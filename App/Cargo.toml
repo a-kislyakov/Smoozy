@@ -1,0 +1,459 @@
+# The Smoozy workspace. One member per module that carries Rust code, and one
+# module in two members — see the framing crate below.
+# The shell and the language are settled at `Preparation/Build/Shell measurement.md`.
+
+[workspace]
+resolver = "2"
+members = [
+    "Security and licence",
+    "State, identity and recovery",
+    "Reporting a problem",
+    "Desktop app and delivery",
+    "Keys",
+    # **One module, two members, from step 10c piece 3.** `Servers — values`
+    # holds the hardware reading's values and the keepalive figures, which the
+    # rented machine's program needs and which connect to nothing; `Servers`
+    # holds every act and re-exports both at the paths they always had.
+    "Servers — values",
+    "Servers",
+
+    # **One module, two members.** `Server protocol and transfers` is split at
+    # step 8a: the framing crate is what both ends speak and opens no
+    # connection, and the crate beside it is every act of connecting. The
+    # program the rented machine runs takes the first and none of the second,
+    # so the SSH client and its C cryptography are out of that program's tree.
+    # Nothing outside the module changed with the split: everything that moved
+    # is re-exported at the path it has always been reached at.
+    "Server protocol and transfers — framing",
+    "Server protocol and transfers",
+    # **One module, two members, from step 10c piece 3**, for the reason
+    # `Servers — values` gives: the layout, the manifest and the reckoning are
+    # values the machine reads, and `Job files and outputs` holds every act on
+    # the file-transfer subsystem.
+    "Job files and outputs — machine",
+    "Job files and outputs",
+    "File Browser",
+    # **One module, two members, and the second is a program rather than a
+    # library.** `Rented-server runtime` is split at step 8b: the library is what
+    # the supervisor, the machine-local endpoint, the workers and the package
+    # transaction are, and the member beside it is `smoozy-server`, the one
+    # program a rented machine runs. **Cargo's dependencies belong to a package
+    # and not to a target**, so a binary inside the library could reach only what
+    # the library reaches — and every crate holding machine-side work depends on
+    # that library, so reaching them from it would close a loop the resolver
+    # refuses. A package nothing depends on can depend on all of them. The ruling
+    # is at `Audits/Build/The machine program/Decisions record.md`.
+    "Rented-server runtime",
+    "Rented-server runtime — program",
+    # **One module, two members, from step 10c piece 3**, for the reason
+    # `Servers — values` gives: the setup worker's judgements and the setup
+    # record connect to nothing, and `Server Setup` holds every act.
+    "Server Setup — machine",
+    "Server Setup",
+    # **One module, two members, from step 10c piece 3**, for the reason
+    # `Servers — values` gives: the payload, the reading, the pin and the device
+    # choice are values the render worker and the queue read, and `Render
+    # Settings` holds every act and the readings' trait.
+    "Render Settings — machine",
+    "Render Settings",
+    # **One module, two members, from step 10c piece 3**, for the reason
+    # `Servers — values` gives: the remap material, its pairs and the fragment
+    # that applies them are values the render worker and the queue read, and
+    # `Dependency Upload & Remap` holds every act, the record and the check.
+    "Dependency Upload & Remap — machine",
+    "Dependency Upload & Remap",
+    # **One module, two members, from step 10c piece 3**, for the reason
+    # `Servers — values` gives: the line, the ending, the readings and the
+    # reader, and the machine's own queue, note, command records and
+    # reconciliation run on the rented machine, and `Queue & History` holds
+    # every desktop act and the local job record.
+    "Queue & History — machine",
+    "Queue & History",
+    # **One module, two members, from step 10c piece 3**, for the reason
+    # `Servers — values` gives: the render worker and everything it composes
+    # and judges run on the rented machine, and `Rendering` holds the
+    # submission, the warning, the desk side's readings and the diary.
+    "Rendering — machine",
+    "Rendering",
+    "Download",
+    "Telegram",
+
+    # **Not a module.** `App/Release/` is the machinery one release runs: it
+    # composes and signs the release manifest and the key-set statement over
+    # artifacts that already exist, and it checks a published release from the
+    # outside. Nothing in Smoozy depends on it. It is a member so that it is
+    # built and its tests are run with everything else.
+    "Release",
+    # **Not a module, and nothing depends on it.** `App/Scenarios/` is the
+    # scenarios played as tests, and the desk machine they play against.
+    "Scenarios",
+]
+
+[workspace.package]
+license = "GPL-3.0-or-later"
+version = "0.2.0"
+edition = "2021"
+
+[workspace.dependencies]
+tauri = { version = "=2.11.5", features = [] }
+tauri-build = { version = "=2.6.3", features = [] }
+serde = { version = "1", features = ["derive"] }
+
+# The written form of the submission manifest and the attempt record —
+# `Job files and outputs` M1 and M8. Already in the tree beneath the shell, so
+# it is no new weight, and pinned exactly like everything else here.
+serde_json = "=1.0.151"
+getrandom = "=0.4.3"
+
+# The local record's engine — `Desktop app and delivery` §5, decided at Build
+# step 2 and recorded at `Audits/Build/Desktop app and delivery/Decisions
+# record.md`. Bundled rather than linked to whatever the machine has, because
+# the application is a plain downloaded binary on three systems and one of
+# them has no such library at all.
+rusqlite = { version = "=0.40.2", features = ["bundled"] }
+
+# Each system's own calls, reached directly rather than through the shell —
+# `Desktop app and delivery` F11, which makes the adapter the one place a
+# location is resolved, and L3b, which names the call per system. All three
+# are already in the tree beneath the shell, so none of them is new weight.
+libc = "=0.2.189"
+
+# The SSH transport Smoozy drives inside its own process — `Servers` K1 and
+# K1a, which forbid running `ssh`, `sftp` or `scp` for a connection at any
+# moment, and `Server protocol and transfers` R5, which puts the byte loop
+# inside it. Pinned exactly, like everything else here. Apache-2.0, from its
+# own manifest.
+russh = "=0.63.1"
+
+# L8's streaming Zstandard decode — `File Browser` L8 and L9, and the pin
+# `File Browser` §13 item 10 says the reading settles. **The C library rather
+# than a pure-Rust decoder, and that was measured rather than preferred**: on
+# 2026-09-04 this one reached the first decompressed bytes from 16 to 43 bytes
+# of a bounded prefix at every compression level, while a pure-Rust decoder
+# needed up to the whole file, because it hands out only what has left the
+# declared window. Default features are off: the legacy formats and the
+# dictionary builder are weight nothing here asks for. MIT, from its own
+# manifest; the C sources it builds are Meta's under the BSD licence.
+zstd = { version = "=0.13.3", default-features = false }
+
+# B9's signatures over the server package's release manifest and its
+# root-signed key-set statement — `Server protocol and transfers` B9 and B10.
+# **Already in the tree beneath the SSH transport, so it is no new weight**, and
+# it is not in the machine program's tree at all: `Rented-server runtime` takes
+# the framing crate and none of the connecting one. Pinned exactly like
+# everything else here. BSD-3-Clause, from its own manifest.
+ed25519-dalek = "=3.0.0"
+
+# S23's digest function, and its implementation is chosen rather than
+# inherited — `Server protocol and transfers` S23, measured at 2.24 s on the
+# machine against 0.46 s for a different implementation of the same function.
+# Already in the tree beneath the transport, so it is no new weight, and pinned
+# exactly like everything else here.
+sha2 = "=0.11.0"
+
+# Already in the tree beneath the shell, so it is no new weight. The transport
+# above is driven on it.
+tokio = { version = "=1.53.1", features = ["rt", "rt-multi-thread", "net", "time", "macros", "io-util", "sync"] }
+
+# **The one HTTPS client, and it is one for four uses on two computers** — the
+# release fetcher `Server protocol and transfers` B8a wants, the Blender listing
+# `Server Setup` B2 reads, and every call Telegram's own service takes, from the
+# desktop and from the rented machine. The ruling and everything measured for it
+# are at `Audits/Build/The one HTTPS client/Decisions record.md`.
+#
+# **The client asks for no cryptography provider of its own**; the one beneath
+# it is `rustls`'s `ring` provider, switched on in the entry below. Until
+# 2026-10-24 it was `rustls-graviola`, chosen on 2026-09-07 because it needs no
+# C compiler, and its processor floor (`avx2`, `bmi1`, `adx` and three more)
+# stopped setup on rented servers with older processors — the Creator's
+# eighteenth notes, note 3. The measurement and the ruling are in
+# `Audits/Build/Step 10c/The eighteenth notes, piece 1, any 64-bit processor —
+# what landed.md`.
+#
+# **It is blocking**, so it brings no second asynchronous runtime, and the
+# machine's program stays free of the one already in the tree.
+#
+# MIT OR Apache-2.0, from its own manifest.
+ureq = { version = "=3.4.1", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
+
+# **The transport-layer security beneath the client, with its default
+# cryptography provider switched off and `ring` switched on.** Left on, this
+# crate's own default is `aws-lc-rs`, whose C library cannot be built for the
+# server program's Linux target at this desk (measured 2026-10-24: it wants a
+# Linux C library's own headers). Nothing else in the workspace declares this
+# crate, so the switches here hold everywhere — Cargo's features add up across a
+# workspace and cannot be subtracted.
+#
+# **`ring` is the one provider, on the desktop and on the rented server.** It
+# asks nothing of an x86-64 processor beyond SSE and SSE2, which every x86-64
+# build already assumes (`ring` 0.17.14, `src/cpu/intel.rs`, the assertions at
+# lines 25–26 and 159–160), and finds every faster instruction set at run time
+# with a plain fallback beside each (`src/aead/aes_gcm.rs`, `new_fallback`). So
+# no processor check is owed and none is made. **It carries C and assembly**:
+# `App/.cargo/config.toml` says how the server program's Linux build gets them
+# compiled at this desk with the Mac's own compiler. It was already in the lock
+# at 0.17.14, so no version moves, and the lock holds it there; no crate here
+# names it directly.
+#
+# `std` is what a program that owns an operating system thread needs; `tls12` is
+# the older protocol version, kept because nothing establishes that every service
+# Smoozy calls offers the newer one.
+#
+# Apache-2.0 OR ISC OR MIT, from its own manifest; `ring` is Apache-2.0 AND ISC,
+# from its own.
+rustls = { version = "=0.23.43", default-features = false, features = ["std", "tls12", "ring"] }
+
+# **Base64url, unpadded — `Telegram` R1's action token, which is exactly 33 bytes
+# and therefore exactly 44 characters, and is composed on the desktop and read on
+# the rented machine.** It adds nothing at all to any dependency tree: the client
+# above already requires this exact version, so pinning it here only makes a
+# crate that is already present reachable by name.
+#
+# MIT OR Apache-2.0, from its own manifest.
+base64 = "=0.23.1"
+
+# **The system file picker — `Desktop app and delivery` K11, taken at Build step
+# 10a piece H, 2026-09-08.** The reasoning in full, and the measurement it rests
+# on, are at `Audits/Build/Desktop app and delivery/Decisions record.md` under
+# that date. The short of it:
+#
+# **There was no picker anywhere in the lock and the choice was a real one** —
+# either this pin, or this document's own platform code beside the shell in the
+# shape K20's folder-reveal takes. The reveal is written that way here and the
+# picker is not, because the two are different in one respect that decides it:
+# the reveal's three calls are one call each with a status back, while a file
+# panel on macOS must be put up on the main thread and answered from it, which
+# is the whole of what this plugin does and what a hand-written adapter would
+# have had to get right blind on two systems this project cannot run.
+#
+# **`xdg-portal` rather than the default `gtk3`, and that is the load-bearing
+# half of the choice.** `File Browser` H2 answers Row 307's Linux half **from
+# the xdg-desktop-portal FileChooser specification**, and that module's own
+# built code names the system `LinuxOnThePortalRoute`. On the GTK backend that
+# answer would describe a route Smoozy does not take, and Row 307's Linux answer
+# would quietly stop being a read one. The portal is also K21's Linux reveal
+# route, so one route on Linux serves both acts.
+#
+# **What it costs, measured on 2026-09-08 with `cargo tree` at these exact
+# pins**: the macOS tree goes from 230 packages to 234 and the Windows tree from
+# 236 to 243; **the Linux tree goes from 272 to 324**, the 48 above the four
+# being the portal's own pure-Rust D-Bus stack. **Nothing of that lands on the
+# macOS or Windows artifacts.** E9 and E11 put a byte length in the release
+# manifest and the shell itself was chosen on a size comparison, so the figure
+# is recorded rather than waved at.
+#
+# **`tauri-plugin-fs` arrives beneath it and is inert.** A plugin's commands are
+# reachable from the page only where a capability grants them, and
+# `capabilities/main.json` grants neither this plugin's nor that one's. That is
+# what keeps K11's *reached through this document's adapter and by no other
+# route* structural rather than remembered, and `src/picker.rs` holds the test.
+#
+# MIT OR Apache-2.0, from its own manifest.
+tauri-plugin-dialog = { version = "=2.7.3", default-features = false, features = ["xdg-portal"] }
+
+# **Tests only, and it is the library the shell builds its own menu module on**
+# — already in the tree beneath the shell at this exact version, and declared
+# here so that one thing can be checked that nothing else checks: **the shell
+# parses an accelerator with `.ok()` and drops one it cannot read, silently**,
+# so a mistyped combination would leave a macOS menu item with no key beside it
+# and nothing anywhere saying why. `src/menus.rs` holds the test. It is a
+# development dependency and is in no artifact.
+#
+# MIT OR Apache-2.0, from its own manifest.
+muda = "=0.19.3"
+
+# **The Linux third of the folder-reveal service** — `Desktop app and delivery`
+# K21, whose Linux route is the portal's `OpenURI.OpenDirectory`. **Already in
+# the Linux tree beneath the picker above, so it is no new weight**, and it is
+# pure Rust, so the Linux half of `src/reveal.rs` can be compiled at this desk
+# in a throwaway crate even though this crate's own Linux cross-build cannot be
+# run here. It is declared for Linux alone and is in neither other tree.
+#
+# MIT, from its own manifest.
+ashpd = "=0.11.1"
+
+# **The Objective-C runtime itself, for the one class this application
+# defines** — `Desktop app and delivery` T28's notification-centre delegate.
+# **Already in the tree beneath every `objc2-*` crate below**, at this exact
+# version, so declaring it by name is no new weight. Nothing else in this
+# workspace defines a class.
+#
+# MIT, from its own manifest.
+objc2 = "=0.6.4"
+
+# **The Objective-C block type, for the three completion handlers the
+# notification centre takes** — `Desktop app and delivery` T6 and T28. Apple's
+# authorisation request, its settings read and its delegate's two methods are
+# each answered through a block. **Already in the tree beneath the shell's own
+# Apple crates**, so it is no new weight.
+#
+# MIT, from its own manifest.
+block2 = "=0.6.2"
+
+# **The Linux notification service's D-Bus client — `Desktop app and delivery`
+# T5, taken at Build step 10a piece G, 2026-09-09.**
+#
+# **Already in this crate's Linux tree beneath `ashpd`**, which step 10a piece
+# H took for K21's portal route, so **declaring it by name adds no package to
+# any artifact** and it is in neither other tree. The features match what
+# `ashpd` already switches on, so nothing about the existing build moves.
+#
+# **`dbus` 0.9.12 was the other candidate and is also already in the Linux tree,
+# beneath the shell's own window library** — so the two were level on weight and
+# the measurement decided: `dbus` binds the C library and cannot be compiled for
+# Linux at this desk at all, while this one is pure Rust and can, which is the
+# throwaway-crate cross-check this stage already uses for code no machine here
+# can run. The workspace has twice ruled against a C dependency for exactly that
+# reason.
+#
+# MIT, from its own manifest.
+zbus = { version = "=5.19.0", default-features = false, features = ["tokio"] }
+
+# **The asynchronous stream the action-invoked signal arrives on** —
+# `Desktop app and delivery` T28's Linux third. Already in the Linux tree
+# beneath `zbus` and `ashpd`, so it is no new weight, and it is in neither
+# other tree.
+#
+# MIT OR Apache-2.0, from its own manifest.
+futures-util = { version = "=0.3.34", default-features = false }
+
+[workspace.dependencies.objc2-foundation]
+version = "=0.3.2"
+# **`NSBundle` and `NSArray` were added on 2026-09-09 for the notification
+# service's macOS third** — `Desktop app and delivery` T2 and T16. `NSBundle`
+# is how the bundle identifier is read **before anything else is called**,
+# which is the precondition an unbundled executable dies on at exit 134;
+# `NSArray` carries the attachment list and the identifier list a take-down
+# names. Both are switches on a crate already in the tree, so neither is new
+# weight.
+features = [
+    "NSFileManager",
+    "NSURL",
+    "NSString",
+    "NSError",
+    "NSPathUtilities",
+    "NSBundle",
+    "NSArray",
+]
+
+# **The macOS notification centre — `Desktop app and delivery` §13, taken at
+# Build step 10a piece G, 2026-09-09.**
+#
+# **It was already in the lock and it was not reachable**, which is the whole
+# of why this declaration is a real decision rather than a formality: it sat
+# beneath `objc2-ui-kit`, a phone framework, so **declaring it is a new pin and
+# new weight in the macOS artifact.**
+#
+# **The alternative was the shell's own notification plugin and it was
+# measured rather than preferred.** That plugin's desktop half answers
+# *granted* to every permission question **without asking anything**, carries
+# no per-post identity to replace on, offers no attachment and no removal, and
+# has no activation callback at all — so T6, T7, T24, T24a and T29 would every
+# one of them be unkept, and §22 items 27 and 61 would be unanswerable rather
+# than merely unobserved. **This crate is Apple's own interface and reaches all
+# five.**
+#
+# `default-features` is off and each switch is here because one call needs it,
+# which is the pattern this manifest already uses: the default set drags in
+# `objc2-core-location`, which is a whole framework nothing here asks for.
+#
+# Zlib OR Apache-2.0 OR MIT, from its own manifest.
+[workspace.dependencies.objc2-user-notifications]
+version = "=0.3.2"
+default-features = false
+features = [
+    "std",
+    "block2",
+    "UNError",
+    "UNNotification",
+    "UNNotificationAttachment",
+    "UNNotificationContent",
+    "UNNotificationRequest",
+    "UNNotificationResponse",
+    "UNNotificationSettings",
+    "UNNotificationTrigger",
+    "UNUserNotificationCenter",
+]
+
+
+# **The macOS third of the folder-reveal service** — `Desktop app and delivery`
+# K21, whose macOS route is `NSWorkspace`'s
+# `selectFile:inFileViewerRootedAtPath:`, the one of the two Apple publishes
+# that returns a status. **Already in the tree beneath the shell**, at this
+# exact version, so declaring it by name is no new weight; the shell reaches
+# none of this itself, which is what K20 says.
+[workspace.dependencies.objc2-app-kit]
+version = "=0.3.2"
+features = ["NSWorkspace"]
+
+[workspace.dependencies.windows-sys]
+version = "=0.61.2"
+# Each switch is here because one Windows call in `Desktop app and delivery`'s
+# platform adapters needs it, and the crate compiles in only what is switched
+# on. The registry switch remains enabled in the shared Windows pin.
+# **Two switches were added on 2026-09-08 for the folder-reveal service's
+# Windows third** — `Desktop app and delivery` K21. `SHOpenFolderAndSelectItems`
+# takes item-identifier lists, whose type lives behind `Win32_UI_Shell_Common`,
+# and `ShellExecuteW`'s last argument is a show-window value, which lives behind
+# `Win32_UI_WindowsAndMessaging`. **`Win32_System_Com` was already on** and is
+# what K21's *with the component system initialised first* is reached through.
+features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Registry",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Security_Credentials",
+    "Win32_Storage_FileSystem",
+]
+
+# **The Windows notification platform, the Start-menu shortcut, and the toast's
+# own document — `Desktop app and delivery` §13 and §19 E3, taken at Build step
+# 10a piece G, 2026-09-09.**
+#
+# **This is the same crate the shell is already built on**, at this exact
+# version, beneath `tao`, `tauri`, `tauri-runtime`, `tauri-runtime-wry`, `wry`
+# and `webview2-com`. **So it adds no package to the Windows tree and it is in
+# neither other tree** — what is new is the feature switches, which is exactly
+# the pattern `windows-sys` below already uses switch by switch.
+#
+# **The reading that decided it, recorded because it corrects a document.**
+# `Audits/Build/Step 10a/The shared layer — what each piece owns and in what
+# order.md` §2 says the Windows notification route *"wants more `windows-sys`
+# feature switches"*. **It cannot: `windows-sys` 0.61.2 publishes no Windows
+# Runtime feature at all** — there is no `Win32_System_WinRT`, no
+# `UI_Notifications` and no `Data_Xml_Dom` in its manifest — and a toast is a
+# Windows Runtime class. **No number of switches on that crate reaches it.**
+# This one is the same publisher's Runtime-capable crate, already present, and
+# it is the one that does.
+#
+# Each switch is here because one call needs it. `UI_Notifications` is the toast
+# manager, the notifier, the notification and its history — T3, T6, T24 and
+# T24a. `Data_Xml_Dom` is the document a toast is composed as. `Foundation` is
+# the typed event handler T28's activation arrives on. The five `Win32_` ones
+# are §19 E3's shortcut: the shell link and the known-folder call in
+# `Win32_UI_Shell`, its property store in `Win32_UI_Shell_PropertiesSystem`, the
+# property value in `Win32_System_Com_StructuredStorage` with its type tag in
+# `Win32_System_Variant`, the application-identifier property key in
+# `Win32_Storage_EnhancedStorage`, and the component system in
+# `Win32_System_Com`.
+#
+# MIT OR Apache-2.0, from its own manifest.
+[workspace.dependencies.windows]
+version = "=0.61.3"
+features = [
+    "Data_Xml_Dom",
+    "Foundation",
+    "UI_Notifications",
+    "Win32_Foundation",
+    "Win32_Storage_EnhancedStorage",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+]
+
+[profile.release]
+strip = true

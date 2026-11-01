@@ -1,0 +1,266 @@
+name: Shell measurement
+
+# Fills the comparison sheet at Preparation/Architecture/Desktop app and delivery.md H5b.
+# Builds one minimal Wails v2 artifact and one minimal Tauri v2 artifact from the same
+# web payload, on a fresh runner image for each of the three systems, and reports the
+# byte figures. It builds nothing that ships and signs nothing.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.system }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: macos
+            runner: macos-latest
+          - system: windows
+            runner: windows-latest
+          - system: linux
+            runner: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      WAILS_VERSION: v2.14.0
+      TAURI_CLI_VERSION: 2.11.4
+      PROBE: smoozy-shell-probe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record the runner image
+        run: |
+          set -eux
+          mkdir -p "$GITHUB_WORKSPACE/reading"
+          if [ -f /imagegeneration/imagedata.json ]; then
+            cp /imagegeneration/imagedata.json "$GITHUB_WORKSPACE/reading/imagedata.json"
+          elif [ -f "/c/imagedata.json" ]; then
+            cp "/c/imagedata.json" "$GITHUB_WORKSPACE/reading/imagedata.json"
+          else
+            echo '[]' > "$GITHUB_WORKSPACE/reading/imagedata.json"
+          fi
+          python3 - <<'PY'
+          import hashlib, json, os, platform
+          path = os.path.join(os.environ["GITHUB_WORKSPACE"], "reading", "imagedata.json")
+          with open(path, "rb") as handle:
+              body = handle.read()
+          out = {
+              "image_os": os.environ.get("ImageOS"),
+              "image_version": os.environ.get("ImageVersion"),
+              "runner_arch": os.environ.get("RUNNER_ARCH"),
+              "runner_name": os.environ.get("RUNNER_OS"),
+              "imagedata_sha256": hashlib.sha256(body).hexdigest(),
+              "platform": platform.platform(),
+              "machine": platform.machine(),
+          }
+          with open(os.path.join(os.environ["GITHUB_WORKSPACE"], "reading", "runner.json"), "w") as handle:
+              json.dump(out, handle, indent=2, sort_keys=True)
+          print(json.dumps(out, indent=2, sort_keys=True))
+          PY
+
+      - name: Linux build dependencies
+        if: matrix.system == 'linux'
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential binutils file curl wget \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            librsvg2-dev patchelf libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Rust toolchain
+        run: |
+          set -eux
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          if [ "${{ matrix.system }}" = "macos" ]; then
+            rustup target add x86_64-apple-darwin
+          fi
+
+      - name: Toolchain versions
+        run: |
+          set -eux
+          go version
+          rustc --version
+          cargo --version
+          node --version
+          python3 --version
+
+      - name: Install the two command-line tools
+        run: |
+          set -eux
+          go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          npm install -g @tauri-apps/cli@${TAURI_CLI_VERSION}
+
+      - name: The one web payload, copied into both projects
+        run: |
+          set -eux
+          src="App/Shell measurement/web"
+          mkdir -p "App/Shell measurement/wails/frontend/dist"
+          mkdir -p "App/Shell measurement/tauri/dist"
+          cp "$src/index.html" "$src/main.css" "$src/main.js" "App/Shell measurement/wails/frontend/dist/"
+          cp "$src/index.html" "$src/main.css" "$src/main.js" "App/Shell measurement/tauri/dist/"
+
+      - name: Wails scaffolding, from the shell's own template
+        run: |
+          set -eux
+          cd "$RUNNER_TEMP"
+          wails init -n scaffold -t vanilla
+          proj="$GITHUB_WORKSPACE/App/Shell measurement/wails"
+          cp -R "$RUNNER_TEMP/scaffold/build" "$proj/build"
+          # The same source icon for both candidates; the frameworks make their own from it.
+          cp "$GITHUB_WORKSPACE/App/Shell measurement/appicon.png" "$proj/build/appicon.png"
+          rm -f "$proj/build/windows/icon.ico" "$proj/build/darwin/iconfile.icns"
+          ls -R "$proj/build"
+
+      - name: Build the Wails artifact
+        run: |
+          set -eux
+          cd "App/Shell measurement/wails"
+          go mod tidy
+          cp go.sum "$GITHUB_WORKSPACE/reading/wails-go.sum"
+          case "${{ matrix.system }}" in
+            macos)   wails build -clean -trimpath -s -platform darwin/amd64 ;;
+            windows) wails build -clean -trimpath -s -platform windows/amd64 -webview2 error ;;
+            linux)   wails build -clean -trimpath -s -platform linux/amd64 -tags webkit2_41 ;;
+          esac
+          ls -laR build/bin
+
+      - name: Tauri icons, from the same source icon
+        run: |
+          set -eux
+          cd "App/Shell measurement/tauri"
+          tauri icon "$GITHUB_WORKSPACE/App/Shell measurement/appicon.png"
+          ls -la src-tauri/icons
+
+      - name: Build the Tauri artifact
+        run: |
+          set -eux
+          cd "App/Shell measurement/tauri"
+          case "${{ matrix.system }}" in
+            macos)   tauri build --target x86_64-apple-darwin --bundles app ;;
+            windows) tauri build --no-bundle ;;
+            linux)   tauri build --no-bundle ;;
+          esac
+          cp src-tauri/Cargo.lock "$GITHUB_WORKSPACE/reading/tauri-Cargo.lock"
+
+      - name: Gather the payloads
+        run: |
+          set -eux
+          root="$GITHUB_WORKSPACE/App/Shell measurement"
+          out="$RUNNER_TEMP/payload"
+          mkdir -p "$out"
+          case "${{ matrix.system }}" in
+            macos)
+              cp -R "$root/wails/build/bin/${PROBE}.app" "$out/wails-${PROBE}.app"
+              cp -R "$root/tauri/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/${PROBE}.app" "$out/tauri-${PROBE}.app"
+              ;;
+            windows)
+              mkdir -p "$out/wails-installed" "$out/tauri-installed"
+              cp "$root/wails/build/bin/${PROBE}.exe" "$out/wails-installed/"
+              cp "$root/tauri/src-tauri/target/release/${PROBE}.exe" "$out/tauri-installed/"
+              for dll in "$root/tauri/src-tauri/target/release"/*.dll; do
+                [ -e "$dll" ] && cp "$dll" "$out/tauri-installed/" || true
+              done
+              for dll in "$root/wails/build/bin"/*.dll; do
+                [ -e "$dll" ] && cp "$dll" "$out/wails-installed/" || true
+              done
+              ;;
+            linux)
+              mkdir -p "$out/wails-payload" "$out/tauri-payload"
+              cp "$root/wails/build/bin/${PROBE}" "$out/wails-payload/"
+              cp "$root/tauri/src-tauri/target/release/${PROBE}" "$out/tauri-payload/"
+              ;;
+          esac
+          ls -laR "$out"
+
+      - name: Measure both
+        run: |
+          set -eux
+          tool="$GITHUB_WORKSPACE/App/Shell measurement/tools/measure.py"
+          out="$RUNNER_TEMP/payload"
+          reading="$GITHUB_WORKSPACE/reading"
+          case "${{ matrix.system }}" in
+            macos)
+              python3 "$tool" --candidate wails --system macos --payload "$out/wails-${PROBE}.app" \
+                --binary-name "${PROBE}" --archive "$reading/wails-macos.zip" --out "$reading/wails-macos.json"
+              python3 "$tool" --candidate tauri --system macos --payload "$out/tauri-${PROBE}.app" \
+                --binary-name "${PROBE}" --archive "$reading/tauri-macos.zip" --out "$reading/tauri-macos.json"
+              ;;
+            windows)
+              python3 "$tool" --candidate wails --system windows --payload "$out/wails-installed" \
+                --binary-name "${PROBE}" --archive "$reading/wails-windows.zip" --out "$reading/wails-windows.json"
+              python3 "$tool" --candidate tauri --system windows --payload "$out/tauri-installed" \
+                --binary-name "${PROBE}" --archive "$reading/tauri-windows.zip" --out "$reading/tauri-windows.json"
+              ;;
+            linux)
+              python3 "$tool" --candidate wails --system linux --payload "$out/wails-payload" \
+                --binary-name "${PROBE}" --archive "$reading/wails-linux.zip" --out "$reading/wails-linux.json"
+              python3 "$tool" --candidate tauri --system linux --payload "$out/tauri-payload" \
+                --binary-name "${PROBE}" --archive "$reading/tauri-linux.zip" --out "$reading/tauri-linux.json"
+              ;;
+          esac
+
+      - name: Record the versions actually used
+        run: |
+          set -eux
+          cd "$GITHUB_WORKSPACE"
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+
+          def run(cmd):
+              try:
+                  return subprocess.run(cmd, shell=True, capture_output=True, text=True).stdout.strip()
+              except Exception:
+                  return None
+
+          def digest(path):
+              try:
+                  with open(path, "rb") as handle:
+                      return hashlib.sha256(handle.read()).hexdigest()
+              except Exception:
+                  return None
+
+          root = os.environ["GITHUB_WORKSPACE"]
+          web = os.path.join(root, "App/Shell measurement/web")
+          payload = {}
+          for name in sorted(os.listdir(web)):
+              payload[name] = digest(os.path.join(web, name))
+
+          out = {
+              "go": run("go version"),
+              "rustc": run("rustc --version"),
+              "cargo": run("cargo --version"),
+              "node": run("node --version"),
+              "wails_cli": os.environ.get("WAILS_VERSION"),
+              "tauri_cli": run("tauri --version") or os.environ.get("TAURI_CLI_VERSION"),
+              "web_payload_sha256": payload,
+              "appicon_sha256": digest(os.path.join(root, "App/Shell measurement/appicon.png")),
+              "wails_go_sum_sha256": digest(os.path.join(root, "reading/wails-go.sum")),
+              "tauri_cargo_lock_sha256": digest(os.path.join(root, "reading/tauri-Cargo.lock")),
+          }
+          with open(os.path.join(root, "reading", "versions.json"), "w") as handle:
+              json.dump(out, handle, indent=2, sort_keys=True)
+          print(json.dumps(out, indent=2, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reading-${{ matrix.system }}
+          path: reading/
+          if-no-files-found: warn

@@ -1,0 +1,7 @@
+# Signatures — Builds, Blender 5.3
+
+- 2026-10-17 — Claude Opus 5.5 (Claude Code) — answered all 10 questions of the topic for Blender 5.3 from the 5.3 manual, Python API documentation and release notes, taken 2026-10-11, and Cycles' own files, taken from the installed 5.3.0 Beta on 2026-10-16. Declared it read only the question sheet and files inside `Blender Sources/`, ran no Blender, left the requirements page unopened as outside its named sources, and said that the project's `CLAUDE.md` signpost, the runner's memory index and the git status reached its context automatically, unopened and unused.
+- 2026-10-17 — Gemini 3.8 Flash High (Antigravity CLI) — audit of 5.3: tightened labels in Q1 and Q10, tightened Q3 and Q7 claims, added Q9 citations, expanded Q5 citation, narrowed hand-tests header
+- 2026-10-18 — Claude Opus 5.5 (Claude Code) — hand tests for 5.3 on the Creator's Mac against the installed 5.3.0 Beta: wrote observed results into questions 1, 2, 3, 5, 6, 7, 9 and 10, the reasons for what could not be run into 4, 5, 6, 8 and 9, brought both standing lines up to date where a test reached them, and pruned the hand-test list at the end to what is still open
+- 2026-10-18 — Gemini 3.8 Flash High (Antigravity) — citation check of 5.3 findings: 116 claims supported, nothing changed
+- 2026-11-01 — Claude Opus 5.5 (Claude Code subagent) — wave 9b of the free-and-open-source work, privacy fixes only: the Creator's home folder and the user name in file listings replaced with neutral stand-ins. No claim or figure about Blender changed.

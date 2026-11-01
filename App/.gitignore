@@ -1,0 +1,3 @@
+# Build output. Never committed. The lettered folders are side-by-side builders' own.
+target/
+target-*/

@@ -1,0 +1,38 @@
+[package]
+license.workspace = true
+name = "smoozy-job-files"
+description = "Where Smoozy's directories sit on a rented machine and what every path under them is called; what the immutable submission manifest carries; and how a job's material is published as one object."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-reporting = { path = "../Reporting a problem" }
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+
+# **The other half of this module**: the layout, the names, the manifest, the
+# attempt record, the reading, the map, the inventory, the reckoning and the
+# rest of what the rented machine reads, split out at step 10c piece 3 so the
+# machine's own program can take them without taking this crate's connection.
+# Re-exported from `src/lib.rs` and `src/publication.rs` at the paths they
+# have always had.
+smoozy-job-files-machine = { path = "../Job files and outputs — machine" }
+
+# The manifest and the attempt record are written as one JSON document each —
+# M1 and M8. The form is Build's choice and it is recorded at
+# `Audits/Build/Job files and outputs/Decisions record.md`; the document
+# already reads one JSON document off a machine at R1, so this is the shape it
+# uses rather than a second one.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# The publication and the folder creation are driven over the file-transfer
+# subsystem, which is async.
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time", "process", "sync"] }
+
+# The far end of the integration test: OpenSSH's own `sftp-server`, so the
+# publication contract is observed against a server this project did not write.
+russh = { workspace = true }

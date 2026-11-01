@@ -1,0 +1,3 @@
+# Settings — Open Threads questions, range and denoising follow-up — signatures
+
+- 2026-08-30 — Claude Opus 5 (Claude Code subagent) — wrote this document: a blind pass answering three narrow points inside questions 18 and 19 for Blender 4.5, sent back by the citation check of the same day. It declared it read only the question sheet and files inside `Blender Sources/` and opened no other part of this project, and that it opened none of the findings documents already sitting in the folder it saved into. **It disclosed one thing of its own accord**: it ran a command that returned only a count of the entries in that folder, to confirm the folder existed. No name was shown and no document there was opened.

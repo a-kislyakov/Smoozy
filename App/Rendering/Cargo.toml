@@ -1,0 +1,76 @@
+[package]
+license.workspace = true
+name = "smoozy-rendering"
+description = "The Blender launch contract — the one command-line window and the order of the line held by the type, the device argument's spelling declared at one point, the launch material composed per attempt and never rewritten; the render kind's declarations, its termination contract and its ending classification with the cause beside every failure; atomic job submission and the reading taken after a dropped one; the missing-assets warning's three cases; submitting again, carrying on, and what *which frames were rendered* is composed from."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-job-files = { path = "../Job files and outputs" }
+smoozy-reporting = { path = "../Reporting a problem" }
+smoozy-render-settings = { path = "../Render Settings" }
+smoozy-dependencies = { path = "../Dependency Upload & Remap" }
+smoozy-queue-history = { path = "../Queue & History" }
+
+# **The other half of this module**: the render worker and every value it
+# composes or judges — the launch line, the versions, the frame list, the launch
+# material, the pipeline, the attempt's composition, the card technology, the
+# stop and the ending classification — split out at step 10c piece 3 so the
+# machine's own program can take them without taking this crate's connection.
+# Re-exported from `src/lib.rs` and `src/acting/mod.rs` at the paths they have
+# always had.
+smoozy-rendering-machine = { path = "../Rendering — machine" }
+
+# Three more than the rules half was briefed with, each forced by a clause
+# that names another document's shape as its own and forbids a second one.
+#
+# L23's table is keyed on the card make *"as a value this table is keyed on
+# and never a wording to be parsed"*, and §8 names `Servers`' hardware
+# reading as where that value comes from — so the lookup takes that crate's
+# own `Cards` and `CardMake`, and a copy of either closed set here would
+# drift.
+smoozy-servers = { path = "../Servers" }
+
+# L14 compares the version the machine's Blender answers against the
+# manifest's, and `Server Setup` B2 fixes that a version is compared *as
+# components, never as strings* — so the type is that crate's `Version`. And
+# S3a reads that document's A5 read-back, in that document's own shape, as
+# §12's standing line to this document.
+smoozy-server-setup = { path = "../Server Setup" }
+
+# S5 composes the manifest, and `Job files and outputs` M1 carries the
+# `.blend`'s four-value identity as `Server protocol and transfers` S13's one
+# type (R11: *one shape rather than two*). Already in the tree beneath the
+# manifest's own crate, so it is no new weight.
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+
+# S5a's reporting field and S5's remap reference go into the manifest as
+# `Job files and outputs` M1's *carried and not interpreted* fields, whose
+# type is a JSON value. Both already in the tree beneath the manifest's own
+# crate, and pinned in `App/Cargo.toml` like everything else.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# **The acting half's, and it was a dev-dependency until step 7's acting
+# half landed.** K1's declarations are read against that crate's own owner
+# row for the render kind; and the acting half takes its sinks and the write
+# into them (`Rented-server runtime` M1 and M3), its capture ceiling (M4a),
+# its kernel reading of a recorded pair (X1), its interrupt (X8 step 4), its
+# hold record and release predicate (§8), and its machine-local endpoint —
+# rather than writing a second of any of them.
+smoozy-runtime = { path = "../Rented-server runtime" }
+
+# The desk-side readings of a machine ride the command channel and the
+# file-transfer subsystem, and the planted-link carriage is what keeps a
+# machine-origin path out of a command string (`Server protocol and
+# transfers` §1.1). Already in the tree beneath this crate's own
+# dependencies, so neither is new weight.
+tokio = { workspace = true }
+
+[dev-dependencies]
+# The same crate with its test helpers turned on: the tests that stayed here
+# build their readings, payloads, jobs, manifests and versions from
+# `material::testing`, `composition::testing` and `versions::testing`, written
+# once for both folders.
+smoozy-rendering-machine = { path = "../Rendering — machine", features = ["testing"] }

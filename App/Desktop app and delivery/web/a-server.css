@@ -1,0 +1,39 @@
+/* A server's own screen — the page half of `src/surface/a_server.rs`, whose
+ * head carries the piece, and whose page module carries the tab and panel
+ * contract.
+ *
+ * **This file holds one rule and it should never hold many more.** The head,
+ * the badge, the address, the hardware line, the tab strip, the panel, its
+ * pinned collapse control and the collapsed strips are all already drawn by
+ * `web/the-drawing.css`, which is the mockup's own stylesheet lifted whole.
+ *
+ * **Nothing here invents a number. There is no number here at all.**
+ */
+
+/* ── What this screen hides, hides ───────────────────────────────────────────
+ *
+ * **The drawing has one server, so nothing at this level is ever hidden in
+ * it.** This screen hides a great deal: the head while the server it named has
+ * been removed, the statement that stands in its place, each tab's body, each
+ * server's own strips, and the badge of a server whose stored colour is not one
+ * of the eight.
+ *
+ * **Every one of those elements is given `display` by the drawing** — `flex`,
+ * `inline-block` — and an author's `display` beats the browser's own rule for
+ * `hidden`, so setting `hidden` on any of them does nothing at all. The drawing
+ * writes `.files[hidden]`, `.setup[hidden]`, `.sheetwrap[hidden]` and
+ * `.strip[hidden]` one at a time for exactly this reason; this is the same
+ * answer for everything inside this screen, including whatever pieces 6, 7, 8
+ * and 9 draw in it.
+ */
+#machineview [hidden] { display: none; }
+
+/* **A head whose hardware reading is last seen reads as stale**, as the list
+ * row does with the drawing's own `.svhw.stale` — step 10a round 1, fix-here
+ * item 15. The drawing's head has no stale state, so the colour is the list's. */
+.hw.stale b {
+  color: var(--ink3);
+}
+
+/* The shared control takes its place directly beside the address. */
+.mconnection { display: contents; }

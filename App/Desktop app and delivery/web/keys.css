@@ -1,0 +1,120 @@
+/* **The Keys screen's own rules** — Preparation/Design/Keys.md.
+ *
+ * **The numbers are the drawing's and their one home is the mockup**, lifted
+ * whole into `the-drawing.css` by piece B. **Nothing below invents a colour, a
+ * size or a radius**: every value here is a token that sheet already carries.
+ *
+ * **What this file adds, and why it is short.** The drawing has 633 classes and
+ * every part of this screen is drawn in them — `.ky-row`, `.ky-name`, `.ky-fp`,
+ * `.ky-where`, `.ky-use`, `.ky-pass`, `.ky-acts`, `.ky-notool`, `.ky-form`,
+ * `.ky-ways`, `.ky-note`. What is here is only what one shape needs that the
+ * mockup did not carry, and it is four things: a control the mockup drew as a
+ * link, a control it drew as a span, the one failure shape sitting where the
+ * mockup drew a per-screen copy, and a list of paths the mockup drew as a
+ * folder.
+ */
+
+/* **Two controls the mockup drew as something that is not a control.**
+ *
+ * *clear it* is an `<a href="#">` in the drawing and *Advanced — key type* is
+ * another; both are acts and neither goes anywhere, so here they are buttons.
+ * **The look is `.ky-lnk`'s own and is not restated** — what is here is the
+ * button chrome taken off, which is the only difference between the two
+ * elements. */
+.ky-asalink {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.ky-asalink:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The same, for the key-type choices. `.rad` is a span in the drawing and each
+ * one is a press here. */
+.rads button.rad {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+.rads button.rad:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* **The one place a row's verdict goes**, which carries the underway mark until
+ * the reading answers and the failure shape after it. It is `.ky-why`'s own
+ * spacing and nothing else. */
+.ky-slot { margin-top: 6px; }
+
+/* **The one failure shape, on a row.** `Design/Whole app`: *"The thing it
+ * attaches to decides only how much room it has, never what it is made of."*
+ * **This is the room and nothing else** — the shape's own controls take a row's
+ * size here, the same size `.mini` takes everywhere else on this screen, and
+ * nothing about what they are is changed. */
+.ky-failure { gap: 7px; }
+.ky-failure .failure-acts { gap: 7px; }
+.ky-failure .failure-acts .btn {
+  padding: 4px 10px;
+  font-size: var(--t-sm);
+  font-weight: 550;
+  background: var(--bg);
+  color: var(--ink);
+  border-color: var(--line);
+}
+.ky-failure .failure-acts .btn:hover { filter: none; border-color: var(--ink3); }
+/* The note beside them, which is the row's own line rather than the shape's:
+ * the shape's second sentence is about the failure and this is about what a
+ * control costs before it is pressed. `.ky-note`'s own look. */
+.ky-failure .ky-note { flex: 1 1 240px; }
+
+/* **`Keys` W6: the confirmation names the file set by full path.** The drawing
+ * names the folder instead and the clause wins under Rule 10, so the box holds
+ * a path per line rather than one sentence. */
+.ky-files { display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+
+/* The made-key dialog's ending, which is two lines with the drawing's own
+ * `.msub` on each. */
+.ky-made { display: flex; flex-direction: column; gap: 6px; }
+
+/* **The clipboard's other way in**, for an engine with no clipboard permission.
+ * It is off screen rather than hidden, because a hidden element cannot be
+ * selected and a selection is what the older route copies. */
+.ky-away {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+/* The copy control's slot. **The row's controls sit in fixed slots, not in a
+ * run that ends where the row's text stops** — `Design/Keys § A row` — so the
+ * row with no copy keeps the slot and leaves it empty rather than closing it
+ * up. `.ky-acts > *` sizes the slot and this sizes what is in it. */
+.ky-copy > .mini { width: 100%; }
+
+/* **A row the keyboard can stand on** — `Design/Keys § Keyboard shortcuts`.
+ * The drawing carries no focus mark for `.ky-row`, so this is the one it gives
+ * the queue's and the history's rows (`.qrow:focus-visible`), unchanged. */
+.ky-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* **The public key, shown to copy by hand where the copy did not report
+ * success** — step 10a round 1, fix-here item 25. A read-only field the width
+ * of the box, with its select control under it. */
+.ky-byhand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 8px;
+}
+.ky-pubkey {
+  width: 100%;
+  min-height: 4.5em;
+  resize: vertical;
+  font-size: var(--t-sm);
+  word-break: break-all;
+}

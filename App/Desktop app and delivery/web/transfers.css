@@ -1,0 +1,90 @@
+/* Transfers — only what the drawing's own classes do not carry.
+ *
+ * **The screen is the drawing's**: `.qhead`, `.req`, `.rqh`, `.rqtag`, `.tf`,
+ * `.tffail`, `.tfchg`, `.qfoot`, `.fmts` and the rest are all in
+ * `the-drawing.css`, lifted and compared, and nothing here redeclares one.
+ *
+ * **What is here is the three places the application draws with an element the
+ * mockup did not use**, each for the reason H33 gives: the mockup fills its bars
+ * with inline `style="width:…"`, which is inert under `style-src 'self'`, so a
+ * bar is the platform's own `<progress>`, which carries its value as a value.
+ */
+
+/* A request's whole-request bar, where the drawing drew `.bar > i`. The look is
+   the shared underway bar's; this sets only where it sits. */
+.req > progress.transfers-bar {
+  display: block;
+  width: 100%;
+  margin: 4px 0 2px;
+}
+
+/* A file's own bar and figure, which is `theMarkOnARow`'s cell, sitting in the
+   drawing's bar column. */
+.tf > .tb {
+  height: auto;
+  background: none;
+}
+.tf > .tb .underway-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.tf > .tb .underway-row progress {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tf > .tb .underway-row .rqs {
+  margin: 0;
+  white-space: nowrap;
+  font-size: var(--t-sm);
+}
+
+/* The one right-click menu, `§ Stopping one file`, placed under the row it
+   belongs to rather than at a position a style would have to carry. */
+.ctx.transfers-ctx {
+  margin: 2px 0 4px 14px;
+  width: max-content;
+}
+
+/* The line an act answers on. */
+.transfers-answer {
+  margin: 0 var(--gutter);
+}
+
+/* The folder choices in a format box sit in the form's own column.
+ *
+ * **A folder row carries two cells, the mark and the words, and the words take
+ * the rest of the row and wrap inside it.** The drawing's `.fmt.choice3` gives
+ * three columns with the words at their own full width and `nowrap`, which is
+ * right for a short name beside a note and wrong for a path of any length: the
+ * proposed folder ran past the row's edge in piece 12's `fmt` photograph.
+ * **The selectors repeat `.fmt.choice3` on purpose** — piece 12's first wrap
+ * rule was less specific than the drawing's `nowrap` and lost to it. */
+.frm .transfers-folders {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.transfers-folders .fmt.choice3 {
+  grid-template-columns: 14px minmax(0, 1fr);
+}
+.transfers-folders .fmt.choice3 .fmn {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* A format row's name column takes its name's width.
+ *
+ * **The drawing's `.fmt` gives the name a fixed 58-pixel column**, which held
+ * *EXR* and *PNG* and nothing longer: *Multilayer EXR*, and before that
+ * `OPEN_EXR_MULTILAYER`, ran into the folders beside it (the Creator's note 16
+ * on their second notes). The folder rows above already take their own
+ * columns; this does the same for the format rows, keeping 58 pixels as the
+ * least. */
+.transfers-formats .fmt {
+  grid-template-columns: 14px minmax(58px, max-content) 1fr auto;
+}
+
+/* Transfers' `Server protocol and transfers` S0a starts and the drawing's two groups. */
+.rqstarted { font-size: var(--t-xs); color: var(--ink3); white-space: nowrap; }
+.reqgroup { padding: 12px var(--gutter) 5px; margin: 0; font-size: var(--t-sm); color: var(--ink3); font-weight: 550; }

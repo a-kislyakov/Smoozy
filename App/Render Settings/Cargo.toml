@@ -1,0 +1,61 @@
+[package]
+license.workspace = true
+name = "smoozy-render-settings"
+description = "The settings half of the one recorded reading of a .blend and the endings a read can have; the override store that keeps the user's answers apart from the file's values; frame-list tidying; the view-layer pin; the samples imposition set; the version pick; the device choice; and the submission payload as a statement of differences."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-job-files = { path = "../Job files and outputs" }
+smoozy-reporting = { path = "../Reporting a problem" }
+
+# **The other half of this module**: the settings half of the recorded reading,
+# the names, the samples set, the pin, the engine's provenance, the device
+# choice, frame lists, the override store, the refusals, the file's half and the
+# payload, split out at step 10c piece 3 so the machine's own program can take
+# them without taking this crate's connection. Re-exported from `src/lib.rs`
+# and `src/readings.rs` at the paths they have always had.
+smoozy-render-settings-machine = { path = "../Render Settings — machine" }
+
+# Three more than the rules half was briefed with, each forced by a clause
+# that names another document's shape as its own and forbids a second one.
+#
+# Q13's four-value file identity is `Server protocol and transfers` S13's
+# type, because `Job files and outputs` R11 requires *one shape rather than
+# two* and the manifest already carries that type. Already in the tree
+# beneath `Job files and outputs`, so it is no new weight.
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+
+# D6's table is written across `Servers` H11's four card states and H1's
+# three reading states, and a copy of either closed set here would be a
+# second set that drifts. The hardware reading is that document's remembered
+# one (D5), so its type is the one the reading arrives in.
+smoozy-servers = { path = "../Servers" }
+
+# B2 matches over versions *parsed as components, never as strings*, which is
+# `Server Setup` B2's discipline and that crate's `Version`; the whole-app
+# floor of 4.5 has one home there; and B1's list *is* that document's fresh
+# search result, taken whole.
+smoozy-server-setup = { path = "../Server Setup" }
+
+# Y2 puts the payload into the manifest as M1's *carried and not interpreted*
+# field, whose type is a JSON value. Both already in the tree beneath the
+# manifest's own crate, and pinned in `App/Cargo.toml` like everything else.
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# The same crate with its test readings turned on: the tests that stayed here
+# build their readings from `file_half::testing`, written once for both folders.
+smoozy-render-settings-machine = { path = "../Render Settings — machine", features = ["testing"] }
+# W5's ruling is read off the runtime crate's own owner row for the
+# file-inspection kind rather than asserted here. Tests only: nothing in this
+# crate's working half reaches the runtime.
+smoozy-runtime = { path = "../Rented-server runtime" }
+# The one thing a test double for `Server protocol and transfers`'
+# `CarriesAValueOnACommandsStandardInput` needs: the secret type its one
+# method takes. Tests only — this crate never carries a secret.
+smoozy-security-and-licence = { path = "../Security and licence" }
+tokio = { workspace = true }

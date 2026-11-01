@@ -1,0 +1,121 @@
+/* **Files — only what this shape needs that the drawing did not carry.**
+ *
+ * `web/the-drawing.css` is the mockup's own stylesheet, lifted, and a test
+ * compares every declaration in it against the mockup's — so nobody edits a
+ * declaration in it by hand. **The browser's own classes are all already
+ * there**: `.files`, `.crumbs`, `.ftools`, `.flist`, `.frow`, `.fic`,
+ * `.fname`, `.fmeta`, `.deny`, `.fhint`, `.fbar`, `.dropzone`, `.fwait`,
+ * `.fask`, `.menuset`, `.ctx`, `.clist`, `.mwarn`, `.mcheck`, `.mnote` and the
+ * rest. **What is here is five rules, and every one of them exists because the
+ * drawing wrote an element this application may not write** — or, for the
+ * last, because the drawing shows its menus side by side rather than opening
+ * one.
+ *
+ * There is no colour of this application's own below: every value is one of the
+ * drawing's own tokens.
+ */
+
+/* **The path's own parts, and the crumbs' controls.**
+ *
+ * The mockup writes each part as `<a data-go="browse">`, which is an anchor with
+ * no address. **This application may not have one**: the content policy is
+ * `default-src 'none'` and the shell refuses a navigation outright
+ * (`Desktop app and delivery` H31), so a path part is a real button and reads
+ * as the link the drawing drew. Same for the offer inside a refusal, which the
+ * mockup writes as `<a href="#">`. */
+.crumbs button,
+.deny button.mini {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  font-weight: 550;
+  cursor: pointer;
+}
+.crumbs button:hover,
+.deny button.mini:hover {
+  text-decoration: underline;
+}
+.crumbs button:focus-visible,
+.deny button.mini:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* **The tail of the colliding-names list.**
+ *
+ * The mockup writes it as `<span style="color:var(--ink3)">…and 37 more</span>`
+ * — one of its 88 inline `style=` attributes, every one of them inert under
+ * `style-src 'self'`. The value is the drawing's own token; only its home
+ * moves. */
+.clist .more {
+  color: var(--ink3);
+}
+
+/* **The line that says an act is not built.**
+ *
+ * A control the user pressed is answered where they pressed it, and a box would
+ * put a second thing in front of them for an answer they did not need to stop
+ * for. **It is a state of this stage rather than of the application** and it
+ * goes when the acts do; it borrows the drawing's own quiet-line values so it
+ * reads as part of the browser rather than as something else. */
+.fnotyet {
+  padding: 8px var(--gutter);
+  border-bottom: 1px solid var(--line);
+  background: var(--sunk);
+  font-size: var(--t-sm);
+  color: var(--ink2);
+}
+.fnotyet[hidden] {
+  display: none;
+}
+
+/* **The one right-click menu, where it was asked for.**
+ *
+ * `.ctx` is the drawing's own panel and every rule inside it is the drawing's.
+ * What the drawing has no rule for is **where one sits**, because the mockup
+ * lays its three menus side by side over a shade to show them at once. The two
+ * numbers arrive as custom properties set from the page — the route
+ * `web/servers.css`'s `.svctx` already takes — so they are values rather than
+ * declarations and H33's rule is kept. */
+.fctx {
+  position: fixed;
+  left: var(--fctx-x, 0);
+  top: var(--fctx-y, 0);
+  z-index: 30;
+}
+
+/* **The transfer count in the bottom bar**, a link to Transfers, drawn as the
+   drawing's `data-fb="xfers"` is: the accent, at the bar's weight of a value.
+   The Creator's notes piece 6. */
+.fbar .ftrans { font-size: inherit; font-weight: 550; }
+
+/* **A folder's size hover line, placed where it opens** — the drawing's
+ * `.fsztip`, at the pointer's row or beside a greyed menu item. The menu it
+ * may sit beside is fixed at the pointer above everything (`.fctx`), so the
+ * line is fixed too and goes above it; the two numbers arrive as custom
+ * properties, as `.fctx`'s do (H33). The Creator's twenty-third notes, note 2. */
+.files .fsztip {
+  position: fixed;
+  left: var(--fsz-x, 0);
+  top: var(--fsz-y, 0);
+  z-index: 31;
+}
+
+/* **The typing field, as the input it has to be.**
+ *
+ * The drawing's `.fname .fedit` is a `<span>`, which as a block fills the name
+ * column by itself; an input does not, so it is given the column's width here,
+ * the 5 px it reaches past each side included, exactly as the drawing's span
+ * does. Its selected text takes the drawing's `.fsel` colours, so *New folder*
+ * reads selected the way the drawing draws it (`Design/File Browser § Acting on
+ * files`; the Creator's note 4 on the test copy). */
+.fname input.fedit {
+  width: calc(100% + 10px);
+  min-width: 0;
+}
+.fname input.fedit::selection {
+  background: var(--accent-solid);
+  color: var(--on-fill);
+}

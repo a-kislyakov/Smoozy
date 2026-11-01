@@ -1,0 +1,31 @@
+/* Design/Whole app, Selecting text — the eighteenth notes, note 2.
+ * Only values worth pasting elsewhere and printed words opt in. Keep both
+ * forms: the desktop engines do not all use the same spelling.
+ */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+.ky-away,
+.tg-away,
+.words-away,
+.selectable,
+.selectable *,
+.lbody,
+.lbody * {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+.rp-addr,
+.rp-addr * {
+  -webkit-user-select: all;
+  user-select: all;
+  cursor: text;
+}

@@ -1,0 +1,128 @@
+/* **The render settings panel — only what this shape needs that the drawing
+   did not carry.**
+
+   `web/the-drawing.css` is the mockup's own stylesheet, lifted, and a test
+   compares every declaration in it against the mockup's — so nobody edits a
+   declaration in it by hand, and every class this page uses is already there.
+   **What is left is one thing: the mockup writes its fields as static spans,
+   and a page a person types into writes them as real controls.**
+
+   **Every selector below is wrapped in `:where(…)`, which contributes no
+   specificity at all**, so each of the drawing's own rules beats it. That is
+   deliberate: these say what the browser must stop doing to a form control, and
+   they must never say what a field looks like — the drawing decides that, and
+   `.set.fromfile .fld` and `.set.typed .fld` are the two rules that carry this
+   page's whole italic-grey-against-upright-bold convention. */
+
+:where(.sheet input, .sheet select, .sheet button) {
+  font-family: inherit;
+  font-size: inherit;
+  font-style: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* A control the keyboard can reach has to show where it is. The boxes, the two
+   engine rows and the two device rows are pressed with a key as well as with a
+   pointer, and none of them is a native button. */
+:where(.sheet .box:focus-visible, .sheet .rad:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* **The panel's body is piece 5's `.suscroll` and the drawing's is `.cols`.**
+
+   That piece hands every panel one body element carrying the Set up tab's own
+   scrolling class — `flex: 1; overflow-y: auto; padding: …; gap: …` — and the
+   drawing makes `.cols` the scroller for this panel, with the submit strip
+   under it inside the sheet. **Two scrollers nested one inside the other put
+   the submit strip halfway up the panel and cut the third column off**, which
+   is what this page drew before these two lines.
+
+   They are scoped to this panel's own wrapper, so nothing else moves, and they
+   take nothing away: `.cols` still scrolls, `.sfoot` still sits under it, and
+   the drawing decides both. **Making piece 5's body class a per-panel choice is
+   a one-line change in a file this piece may not edit**, and it is written down
+   in this piece's account as the tidy that would remove these rules. */
+[data-panel="set"] .suscroll {
+  padding: 0;
+  gap: 0;
+}
+
+/* **A line that went, keeping its space** — `Design/Whole app § The window`:
+   *a line that can go keeps its space when it goes*. The pick line leaves the
+   header when a Blender is picked, and every field sits below it; the page
+   draws it again with this class so nothing under it moves. */
+:where(.pkline.kept) {
+  visibility: hidden;
+}
+
+/* **A field and its unit, held on one line** — `Design/Whole app §
+   Typography`, Creator-stated 2026-09-28: a number and its unit are never
+   split across two lines. `.set` wraps, so the resolution field and its *%*
+   sit in one piece that does not, spaced as the row spaces them. */
+:where(.set .withunit) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+
+/* **The read's failure sits in its own box**, as the drawing draws it —
+   `<div class="noread rdfail">`, `Preparation/Design/Mockup/Smoozy.html` § the
+   four read endings. **The application has one failure shape** (`.qfail
+   .failure`, `web/the-failure-shape.js`) and it carries no box of its own,
+   because on a job's entry the entry is the box; set straight on this page it
+   put its red dot on the panel's own edge, outside the margin of the grey
+   *not read* box above it (the Creator's item 15 on 0.1.7). **So the box is
+   given here, on this panel only, with `.noread`'s own measures and
+   `.rdfail`'s page background.** `.rdfail` itself is not put on the shape: its
+   paragraph rule would fight the shape's own indent for the second sentence. */
+[data-panel="set"] .suscroll > .qfail.failure {
+  margin: 0 0 14px;
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg);
+}
+
+/* **A submission that went: the server's name in the sentence's own ink** —
+   the drawing's `res-sent` draws *Submitted to RunPod 4090.* with no bold, and
+   this page draws every value in a `<b>` (`saidInto`). Ordinary ink at the
+   page's own text size is `Design/Render Settings § Submitting`'s, the
+   Creator's note 10 on the test copy. */
+.rs-sent b { font-weight: inherit; }
+
+/* **What the submission answered — *Submitting.*, a refusal — sits where a
+   submission that went sits: under Render, right-aligned in Render's column,
+   on the foot's second line** (`Design/Render Settings § Submitting`, the
+   Creator's tenth notes, note 8). The drawing's `.rs-sent` carries its own
+   `margin-left: auto`; the answer line is this page's and the drawing has no
+   state for it, so its push to the right is written here. Its class is set by
+   what it says (`.alertnote` or `.bar-note underval`), so it is named by its
+   box, and the value column's 91-pixel inset those classes carry is taken off.
+   The two are never shown together. */
+.sfoot .sfl2 > [data-box="submit-answer"] {
+  margin-left: auto;
+  padding-left: 0;
+  text-align: right;
+}
+
+/* **Smoozy's own dropdown, closed** — the Creator's fifth notes, note 2. The
+   page's three dropdowns are a button and a list (`aDropdown` in
+   `web/render-settings.js`), never a `select`. Its look is the drawing's
+   (`.pick .pkb`, `.pick .ddl`). Only mechanism is here: a control with nothing
+   picked keeps its height with a character that takes no width. */
+.pick > .pkb:empty::before { content: "\200B"; }
+
+/* **A dropdown with no room below opens upward** — the Creator's thirteenth
+   notes, note 1. Where the page finds the list would pass the window's bottom
+   with more room above (`theListIsKeptInsideTheWindow` in
+   `web/render-settings.js`), it carries `up`. ~~Its rule, `.pick .ddl.up`, was
+   written here as mechanism.~~ **From 2026-10-19 the drawing draws it**
+   (`res-tglist`), so the rule is the drawing's, lifted into
+   `web/the-drawing.css`, and its copy here went with piece N. */

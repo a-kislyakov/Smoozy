@@ -1,0 +1,8 @@
+[package]
+license.workspace = true
+name = "smoozy-security-and-licence"
+description = "The rules for what Smoozy holds, how it is reached, and how it is erased. The adapters that implement them belong to Desktop app and delivery."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]

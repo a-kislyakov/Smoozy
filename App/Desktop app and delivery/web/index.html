@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smoozy</title>
+<!-- One stylesheet link, and it is the only one there will ever be. Every
+     other stylesheet arrives through the @import list at the head of
+     smoozy.css, which is where a piece adds its one line. Desktop app and
+     delivery H33: style-src 'self', so there is no inline style anywhere in
+     this document and no remote sheet. -->
+<link rel="stylesheet" href="smoozy.css">
+</head>
+<body>
+<!-- **This document is shared and a piece adds nothing to it. Step 10a piece
+     A, 2026-09-08.**
+
+     The whole of the layout rule is at the head of smoozy.js. The short of it:
+     this file holds the window's own chrome and one empty pane, and **every
+     piece makes its own elements inside the pane from its own module** rather
+     than putting markup here. Eight pieces and eleven screens editing one
+     markup file is the merge that rule exists to avoid, and markup a module
+     did not make is markup that module cannot be sure is there.
+
+     The window's own title bar. On a Mac the system keeps its frame and draws
+     its own buttons over this bar; on Windows and Linux the frame is given up
+     and Smoozy draws them, into whichever of the two groups below that system
+     puts them in. The groups are filled by the script, because which buttons
+     there are and which side they sit on is the system's answer, not ours.
+     Desktop app and delivery H6a; Preparation/Design/Whole app.md.
+
+     The drag attribute does not reach child elements on this shell, so every
+     part of the bar that should drag carries it of its own — H6b. -->
+<div class="app">
+  <div class="titlebar" data-tauri-drag-region>
+    <div class="lights lights-left" id="buttons-left"></div>
+    <span class="nm" id="app-name" data-tauri-drag-region></span>
+    <span class="grow" data-tauri-drag-region></span>
+    <div class="lights lights-right" id="buttons-right"></div>
+  </div>
+  <div class="pane" id="pane"></div>
+</div>
+<!-- Desktop app and delivery H33: script-src 'self'. Separate files served
+     from the packaged origin, and no inline script of any kind. This is the
+     one script tag in the document; everything else is imported by it. -->
+<script type="module" src="smoozy.js"></script>
+</body>
+</html>

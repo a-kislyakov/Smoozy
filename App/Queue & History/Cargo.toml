@@ -1,0 +1,52 @@
+[package]
+license.workspace = true
+name = "smoozy-queue-history"
+description = "The machine-local queue and the line in it; how a job's identity, folder and label are composed; held jobs and the predicate that drops a waiter; every act on the line — a cancel, a reorder, a group moved as one block, a stop, a clear-then-stop whose order is the promise; the two bars and their plan arithmetic; how an ending is decided and what the entry says about the devices; the local job record and what each field survives; one job's two records on two lifetimes; the idle half hour; and deletion, which reaches both copies and never comes back."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-job-files = { path = "../Job files and outputs" }
+smoozy-reporting = { path = "../Reporting a problem" }
+smoozy-render-settings = { path = "../Render Settings" }
+smoozy-dependencies = { path = "../Dependency Upload & Remap" }
+
+# **The other half of this module**: the line and the job record, the ending,
+# the readings and the reader, the waiting predicate, the previews' arithmetic
+# and queueing, the acts on the machine-side record, and the machine's own
+# stores and acts — split out at step 10c piece 3 so the machine's own program
+# can take them without taking this crate's connection. Re-exported from
+# `src/lib.rs`, `src/acting/mod.rs` and `src/acting/previews.rs` at the paths
+# they have always had.
+smoozy-queue-history-machine = { path = "../Queue & History — machine" }
+
+# **The acting half's own, and it is no new weight.** Q1's machine-local
+# queue is a durable store and its records have a written form; the form is
+# Build's own choice and is recorded in this module's decisions record, in the
+# shape `Job files and outputs` already settled for the manifest and the
+# attempt record. Both are already in the tree beneath this crate's own
+# dependencies and both are the workspace's own pins.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# **The acting half's own, and none of it is new to the workspace.** Each was
+# already in the tree beneath this crate's own dependencies and each is the
+# workspace's own pin.
+
+# The supervisor whose writes this document rides — `Rented-server runtime`
+# S1, S11 to S14 — the hold record and its release evaluation (§8), the sinks
+# and the capture ceiling (§11), the health readings (§12) and the
+# machine-local endpoint. **A second one of any of them would be a second
+# thing to keep true**, so none is written here.
+smoozy-runtime = { path = "../Rented-server runtime" }
+
+# The request frame a machine-local endpoint call is made in, the transfer
+# contract every fetch below rides, and the free-space reading's own shape.
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+
+[dev-dependencies]
+# The same crate with its test helpers turned on: the tests that stayed here
+# build their jobs, groups, operations and lines from `line::testing`, written
+# once for both folders.
+smoozy-queue-history-machine = { path = "../Queue & History — machine", features = ["testing"] }

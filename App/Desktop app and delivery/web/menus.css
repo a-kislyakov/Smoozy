@@ -1,0 +1,88 @@
+/* The menu button and the place it sits in the title bar — the page half of
+ * `web/menus.js`, and only ever drawn on Windows and Linux. Added 2026-09-12 by
+ * step 10a round 1's must-do F-9.
+ *
+ * **Why this file exists.** The module had no stylesheet and borrowed two
+ * classes from the drawing, and both brought their drawing with them.
+ *
+ *   - `.sysbar` is the mockup's **menu-bar strip**: its own height, its own
+ *     sunken ground and a bottom border. Put inside the title bar it drew a
+ *     short sunken box with a rule under it, between the application's name and
+ *     the rest of the bar. **Design settles that Smoozy draws one bar at one
+ *     height everywhere**, and that on these two systems the four menus sit
+ *     behind **one button** in that bar.
+ *   - `.wbtn` is the **window button** in `chrome.css`, and nothing narrowed it.
+ *     So on Linux the menu button became a 22-pixel grey circle a few pixels
+ *     from three identical grey circles that close, minimise and maximise the
+ *     window; on Windows a 46-pixel full-height plate, which is what Microsoft's
+ *     arrangement makes a window button look like. **Design's whole reason for
+ *     asking each system what its window buttons look like was that one system's
+ *     arrangement worn by two that do not use it is wrong**, and a fourth button
+ *     that is not a window button at all is the same mistake by another route.
+ *     `chrome.css` now narrows those rules to the two containers they are for,
+ *     so the class cannot be borrowed again by accident.
+ *
+ * **What is still the drawing's is the panel** — `.mb`, `.ctx` and `.k` — which
+ * is genuinely the mockup's own menu panel and is drawn as the mockup draws it.
+ *
+ * **What this file's own numbers are.** The button is Smoozy's own element, the
+ * mockup having drawn a bar rather than a button, so its size is decided here
+ * the way `chrome.css` decides the three window buttons'. Everything else is a
+ * token from the drawing.
+ */
+
+/* The place in the title bar. **No height, no ground and no border**: it is
+ * where the button sits, not a second bar. It is positioned so the panel has
+ * something to hang from, and it takes the stacking order the mockup's own menu
+ * strip had — the title bar comes before the pane in the document, so without it
+ * an open panel would draw behind the screen beneath it. */
+.mnu { position: relative; display: flex; align-items: center; z-index: 60; }
+
+/* The one button. It is drawn as a title-bar control rather than as a window
+ * button: the mark centred, the ground appearing on hover, and the open state
+ * carrying the accent the mockup's own menu headings carry when their menu is
+ * open. 22 by 18 is the mark at the drawing's own 10-pixel glyph size with room
+ * around it, and nothing else in the bar changes height for it. */
+.mnu-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink2);
+  cursor: pointer;
+}
+.mnu-btn svg { width: 10px; height: 10px; overflow: visible; }
+.mnu-btn svg path { stroke: currentColor; stroke-width: 1; fill: none; }
+.mnu-btn:hover { background: var(--sel); color: var(--ink); }
+.mnu-btn[aria-expanded="true"] { background: var(--accent-solid); color: var(--on-fill); }
+.mnu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The panel hangs from the button rather than from the mockup's menu-bar
+ * height, that bar not existing here. No number: it is the button's own bottom
+ * edge. */
+.mnu .mb { top: 100%; }
+
+/* The Linux update box follows the drawing's shared .modal.top, .mbox, .msub and .mact rules
+ * from the-drawing.css. Only the separately supplied version needs a line
+ * kept whole, like About's version. No layout number differs from the drawing. */
+.linux-update h3 .selectable { white-space: nowrap; }
+
+/* About's offline licence reader shares its box and keeps long text inside it. */
+.about .mbox { max-height: 100%; min-height: 0; overflow-y: auto; }
+.about .ab-links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 16px; }
+.about .ab-link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; }
+.about .ab-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.about .ab-reading { width: min(850px, 100%); }
+.about .ab-text { max-height: calc(100vh - 220px); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--t-sm); font-family: var(--face-mono); line-height: 1.5; text-align: left; }
+.ax-bad {
+  font-size: var(--t-sm); color: var(--ink2);
+  background: var(--alert-bg); border-left: 2px solid var(--alert);
+  padding: 7px 9px; border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.ax-bad b { color: var(--ink); font-weight: 600; }
+.ax-bad .fdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 7px; vertical-align: 1px; }
+/* End About styles. */

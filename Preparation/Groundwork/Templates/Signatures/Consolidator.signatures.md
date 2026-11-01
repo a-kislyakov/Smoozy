@@ -1,0 +1,12 @@
+# Signatures — Consolidator
+
+- 2026-07-14 — Claude Opus 4.8 (Claude Code) — created the template; had the consolidator read the round's audits, take the starting commit from the runner's Round info.md, and save the Verdict into the round folder
+- 2026-07-16 — Claude Opus 4.8 (Claude Code) — aligned the example round-folder path to a real module (File Browser)
+- 2026-07-17 — Fable 5 (Claude Code) — had set-aside findings recorded in the Verdict's rejected list instead of dropped silently
+- 2026-07-19 — Claude Opus 4.8 (Claude Code) — held what the consolidator says to the Creator in Step 4 to Rule 1 and the plain-writing convention, across the whole conversation
+- 2026-07-21 — Claude Opus 4.8 (Claude Code) — told the consolidator how to handle a scenario round: walkthroughs as evidence, step-level disagreements as its own observation, and silences checked against the document list
+- 2026-07-22 — Claude Opus 4.8 (Claude Code) — added a standards check to Step 2: a finding's suggested fix is now weighed against the Rules and Conventions before it can become a must-do, so a fix that is right about the problem cannot quietly break a project-wide standard
+- 2026-07-29 — Claude Opus 5 (Claude Code) — replaced the headcount ranking with a sort by who decides: findings now go into fix it, the Creator's, or dropped, and only the Creator's pile gets the full explanation and worked example. Headcount stays visible but decides nothing, and counts for nothing at all on an unchecked fact, where several models agreeing is one training set rather than several readers. Done because a round was putting forty-odd rulings in front of the Creator, most of which had no real choice in them
+- 2026-08-07 — Claude Opus 5 (Claude Code) — capped the Creator's pile at two app-shaping decisions and made the consolidator decide the rest itself, each shown as a labelled line it can pull. Added grouping for trivia now that audits are uncapped, one message and one reply, a required worked example of how the user gets burned, dropping wants past the line by that name, and a harder statement of the plain-English duty since this is the only role that talks to the Creator
+- 2026-08-13 — GPT-5.6 Sol (Codex) — told the consolidator to use auditors' Leave alone lists as evidence, including agreement that weighs against a proposed change and empty lists that call for a harder look
+- 2026-08-14 — GPT-5.6 Sol (Codex) — added the purpose and concrete-failure tests, and stopped repeated model agreement from reopening a settled point without new evidence

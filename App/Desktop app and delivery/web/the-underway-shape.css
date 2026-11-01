@@ -1,0 +1,167 @@
+/* **The underway shape's own rules** — Desktop app and delivery §16.5 and
+ * §16.7.
+ *
+ * **The numbers are the drawing's. Their one home is the token block at the top
+ * of `Preparation/Design/Mockup/Smoozy.html`**, lifted whole into
+ * `the-drawing.css` by piece B. **Nothing below invents a colour and nothing
+ * below invents a size** — every value here is a token or a shape the drawing
+ * already has.
+ *
+ * **What is here is only what one shape needs that eleven per-screen copies did
+ * not.** `.uway`, `.uwl`, `.spin`, `@keyframes sp`, `.bar`, `.rqs`, `.svwork`,
+ * `.svhw.stale`, `.cbtn.trying` and `.sub` are all the drawing's own and are
+ * already in `the-drawing.css`; this file adds the two shapes the drawing had
+ * no single home for, the bar H33 forced into a different element, and the
+ * turning mark placed where the drawing never placed one.
+ */
+
+/* **Design's *on the control*: it keeps its place and its width, loses its
+ * label to a turning mark, and IS NOT DIMMED.**
+ *
+ * The place and the width come from `.uway .uwl { visibility: hidden }` in the
+ * drawing's own sheet — the label stays in the markup and holds the box. **What
+ * is written here is the absence**: no `opacity` and no `filter` on a control
+ * carrying the mark, anywhere, ever. Design, 2026-09-02, after the drawing
+ * turned out to have two of these, one faded and one not: *"Not being pressable
+ * is carried by the control not answering; a fade on top of that says
+ * unavailable twice, and on a filled button it washes the turning mark out to
+ * almost nothing."*
+ *
+ * `aria-disabled` is what says *not pressable* to anything that is not looking
+ * at pixels; the drawing's own `pointer-events: none` is what makes it true.
+ * **`[disabled]` is deliberately not used** — every engine dims it.
+ */
+.uway[aria-disabled="true"] {
+  opacity: 1;
+}
+
+/* **Design's *on the row*: the row says how far along in its own status
+ * column.** */
+.underway-row {
+  display: block;
+  min-width: 0;
+}
+/* **M3a's *as of that moment* is its own line.** The drawing gives `.sub` a
+ * block of its own inside `.svwork` and `.svhw` and not inside `.rqs`, and a
+ * moment run on to the end of a byte count reads as part of the figure. */
+.underway-row .rqs .sub {
+  display: block;
+}
+
+/* **The bar, in a native `<progress>` because H33 forbids the drawing's inline
+ * width.** The look is `the-drawing.css`'s own `.bar` and `.bar i`, on the same
+ * tokens and at the same height and radius. */
+.underway-bar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  border: 0;
+  border-radius: var(--r-xs);
+  background: var(--track);
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.underway-bar::-webkit-progress-bar {
+  background: var(--track);
+  border-radius: var(--r-xs);
+}
+.underway-bar::-webkit-progress-value {
+  background: var(--accent-fill);
+  border-radius: inherit;
+}
+.underway-bar::-moz-progress-bar {
+  background: var(--accent-fill);
+  border-radius: inherit;
+}
+/* **A shape that never becomes a figure is the app saying it cannot**, and an
+ * indeterminate bar is that sentence drawn. It carries no fill of its own, so
+ * the turning mark beside it is the whole of the statement. */
+.underway-row[data-it-cannot-say="true"] .underway-bar {
+  visibility: hidden;
+}
+
+/* **Design's *over the pane*: nothing on that pane can be used until the work
+ * finishes, and nothing else on the screen is covered.** It covers its own
+ * positioned parent and no more. */
+.underway-pane {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  z-index: 2;
+}
+
+/* **The turning mark itself, wherever it is not on a control.** Added
+ * 2026-09-27, step 10c's eighth-pass fix piece 5.
+ *
+ * **The drawing styles `.spin` only inside `.uway` and `.rdwait`**, so the mark
+ * `theMarkOverAPane()` and `theMarkOnARow()` put down was an empty `<i>` with no
+ * size: the Set up tab's first opening and the *Install Blender…* box showed a
+ * pale wash with nothing on it, and the setup step under way showed no mark at
+ * all (step 10c's eighth pass on Hyperstack). Piece 9's harness counted the
+ * element and passed; the harness for this rule measures its size and whether
+ * the screen changes when it is hidden.
+ *
+ * **Every value is the drawing's own `.uway .spin`** — the size, the two
+ * greys, the round shape and the `sp` turn — placed in the line rather than
+ * over a label, because here there is no label to sit over. `.underway-reading`
+ * is Design's *"the reading it produced carries the mark itself"*
+ * (`Design/Whole app § Anything that isn't instant shows that it's underway`)
+ * for a reading no control started, such as the Blender search on Render
+ * Settings. */
+.underway-pane .spin,
+.underway-row .spin,
+.underway-reading .spin {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--line);
+  border-top-color: var(--ink3);
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: sp .7s linear infinite;
+}
+
+/* **A setup step's mark sits in the step's own line and moves nothing below
+ * it.** Added 2026-09-28, step 10c's ninth-pass fix piece 4.
+ *
+ * A step says nothing of how far along it is, so its row shape is the one that
+ * never becomes a figure — the turning mark alone, its bar hidden. **The
+ * shared `.underway-row` above is a block**, which is right in a status column
+ * and wrong under a step's name: the ninth pass on Hyperstack watched the mark
+ * sit on a line of its own and the steps below it move down while a step ran,
+ * which `Design/Whole app § The window` forbids (*"nothing already drawn
+ * moves"*). **So this is scoped to a step and the shared rule is untouched**:
+ * Transfers and the Queue draw the same row shape in their own columns. */
+.steps li > .underway-row,
+.steps li > .underway-row .rqs {
+  display: inline;
+  margin: 0;
+}
+.steps li > .underway-row .underway-bar {
+  display: none;
+}
+
+/* **And it stands clear of the step's last letter**, by the drawing's own gap
+ * between a step's words and what follows them on its line — `.stm`'s 8
+ * pixels. The tenth pass on Hyperstack saw the mark touch the letter
+ * (*driver◌*, *check◌*). Added 2026-09-28, step 10c's tenth-pass fix piece 6. */
+.steps li > .underway-row {
+  margin-left: 8px;
+}
+
+/* The proof pane this piece draws into, which a later piece takes. */
+.underway {
+  display: grid;
+  gap: var(--gap, 12px);
+  padding: 12px 0;
+}
+.underway .svrow.repairing {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 12px;
+}

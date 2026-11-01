@@ -1,0 +1,40 @@
+[package]
+license.workspace = true
+name = "smoozy-dependencies-machine"
+description = "The half of `Dependency Upload & Remap` the rented machine's own program may take: the byte objects a location is, the kinds a reference can be, where the remap material lives in the asset area, the material's pairs and how one is matched, the fragment that applies them inside a running Blender and the reading of what it reported, and the one location that goes with a job's machine-side record. It opens no connection, reads no disk and runs no process."
+version.workspace = true
+edition.workspace = true
+
+# **Nothing here reaches a network, a disk or another process, and nothing here
+# reaches `smoozy-server-protocol`.** That is the whole reason this crate
+# exists. The render worker composes the remap material's fragment into its
+# launch material and reads the per-pair lines back off the captured stream,
+# and the queue removes the material with a job's machine-side record; all of it
+# is values, and while it sat in `smoozy-dependencies`, taking any of it meant
+# taking that crate's SSH client and its C cryptography too.
+# `smoozy-dependencies` re-exports everything here at the path it has always
+# been reached at, and keeps every act, the record and the readings' trait. The
+# ruling is at `Audits/Build/Step 10c/The runner's rulings.md`, under piece 3.
+
+[dependencies]
+# The job identity the material is kept under — `State, identity and recovery`
+# §2.1.
+smoozy-state = { path = "../State, identity and recovery" }
+
+# A1: the asset area is `Job files and outputs` L6's, read off that document's
+# own layout; M10's reference rides the manifest's carried-and-not-interpreted
+# field. The half of that module that holds the layout and the manifest.
+smoozy-job-files-machine = { path = "../Job files and outputs — machine" }
+
+# M6: the material names the Blender it was composed for, which is `Render
+# Settings`' identity of a build. The half of that module that holds it.
+smoozy-render-settings-machine = { path = "../Render Settings — machine" }
+
+# M10's material is one written document, the form the manifest already takes.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# The fragment's tests compose a material for a named Blender version, which is
+# `Server Setup`'s `Version`. Tests only.
+smoozy-server-setup-machine = { path = "../Server Setup — machine" }

@@ -1,0 +1,28 @@
+/* The shell — the page half of `src/surface/the_rail.rs`, whose head carries
+ * the piece and whose page module carries the mounting contract.
+ *
+ * **This file holds two rules and it should never hold many more.** The rail,
+ * the main pane, the three sections, the dividers, the rows, the badges, the
+ * marks, the counts, the current-row mark and all four narrowing steps are
+ * already drawn by `web/the-drawing.css`, which is the mockup's own stylesheet
+ * lifted whole. **What is below is the one thing the drawing cannot carry**,
+ * because it is about where the shell sits rather than about how it looks.
+ *
+ * **Nothing here invents a number.** There is no number here at all.
+ */
+
+/* ── The shell fills the one empty pane ──────────────────────────────────────
+ *
+ * In the drawing, `.body` is a direct child of `.app`'s own grid and takes the
+ * row it is given. Here it sits inside the one empty `<div class="pane">` that
+ * `index.html` holds — a block — so it is told to fill it.
+ *
+ * **These two rules came from `web/panes.css`, where piece B wrote them under
+ * its own proof surface**, and they are here because the thing they hold up is
+ * no longer a proof surface: it is the shell, and every screen sits in it.
+ * Piece B's third rule went with the block rather than moving — it gave a
+ * minimum height to the empty preview column that surface drew, and there is
+ * no such column here.
+ */
+.pane { display: flex; flex-direction: column; }
+.pane > .body { flex: 1; min-height: 0; }

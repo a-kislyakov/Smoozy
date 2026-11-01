@@ -1,0 +1,3 @@
+# Signatures — The Pile 3 batch
+
+- 2026-08-25 — Claude Opus 5 (Claude Code) — written, from the batch's own raw record at `Audits/Architecture/The Pile 3 batch of 2026-08-25/Findings — the rented container.md`. One rented Vast.ai container, 93 minutes, about six cents, destroyed and the account confirmed empty. It answers the three Pile 3 items that wanted a rental — U1, U2 and U8 — and Fact 131, which rode it free. Every section states the bound of what was actually exercised rather than rounding it off: U1 is the container kind only and says nothing about systemd, U2 is one hour on one provider and sets no upper limit, and U8's confirmation of the 60-second deadline rests on the scene's sample batch rather than on anything about Blender

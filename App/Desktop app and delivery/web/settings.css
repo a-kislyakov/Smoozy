@@ -1,0 +1,22 @@
+/* **Settings' own rules** — Preparation/Design/Settings.md.
+ *
+ * **The numbers are the drawing's and their one home is the mockup**, which is
+ * `web/smoozy.css`'s standing rule. `.stgwrap`, `.stgnav`, `.stgbody`, `.stgs`,
+ * `.stgrow`, `.folders`, `.sfrow`, `.sfdrop`, `.sflift`, `.sfhit`, `.sws`,
+ * `.cmp`, `.trow`, `.modal` and `.mbox` are all lifted in `the-drawing.css`.
+ * **What is here is only what the drawing wrote inline or did not need.**
+ */
+
+/* **The restore control arrives from `said-once.js`'s builder as a section of
+ * its own**, and `said-once.css` still pads it for the bare pane it used to
+ * stand in. Inside this screen the body already gives it room, so that padding
+ * is taken back off here. *(`said-once.css`'s two rules are owed deletion and
+ * that file is not this piece's.)* */
+.stgs .said-once {
+  padding: 0;
+}
+
+/* An answer holder with nothing in it takes no room in the section's gap. */
+.stg-answer:empty {
+  display: none;
+}

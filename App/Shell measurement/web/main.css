@@ -1,0 +1,29 @@
+:root { --title-h: 38px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font: 13px/1.4 system-ui, sans-serif;
+  color: #e8e8e8;
+  background: #1b1b1b;
+  display: grid;
+  grid-template-rows: var(--title-h) 1fr;
+}
+#titlebar {
+  --wails-draggable: drag;
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  background: #242424;
+  user-select: none;
+}
+#buttons { --wails-draggable: no-drag; -webkit-app-region: no-drag; display: flex; gap: 4px; }
+#buttons button {
+  width: 26px; height: 22px;
+  border: 0; border-radius: 3px;
+  background: #333; color: #ddd;
+  font: inherit; cursor: default;
+}
+main { display: grid; place-content: center; gap: 6px; text-align: center; }
+#echo { color: #8a8a8a; }

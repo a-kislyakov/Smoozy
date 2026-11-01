@@ -1,0 +1,4 @@
+# Signatures — Architecture Auditor
+
+- 2026-08-12 — Claude Opus 5 (Claude Code) — created the template, replacing the standing Auditor brief for an architecture Subject. Turns off the clause that makes code-speak a defect and puts ambiguity in its place as the language fault this stage actually has; hands over the rows with their quoted promises; requires the leave-alone list, and says why it is required rather than polite; carries the one question no gate at this stage catches — whether an answer puts something in front of the user that no spec says they get; and tells the auditor not to repeat the counting the gates have already done
+- 2026-08-14 — GPT-5.6 Sol (Codex) — bounded the brief by purpose and ownership, required a concrete failure path, made zero findings valid, and barred Shape audits from pulling downstream mechanism detail into the Subject

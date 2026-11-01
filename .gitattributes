@@ -1,0 +1,27 @@
+# Every text file under App and Preparation is checked out with plain line
+# endings on every system, Windows included.
+#
+# Without this, the hosted Windows runner checks each text file out with
+# Windows line endings, and the application's tests read source files, page
+# files, the mockup and the plans as text. A test that looks for a line holding
+# only a closing brace found it on the Mac and on Linux and not on Windows, and
+# eight tests went red on run 34759561814 for that reason alone. The account is
+# `Audits/Build/Step 10a/The red run of 2026-09-13 — what it was.md`.
+#
+# The hosted workflows are held to the same, because a test reads the workflow
+# as text too. Run 34767216812 went red on Windows on exactly that one test
+# after the first two lines were in place.
+#
+# Apart from COPYING below, it is limited to those three folders on purpose.
+# Audits keeps raw output captured on a Windows machine, with that machine's
+# own line endings, and those bytes are evidence and are left as written.
+#
+# A test in `App/Desktop app and delivery/src/the_selected_shell.rs` asks git
+# whether this still holds for every file, and fails if it does not.
+/App/** text=auto eol=lf
+/Preparation/** text=auto eol=lf
+/.github/** text=auto eol=lf
+
+# About embeds this licence unchanged. Keep its bytes the same in Windows
+# builds, the drawing's offline reader and the public repository.
+/COPYING text eol=lf

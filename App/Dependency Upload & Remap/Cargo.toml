@@ -1,0 +1,74 @@
+[package]
+license.workspace = true
+name = "smoozy-dependencies"
+description = "What the dependency check reads and what a row is; the one record its whole promise rests on and the two ways it is keyed; how two files are told apart by contents; how the search over the user's own folders matches exactly on a disk that does not; where an asset lands and what keeps it there; what the remap material says and how a pair is matched; and what makes Rendering's warning stop and come back."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-job-files = { path = "../Job files and outputs" }
+smoozy-reporting = { path = "../Reporting a problem" }
+smoozy-render-settings = { path = "../Render Settings" }
+
+# **The other half of this module**: the byte objects a location is, the kinds,
+# the asset area's segments, the remap material and its pairs, the fragment
+# that applies them and the one location that goes with a job's record, split
+# out at step 10c piece 3 so the machine's own program can take them without
+# taking this crate's connection. Re-exported at the paths they have always had.
+smoozy-dependencies-machine = { path = "../Dependency Upload & Remap — machine" }
+
+# One more than the rules half was briefed with, forced by two clauses that
+# name another document's shape as their own and forbid a second one.
+#
+# Q1's digest function is `Server protocol and transfers` S23's, *"so that one
+# reading serves both purposes"*, and a transfer's pass-through digest (S22)
+# **is** the content identity of what was published; K7's four-value identity
+# is *"the same shape as S13 and R10, one shape rather than three"*. Already
+# in the tree beneath `Job files and outputs`, so it is no new weight.
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+
+# M10's remap-material document is placed on the machine as one written
+# document, and the manifest carries the reference to it as `Job files and
+# outputs` M1's *carried and not interpreted* field, whose type is a JSON
+# value. Both already in the tree beneath the manifest's own crate, and pinned
+# in `App/Cargo.toml` like everything else.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# **The acting half's own two, and neither is new weight**: both already sit in
+# this crate's tree beneath `Render Settings`, and the plan's own scope line
+# takes *"a Blender from `Server Setup`"* while `About this folder.md` puts
+# `Servers` at the point *"every server-using module below enters through"*.
+#
+# `Servers` supplies the command channel a reading is driven over — this module
+# composes no second one, and `Servers` K1 and K1a forbid running `ssh` for a
+# connection at any moment. `Server Setup` supplies B1's desk-side bound on a
+# Blender run, so one number covers every Blender this application starts, and
+# the elevated-step shape its own acts already keep.
+smoozy-servers = { path = "../Servers" }
+smoozy-server-setup = { path = "../Server Setup" }
+
+# Every act that reaches a machine is asynchronous, because the transport and
+# the transfer loop are — `Server protocol and transfers` R5 puts the byte loop
+# inside the connection Smoozy drives in its own process. The one thing this
+# crate adds of its own is the bound on a Blender run (`Server Setup` B1),
+# which is a deadline rather than a poll. Already in the tree beneath the
+# shell, so it is no new weight, and pinned exactly like everything else.
+tokio = { workspace = true }
+
+# F13 asks that the stored-name reading live in `Desktop app and delivery`'s
+# platform file adapter, and says in its own words what stands until that is
+# granted: *"the macOS call set above is the requirement's content."* It is not
+# granted — that crate depends on the feature modules and supplies their
+# adapters, so this one cannot reach into it without a cycle — so the call set
+# is here, in `src/adapter.rs`, behind `readings::Readings`, and that file is
+# the only route to the filesystem in this crate. These are each system's own
+# calls, reached directly, exactly as `Desktop app and delivery` F11 and L3b
+# already reach them; all three are already in the tree beneath the shell, so
+# none is new weight, and each is the workspace's own pin.
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys.workspace = true

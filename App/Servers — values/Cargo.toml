@@ -1,0 +1,21 @@
+[package]
+license.workspace = true
+name = "smoozy-servers-values"
+description = "The half of `Servers` the rented machine's own program may take: the hardware reading's values and the judgements over them, and the keepalive figures. It opens no connection, reads no disk and runs no process."
+version.workspace = true
+edition.workspace = true
+
+# **Nothing here reaches a network, a disk or another process, and nothing here
+# reaches `smoozy-server-protocol`.** That is the whole reason this crate
+# exists. The render worker needs the cards a machine has and the setup worker
+# needs the keepalive interval, and both are values; while they sat in
+# `smoozy-servers`, taking them meant taking that crate's SSH client and its C
+# cryptography too. `smoozy-servers` re-exports both files at the paths they
+# have always been reached at. The ruling is at
+# `Audits/Build/Step 10c/The runner's rulings.md`, under piece 3.
+
+[dependencies]
+# The installation check and the observed reading the hardware record is kept
+# against — `State, identity and recovery` §2.3 and §3, taken whole rather
+# than re-shaped here.
+smoozy-state = { path = "../State, identity and recovery" }

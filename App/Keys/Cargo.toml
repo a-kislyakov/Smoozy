@@ -1,0 +1,11 @@
+[package]
+license.workspace = true
+name = "smoozy-keys"
+description = "SSH keys on the user's own computer: discovery, generation, validation, fingerprinting, copying, deletion, and how a passphrase is kept and genuinely forgotten."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-security-and-licence = { path = "../Security and licence" }
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-reporting = { path = "../Reporting a problem" }

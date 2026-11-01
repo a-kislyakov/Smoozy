@@ -1,0 +1,45 @@
+[package]
+license.workspace = true
+name = "smoozy-telegram"
+description = "The Telegram bot: the one way to Telegram's service, the pinned slot and the board, routing, the walkthrough and its proof, the told-record, and what a machine and a job say on a phone."
+version.workspace = true
+edition.workspace = true
+
+# **This manifest is written whole at step 10 piece 1, so that no later piece
+# edits it.** Every line below is one a piece of step 10 needs, as listed at
+# `Audits/Build/Step 10/Telegram — what each piece owns and in what order.md`
+# section 7. **A later piece that needs another line reports it to the runner
+# and does not add it**, and never adds a crate that reaches the desktop's SSH
+# client.
+#
+# **What this crate may never depend on**: `smoozy-server-protocol`,
+# `smoozy-queue-history`, `smoozy-job-files` and `smoozy-rendering`. All four
+# reach the SSH client, and the machine program may one day take this crate.
+# Their records are handed in as values through traits. `tests/the_crates_shape_holds.rs`
+# is what says so, and nobody weakens it.
+
+[dependencies]
+# The cryptography rules and the fourth stored secret kind, the bot token.
+# (It also held the processor floor until 2026-10-24, when the floor went.)
+smoozy-security-and-licence = { path = "../Security and licence" }
+# The identities and the stores the worker's state and the told-record lean on.
+smoozy-state = { path = "../State, identity and recovery" }
+
+serde.workspace = true
+serde_json.workspace = true
+getrandom.workspace = true
+
+# `Telegram` R1's action token, unpadded base64url. Already in the tree beneath
+# the client at this exact version.
+base64.workspace = true
+
+# **The one HTTPS client and the transport-layer security beneath it.** Chosen,
+# measured and pinned in `App/Cargo.toml`; the ruling is at `Audits/Build/The
+# one HTTPS client/Decisions record.md`, and the provider beneath it became
+# `rustls`'s own `ring` on 2026-10-24 (the Creator's eighteenth notes, note 3).
+# `rustls` is declared here as well so this crate is held to the workspace
+# entry, whose default features are off — left on, that crate's default
+# provider is `aws-lc-rs`, whose C library cannot be built for the server
+# program's Linux target at this desk.
+ureq.workspace = true
+rustls.workspace = true

@@ -1,0 +1,6 @@
+# Signatures — Settings — Architecture item 24, second pass, Blender 5.0
+
+- 2026-08-29 — Claude Opus 5 (Claude Code) — second pass: answered Settings question 17 again from the Blender 5.0 sources, cold, with the record of where it looked written as part of the answer.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — audit of the second pass: nine faults, two Medium — a line from Cycles' interface file read as what a person sees on screen, and the answer's own label sitting a hundred lines below three item labels that disagreed with it.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — citation check: every quote opened against the 5.0 sources. Three changes — one Cycles line range corrected, a release-note file count corrected from twenty-one to twenty-three against the document's own list, and a note that `use_single_layer` was never looked for.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — hand tests written back: the fifteen runs of 2026-08-29 recorded as **observed** beside the reading, with the machine's own output. A photograph of the running panel settles this pass's inferred step from Cycles' interface file to what a person sees. Both standing lines brought up to date, the operating-system line held to macOS on Apple silicon. Two of six by-hand items pruned; three remain.

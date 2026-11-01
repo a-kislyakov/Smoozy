@@ -1,0 +1,72 @@
+[package]
+license.workspace = true
+name = "smoozy-rendering-machine"
+description = "The half of `Rendering` the rented machine's own program may take: the render worker — the one command-line window and the order of the line held by the type, the device argument's spelling declared at one point, the launch material composed per attempt and placed under the render's login, the render started and held, its two streams copied and observed, the stop performed — with the nine-step pipeline, the attempt's composition, the four versions, the frame list, the card technology and the ending classification with the cause beside every failure. It opens no connection."
+version.workspace = true
+edition.workspace = true
+
+# **Nothing here opens a connection, and nothing here reaches
+# `smoozy-server-protocol`.** That is the whole reason this crate exists. The
+# render worker runs on the rented machine and is started by the supervisor,
+# and while it sat in `smoozy-rendering`, taking it meant taking that crate's
+# SSH client and its C cryptography too. `smoozy-rendering` re-exports
+# everything here at the path it has always been reached at, and keeps the
+# submission, the warning, submitting again, the reading after a dropped
+# submission, the page's readings, the render kind's declarations and the
+# diary. The ruling is at `Audits/Build/Step 10c/The runner's rulings.md`,
+# under piece 3.
+
+[dependencies]
+# Job and condition identities and the observed reading — `State, identity and
+# recovery` §2 and §3.
+smoozy-state = { path = "../State, identity and recovery" }
+
+# The sinks and the write into them (`Rented-server runtime` M1 and M3), the
+# capture ceiling (M4a), the kernel's reading of a recorded pair (X1) and the
+# interrupt (X8 step 4) — taken rather than written a second time.
+smoozy-runtime = { path = "../Rented-server runtime" }
+
+# S5's manifest carries the `.blend`'s four-value identity as `Server protocol
+# and transfers` S13's one type. The half of that module that opens no
+# connection.
+smoozy-framing = { path = "../Server protocol and transfers — framing" }
+
+# L23's table is keyed on `Servers`' own `Cards` and `CardMake`. The half of
+# that module that holds the hardware reading's values.
+smoozy-servers-values = { path = "../Servers — values" }
+
+# L14 compares versions as components, which is `Server Setup` B2's `Version`.
+# The half of that module that holds it.
+smoozy-server-setup-machine = { path = "../Server Setup — machine" }
+
+# S5 composes the manifest, the redirect and the mapping; the pipeline reads the
+# attempt record, the inventory and the reckoning. The half of `Job files and
+# outputs` that holds them.
+smoozy-job-files-machine = { path = "../Job files and outputs — machine" }
+
+# The launch material is composed from the payload, the reading, the pin and the
+# samples set. The half of `Render Settings` that holds them.
+smoozy-render-settings-machine = { path = "../Render Settings — machine" }
+
+# The remap material and the fragment that applies it. The half of `Dependency
+# Upload & Remap` that holds them.
+smoozy-dependencies-machine = { path = "../Dependency Upload & Remap — machine" }
+
+# `Queue & History` R1: its reader is a tee on this crate's copy loop, and the
+# ending this crate classifies is that document's. The half of that module that
+# holds the reader, the readings and the ending.
+smoozy-queue-history-machine = { path = "../Queue & History — machine" }
+
+# S5a's reporting field and S5's remap reference go into the manifest as `Job
+# files and outputs` M1's carried-and-not-interpreted fields, whose type is a
+# JSON value.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+# **For tests only, and only another crate's.** `smoozy-rendering` keeps the
+# tests over what stayed there, and they build their readings, payloads, jobs,
+# manifests and versions from `material::testing`, `composition::testing` and
+# `versions::testing`. It turns this on as a development dependency, so those
+# are written once for both folders. Nothing else turns it on.
+testing = []

@@ -1,0 +1,45 @@
+# **How `ring`'s C and assembly are compiled for the server program's Linux
+# target, `x86_64-unknown-linux-musl`, on this Mac and on the Linux runner.**
+# Added 2026-10-24, the Creator's eighteenth notes, note 3: the HTTPS client's
+# cryptography became `ring` so that Smoozy runs on any 64-bit Intel or AMD
+# processor. The measurement is in `Audits/Build/Step 10c/The eighteenth notes,
+# piece 1, any 64-bit processor — what landed.md`.
+#
+# **The freestanding C flags touch only that Linux target.** The separate
+# privacy wrappers also cover native Mac C calls and every Rust build started
+# inside `App/`.
+#
+# **The compiler is the Mac's own `clang`**, which can write Linux objects. There
+# is no Linux C library on the Mac, so it is told to look for none
+# (`-nostdlibinc`, `-ffreestanding`), and `ring` is told the same with its own
+# switch, `RING_CORE_NOSTDLIBINC`, which puts its own plain versions in place
+# of the three things it takes from the C library — `memcpy`, `memset` and
+# `assert` (`ring` 0.17.14, `crypto/internal.h` and `include/ring-core/check.h`,
+# whose note reads "emulated when there is no assert.h to make cross-building
+# easier"). `ring`'s own build script sets the same two for every musl target
+# but this one (`build.rs`, line 594, "Allow cross-compiling without a target
+# sysroot"). `-U__musl__`
+# is because this `clang` (21) sends `<stddef.h>` on to the C library's own copy
+# on a musl target, and there is none here.
+#
+# **The archiver is a small script beside this file**, because the Mac's `ar`
+# throws Linux objects away; the script says why and what it does.
+[build]
+# Keep the build computer's home and checkout paths out of Rust's stored paths.
+# The helper computes the prefixes on each computer, including test-copy exports.
+# On Windows first run `python .cargo/rustc-with-public-paths.py
+# --build-windows-launcher target/public-paths/rustc-with-public-paths.exe`,
+# then set RUSTC_WRAPPER to that executable's absolute path. Rebuild the launcher
+# after moving the checkout or Python. The hosted workflow does this each run.
+rustc-wrapper = ".cargo/rustc-with-public-paths.py"
+# Also covers source paths passed to rustc relative to its working folder, and
+# makes the privacy setting part of Cargo's build fingerprint.
+rustflags = ["--remap-path-prefix=.=/smoozy/App"]
+
+[env]
+# The wrapper still calls clang; its added flags replace paths only.
+CC_aarch64_apple_darwin = { value = ".cargo/cc-with-public-paths.py", relative = true }
+CC_x86_64_apple_darwin = { value = ".cargo/cc-with-public-paths.py", relative = true }
+CC_x86_64_unknown_linux_musl = { value = ".cargo/cc-with-public-paths.py", relative = true }
+CFLAGS_x86_64_unknown_linux_musl = "-nostdlibinc -ffreestanding -U__musl__ -DRING_CORE_NOSTDLIBINC=1"
+AR_x86_64_unknown_linux_musl = { value = ".cargo/ar-keeping-linux-objects.sh", relative = true }

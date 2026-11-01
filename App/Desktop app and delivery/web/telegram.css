@@ -1,0 +1,46 @@
+/* **The Telegram section's and the walkthrough's own rules** —
+ * Preparation/Design/Settings.md § Telegram.
+ *
+ * `.sucard`, `.fmts`, `.fmt.choice3`, `.rb`, `.sws`, `.bsteps`, `.tg-nm`,
+ * `.ckdot`, `.sunote.amber`, `.modal` and `.mbox` are all lifted in
+ * `the-drawing.css`, and so, from 2026-10-24, are the bot step's own —
+ * `.botroute`, `#botexisting`, `#botcreate`, `.botstartlink` and
+ * `#botcopyresult`, which the page's boxes carry the drawing's identifiers for. **What is here is only what the drawing wrote inline or
+ * did not need.**
+ */
+
+/* **The clipboard's other way in**, as `.ky-away` in `keys.css`: off screen
+ * rather than hidden, because a hidden element cannot be selected and a
+ * selection is what the older route copies. */
+.tg-away {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+/* The part of the section that exists only once Telegram is on is one more
+ * column of the section, with the section's own gap. */
+.tg-on {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.tg-on[hidden],
+.stgs .sunote[hidden] {
+  display: none;
+}
+
+/* A failure holder with nothing in it takes no room. */
+.tg-failure:empty {
+  display: none;
+}
+
+/* **The token row draws either the dots or the not-stored line**, and the one
+ * not drawn takes no room. */
+.stgrow [hidden] {
+  display: none;
+}

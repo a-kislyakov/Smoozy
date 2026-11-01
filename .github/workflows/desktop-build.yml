@@ -1,0 +1,482 @@
+name: Desktop build
+
+# Builds the Smoozy desktop application on Windows and Linux, runs its tests
+# there, and keeps what it built. It signs nothing and publishes nothing.
+#
+# It kept nothing until 2026-09-06, and that had to change for a release to be
+# possible at all. This project has no Windows machine and no Linux machine and
+# no rental will answer for one, so a run that threw its binaries away left two
+# of the three systems with nothing that could ever be released. Keeping them is
+# the only route from a green run to a published artifact. See
+# `Audits/Build/Step 8a/Decisions record.md`.
+#
+# Keeping them changes nothing else: no signing, no publishing, and no push
+# trigger.
+
+# macOS is deliberately absent. The Mac is the one machine this project has,
+# it builds and runs the whole thing itself in about half a minute, and a
+# macOS runner minute costs ten times a Linux one. So the Mac is built at the
+# desk and only the two systems nobody here can run are built up here.
+
+# Started by hand, never on a push, for the same reason: this runs when there
+# is a question worth asking - a build step closing, or a change that could
+# behave differently on a system nobody here can run - not on every commit.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.system }}
+    runs-on: ${{ matrix.runner }}
+    # A ceiling on each job, so a hang fails in an hour and a half rather than
+    # sitting at the runner's own six hours. Runs 35595657437 and 35601023619
+    # sat 218 and 160 minutes on Linux on a test waiting for ever before they
+    # were cancelled by hand. The nine green runs of 2026-09-18 to 2026-09-21
+    # took 26 to 34 minutes on Linux, and every Windows job of the last thirteen
+    # runs took 39 to 45, so 90 is twice the slowest job this workflow has had,
+    # with room for the workspace to grow.
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: windows
+            runner: windows-latest
+            # Where that system's desktop artifact lands, named here so the
+            # step that keeps it needs no branch of its own.
+            desktop: target/release/smoozy-desktop.exe
+          - system: linux
+            # E4b's oldest Linux row sets the build's C-library floor.
+            runner: ubuntu-24.04
+            desktop: target/release/smoozy-desktop
+
+    # Windows starts a native launcher built below; Linux uses Python directly.
+    # Both call the same helper as App/.cargo/config.toml, without cmd.exe.
+    env:
+      RUSTC_WRAPPER: ${{ format('{0}/App/{1}', github.workspace, matrix.system == 'windows' && 'target/public-paths/rustc-with-public-paths.exe' || '.cargo/rustc-with-public-paths.py') }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Room for the build, made before anything is built.
+      #
+      # Run 35324151573 died in *Build the application* with "No space left on
+      # device" writing an rlib. Nothing was wrong with the code: the workspace
+      # has simply grown past what a stock runner has room for. The run before
+      # it that went green, 34888333444 of 2026-09-14, measured the same disk at
+      # 686 MB free of 72 GB by the time the Worker's room was made - it got
+      # through by less than a gigabyte, and four days of growth was enough.
+      #
+      # So the room is made first, and it is made by removing preinstalled
+      # toolchains this project never uses rather than by building less.
+      #
+      # WHAT IS ON THE IMAGE, FROM GITHUB'S OWN MANIFEST for the exact image
+      # this failed on - "Ubuntu 24.04" with "Image Version: 20260907.300.1",
+      # read 2026-09-18 at
+      # https://github.com/actions/runner-images/blob/ubuntu24/20260907.300/images/ubuntu/Ubuntu2404-Readme.md
+      # It lists "Android Command Line Tools | 12.0" and "Android SDK
+      # Platform-Tools | 37.0.1" under `ANDROID_HOME` = "/usr/local/lib/android/sdk";
+      # eleven dotnet SDKs, "8.0.130, 8.0.206, 8.0.319, 8.0.424, 9.0.120,
+      # 9.0.205, 9.0.317, 10.0.111, 10.0.204, 10.0.303, 10.0.400"; "GHC 9.14.1"
+      # with "Cabal 3.18.1.0"; "Swift 6.3.3"; `CONDA` = "/usr/share/miniconda";
+      # and `VCPKG_INSTALLATION_ROOT` = "/usr/local/share/vcpkg". This project
+      # builds a Rust workspace and a Tauri desktop application and uses none of
+      # them.
+      #
+      # THE SIZES ARE NOT WRITTEN DOWN ANYWHERE, so this step measures each one
+      # before it removes it and prints the disk on both sides of the lot. The
+      # next person reads numbers from the run rather than a claim from here.
+      #
+      # `/opt/hostedtoolcache` IS NOT TOUCHED AS A WHOLE: Node lives in it and
+      # the two steps below install Node tools with `npm install -g`. Only the
+      # named neighbours go, and Node is not among them.
+      - name: Room for the build
+        if: matrix.system == 'linux'
+        run: |
+          set -eu
+          df -h /
+          for unused in \
+            "${ANDROID_HOME:-}" \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /usr/share/swift \
+            /usr/local/.ghcup \
+            "${CONDA:-}" \
+            "${VCPKG_INSTALLATION_ROOT:-}" \
+            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/go \
+            /opt/hostedtoolcache/Ruby \
+            /opt/hostedtoolcache/PyPy
+          do
+            [ -n "$unused" ] && [ -e "$unused" ] || continue
+            echo "removing $unused, $(du -sh "$unused" 2>/dev/null | cut -f1)"
+            sudo rm -rf "$unused"
+          done
+          df -h /
+
+      - name: Linux build dependencies
+        if: matrix.system == 'linux'
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl wget file \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            librsvg2-dev patchelf libxdo-dev libssl-dev
+
+      - name: Rust toolchain
+        run: |
+          set -eux
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+
+      - name: The Windows compiler launcher
+        if: matrix.system == 'windows'
+        working-directory: App
+        run: python .cargo/rustc-with-public-paths.py --build-windows-launcher target/public-paths/rustc-with-public-paths.exe
+
+      - name: Compiler arguments reach the compiler unchanged
+        working-directory: App
+        run: |
+          case "${{ matrix.system }}" in
+            windows) python .cargo/test-public-paths.py --launcher "$RUSTC_WRAPPER" ;;
+            linux) python3 .cargo/test-public-paths.py --launcher "$RUSTC_WRAPPER" ;;
+          esac
+
+      # Every member, not just the desktop crate. Until 2026-09-03 this read
+      # `-p smoozy-desktop`, which builds every other member but runs none of
+      # their tests - so the two integration tests that bind a loopback socket
+      # and drive a real SSH server had never been run on either system.
+      #
+      # The disk is printed on both sides of this, and of the build below, on
+      # both systems: run 35324151573 ran out of it and nobody could say where
+      # it went, because nothing measured it until the last step of the job.
+      # `--no-fail-fast` since 2026-09-30: runs 36735409651 and 36742065126
+      # each stopped at the first failing test program, so every fix round
+      # found only the next layer of failures, an hour apart. One run now
+      # reports every failure it meets.
+      - name: The application's tests
+        working-directory: App
+        run: |
+          set -eux
+          df -h .
+          cargo test --workspace --no-fail-fast
+          df -h .
+          du -sh target/* || true
+
+      - name: Build the application
+        working-directory: App/Desktop app and delivery
+        run: |
+          set -eux
+          df -h .
+          npm install -g @tauri-apps/cli@2.11.4
+          case "${{ matrix.system }}" in
+            windows) tauri build --no-bundle ;;
+            linux)   tauri build --bundles deb ;;
+          esac
+          df -h .
+
+      # Desktop app and delivery E4 / E4b. Build once on the oldest row,
+      # then keep a named Debian-family package for each approved row.
+      # Tauri 2.11.4 ADDS libgtk-3-0 even when deb.depends is supplied:
+      # https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-cli/src/interface/rust.rs
+      # tauri_config_to_bundle_settings. Its supported depends setting alone
+      # therefore cannot declare the rows' GTK name. Repack the control field
+      # with dpkg-deb, keeping the payload and all other dependencies:
+      # https://manpages.debian.org/trixie/dpkg/dpkg-deb.1.en.html
+      # No package is installed or application launched by this step.
+      - name: Packages for the Linux release matrix
+        if: matrix.system == 'linux'
+        working-directory: App
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import subprocess
+
+          ROWS = ("ubuntu-24.04", "ubuntu-26.04", "debian-13")
+
+          def run(*args):
+              return subprocess.check_output(args, text=True).strip()
+
+          def row_control(control, row):
+              if row not in ROWS:
+                  raise ValueError("unlisted Linux release row: " + row)
+              matches = list(re.finditer(r"^Depends: (.*(?:\n[ \t]+.*)*)", control, re.M))
+              if len(matches) != 1:
+                  raise ValueError("expected exactly one Depends field")
+              match = matches[0]
+              dependencies = [item.strip() for item in match[1].replace("\n", " ").split(",")]
+              # Remove only the obsolete GTK name injected by this pinned CLI.
+              dependencies = [item for item in dependencies if item != "libgtk-3-0"]
+              dependencies = list(dict.fromkeys(dependencies))
+              control = control[:match.start()] + "Depends: " + ", ".join(dependencies) + control[match.end():]
+              return control.rstrip() + "\nX-Smoozy-Release-Matrix-Row: " + row + "\n"
+
+          def row_preinstall(row):
+              if row not in ROWS:
+                  raise ValueError("unlisted Linux release row: " + row)
+              # E4 refuses an unlisted system in the package transaction.
+              # Debian Policy 6.1 / 6.5; os-release's published ID / VERSION_ID.
+              return ('#!/bin/sh\nset -eu\n'
+                      'case "${1-}" in install|upgrade) ;; *) exit 0 ;; esac\n'
+                      'ID=\nVERSION_ID=\n'
+                      'if [ -r /etc/os-release ]; then . /etc/os-release; '
+                      'elif [ -r /usr/lib/os-release ]; then . /usr/lib/os-release; fi\n'
+                      'if [ "$ID-$VERSION_ID" != "' + row + '" ]; then\n'
+                      '  echo "This Smoozy package requires ' + row + ' (amd64)." >&2\n'
+                      '  exit 1\nfi\nexit 0\n')
+
+          def check_package(package, row):
+              if run("dpkg-deb", "--field", str(package), "Architecture") != "amd64":
+                  raise ValueError("the Linux package is not amd64")
+              if run("dpkg-deb", "--field", str(package), "X-Smoozy-Release-Matrix-Row") != row:
+                  raise ValueError("the Linux package does not name its row")
+              declared = run("dpkg-deb", "--field", str(package), "Depends")
+              print(str(package) + ": " + declared, flush=True)
+              dependencies = {item.strip() for item in declared.split(",")}
+              required = {"libc6 (>= 2.39)", "libgtk-3-0t64", "libwebkit2gtk-4.1-0"}
+              if not required <= dependencies:
+                  raise ValueError("the package does not declare the row's dependencies")
+              if re.search(r"\blibgtk-3-0\b(?!t64)|appindicator", declared):
+                  raise ValueError("the package declares obsolete GTK or a tray dependency")
+
+          def main():
+              # A newer runner or toolchain must not silently raise E4b's floor.
+              binary = pathlib.Path("target/release/smoozy-desktop").read_bytes()
+              versions = {tuple(map(int, value.split(b"."))) for value in re.findall(rb"GLIBC_([0-9.]+)", binary)}
+              if not versions or max(versions) > (2, 39):
+                  raise ValueError("the desktop's C-library imports do not meet the 2.39 floor")
+              print("greatest C-library import: " + ".".join(map(str, max(versions))), flush=True)
+              sources = list(pathlib.Path("target/release/bundle/deb").glob("*.deb"))
+              if len(sources) != 1:
+                  raise ValueError("expected one Tauri Debian package")
+              source = sources[0]
+              output = pathlib.Path("target/release/release-matrix")
+              output.mkdir(exist_ok=True)
+              version = run("dpkg-deb", "--field", str(source), "Version")
+              for row in ROWS:
+                  stage = output / row
+                  subprocess.run(["dpkg-deb", "--raw-extract", str(source), str(stage)], check=True)
+                  control = stage / "DEBIAN/control"
+                  control.write_text(row_control(control.read_text(), row))
+                  preinstall = stage / "DEBIAN/preinst"
+                  if preinstall.exists():
+                      raise ValueError("Tauri added a pre-install script; review it before replacing it")
+                  preinstall.write_text(row_preinstall(row))
+                  preinstall.chmod(0o755)
+                  package = output / ("Smoozy_" + version + "_" + row + "_amd64.deb")
+                  subprocess.run(["dpkg-deb", "--build", "--root-owner-group", str(stage), str(package)], check=True)
+                  check_package(package, row)
+              # Reading dependencies is not proof of installation on a desktop.
+
+          if __name__ == "__main__":
+              main()
+          PY
+
+      - name: Say what was produced
+        working-directory: App
+        run: |
+          set -eux
+          case "${{ matrix.system }}" in
+            windows) ls -la target/release/*.exe ;;
+            linux)   ls -la target/release/smoozy-desktop ;;
+          esac
+
+      # A release build must not honour the throwaway launch argument, and the
+      # test that says so runs only under `cargo test --release`, which this
+      # run never does. So the release build made above is read instead: the
+      # argument's text must not be in it at all. No second release compile -
+      # the Linux runner has no room for one. Step 10b's first audit round,
+      # item 18.
+      #
+      # The desk program argument is read the same way, for the same reason:
+      # Server protocol and transfers B10a lets a development copy pointed at a
+      # throwaway folder place a server program built at the desk, and says no
+      # release build honours it and that this is proved. Its text must not be
+      # in the release build either. Added 2026-09-27, step 10c fix piece 1.
+      - name: The release build holds no throwaway argument
+        working-directory: App
+        shell: bash
+        run: |
+          set -eux
+          if grep -a -q -e '--throwaway-copy' "${{ matrix.desktop }}"; then
+            echo "the release build contains the throwaway launch argument"
+            exit 1
+          fi
+          if grep -a -q -e '--desk-program' "${{ matrix.desktop }}"; then
+            echo "the release build contains the desk program launch argument"
+            exit 1
+          fi
+
+      # Windows keeps its per-user unpackaged executable (E3). Linux keeps the
+      # three named packages whose own dependency fields were checked above.
+      # Signing and the desktop update manifest are later step 11 pieces.
+      - name: Stage the Windows application and notices
+        if: matrix.system == 'windows'
+        working-directory: App
+        run: |
+          python -c "from pathlib import Path; import shutil; p=Path('target/release/with-notices'); p.mkdir(exist_ok=True); [shutil.copyfile(s, p/s.name) for s in [Path('target/release/smoozy-desktop.exe'), Path('Release/generated-notices/COPYING'), Path('Release/generated-notices/THIRD-PARTY-LICENSES.txt')]]"
+
+      - name: Keep the desktop application
+        if: matrix.system == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoozy-desktop-${{ matrix.system }}
+          if-no-files-found: error
+          path: App/target/release/with-notices/*
+
+      - name: Keep the Linux release matrix packages
+        if: matrix.system == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoozy-desktop-linux
+          if-no-files-found: error
+          path: App/target/release/release-matrix/*.deb
+
+      # The rented machine's own program, built for the one target it runs on -
+      # Linux, x86-64, and its own C library carried inside it. Linux only,
+      # because that is the target, and because no cross toolchain is wanted
+      # when the runner is already the right machine.
+      #
+      # IT WAS BUILT AGAINST THE RUNNER'S OWN C LIBRARY UNTIL 2026-09-23, AND
+      # THAT IS WHAT THIS STEP WAS CHANGED FOR. A program built against the GNU
+      # C library records, for every symbol it imports, the release of that
+      # library the symbol came from, and the loader on the machine refuses it
+      # where its own library is older. The runner is Ubuntu 24.04, whose
+      # library is 2.39; Ubuntu 22.04's is 2.35. So release 1638's artifact
+      # could not run on Ubuntu 22.04 at all - it died five times in one second
+      # with "version `GLIBC_2.39' not found" on a real rented machine, and the
+      # setup could not finish. Audits/Build/Step 10c/Piece 12, the fifth pass -
+      # Sesterce.md, 2026-09-23.
+      #
+      # Server Setup M1a promises Ubuntu AND Debian and promises no version of
+      # either, and a release manifest has nowhere to write a version floor -
+      # Server protocol and transfers B8 forbids deriving one. So there is no
+      # release of that library this could be built against and keep the
+      # promise. The target below carries its own C library inside the program
+      # instead, which is Rust's documented behaviour for it: "Typically targets
+      # are linked dynamically by default, but there are exceptions which are
+      # static by default such as: ... x86_64-unknown-linux-musl" - the Rust
+      # Reference, Linkage, https://doc.rust-lang.org/reference/linkage.html,
+      # read 2026-09-23. The step after this one proves it of the bytes rather
+      # than trusting the sentence.
+      #
+      # THE OTHER ROUTE WAS AN OLDER RUNNER IMAGE AND IT WAS NOT TAKEN. Building
+      # on ubuntu-22.04 would buy a 2.35 floor, which still rules out nothing
+      # older and still leaves Debian 11 (2.31) out; and GitHub's own images
+      # README says "GA images are eventually deprecated according to our
+      # guidelines as we only support the latest 2 versions of an OS"
+      # (https://github.com/actions/runner-images, read 2026-09-23), with
+      # ubuntu-24.04 and ubuntu-26.04 now being those two. A floor that a
+      # runner's retirement can raise underneath a shipped product is not a
+      # floor.
+      #
+      # This is the artifact a release manifest names. The two values printed
+      # below are the two that manifest carries about it, and they are measured
+      # here rather than typed: Server protocol and transfers B8's byte length
+      # and SHA-256 digest.
+      #
+      # It signs nothing and publishes nothing. Signing happens on the Mac, at a
+      # release, with a secret in that machine's keychain that never comes near
+      # a runner; see App/Release/.
+      #
+      # The two values are printed for a person reading the log and are not what
+      # a release trusts: the release tool measures the artifact's own bytes
+      # again when it composes the manifest, so a value that had gone wrong here
+      # could not reach a signed document.
+      - name: The machine's own program, and what a manifest would say about it
+        if: matrix.system == 'linux'
+        working-directory: App
+        run: |
+          set -eux
+          rustup target add x86_64-unknown-linux-musl
+          # Linked with the linker the Rust toolchain ships rather than the
+          # runner's own, because that is the one this exact build was proved
+          # with: on the Mac, 2026-09-26, it produced "ELF 64-bit LSB pie
+          # executable, x86-64 ... static-pie linked" with no versioned import
+          # at all. The same linker already builds the Worker below.
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
+          cargo build --release -p smoozy-server --bin smoozy-server \
+            --target x86_64-unknown-linux-musl
+          artifact=target/x86_64-unknown-linux-musl/release/smoozy-server
+          ls -la "$artifact"
+          echo "byte length: $(wc -c < "$artifact")"
+          echo "sha-256:     $(sha256sum "$artifact" | cut -d" " -f1)"
+
+      # THE ARTIFACT IS READ RATHER THAN TRUSTED, and this step fails the run if
+      # it asks the machine for anything of the machine's own C library. It is
+      # the same reading the release tool makes at the desk before it signs
+      # anything - App/Server protocol and transfers/src/release/composing.rs,
+      # B8c - and it is here as well so that a run says so in minutes rather
+      # than a release saying so days later.
+      #
+      # Three things are printed and one of them is checked. `file` says whether
+      # the program is statically linked; `readelf -d` says what it asks to be
+      # loaded beside it, which for this target is nothing; and the versioned
+      # imports are what the machine's loader actually refuses on, so their
+      # absence is the check.
+      - name: The machine's program needs no C library from the machine
+        if: matrix.system == 'linux'
+        working-directory: App
+        run: |
+          set -eux
+          artifact=target/x86_64-unknown-linux-musl/release/smoozy-server
+          file "$artifact"
+          readelf -d "$artifact" || true
+          if grep -a -q 'GLIBC_' "$artifact"; then
+            echo "the machine's program asks the machine for a release of its own C library:"
+            grep -a -o 'GLIBC_[0-9.]*' "$artifact" | sort -u
+            echo "it would not run on every Ubuntu and Debian the plans promise"
+            exit 1
+          fi
+          echo "no versioned import of the machine's C library"
+
+      # WHAT THE DESKTOP APPLICATION'S OWN LINUX ARTIFACT ASKS FOR, PRINTED AND
+      # NOT CHECKED. It is a different question with a different owner: that
+      # artifact is not in the signed release manifest, it is a windowed
+      # application that wants the machine's own graphics and web-view
+      # libraries by name anyway, and moving it is Desktop app and delivery's
+      # work rather than this step's. It is printed here so that whoever picks
+      # that question up has the number rather than a guess.
+      - name: What the desktop's Linux artifact asks the system for
+        if: matrix.system == 'linux'
+        working-directory: App
+        run: |
+          set -eux
+          file target/release/smoozy-desktop
+          echo "the C library releases it asks for:"
+          grep -a -o 'GLIBC_[0-9.]*' target/release/smoozy-desktop | sort -u -V | tail -20 || true
+
+      # Kept for the same reason as the desktop artifact above, and it is the
+      # one this project most needs: the rented machine is a Linux machine, and
+      # nobody here has one to build its program on.
+      #
+      # THE KEPT NAME DOES NOT MOVE WITH THE TARGET, and that is deliberate. It
+      # is the artifact identity a release manifest carries, `linux-x86_64-gnu`,
+      # which B8 makes stable across releases and which the package-phase record
+      # on every machine already holds. What changed is how the artifact is
+      # built, not which machines it is for: it is still the artifact a machine
+      # whose C library is the GNU one selects, and it now runs on every release
+      # of that library rather than on the runner's own and newer. B8c at
+      # App/Server protocol and transfers/src/release/composing.rs says this in
+      # full.
+      - name: Stage the machine program and notices
+        if: matrix.system == 'linux'
+        working-directory: App
+        run: |
+          python3 -c "from pathlib import Path; import shutil; p=Path('target/x86_64-unknown-linux-musl/release/with-notices'); p.mkdir(exist_ok=True); [shutil.copyfile(s, p/s.name) for s in [Path('target/x86_64-unknown-linux-musl/release/smoozy-server'), Path('Release/generated-notices/COPYING'), Path('Release/generated-notices/THIRD-PARTY-LICENSES-server.txt')]]"
+
+      - name: Keep the machine's own program
+        if: matrix.system == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoozy-server-linux-x86_64-gnu
+          if-no-files-found: error
+          path: App/target/x86_64-unknown-linux-musl/release/with-notices/*

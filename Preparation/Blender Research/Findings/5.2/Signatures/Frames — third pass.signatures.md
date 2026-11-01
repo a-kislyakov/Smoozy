@@ -1,0 +1,5 @@
+# Signatures — Frames — third pass, Blender 5.2
+
+- 2026-08-05 — Opus 5 (Claude Code) — third research pass on question 7, sent back by the citation check because the second pass had answered a 5.2 question from another version's release notes. Answered blind from the 5.2 sources alone, taken 2026-07-30, with the brief carrying an added line forbidding reading across to any other version. Declared it read only the question sheet and the 5.2 folders inside `Blender Sources/`, and did not open either of the two existing documents for this version. It used no helper agents.
+- 2026-08-06 — Opus 5 (Claude Code) — Linux hand-test results written in as an observed section per question, and the closing list pruned
+- 2026-08-06 — Opus 5 (Claude Code) — citation check of the Linux hand tests read this document's Linux material for question 7 and ruled every claim supported. No change made. It notes, without acting on it, that the Mac's own hand-test results from 2026-08-05 are still missing from this document, as the Linux hand-test list already reports.

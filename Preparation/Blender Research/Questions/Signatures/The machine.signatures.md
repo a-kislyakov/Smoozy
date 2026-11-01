@@ -1,0 +1,4 @@
+# Signatures — The machine (question sheet)
+
+- 2026-08-01 — Claude Opus 5 (Claude Code) — wrote the sheet blind from the register's six numbered questions for this topic, after the earlier sheet was removed as stale. Kept the register's numbering, dropped every origin and stake, and wrote the opening line to say only what the questions are about and how to answer them.
+- 2026-08-30 — Claude Opus 5 (Claude Code) — added question 8 blind from the cross-sweep of that date: what a render does under each render engine on a computer that has a graphics card but draws its screen with its processor. Worded to name the condition and nothing else — the manual sentence three topics quote, and the engine it is about, are both in the register and neither is in the sheet. Carries the note saying which of this topic's own questions it is not; the neighbouring question in another topic is named in the register, where a researcher never sees it.

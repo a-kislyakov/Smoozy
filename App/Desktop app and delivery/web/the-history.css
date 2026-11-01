@@ -1,0 +1,38 @@
+/* **The History screen's own rules, and there is one.**
+ *
+ * **The drawing carries everything else.** This screen fills the same entry the
+ * queue's does — `web/the-queue.js` builds it — so what it adds of its own is
+ * the failure shape's own place at the top of the entry and nothing else, and
+ * even that is `the-drawing.css`'s `.qfail`.
+ *
+ * The one rule below is a value the drawing writes as an inline `style=`
+ * attribute, which H33 makes inert.
+ *
+ * The page half's own rules are at the head of `web/the-history.js`. */
+
+/* The last-frame line's second half — *— frame 61 not confirmed* — which the
+ * drawing writes as `style="color:var(--ink3);font-weight:400"` on a span
+ * inside the value. **It is a note beside the figure and not part of it**, and
+ * the two figures in it travel as values of their own. */
+.facts dd .mono + span, .facts dd span.mono ~ span { color: var(--ink3); font-weight: 400; }
+
+/* **The status dot's colour, one per ending**, which the drawing writes as an
+ * inline `style="background:var(--bad)"` on the entry's own dot — five of them,
+ * one per ending. **The class is the ending's own**, the same one the row's
+ * word already carries, so there is one name for one ending rather than a
+ * second set invented for the dot.
+ *
+ * `the-drawing.css` gives `.sdot` its size, its shape and one background, and
+ * scopes every `.e-*` rule to `.qst`, which sets a colour and never a
+ * background — so nothing below overrides anything. */
+.sdot.e-ok { background: var(--ok); }
+.sdot.e-fail { background: var(--bad); }
+.sdot.e-stop { background: var(--idle); }
+.sdot.e-gave { background: var(--busy-fill); }
+.sdot.e-unk { background: var(--ink3); }
+
+/* **Rows that would not read back, said beside the list** — step 10b round 1
+ * of *jobs, history and downloads*, must-do 3(c). The drawing has no such line,
+ * so it takes the grey the drawing already uses for a value Smoozy cannot
+ * confirm, and sits under the rows rather than among them. */
+.hunread { margin: 8px 14px; color: var(--ink3); font-size: 12px; }

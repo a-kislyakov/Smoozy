@@ -1,0 +1,6 @@
+# Writing — Open Threads questions — signatures
+
+- 2026-08-29 — Claude Opus 5 (Claude Code subagent) — wrote this document: a blind research pass answering question 14 for Blender 5.1, started by a dispatcher that answered nothing itself. It declared it read only the question sheet and files inside `Blender Sources/` and opened no other part of this project, and that it opened none of the findings documents already sitting in the folder it saved into.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — audit of question 14: claims narrowed to their quotes, three steps relabelled as inference, unsearched corners marked, opening line added
+- 2026-08-30 — Claude Opus 5 (Claude Code) — hand tests: fourteen tests run by the agent in all four versions on two machines, the observed results written in under question 14, both standing lines brought up to date, and the researcher's own list pruned to Windows and one thing needing two machines.
+- 2026-08-30 — Claude Opus 5 (Claude Code) — citation check, Writing question 14: 324 claims ruled, 314 supported and 10 partly. Changed here: test 11's tile-cache wording narrowed from *before that frame's output file appears* to *no later than the reading in which*, because the watcher stamps a whole sweep with one time and two of the three Mac removals share a stamp with the next file's appearance.

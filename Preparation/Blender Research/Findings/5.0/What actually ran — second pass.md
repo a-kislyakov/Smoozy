@@ -1,0 +1,1774 @@
+# What actually ran — Blender 5.0 — second pass
+
+**Sources consulted, and when.** Blender's 5.0 manual, Blender's 5.0 Python API documentation, Blender's 5.0 release notes and Cycles' own files as shipped with 5.0 — all read on **2026-07-30** (the date the copies in `Blender Sources/` were taken). Blender's requirements page, read on **2026-08-01**.
+
+**I read only the question sheet and files inside Blender Sources/. I did not open any other part of this project.**
+
+A note on labels used below: **documented** means the source says it outright; **inferred** means I took a step beyond the words, and the step is written out; **observed** means I got it by examining a file that was supplied rather than by reading documentation; **not in the sources** means I searched and found nothing.
+
+A note on Cycles' files: Cycles ships as an add-on, so what I have is its Python files. Reading them tells me what settings and messages exist. It does not tell me what a render does. Where I take that second step I say so and label the finding inferred.
+
+---
+
+## 1. When a render has finished, what can be learned about which parts of the computer it used?
+
+**LABEL: documented** (for the named facts a finished render can carry), with two **inferred** points marked below.
+
+Four kinds of thing can be learned, and they differ a lot in strength.
+
+**(a) Facts that can be baked into the image file itself.** Blender can write a fixed list of fields into render output. Three of them bear on the machine:
+
+> "Render Time
+>
+> Includes the render time.
+> […]
+> Memory
+>
+> Includes the peak memory usage.
+>
+> Hostname
+>
+> Includes the rendering machine's hostname."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/output/properties/metadata.html`, read 2026-07-30.
+
+The same three appear in the Python API as scene settings, with their defaults:
+
+> "use_stamp_hostname
+>
+> Include the hostname of the machine that rendered the frame
+>
+> Type:
+>
+> boolean, default False"
+
+> "use_stamp_memory
+>
+> Include the peak memory usage in image metadata
+>
+> Type:
+>
+> boolean, default True"
+
+> "use_stamp_render_time
+>
+> Include the render time in image metadata
+>
+> Type:
+>
+> boolean, default True"
+
+— Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.types.RenderSettings.html`, read 2026-07-30.
+
+There is no field for the render device, the processor, the graphics card, or the number of threads. The full list of fields on that manual page is: Date, Time, Render Time, Frame, Frame Range, Memory, Hostname, Camera, Lens, Scene, Marker, Filename, Strip Name, Note.
+
+I opened the picture of the panel that the manual names, `_images/render_output_properties_metadata_panel.png` (part of the manual page above, read 2026-07-30). It shows the same field names as tick boxes. In that picture Date, Time, Render Time, Frame, Camera, Scene, Filename and Include Labels are ticked, and Frame Range, Memory, Hostname, Lens, Marker, Strip Name, Note and Burn Into Image are not. That picture disagrees with the API default for Memory quoted above, which is True. I report both and do not resolve it; the picture may not show a file at factory settings.
+
+One thing to hold: this is what a render *can* be made to carry, not what it carries by default, and it only reaches file formats that accept metadata at all (see question 5).
+
+There is a caution attached to the memory field in 5.0 specifically:
+
+> "* Metadata output for "Peak Memory" displays "ddM" in Blender 5.0. (blender/blender#150524)"
+
+— Blender 5.0 release notes, corrective releases, `https://developer.blender.org/docs/release_notes/5.0/corrective_releases/`, read 2026-07-30. It is listed under Blender 5.0.1, which is described as "Released on December 16th 2025, Blender 5.0.1 features 132 bug fixes". So in 5.0.0 the peak memory metadata is documented as broken, and fixed from 5.0.1 on.
+
+**(b) Facts a render prints as it goes, which survive in whatever captured the console.** The 5.0 release notes give a worked example of Blender's log:
+
+> ```
+> 00:00.359  gpu.platform     | Using GPU "Apple M3 Max Metal API 1.2"
+> 00:00.359  gpu.platform     | Using Backend "Metal"
+> 00:01.041  cycles           | Added device "Apple M3 Max (GPU - 40 cores)" with id "METAL_Apple M3 Max (GPU - 40 cores)".
+> ...
+> 00:00.244  render           | Rendering single frame (frame 1)
+> 00:00.245  render           | Start rendering: Scene, ViewLayer
+> 00:00.245  render           | Engine: Cycles
+> 00:26.799  render           | Mem: 2983M | Sample 1/16
+> 00:26.799  render           | Mem: 2983M | Sample 16/16
+> 00:28.631  render           | Saved: '/tmp/0001.png'
+> 00:28.631  render           | Time: 00:28.38 (Saving: 00:00.15)
+> ```
+
+— Blender 5.0 release notes, core, `https://developer.blender.org/docs/release_notes/5.0/core/`, read 2026-07-30.
+
+The same page says what turns this on and what the levels mean:
+
+> "* `--log-level info` enables all info level log messages, with a moderate amount of output.
+>   This may be useful to enable in production for troubleshooting issues."
+
+and the command line page describes the `info` level as:
+
+> "info: Information about devices, files, configuration, operations"
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/advanced/command_line/arguments.html`, read 2026-07-30.
+
+Read carefully, the `cycles | Added device …` line says a device was *added* to Cycles' list, not that the frame was rendered on it. The `gpu.platform | Using GPU …` line is about the graphics backend Blender is drawing with. Neither line, on its own, says which device did the path tracing. The `Mem:` and `Time:` lines do speak about the render itself.
+
+**(c) A Cycles-only switch that prints more.** From the command line page:
+
+> "--cycles-print-stats
+>
+> Log statistics about render memory and time usage."
+
+— same manual page as above, read 2026-07-30.
+
+Cycles' own file words it differently, and says where it goes:
+
+> `parser.add_argument("--cycles-print-stats",`
+> `                    help="Print rendering statistics to stderr",`
+> `                    action='store_true')`
+
+— **observed**, Cycles' own files, `cycles_5.0/engine.py`, lines 13–15, read 2026-07-30. Note that the manual says "Log" and Cycles' own file says "to stderr"; nothing I read describes the contents of those statistics.
+
+**(d) A Cycles render pass that maps time onto the picture.** New in 5.0:
+
+> "* Add Render Time pass, which visualizes the time spent to render each pixel (blender/blender!125933)"
+
+— Blender 5.0 release notes, Cycles, `https://developer.blender.org/docs/release_notes/5.0/cycles/`, read 2026-07-30.
+
+Cycles' own file adds a restriction, and its code only offers the pass on CPU:
+
+> `pass_render_time: BoolProperty(`
+> `    name="Render Time",`
+> `    description="Reports time per pixel in milliseconds. Supported only on CPU render devices",`
+
+— **observed**, `cycles_5.0/properties.py`, lines 1488–1490, read 2026-07-30.
+
+> `if crl.pass_render_time:`
+> `    # Only yield the pass if rendering on CPU`
+> `    if scene.cycles.device == 'CPU':`
+> `        yield ("Render Time", "X", "VALUE")`
+
+— **observed**, `cycles_5.0/engine.py`, lines 222–225, read 2026-07-30.
+
+**Inferred point one.** Because Cycles only registers that pass when the scene device is CPU, the presence of a "Render Time" pass in a finished Cycles render is a sign the scene was set to CPU. The step: the file shows the pass being registered only under that condition, so a render result carrying the pass must have met the condition. This is a statement about the scene setting, not about the hardware that actually did the work.
+
+**(e) A separate file about the machine, which is not part of the render.** Blender can write out a description of the computer:
+
+> "Save System Info
+>
+> This extracts system information which can be useful for including in bug reports, inspecting the configuration, or diagnosing problems.
+>
+> You will be prompted to save a text file called system-info.txt."
+
+and among its sections:
+
+> "GPU
+>
+> Shows the GPU vendor, version and the capabilities of your hardware and driver."
+
+> "Cycles
+>
+> The instruction sets and capabilities of each hardware render device available for use with Cycles."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/getting_started/help.html`, read 2026-07-30.
+
+The matching Python entry point:
+
+> "bpy.ops.wm.sysinfo(*, filepath='')
+>
+> Generate system information, saved into a text file"
+
+— Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.ops.wm.html`, read 2026-07-30.
+
+**Inferred point two.** That file describes devices *available*, in the manual's own word, and can be written at any moment. It is not tied to a render and does not record which device a given frame used. The step: I am reading "available for use with Cycles" as different from "used by this render", which the wording supports but does not spell out.
+
+**(f) What can be asked of the running Blender.** The `gpu` module reports the drawing hardware:
+
+> "gpu.platform.renderer_get()
+>
+> Get GPU to be used for rendering.
+>
+> Returns:
+>
+> GPU name."
+
+and alongside it `vendor_get()` ("Get GPU vendor"), `version_get()` ("Get GPU driver version"), `device_type_get()` (returning one of 'APPLE', 'NVIDIA', 'AMD', 'INTEL', 'SOFTWARE', 'QUALCOMM', 'UNKNOWN') and `backend_type_get()` (returning 'OPENGL', 'VULKAN', 'METAL', 'NONE', 'UNKNOWN').
+
+— Blender 5.0 Python API, `https://docs.blender.org/api/5.0/gpu.platform.html`, read 2026-07-30. The phrase "GPU to be used for rendering" is the documentation's, and this module is Blender's own GPU-drawing module; nothing on that page ties it to Cycles' choice of compute device.
+
+Cycles keeps its own list of devices, but only in its files, not in the published API:
+
+> `def available_devices():`
+> `    import _cycles`
+> `    return _cycles.available_devices()`
+
+and
+
+> `def system_info():`
+> `    import _cycles`
+> `    return _cycles.system_info()`
+
+— **observed**, `cycles_5.0/engine.py`, lines 152–154 and 172–174, read 2026-07-30. Cycles' preferences hold a list of devices with an id, a name, a type and a "use" tick:
+
+> `id: StringProperty(name="ID", description="Unique identifier of the device")`
+> `name: StringProperty(name="Name", description="Name of the device")`
+> `use: BoolProperty(name="Use", description="Use device for rendering", default=True)`
+> `type: EnumProperty(name="Type", items=enum_device_type, default='CUDA')`
+
+— **observed**, `cycles_5.0/properties.py`, lines 1563–1566, read 2026-07-30. These describe what is configured, at the moment you ask. They are not a record of a past render.
+
+**Not covered.** Nothing I read gives a way, from a finished render alone, to establish which compute device, which graphics card, how many threads, or which processor did the work. The strongest identity a finished image can carry is the machine's hostname, and only if that was switched on before the render. I found nothing that records the number of threads actually used, and nothing that records whether Cycles ran on CPU, on GPU, or on both.
+
+**Outside the interface.** The metadata fields are scene settings, so they apply the same when Blender is driven from a command line; the manual's own hint on that page is aimed at exactly that case: "It can be useful to use the Note field if you are setting up a render farm." The log output is the case *specifically* documented for outside the interface — the 5.0 release notes describe the change as covering "background render progress", and the Python API notes say "Add-ons or render farms parsing this output may need to be updated" (`https://developer.blender.org/docs/release_notes/5.0/python_api/`, read 2026-07-30). The status bar's "System Memory" readout and the Image editor's Show Metadata overlay are interface-only by construction. `bpy.ops.wm.sysinfo` takes a `filepath`, which suggests it can be driven without a file dialogue, but the sources do not say it works in background mode, so I do not claim it. **Settled by test on 2026-08-06, on Linux only — see below.** `bpy.ops.wm.sysinfo` does work with no window, returning `{'FINISHED'}` and writing its file, so the inferred step above holds; but its GPU section then reads `GPU: missing, background mode`, so the route works and the hardware part of what it produces does not. The `gpu.platform` calls do **not** work with no window — they raise `SystemError` in every version. And the line naming the processor that did the work is reachable with no window, on standard output. **Added by the tests of 2026-08-07, with the machine's graphics card repaired:** driving Blender from outside its window is no obstacle to naming the card. With no window and no display server, a run prints the card's model in its `Path tracing on:` line, `bpy.ops.wm.sysinfo` describes the card in full in its Cycles section, and the Cycles preferences list it before any render. The GPU section of `system-info.txt` still reads `GPU: missing, background mode`, so that one section is genuinely lost outside the window and nothing else is. **Added by the re-run of 2026-08-07, after the citation check:** nothing in these three tests needs a window, and all three were run on a machine that has no display server at all.
+
+**Operating system.** The metadata fields are described with no operating-system caveat. The device names in the log example are from a Mac, but the log mechanism is described generally. Two real differences that bear on this: EEVEE "only uses the power of the GPU to render" and "Headless rendering is not supported on headless Windows systems" (Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/eevee/limitations/limitations.html`, read 2026-07-30), and which Cycles backends exist at all depends on the operating system — CUDA, OptiX, HIP and oneAPI are each described as "supported on Windows and Linux", and "Metal is supported on Apple computers with Apple Silicon" (Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/cycles/gpu_rendering.html`, read 2026-07-30). There is also a Windows-only scheduling switch, `--qos <level>`, with "high: Always makes use of performance cores" and "eco: Schedules Blender threads exclusively to efficiency cores" (command line arguments page, read 2026-07-30), which changes which parts of a processor are used and has no counterpart named for other systems. **The tests recorded below were run on Linux only, on 2026-08-06; macOS is untested and Windows was not tried.** **The tests of 2026-08-07 were run on the same Linux machine, with its graphics card working and its driver at 580.173.02; macOS is still untested and Windows was still not tried.** So everything the card added above is an NVIDIA-on-Linux answer: CUDA and OptiX are what was seen, and Metal, HIP and oneAPI were not. **Added by the re-run of 2026-08-07, after the citation check:** the three tests sent back by the citation check were run on that same Linux machine and nowhere else, so they are an NVIDIA-on-Linux answer; macOS and Windows are untouched by them.
+
+### Tested by hand, 2026-08-06 — **LABEL: observed**
+
+Machine, Blender and settings folder as recorded under question 1 of this document: **the rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server — running `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings/5.0`) and never at the real one. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**One thing about this machine bears on every device result here.** Its graphics card could not be reached while the tests ran — the card's kernel module (580.95.05) and the libraries that talk to it (580.173.02) no longer match. `nvidia-smi` answered `Failed to initialize NVML: Driver/library version mismatch`, and Blender's own view was `cycles | ERROR CUDA cuInit: Unknown error` with an empty device list. So every result below is from a machine that has a graphics card and cannot use it.
+
+**Blender 5.0 prints which processor did the work, by name, and `--log-level info` on its own is enough to bring it out.** The scene was the factory cube at 160 by 120, 16 samples, Cycles. Run as `blender -b scene.blend --log "*" --log-level info -o out/li_ -F PNG -f 1`, standard output carried:
+
+```
+00:00.527  cycles           | Full path tracing report:
+                            | 
+                            | Path tracing on: AMD EPYC 7B12 64-Core Processor (CPU) (24 threads) [CPU]
+                            |                      Hardware Ray-Tracing: Off
+                            | 
+                            | Render Scheduler Summary
+                            | 
+                            | Mode: Headless
+                            | Resolution: 160x120
+```
+
+*Note added by the citation check, 2026-08-07.* The block above was run again on the same machine, with the same build, the same scene and the same switch. The repeat produced the block **without** the `Hardware Ray-Tracing: Off` line — everything else identical. Blender 5.1 and 5.2 on the same machine do print that line, and their documents' blocks match their runs exactly. The two 5.0 runs are recorded side by side and neither has been chosen; the question is sent back to the hand tests. Everything the paragraph claims — the model, the thread count, the kind of device, and the stream — reproduced.
+
+That names the processor's model, the number of threads and the kind of device. Counted per switch and per stream, the line appears on **standard output** and never on the error stream:
+
+```
+  [--log cycles --log-level info] -> Path tracing line on stdout: 1, on stderr: 0
+  [--log-level info]              -> Path tracing line on stdout: 1, on stderr: 0
+  [--debug-cycles]                -> stdout: 1, stderr: 0
+```
+
+The same run also prints `cycles | Using AVX2 CPU kernels.` twice, near the start.
+
+**A background render with no switches at all names no device.** Run as `blender -b scene.blend -o out/p_ -F PNG -f 1`, exit 0, frame written, error stream 0 bytes. The lines that carry the answer:
+
+```
+00:00.303  render           | Rendering single frame
+00:00.303  render           | Rendering frame 1
+00:00.304  render           | Start rendering: Scene, ViewLayer
+00:00.304  render           | Engine: Cycles
+00:00.311  render           | Fra: 1 | Mem: 0M | Loading render kernels (may take a few minutes the first time)
+00:00.313  render           | Fra: 1 | Mem: 1M | Sample 0/16
+00:00.327  render           | Fra: 1 | Mem: 1M | Finished
+00:00.440  render           | Saved: '/root/what-actually-ran/out/p_0001.png'
+00:00.440  render           | Time: 00:00.13 (Saving: 00:00.11)
+```
+
+The words `Copying Transformations to device`, `Copying BVH to device` and `Updating Device | Writing constant memory` appear in the fuller output; they carry the word *device* without naming one.
+
+**No field written into a finished image names a device.** With every `use_stamp_*` switched on and the note set to `SMOOZY NOTE`, a Cycles render to PNG carried exactly these fields, read straight out of the file's text chunks:
+
+```
+   File = /root/what-actually-ran/work/scene.blend
+   Note = SMOOZY NOTE
+   Date = 2026/08/06 22:59:30
+   Marker = <none>
+   Time = 00:00:00:01
+   Frame = 1
+   FrameRange = 1:3
+   Camera = Camera
+   Lens = 50.00
+   Scene = Scene
+   Strip = <none>
+   RenderTime = 00:00.06
+   Memory = 1M
+   Hostname = ubuntu
+   cycles.ViewLayer.samples = 16
+   cycles.ViewLayer.total_time = 00:00.06
+   cycles.ViewLayer.render_time = 00:00.05
+   cycles.ViewLayer.synchronization_time = 00:00.01
+```
+
+The Memory field read `1M` — a plain figure, **not** the literal `ddM` a corrective-release note describes. The installed build is 5.0.1 or later in every case, so this says nothing about 5.0.0.
+
+**The stamp switches at factory startup.** Run as `blender -b --factory-startup --python t_stamp.py`, all sixteen:
+
+```
+STAMP use_stamp False
+STAMP use_stamp_camera True
+STAMP use_stamp_date True
+STAMP use_stamp_filename True
+STAMP use_stamp_frame True
+STAMP use_stamp_frame_range False
+STAMP use_stamp_hostname False
+STAMP use_stamp_labels True
+STAMP use_stamp_lens False
+STAMP use_stamp_marker False
+STAMP use_stamp_memory False
+STAMP use_stamp_note False
+STAMP use_stamp_render_time True
+STAMP use_stamp_scene True
+STAMP use_stamp_sequencer_strip False
+STAMP use_stamp_time True
+```
+
+**`use_stamp_memory` is False and `use_stamp_hostname` is False**, matching the manual's picture of the panel rather than the API page's stated defaults. The master switch `use_stamp` is off, so none of the rest is written unless somebody turns it on. The same run printed `THREADS 24 THREADS_MODE AUTO` — the machine's core count, not the documented default of 1.
+
+**The settings read after a run do not say what ran.** A run whose scene was set to GPU Compute and which was overridden on the command line with `-- --cycles-device CPU` printed, from inside the same run:
+
+```
+AFTER_OVERRIDE compute_device_type= NONE  scene.cycles.device= GPU
+```
+
+while the same run's `Path tracing on:` line named the processor.
+
+**`bpy.ops.wm.sysinfo` works with no window, but its GPU section is not filled in.** It returned `{'FINISHED'}`, exit 0, and wrote a 94-line file whose GPU and Cycles sections read:
+
+```
+GPU: missing, background mode
+
+Cycles:
+========================================
+
+
+CPU device capabilities: AVX2
+
+CUDA device capabilities:
+Error initializing CUDA: Unknown error
+```
+
+**The `gpu` module answers nothing with no window.** Run as `blender -b --python-expr "import gpu; ..."`:
+
+```
+GPU_ERROR SystemError GPU functions for drawing are not available in background mode
+HAS_GPU_INIT False
+```
+
+
+### Tested by hand with the graphics card working, 2026-08-07 — **LABEL: observed**
+
+The machine of the 2026-08-06 tests, repaired. **The rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server at all — now carrying NVIDIA driver **580.173.02** in both halves, the kernel module and the libraries agreeing at last. `nvidia-smi` answers, and Blender finds the card. Blender was `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose before it was used (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings-card/5.0`) and never at the real one. Nothing else was running on the machine. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**The `Path tracing on:` line names the graphics card, its model and the route taken to it.** The same scene as before — the factory cube at 160 by 120, 16 samples, Cycles — with the Cycles preference set to OptiX, the card's OptiX device switched on and the scene set to GPU Compute. Run as `blender -b scene.blend --python setcard.py --log-level info -o out/l_ -F PNG -f 1`, **standard output** carried:
+
+```
+Path tracing on: NVIDIA GeForce RTX 4080 SUPER (OptiX) [CUDA_NVIDIA GeForce RTX 4080 SUPER_0000:00:07_OptiX]
+```
+
+and with the preference set to CUDA instead, the same line read:
+
+```
+Path tracing on: NVIDIA GeForce RTX 4080 SUPER (CUDA) [CUDA_NVIDIA GeForce RTX 4080 SUPER_0000:00:07]
+```
+
+So the line names the card's model, which of the two NVIDIA routes was taken, and an identifier holding the card's place on the bus. It is the same line, in the same place, brought out by the same switch as when it named the processor on 2026-08-06 — `--log-level info` on its own is still enough.
+
+**Where in the run it arrives.** The line is part of a closing report: it is printed after the last sample and before the frame is written. In the 5.2 run the last sample line was at `00:02.270` and the report at `00:02.270`, with `Saved:` at `00:02.577`. So it answers *what did the work* once the work is done, not before it starts.
+
+**A background render with no switches at all still names no card — but OptiX leaves its name behind.** Run with no log switches: exit 0, a frame written, error stream 0 bytes, and no line naming the card. What OptiX does put into the ordinary progress lines is its own name:
+
+```
+00:02.012  render           | Fra: 1 | Mem: 1M | Updating Scene BVH | Building OptiX acceleration structure
+```
+
+Lines of that shape appear more than once in the OptiX run and **not once** in the CUDA run of the same scene. So at default settings the printed output can tell you OptiX was in use and cannot tell you CUDA was.
+
+*Changed by the citation check, 2026-08-07.* This used to say "three times". A repeat on the same machine gave four, and across the four versions the counts I read were four, four, three and two, so the number is not stable and has been taken out. The contrast the claim rests on held in every run either of us made.
+
+**The memory figure jumps when the card does the work, and that needs no switch either.** The same frame, the same scene, the figure Blender prints in its progress lines and writes into the `Memory` stamp field:
+
+| what did the work | the figure |
+|---|---|
+| the processor | `1M` |
+| the card | `650M` |
+
+The card's figure is the memory the card is holding, and it is hundreds of times the processor's for a scene of one cube. It names nothing, but it is a strong hint, and it is on disk as well as on screen.
+
+**`bpy.ops.wm.sysinfo` now names the card, in its Cycles section only.** The same call, with no window: exit 0, `{'FINISHED'}`, and a file grown from 94 lines to 183. The GPU section is unchanged and still reads `GPU: missing, background mode`. The Cycles section, which on 2026-08-06 read `Error initializing CUDA: Unknown error`, now reads:
+
+```
+CPU device capabilities: AVX2
+
+CUDA device capabilities:
+	NVIDIA GeForce RTX 4080 SUPER
+		CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK			1024
+		CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT			80
+		CU_DEVICE_ATTRIBUTE_CLOCK_RATE			2580000
+		CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR			8
+		CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR			9
+		CU_DEVICE_ATTRIBUTE_MULTI_GPU_BOARD			0
+```
+
+(Sixty more `CU_DEVICE_ATTRIBUTE_` lines sit between those, cut here for length.) The heading is `CUDA device capabilities:` in every version and there is **no OptiX heading** — the file describes the card once, by its CUDA identity, whichever backend a render would use. All ninety added lines are in this section; every other section is unchanged.
+
+**The card can be listed before anything is rendered.** `preferences.addons['cycles'].preferences.devices`, read after `refresh_devices()` with `--factory-startup` and no scene, comes back identical in all four versions:
+
+```
+[('NVIDIA GeForce RTX 4080 SUPER', 'CUDA', True), ('AMD EPYC 7B12 64-Core Processor', 'CPU', False), ('NVIDIA GeForce RTX 4080 SUPER', 'OPTIX', True)]
+```
+
+The card appears twice, once per backend, each switched on; the processor appears with its switch off. But `compute_device_type` still reads `NONE` at factory startup with the card sitting there working — so that setting says nothing at all about whether a card is present.
+
+**The `gpu` module still answers nothing, and the card being repaired makes no difference to it.** The same call as on 2026-08-06, run again with the card working:
+
+```
+HAS_GPU_INIT False
+GPU_ERROR SystemError GPU functions for drawing are not available in background mode
+```
+
+So the refusal is about the missing window, not about the missing card — which the 2026-08-06 run could not tell apart. `gpu.init` does not exist in this version; it exists in 5.2 and does work there.
+
+**The settings still do not say what ran, and can now be shown to mislead.** A run with the Cycles preference set to OptiX and the scene set to GPU Compute, overridden on the command line with `-- --cycles-device CPU`, printed from inside itself:
+
+```
+AFTER_OVERRIDE compute_device_type= OPTIX  scene.cycles.device= GPU
+```
+
+while the same run's `Path tracing on:` line named the processor. Both settings name the card's route; the processor did the work.
+
+**A timing worth having, now that nothing else is running on this machine.** The same frame — 960 by 540, 1024 samples, adaptive sampling off — rendered twice, once with `-- --cycles-device OPTIX` and once with `-- --cycles-device CPU`:
+
+| what did the work | wall clock | the `Time:` line Blender printed |
+|---|---|---|
+| the card, OptiX | 2.08 s | `Time: 00:01.51 (Saving: 00:00.15)` |
+| the processor | 24.27 s | `Time: 00:23.40 (Saving: 00:00.17)` |
+
+**This is one machine's timing, on one scene, on one day**, and it is offered as nothing more. What it does show is that the two are nowhere near each other: the card finished this frame about fifteen times sooner, which is far outside anything the spread between repeats could explain. The card's figure includes loading the render kernels, so it is if anything the slower of the two readings.
+
+**Where I looked.** Searched the whole 5.0 manual for: metadata, stamp, statistics, "render statistics", "render stats", hostname, "peak memory", "render time", processor, "instruction set", "core count", "CPU model", "which device", "device used", "graphics card", "driver version", "system info", "Fra:", "Mem:", "Time:", "Saved:". Searched the whole 5.0 API documentation for: stamp, metadata, hostname, "peak memory", "render time", device, sysinfo, system_info, available_devices, get_devices, has_active_device. Searched all of Cycles' Python files for: device, stamp, print, logging. Searched all 5.0 release notes for: metadata, stamp, device, stats, log, engine. Pages opened in full: the Metadata panel page, the Metadata panel picture, command line arguments, command line rendering, Cycles GPU rendering, Cycles render settings index, Cycles performance, Cycles sampling, EEVEE limitations, EEVEE performance, the Help menu page, the status bar page, the Image editor navigating and overlays pages, `bpy.types.RenderSettings`, `bpy.app`, `gpu.platform`, `bpy.types.RenderEngine`, `bpy.types.RenderResult`, release notes core and Cycles, and Cycles' `engine.py`, `__init__.py`, `properties.py` and `ui.py`. Ruled out: the asset, sequencer, movie-clip and volume-grid uses of the word "metadata", which are about assets and clips, not renders.
+
+---
+
+### Tested by hand on the Mac, 2026-08-07 — **LABEL: observed**
+
+**The machine.** The Creator's own Mac — a MacBook Pro with an **M1 Pro** chip, **macOS 26.5.2** (build 25F84), Apple's own graphics and no second card. Blender was `/Applications/Blender 5.0.1.app/Contents/MacOS/Blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:51:40)` — the same build hash as the Linux machine's 5.0, built at a different hour. Every run was pointed at a settings folder made before it was used (`BLENDER_USER_RESOURCES=/tmp/smoozy-war/settings/5.0`, and `/tmp/smoozy-war/settings2/5.0` where a run needed preferences that had been saved once) and never at the real one. Working files sat in `/tmp/smoozy-war/`; the prepared scene — the factory cube at 160 by 120, 16 samples, Cycles, denoising off — sat at `/Users/artist/Documents/Smoozy hand tests/What actually ran/scene.blend` and was built by Blender 4.5 so all four versions could open it. **Two other topics were running Blender on this Mac while these tests ran**, so nothing below is offered as a timing or a memory measurement. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**A background render with no switches names no device on macOS either.** `blender -b scene.blend -o out/p_ -F PNG -f 1`: exit 0, a frame written, **the error stream 0 bytes**, and no line naming a processor, a card, Metal, CUDA, OptiX, HIP or oneAPI. Line for line the same shape as the Linux run of 2026-08-06.
+
+**`--log-level info` on its own still brings the device line out, and on macOS it names Apple's chip.** Same scene, `--log-level info`, on **standard output**:
+
+```
+                            | Path tracing on: Apple M1 Pro (CPU) (8 threads) [CPU]
+                            |                      Hardware Ray-Tracing: Off
+```
+
+Counted per switch, the same as on Linux: `--log cycles --log-level info`, `--log-level info` and `--debug-cycles` each put the line on standard output once and on the error stream not at all.
+
+**The line names the card when the card does the work.** With the Metal device switched on and the scene set to GPU Compute, the same line on standard output read:
+
+```
+Path tracing on: Apple M1 Pro (GPU - 14 cores) (Metal) (display) [METAL_Apple M1 Pro (GPU - 14 cores)]
+                     Hardware Ray-Tracing: Off
+```
+
+So it names the chip, the number of graphics cores, the route (Metal), the word `display` — this machine's graphics drive the screen as well — and an identifier built from the two.
+
+**One line in the same run must not be read as saying what ran.** At `--log-level info` this appears whether the work went to the processor or to the graphics:
+
+```
+cycles           | Added device "Apple M1 Pro (GPU - 14 cores)" with id "METAL_Apple M1 Pro (GPU - 14 cores)".
+```
+
+It was present, word for word, in a run whose `Path tracing on:` line named the processor. **`Added device` names what Cycles found; `Path tracing on:` names what did the work.**
+
+**`--cycles-print-stats` still names no device.** Exit 0, the whole statistics block on **standard output**, the error stream 0 bytes, and searching the captured output for `Metal`, `CUDA`, `OptiX`, `HIP`, `oneAPI`, `GPU`, `CPU`, `Apple` and `M1` returned nothing.
+
+**And with the graphics doing the work it refuses.** The same switch with `-- --cycles-device METAL`: exit 0, the block still on standard output, the error stream 0 bytes, and in place of the timings, in all four versions, the one sentence:
+
+```
+Profiling information not available (only works with CPU rendering)
+```
+
+— word for word what the mended Linux card produced. Nothing in it names a device.
+
+**A render on the graphics writes no new field, but the `Memory` field jumps.** Every metadata switch on, the same one-cube scene, `-- --cycles-device METAL`: the field set is identical to the processor run's and **no field names the graphics, the backend or the technology** — every value searched for `metal`, `apple`, `m1`, `nvidia`, `geforce`, `cuda`, `optix`, `hip`, `oneapi` and `device`, zero matches, in all four versions. What changes is one number:
+
+| what did the work | the `Memory` field in this version |
+|---|---|
+| the processor | `1M` |
+| the graphics | `1385M` |
+
+So the figure is a strong hint and names nothing — the same shape of hint the Linux card gave. **It is a memory reading taken on a shared machine**, so it is offered as an order of magnitude and not as a measurement.
+
+**The settings still do not say what ran, and on this machine they mislead in the other direction.** A run with the scene set to GPU Compute and `-- --cycles-device CPU` on the command line printed from inside itself:
+
+```
+AFTER_OVERRIDE compute_device_type= METAL  scene.cycles.device= GPU
+```
+
+while the same run path-traced on the processor. Both settings name the graphics; the processor did the work.
+
+**What a written image carries.** Every metadata switch on, Cycles, PNG and OpenEXR: **no field names a device, a card or a technology**, in any of the four versions. The `Hostname` field carried the machine's name, `Artists-Studio-MacBook.local`. The `Memory` field read `1M` for the processor run — nothing resembling `ddM` appeared.
+
+**`bpy.ops.wm.sysinfo` with no window: the GPU section is empty and the Cycles section names the card.** Exit 0, `{'FINISHED'}`, a 96-line file. The GPU section reads `GPU: missing, background mode`, exactly as on Linux. The Cycles section, on this machine:
+
+```
+CPU device capabilities: 
+
+Metal device capabilities:
+Number of devices: 1
+		Device: Apple M1 Pro (GPU - 14 cores)
+```
+
+Note that `CPU device capabilities:` is **blank** here where the Linux file carried `AVX2` — that line reports an instruction set this chip has no entry for.
+
+**With a window open the GPU section is filled in.** The same operator, called from a script in a Blender started with a window, wrote a 120-line file. Comparing the two files line by line, the only differences are the temporary folder's name and this, where the windowless file had one line:
+
+```
+GPU:
+========================================
+
+renderer:	'Metal API'
+vendor:		'Apple M1 Pro'
+version:	'1.2'
+device type:	'APPLE'
+backend type:	'METAL'
+extensions:
+
+Implementation Dependent GPU Limits:
+========================================
+
+Maximum Batch Vertices:	-2147483648
+Maximum Batch Indices:	-2147483648
+```
+
+**The `gpu` module still answers nothing with no window in this version**, on a machine whose graphics work:
+
+```
+GPU_ERROR SystemError GPU functions for drawing are not available in background mode
+HAS_GPU_INIT False
+```
+
+There is no `gpu.init` to call here — 5.2 alone offers one, and there it answers.
+
+**The Metadata panel, seen on screen.** Blender started with a window on the factory scene, the Output Properties tab shown and its own search box set to `Metadata` so the panel opened, then Blender's own `screen.screenshot` operator. The panel showed `Metadata Input: Scene` and thirteen boxes: **Date, Time, Render Time, Frame, Camera, Scene and Filename ticked; Frame Range, Memory, Hostname, Lens, Marker and Strip Name unticked**, with `Note` and `Burn Into Image` as closed sub-panels, both unticked. **The Memory box is not ticked**, which matches what a running Blender reports and not the API page's stated default of True. Identical in all four versions. The picture is at `/tmp/smoozy-war/out/e27/panel_5.0.png`.
+
+**The build reports itself as `BUILD_PLATFORM b'Darwin'`**, `BACKGROUND True`, `cycles: True`, `cycles_osl: True`, and every conditional image format compiled in. Against the Linux build of the same version, the differences are `coreaudio` True here and False there, `jack` and `pulseaudio` False here and True there.
+
+**Threads read `THREADS 8 THREADS_MODE AUTO`** at factory startup — this machine's core count, not the documented default of 1.
+
+---
+
+### Tested by hand again after the citation check, 2026-08-07 — **LABEL: observed**
+
+**Why these runs happened.** The citation check of this topic found four disagreements, recorded both sides of each, chose between none of them, and sent them back to the hand tests. Three of the four are tests. They were run on 2026-08-07 on the rented Linux machine, alone and last, because that machine was about to be taken away and nothing else could be asked of it afterwards. They are entries 42, 43 and 44 of `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**The machine, named in full.** The rented Linux machine: Ubuntu 22.04.5 LTS, kernel `6.8.0-59-generic`, one NVIDIA GeForce RTX 4080 SUPER with 16376 MiB of graphics memory, driver **580.173.02** in both halves — `nvidia-smi` and `/proc/driver/nvidia/version` were read at the start of the sitting and agree — an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, and no display server at all. Nothing else was running on it: the load average was 0.19 and there was no Blender process. Everything was written inside `/root/again-what-actually-ran/`, and each of the four Blenders was given a settings folder of its own, made before it was used. The scene is the one-cube factory scene at 160 by 120, sixteen samples, denoising off, built by Blender 4.5 so that all four versions can open it. No test below reads what is written inside a finished image, so no picture and no file was compared.
+
+**Two of the three tests answer this question. They are set out one after the other below.**
+
+---
+
+#### Test one — what the `Full path tracing report` block holds in this version, transcribed exactly
+
+*What a negative result would look like, said before the run.* A `Hardware Ray-Tracing:` line inside this version's block — which is exactly what the 2026-08-06 transcript above records. Blender 5.1 and 5.2 were run identically alongside as controls, precisely so that this test can come out the other way: if those two show the line and this one does not, the absence is a fact about the version and not a fault in the capture.
+
+*What was done.* `/opt/blender/5.0/blender -b scene.blend --log-level info -o out/ -F PNG -f 1`, five times, both streams captured to separate files, on `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)` — the same build named in the 2026-08-06 record above. The same run was then made three more times with the graphics card doing the work.
+
+*What came back, word for word.* Exit 0 and a 0-byte error stream every time. The block, from the first of the five processor runs, uncut:
+
+```
+00:00.309  cycles           | Full path tracing report:
+                            | 
+                            | Path tracing on: AMD EPYC 7B12 64-Core Processor (CPU) (24 threads) [CPU]
+                            | 
+                            | Render Scheduler Summary
+                            | 
+                            | Mode: Headless
+                            | Resolution: 160x120
+```
+
+**There is no `Hardware Ray-Tracing:` line.** The five runs are identical to one another once their timestamps are set aside — the same eight lines, byte for byte. Searching the whole of the captured output of all five runs, both streams, for `Hardware Ray-Tracing` and for `ray-trac` in any case gives nought matches. The three runs with the card doing the work carry the card's name in that line — `Path tracing on: NVIDIA GeForce RTX 4080 SUPER (OptiX) [CUDA_NVIDIA GeForce RTX 4080 SUPER_0000:00:07_OptiX]` — and still no `Hardware Ray-Tracing:` line.
+
+*The controls did their job.* Blender 5.1 and 5.2, run identically on the same machine on the same day, **do** carry `Hardware Ray-Tracing: Off` in every one of their eight runs each, on the processor and on the card alike. So the test could have come out the other way, and did not.
+
+*Two runs of the same test on the same machine came out differently, and neither has been chosen.* The 2026-08-06 transcript above stands exactly as it was written, and it carries a `Hardware Ray-Tracing: Off` line. The citation check's repeat of 2026-08-07 did not, and these five further runs of 2026-08-07 did not either. That is one run against ten, on the same machine, with the same build, the same scene and the same switch. **This finding does not choose between them.** What it can say is what the ten runs have in common with the one: the block exists, it is on standard output, it is brought out by `--log-level info`, and its `Path tracing on:` line names the processor's model, its thread count and the kind of device. Anything downstream that needs the `Hardware Ray-Tracing:` line must treat its presence in 5.0 as unsettled, and must not read its absence from a 5.0 run as an error.
+
+---
+
+#### Test two — how many `Building OptiX acceleration structure` lines a run prints
+
+*What a negative result would look like, said before the run.* The same number in all five runs of a version — which would have meant the two earlier counts were a miscount rather than a moving target, and the finding could then name the number with five repeats behind it. The CUDA runs beside them are the second way this test can fail: they show what the same count looks like when the answer is nought, so the counting is not something that only ever returns small positive numbers.
+
+*What was done.* The shared scene rendered on the card with OptiX and **no log switches at all**, five times per version, counting the lines that carry `Building OptiX acceleration structure` on each stream. The card was pointed at by a script that sets the Cycles preference to OptiX and the scene to GPU, and prints the device list back so the run says rather than assumes what it used — it read `[('NVIDIA GeForce RTX 4080 SUPER', 'CUDA', False), ('AMD EPYC 7B12 64-Core Processor', 'CPU', False), ('NVIDIA GeForce RTX 4080 SUPER', 'OPTIX', True)]` in every OptiX run. Five CUDA runs per version were made the same way, as the control.
+
+*What came back.* The count is **not stable**. Five OptiX runs of the identical command in this version gave, in order:
+
+```
+2, 4, 4, 2, 4
+```
+
+and the five CUDA runs beside them gave `0, 0, 0, 0, 0`. Exit 0 and a frame written in all ten; the error stream was 0 bytes in all ten. **Both of the numbers the two earlier runs disagreed about — three and four — sit inside that spread**, and so does a third number neither of them reported.
+
+*Why it moves, read straight off the lines.* The lines are ordinary progress lines, and which of the geometry steps gets a line of its own varies from run to run. Two runs of this version, side by side, with the timestamps and memory figures taken out:
+
+```
+run 1
+  render | Fra: 1 | Updating Geometry BVH Cube 2/1 | Building OptiX acceleration structure
+  render | Fra: 1 | Updating Scene BVH | Building OptiX acceleration structure
+
+run 2
+  render | Fra: 1 | Updating Geometry BVH light 4/3 | Building OptiX acceleration structure
+  render | Fra: 1 | Updating Geometry BVH Light 3/3 | Building OptiX acceleration structure
+  render | Fra: 1 | Updating Geometry BVH Cube 2/3 | Building OptiX acceleration structure
+  render | Fra: 1 | Updating Scene BVH | Building OptiX acceleration structure
+```
+
+The `Updating Scene BVH` line is in every run of every version. The geometry lines above it are not. So the number is a fact about which progress steps happened to be reported, and never a fact about Blender or about OptiX.
+
+*What this settles, and what must not be written.* Across the four versions the counts were 4.5 `3, 4, 4, 3, 4`; 5.0 `2, 4, 4, 2, 4`; 5.1 `3, 4, 3, 3, 4`; 5.2 `2, 4, 2, 3, 3`; and CUDA nought, twenty runs out of twenty. **The number must never be quoted as a fact about a version.** What holds, and held in every run anybody has made, is the half the claim rests on: lines of this shape appear in an OptiX run and never once in a CUDA run of the same scene. The right form of words is *more than once*, which is what the documents now say.
+
+
+## 2. When a render has finished, what can be learned about which render engine produced it?
+
+**LABEL: not in the sources**, for the finished image on its own. **documented** for what is printed while it runs and what can be asked of the file.
+
+There is no engine field in render metadata. The complete list of metadata fields on the Metadata panel page (quoted in question 1) contains Date, Time, Render Time, Frame, Frame Range, Memory, Hostname, Camera, Lens, Scene, Marker, Filename, Strip Name and Note. None of them names the engine. I searched the manual and the API for a "Software", "producer", "creator" or "written by" style field written into image output and found none.
+
+Three things do exist.
+
+**(a) The engine prints its name.** In the log example already quoted:
+
+> `00:00.245  render           | Engine: Cycles`
+
+— Blender 5.0 release notes, core, `https://developer.blender.org/docs/release_notes/5.0/core/`, read 2026-07-30.
+
+**(b) An engine can add its own fields to the render result.** The API offers exactly this:
+
+> "stamp_data_add_field(field, value)
+>
+> Add engine-specific stamp data to the result"
+
+— Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.types.RenderResult.html`, read 2026-07-30. This is a hook an engine may use. Nothing I read says that Cycles, EEVEE or Workbench use it, and I found no mention of stamp fields anywhere in Cycles' Python files.
+
+**(c) The blend-file records which engine is set.** From the API:
+
+> "engine
+>
+> Engine to use for rendering
+>
+> Type:
+>
+> enum in ['BLENDER_EEVEE'], default 'BLENDER_EEVEE'"
+
+— Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.types.RenderSettings.html`, read 2026-07-30. The list of allowed values there holds only one entry, which fits the fact that Cycles is an add-on: "More renderers from third-party developers are available as add-ons" (Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/introduction.html`, read 2026-07-30), and Cycles' own file declares itself as one, with `"category": "Render"` and `bl_idname = 'CYCLES'` (**observed**, `cycles_5.0/__init__.py`, lines 7–16 and 43, read 2026-07-30). This is a setting in the file, not a record of what ran; it can be overridden at the command line:
+
+> "-E, --engine <engine>
+>
+> Specify the render engine.
+> Use -E help to list available engines."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/advanced/command_line/arguments.html`, read 2026-07-30.
+
+One 5.0-specific trap worth recording, because it changes what an engine name means between versions:
+
+> "- EEVEE's engine identifier was changed from `BLENDER_EEVEE_NEXT` to `BLENDER_EEVEE`."
+
+— Blender 5.0 release notes, EEVEE, `https://developer.blender.org/docs/release_notes/5.0/eevee/`, read 2026-07-30, repeated in the Python API notes at `https://developer.blender.org/docs/release_notes/5.0/python_api/`.
+
+**Not covered.** I cannot say whether Blender writes an engine name, a Blender version, or any "software" tag into image files by any route the documentation describes. My answer covers only what the manual, the API documentation, the release notes and Cycles' files state. It is possible that the image libraries Blender uses write such a tag; the sources I have do not say, and I did not go looking outside them.
+
+**Outside the interface.** The `Engine: Cycles` log line is documented in the context of background rendering, so it holds outside the interface. `-E help` and `-E <engine>` exist only outside the interface. The scene's engine setting is readable either way. **Settled by test on 2026-08-06, on Linux only — see below.** The engine's name reaches a finished image with no window involved, through the four `cycles.ViewLayer.*` stamp fields and, from 5.0 on, an OpenEXR `Software` attribute. `-E help` needs `-b` on a machine with no screen; in Blender 4.5 it never returns even then. **Added by the tests of 2026-08-07:** nothing about the engine changes when a graphics card does the work. Every route above behaves the same outside the window with the card in use as with the processor.
+
+**Operating system.** Nothing in what I read makes any of this depend on the operating system. Which engines are *available* can differ: `bpy.app.build_options` reports `cycles=True` among many build switches (Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.app.html`, read 2026-07-30), so a build without Cycles would not offer it. **The tests recorded below were run on Linux only, on 2026-08-06; macOS is untested and Windows was not tried.** **The tests of 2026-08-07 were run on the same Linux machine, with its graphics card working and its driver at 580.173.02; macOS is still untested and Windows was still not tried.** So everything the card added above is an NVIDIA-on-Linux answer: CUDA and OptiX are what was seen, and Metal, HIP and oneAPI were not.
+
+### Tested by hand, 2026-08-06 — **LABEL: observed**
+
+Machine, Blender and settings folder as recorded under question 1 of this document: **the rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server — running `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings/5.0`) and never at the real one. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**A finished image does carry a trace of the engine, in two ways, and one of them is new since 4.5.**
+
+*Cycles writes four stamp fields of its own.* The same frame was rendered twice with every metadata switch on, once with `-E CYCLES` and once with `-E BLENDER_EEVEE`. The Cycles file carried four fields the EEVEE file did not:
+
+```
+   cycles.ViewLayer.samples = 16
+   cycles.ViewLayer.total_time = 00:00.06
+   cycles.ViewLayer.render_time = 00:00.05
+   cycles.ViewLayer.synchronization_time = 00:00.01
+```
+
+The EEVEE render of the same frame carried only the documented stamp fields:
+
+```
+   File = /root/what-actually-ran/work/scene.blend
+   Note = SMOOZY NOTE
+   Date = 2026/08/06 22:59:57
+   Marker = <none>
+   Time = 00:00:00:01
+   Frame = 1
+   FrameRange = 1:3
+   Camera = Camera
+   Lens = 50.00
+   Scene = Scene
+   Strip = <none>
+   RenderTime = 00:25.81
+   Memory = 0M
+   Hostname = ubuntu
+```
+
+So the hook the API describes for engine-specific stamp data is in use, and the field names begin with the engine's own name.
+
+*An OpenEXR also carries a `Software` attribute.* The Cycles render to OpenEXR carried, among its attributes:
+
+```
+   Software (string) = Blender 5.0.1
+   colorInteropID (string) = lin_rec709_scene
+```
+
+Neither appears in a PNG, and **neither appears in the equivalent file written by Blender 4.5** — that comparison was run on the same machine on the same day and is recorded in 4.5's own document. This closes the *Not covered* line above about a producer or software tag.
+
+**The log names the engine at default settings.** The plain background render quoted under question 1 carries `render | Engine: Cycles` with no switch at all.
+
+**`blender -b -E help` lists three engines.** Exit 0:
+
+```
+Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)
+Blender Engine Listing:
+	BLENDER_EEVEE
+	BLENDER_WORKBENCH
+	CYCLES
+```
+
+**The `-b` matters:** run without it on a machine with no screen, `-E help` printed GHOST display errors and never returned.
+
+**An engine name Blender does not know is refused.** Run as `blender -b scene.blend -E NOT_AN_ENGINE -o out/be_ -F PNG -f 1`:
+
+```
+Error: engine not found 'NOT_AN_ENGINE'
+```
+
+**The engine list a running Blender reports really does hold one entry.** Run under `--factory-startup`:
+
+```
+ENGINE 'BLENDER_EEVEE'
+ENGINE_ITEMS ['BLENDER_EEVEE']
+HAS_MULTIPLE_ENGINES True
+```
+
+So the single-entry list is **not** an artefact of how the documentation was generated — a running Blender says the same thing, while the same Blender lists three engines to `-E help` and accepts `-E CYCLES`. Any reasoning above about why that list is short should be read against this.
+
+
+### Tested by hand with the graphics card working, 2026-08-07 — **LABEL: observed**
+
+The machine of the 2026-08-06 tests, repaired. **The rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server at all — now carrying NVIDIA driver **580.173.02** in both halves, the kernel module and the libraries agreeing at last. `nvidia-smi` answers, and Blender finds the card. Blender was `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose before it was used (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings-card/5.0`) and never at the real one. Nothing else was running on the machine. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**Which part of the computer did the work changes nothing about what names the engine.** The metadata test was run again with the scene on GPU Compute and OptiX really doing the work: a Cycles render with every `use_stamp_*` switched on, to PNG and to OpenEXR. **The field set is identical to the processor's** — the same four `cycles.ViewLayer.*` fields, and the same `Software` attribute in the OpenEXR naming Blender and its version. Nothing new names the engine, and no field names the card.
+
+The one thing a card adds sits in the printed output, not in the file. `Building OptiX acceleration structure` (question 1) names a *technology*, not an engine — somebody reading only that line would know a graphics card was in use and still not know which engine had asked for it. Cycles is the only engine that can ask, on the evidence of `-E help`, but that is a step this run does not take.
+
+`-E help`, the `render | Engine: Cycles` line and the engine list were settled on 2026-08-06 and are untouched by the card; they were not run again, so that a second result could not be laid over a first.
+
+**Where I looked.** Searched the whole manual for: engine, "render engine", Software, producer, "Blender version", "written by", metadata, stamp. Searched the whole API for: stamp, metadata, engine. Searched all release notes for: engine, metadata. Searched all Cycles Python files for: stamp. Pages opened: the Metadata panel page, `bpy.types.RenderResult`, `bpy.types.RenderSettings`, `bpy.types.RenderEngine`, the render introduction page, command line arguments, command line rendering, release notes core, EEVEE and Python API. Ruled out: `bpy.types.AssetMetaData` and the sequencer/movie-clip metadata pages, which concern assets and footage rather than render output; the compositor's OpenEXR "Color Interop ID metadata" note in the 5.0 pipeline notes, which is about colour space, not the engine.
+
+---
+
+### Tested by hand on the Mac, 2026-08-07 — **LABEL: observed**
+
+The machine and the method are described under question 1.
+
+**The log names the engine on macOS too.** A background render with no switches at all put this on standard output:
+
+```
+render           | Engine: Cycles
+```
+
+The line is in the same place in the same run in 5.0, 5.1 and 5.2, and Blender 4.5 on the same machine printed nothing of the kind.
+
+**`-E help` lists three engines.** `blender -b -E help`, exit 0, standard output:
+
+```
+Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:51:40)
+Blender Engine Listing:
+	BLENDER_EEVEE
+	BLENDER_WORKBENCH
+	CYCLES
+```
+
+**But a running Blender's own engine list still holds one entry.** Read at factory startup with no window:
+
+```
+ENGINE 'BLENDER_EEVEE'   ENGINE_ITEMS ['BLENDER_EEVEE']   HAS_MULTIPLE_ENGINES True
+```
+
+So the short list is not an artefact of how the documentation was made, and it is not an artefact of the operating system either.
+
+**Cycles writes four fields of its own into every image it renders, and EEVEE does not.** With every metadata switch on, the Cycles PNG carried `cycles.ViewLayer.samples`, `cycles.ViewLayer.total_time`, `cycles.ViewLayer.render_time` and `cycles.ViewLayer.synchronization_time`; the EEVEE PNG of the same frame (engine `BLENDER_EEVEE` in this version) carried none of them. Counted in all four versions: four in the Cycles file, none in the EEVEE file.
+
+**The OpenEXR carries `Software`.** From the Cycles OpenEXR written on this machine:
+
+```
+   Software (string) = Blender 5.0.1
+   colorInteropID (string) = lin_rec709_scene
+```
+
+Blender 4.5 on the same machine wrote neither attribute. The PNGs carry no `Software` field in any version. Same as the Linux runs.
+
+---
+
+## 3. When a render has finished, what can be learned about which add-ons were in use while it ran?
+
+**LABEL: not in the sources**, for the finished render itself. **documented** for a separate file that lists them, and for what can be asked of a running Blender.
+
+Nothing in render metadata concerns add-ons. Nothing in the log example concerns add-ons. I found no field, tag, pass or file written by a render that names an add-on.
+
+What does exist:
+
+**(a) A separate text file lists them.** Among the sections of `system-info.txt`:
+
+> "Enabled Add-Ons
+>
+> Lists add-ons currently in use along with their versions and paths."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/getting_started/help.html`, read 2026-07-30. The word "currently" is the manual's. This is a snapshot at the moment the file is written, not a record attached to a render.
+
+**(b) A running Blender can be asked.** The preferences carry a collection of add-ons:
+
+> "addons
+>
+> Type:
+>
+> Addons bpy_prop_collection of Addon, (readonly)"
+
+— Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.types.Preferences.html`, read 2026-07-30. Each entry gives little:
+
+> "class bpy.types.Addon(bpy_struct)
+>
+> Python add-ons to be loaded automatically
+>
+> module
+>
+> Module name"
+
+— Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.types.Addon.html`, read 2026-07-30. That is a module name and a preferences block; no version, no path.
+
+**(c) Add-ons can be added for one run.** From the command line page:
+
+> "--addons <addon(s)>
+>
+> Comma separated list (no spaces) of add-ons to enable in addition to any default add-ons."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/advanced/command_line/arguments.html`, read 2026-07-30. The phrase "in addition to any default add-ons" means this flag alone does not tell you the full set that was active.
+
+**(d) One indirect trace.** If a render was made by a render-engine add-on, the engine identifier says so, since third-party engines arrive as add-ons ("More renderers from third-party developers are available as add-ons", render introduction page, read 2026-07-30). This tells you about one add-on, not the rest.
+
+**(e) The only route to putting it in the image.** The manual points at the Note field as the place to script your own facts:
+
+> "Note
+>
+> Includes a custom note."
+
+> "Hint
+>
+> It can be useful to use the Note field if you are setting up a render farm.
+> Since you can script any information you like into it,
+> such as an identifier for the render node or the job number."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/output/properties/metadata.html`, read 2026-07-30. Nothing there says anything about add-ons; it is a free text field somebody would have to fill themselves.
+
+**Not covered.** I found nothing on whether a blend-file records which add-ons were enabled when it was saved or rendered, and nothing on whether a failed or missing add-on leaves a mark in render output. Whether the add-on list in `system-info.txt` can be produced without a person clicking is not stated (see "Outside the interface" below).
+
+**Outside the interface.** This is where the answer is weakest. `--addons` is a command-line flag, so it holds outside the interface. The preferences collection is readable from a script either way. `system-info.txt` is documented as a Help menu item — "Save System Info" — and the API operator `bpy.ops.wm.sysinfo(*, filepath='')` takes a file path, but no source I read says it works in background mode, so I do not claim it. There is also an example in the API documentation of a custom command called `sysinfo` registered through `bpy.utils.register_cli_command`, which prints `bpy.app.version_string`, `platform.platform()`, `platform.machine()` and `os.cpu_count()` — but that is a worked example somebody would write, not something Blender ships (Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.utils.html`, read 2026-07-30). **Settled by test on 2026-08-06, on Linux only — see below.** `bpy.ops.wm.sysinfo` does work with no window in every version, and its Enabled add-ons section is filled in with versions and paths, so the inferred step above holds. **Added by the tests of 2026-08-07:** the add-on section of `system-info.txt` written from outside the window is unchanged by the card working, and no field a render writes names an add-on whichever device ran it.
+
+**Operating system.** Nothing in what I read makes any of this depend on the operating system. The add-on directory layout differs by system, and the manual's add-on preferences page mentions checking "the Console window" for errors when an add-on fails to activate (Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/editors/preferences/addons.html`, read 2026-07-30) — a console window is a Windows notion in Blender's own command line documentation (`-con, --start-console … (Windows only)`). **The tests recorded below were run on Linux only, on 2026-08-06; macOS is untested and Windows was not tried.** **The tests of 2026-08-07 were run on the same Linux machine, with its graphics card working and its driver at 580.173.02; macOS is still untested and Windows was still not tried.** So everything the card added above is an NVIDIA-on-Linux answer: CUDA and OptiX are what was seen, and Metal, HIP and oneAPI were not.
+
+### Tested by hand, 2026-08-06 — **LABEL: observed**
+
+Machine, Blender and settings folder as recorded under question 1 of this document: **the rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server — running `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings/5.0`) and never at the real one. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**Nothing about add-ons reaches a rendered image.** The fields written into a Cycles PNG and a Cycles OpenEXR with every stamp switch on are listed in full under question 1. None names an add-on. The only engine-shaped fields are the four `cycles.ViewLayer.*` fields recorded under question 2.
+
+**`bpy.ops.wm.sysinfo` works with no window and its add-on section is filled in.** It returned `{'FINISHED'}` and wrote a 94-line file. The heading in the file is `Enabled add-ons:`, not `Enabled Add-Ons` as the manual writes it, and under it sat eight entries with versions and paths:
+
+```
+io_anim_bvh (version: (1, 0, 1), path: '.../scripts/addons_core/io_anim_bvh/__init__.py')
+io_curve_svg (version: UNKNOWN, path: '.../scripts/addons_core/io_curve_svg/__init__.py')
+io_mesh_uv_layout (version: (1, 2, 0), path: '.../scripts/addons_core/io_mesh_uv_layout/__init__.py')
+io_scene_fbx (version: (5, 15, 0), path: '.../scripts/addons_core/io_scene_fbx/__init__.py')
+io_scene_gltf2 (version: (5, 2, 39), path: '.../scripts/addons_core/io_scene_gltf2/__init__.py')
+cycles (version: UNKNOWN, path: '.../scripts/addons_core/cycles/__init__.py')
+pose_library (version: (2, 0), path: '.../scripts/addons_core/pose_library/__init__.py')
+bl_pkg (version: (0, 0, 1), path: '.../scripts/addons_core/bl_pkg/__init__.py')
+```
+
+(The version numbers quoted are this version's; the paths are abbreviated here and are given in full in the hand-tests file.)
+
+**The list that file holds is current, not stale.** In one session, without restarting, the file was written, an add-on switched off, and the file written again:
+
+```
+ON_BEFORE True
+DISABLE {'FINISHED'}
+ON_AFTER False
+   io_anim_bvh in first file: 1  in second file: 0
+```
+
+So an add-on switched off part-way through a session is gone from the next report written in that session.
+
+**The enabled list a script reads.** Run as `blender -b --python-expr "import bpy; print('MODULES', sorted(a.module for a in bpy.context.preferences.addons))"`:
+
+```
+MODULES ['bl_pkg', 'cycles', 'io_anim_bvh', 'io_curve_svg', 'io_mesh_uv_layout', 'io_scene_fbx', 'io_scene_gltf2', 'pose_library']
+```
+
+The same command with `--addons node_wrangler` printed the identical list and said nothing at all about the named add-on. **What that does and does not show:** `node_wrangler` is not among the eight this Blender ships, so the run cannot tell "loaded but not listed" apart from "nothing to load". What it does establish is that naming an add-on that is not there produces no message and no failure.
+
+
+### Tested by hand with the graphics card working, 2026-08-07 — **LABEL: observed**
+
+The machine of the 2026-08-06 tests, repaired. **The rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server at all — now carrying NVIDIA driver **580.173.02** in both halves, the kernel module and the libraries agreeing at last. `nvidia-smi` answers, and Blender finds the card. Blender was `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose before it was used (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings-card/5.0`) and never at the real one. Nothing else was running on the machine. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**The card changes nothing here, and the negative result is now stronger for it.** Every field written into a PNG and into an OpenEXR by a render that really ran on the graphics card was read back (see question 1's run). **No field names an add-on**, exactly as when the processor did the work.
+
+The `Enabled add-ons:` section of `system-info.txt` is unchanged too. The file grew from 94 lines to 183 with the card repaired, and **every added line is in the Cycles section**, describing the card's capabilities. The add-on list, its versions and its paths are identical.
+
+So the 2026-08-06 answer stands, with the case that was missing from it filled in: a finished render leaves no trace of which add-ons were loaded, whichever part of the computer did the work.
+
+**Where I looked.** Searched the whole manual for: add-on, addon, extension, "enabled add-ons", "system info", metadata, stamp. Searched the whole API for: addon, Addon, extension, addon_utils (no hits at all), sysinfo, metadata. Searched all release notes for: add-on, addon, extension. Searched the manual's `files/` section (blend-file, packed data, linked libraries, compatibility) for any mention of add-ons being recorded in a file — the only hits are about import/export add-ons and asset libraries, not about recording which add-ons were on. Pages opened: the Help menu page, the Add-ons preferences page, the Extensions add-ons page, `bpy.types.Addon`, `bpy.types.Preferences`, `bpy.ops.preferences`, `bpy.utils`, command line arguments, the Metadata panel page. Ruled out: `bpy.ops.extensions`, which is about installing and updating, not about reporting what ran.
+
+---
+
+### Tested by hand on the Mac, 2026-08-07 — **LABEL: observed**
+
+The machine and the method are described under question 1.
+
+**`bpy.ops.wm.sysinfo` fills its add-on section in with no window.** The same eight modules the Linux machine ships, at macOS paths under `/Applications/Blender 5.0.1.app/Contents/Resources/5.0/scripts/addons_core/` — `io_anim_bvh`, `io_curve_svg`, `io_mesh_uv_layout`, `io_scene_fbx`, `io_scene_gltf2`, `cycles`, `pose_library` and `bl_pkg`, each with its version in brackets and its full path. The file written with a window open carries the identical section.
+
+**The list is current, not a record of the session's start.** In one session: write the file, switch `io_anim_bvh` off, write it again without restarting.
+
+```
+ON_BEFORE True
+DISABLE {'FINISHED'}
+ON_AFTER False
+   io_anim_bvh in first file: 1  in second file: 0
+```
+
+**`--addons` changed nothing a script could read.** With and without `--addons node_wrangler`, the enabled list was identical, and identical to the Linux machine's:
+
+```
+MODULES ['bl_pkg', 'cycles', 'io_anim_bvh', 'io_curve_svg', 'io_mesh_uv_layout', 'io_scene_fbx', 'io_scene_gltf2', 'pose_library']
+```
+
+Nothing was printed about the named add-on either way. The same limit applies as on Linux: `node_wrangler` is not among the eight this build ships, so this shows only that naming an absent add-on produces no message and no failure.
+
+---
+
+## 4. What does a render do when it is asked for something the computer or the installed Blender cannot provide, and what does it report?
+
+**LABEL: mixed.** Several named cases are **documented**. There is no general rule in the sources, and the most important case for a render farm — a GPU that was asked for but is not there — is **not in the sources** as a statement about what a render does.
+
+The sources describe particular cases, not a policy. Here are the ones I found.
+
+**(a) Not enough graphics memory: it quietly borrows system memory.**
+
+> "With CUDA, OptiX, HIP and Metal devices, if the GPU memory is full Blender will automatically try to use system memory. This has a performance impact, but will usually still result in a faster render than using CPU rendering."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/cycles/gpu_rendering.html`, read 2026-07-30. Note which backend is missing from that list: oneAPI. The page does not say what oneAPI does.
+
+**(b) Running out of memory outright: a named error.** The same page lists error messages under a heading "Error Messages", including:
+
+> "Error: Out of memory
+>
+> This usually means there is not enough memory to store the scene for use by the GPU."
+
+and
+
+> "CUDA Error: Kernel compilation failed
+>
+> This error may happen if you have a new NVIDIA graphics card that is not yet supported by the Blender version and CUDA toolkit you have installed. In this case Blender may try to dynamically build a kernel for your graphics card and fail."
+
+— same page, read 2026-07-30.
+
+**(c) Compositor denoising falls back on its own.**
+
+> "GPU:
+>
+> Use the GPU to process the denoise node if available, otherwise fallback to CPU."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/cycles/render_settings/performance.html`, read 2026-07-30, and identically at `https://docs.blender.org/manual/en/5.0/render/eevee/render_settings/performance.html`. The same wording is in the API at `https://docs.blender.org/api/5.0/bpy.types.RenderSettings.html`. Nothing says it reports the fallback.
+
+**(d) The image denoiser picks what it can.**
+
+> "Automatic:
+>
+> Uses GPU accelerated denoising if supported, for best performance.
+> Prefers OpenImageDenoise over OptiX."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/cycles/render_settings/sampling.html`, read 2026-07-30. The OptiX choice carries a hard limit: "Only available on NVIDIA GPUs when configured in the Cycles Render Devices user preferences."
+
+**(e) EEVEE cannot use a processor at all, and cannot run headless on Windows.**
+
+> "Being a rasterization engine, EEVEE only uses the power of the GPU to render. There is no plan to support CPU (software) rendering as it would be very inefficient."
+
+> "Headless Rendering
+>
+> Headless rendering is not supported on headless Windows systems."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/eevee/limitations/limitations.html`, read 2026-07-30. Neither statement says what happens or what is reported when you try.
+
+**(f) Features Cycles will not do on a graphics card.**
+
+> "Path Guiding is not supported on any GPU.
+>
+> Open Shading Language is only supported for OptiX, with some limitations listed in the documentation."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/cycles/gpu_rendering.html`, read 2026-07-30. Again, no statement of what happens if asked.
+
+**(g) A build that lacks the feature says so.** Cycles' own file carries an exact message:
+
+> `self.report({'ERROR'}, "OSL support disabled in this build")`
+
+— **observed**, `cycles_5.0/__init__.py`, lines 111 and 118, read 2026-07-30. It fires from `update_script_node` and `update_custom_camera` when `engine.with_osl()` is false.
+
+**(h) A bad device on the command line stops Blender.**
+
+> `if args.cycles_device:`
+> `    import _cycles`
+> `    if not _cycles.set_device_override(args.cycles_device):`
+> `        sys.exit(1)`
+
+— **observed**, `cycles_5.0/engine.py`, lines 38–41, read 2026-07-30. **Inferred**: if `--cycles-device` is given and Cycles cannot honour it, Blender exits with status 1 before rendering. The step: I am reading `sys.exit(1)` as ending the process with that status, and I am assuming `set_device_override` returns false when it cannot set the device. The file does not say what makes it return false — an unrecognised name, an absent device, or both — and it prints nothing itself.
+
+**(i) File formats a build does not have.**
+
+> "-F, --render-format <format>
+>
+> Set the render format.
+> Valid options are:
+> TGA RAWTGA JPEG IRIS PNG BMP HDR TIFF.
+>
+> Formats that can be compiled into Blender, not available on all systems:
+> OPEN_EXR OPEN_EXR_MULTILAYER FFMPEG CINEON DPX JP2 WEBP."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/advanced/command_line/arguments.html`, read 2026-07-30. What is compiled in can be read from `bpy.app.build_options`, which the API shows as a long list of switches including `image_openexr=True`, `codec_ffmpeg=True`, `cycles=True`, `cycles_osl=True`, `image_webp=True` (Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.app.html`, read 2026-07-30). The values shown there are those of the machine that built the documentation, not a promise.
+
+**(j) The Cycles preferences say when no graphics card qualifies.** Cycles' own file builds this message:
+
+> `col.label(text=rpt_("No compatible GPUs found for Cycles"), icon='INFO', translate=False)`
+
+followed by per-backend lines such as `rpt_("Requires NVIDIA GPU with compute capability %s")`, `rpt_("and NVIDIA driver version %s or newer")`, `rpt_("Requires AMD GPU with RDNA architecture")`, `rpt_("Requires Intel GPU with Xe-HPG architecture")` and `rpt_("Requires Apple Silicon with macOS %s or newer")`.
+
+— **observed**, `cycles_5.0/properties.py`, lines 1808–1869, read 2026-07-30. This is drawn in the preferences panel. It is not a render-time report.
+
+**(k) What an engine has to report with.** The API gives an engine two ways to speak:
+
+> "report(type, message)
+>
+> Report info, warning or error messages"
+
+> "error_set(message)
+>
+> Set error message displaying after the render is finished"
+
+— Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.types.RenderEngine.html`, read 2026-07-30. And in 5.0 those reports go into the log:
+
+> "Most of Blender now uses the same logging system, including operators reports and background render progress."
+
+— Blender 5.0 release notes, core, `https://developer.blender.org/docs/release_notes/5.0/core/`, read 2026-07-30.
+
+**The gap.** I could not find any statement of what a Cycles render does when the scene asks for GPU Compute and no usable graphics device is there. The closest thing in the sources is a helper in Cycles' interface file:
+
+> `def use_cpu(context):`
+> `    cscene = context.scene.cycles`
+> `    return (get_device_type(context) == 'NONE' or cscene.device == 'CPU' or not backend_has_active_gpu(context))`
+
+— **observed**, `cycles_5.0/ui.py`, lines 104–107, read 2026-07-30, with the matching `use_gpu` at lines 110–113 requiring `backend_has_active_gpu(context)` to be true. **Inferred**: Cycles treats the situation "GPU selected, no usable GPU present" the same as CPU. The step, stated plainly: this function decides which panels and options the interface shows, and I am reading its verdict as matching what the renderer does. The file does not say that, and the step could be wrong. Also **observed**, in the same file, `col.active = show_device_active(context)` at line 2466, with `show_device_active` returning false in that situation (lines 142–146) — so the Device menu is drawn greyed out. That is an interface fact only.
+
+**Not covered.** There is no general statement anywhere I looked about what a render does when a request cannot be met — whether it stops, substitutes, or carries on quietly. The sources give named cases and nothing joining them. I found no documentation of Blender's exit status after a failed render; the only exit code mentioned anywhere in the manual is `--python-exit-code <code>`, which is about Python exceptions from scripts, not about renders.
+
+**Outside the interface.** Several of the cases above are interface-only in the form I found them: the "No compatible GPUs" message and the greyed-out Device menu are drawn in preferences and properties panels, and `report()` shows in the Info editor and status bar. The 5.0 change that routes operator reports through the logging system is the one thing that makes these reachable outside the interface, and the release note says so directly. `--cycles-device` and `-F` are command-line only. The out-of-memory and kernel-compilation errors are quoted from a troubleshooting page that does not say where they appear. **Settled in part by test on 2026-08-06, on Linux only — see below.** Every failure message found reached standard output or the error stream with no window: the `--cycles-device` refusal, the unwritable-output error, and the `-F` format complaint. The preferences-panel messages could not be reached at all with no window, as expected, and no substitute for them appeared anywhere. **Added by the tests of 2026-08-07:** `--cycles-device` exists only outside the window, and with the card working it can now be seen to succeed silently for `OPTIX` and `CUDA` and to refuse `HIP` and `ONEAPI` with `Found no Cycles device of the specified type`. The out-of-memory case is still out of reach, because this machine's own memory gives out before the card's does.
+
+**Operating system.** Some of these are operating-system specific by their nature. Headless EEVEE fails only on Windows. `--qos` is Windows only. The Cycles "requires" messages branch on `sys.platform` in Cycles' own file, giving different driver requirements for Windows and Linux (**observed**, `cycles_5.0/properties.py`, lines 1826–1861). The requirements page names 5.0 in one place: "Blender 4.5 LTS is the last release to support Intel and macOS 11.2 (Big Sur). Blender 5.0 and later require Apple Silicon running macOS 13 (Ventura) or later" (`https://www.blender.org/download/requirements/`, read 2026-08-01) — so on macOS, 5.0 will not run at all on an Intel Mac, which is a different failure from a render failing. **The tests recorded below were run on Linux only, on 2026-08-06; macOS is untested and Windows was not tried.** **The tests of 2026-08-07 were run on the same Linux machine, with its graphics card working and its driver at 580.173.02; macOS is still untested and Windows was still not tried.** So everything the card added above is an NVIDIA-on-Linux answer: CUDA and OptiX are what was seen, and Metal, HIP and oneAPI were not.
+
+### Tested by hand, 2026-08-06 — **LABEL: observed**
+
+Machine, Blender and settings folder as recorded under question 1 of this document: **the rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server — running `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings/5.0`) and never at the real one. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+Six different kinds of shortfall were tried, and they do not behave alike. **Windows was not tried at all** — no Windows machine has run it — so every Windows-specific line above stays untested rather than confirmed.
+
+**A device demanded on the command line that Cycles will not give: exit 1 and no frame.** Five runs, each deleting the output first:
+
+| `-- --cycles-device` | exit | frame written |
+|---|---|---|
+| `NOTADEVICE` | 1 | no |
+| `OPTIX` | 1 | no |
+| `CUDA` | 1 | no |
+| `METAL` | 1 | no |
+| `CPU` | 0 | yes |
+
+A name Cycles does not know, on standard output through the log:
+
+```
+00:00.281  cycles           | ERROR NOTADEVICE is not a valid Cycles device.
+Error: Not freed memory blocks: 1, total unfreed memory 0.000004 MB
+```
+
+A real backend with no hardware behind it, also on standard output:
+
+```
+00:00.544  cycles           | ERROR CUDA cuInit: Unknown error
+00:00.548  reports          | ERROR Found no Cycles device of the specified type
+```
+
+`METAL` gave only the second of those two, with no CUDA line. (In Blender 4.5 these same messages go to the **error** stream instead; that is recorded in 4.5's own document.)
+
+**A scene asking for GPU Compute where no card can be used: it renders anyway, and it says what it used.** With `scene.cycles.device` set to `GPU` and the Cycles preference reading `NONE`, run as `blender -b scene.blend --python setgpu.py --log "*" --log-level info -o out/g_ -F PNG -f 1`:
+
+```
+exit=0
+frame written
+PREF_COMPUTE_DEVICE_TYPE NONE
+SCENE_CYCLES_DEVICE GPU
+                            | Path tracing on: AMD EPYC 7B12 64-Core Processor (CPU) (24 threads) [CPU]
+00:00.560  render           | Time: 00:00.17 (Saving: 00:00.13)
+```
+
+The same file with the device set to CPU gave `exit=0`, a frame, the **identical** `Path tracing on:` line, and `Time: 00:00.22`. So the run is not silent about it. The times are not evidence and are not offered as any: the machine was shared with other work while these ran, the scene takes a fifth of a second, and the two runs differ by less than the spread between repeats.
+
+**A render that cannot write its output: exit 1, and it says so.** With a plain file sitting where the output folder should be:
+
+```
+00:00.619  image            | ERROR Couldn't create directory for file .../notadir/z_0001.png: File exists
+00:00.619  reports          | ERROR Render error (File exists) cannot save: '.../notadir/z_0001.png'
+```
+
+exit status 1.
+
+**A format name that is not a format: it complains and renders anyway.** Run as `blender -b scene.blend -o out/f_ -F NOSUCHFORMAT -f 1`, exit **0**, a file `f_0001.png` written in the scene's own format, and this on the error stream:
+
+```
+Error: Format from '-F / --render-format' not known or not compiled in this release.
+```
+
+The wording covers a bad name and a missing build feature in one sentence, so the two cannot be told apart from it. This settles what the *Not covered* line above leaves open — with the limit that every conditional format is compiled into this build, so the second half of that sentence could not be provoked.
+
+**A format that cannot hold metadata: nothing at all is said.** With every stamp switch on and `-F TIFF` and then `-F TGA`, both runs exited 0 and wrote their file. Counting lines in both streams matching any of `warn`, `error`, `metadata`, `not supported` or `preserved` gave 0 and 0. The metadata is simply gone, quietly.
+
+**A render asked to stop part-way: a complete file, and exit 0.** — **This reading is wrong and is corrected further down this document.** *(Marked by the citation check, 2026-08-07.)* With adaptive sampling on, this scene converges and finishes by itself before six seconds, so the complete file and the exit 0 describe a render that ended normally, not one that was interrupted. The Mac tests of 2026-08-07 repeated it with `use_adaptive_sampling = False` and got status 143 and no file at all. Read that block, not this one. The original wording is kept below so the two runs can be told apart. A slow render (100000 samples at 1200 by 900) was started and sent a stop signal after six seconds. The exit status was **0**, and a valid PNG ending in `IEND` was left at the output path, carrying:
+
+```
+   RenderTime = 00:03.25
+   cycles.ViewLayer.samples = 100000
+   cycles.ViewLayer.total_time = 00:03.24
+```
+
+The stamp records what the scene asked for, not what was reached. **Nothing in the exit status, the file's size, its validity or its fields distinguishes it from a render that finished.** Note this is a render *asked to stop*, which is not the same as one that fails on its own; the unwritable-output case above ends non-zero.
+
+**Two messages the sources describe cannot be provoked on this machine.** `bpy.app.build_options` reports `cycles_osl: True`, so no build here lacks Open Shading Language and "OSL support disabled in this build" cannot be reached. There is **no Embree entry in `build_options` at all**, so nothing can say whether the build has it and the Embree lines cannot be reached either. This build reports 44 fields, with `cycles: True`, `image_openexr: True`, `image_openjpeg: True`, `image_webp: True`, `codec_ffmpeg: True`, and `openmp: False`, `sdl: False`, `codec_avi: False`.
+
+
+### Tested by hand with the graphics card working, 2026-08-07 — **LABEL: observed**
+
+The machine of the 2026-08-06 tests, repaired. **The rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server at all — now carrying NVIDIA driver **580.173.02** in both halves, the kernel module and the libraries agreeing at last. `nvidia-smi` answers, and Blender finds the card. Blender was `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose before it was used (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings-card/5.0`) and never at the real one. Nothing else was running on the machine. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**`--cycles-device OPTIX` and `--cycles-device CUDA` now succeed, and say nothing at all.** The same command line that on 2026-08-06 gave exit 1 and no frame now gives exit 0, a frame written, and a 0-byte error stream:
+
+| `--cycles-device` | exit | frame written | what was said |
+|---|---|---|---|
+| `OPTIX` | 0 | yes | nothing |
+| `CUDA` | 0 | yes | nothing |
+| `HIP` | 1 | no | `Found no Cycles device of the specified type` |
+| `ONEAPI` | 1 | no | `Found no Cycles device of the specified type` |
+
+The exit statuses and the frames are identical in all four versions. In **5.0, 5.1 and 5.2** `HIP` also brings out, ahead of the refusal, `cycles | WARNING HIPEW initialization failed: Error opening HIP dynamic library`; `ONEAPI` brings out the refusal alone. *(Changed by the citation check, 2026-08-07. This used to say the whole result was identical in all four versions. It is not: in 4.5 that warning is not printed at all in this run — the whole of its output is the banner, the blend-read line, one progress line and `Error: Found no Cycles device of the specified type`, with the error stream at 0 bytes. In 4.5 the warning appears only under `--debug-cycles`, and then on the error stream. The exit statuses and the frames are identical in all four, and were repeated in all four.)*
+
+**This is the comparison 2026-08-06 could not make.** Then, every backend on this machine gave the same refusal, so the message could not be told apart from *the switch never works here*. Now the same machine on the same day gives exit 0 for two backends and the refusal for the other two — so `Found no Cycles device of the specified type` really does mean *there is no hardware for this backend*, and a success really is silent. A run that worked and a run that was refused differ in the exit status and in whether a frame exists, and in nothing else worded.
+
+**What a graphics card running out of memory does is still not answered — and the reason is now measured rather than guessed at.** The card cannot be filled on this machine, because the machine's own memory gives out first. A grid of 72 million triangles rendered on the card without complaint: exit 0, a frame written, the card's memory peaking at 5,053 MiB of 16,376, and Cycles reporting `Mem: 3990M`. A grid of 128 million triangles never reached the card at all — the operating system killed Blender while it was still building the mesh, at `Started bpy.ops.mesh.primitive_grid_add(x_subdivisions=8000, y_subdivisions=8000, size=20)`:
+
+```
+Out of memory: Killed process 478499 (blender) total-vm:43362104kB, anon-rss:40221084kB, file-rss:1248kB, shmem-rss:0kB, UID:0 pgtables:83200kB oom_score_adj:0
+```
+
+That is the machine's 39 GB running out, not the card's 16 GB. Blender needs several times more of the machine's memory to build a scene than the card needs to hold it, so on a machine with this ratio the card cannot be pushed over by geometry. Nor by the frame: a 30000 by 30000 render with automatic tiling switched off (`scene.cycles.use_auto_tile = False`) **still tiled**, reporting `Rendered 0/225 Tiles`, so the render buffer never grew large enough either. Two more images were tried and are recorded in the list.
+
+What the runs did find is the announcement of the facility, printed before any render begins, in all four versions:
+
+```
+Mapped host memory limit set to 38,013,009,920 bytes. (35.40G)
+```
+
+So Blender says up front how much of the machine's memory it is willing to lend the card. Whether it ever says anything when it starts using it is not settled here, and cannot be on this machine.
+
+**Where I looked.** Searched the whole manual for: "fall back", fallback, "falls back", "revert to CPU", "automatically use", "if unavailable", "not available", "not supported", unsupported, "exit code", "return code", error. Searched the whole API for: "fall back", fallback, "if available", "not supported", "exit code", device. Searched all Cycles Python files for: report(, ERROR, "no compatible", requires, warning, error, unsupported, fallback, instead. Searched all release notes for: device, engine, compat, backward. Pages opened in full: Cycles GPU rendering (including its Error Messages section), EEVEE limitations, Cycles and EEVEE performance, Cycles sampling, command line arguments, `bpy.types.RenderEngine`, `bpy.app`, the crash troubleshooting page, the Info editor page, and Cycles' `__init__.py`, `engine.py`, `ui.py` and the preferences-drawing part of `properties.py`. Ruled out: the troubleshooting pages for graphics hardware per vendor, which are about drivers and installation rather than about what a render does; the `bpy.types.DriverTarget` fallback properties, which are about animation drivers.
+
+---
+
+### Tested by hand on the Mac, 2026-08-07 — **LABEL: observed**
+
+The machine and the method are described under question 1.
+
+**A device Cycles does not know, and backends with no hardware behind them.** Seven runs, the output file deleted before each:
+
+| `--cycles-device` | exit | frame written |
+|---|---|---|
+| `NOTADEVICE` | 1 | no |
+| `OPTIX` | 1 | no |
+| `CUDA` | 1 | no |
+| `HIP` | 1 | no |
+| `ONEAPI` | 1 | no |
+| `METAL` | 0 | yes |
+| `CPU` | 0 | yes |
+
+Identical in all four versions. **This is the mirror image of the Linux table**, where `METAL` was the one that failed and the NVIDIA routes worked once that machine's card was mended.
+
+The wording, on **standard output**, for the unknown name:
+
+```
+cycles           | ERROR NOTADEVICE is not a valid Cycles device.
+Error: Not freed memory blocks: 1, total unfreed memory 0.000004 MB
+```
+
+and for a real backend with no hardware behind it — `OPTIX`, `CUDA`, `HIP` and `ONEAPI` all alike:
+
+```
+reports          | ERROR Found no Cycles device of the specified type
+```
+
+**One line the Linux runs carried is missing here.** On Linux the same case printed a `cycles | ERROR CUDA cuInit: Unknown error` line above the report. On this machine there is no such line for any of the four absent backends — only the one sentence.
+
+**A scene set to GPU Compute with no Cycles device switched on renders anyway.** The Cycles preference set to `NONE` and every device unticked, the scene still asking for GPU Compute:
+
+```
+SET_NONE ok
+PREF_COMPUTE_DEVICE_TYPE NONE
+DEVICES_IN_USE [('Apple M1 Pro', 'CPU', False), ('Apple M1 Pro (GPU - 14 cores)', 'METAL', False)]
+SCENE_CYCLES_DEVICE GPU
+```
+
+Exit 0, a frame written, the error stream 0 bytes, in all four versions. In this version the device line says plainly what happened — `Path tracing on: Apple M1 Pro (CPU) (8 threads) [CPU]` — while in 4.5 on the same machine nothing at any log level does.
+
+**An unknown engine name is refused.** `-E NOT_AN_ENGINE`: no frame, exit 1, and on the **error** stream:
+
+```
+Error: engine not found 'NOT_AN_ENGINE'
+```
+
+Blender 4.5 on this machine gave the same message and exited **134**, with `libc++abi: terminating` after it.
+
+**A render that cannot write its output.** A plain file put where the output folder should be. Exit **1**, and two lines on standard output, from two different categories:
+
+```
+image            | ERROR Couldn't create directory for file /tmp/smoozy-war/out/e20/fail/notadir/z_0001.png: File exists
+reports          | ERROR Render error (File exists) cannot save: '/tmp/smoozy-war/out/e20/fail/notadir/z_0001.png'
+```
+
+Blender 4.5 on this machine gave one line and different wording — `(Not a directory)` here against `(Invalid argument)` in the same test on Linux. The words in the brackets are the operating system's, not Blender's.
+
+**An invalid `-F` name complains and renders anyway.** Exit 0, a file written in the scene's own format, and this on the **error** stream in all four versions:
+
+```
+Error: Format from '-F / --render-format' not known or not compiled in this release.
+```
+
+**A format that cannot hold metadata says nothing.** TIFF and TGA, every metadata switch on: exit 0, the file written, and no line in either stream matching `warn`, `error`, `metadata`, `not supported` or `preserved` — zero, in all four versions and both formats.
+
+**"No compatible GPUs found for Cycles" could not be reached, and the panel shows why.** Blender started with a window, Preferences ▸ System shown and photographed by Blender's own screenshot operator. The Cycles Render Devices panel offers two buttons, `None` and `Metal`, with `Metal` chosen; under them a list holding `Apple M1 Pro (GPU - 14 cores)` ticked and `Apple M1 Pro` unticked, then `Kernel Optimization: Full` and `MetalRT: Auto`. Setting the preference to `None` leaves the two buttons and **nothing else at all** — no list, no message. There is no CUDA, OptiX, HIP or oneAPI button on this machine, so there is no way to put the panel into the state that message belongs to. Pictures at `/tmp/smoozy-war/out/e28/prefs_5.0.png` and `/tmp/smoozy-war/out/e28/prefs_none_5.2.png`.
+
+---
+
+## 5. Where can each of the things above be learned from — what a render prints while it works, what it leaves on disk, or what can be asked afterwards?
+
+**LABEL: documented**, taking each item in turn. Where a route does not exist, that is marked **not in the sources**.
+
+**What a render prints while it works.** This is the richest route in 5.0, and it is the one the release notes single out for render farms.
+
+> "Most of Blender now uses the same logging system, including operators reports and background render progress. The output format has changed, and log levels are easier to control."
+
+> "* `--log-level info` enables all info level log messages, with a moderate amount of output. This may be useful to enable in production for troubleshooting issues."
+
+— Blender 5.0 release notes, core, `https://developer.blender.org/docs/release_notes/5.0/core/`, read 2026-07-30. And:
+
+> "- The format of logging output has changed, including background render progress. Add-ons or render farms parsing this output may need to be updated."
+
+— Blender 5.0 release notes, Python API, `https://developer.blender.org/docs/release_notes/5.0/python_api/`, read 2026-07-30.
+
+The example output quoted under question 1 shows what this route carries: a graphics device name and backend (`gpu.platform` lines), Cycles devices being added (`cycles` line), the engine name, memory and sample progress, the saved path, and the total time with saving time split out. The categories can be narrowed:
+
+> `--log "render,cycles": both render and cycles messages.`
+
+and there is a switch to add memory to every line:
+
+> "--log-show-memory
+>
+> Show memory usage for each log message."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/advanced/command_line/arguments.html`, read 2026-07-30.
+
+Cycles' extra statistics also go to this route: "Print rendering statistics to stderr" (**observed**, `cycles_5.0/engine.py`, line 14, read 2026-07-30).
+
+Per item: **(1) hardware** — partly, via the `gpu.platform` and `cycles` device lines and the `Mem:`/`Time:` lines. **(2) engine** — yes, the `Engine:` line. **(3) add-ons** — **not in the sources**; nothing in the example or the description mentions add-ons. **(4) failures** — yes, since operator reports now go through the same system.
+
+**What it leaves on disk.** Four different things end up on disk.
+
+*The image, with metadata inside it.* Only some formats can hold it:
+
+> "Note
+>
+> Only some image formats support metadata:
+> See image formats."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/output/properties/metadata.html`, read 2026-07-30. The table on the linked page has a Metadata column; reading down it, JPEG, OpenEXR, PNG and WebP are ticked, and BMP, Cineon, DPX, Iris, JPEG 2000 and Radiance HDR are crossed (Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/files/media/image_formats.html`, read 2026-07-30). Metadata can also be drawn into the pixels:
+
+> "Burn into Image
+>
+> Add metadata as text to the render."
+
+— Metadata panel page, read 2026-07-30.
+
+*A log file, if asked for.*
+
+> "--log-file <filepath>
+>
+> Set a file to output the log to."
+
+— command line arguments page, read 2026-07-30.
+
+*A system description, if asked for.* `system-info.txt`, described under question 1 and question 3.
+
+*Other files a render can drop.* Placeholder frames and a cached result:
+
+> "Create empty placeholder frames while rendering."
+
+> "Hint
+>
+> Primitive Render Farm
+>
+> An easy way to get multiple machines to share the rendering workload is to:
+>
+> Set up a shared directory over a network file system.
+>
+> Disable Overwrite, enable Placeholders in the Render Output panel.
+>
+> Start as many machines as you wish rendering to that directory."
+
+> "Saving – Cache Result
+>
+> Saves the rendered view layers and their passes to a multi-layer OpenEXR image. […] The image is stored in the Render Cache folder as specified in the File Paths Preferences."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/output/properties/output.html`, read 2026-07-30. And for animations:
+
+> "animations are a series of images, or frames, and are automatically saved directly out to a drive after being rendered."
+
+— Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/render/output/animation.html`, read 2026-07-30.
+
+There is also a profiling file and crash files, neither about the render as such:
+
+> "--profile-gpu
+>
+> Enable CPU & GPU performance profiling for GPU debug groups
+> (Outputs a profile.json file in the Trace Event Format to the current directory)"
+
+— command line arguments page, read 2026-07-30. Crash files are named per system in the manual: `test.crash.txt` and `blender.crash.txt` on Windows, `~/Library/Logs/DiagnosticReports/` on macOS, `blender.crash.txt` in `/tmp` on Linux (Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/troubleshooting/crash.html`, read 2026-07-30).
+
+Per item: **(1) hardware** — only hostname, peak memory and render time, and only if switched on and the format allows it; and only in a log file if one was asked for. **(2) engine** — **not in the sources** for the image file; yes for a log file. **(3) add-ons** — only via `system-info.txt`, which is not a render output; **not in the sources** for anything a render itself writes. **(4) failures** — a log file if one was asked for; crash files if Blender crashed.
+
+**What can be asked afterwards.** This route is weaker than it looks, because everything I found answers about the present, not about a render that has been.
+
+- Devices: Cycles' `available_devices()` and `system_info()` (**observed**, `cycles_5.0/engine.py`, lines 152–154, 172–174), and the preferences device list (**observed**, `cycles_5.0/properties.py`, lines 1558–1566, 1687–1705). These describe the machine now.
+- Graphics hardware: `gpu.platform.renderer_get()`, `vendor_get()`, `version_get()`, `device_type_get()`, `backend_type_get()` (`https://docs.blender.org/api/5.0/gpu.platform.html`, read 2026-07-30).
+- Build: `bpy.app.build_options`, `bpy.app.build_platform` ("The platform this blender instance was built for"), `bpy.app.build_hash`, `bpy.app.version_string`, `bpy.app.binary_path` (`https://docs.blender.org/api/5.0/bpy.app.html`, read 2026-07-30).
+- Engine setting: `scene.render.engine`.
+- Add-ons: `bpy.context.preferences.addons`, giving module names only.
+- Metadata already written into a saved file: **not in the sources**. I searched the whole API for a way to read image metadata back and found none — the API's metadata entries are about assets, sequencer strips, movie clips and volume grids, not about reading a rendered file's fields. Inside the interface a person can look: "Show Metadata — Displays metadata about the selected Render Result" (Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/editors/image/navigating.html`, read 2026-07-30) and the Image editor sidebar "Metadata — Lists image metadata" (`https://docs.blender.org/manual/en/5.0/editors/image/sidebar.html`, read 2026-07-30).
+
+**Not covered.** I have not established what any of these routes contain byte for byte — only that the sources name them. In particular I cannot say what `--cycles-print-stats` prints, what fields land in a file's metadata under which names, or what `system-info.txt` looks like beyond its section headings.
+
+**Outside the interface.** The printed route and the on-disk route are both documented for use outside the interface, and the release notes name render farms explicitly. The "ask afterwards" route needs a running Blender with a script, which is possible outside the interface but tells you about that Blender, not about the render. The Image editor metadata display is interface only. **Settled by test on 2026-08-06, on Linux only — see below.** With no window, everything a render prints goes to standard output and the error stream stays empty, apart from the `-F` complaint and, in 4.5 only, the device and `--cycles-device` messages. `--cycles-print-stats` goes to standard output, not the error stream. There is no route from Blender's Python to a written file's metadata in any version, with or without a window. **Added by the tests of 2026-08-07:** the printed route is the one that names the card, and it works with no window. `--cycles-print-stats` replaces its profiling sections with `Profiling information not available (only works with CPU rendering)` when the card did the work. The on-disk route names no card at all. **Added by the re-run of 2026-08-07, after the citation check:** nothing in these three tests needs a window, and all three were run on a machine that has no display server at all.
+
+**Operating system.** Crash file locations differ by system, as quoted. Everything else — metadata, logging, log files, placeholders — is described with no operating-system caveat. **The tests recorded below were run on Linux only, on 2026-08-06; macOS is untested and Windows was not tried.** **The tests of 2026-08-07 were run on the same Linux machine, with its graphics card working and its driver at 580.173.02; macOS is still untested and Windows was still not tried.** So everything the card added above is an NVIDIA-on-Linux answer: CUDA and OptiX are what was seen, and Metal, HIP and oneAPI were not. **Added by the re-run of 2026-08-07, after the citation check:** the three tests sent back by the citation check were run on that same Linux machine and nowhere else, so they are an NVIDIA-on-Linux answer; macOS and Windows are untouched by them.
+
+### Tested by hand, 2026-08-06 — **LABEL: observed**
+
+Machine, Blender and settings folder as recorded under question 1 of this document: **the rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server — running `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings/5.0`) and never at the real one. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+These runs close the biggest hole this answer names — the exact shape of what a render prints.
+
+**Which stream everything lands on.** With the two streams captured to separate files, a plain background render put **everything on standard output and left the error stream empty** — 0 bytes. So did a run with `--cycles-print-stats`, and so did the `Path tracing on:` line under every switch that produces it. The exceptions found are the `-F` format complaint (question 4) and, in Blender 4.5 only, the device and `--cycles-device` messages; those go to the error stream.
+
+**What `--cycles-print-stats` prints, and where.** Run as `blender -b scene.blend -o out/s_ -F PNG -f 1 -- --cycles-print-stats`, exit 0. **The statistics went to standard output, and the error stream was 0 bytes** — the opposite of the "to stderr" that Cycles' own file says, and the two descriptions the answer above says are unreconciled are settled in favour of neither: it is standard output. They begin with a per-stage timing block (`Scene`, `Geometry`, `Light`, `Object`, `Image`, `Background`, `Bake`, `Camera`, `Film`, `Integrator`, `OSL`, `Particles`, `SVM`, `Tables`, `Procedurals`) and continue into:
+
+```
+Render statistics:
+Mesh statistics:
+  Geometry:
+    Total memory: 386B (386)
+        Cube                             289B (289)
+        backgroundlight                  50B (50)
+        Light                            47B (47)
+Image statistics:
+  Total image memory: 0B (0)
+Kernel statistics:
+  Total render time               : Total 100.00% (0.34s), Self 13.10% (0.04s)
+    Ray setup                       : Total 29.76% (0.10s), Self 29.76% (0.10s)
+    Intersect Closest               : Total 23.81% (0.08s), Self 23.81% (0.08s)
+    Shade Surface                   : Total 22.32% (0.07s), Self 0.00% (0.00s)
+...
+Shader statistics:
+  Material                        : 0.07s (Relative cost: 1.00)
+Object statistics:
+  Cube                            : 0.07s (Relative cost: 1.00)
+```
+
+(The kernel block is thirty lines long and is kept whole in the hand-tests file; the four quoted here are the largest and the shape is the same throughout.) **No statistic names a device.** Searching the whole captured output for `device`, `CUDA`, `OptiX`, `Metal`, `HIP`, `oneAPI`, `GPU`, `CPU`, `EPYC`, `NVIDIA` and `GeForce` matched only the ordinary render lines that carry the word *device* without naming one, and the `device_update` timing line.
+
+**`--log-list-categories` exists in this version and lists 170 categories.** Exit 0. The list opens `addon`, `anim`, `anim.action`, `anim.data`, `anim.driver`, and the categories bearing on this topic are `cycles`, `render`, `hydra.render`, `compositor.gpu`, `image.gpu` and a family of `gpu.*` entries. There is an `addon` category. The device line lives under `cycles` at `info` level — see question 1. (In Blender 4.5 the switch does not exist at all; that is recorded in 4.5's own document.)
+
+**`--log-level` takes a name in this version.** `--log-level info` was accepted and the render exited 0. (Blender 4.5 takes a number and refuses the name; recorded in 4.5's document.)
+
+**A written render's metadata cannot be read back from Blender's own Python.** Run as `blender -b --python-expr` loading one of the stamped PNGs:
+
+```
+LOADED (160, 120)
+HAS_metadata_attr False
+stamp-ish attrs: []
+```
+
+The image loads and reports its size, so Blender read the file; there is no route from Python to the fields inside it. This closes the *not in the sources* recorded above.
+
+**What `system-info.txt` holds when written with no window** is under questions 1 and 3 — the operator works, but the GPU section reads `GPU: missing, background mode`.
+
+
+### Tested by hand with the graphics card working, 2026-08-07 — **LABEL: observed**
+
+The machine of the 2026-08-06 tests, repaired. **The rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server at all — now carrying NVIDIA driver **580.173.02** in both halves, the kernel module and the libraries agreeing at last. `nvidia-smi` answers, and Blender finds the card. Blender was `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose before it was used (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings-card/5.0`) and never at the real one. Nothing else was running on the machine. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**What a render prints while it works** gained four things, all of them new because the card works.
+
+- The `Path tracing on:` line names the card, on **standard output** as before (question 1).
+- `Building OptiX acceleration structure` appears in the ordinary progress lines, with no switch at all — OptiX only, never CUDA.
+- The memory figure in the progress lines reads `650M` where the processor's run read `1M`.
+- `Mapped host memory limit set to 38,013,009,920 bytes. (35.40G)` is printed before the render starts, under a log switch. *(Qualified by the citation check, 2026-08-07: the line and the figure reproduced exactly in all four versions, but it needs `--debug-cycles` in 4.5 and `--log-level info` in 5.0, 5.1 and 5.2. A run with no switches never prints it.)*
+
+**`--cycles-print-stats` prints something different when the card did the work, and the difference is itself a sign.** The statistics still go to **standard output** and the error stream is still empty (0 bytes) in every version, exactly as on 2026-08-06. The Mesh and Image sections are unchanged. But where the processor's run printed a Kernel statistics tree, a Shader statistics line and an Object statistics line, the card's run prints one sentence in their place:
+
+```
+Image statistics:
+  Total image memory: 0B (0)
+Profiling information not available (only works with CPU rendering)
+```
+
+So this switch answers *which part of the computer did the work* by what it refuses to print, and it names no device while doing it.
+
+**What it leaves on disk** gained one thing and lost none. No field in a PNG or an OpenEXR names the card (question 1). The `Memory` stamp field carries the card's figure rather than the processor's, which is a hint and not a name. And the Render Time pass — see question 6 — turns out to record the scene's setting rather than what ran, so it is not a route to this at all.
+
+**What can be asked afterwards** gained two routes and kept one trap. `bpy.ops.wm.sysinfo` now describes the card in full in its Cycles section, and the Cycles preferences list it by name before any render (question 1). The trap is unchanged: the settings read back after a run say what was asked for, not what happened.
+
+**Where I looked.** Searched the whole manual for: metadata, "image formats", placeholder, overwrite, "cache result", log, "log-file", profile, crash, "system info". Searched the whole API for: metadata, stamp, log. Searched all release notes for: log, "log-file", "log-level", metadata. Pages opened: the Metadata panel page and its picture, the image formats page, the render output properties page, the rendering animations page, the file paths page (path template variables — none of them names a device, an engine or an add-on), command line arguments, the crash page, the Image editor navigating, overlays and sidebar pages, the Info editor page, `bpy.app`, `gpu.platform`, release notes core and Python API, and Cycles' `engine.py` and `properties.py`.
+
+---
+
+### Tested by hand on the Mac, 2026-08-07 — **LABEL: observed**
+
+The machine and the method are described under question 1.
+
+**Which stream everything lands on.** In this version, every one of these went to **standard output** and left the error stream at 0 bytes: the ordinary progress lines, the `Engine:` line, the `Path tracing on:` device line at `--log-level info`, the whole `--cycles-print-stats` block, the `Found no Cycles device` refusal, and the two-line failure when a render cannot save. The only things that reached the **error** stream were the `-F` complaint and the `engine not found` refusal.
+
+**`--log-list-categories` works, and the list is shorter on macOS with different graphics categories.** Exit 0 and **135 categories** on this machine, against 170 for the same version on Linux. The graphics ones here:
+
+```
+compositor.gpu
+cycles
+gpu.debug.metal
+gpu.platform
+gpu.shader
+gpu.texture
+hydra.render
+render
+```
+
+The Linux list carried `gpu.debug`, `gpu.opengl` and `gpu.vulkan` where this one carries `gpu.debug.metal`. **So the category list is a fact about the operating system as well as the version**, and a plan that hard-codes a category name from one machine will not find it on the other. `addon`, `cycles` and `render` are in both.
+
+**`--log-level` takes a name.** `--log-level info` accepted, exit 0. In 4.5 on the same machine it is refused with `Error: not a number '--log-level info'.` on the error stream, and the render then goes ahead anyway, exit 0.
+
+**A written render's fields cannot be read back from Blender's Python.** Identical in all four versions:
+
+```
+LOADED (160, 120)
+HAS_metadata_attr False
+stamp-ish attrs: []
+```
+
+**And there is no Metadata panel in the Image editor to read them from either.** The Image editor's sidebar was opened on a stamped PNG loaded from disk. Its tabs are `Tool`, `Image`, `View`, `Scopes` and `Mask` — there is no Metadata tab. Asking the running Blender for every sidebar panel the Image editor defines gives, for the `Image` tab, exactly `Image`, `Render Slots` and `UDIM Tiles`, and **no panel anywhere in the Image editor carries a label containing "metadata"** — the only two panels in the whole of Blender that do are the Asset Browser's and Output Properties' own. Identical in all four versions. A picture of the open sidebar is at `/tmp/smoozy-war/out/e29/img_5.2.png`. The sidebar tab could not be switched from a script (`Region.active_panel_category` is read-only), so the panel list was read instead of photographed.
+
+**The render handlers fire in one order and the frame is already on disk at `render_write`.**
+
+```
+HANDLER render_init      args=['Scene', 'NoneType']
+HANDLER render_pre       args=['Scene', 'NoneType']
+HANDLER render_post      args=['Scene', 'NoneType']
+HANDLER render_write     args=['Scene', 'NoneType'] | file exists now: True
+HANDLER render_complete  args=['Scene', 'NoneType']
+```
+
+`render_cancel` did not fire; all six handlers exist; every handler is handed two arguments, not one. `render_stats` fired **43** times with no window. First and last:
+
+```
+HANDLER render_stats     args=('Mem: 0M | Synchronizing object | Cube', None)
+HANDLER render_stats     args=('Time: 00:00.08 (Saving: 00:00.05)', None)
+```
+
+**With a window open, only 5.2 keeps handing the same strings over.** The same render, driven by `bpy.ops.render.render(write_still=True)` from a timer inside a Blender started with a window:
+
+| version | `render_stats` calls, no window | `render_stats` calls, window open |
+|---|---|---|
+| 4.5 | 42 | **1** |
+| 5.0 | 43 | **1** |
+| 5.1 | 43 | **1** |
+| 5.2 | 44 | **44** |
+
+The one string this version hands over with a window open is the closing line, `('Time: 00:00.06 (Saving: 00:00.04)', None)` in 4.5. **The control matters and was run**: the same operator-driven render with no window gave 42, 43, 43 and 44, so the difference is the window and not the way the render was started. So a plan that watches `render_stats` to follow a render's progress works with no window in this version and does not work with one.
+
+**Each frame of a background animation is announced before it is rendered.**
+
+```
+render           | Rendering frame 1
+render           | Saved: '/tmp/smoozy-war/out/e19/an_0001.png'
+render           | Rendering frame 2
+render           | Saved: '/tmp/smoozy-war/out/e19/an_0002.png'
+render           | Rendering frame 3
+render           | Saved: '/tmp/smoozy-war/out/e19/an_0003.png'
+```
+
+**A render asked to stop leaves nothing behind, and this corrects the set-up used on Linux.** The Linux run of 2026-08-06 set 100000 samples and killed the run after six seconds, and read a complete image and exit 0 as the answer. Run again here, the same set-up **never reached six seconds**: with adaptive sampling on, all four versions converged at `Sample 960/100000` and finished by themselves at about five seconds, exit 0, a complete valid image, and `cycles.ViewLayer.samples = 100000` inside it. That is a render that finished, not one that was stopped, so it says nothing about interruption. Repeated with `use_adaptive_sampling = False` so the render really was still going at six seconds:
+
+```
+still rendering at six seconds: yes
+exit after SIGTERM=143
+no file at output path
+```
+
+Identical in all four versions. **So a render stopped part-way through writes no file and ends with status 143**, and the earlier reading — a complete file and exit 0 — describes a render that converged, not one that was interrupted.
+
+---
+
+### Tested by hand again after the citation check, 2026-08-07 — **LABEL: observed**
+
+**Why these runs happened.** The citation check of this topic found four disagreements, recorded both sides of each, chose between none of them, and sent them back to the hand tests. Three of the four are tests. They were run on 2026-08-07 on the rented Linux machine, alone and last, because that machine was about to be taken away and nothing else could be asked of it afterwards. They are entries 42, 43 and 44 of `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**The machine, named in full.** The rented Linux machine: Ubuntu 22.04.5 LTS, kernel `6.8.0-59-generic`, one NVIDIA GeForce RTX 4080 SUPER with 16376 MiB of graphics memory, driver **580.173.02** in both halves — `nvidia-smi` and `/proc/driver/nvidia/version` were read at the start of the sitting and agree — an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, and no display server at all. Nothing else was running on it: the load average was 0.19 and there was no Blender process. Everything was written inside `/root/again-what-actually-ran/`, and each of the four Blenders was given a settings folder of its own, made before it was used. The scene is the one-cube factory scene at 160 by 120, sixteen samples, denoising off, built by Blender 4.5 so that all four versions can open it. No test below reads what is written inside a finished image, so no picture and no file was compared.
+
+**The third of the three tests answers this question.** The other two are written out under question 1: what the `Full path tracing report` block holds in this version, and how many `Building OptiX acceleration structure` lines a run prints. Both bear on this question too, because both are about what a render prints while it works: the first is reached only by a log switch, the second needs no switch at all.
+
+---
+
+#### Test three — whether this version's log-category list carries `gpu.opengl`
+
+*What a negative result would look like, said before the run.* `gpu.opengl` present in this version's list — which is what the Mac section of this document originally said the Linux list carried. Blender 5.1 and 5.2 were run identically as controls: if the same search finds the entry in those two lists, then the search works and its silence here means something.
+
+*What was done.* `blender -b --log-list-categories`, three times per version, both streams captured, and the output searched for a line reading exactly `gpu.opengl`.
+
+*What came back.* **This version's list has no `gpu.opengl` entry.** Exit 0, three runs, and all three files are identical to the byte. The list is 170 lines, of which the first is the version banner, so **169 categories**. Every category whose name contains `gpu`, in full:
+
+```
+compositor.gpu
+gpu.debug
+gpu.platform
+gpu.shader
+gpu.texture
+gpu.vulkan
+image.gpu
+```
+
+A case-insensitive search of the whole list for `opengl` gives nought matches.
+
+*The controls did their job.* The same search on the same machine on the same day finds `gpu.opengl` in Blender 5.1 (174 lines, 173 categories) and in Blender 5.2 (183 lines, 182 categories). Blender 4.5 has no such switch at all. So the entry arrives at 5.1, and the search that found it there is the one that found nothing here.
+
+*Two runs of the same test on the same machine came out differently, and neither has been chosen.* The Mac section further down this document said the Linux list carried `gpu.debug`, `gpu.opengl` and `gpu.vulkan`; the citation check's repeat found no `gpu.opengl`; these three further runs found none either. That is one run against four. **This finding does not choose between them.** The sentence in the Mac section was already changed by the citation check to drop the name, and it stays as it was left; what these runs add is that four separate readings of the 5.0 list on this machine agree with each other, and the point the Mac sentence was making — that the category list is a fact about the operating system as well as about the version — is untouched by any of this.
+
+
+## 6. At what point can each of the things above be learned — before a render starts, while it runs, or only once it has finished?
+
+**LABEL: mixed — documented** for the moments the sources name, **inferred** where I place an item in time from what the source says about it.
+
+The sources do not answer this question as a question. What follows places each item using the wording already quoted, and I mark the placement as inferred wherever I had to do the placing myself.
+
+**Before a render starts.**
+
+- Which engines the installed Blender offers: "Use `-E help` to list available engines" (command line arguments page, read 2026-07-30) — **documented** as a listing command that runs instead of a render.
+- Which log categories exist: "--log-list-categories — List all available logging categories for `--log`, and exit" (same page) — **documented**, and the words "and exit" put it before any render.
+- Which Blender: "-v, --version — Print Blender version and exit" (same page) — **documented**, same reasoning.
+- Which devices Cycles can see, and which are ticked: Cycles' preferences and `available_devices()` (**observed**, `cycles_5.0/engine.py` and `properties.py`) — **inferred** that these are answerable before a render, since they are preference data and a device query, not render results.
+- What the build can do: `bpy.app.build_options` — **inferred**, same reasoning.
+- Which engine and which device the scene asks for: `scene.render.engine`, and Cycles' scene `device` setting with its two choices, `'CPU'` and `'GPU'` (**observed**, `cycles_5.0/properties.py`, lines 30–34) — **inferred**, since these are settings stored in the file.
+- Which add-ons are on: the preferences add-on collection, and `system-info.txt` — **documented** that the file lists "add-ons currently in use", **inferred** that this is answerable before a render.
+
+**While it runs.**
+
+- Everything in the log: the device lines, the engine line, the memory and sample lines. The 5.0 release notes call this "background render progress", which is a during-the-run notion — **documented**.
+- A handler fires each time statistics are printed:
+
+> "bpy.app.handlers.render_stats
+>
+> on printing render statistics. Accepts one argument: the render stats (render/saving time plus in background mode frame/used [peak] memory)."
+
+— Blender 5.0 Python API, `https://docs.blender.org/api/5.0/bpy.app.handlers.html`, read 2026-07-30. Note the parenthesis: it says the contents differ in background mode, adding frame and used and peak memory.
+
+- Other handlers mark the moments precisely, and are the clearest timing statement in any of my sources:
+
+> "bpy.app.handlers.render_init — on initialization of a render job. Accepts one argument: the scene data-block being rendered"
+> "bpy.app.handlers.render_pre — on render (before)"
+> "bpy.app.handlers.render_post — on render (after)"
+> "bpy.app.handlers.render_write — on writing a render frame (directly after the frame is written)"
+> "bpy.app.handlers.render_complete — on completion of render job. Accepts one argument: the scene data-block being rendered"
+> "bpy.app.handlers.render_cancel — on canceling a render job. Accepts one argument: the scene data-block being rendered"
+
+— same page, read 2026-07-30.
+
+- An engine reports progress and memory as it goes: `update_stats(stats, info)` — "Update and signal to redraw render status text"; `update_progress(progress)`; `update_memory_stats(*, memory_used=0.0, memory_peak=0.0)` — "Update memory usage statistics", with "Current memory usage in megabytes" and "Peak memory usage in megabytes" (`https://docs.blender.org/api/5.0/bpy.types.RenderEngine.html`, read 2026-07-30) — **documented**.
+- In the interface: "Running Task — Shows the progress of the currently running task (such as rendering or baking). Hovering the mouse pointer over the progress bar will display a time estimate" (Blender 5.0 manual, `https://docs.blender.org/manual/en/5.0/interface/window_system/status_bar.html`, read 2026-07-30) — **documented**, interface only.
+
+**Only once it has finished.**
+
+- Render time and peak memory as numbers about the whole job. The log line `Time: 00:28.38 (Saving: 00:00.15)` comes after `Saved:` in the example, and the metadata fields for Render Time and Memory describe the finished render — **inferred** from position in the example and from the field names.
+- Metadata inside the image file. The frame must exist for its metadata to exist, and `render_write` fires "directly after the frame is written" — **inferred**.
+- An engine's own delayed error: `error_set(message)` — "Set error message displaying after the render is finished" — **documented**, and it is the one message the API places explicitly after the end.
+- Whether a job completed or was cancelled: `render_complete` versus `render_cancel` — **documented**.
+
+**Never, from the render alone.** Which compute device did the work; which add-ons were on; which engine, if you have only the image file. See questions 1, 2 and 3.
+
+**Not covered.** The sources give no ordering guarantee — nothing says that a `Saved:` line always precedes a `Time:` line, or that `render_write` always precedes `render_complete`, beyond what the names and the one example imply. And nothing states whether the log lines appear as they happen or are flushed in a batch, which matters if something is watching the output live.
+
+**Outside the interface.** The handler list, the log and the metadata are all available outside the interface; the release notes' phrase "background render progress" is the direct statement. The status bar progress bar is interface only. One 5.0 caution on asking Blender questions from a background run: "Python API: Call of 'bpy.app.is_job_running' function in background crashes Blender 5.0. (blender/blender#150276)" — listed among the 5.0.1 fixes (`https://developer.blender.org/docs/release_notes/5.0/corrective_releases/`, read 2026-07-30). So in 5.0.0, one obvious way of asking "is a render still running" is documented as crashing in background mode. **Settled by test on 2026-08-06, on Linux only — see below.** All six render handlers fire with no window, in the order init, pre, post, write, complete, with the frame already on disk when `render_write` fires; `render_cancel` does not fire on a finished render. `bpy.app.is_job_running` works with no window and does not crash. So the inferred step above holds. **Added by the tests of 2026-08-07:** which parts of the computer are available can now be learned before a render starts, from outside the window; which part did the work can only be learned once the render has finished, from a closing report.
+
+**Operating system.** Nothing in what I read makes the timing depend on the operating system. **The tests recorded below were run on Linux only, on 2026-08-06; macOS is untested and Windows was not tried.** **The tests of 2026-08-07 were run on the same Linux machine, with its graphics card working and its driver at 580.173.02; macOS is still untested and Windows was still not tried.** So everything the card added above is an NVIDIA-on-Linux answer: CUDA and OptiX are what was seen, and Metal, HIP and oneAPI were not.
+
+### Tested by hand, 2026-08-06 — **LABEL: observed**
+
+Machine, Blender and settings folder as recorded under question 1 of this document: **the rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server — running `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings/5.0`) and never at the real one. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**The handlers do fire with no window, and this is the order they fire in.** A script was attached to `render_init`, `render_pre`, `render_post`, `render_write`, `render_complete`, `render_cancel` and `render_stats`, and the output file was deleted first so that checking for it means something:
+
+```
+HANDLER render_init      t=0.000 args=['Scene', 'NoneType']
+HANDLER render_pre       t=0.001 args=['Scene', 'NoneType']
+HANDLER render_post      t=0.144 args=['Scene', 'NoneType']
+HANDLER render_write     t=0.144 args=['Scene', 'NoneType'] | file exists now: True
+HANDLER render_complete  t=0.144 args=['Scene', 'NoneType']
+```
+
+Three things this settles. **`render_post` fires before `render_write`**, which this answer records as unknown. **The frame is already on disk when `render_write` fires** — `file exists now: True` — so the metadata reaches disk at or before that moment, which is the step marked inferred above. And **`render_cancel` did not fire**, which is what a finished render should give. All six handlers exist; none reported itself missing.
+
+**Every handler is handed two arguments, not the one the documentation describes.** The scene-level ones get the scene and a second argument of type `NoneType`; `render_stats` gets a string and a second argument of `None`.
+
+**`render_stats` fired 43 times for one frame**, so it is not once per frame. Its first and last strings:
+
+```
+HANDLER render_stats     args=('Mem: 0M | Synchronizing object | Cube', None)
+HANDLER render_stats     args=('Time: 00:00.14 (Saving: 00:00.10)', None)
+```
+
+**What it is handed does not match either description in the sources.** There is no frame number and no peak-memory figure in the string, and no sample count; the frame number lives in the log line's own prefix (`render | Fra: 1 | ...`), which the handler never sees. Blender 4.5 hands over a longer string that does carry the frame, the running memory and the peak — that comparison was run on the same machine on the same day and is in 4.5's document.
+
+**Each frame of a background animation is announced before it is rendered.** Run as `blender -b scene.blend -o out/an_ -F PNG -s 1 -e 3 -a`:
+
+```
+00:00.289  render           | Rendering frame 1
+00:00.457  render           | Saved: '/root/what-actually-ran/out/hd/an_0001.png'
+00:00.457  render           | Rendering frame 2
+00:00.484  render           | Saved: '/root/what-actually-ran/out/hd/an_0002.png'
+00:00.485  render           | Rendering frame 3
+00:00.507  render           | Saved: '/root/what-actually-ran/out/hd/an_0003.png'
+```
+
+**Asking whether a render is under way works with no window, and does not crash.** Run as `blender -b --python-expr "import bpy; print('IS_JOB_RUNNING', bpy.app.is_job_running('RENDER'))"`, exit 0:
+
+```
+IS_JOB_RUNNING False
+```
+
+The installed build is 5.0.1 or later, which is the release a corrective note says mended this, so it says nothing about 5.0.0.
+
+**A value read after a render need not be the one in force during it.** A run overridden with `-- --cycles-device CPU`, whose scene said GPU Compute, printed from inside itself `AFTER_OVERRIDE compute_device_type= NONE  scene.cycles.device= GPU` while its `Path tracing on:` line named the processor. So the settings and what ran can disagree, and only the printed line tells them apart.
+
+**The Render Time pass follows the setting, not the hardware.** With the pass switched on and the output set to multi-layer OpenEXR, two runs on a machine where **both** did their work on the processor:
+
+```
+  device=CPU layers: ['ViewLayer.Combined.A', 'ViewLayer.Combined.B', 'ViewLayer.Combined.G', 'ViewLayer.Combined.R', 'ViewLayer.Render Time.X']
+  device=GPU layers: ['ViewLayer.Combined.A', 'ViewLayer.Combined.B', 'ViewLayer.Combined.G', 'ViewLayer.Combined.R']
+```
+
+So a file carrying the layer tells you the scene said CPU, and tells you nothing about what actually ran. Whether a working graphics card changes that is untested. (The property does not exist at all in Blender 4.5; recorded in 4.5's document.)
+
+
+### Tested by hand with the graphics card working, 2026-08-07 — **LABEL: observed**
+
+The machine of the 2026-08-06 tests, repaired. **The rented Linux machine** — Ubuntu 22.04.5 LTS, one NVIDIA GeForce RTX 4080 SUPER with 16 GB, an AMD EPYC 7B12 with twenty-four cores, 39 GB of memory, no display server at all — now carrying NVIDIA driver **580.173.02** in both halves, the kernel module and the libraries agreeing at last. `nvidia-smi` answers, and Blender finds the card. Blender was `/opt/blender/5.0/blender`, which reported itself as `Blender 5.0.1 (hash a3db93c5b259 built 2025-12-16 01:30:59)`, pointed at a settings folder made for the purpose before it was used (`BLENDER_USER_RESOURCES=/root/what-actually-ran/settings-card/5.0`) and never at the real one. Nothing else was running on the machine. **Nothing was run on macOS**, so every result below covers Linux only. The whole procedure is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**Before a render starts** — which parts of the computer are *available* is now answerable, and it was not on 2026-08-06. `refresh_devices()` and the Cycles preferences name the card with no render and no window; `bpy.ops.wm.sysinfo` describes it in full. What is still not answerable beforehand is which of them will do the work: `compute_device_type` reads `NONE` at factory startup with the card sitting there working, and the command line can override whatever the scene says.
+
+**While it runs** — two signals arrive early. `Mapped host memory limit set to 38,013,009,920 bytes. (35.40G)` comes before the scene is even synchronized, and the memory figure in the progress lines is already the card's by the first sample line (`Mem: 650M | Sample 0/16`). The OptiX name arrives in the progress lines during the geometry step.
+
+**Only once it has finished** — the `Path tracing on:` line, which is the only one that names the card, is a closing report. It is printed after the last sample and before the frame is written: in the 5.2 run, last sample at `00:02.270`, report at `00:02.270`, `Saved:` at `00:02.577`. So a run that is stopped part-way never prints it.
+
+**The `Render Time` pass records the scene's setting, not what ran — settled.** On 2026-08-06 the pass appeared with the scene set to CPU and not with it set to GPU, on a machine where the processor did the work either way; that showed it followed the setting rather than the hardware, but could not show which setting. With the card working, six runs of the same frame to multi-layer OpenEXR settle it. `ran on` below is read from each run's own `Path tracing on:` line:
+
+| the scene's device | `--cycles-device` | what actually ran | `ViewLayer.Render Time.X` in the file |
+|---|---|---|---|
+| CPU | none | the processor | present |
+| CPU | `CPU` | the processor | present |
+| CPU | `OPTIX` | **the card** | **present** |
+| GPU | none | the card | absent |
+| GPU | `CPU` | **the processor** | **absent** |
+| GPU | `OPTIX` | the card | absent |
+
+Identical in 5.0, 5.1 and 5.2. The two bold rows are the ones that decide it: the pass is written when the *scene* says CPU even though the card did the work, and withheld when the scene says GPU even though the processor did the work. **So this pass can never tell anybody, afterwards, which part of the computer did the work.** It reports an intention.
+
+**Where I looked.** Searched the whole API for: handlers, render_stats, render_complete, render_init, render_write, update_stats, update_progress, update_memory_stats, error_set. Searched the whole manual for: statistics, progress, "status bar", "running task". Searched all release notes for: log, background, progress, is_job_running. Pages opened: `bpy.app.handlers`, `bpy.types.RenderEngine`, the status bar page, command line arguments, release notes core, Python API and corrective releases.
+
+---
+
+### Tested by hand on the Mac, 2026-08-07 — **LABEL: observed**
+
+The machine and the method are described under question 1.
+
+**Before a render starts.** With no window and `--factory-startup`, this machine's Cycles preference already reads `METAL` and the card is already listed and ticked:
+
+```
+COMPUTE_DEVICE_TYPE METAL
+DEVICES [('Apple M1 Pro', 'CPU', False), ('Apple M1 Pro (GPU - 14 cores)', 'METAL', True)]
+```
+
+**This differs from the Linux machine, where the same read gave `NONE`.** The list only fills in after `refresh_devices()` is called: read without that call in the same session, `p.devices` came back empty while `compute_device_type` still said `METAL`.
+
+**And that difference decides what a render actually uses.** With a settings folder that has never had preferences saved, a scene set to GPU Compute path-traced on the **processor**, in the very same run in which Cycles printed that it had added the Metal device. With a settings folder in which preferences had been saved once, after `refresh_devices()`, the identical scene and command path-traced on the **card**. So on this machine, whether a GPU render reaches the graphics before it starts depends on the state of the settings folder, and nothing in the scene file says which it will be.
+
+**The sixteen metadata switches at factory startup are the same as on Linux**, `use_stamp_memory` and `use_stamp_hostname` both False and the master `use_stamp` False, so none of them is written unless somebody turns the master on. Threads read `THREADS 8 THREADS_MODE AUTO`.
+
+**The Render Time pass follows the scene's setting and not what did the work, shown here in the harder direction.** The Linux machine could only show it with the card unusable. On this machine the card works, so both halves are real:
+
+```
+  device=CPU layers: ['ViewLayer.Combined.A', 'ViewLayer.Combined.B', 'ViewLayer.Combined.G', 'ViewLayer.Combined.R', 'ViewLayer.Render Time.X']
+                     Path tracing on: Apple M1 Pro (CPU) (8 threads) [CPU]
+  device=GPU layers: ['ViewLayer.Combined.A', 'ViewLayer.Combined.B', 'ViewLayer.Combined.G', 'ViewLayer.Combined.R']
+                     Path tracing on: Apple M1 Pro (GPU - 14 cores) (Metal) (display) [METAL_Apple M1 Pro (GPU - 14 cores)]
+```
+
+The GPU run genuinely ran on the card and the layer is still absent. `pass_render_time` exists in 5.0, 5.1 and 5.2 and does not exist in 4.5.
+
+**While it runs.** `render_stats` hands a string over dozens of times per frame with no window — 43 times for this scene in this version. **With a window open that stream of strings survives only in 5.2**; 4.5, 5.0 and 5.1 hand over one string, the closing time line. So a plan that watches `render_stats` to follow a render's progress works with no window in every version, and with a window only from 5.2.
+
+**Only once it has finished.** The device report arrives after the last sample and before the frame is saved; `render_write` fires with the file already on disk; and the fields inside the image can be read by anything except Blender's own Python.
+
+**`bpy.app.is_job_running` works with no window**, exit 0, no crash:
+
+```
+IS_JOB_RUNNING False
+```
+
+The installed 5.0 is 5.0.1 on this machine too, which is the release the corrective note says mended it, so this says nothing about 5.0.0.
+
+---
+
+## Things only a running Blender can settle
+
+The list that stood here has been run. What was found is written into the answers above as observed findings, and the whole procedure — every command and every raw result — is in `Audits/Blender Research/What actually ran/Hand tests.md`.
+
+**Run and settled**, across three sittings: the rented Linux machine on 2026-08-06 with its graphics card unreachable, the same machine on 2026-08-07 with the card mended, and the Creator's Mac on 2026-08-07. Whether anything in a render names the device that did the work, on the processor and on a card; whether a written image carries a device or an engine field; what `--cycles-print-stats` prints and on which stream; what a scene set to GPU Compute does when no card can be used; what a rejected `--cycles-device` does; whether `system-info.txt` can be written with no window and what its sections hold, with and without a window; which log categories exist, on both operating systems; whether the frame counter appears during a background animation; whether an engine writes its own stamp fields; whether the Memory metadata box starts ticked, in the panel as well as in the settings; whether the Render Time pass follows the setting or the hardware; whether the `gpu` module answers with no window, and what `gpu.init()` does; whether `--addons` changes the list a script reads; whether the printed statistics differ with a window open; what the Cycles preferences show when the graphics work; whether the Image editor lists a saved file's fields; and what a render asked to stop leaves behind.
+
+**Still open, and why.**
+
+1. **Whether a graphics card running out of memory announces the move into system memory.** Tried on the mended Linux card and not answerable there — the machine's own memory gives out before the card's does. The Mac is no help either: its graphics memory is the machine's memory.
+
+2. **What Blender 5.0.0 did**, as against 5.0.1. Both installed 5.0 builds are 5.0.1 on both machines, so the peak-memory field and the background-mode crash the corrective notes describe cannot be reached.
+
+3. **Anything on Windows.** No Windows machine has run it. **Untried rather than untestable: a Windows machine can be rented, and every one this project has read reported a Server edition — see the equipment section of `Preparation/Blender Research/Method.md`.**
+
+4. **Whether the two build-dependent messages** — "OSL support disabled in this build" and the Embree lines — ever reach anybody. Every build on both machines reports `cycles_osl: True`, and `build_options` has no Embree entry at all, so neither can be provoked or even checked here.
+
+---
+
+2026-08-06 — Opus 5 (Claude Code) — What actually ran, Blender 5.0

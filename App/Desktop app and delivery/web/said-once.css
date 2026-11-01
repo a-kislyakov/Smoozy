@@ -1,0 +1,28 @@
+/* **The restore control's own rules** — Desktop app and delivery §15, and
+ * Preparation/Design/Settings.md's *Warnings and notifications*.
+ *
+ * **The numbers are the drawing's and their one home is the mockup**, which is
+ * `web/smoozy.css`'s standing rule. Nothing below invents a colour, a size or a
+ * spacing: `.stgs`, `.stgrow`, `.lab`, `.mini`, `.hintl`, `.gap` and `.grow`
+ * are all lifted in `the-drawing.css`.
+ *
+ * **What this file adds, and it is two rules.** The mockup draws this control
+ * inside a Settings screen that already has its own padding and its own one
+ * section at a time; this application has no Settings screen yet, so the
+ * section needs the room the screen would have given it. Both rules go when
+ * that screen arrives.
+ */
+
+/* The section, standing on its own in the pane rather than inside Settings'
+ * body. **Padding only** — the drawing's own spacing between the heading, the
+ * row and the line under it is `.gap`'s and `.stgrow`'s and is untouched. */
+.said-once {
+  padding: 16px 20px;
+}
+
+/* The count, so a two-figure number and a one-figure number do not move the
+ * control. The drawing's own `.lab` carries the face and the colour; this adds
+ * nothing but the reserved room. */
+.said-once .lab {
+  min-width: 10ch;
+}

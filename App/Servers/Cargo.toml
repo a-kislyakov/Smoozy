@@ -1,0 +1,47 @@
+[package]
+license.workspace = true
+name = "smoozy-servers"
+description = "What a connected period is, the closed list of moments a connection is opened or replaced, how a break is learned of without using the connection to learn it, and how long repair persists."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-security-and-licence = { path = "../Security and licence" }
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-reporting = { path = "../Reporting a problem" }
+smoozy-keys = { path = "../Keys" }
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+
+# **The other half of this module**: the hardware reading's values and the
+# keepalive figures, split out at step 10c piece 3 so the rented machine's own
+# program can take them without taking this crate's connection. Re-exported
+# from `src/lib.rs` at the paths they have always had.
+smoozy-servers-values = { path = "../Servers — values" }
+
+# The transport above is driven on it, and the repair's two pauses are waited
+# on it — `Servers` N2 and N6. Already in the tree beneath the shell.
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time"] }
+
+# The far end of the integration tests: a real SSH server on the loopback
+# address, so every ordering clause is observed rather than described. Nothing
+# is rented and nothing on this computer is touched.
+russh = { workspace = true }
+
+# The far end of `against_a_rented_machine.rs` is a real rented Linux box, and
+# that one test drives this module's sequence, `Server protocol and transfers`'
+# whole §7 contract and `Job files and outputs`' root choice against it in one
+# sitting — because they are one cycle and the machine is rented once. This
+# crate does not depend on that one anywhere else, and neither depends on the
+# other outside a test.
+smoozy-job-files = { path = "../Job files and outputs" }
+
+# The tests' stand-in for the user's own computer keeps `Server protocol and
+# transfers` S18's four requirements, and the fourth is the stable file
+# identity. `Desktop app and delivery` F15a names the call per system and this
+# is Windows's. Same pinned version as everywhere else in the workspace, and
+# already in the tree beneath the shell, so it is no new weight.
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys.workspace = true

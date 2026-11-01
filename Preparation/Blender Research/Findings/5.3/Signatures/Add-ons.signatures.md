@@ -1,0 +1,7 @@
+# Signatures — Add-ons, Blender 5.3
+
+- 2026-10-16 — Claude Opus 5.5 (Claude Code) — answered all 13 questions of the topic for Blender 5.3 (1 to 8 and 10 to 14; 9 is retired) from the 5.3 manual, Python API documentation and release notes, taken 2026-10-11, and Cycles' own files, taken from the installed 5.3.0 Beta on 2026-10-16. Declared it read only the question sheet and files inside `Blender Sources/`, ran no Blender, and said that the project's `CLAUDE.md` signpost, the runner's memory index and recent commit messages reached its context automatically, unopened and unused.
+- 2026-10-16 — Gemini 3.8 Flash High (cli) — audit of Add-ons, Blender 5.3
+- 2026-10-17 — Claude Opus 5.5 (Claude Code) — hand tests for Add-ons, Blender 5.3: ran all 21 entries of `Audits/Blender Research/Add-ons/Hand tests — 5.3.md` on the Creator's Mac and wrote every result in as observed, brought the standing lines up to date, pruned the researcher's hand-test list, and added the sections on how the tests were run and what they could not reach.
+- 2026-10-17 — Gemini 3.8 Flash High (Antigravity) — citation check of 5.3 findings: checked all 188 claims across 13 questions against Blender 5.3 documentation, release notes, Cycles source files and hand tests; all verified supported, no findings altered
+- 2026-11-01 — Claude Opus 5.5 (Claude Code subagent) — wave 9b of the free-and-open-source work, privacy fixes only: the Creator's home folder replaced with neutral stand-ins. No claim or figure about Blender changed.

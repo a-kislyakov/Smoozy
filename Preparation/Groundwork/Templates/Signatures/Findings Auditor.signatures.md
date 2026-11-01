@@ -1,0 +1,7 @@
+# Signatures — Findings Auditor
+
+- 2026-07-30 — Claude Opus 5 (Claude Code) — created the template
+- 2026-07-30 — Claude Opus 5 (Claude Code) — taught it the two shapes an observed finding takes, since it had assumed nothing observed could be quoted and would have wrongly failed every finding drawn from Cycles' own files; added the over-reading test those files invite
+- 2026-07-30 — Claude Opus 5 (Claude Code) — rewritten for the new order: one Blender version rather than all of them, and the same chat now fixes what it finds instead of handing findings to a consolidator and an implementer. Named the two faults it may not fix itself — a search abandoned early, which needs a fresh blind researcher, and anything only a running Blender settles — and told it not to check citations, which now happen after it
+- 2026-08-01 — Claude Opus 5 (Claude Code) — said to append the decisions-record line at the bottom, after the first auditor into a fresh record wrote above its placeholder instead of replacing it
+- 2026-08-02 — Claude Opus 5 (Claude Code) — added the dispatcher wrapper, so one chat can start an auditor per version where the tool allows, and stopped auditors writing the decisions record or a signatures file by either route. Several agents writing one file at once overwrite each other silently; each now ends its own file with the line it would have added, and the runner copies them in

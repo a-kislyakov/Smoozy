@@ -1,0 +1,93 @@
+[package]
+license.workspace = true
+name = "smoozy-server-protocol"
+description = "The two mechanisms the pre-package surface is made of, request framing, correlation so that sending a thing twice does not do it twice, and the one staging-resume-integrity-publication contract that holds in both directions for the machine's whole life."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# **The other half of this same module**, at `App/Server protocol and transfers
+# — framing/`. §2's request framing and the shapes a result carries live there
+# because the program the rented machine runs needs them and needs nothing
+# below: it is the far end of an SSH connection and never opens one. Everything
+# that moved is re-exported from here at the path it has always been reached
+# at, so nothing outside this module changed. The split is step 8a's and the
+# account is in this module's decisions record.
+smoozy-framing = { path = "../Server protocol and transfers — framing" }
+
+russh.workspace = true
+
+# B9's signature scheme. The pin and why it is this one are at `App/Cargo.toml`
+# and at `src/release/mod.rs`.
+ed25519-dalek.workspace = true
+
+sha2.workspace = true
+tokio.workspace = true
+
+# **The release fetcher B8a wants, and the two pins it is made of.** The
+# choice, the nine configurations it was measured over and the reason the
+# smallest of them was the worst answer are at `Audits/Build/The one HTTPS
+# client/Decisions record.md`. The cryptography beneath it became `rustls`'s own
+# `ring` provider on 2026-10-24 (the Creator's eighteenth notes, note 3).
+#
+# **This crate is where the fetcher goes because the machine's own program does
+# not reach this crate.** `Rented-server runtime — program` takes the framing
+# half of this module and the runtime library, and neither of those takes this
+# one — which is step 8a's whole result, and the guard test in that package is
+# what says it still holds.
+#
+# `rustls` is declared here as well as beneath the client so that this crate is
+# held to the workspace's own entry, whose default features are off. Left on,
+# that crate's default provider is the C library the cross-build cannot compile.
+ureq.workspace = true
+rustls.workspace = true
+smoozy-security-and-licence = { path = "../Security and licence" }
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-reporting = { path = "../Reporting a problem" }
+
+# **The records B4's package inspection is composed from, taken from the
+# document that owns them rather than copied.** B4 has the desktop read *"the
+# installation's durable records"* over the file-transfer subsystem and compose
+# the answer; the phase record is `Rented-server runtime` G2's, the
+# boot-registration record K16's, the installation identity G10's, and the names
+# of all four are that crate's `the_program::records`. **A second copy of a
+# record's written form here would drift**, and a desktop that misread a
+# machine's package version would do it silently.
+#
+# **This edge is the opposite of the one step 8a's split removed and does not
+# undo it.** That split took the SSH client and its C cryptography out of
+# `smoozy-server`'s tree, which is this crate out of that one's; this is that
+# one inside this. **Nothing reaches the machine program**: a binary's tree is
+# its own package's dependencies, and none of them moved. **And nothing new
+# reaches the desktop either** — `Queue & History`, `Rendering` and
+# `Render Settings` already carry this crate, so the desktop application has
+# held it since step 7.
+smoozy-runtime = { path = "../Rented-server runtime" }
+
+# **The written form of the machine's own records, read back on this side.**
+# `Rented-server runtime`'s durable records in the package area are written this
+# way — that crate's own `written_form` — and `Server protocol and transfers` B4
+# has the desktop compose package inspection from them, so the desktop reads
+# what the machine wrote. **G12's health answer carries the package phase the
+# same way**, as a field of a framed result, and the placement performer reads it
+# back.
+#
+# **It is no new weight anywhere.** It is already pinned in `App/Cargo.toml`,
+# already in this crate's tree beneath `smoozy-runtime`, and reaches the machine
+# program not at all — that program's tree is its own package's dependencies.
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# The far end of the integration tests: a real SSH server on the loopback
+# address, carrying the machine's own OpenSSH `sftp-server` on a subsystem
+# session. Nothing is rented and nothing on this computer outside a temporary
+# folder is touched.
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time", "process", "sync"] }
+
+# The tests' stand-in for the user's own computer keeps `Server protocol and
+# transfers` S18's four requirements, and the fourth is the stable file
+# identity. `Desktop app and delivery` F15a names the call per system and this
+# is Windows's. Same pinned version as everywhere else in the workspace, and
+# already in the tree beneath the shell, so it is no new weight.
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys.workspace = true

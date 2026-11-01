@@ -1,0 +1,133 @@
+/* Set up — the page half of `src/surface/set_up.rs`, whose head carries the
+ * piece, and whose page module carries what is drawn.
+ *
+ * **This file holds five rules and it should never hold many more.** The card,
+ * its state line, its list, the Blender table, every box, the step list and its
+ * four marks are all already drawn by `web/the-drawing.css`, which is the
+ * mockup's own stylesheet lifted whole.
+ *
+ * **Nothing here invents a number, and there is no number here at all.** The
+ * first two rules below exist for the same reason: the value the drawing uses lives in an
+ * inline `style=` attribute rather than in its stylesheet, and this
+ * application's content policy makes every one of those inert — 88 of them, on
+ * the mockup's own count. **So the value has no home in `the-drawing.css` to
+ * be lifted from**, and putting it here changes nothing the drawing decided.
+ * *(2026-10-25: the step numbers' rule at the end holds one figure, `100%`,
+ * which places a number against its step's own edge and sets no size.)*
+ */
+
+/* ── The state dot's colour ──────────────────────────────────────────────────
+ *
+ * `the-drawing.css` gives `.sdot` its size, its shape and one background —
+ * `--busy-fill` — and the mockup's five cards each override it inline:
+ * `--ok` on a ready or a nothing-to-prepare server, `--idle` on one never set
+ * up, `--busy-fill` on one being set up.
+ *
+ * **The application says which**, in a value on the element, and this file
+ * turns that value into the drawing's own token. **No colour is chosen here**:
+ * all three are the drawing's, and a fourth would be a change to the drawing.
+ *
+ * **`.sdot.busy`'s animation is deliberately not reached by this.** The drawing
+ * animates a dot carrying the class, and the mockup's own *Setting up* card
+ * does not carry it — it sets the colour and nothing else — so a data value
+ * that also animated would be this file deciding something the drawing did not.
+ */
+.sdot[data-dot="ok"] { background: var(--ok); }
+.sdot[data-dot="idle"] { background: var(--idle); }
+.sdot[data-dot="busy"] { background: var(--busy-fill); }
+/* **A fourth, and Design asked for it**: the card where the connection an add
+ * asked for was not made has *"the red dot"* (`Design/Server Setup § This
+ * server`, 2026-10-03, the Creator's note 14 on the test copy). The token is
+ * the drawing's own `--bad`, which its server head already gives an `.sdot`;
+ * the drawing's `su-connectfail` state is owed (the plan pass for these notes). */
+.sdot[data-dot="bad"] { background: var(--bad); }
+
+/* ── The Install Blender control keeps its own width ─────────────────────────
+ *
+ * `.sus` is a flex column, so a control inside one stretches the whole width of
+ * the section unless it is told not to. The mockup tells it not to inline —
+ * `align-self:flex-start` on `#buinstall` — and that attribute is inert here.
+ *
+ * **It is the only control this tab puts directly inside a section**; every
+ * other one sits in a row of its own that already holds it.
+ */
+.setup .sus > .btn { align-self: flex-start; }
+
+/* ── The tab's own pane holds the over-the-pane mark ──────────────────────────
+ *
+ * `web/the-underway-shape.css` places `.underway-pane` over its nearest
+ * positioned ancestor, and nothing in the drawing positions this tab's
+ * scrolling pane. **Only the pane, and never the tab**: every box of this tab
+ * is a `.modal` placed against an ancestor further out, and positioning the
+ * tab would shrink every one of them to it. Added 2026-09-27, fix piece 9.
+ */
+.setup > .suscroll { position: relative; }
+
+/* ── The Blender table holds its own mark while it is read again ─────────────
+ *
+ * After a run ends, the table alone is covered until the next reading lands
+ * and the card stays usable (the Creator's note 8 on 0.1.7), so the section is
+ * what the mark is placed against. No box is inside a section. Added
+ * 2026-10-02.
+ */
+.setup .sus { position: relative; }
+
+/* ── A box whose content is still being read holds the mark too ─────────────
+ *
+ * The install box has nothing in it until Blender's list comes back, and the
+ * over-the-pane mark covers the box rather than the tab behind it. Added
+ * 2026-09-27, fix piece 9.
+ */
+.setup .mbox.reading { position: relative; }
+
+/* ── A card drawn from what was last seen reads as such ─────────────────────
+ *
+ * `Server Setup` Y6a: with no connection the card is last-known, greyed and
+ * stamped, and `Design/Whole app` greys anything shown from memory. The grey
+ * is the drawing's own `--ink3`, the colour its other last-seen rows take
+ * (`.qrow.stale`, `.svhw.stale`). **The action is not greyed**: Design keeps
+ * it never greyed out. Added 2026-10-03, the 38's piece 6.
+ */
+.sucard.stale .stx b, .sucard.stale .sunote, .sucard.stale .sudid { color: var(--ink3); }
+
+/* ── A driver line read on an earlier connection reads as such ─────────────
+ *
+ * `Servers` H11b: the driver's values are shown greyed as *last seen* when not
+ * connected, and the card around them may be one read now (*Smoozy has not
+ * read this server yet* after a relaunch, or a connect under way). So the line
+ * and its warning grey on their own, in the same `--ink3` the last-seen card
+ * takes. Added 2026-10-11.
+ */
+.sucard .sunote.stale { color: var(--ink3); }
+
+/* ── Step numbers of two digits line up with the rest ────────────────────────
+ *
+ * `Design/Server Setup § The step that failed`: *"the numbers sit in a column
+ * as wide as the widest of them, so a tenth step's* 10. *lines up with* 9. *by
+ * its point and never sticks out of the card's edge."* The drawing gives the
+ * list its column — `.steps { padding-left: 28px; }`, which `.suout` shares so
+ * *Server output* starts at the step names' edge — and leaves the number to
+ * the list's own marker.
+ *
+ * **The marker is not the same width in every web view**: the gap a marker
+ * keeps after its number is the engine's, and the Creator's stopped card of
+ * ten steps had *10.* hanging out of the card at the drawing's earlier 20px
+ * (the eighteenth notes, note 4, screenshot 1). **So the number is drawn
+ * here, in the column the drawing already gives**: the list's own count,
+ * ending at the step name's edge with one space after its point — the gap the
+ * drawing's own marker keeps — in figures of one width, and in the step's own
+ * colour, weight and slant, as the marker was. No width is chosen here.
+ *
+ * **Here and not in `the-drawing.css`**, which is the mockup's stylesheet line
+ * for line; the drawing's own ten-step card (`su-stepten`) keeps its marker.
+ * Added 2026-10-25.
+ */
+.sucard .steps { list-style: none; counter-reset: su-step; }
+.sucard .steps > li { position: relative; counter-increment: su-step; }
+.sucard .steps > li::before {
+  content: counter(su-step) ". ";
+  white-space: pre;
+  position: absolute;
+  right: 100%;
+  font-variant-numeric: tabular-nums;
+}

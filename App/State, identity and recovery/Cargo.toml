@@ -1,0 +1,10 @@
+[package]
+license.workspace = true
+name = "smoozy-state"
+description = "Every durable store on the user's computer, what issues each identity, desired state against observed state, and what survives what."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-security-and-licence = { path = "../Security and licence" }
+getrandom.workspace = true

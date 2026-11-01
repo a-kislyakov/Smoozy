@@ -1,0 +1,7 @@
+# Reports — cross-sweep questions — signatures
+
+- 2026-08-11 — Claude Opus 5 (Claude Code) — wrote this document: the first blind research pass answering questions 7 to 11 for Blender 4.5. It declared that it read only the question sheet and files inside `Blender Sources/`, and that it started no helper agents. The tool it ran in refused to let it write the file, so it returned its whole document as text and the runner saved it to this path unaltered.
+- 2026-08-11 — Claude Opus 5 (Claude Code) — audit: labels narrowed to what the quotes carry across questions 7 to 11, and the hand-test list given its missing negative results
+- 2026-08-11 — Claude Opus 5 (Claude Code) — hand tests: the results of twenty tests run in this version on both machines written in as observed findings, the two standing lines brought up to date, and the researcher's own list pruned to what is genuinely still open
+- 2026-08-11 — Claude Opus 5 (Claude Code) — citation check: every quote and every observed test checked against its own version's sources and run again on both machines; nothing needed changing
+- 2026-08-30 — Claude Opus 5 (Claude Code) — second pass of the Windows-sentence sweep: repaired 6 sentences that said this project has no Windows computer, or called the Windows gap unrunnable — they now say no Windows machine has run it; added one line saying the gap is untried rather than untestable and pointing at the equipment section of `Preparation/Blender Research/Method.md`. No test result, and no fact about Blender, was added, removed or changed.

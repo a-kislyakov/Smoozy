@@ -1,0 +1,10 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "smoozy-shell-probe",
+  "outputfilename": "smoozy-shell-probe",
+  "frontend:dir": "frontend",
+  "wailsjsdir": "./frontend",
+  "author": {
+    "name": "Smoozy"
+  }
+}

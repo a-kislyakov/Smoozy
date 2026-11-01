@@ -1,0 +1,14 @@
+{
+  "identifier": "main",
+  "description": "What the Smoozy window itself may ask the shell for. Desktop app and delivery H6a: the three window buttons are the application's own and are wired to the shell's own calls; H34: the binding surface is the application-service surface and nothing beneath it.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging"
+  ]
+}

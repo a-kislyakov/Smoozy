@@ -1,0 +1,3 @@
+# Writing — cross-sweep questions, third pass — signatures
+
+- 2026-08-12 — Claude Opus 5 (Claude Code) — wrote this document: a third blind research pass answering question 11 for Blender 5.1, run because the citation check found three of the first pass's silences carrying no record of looking. It was told to search wider and to treat an absence as the claim to work hardest for, in wording identical to this round's second passes, and it was not told what the check said was missing. It did not open the earlier documents. It declared that it read only the question sheet and files inside `Blender Sources/`, and that it started no helper agents.

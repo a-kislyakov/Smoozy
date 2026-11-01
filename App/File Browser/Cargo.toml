@@ -1,0 +1,51 @@
+[package]
+license.workspace = true
+name = "smoozy-file-browser"
+description = "How the browser lists a machine and what each listed fact is worth; how a permission refusal is told apart and retried with elevated access; how the already-exists question is walked and judged; the picker; and this module's declarations."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-reporting = { path = "../Reporting a problem" }
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+smoozy-servers = { path = "../Servers" }
+smoozy-state = { path = "../State, identity and recovery" }
+
+# L8's streaming Zstandard decode, whose real end is `crate::wiring`. The pin
+# and why it is this decoder are at `App/Cargo.toml`.
+zstd = { workspace = true }
+
+# The machine acts of Sections 5 and 7 are driven over the file-transfer
+# subsystem, which is async.
+tokio = { workspace = true }
+
+[dev-dependencies]
+# **The second observer the free-space limb of that integration test needs.**
+# `statvfs` taken here, on the same path, microseconds from the reading the far
+# end sends back — the only way to judge a figure the whole disk shares without
+# asserting something no filesystem promises. The account is at
+# `Audits/Build/Step 10c/The two flakes — what was found.md`. Already the
+# workspace's own pin and already in this tree beneath the shell, so it is no
+# new weight, and it is a development dependency: nothing shipped names it.
+libc = { workspace = true }
+
+# The far end of the integration test: a real SSH server on the loopback
+# address, carrying the machine's own OpenSSH `sftp-server` on a subsystem
+# session. Nothing is rented and nothing on this computer outside a temporary
+# folder is touched. The same pinned version the transport itself is built on.
+russh = { workspace = true }
+
+# Tokio's test harness and the process plumbing that runs `sftp-server`.
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time", "process", "sync"] }
+
+# **The store behind this crate's `request::KeepsTheRequest` seam**, which is
+# `Desktop app and delivery` §5's local record. §3 promises an upload request
+# survives the app closing and a fresh sitting, and the only way to watch that
+# is to drive the real store the way the application drives it — open the
+# record, write the request, close it, open it again.
+#
+# **This is a development dependency and a cycle only in that direction.** That
+# crate depends on this one because `File Browser` §12 puts this module's
+# adapters there; nothing in this crate's working half names it, and no shipped
+# binary carries the edge.
+smoozy-desktop = { path = "../Desktop app and delivery" }

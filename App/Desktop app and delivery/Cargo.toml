@@ -1,0 +1,197 @@
+[package]
+license.workspace = true
+name = "smoozy-desktop"
+description = "The Smoozy desktop application."
+version.workspace = true
+edition.workspace = true
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+# Always use the packaged page. A development context stores the builder's
+# configuration folder as a runtime string, beyond rustc's source-path remap.
+tauri = { workspace = true, features = ["custom-protocol"] }
+serde.workspace = true
+rusqlite.workspace = true
+# **The system file picker, `Desktop app and delivery` §18.4.** Reached through
+# `src/picker.rs` and by no other route (K11): the page is granted none of this
+# plugin's permissions, and `src/picker.rs` holds the test that says so. The
+# whole reasoning and the measured weight are at the workspace manifest.
+tauri-plugin-dialog.workspace = true
+smoozy-security-and-licence = { path = "../Security and licence" }
+# **The update check's read of the update file** — `Desktop app and delivery`
+# E11, Z22: it says the running version and system as who is asking and draws
+# every byte from the download budget, which the server package's own fetch
+# does neither of. **No new outside dependency**: the workspace's one HTTPS
+# client and its cryptography, with pins declared in the workspace, so
+# `App/Cargo.lock` gains this crate's two dependency lines and no version
+# moves. Added 2026-10-24 by step 11's check piece; the second line became
+# `rustls` (whose `ring` provider is switched on in `App/Cargo.toml`) the same
+# day, the Creator's eighteenth notes, note 3.
+ureq.workspace = true
+rustls.workspace = true
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-reporting = { path = "../Reporting a problem" }
+smoozy-keys = { path = "../Keys" }
+smoozy-servers = { path = "../Servers" }
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+# **The three values `Server protocol and transfers`' own placement transaction
+# takes** — `Rented-server runtime` G2's transaction owner and its route, and
+# K2's machine kind — which `WhatThePlacementNeeds` names and which no other
+# crate re-exports. Step 10c piece 9 is the first caller of that transaction
+# from the running application, and it cannot compose what it hands over
+# without naming this crate. **No new outside dependency**: it is already a
+# workspace member and already in this crate's tree beneath
+# `smoozy-server-protocol`, so `App/Cargo.lock` gains nothing but this crate's
+# own dependency line and no version moves.
+smoozy-runtime = { path = "../Rented-server runtime" }
+# `File Browser` §12 gives this crate's platform file adapter the real end of
+# that module's own path-identity reading — *"K7's path identities and K9's
+# read-through — all through the platform file adapter"* — so the trait is
+# implemented here and the direction of the dependency is desktop-to-feature,
+# the same as every line above it.
+smoozy-file-browser = { path = "../File Browser" }
+
+# **`File Browser` §8 and its X7a, whose records are these three documents'.**
+# That module's warning layer reads `Dependency Upload & Remap`'s own record
+# and `Queue & History`'s own job records, and X7a's two publication writes
+# land on that module's check standing and on `Render Settings`' recorded
+# reading. **None of those crates can be named from `File Browser` itself** —
+# `Dependency Upload & Remap` is built on `Render Settings`, which is built on
+# `Server Setup`, which is built on `File Browser` for its P5 elevation
+# readings, so a direct dependency there is a cycle the build refuses. This
+# crate sits above all of them and already answers that module's other
+# local-record seam, so the adapter lives here. `Job files and outputs` comes
+# with them for the job folder's own path, which is that document's layout.
+smoozy-dependencies = { path = "../Dependency Upload & Remap" }
+smoozy-queue-history = { path = "../Queue & History" }
+smoozy-render-settings = { path = "../Render Settings" }
+# **`Render Settings`'s page carries the submit control**, because `Whole app.md`
+# puts submitting at the bottom of that panel — *"so its Design lands in those two
+# documents rather than in a third that would describe no place"* — and composing
+# a submission is this module's. Step 10a piece 8. **No new outside dependency**:
+# it is already a workspace member and already in this crate's tree beneath
+# `smoozy-render-settings`.
+smoozy-rendering = { path = "../Rendering" }
+smoozy-job-files = { path = "../Job files and outputs" }
+# **Promoted out of the test dependencies by step 10a piece 7, 2026-09-13**, the
+# Set up tab being this crate's first caller of that module. **No new outside
+# dependency**: it is already a workspace member and already in this crate's
+# tree beneath `smoozy-render-settings`. No pin is loosened and
+# `App/Cargo.lock` does not move.
+smoozy-server-setup = { path = "../Server Setup" }
+smoozy-download = { path = "../Download" }
+# **The Telegram walkthrough, its proof and the bot token** — step 10 piece 4,
+# 2026-09-13. A workspace member whose own guard keeps it out of the SSH
+# client's tree, so it adds no outside package and `App/Cargo.lock` gains no
+# entry beyond this crate's own dependency line.
+smoozy-telegram = { path = "../Telegram" }
+# **Moved out of the Linux-only target block at step 10b piece 7**, which is the
+# one manifest line that step allows and the exact move it names.
+# `src/downloading.rs` is the first caller of `Server protocol and transfers`
+# §7's byte loop, and that loop's stream is named by this crate's own two
+# traits, on all three systems rather than on one.
+#
+# **No new outside dependency and no pin loosened.** It is already pinned at
+# `App/Cargo.toml`, already in this crate's tree beneath `smoozy-server-protocol`
+# on every system, and `App/Cargo.lock` already lists it under this package —
+# so the lock does not move. The Linux-only block below is what it moved out
+# of, and that block's own reasoning is unchanged and still written there.
+tokio.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-foundation.workspace = true
+# The folder-reveal service's macOS third — `Desktop app and delivery` K21.
+objc2-app-kit.workspace = true
+# **The notification service's macOS third** — `Desktop app and delivery` §13.
+# The runtime and the block type are for T28's delegate, which is the one
+# Objective-C class this application defines, and for the three completion
+# handlers T6 and T7's request and read take. The whole reasoning and the
+# measured weight are at the workspace manifest.
+objc2.workspace = true
+block2.workspace = true
+objc2-user-notifications.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# **Three switches added here for the Windows update route** — step 11's Windows update piece,
+# `Desktop app and delivery` E16's Windows half and Z21. `WinVerifyTrust` and
+# its structures live behind `Win32_Security_WinTrust`, which needs
+# `Win32_Security_Cryptography` for `WINTRUST_DATA` and `Win32_Security` for
+# `CreateFileW`'s security argument; `SetStdHandle` and `GetStdHandle`, which
+# point the probe's output at the null device once its token is said, live
+# behind `Win32_System_Console`. **Added on this crate's own line rather than
+# the workspace's**: features add up across the two, the version stays the
+# workspace pin, and no package is added, so `App/Cargo.lock` does not move.
+windows-sys = { workspace = true, features = [
+    "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_Security_WinTrust",
+    "Win32_System_Console",
+] }
+# **The notification service's Windows third** — `Desktop app and delivery`
+# §13 and §19 E3. It is the crate the shell is already built on, so it is no
+# new package; the reasoning and the correction it carries are at the workspace
+# manifest.
+windows.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# The folder-reveal service's Linux third — `Desktop app and delivery` K21's
+# portal route. Already in the Linux tree beneath the picker, so it is no new
+# weight, and it is in neither other tree.
+ashpd.workspace = true
+# **The notification service's Linux third** — `Desktop app and delivery` T5,
+# whose route is the session message bus. Already in this crate's Linux tree
+# beneath `ashpd` above, so it is no new weight, and it is pure Rust, so the
+# Linux half of `src/notifications/linux.rs` can be compiled at this desk in a
+# throwaway crate. The whole reasoning, and why `dbus` was not taken, are at the
+# workspace manifest.
+zbus.workspace = true
+# The stream T28's action-invoked signal arrives on. Already in the Linux tree
+# beneath `zbus` and `ashpd`.
+futures-util.workspace = true
+# **What blocks on the portal's answer and what drives the session bus.** The
+# portal call is asynchronous and the reveal is not: K22 says the outcome
+# reaches the caller, so the call is waited for, on one current-thread runtime
+# made for the one call and dropped with it. **The notification service's Linux
+# third holds one standing runtime and one session connection instead**, from
+# 2026-09-12 and step 10a round 1's F-4: the send and the signal listener have
+# to be the same client on the bus, and two runtimes cannot be. `Desktop app and
+# delivery` P9 and P10 are untouched either way — there is no timer and no poll,
+# and what stands is a connection and its worker, which is the same shape a
+# connection is.
+#
+# **The line itself moved up into `[dependencies]` at step 10b piece 7**, where
+# the first caller of the download byte loop had to name that loop's own stream
+# traits on all three systems. Nothing about the Linux reasoning above changes.
+
+[dev-dependencies]
+# **Tests only.** The shell parses a menu accelerator with `.ok()` and silently
+# drops one it cannot read, so a mistyped combination leaves a macOS menu item
+# with no key beside it and nothing saying why. `src/menus.rs` parses each one
+# with the same library the shell uses.
+muda.workspace = true
+# **Tests only, added at step 10c's ninth-pass fix piece 1.** The stand-in
+# machine in `src/servers/a_period.rs`'s tests writes the recorded reading the
+# render worker writes, and it writes it the way the worker does. **No new
+# outside dependency**: it is the workspace's own pin, already in this crate's
+# tree beneath `smoozy-job-files`, so no version moves.
+serde_json.workspace = true
+# **Tests only, added at step 10c's twelfth-pass fix piece 6b.** The stand-in
+# machine in `tests/through_the_servers_own_point.rs` holds a `.blend` saved
+# compressed, as Blender 5 saves one by default, so the version tag is read
+# through the decoder the application uses. **No new outside dependency**: it
+# is the workspace's own pin, already in this crate's tree beneath
+# `smoozy-file-browser`, so no version moves.
+zstd.workspace = true
+# **Tests only, added 2026-10-18, the Creator's fourteenth notes, piece S.**
+# A setup is driven at the desk over a real SSH connection to an SSH server run
+# inside the test (`tests/a_setup_is_driven_from_the_desk.rs`), so what an
+# admin step prints is followed from the far end to the Set up card. **No new
+# outside dependency**: it is the workspace's own pin, already in this crate's
+# tree beneath `smoozy-server-protocol`, whose own tests run the same server,
+# so no version moves.
+russh.workspace = true

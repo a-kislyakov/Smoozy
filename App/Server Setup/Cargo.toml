@@ -1,0 +1,63 @@
+[package]
+license.workspace = true
+name = "smoozy-server-setup"
+description = "How a rented machine is made able to render, and how that act is detected, ordered, recorded, interrupted, resumed and safely re-run; how Blender builds are listed, fetched, sent up, unpacked, matched and removed; elevation and the refusal; and this module's declarations."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-job-files = { path = "../Job files and outputs" }
+smoozy-reporting = { path = "../Reporting a problem" }
+smoozy-security-and-licence = { path = "../Security and licence" }
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+smoozy-servers = { path = "../Servers" }
+smoozy-state = { path = "../State, identity and recovery" }
+
+# **The other half of this module**: the Blender lifecycle's judgements, the
+# add-on read-backs, the setup run and its record, recovery, who performs each
+# step and the ready action's steps, split out at step 10c piece 3 so the
+# rented machine's own program can take them without taking this crate's
+# connections. Re-exported from `src/lib.rs`, `src/blender.rs` and
+# `src/ready_action.rs` at the paths they have always had.
+smoozy-server-setup-machine = { path = "../Server Setup — machine" }
+
+# The transport this crate drives is asynchronous, so the acting half is too.
+# Already in the tree beneath the shell and beneath `Server protocol and
+# transfers`, so it is no new weight, and pinned in `App/Cargo.toml` like
+# everything else there.
+tokio.workspace = true
+
+# `File Browser` P5 assigns its two elevation readings to this document — its
+# §1 kind table and this document's M3 probe — and `File Browser` §12 names
+# this module as their owner. The end of that seam is built here, at
+# `crate::elevation`, which is why this crate names that one.
+smoozy-file-browser = { path = "../File Browser" }
+
+# **B2's read of the shop-front's own listing, which is the one outside fetch
+# this module makes.** The client and the transport-layer security beneath it,
+# with its cryptography provider (`ring`, since 2026-10-24), are chosen,
+# measured and pinned in `App/Cargo.toml`; nothing here loosens a pin, adds a
+# feature or picks a different provider. The ruling is at
+# `Audits/Build/The one HTTPS client/Decisions record.md`.
+#
+# **This crate is not in the machine program's tree** — that program reaches
+# five workspace crates and this is not one of them — so none of this weight
+# reaches the artifact the desktop uploads. Its own guard test is what says so.
+ureq.workspace = true
+rustls.workspace = true
+
+# The listing is machine-readable and this is what reads it. Already in the
+# tree beneath the shell, so it is no new weight, and pinned in `App/Cargo.toml`
+# like everything else there.
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+# **B1's bound on the version ask is a real deadline, and a test of a deadline
+# must end rather than wait it out.** This feature is what lets the test
+# runtime's clock be paused, so a bound that fires ends the test at once and a
+# bound that stopped firing fails it instead of running for ever — which is the
+# shape two tests in this build step were found to have. **The version is the
+# workspace's own pin and nothing here loosens it**, and the feature is on for
+# tests alone.
+tokio = { workspace = true, features = ["test-util"] }

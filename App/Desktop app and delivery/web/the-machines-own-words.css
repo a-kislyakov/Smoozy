@@ -1,0 +1,94 @@
+/* **The machine's own words, and the carve-out's reading** — Desktop app and
+ * delivery §16.3 and §16.4.
+ *
+ * **The numbers are the drawing's. Their one home is the token block at the top
+ * of `Preparation/Design/Mockup/Smoozy.html`**, lifted whole into
+ * `the-drawing.css` by piece B. **Nothing below invents a colour and nothing
+ * below invents a size.**
+ *
+ * **What is here is only what one panel needs that the drawing had no single
+ * home for.** `.lbox`, `.lhead`, `.lsub`, `.ltabs`, `.ltab`, `.lbody`,
+ * `.lstate`, `.lnone`, `.lfoot`, `.lnote`, `.rqs`, `.mono`, `.grow`,
+ * `.btn.quiet`, and the words' frame `.lwords` with its copy icon `.lcopy`,
+ * `.ib` and `.ibl`, are all the drawing's own and are already in
+ * `the-drawing.css`.
+ */
+
+/* **The panel covers the window rather than a pane.** The drawing's own
+ * `.modal` is absolute inside `.app`; this application has no `.app` box yet —
+ * piece B's narrowing measures `.app`'s width from the window — so the panel is
+ * fixed to the window, which is the same covering at this stage and needs no
+ * positioned ancestor to be right. */
+.words-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--shade);
+}
+.words-panel[hidden] {
+  display: none;
+}
+
+/* One stream's body. **The two are apart and never merged** — M13 — so each has
+ * its own box and only one is shown at a time. **Each body is the scroller and
+ * the frame around them, `.lwords`, is not**, which is what keeps the copy icon
+ * in the frame's corner still while the words scroll. */
+.words-body {
+  display: block;
+  overflow: auto;
+}
+
+/* **A long line is read whole, wrapped onto the next row rather than cut at the
+ * panel's right edge.** Added 2026-09-22, from step 10c's third pass: the
+ * drawing's `.lbody` sets `white-space: pre`, and on the real window the two
+ * lines that mattered most — the file apt could not fetch, and the words after
+ * *(set…* in a refusal — ran off the edge with no way to read the rest.
+ * `Design/Whole app § the raw text` asks for *"exactly what was printed,
+ * unchanged"*: `pre-wrap` keeps every character and every line break the
+ * machine printed and only moves where a row ends on the screen, and
+ * `overflow-wrap: anywhere` breaks a word longer than the panel, such as an
+ * address, rather than letting it run out. Nothing is edited (M9). */
+.words-panel .lbody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* **The second way of copying holds the words in a box nobody sees** — the
+ * same rule as `.ky-away` in `keys.css`, repeated because the copying itself
+ * is repeated (`theClipboardTakes`). */
+.words-away {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+/* **How much was kept and why the rest went**, beside the sentence rather than
+ * inside it. Each of the three arrived as a value on its own. */
+.words-counts {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--ink3);
+}
+
+/* **M3a's *as of that moment* is its own line.** A moment run on to the end of a
+ * figure reads as part of the figure — piece E watched that and fixed it, and
+ * the drawing gives `.sub` a block of its own inside `.svwork` and `.svhw`
+ * rather than inside `.rqs`. */
+.words-reading .sub {
+  display: block;
+  font-size: var(--t-sm);
+  color: var(--ink3);
+}
+
+/* The proof pane this piece draws into, which a later piece takes. */
+.machines-own-words {
+  display: grid;
+  gap: var(--gap, 12px);
+  padding: 12px 0;
+}

@@ -1,0 +1,2844 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE DRAWING. This file is `Preparation/Design/Mockup/Smoozy.html`'s own
+   stylesheet, lifted whole on 2026-09-08 by step 10a piece B.
+
+   **The numbers' one home is the mockup.** Change a value there first and then
+   here, never the other way round. `Preparation/Design/Design values.md` says
+   what each token means, and the mockup's own banner further down still binds:
+   *nothing below invents a colour.*
+
+   **NOBODY EDITS A DECLARATION IN THIS FILE BY HAND.** A test holds it —
+   `the_drawing_is_the_mockups_stylesheet_with_the_mechanism_changed` in
+   `src/surface/panes.rs` — and it compares every declaration here against every
+   declaration in the mockup. A value changed here and not there fails it, which
+   is the point: the same fact living in two places is the fault this stage
+   keeps meeting, and this is the one place where two files must carry it.
+
+   **Exactly two things differ from the mockup, and both are mechanism rather
+   than value**, so no number moved:
+
+     1. `.app` no longer carries `container-type: inline-size` or
+        `container-name: win`.
+     2. Every `@container win (max-width: Npx)` block is now an ordinary
+        selector block keyed to a step mark that `web/panes.js` writes onto
+        `.app` — `.app[data-narrow~="s1"]` and so on, at the same 1180, 1020,
+        900, 780 and 680 boundaries, with every declaration inside untouched.
+
+   **Why the mechanism differs is stated in `smoozy.css`'s own header and
+   nowhere else**, which is what the ruling asks. Do not restate it here.
+
+   **What is inert here and is kept anyway.** The mockup's own furniture — the
+   state bar, the stage, the *nowhere* toast — draws nothing in the application
+   because no element carries those names, and the two `:root[data-theme]`
+   blocks are entered by nothing because Smoozy has no theme switch (H22, which
+   says outright they are kept so the two files stay one file). Keeping them is
+   what lets the test above compare the two files declaration for declaration.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }  /* a display rule must never outrank hidden */
+html, body { height: 100%; margin: 0; overflow: hidden; }
+p { margin: 0; }
+
+:root {
+  /* — type, in px. Six steps and no more. — */
+  --t-xs:   10.5px;  /* a tag beside something */
+  --t-sm:   11.5px;  /* secondary lines, notes, meta */
+  --t-md:   12.5px;  /* controls, dense rows */
+  --t-base: 13px;    /* body */
+  --t-lg:   15px;    /* a screen or panel title */
+  --t-xl:   17px;    /* the one heading in a dialog */
+
+  /* — the two faces, both the operating system's: the interface face for
+       everything, the fixed-width face for anything that lines up in a column.
+       They are tokens because they were written out nine times and five of the
+       nine had already lost two names off the stack, so a tag and the body
+       around it could resolve to different faces on Windows. — */
+  --face-ui:   system-ui, -apple-system, "Segoe UI", sans-serif;
+  --face-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* — corner radius — */
+  --r-xs: 3px;   /* a tag */
+  --r-sm: 5px;   /* a field */
+  --r-md: 6px;   /* a button, a row */
+  --r-lg: 7px;   /* a card */
+  --r-xl: 10px;  /* a panel, a dialog */
+
+  /* — the shape of the window — */
+  --menu-h:  24px;   /* the menu bar; the system's on a Mac, ours elsewhere */
+  --title-h: 38px;
+  --rail-w:  214px;  /* navigation only, never the server list */
+  --list-w:  380px;  /* a list beside a detail */
+  --side-w:  234px;  /* the column holding a preview */
+
+  /* — the side gutter: how far a screen's own content sits from the edge of
+       the pane it is in. One number, because it is one question, and every
+       screen answers it the same. It was 22 on six screens, 18 on the queue
+       and history, and 20 on transfers and on the queue's detail pane, which
+       nobody could name and everybody felt as the content sliding when the
+       rail did not move. It narrows once, at the last step, and narrows for
+       everything at the same moment. — */
+  --gutter: 22px;
+
+  /* — the gap between the columns of a list row. Same question, same number:
+       it was 16, 14 and 12 on different screens. — */
+  --rowgap: 16px;
+
+  /* — the badge palette: identity only, never state.
+       Eight hues 45 degrees apart, the whole wheel. It may sit on the meaning
+       colours because a badge is a squircle and every state is a circle —
+       shape carries that difference, so colour does not have to. — */
+  --b1: #d8402c;  /* red     */
+  --b2: #c08707;  /* gold    */
+  --b3: #5a9e12;  /* green   */
+  --b4: #00a173;  /* jade    */
+  --b5: #0f9fc4;  /* cyan    */
+  --b6: #3f5fe0;  /* blue    */
+  --b7: #9535d6;  /* violet  */
+  --b8: #d92a86;  /* magenta */
+
+  /* — ground, ink, and the meanings. Light.
+       Two of these are the same in both themes and are repeated anyway, so that
+       every block below carries the whole set: --on-fill is the text drawn on a
+       filled or a dark ground, and --pic-shade is the ground of a mark painted
+       over a picture. — */
+  --bg: #fdfdfc; --rail: #f2f2f0; --sel: #e4e5e2; --sunk: #f7f7f5;
+  --line: #e4e4e0; --soft: #eeeeea; --ink: #1c1d1a; --ink2: #5f615c;
+  --ink3: #656761; --accent: #35618c; --ok: #2b724e; --busy: #856008;
+  --bad: #a5382d; --idle: #656761; --track: #e2e2de; --busy-fill: #f2b705; --accent-fill: #6d9fd8;
+  /* The third value each of those two meanings needs: a ground that carries
+     words. The fill is drawn to be a bar, so white text on it reads at under
+     three to one in both themes; the word value is drawn to be read on the
+     page, so in dark it is too pale to put white on at all. A button is
+     neither, and takes these. */
+  --accent-solid: #35618c; --bad-solid: #a5382d;
+  --key: #d8a01f; --lib: #46749f; --alert: #b3453a; --alert-bg: #f7e9e7;
+  --tag-up: #4d5865; --tag-dn: #5b6775; --tag-dep: #697585; --tag-auto: #3f4a55;
+  --shade: rgba(24,24,20,.38); --on-fill: #fff; --pic-shade: rgba(0,0,0,.45);
+
+  /* Scrollbars and native controls belong to the browser, and it paints them
+     light unless the page declares its theme. Every token below has to be
+     matched here, or the app is dark and its scrollbars are not. */
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1d1c; --rail: #171817; --sel: #2a2c2a; --sunk: #212220;
+    --line: #2e302d; --soft: #262825; --ink: #e5e5e1; --ink2: #9b9d97;
+    --ink3: #9d9f96; --accent: #82a9cd; --ok: #68a878; --busy: #e0ac3c;
+    --bad: #d68074; --idle: #9d9f96; --track: #303230; --busy-fill: #ffc61a; --accent-fill: #5f96d4;
+    --accent-solid: #4477a8; --bad-solid: #b04a3e;
+    --key: #e0ab2c; --lib: #6f9dc6; --alert: #d3796c; --alert-bg: #35211f;
+    --tag-up: #5a6672; --tag-dn: #616d79; --tag-dep: #68737f; --tag-auto: #525d68;
+    --shade: rgba(0,0,0,.58); --on-fill: #fff; --pic-shade: rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #fdfdfc; --rail: #f2f2f0; --sel: #e4e5e2; --sunk: #f7f7f5;
+  --line: #e4e4e0; --soft: #eeeeea; --ink: #1c1d1a; --ink2: #5f615c;
+  --ink3: #656761; --accent: #35618c; --ok: #2b724e; --busy: #856008;
+  --bad: #a5382d; --idle: #656761; --track: #e2e2de; --busy-fill: #f2b705; --accent-fill: #6d9fd8;
+  --accent-solid: #35618c; --bad-solid: #a5382d;
+  --key: #d8a01f; --lib: #46749f; --alert: #b3453a; --alert-bg: #f7e9e7;
+  --tag-up: #4d5865; --tag-dn: #5b6775; --tag-dep: #697585; --tag-auto: #3f4a55;
+  --shade: rgba(24,24,20,.38); --on-fill: #fff; --pic-shade: rgba(0,0,0,.45);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1c1d1c; --rail: #171817; --sel: #2a2c2a; --sunk: #212220;
+  --line: #2e302d; --soft: #262825; --ink: #e5e5e1; --ink2: #9b9d97;
+  --ink3: #9d9f96; --accent: #82a9cd; --ok: #68a878; --busy: #e0ac3c;
+  --bad: #d68074; --idle: #9d9f96; --track: #303230; --busy-fill: #ffc61a; --accent-fill: #5f96d4;
+  --accent-solid: #4477a8; --bad-solid: #b04a3e;
+  --key: #e0ab2c; --lib: #6f9dc6; --alert: #d3796c; --alert-bg: #35211f;
+  --tag-up: #5a6672; --tag-dn: #616d79; --tag-dep: #68737f; --tag-auto: #525d68;
+  --shade: rgba(0,0,0,.58); --on-fill: #fff; --pic-shade: rgba(0,0,0,.45);
+}
+
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--face-ui);
+  font-size: var(--t-base); line-height: 1.62; -webkit-font-smoothing: antialiased;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+p { margin: 0; }
+
+/* ══════════════════════════════════════════════════════════════════
+   COMPONENTS. Nothing below invents a colour.
+   ══════════════════════════════════════════════════════════════════ */
+.mono { font-family: var(--face-mono); font-variant-numeric: tabular-nums; }
+
+body { display: flex; flex-direction: column; }
+.app {
+  flex: 1; min-height: 0; display: grid; grid-template-rows: var(--title-h) 1fr;
+  position: relative;
+  width: 100%; margin: 0 auto;
+}
+
+/* ══ The menu bar. Four menus, and nothing in them that has another home.
+      On a Mac it sits at the top of the screen rather than in the window;
+      on Windows and Linux the same four sit behind one button in the title bar. ══ */
+.sysbar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 1px; height: var(--menu-h);
+  padding: 0 9px; background: var(--sunk); border-bottom: 1px solid var(--line);
+  position: relative; z-index: 60;
+}
+.mwrap { position: relative; }
+.sysbar button {
+  font: inherit; font-size: var(--t-sm); color: var(--ink); background: none; border: 0;
+  border-radius: var(--r-sm); padding: 2px 9px; cursor: pointer;
+}
+.sysbar button.apl { font-weight: 700; }
+.sysbar button:hover { background: var(--sel); }
+.sysbar button[aria-expanded="true"] { background: var(--accent-solid); color: var(--on-fill); }
+.sysbar .note { margin-left: auto; font-size: var(--t-xs); color: var(--ink3); padding-right: 4px; }
+.mb { position: absolute; top: calc(var(--menu-h) - 2px); left: 0; }
+.mb .ctx { width: 218px; }
+.mb .ctx button { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; width: 100%; }
+.mb .ctx button:hover { background: var(--sel); }
+.mb .ctx button[aria-expanded] { background: none; }
+.mb .k { color: var(--ink3); font-size: var(--t-sm); }
+.mb .ctx button.off .k { color: var(--ink3); }
+
+.titlebar { display: flex; align-items: center; gap: 11px; padding: 0 14px; background: var(--rail); border-bottom: 1px solid var(--line); }
+.lights { display: flex; gap: 7px; }
+.lights i { width: 11px; height: 11px; border-radius: 50%; display: block; background: var(--track); }
+.titlebar .nm { font-size: var(--t-md); font-weight: 600; color: var(--ink2); }
+.grow { flex: 1; }
+.titlebar .rate { font-size: var(--t-sm); color: var(--ink3); }
+.notes-btn { font: inherit; font-size: var(--t-sm); font-weight: 600; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 3px 8px; border-radius: var(--r-sm); }
+.notes-btn:hover { background: var(--sel); }
+.notes-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.body { display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); min-height: 0; }
+/* ── Rail ── */
+.rail { background: var(--rail); border-right: 1px solid var(--line); overflow-y: auto; min-height: 0; padding-bottom: 12px; }
+.rsec { padding: 13px 8px 3px; }
+.rhd { display: flex; align-items: baseline; justify-content: space-between; padding: 0 9px 6px; }
+.rhd span { font-size: var(--t-sm); font-weight: 600; color: var(--ink3); }
+
+.item {
+  display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
+  padding: 7px 9px; border-radius: var(--r-md); border: 0; background: none;
+  font: inherit; color: var(--ink2); cursor: pointer;
+}
+.item:hover { background: color-mix(in srgb, var(--sel) 60%, transparent); color: var(--ink); }
+.item[aria-current="true"] { background: var(--sel); color: var(--ink); font-weight: 550; }
+.item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.item .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .tl { font-size: var(--t-sm); color: var(--ink3); }
+/* A server row's one dot says what the server is doing: green while connected
+   and idle, amber and pulsing while a job renders on it, none while it is not
+   connected (Design/Whole app, The server badge; the Creator's note 19 on the
+   test copy, 2026-10-04, replacing the mark for an open panel). */
+.rdot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
+.rdot.run { background: var(--busy-fill); animation: working 1.7s ease-in-out infinite; }
+/* Reconnecting: the connect control's own reconnecting dot, still, no pulse
+   (the Creator's seventh notes, note 10). */
+.rdot.trying { background: var(--busy-fill); opacity: .55; }
+/* The rail's Queue says a job there reads Needs your answer (Design/Whole
+   app, the Creator's twenty-fourth notes, note 2): one still dot just after
+   the word, in the amber those words are written in. A server's dot sits at
+   its row's end, in the lighter amber, and pulses while a job renders. */
+.qask { width: 6px; height: 6px; border-radius: 50%; background: var(--busy); flex: none; margin-left: -2px; }
+.qask[hidden] { display: none; }
+.item .lbl.fit { flex: 0 1 auto; }
+.item .lbl.fit ~ .tl { margin-left: auto; }
+
+
+/* ── Server badge: identity, never state ── */
+/* The badge is the server's identity. One distance to the name it labels,
+   wherever it appears — so no two screens space it differently. */
+.badge { width: 10px; height: 10px; border-radius: 30%; flex: none; display: inline-block; vertical-align: 0; margin-right: 7px; }
+.badge.sm { width: 9px; height: 9px; }
+/* Containers that already space their children must not add to it. */
+.item .badge, .qmach .badge { margin-right: 0; }  /* those two space it with their own gap */
+/* The eight hues are the same in both themes, deliberately. They mean *which
+   server* and nothing else, so a hue that shifted between themes would be a
+   second thing to learn. Design values records it. */
+.b1 { background: var(--b1); }
+.b2 { background: var(--b2); }
+.b3 { background: var(--b3); }
+.b4 { background: var(--b4); }
+.b5 { background: var(--b5); }
+.b6 { background: var(--b6); }
+.b7 { background: var(--b7); }
+.b8 { background: var(--b8); }
+@media (prefers-color-scheme: dark) {
+  .b1 { background: var(--b1); } .b2 { background: var(--b2); } .b3 { background: var(--b3); } .b4 { background: var(--b4); }
+  .b5 { background: var(--b5); } .b6 { background: var(--b6); } .b7 { background: var(--b7); } .b8 { background: var(--b8); }
+}
+
+/* rail: a server that is not connected reads dim — the whole row, badge and
+   all. The label alone carried it while there was a label; with the rail down
+   to badges there was none, and a disconnected server read exactly like a
+   connected one. */
+.item.away .lbl { color: var(--ink3); }
+.item.away .badge { opacity: .38; }
+.swatches { display: flex; gap: 7px; }
+/* A swatch is a squircle, because what it picks is a badge. Every state in
+   Smoozy is a circle and every identity a squircle, so a round swatch would
+   teach the opposite of the rule at the one moment the user meets the colour.
+   Same 30% as .badge, so the shape reads the same at any size. */
+.sw { width: 18px; height: 18px; border-radius: 30%; cursor: pointer; border: 2px solid transparent; }
+.sw.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--bg) inset; }
+/* The pick is made for the user — the first hue no server is using — so the
+   ones already taken are dimmed rather than withheld. They stay choosable:
+   the spec allows two servers to share a hue if the user insists. */
+.swgroup { display: flex; flex-direction: column; gap: 5px; }
+.sw.used { opacity: .38; }
+.sw.used:hover { opacity: 1; }
+.swnote { font-style: normal; font-size: var(--t-sm); color: var(--ink3); }
+
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.dot.busy { background: var(--busy-fill); } .dot.ok { background: var(--ok); }
+.dot.wait { background: var(--busy-fill); opacity: .45; } .dot.off { background: var(--idle); }
+.dot.bad { background: var(--bad); }
+.dot.new { background: none; border: 1.5px solid var(--ink3); }
+
+.rdiv { height: 1px; background: var(--line); margin: 10px 13px 1px; }
+
+/* ── Main ── */
+.main { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); position: relative; }
+
+.mhead { padding: 13px var(--gutter) 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+.mtop { display: flex; align-items: baseline; gap: 13px; flex-wrap: wrap; }
+.mtop h1 { margin: 0; font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
+.mtop .addr { font-size: var(--t-sm); color: var(--ink3); }
+.hw { display: flex; gap: 3px 20px; flex-wrap: wrap; font-size: var(--t-sm); color: var(--ink3); }
+.hw b { color: var(--ink2); font-weight: 550; }
+.tabs { display: flex; gap: 3px; }
+.tab {
+  font: inherit; font-size: var(--t-md); font-weight: 550; color: var(--ink2);
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  padding: 8px 13px 9px; cursor: pointer; margin-bottom: -1px;
+}
+.tab:hover { color: var(--ink); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ── File browser (full width now) ── */
+.files { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; position: relative; }
+.files[hidden] { display: none; }
+
+/* Sortable headers */
+.sortb {
+  font: inherit; font-size: var(--t-sm); font-weight: 600; color: var(--ink3);
+  background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
+}
+.sortb.r { text-align: right; }
+.sortb:hover { color: var(--ink); }
+.sortb.on { color: var(--ink); }
+.sortb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A folder the login cannot read */
+.frow.denied { cursor: default; background: var(--sunk); }
+.frow.denied .fname { color: var(--ink3); }
+/* ── A refused folder or action. The row stays in the list and stays dimmed,
+      which says the thing cannot be opened rather than that something is
+      broken — the row is still real and the user may still see it is there.
+      The note beside it is the failure, and it takes the whole-app shape:
+      dot, plain sentence, then the way out. It was amber, which said "not a
+      fault"; a refusal the user cannot get past is a failure. ── */
+.deny { display: block; font-size: var(--t-sm); color: var(--bad); white-space: normal; }
+.deny .fdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 7px; vertical-align: 1px; }
+.deny a { color: var(--accent); font-weight: 550; }
+/* A warning that came from the list rather than from the machine. It is a
+   hint about what Smoozy last saw and it stops nothing, so it carries neither
+   the red dot nor the red — only the refusal above is the machine's answer. */
+.fhint { display: block; font-size: var(--t-sm); color: var(--ink3); white-space: normal; }
+/* A row being typed into, a new folder or a rename, keeps the row's height:
+   the field takes the list's own font and size, sits where the name sits and
+   as wide as the name column, and shows its focus by a one-pixel accent border,
+   never the system's glow. The name cell lets the border show rather than
+   clipping it (Design/File Browser; the Creator's note 4 on the test copy). */
+.fname.fediting { overflow: visible; }
+.fname .fedit { display: block; margin: -1px -5px; padding: 0 4px; border: 1px solid var(--accent); border-radius: var(--r-xs); background: var(--bg); color: var(--ink); font: inherit; line-height: inherit; outline: none; }
+.fedit .fsel { background: var(--accent-solid); color: var(--on-fill); }
+/* The typed name a rename was refused on. Red is the whole of what says the
+   name was refused rather than accepted, and the field is where it goes. */
+.fname .fld.bad { border-color: var(--alert); background: var(--alert-bg); color: var(--alert); font-weight: 600; }
+
+/* Connection down */
+.stale-bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px var(--gutter);
+  background: color-mix(in srgb, var(--busy-fill) 14%, var(--bg));
+  border-bottom: 1px solid var(--line); font-size: var(--t-md); color: var(--ink2);
+}
+/* The band's ground is a warm tint of the page, which in dark is lighter than
+   the page — so the quiet ink loses a step on it and takes the darker one. */
+:root[data-theme="dark"] .stale-bar, :root[data-theme="dark"] .stale-bar b { color: var(--ink); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .stale-bar, :root:not([data-theme="light"]) .stale-bar b { color: var(--ink); } }
+.stale-bar[hidden] { display: none; }
+.stale-bar .mk { width: 7px; height: 7px; border-radius: 50%; background: var(--busy-fill); flex: none; }
+/* Everything needing the server goes unavailable rather than failing on a
+   click. The toolbar's eight file-manager icons are as much the server's as
+   the rows are, so they dim and stop responding with them — a control at full
+   strength on a screen whose own bar says the listing is not live is a
+   control that will fail on the press. */
+.files.offline .flist, .files.offline .fbar { opacity: .55; }
+.files.offline .mini, .files.offline .ib, .files.offline .crumbs a, .files.offline .frow { pointer-events: none; }
+.files.offline .mini, .files.offline .ib { opacity: .45; }
+
+/* Modals — legitimate here: the user asked and is standing waiting for the answer */
+/* A box sits above every panel (.sheetwrap, 20) by this one rule, so no
+   screen has to opt in: Design/Whole app, "A box, then a panel, then a
+   menu". The Creator's twenty-third notes, note 4. .top is the same height
+   and stays only because modules still mark it. */
+.modal { position: absolute; inset: 0; z-index: 40; background: var(--shade); display: grid; place-items: center; padding: 24px; }
+.modal[hidden] { display: none; }
+.modal.top { z-index: 40; }
+.mbox {
+  width: min(520px, 100%); max-height: 100%; overflow-y: auto;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-xl);
+  box-shadow: 0 14px 44px -14px rgba(0,0,0,.4);
+  padding: 20px 22px; display: flex; flex-direction: column; gap: 12px;
+}
+.mbox h3 { margin: 0; font-size: var(--t-xl); font-weight: 620; letter-spacing: -0.01em; }
+.msub { font-size: var(--t-md); color: var(--ink3); }
+.mwarn { font-size: var(--t-md); color: var(--ink2); background: var(--sunk); border-left: 2px solid var(--busy); padding: 9px 11px; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.mwarn.hard { border-left-color: var(--bad); }
+.mwarn b { color: var(--ink); font-weight: 600; }
+.mwarn a { color: var(--accent); font-weight: 550; }
+.clist { font-size: var(--t-sm); color: var(--ink2); background: var(--sunk); border: 1px solid var(--soft); border-radius: var(--r-sm); padding: 9px 11px; max-height: 108px; overflow-y: auto; line-height: 1.7; }
+.mcheck { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); color: var(--ink2); cursor: pointer; }
+.mnote { font-size: var(--t-sm); color: var(--ink3); padding-left: 21px; }
+.mrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 2px; }
+.btn.danger { background: var(--bad-solid); border-color: var(--bad-solid); color: var(--on-fill); }
+
+.pb {
+  display: inline-grid; place-items: center; min-width: 15px; height: 15px;
+  padding: 0 4px; margin-left: 4px; border-radius: var(--r-md);
+  background: var(--accent-solid); color: var(--on-fill); font-size: var(--t-xs); font-weight: 700;
+}
+
+/* Drag and drop. The dashed border is on the list itself rather than on the
+   card over it: the list is the thing the files are being dropped into, and
+   drawing the border there leaves it readable at the moment the user is
+   deciding where they land. */
+.dropzone { position: absolute; inset: 0; z-index: 11; display: grid; place-items: center; padding: 26px; background: color-mix(in srgb, var(--accent) 9%, transparent); outline: 2px dashed var(--accent); outline-offset: -3px; }
+.dropzone[hidden] { display: none; }
+.dropbox {
+  border: 1px solid var(--line); border-radius: var(--r-xl);
+  background: var(--bg); padding: 30px 42px; text-align: center;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.dropbox .dt { font-size: var(--t-lg); font-weight: 620; color: var(--ink); }
+.dropbox .ds { font-size: var(--t-md); color: var(--ink3); }
+
+/* ── Underway, over the pane. Reading a folder over a connection to a rented
+      machine takes a noticeable moment, and nothing in the list can be used
+      until it arrives — which is the shape the whole app names this screen's
+      own case as its example of. Nothing else on the screen is covered, and
+      it says how far along or says it cannot. ── */
+.fwait { position: absolute; inset: 0; z-index: 11; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 74%, transparent); }
+.fwait[hidden] { display: none; }
+.fwait .fwb { display: flex; align-items: center; gap: 4px; font-size: var(--t-md); color: var(--ink2); background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 9px 15px; box-shadow: 0 10px 30px -12px rgba(0,0,0,.35); }
+
+/* ── The question inside Upload. Where the system's own picker cannot take
+      files and folders in one go, Upload asks which kind first — one control
+      either way, and never a second control beside it. ── */
+.uphold { position: relative; display: inline-flex; flex: none; }
+.fask {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 16; width: 244px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: 0 12px 34px -10px rgba(0,0,0,.45); padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.fask[hidden] { display: none; }
+.fask .fat { font-size: var(--t-md); font-weight: 600; color: var(--ink); }
+.fask .fas { font-size: var(--t-sm); color: var(--ink3); }
+
+/* Right-click menus, drawn side by side */
+.menus { position: absolute; inset: 0; z-index: 12; background: var(--shade); display: grid; place-items: center; padding: 22px; overflow: auto; }
+.menus[hidden] { display: none; }
+.menuset { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+.mcol { display: flex; flex-direction: column; gap: 8px; }
+/* The caption above each menu. The wash behind these displays is 38% and the
+   rows show through it, so white words alone sat on top of the file list's own
+   headings and could not be read. Each caption takes its own ground. */
+.mcap { font-size: var(--t-sm); font-weight: 600; color: var(--on-fill); text-shadow: 0 1px 3px rgba(0,0,0,.7);
+  background: var(--pic-shade); padding: 2px 8px; border-radius: var(--r-xs); align-self: flex-start; margin: 0; }
+:root[data-theme="light"] .mcap, .mcap { color: var(--on-fill); }
+.ctx {
+  width: 232px; background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: 0 12px 34px -10px rgba(0,0,0,.45);
+  padding: 5px; display: flex; flex-direction: column;
+}
+.ctx button {
+  font: inherit; font-size: var(--t-md); text-align: left; color: var(--ink);
+  background: none; border: 0; border-radius: var(--r-sm); padding: 5px 10px; cursor: pointer;
+}
+.ctx button:hover { background: var(--sel); }
+.ctx button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ctx button.hd { font-weight: 600; }
+.ctx button.dg { color: var(--bad); }
+.ctx hr { border: 0; border-top: 1px solid var(--soft); margin: 4px 6px; }
+
+/* ── Queue & History ── */
+#queueview, #historyview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+#queueview[hidden], #historyview[hidden] { display: none; }
+.qsplit { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, var(--list-w)) minmax(0, 1fr); }
+.qlist { min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
+.qhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; padding: 13px var(--gutter); border-bottom: 1px solid var(--line); }
+.qhead h1 { margin: 0; font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
+.qsub { font-size: var(--t-sm); color: var(--ink3); }
+
+.qbanner { display: flex; align-items: flex-start; gap: 12px; padding: 11px var(--gutter); background: var(--sunk); border-bottom: 1px solid var(--line); }
+.qbanner.amber { background: color-mix(in srgb, var(--busy-fill) 13%, var(--bg)); }
+.qbanner[hidden] { display: none; }
+.qb1 { font-size: var(--t-md); font-weight: 600; color: var(--ink); }
+.qb2 { font-size: var(--t-sm); color: var(--ink2); margin-top: 2px; }
+.qbacts { display: flex; flex-direction: column; gap: 5px; flex: none; }
+
+.qscroll { flex: 1; min-height: 0; overflow-y: auto; }
+/* A server's line folds away. Folded, the heading still says what is running. */
+.qmgroup { display: block; }
+.qmgroup[data-open="false"] .qmrows { display: none; }
+.qmgroup[data-open="false"] .chev { transform: rotate(-90deg); }
+.qmgroup[data-open="true"] .qm2.shut { display: none; }
+.qmgroup[data-open="false"] .qm2.open { display: none; }
+.chev { color: var(--ink3); font-size: var(--t-xs); line-height: 1; transition: transform .12s; display: inline-block; width: 11px; }
+.qm2.shut { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.qm2.shut .qmn { color: var(--ink2); font-weight: 550; overflow: hidden; text-overflow: ellipsis; max-width: 108px; }
+.qm2.shut .bar { width: 34px; flex: none; }
+button.qmach { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+button.qmach:hover { background: var(--sel); }
+button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Alternating ground, so one job's lines never read as the next job's. */
+.qmrows > *:nth-child(even) { background: var(--sunk); }
+.qgroup .qrow:nth-child(even) { background: var(--sunk); }
+
+.qmach {
+  display: flex; align-items: center; gap: 7px; padding: 9px var(--gutter) 7px;
+  font-size: var(--t-sm); color: var(--ink2); background: var(--sunk);
+  border-bottom: 1px solid var(--soft); position: sticky; top: 0; z-index: 2;
+}
+.qmach b { color: var(--ink); font-weight: 600; font-size: var(--t-md); white-space: nowrap; }
+.qmach .qm2 { font-size: var(--t-sm); color: var(--ink3); }
+.qmach.stale b, .qmach.stale .qm2 { color: var(--ink3); }
+
+.qrow, .hrow {
+  display: grid; grid-template-columns: minmax(0,1fr) auto; gap: var(--rowgap); align-items: start;
+  width: 100%; text-align: left; padding: 9px var(--gutter); border: 0; background: none;
+  font: inherit; color: inherit; cursor: pointer; border-bottom: 1px solid var(--soft);
+}
+.qrow:hover, .hrow:hover { background: var(--sunk); }
+.qrow[aria-current="true"], .hrow[aria-current="true"] { background: var(--sel); }
+.qrow:focus-visible, .hrow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.qrow { grid-template-columns: auto minmax(0,1fr) auto; }
+.qrow.in { padding-left: calc(var(--gutter) + 14px); }
+/* A row that cannot be moved keeps the space and shows nothing in it, so the
+   rows still line up and the withheld grip is itself the answer. */
+.qrow .qgrip { margin-top: 3px; }
+.qgrip.nodrag { visibility: hidden; }
+.qrow.stale .qn, .qrow.stale .qs { color: var(--ink3); }
+/* Each line of a row stays one line: a cell that does not fit ends in an
+   ellipsis and shows whole on hover (Design/Whole app, the Creator's note 9
+   on the test copy). */
+.qn { font-size: var(--t-md); font-weight: 550; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qs { display: block; font-size: var(--t-sm); color: var(--ink3); font-weight: 400; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; }
+.qst { font-size: var(--t-sm); color: var(--ink3); white-space: nowrap; }
+.qst.run { color: var(--busy); font-weight: 600; }
+.qst.held { color: var(--busy); font-weight: 600; }
+.qst.bad { color: var(--bad); font-weight: 600; }
+/* A job just submitted, before the machine's own row replaces it (the
+   Creator's seventh notes, note 6): its word and the spinner Smoozy already
+   draws, and nothing to press — no bars, no place, no menu. */
+.qrow.sub { cursor: default; }
+.qrow.sub:hover { background: none; }
+.qst .spin { width: 10px; height: 10px; border: 1.5px solid var(--line); border-top-color: var(--ink3); border-radius: 50%; display: inline-block; vertical-align: -1px; margin-left: 6px; animation: sp .7s linear infinite; }
+/* A row carries both bars, stacked: the frame in hand above, the whole job below. */
+.qbars { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.qbar { height: 2px; background: var(--track); border-radius: 1px; overflow: hidden; }
+.qbar i { display: block; height: 100%; background: var(--busy-fill); }
+.qbar.w i { background: var(--accent-fill); }
+
+.qgroup { border-bottom: 1px solid var(--soft); }
+.qgh { display: flex; align-items: baseline; gap: 10px; padding: 8px var(--gutter) 4px; font-size: var(--t-sm); color: var(--ink2); font-weight: 600; }
+/* nowrap: these are two or three words ending in a count, and a wrap put the
+   count on a line of its own — "Cancel all" over "4". */
+.glnk { font: inherit; font-size: var(--t-sm); color: var(--accent); font-weight: 550; background: none; border: 0; cursor: pointer; padding: 0; white-space: nowrap; }
+/* The group's heading is the grip for the whole block. A row has its own. */
+.qgrip { color: var(--ink3); cursor: grab; font-size: var(--t-xs); letter-spacing: -3px; flex: 0 0 auto; }
+/* Where a control is gone for good, its reason takes the space rather than a
+   greyed button that cannot be pressed. */
+.gonel { font-size: var(--t-sm); color: var(--ink3); align-self: center; }
+.qgroup .qrow { border-bottom: 0; }
+
+/* Every server the clear-all box covers, with its own count. A single total
+   does not show the reach of an act that crosses every machine at once. */
+.hcs { display: grid; grid-template-columns: max-content auto; gap: 3px 16px; margin: 9px 0 4px; }
+.hcs dt { font-size: var(--t-sm); color: var(--ink2); font-weight: 550; }
+.hcs dd { font-size: var(--t-sm); color: var(--ink3); margin: 0; }
+/* The two acts that clear history sit on the list's own heading, beside the
+   count they change: they act on the list and not on one job, so they are not
+   in the entry's header where every act is about the one job showing. */
+.hclear { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 0 100%; margin-top: 3px; }
+.qfoot { border-top: 1px solid var(--line); background: var(--rail); padding: 8px var(--gutter); font-size: var(--t-sm); color: var(--ink3); }
+
+.qdetail { min-height: 0; display: flex; flex-direction: column; }
+.qdh { display: flex; align-items: flex-start; gap: 10px; padding: 13px var(--gutter); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.qdh h2 { margin: 0; font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
+/* The acts' own row under the name, from the left edge (the Creator's note 11
+   on the test copy). */
+.qdacts { flex-basis: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* A refused act on the entry answers on its own line directly under the acts
+   row, from its left edge, never inside the row beside the buttons. Inside a
+   box it stays after the control (the Creator's fourteenth notes, note 8,
+   2026-10-18). */
+.qdacts + .qanswer { flex-basis: 100%; }
+.qdsub { font-size: var(--t-sm); color: var(--ink3); margin-top: 2px; }
+.qdbody { flex: 1; min-height: 0; overflow-y: auto; padding: 20px var(--gutter) 26px; display: grid; grid-template-columns: minmax(0,1fr) var(--side-w); gap: 24px 30px; align-content: start; }
+.qdmain, .qdside { display: flex; flex-direction: column; gap: 19px; min-width: 0; }
+
+.stepper { display: flex; align-items: center; gap: 9px; }
+.sb { font: inherit; font-size: var(--t-base); width: 24px; height: 22px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); color: var(--ink); cursor: pointer; }
+.sb:hover { border-color: var(--ink3); }
+.sb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sn { font-size: var(--t-sm); color: var(--ink3); }
+/* The preview's own controls (the Creator's seventh notes, note 4). An arrow
+   with no frame beyond it does not answer, the way every other control that
+   cannot act reads here. Show latest sits at the row's far end, apart from
+   the arrows it is not one of. The View Layer dropdown is Smoozy's own, as
+   wide as the column. */
+.sb[disabled] { opacity: .45; cursor: default; }
+.sb[disabled]:hover { border-color: var(--line); }
+.pvstep .mini { margin-left: auto; }
+.pick.pvvl { width: 100%; }
+/* The dropdown's label sits before it, in the stepper's small grey, so it
+   reads as a choice and not as a caption (the Creator's fourteenth notes,
+   note 7, 2026-10-18). */
+.pvvlrow { display: flex; align-items: center; gap: 9px; }
+.pvvlrow > .pick.pvvl { flex: 1 1 0; min-width: 0; width: auto; }
+
+/* A history row is three columns: what the job was, how much of it was rendered
+   and what that cost, and how it ended. The colour is on the ending word and
+   nowhere else — a stripe down the edge said the same thing twice, and put a
+   second colour beside the server's own badge. */
+.hrow {
+  grid-template-columns: minmax(0,1fr) auto auto;
+  gap: 2px var(--rowgap); align-items: baseline;
+}
+.hn { font-size: var(--t-md); font-weight: 550; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm { font-size: var(--t-sm); color: var(--ink3); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hwhen { font-size: var(--t-sm); color: var(--ink3); white-space: nowrap; text-align: right; }
+/* The middle column: how much was rendered, and what it cost. Those are the two
+   questions history exists to answer, and the space was empty. */
+.hnum { font-size: var(--t-sm); color: var(--ink2); white-space: nowrap; text-align: right; }
+.hnum.dim { color: var(--ink3); }
+.qst { text-align: right; }
+
+/* ── Set up ── */
+.setup { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.setup[hidden] { display: none; }
+.suscroll { flex: 1; min-height: 0; overflow-y: auto; padding: 20px var(--gutter) 26px; display: flex; flex-direction: column; gap: 26px; }
+.sus { display: flex; flex-direction: column; gap: 10px; max-width: 940px; }
+.sus h2 { margin: 0; font-size: var(--t-base); font-weight: 620; color: var(--ink); }
+.h2n { font-weight: 400; font-size: var(--t-sm); color: var(--ink3); margin-left: 8px; }
+.sucard { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 13px 15px; display: flex; flex-direction: column; gap: 8px; }
+.sustat { display: flex; align-items: center; gap: 10px; }
+.sunote { font-size: var(--t-sm); color: var(--ink3); }
+.sunote.amber { color: var(--busy); }
+/* The one line on this card that names a reason to press the action, with the
+   loud control beside it rather than below the card with the quiet ones. */
+.sufix { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sufix .sunote { flex: 1 1 260px; }
+.sufix .btn { flex: none; }
+
+/* Underway on the control: it keeps its place and its width, loses its label,
+   and cannot be pressed until it finishes. The label stays in the markup only
+   to hold the width.
+
+   One shape, attached two ways. Use .uway where the control has a label span
+   to hide, and .wk where the whole of its content goes. They were written
+   twice, with two spinners and two animations, and .uway also faded its
+   control to 55% — which on a filled button washed the spinner out to almost
+   nothing. Nothing is faded now: unavailable is carried by the control not
+   answering, which is what the whole-app rule asks for and what Connect,
+   the rule's own example, already did. */
+.uway, .wk { position: relative; cursor: default; pointer-events: none; }
+.uway .uwl { visibility: hidden; }
+.wk { color: transparent !important; }
+.wk > * { visibility: hidden; }
+.uway .spin, .wk::after {
+  content: ""; position: absolute; top: 50%; left: 50%; width: 11px; height: 11px; margin: -6px 0 0 -6px;
+  border: 1.5px solid var(--line); border-top-color: var(--ink3); border-radius: 50%;
+  animation: sp .7s linear infinite;
+}
+/* The same shape on a filled button. The greys above are drawn for a small
+   control on the page's own ground and disappear on a filled one, so the
+   spinner takes the colour that button's own words already use. */
+.btn.uway .spin, .btn.wk::after { border-color: color-mix(in srgb, var(--on-fill) 40%, transparent); border-top-color: var(--on-fill); }
+
+/* The table's columns are set once, on the table, and every row takes them.
+   Each row used to set them itself, so the header — whose third cell is empty
+   where every other row holds a Remove button — sized its own columns
+   differently and the word Where sat thirty pixels off the paths under it. */
+.butable { border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.1fr) auto; }
+.burow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; gap: var(--rowgap); align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--soft); }
+.burow:last-child { border-bottom: 0; }
+.buhead { font-size: var(--t-sm); font-weight: 620; color: var(--ink3); background: var(--sunk); }
+.buv { font-size: var(--t-md); font-weight: 600; color: var(--ink); }
+.buk { font-size: var(--t-md); color: var(--ink2); }
+.btag { font-size: var(--t-xs); font-weight: 600; color: var(--ink2); background: var(--sel); border-radius: var(--r-xs); padding: 0 4px; margin-left: 5px; font-family: var(--face-ui); }
+/* What the setup actually did, so "ready" is not a word the user has to take on trust */
+.sudid { margin: 0; padding-left: 17px; display: flex; flex-direction: column; gap: 3px; font-size: var(--t-sm); color: var(--ink2); }
+.bup { font-size: var(--t-sm); color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bwarn { font-size: var(--t-xs); font-weight: 600; color: var(--busy); border: 1px solid var(--busy); border-radius: var(--r-xs); padding: 0 4px; margin-left: 5px; }
+
+.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: var(--t-md); color: var(--ink2); }
+.steps li.done { color: var(--ink3); }
+.steps li.now { color: var(--ink); font-weight: 600; }
+.steps li.bad { color: var(--bad); font-weight: 600; }
+.steps li.skip { color: var(--ink3); font-style: italic; }
+.stm { font-size: var(--t-sm); color: var(--ink3); font-weight: 400; font-style: normal; margin-left: 8px; }
+/* A setup step's mark in its meaning's colour, the step's name left as it is:
+   done green, nothing to do grey, not checked amber, failed red
+   (Design/Server Setup, This server; the Creator's note 3 on the test copy). */
+.stm-ok { color: var(--ok); }
+.stm-idle { color: var(--idle); }
+.stm-busy { color: var(--busy); }
+.stm-bad { color: var(--bad); }
+/* And a step's mark is italic and a step heavier, so it stands apart from the
+   step's name by shape as well as colour (Design/Server Setup, This server; the
+   Creator's note 1 on their second notes, 2026-10-04). */
+.sudid .stm, .steps .stm { font-style: italic; font-weight: 500; }
+/* A line beside one step, where that step is the moment a fact about it is
+   true and nowhere else. */
+.steps .stnote { display: block; font-size: var(--t-sm); color: var(--ink3); font-weight: 400; font-style: normal; margin-top: 3px; }
+/* While a long step prints, the server's newest three lines sit to the right
+   of the steps: the rendering entry's window, with Server output under the
+   lines. Under the steps where the window is narrow (below, at 780) —
+   Design/Server Setup, A long step; the Creator's thirteenth notes, note 7,
+   2026-10-18. */
+.suwork { display: flex; align-items: flex-start; gap: 22px; }
+.suwork > .steps { flex: none; }
+.suwork > .log { flex: 1 1 0; min-width: 0; }
+/* What was asked for while a setup runs, waiting its turn: under the steps
+   and the server's lines, at the step names' left edge, a small muted
+   heading and one line per act, greyed like a step not reached and with no
+   mark. Below the window at the narrow width too, since the window goes
+   under the steps there (Design/Server Setup, Asking for more while a setup
+   runs; the Creator's nineteenth notes, note 2, 2026-10-27). */
+.suwait { padding-left: 28px; }
+.suwait .suwh { margin: 0 0 5px; font-size: var(--t-sm); color: var(--ink3); }
+.suwait ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: var(--t-md); color: var(--ink2); }
+.suwait li { overflow-wrap: anywhere; }
+
+/* ── A step that ran and failed. This screen installs software and restarts
+      machines, so it is the richest source of machine output in the app, and
+      "step 4 stopped" is the one thing a user cannot act on.
+
+      The failure takes the whole-app shape on the step itself: dot, plain
+      sentence, then the machine's own words behind the named control. It is
+      the step that failed, so it attaches to the step and not to the panel.
+      No cross — the panel's own ways out end it. ── */
+.stfail {
+  margin: 5px 0 0; padding: 7px 10px;
+  border-left: 2px solid var(--bad); border-radius: 0 var(--r-sm) var(--r-sm) 0; background: var(--sunk);
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-size: var(--t-sm); font-weight: 400; color: var(--ink2);
+}
+.stfail .fdot { width: 6px; height: 6px; border-radius: 50%; background: var(--bad); flex: none; position: relative; top: -1px; }
+.stfail b { color: var(--ink); font-weight: 620; }
+.stfail a { color: var(--accent); font-weight: 550; text-decoration: none; }
+.stfail a:hover { text-decoration: underline; }
+
+.jl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; }
+.jn { font-size: var(--t-md); font-weight: 600; color: var(--ink); }
+.jw { font-size: var(--t-md); color: var(--ink2); }
+
+.golink { font: inherit; background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); text-align: left; text-decoration: underline; text-underline-offset: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.golink:hover { color: var(--ink); }
+.golink:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.rb { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--ink3); display: grid; place-items: center; }
+.rb.on { border-color: var(--accent); border-width: 4px; }
+
+/* Choosing which formats download */
+.fmts { display: flex; flex-direction: column; gap: 6px; }
+.fmt {
+  display: grid; grid-template-columns: 14px 58px 1fr auto; gap: 11px; align-items: center;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer;
+}
+.fmt:hover { border-color: var(--ink3); }
+.fmt.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.fmn { font-size: var(--t-base); font-weight: 600; color: var(--ink); }
+.fmw { font-size: var(--t-sm); color: var(--ink3); }
+.fmc { font-size: var(--t-sm); color: var(--ink2); }
+.fmt.choice3 { grid-template-columns: 14px minmax(150px, auto) 1fr; }
+.fmt.choice3 .fmn { white-space: nowrap; }
+.fmtot { font-size: var(--t-md); color: var(--ink2); }
+.fmtot b { color: var(--ink); font-weight: 600; }
+/* The rule between the finished releases and the experimental builds. It
+   answers which of these is safe to render a night's work with before any
+   entry is read, so it is a rule and not only a heading. Under it, the heading
+   "Experimental builds" and nothing explaining it (Creator-stated 2026-09-27).
+   Both have their own class, because .fmtot is shared with another screen. */
+.burule { height: 1px; background: var(--line); margin: 6px 0 4px; }
+.buexp { margin: 2px 0 4px; font-size: var(--t-md); font-weight: 600; color: var(--ink2); }
+
+/* ── Transfers, and then three other screens — READ THIS BEFORE SLICING ──
+
+      This block starts at Transfers and does not stay there. From
+      `.stat-line` below it is a job's entry, the queue's catch-up notice,
+      the render settings panel and the dependency check, interleaved rather
+      than grouped, and it runs that way until the failure-shape banner far
+      below.
+
+      **Slicing this file by its banners gets the wrong set of rules for four
+      screens at once**, which is exactly what happened at the sixth mockup
+      seam: that round took the render settings panel's rules to be the two
+      ranges its own banners named, and `.rdwait`, `.vlfoot`, `.addon`,
+      `.pkline` and `.bar-note` — all used on that panel and no other — were
+      sitting here, so neither auditor was given them.
+
+      **The rules are not moved and that is deliberate.** Order decides which
+      of two rules with the same name wins, this file has been bitten by that
+      twice, and reordering hundreds of lines to tidy a comment would risk
+      four screens to fix a signpost. The signpost is fixed instead. Anyone
+      wanting one screen's rules should search for the class names, not the
+      line range. ── */
+#transfersview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+#transfersview[hidden] { display: none; }
+#transfersview .qhead a { color: var(--accent); }
+
+.req { padding: 14px var(--gutter); border-bottom: 1px solid var(--soft); display: flex; flex-direction: column; gap: 7px; }
+.req[hidden] { display: none; }
+/* No kind of request has a ground of its own. Ground is already spoken for on
+   this screen — the rows alternate it, so one request's last file does not read
+   as the next request's first — and a second ground fighting that alternation
+   makes both mean less. The tag says the kind and the arrow says the direction. */
+.rqh { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap; }
+/* The header never wraps, so its control never moves between the line and
+   under it: the destination line gives way, cut at its end, and the tag, the
+   count and the control never shrink. On a finished request the name keeps
+   its length and the destination line goes first; the name gives way only past
+   half the line (the Creator's fourteenth notes, note 5, 2026-10-18). It wrapped
+   until then. */
+.rqh .rqn, .rqh .rqs { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.req.done .rqh .rqn { flex-shrink: 0; max-width: 50%; }
+.rqh .rqm, .rqh .mini { flex: none; }
+.rqtag {
+  font-size: var(--t-xs); font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: var(--r-xs); flex: none;
+  background: var(--tag-dn); color: var(--on-fill);
+}
+/* Direction is not a meaning the reserved five carry, so it gets its own
+   family rather than borrowing green, grey and the linked-library blue. One
+   hue, four lightnesses: the tag says which kind, the arrow says which way,
+   and neither collides with connected, finished, unconfirmed or linked. */
+.rqtag.up  { background: var(--tag-up); }
+.rqtag.dn  { background: var(--tag-dn); }
+.rqtag.dep { background: var(--tag-dep); }
+/* Which way the files are going, read before the label is */
+.rqtag .dir { font-style: normal; font-weight: 700; margin-right: 4px; font-size: var(--t-sm); }
+.rqtag.auto { background: var(--tag-auto); }
+.rqn { font-size: var(--t-base); font-weight: 600; color: var(--ink); min-width: 0; }
+/* A dependency upload is named for its file: For in the secondary ink at the
+   ordinary weight, the file's name as the name. Not italics, which mean a value
+   Smoozy cannot confirm, and not a colour, since every colour here carries a
+   meaning (the Creator's fourteenth notes, note 4, 2026-10-18). */
+.rqn .rqlead { color: var(--ink2); font-weight: 400; }
+.rqm { font-size: var(--t-sm); color: var(--ink2); }
+.rqs { font-size: var(--t-sm); color: var(--ink3); }
+.rqs.amber { color: var(--busy); }
+.rqs.amber a { color: var(--accent); font-weight: 550; }
+/* A transfer the connection cut is still working. Amber is work in progress,
+   and this is work in progress standing still — the same word the server's own
+   row carries, so the user meets one fact rather than two. */
+/* Alternating ground. A request carries several lines of its own, so without
+   it one request's last file reads as the next request's first. The queue
+   list already works this way. */
+#tscroll .req:nth-child(even) { background: var(--sunk); }
+#tscroll .req { padding: 12px var(--gutter); border-bottom: 1px solid var(--soft); }
+.rqs.amber2 { color: var(--busy); }
+.rqs.amber2 b { color: var(--busy); font-weight: 700; }
+/* A transfer's bar is the accent in every state, waiting included. It is one
+   reading of overall progress against a known total, which is what that colour
+   answers; amber is the piece in hand, and a paused transfer is not one. The
+   waiting is said in the words. Nothing dims the tag either — the tag says
+   which kind, and a state written onto it teaches the reader nothing. */
+.rqs.bad2 { color: var(--bad); }
+.rqs.bad2 b { color: var(--bad); font-weight: 700; }
+/* A download that met trouble is a failure, so it takes the whole-app failure
+   shape: the red dot, the plain sentence, the second sentence saying what to do,
+   and the cross. A full folder is a live condition — it clears itself when the
+   folder takes files again — and the cross is what the user clears it with
+   meanwhile. There is no retry: the row says what to do once and keeps trying. */
+.rqs.bad2 .fdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 7px; vertical-align: 1px; }
+.rqs.bad2 .fx { vertical-align: -3px; margin-left: 6px; }
+
+.tf { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(90px,1fr) 150px; gap: var(--rowgap); align-items: center; padding: 2px 0 2px 14px; }
+.tn { font-size: var(--t-sm); color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tn .sub2 { color: var(--ink3); font-size: var(--t-xs); margin-left: 6px; }
+.tb { height: 3px; background: var(--track); border-radius: 2px; overflow: hidden; }
+.tb i { display: block; height: 100%; background: var(--accent-fill); }
+.tm { font-size: var(--t-sm); color: var(--ink3); text-align: right; }
+.tf.waiting .tn, .tf.waiting .tm { color: var(--ink3); }
+.tf.failed .tm { color: var(--bad); }
+.tf.failed .tm a { color: var(--accent); font-weight: 550; margin-left: 6px; }
+
+/* ── A failed file takes the whole-app failure shape, and the row cannot hold
+      it: the third column is 150px and the shape is a sentence and three
+      controls. So the row keeps its name and one word, and the shape sits on
+      its own line beneath, indented to the file it is about.
+
+      This is the shape's row form rather than a licence to invent one — dot,
+      plain sentence, then the controls in the order the convention sets: the
+      act that would try again, the machine's own words, the cross. ── */
+.tffail {
+  margin: 2px 0 6px; padding-left: 14px;
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-size: var(--t-sm); color: var(--ink2);
+}
+.tffail .fdot { width: 6px; height: 6px; border-radius: 50%; background: var(--bad); flex: none; position: relative; top: -1px; }
+.tffail b { color: var(--ink); font-weight: 620; }
+.tffail a { color: var(--accent); font-weight: 550; text-decoration: none; }
+.tffail a:hover { text-decoration: underline; }
+
+/* ── The same problem one row along: a sentence and a control do not fit the
+      last column either, so the row keeps its name and one word and the rest
+      sits on its own line beneath, indented to the file. Its own class rather
+      than the failure's, because this is not a failure: amber and not red, and
+      no dot. Smoozy noticed the file move and stopped rather than landing half
+      of one file and half of another. ── */
+.tfchg {
+  margin: 2px 0 6px; padding-left: 14px;
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-size: var(--t-sm); color: var(--busy);
+}
+.tfchg b { color: var(--busy); font-weight: 620; }
+.tfchg a { color: var(--accent); font-weight: 550; text-decoration: none; }
+.tfchg a:hover { text-decoration: underline; }
+
+/* Submit-footer options */
+/* A line of the submit strip's middle: a switch with what it carries beside
+   it, on the switch's own line (the Creator's tenth notes, note 8). It takes
+   the room left over and no more, so a long summary ends in an ellipsis
+   rather than pushing Render off its line. */
+.so { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sok { font-size: var(--t-sm); color: var(--ink3); }
+.sonote { font-size: var(--t-xs); color: var(--ink3); padding-left: 22px; }
+
+/* Placeholder render thumbnails */
+.preview {
+  position: relative; overflow: hidden; padding: 0;
+  aspect-ratio: 16 / 9; width: 100%;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--sunk);
+}
+/* The whole frame shows inside the preview, never cropped or stretched,
+   whatever its shape; the space it leaves is plain. The sample drawn is
+   square, so it shows the plain space either side (Design/Queue & History;
+   the Creator's third notes, note 10). */
+.thumb { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: contain; }
+.preview > span {
+  position: absolute; left: 8px; bottom: 8px; z-index: 2;
+  font-size: var(--t-xs); color: var(--ink2); background: var(--bg);
+  padding: 1px 6px; border-radius: var(--r-xs);
+}
+
+/* The file's value versus yours, on a settled entry */
+.ff { font-style: italic; color: var(--ink2); }
+.uu { font-style: normal; color: var(--ink); font-weight: 600; }
+.chg {
+  font-style: normal; font-weight: 600; font-size: var(--t-xs); letter-spacing: .04em;
+  text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: var(--r-xs); padding: 0 4px; margin-left: 5px; vertical-align: 1px;
+  font-family: var(--face-ui);
+}
+.res { font-style: normal; font-weight: 400; font-size: var(--t-sm); color: var(--ink3); margin-left: 7px; }
+.was { font-style: normal; font-weight: 400; font-size: var(--t-xs); color: var(--ink3); margin-left: 6px; font-family: var(--face-ui); }
+.leg { font-weight: 400; font-size: var(--t-xs); color: var(--ink3); margin-left: 8px; text-transform: none; letter-spacing: 0; }
+.leg b { color: var(--ink2); }
+
+/* Auto-download's own card was declared here as well, as a bordered column,
+   and merged with the row below into a centred box. Both places that use the
+   name want the row, and the queue's Design document describes a switch with
+   the narrowing under it and the count under both — no card. One declaration,
+   at .adl below. */
+.adtop { display: flex; align-items: center; gap: 10px; }
+.adpc { font-size: var(--t-sm); color: var(--ink2); }
+.facts.tight .fact { padding: 3px 0; }
+.facts.tight dt { width: 42px; }
+.adnote { font-size: var(--t-sm); color: var(--ink3); }
+.adwarn { font-size: var(--t-sm); color: var(--busy); }
+.adwarn a { color: var(--accent); font-weight: 550; }
+
+/* Status line at the top of an entry */
+.statusline { display: flex; align-items: center; gap: 10px; }
+/* The dot is a traffic light, so it takes the traffic light's own yellow. */
+.sdot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--busy-fill); }
+.stx { font-size: var(--t-base); color: var(--ink2); }
+.stx b { color: var(--ink); font-weight: 600; }
+
+/* A progress bar. Whole-of-something is the accent; the piece in hand is amber. */
+.bar { height: 6px; border-radius: var(--r-xs); background: var(--track); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent-fill); border-radius: inherit; }
+.bar.big { height: 7px; border-radius: var(--r-sm); }
+/* Two readings of one render: the frame in hand amber, the whole job the light
+   accent. The pair was tried in one colour family and the whole job came back to
+   the accent. The same pair at every size a bar comes in. */
+.bar.big i { background: var(--busy-fill); }
+.bar.big.whole i { background: var(--accent-fill); }
+
+/* The two progress blocks, stacked tight: one reading, two bars, no gap to cross. */
+.prog { display: flex; flex-direction: column; gap: 4px; }
+.prog + .prog { margin-top: 8px; }
+.pline { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.pl { font-size: var(--t-md); font-weight: 600; color: var(--ink); }
+.pv { font-size: var(--t-md); color: var(--ink); }
+.pn { font-size: var(--t-sm); color: var(--ink3); }
+.pnote { font-size: var(--t-sm); color: var(--ink3); }
+
+/* A job's setup: label and value in two aligned columns, never a stack. */
+.facts { display: grid; grid-template-columns: 92px minmax(0, 1fr); margin: 0; }
+.fact { display: contents; }
+.facts dt {
+  font-size: var(--t-sm); color: var(--ink3); padding: 5px 0;
+  border-top: 1px solid var(--soft); align-self: baseline;
+}
+.facts dd {
+  margin: 0; font-size: var(--t-md); color: var(--ink); padding: 5px 0;
+  border-top: 1px solid var(--soft); min-width: 0;
+}
+.fact:first-child dt, .fact:first-child dd { border-top: 0; }
+/* The folder after Writing to is a link and looks like one (Design/Queue &
+   History; the Creator's third notes, note 11). */
+.facts dd .jflink { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+/* A path breaks anywhere rather than pushing the pane sideways: a job folder's
+   identity has no break point (the Creator's twenty-first notes, note 9). */
+.facts dd .mono { overflow-wrap: anywhere; }
+.facts.tight dt, .facts.tight dd { padding: 3px 0; }
+.facts.tight { grid-template-columns: 58px minmax(0, 1fr); }
+
+/* Work happening now pulses, so a still screenshot and a live render differ. */
+@keyframes working { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+.sdot.busy, .qst.run { animation: working 1.7s ease-in-out infinite; }
+
+/* ── FROM HERE THIS IS NO LONGER TRANSFERS ── a job's entry, the queue's
+      catch-up notice, the render settings panel and the dependency check,
+      all under the Transfers banner above. See its warning. ── */
+
+/* The two readings taken off the server, side by side and told apart. */
+.stat-line { display: flex; flex-wrap: wrap; gap: 6px 26px; font-size: var(--t-md); color: var(--ink2); }
+.stat-line b { color: var(--ink); font-weight: 600; }
+
+/* Blender's own words: a rendering entry's newest lines, with the control
+   that opens the rest under them, so the lines have the whole width (the
+   Creator's third notes, note 14). */
+.log {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 7px; background: var(--sunk);
+  border: 1px solid var(--soft); border-radius: var(--r-md); padding: 7px 9px 7px 11px;
+}
+/* Where there are no lines to show — every History entry, and a job not
+   rendering — the control sits alone, never inside an empty grey box; on
+   History it has no heading over it (Design/Queue & History, A rendering
+   entry; the Creator's note 12 on their second notes, 2026-10-04, and note 15
+   on their third). */
+.log.nolines { background: none; border: 0; padding: 0; }
+/* A rendering entry's newest three lines, one line each. A line that does not
+   fit loses its start, not its end, because the end is the part that moves
+   (the Creator's note 15 on their second notes, 2026-10-04). */
+.log .qlines { align-self: stretch; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: var(--t-sm); color: var(--ink2); }
+.qlines > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.log button {
+  font: inherit; font-size: var(--t-sm); font-weight: 550; flex: none; cursor: pointer;
+  color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 3px 9px;
+}
+.log button:hover { border-color: var(--ink3); }
+
+/* A dropped job's Dismiss is small and quiet: dismissing ends the only record
+   of that job, so it should not be the easy thing to press. Its size is set
+   here rather than left to its label. */
+.cbtns { display: flex; align-items: center; gap: 10px; flex: none; }
+#catchdismiss { padding: 3px 7px; font-size: var(--t-sm); color: var(--ink3); border-color: transparent; }
+#catchdismiss:hover { color: var(--ink); border-color: var(--line); }
+.bar-note { font-size: var(--t-sm); color: var(--ink3); line-height: 1.45; }
+/* The file count sits under the folder name rather than beside it. The name is
+   long by construction — it carries the job identity — so a narrow window put
+   the count on a line of its own anyway, orphaned after a hyphen. */
+.ff .ffn { display: block; font-family: var(--face-ui); font-size: var(--t-sm); color: var(--ink3); margin-top: 2px; }
+/* Simplify sits under the settings the failed job ran with, not among them. */
+/* A link that is a button, so the read control can go underway in place. */
+.lnkb { font: inherit; font-size: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.lnkb:hover { text-decoration: underline; }
+.lnkb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
+.rdwait { display: inline-flex; align-items: center; justify-content: center; width: 60px; color: var(--ink3); cursor: default; }
+.rdwait:hover { text-decoration: none; }
+.rdwait .spin { width: 10px; height: 10px; border: 1.5px solid var(--line); border-top-color: var(--ink3); border-radius: 50%; display: inline-block; animation: sp .7s linear infinite; }
+/* A read is something a Blender does, so on a machine with none the control
+   stays where it was and reads unavailable rather than disappearing. */
+.lnkb[disabled] { color: var(--ink3); cursor: default; }
+.lnkb[disabled]:hover { text-decoration: none; }
+@keyframes sp { to { transform: rotate(360deg); } }
+
+/* A setting with no value at all: the file's, and Smoozy has not looked. It is
+   in the file's own italic face, so the dash reads as "the file's" rather than
+   as a value of nothing — which is what a blank box reads as. */
+.dashv { font-style: italic; color: var(--ink3); }
+
+/* The band that says once, at the top, why the page is full of dashes. */
+.noread { margin: 0 0 14px; padding: 9px 13px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--sunk); font-size: var(--t-md); color: var(--ink2); line-height: 1.5; }
+.noread b { color: var(--ink); font-weight: 620; }
+.rdfail { border-color: var(--line); background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
+/* The sentence is a paragraph, not a row. It was laid out as a row so the dot
+   would sit beside the words — but a row makes every child its own column, so
+   the bold first sentence and the plain second one became two narrow columns
+   side by side, each wrapping on its own. The dot is drawn inline instead. */
+.rdfail p { margin: 0; padding-left: 15px; text-indent: -15px; }
+.rdfail .fdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); margin-right: 8px; position: relative; top: -1px; }
+.rdrow { display: flex; align-items: center; gap: 8px; padding-left: 15px; }
+.rdnote { font-size: var(--t-sm); color: var(--ink3); }
+/* A sentence, laid out as one. Same correction as .rdfail p above: a row here
+   made every bold word its own column. */
+.vmm { margin: 0 0 12px; font-size: var(--t-md); color: var(--ink2); }
+.vmm b { color: var(--ink); font-weight: 620; }
+.mbox.wide { max-width: 560px; }
+.vmg h4 { margin: 12px 0 4px; font-size: var(--t-sm); font-weight: 620; color: var(--ink3); }
+.vmg ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: var(--t-md); color: var(--ink); line-height: 1.5; }
+.msub.dim { color: var(--ink3); }
+.blnone { color: var(--ink2); }
+/* The search's own honesty, at the foot of the list where it is about something. */
+.addon { margin: 6px 0 0; font-size: var(--t-sm); color: var(--ink2); line-height: 1.5; display: flex; gap: 8px; align-items: baseline; }
+.addon b { color: var(--ink); font-weight: 620; }
+.pkline { display: flex; flex-direction: column; gap: 3px; }
+/* The two the read finds that ask something of the user. Amber, above the
+   list, and never blocking Render. The pair of paths is the colliding one's
+   whole value, so they are given a line of their own rather than being run
+   into the sentence. */
+.owwarn { margin: 0 0 9px; padding: 8px 11px; border-left: 2px solid var(--busy); background: var(--sunk); border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: var(--t-sm); color: var(--ink2); line-height: 1.5; }
+.owwarn p { margin: 0; }
+.owwarn b { color: var(--ink); font-weight: 620; }
+.owpair { display: flex; flex-direction: column; gap: 2px; margin-top: 5px !important; font-size: var(--t-sm); color: var(--ink3); }
+.owpair b { color: var(--ink2); font-weight: 600; }
+
+.vlfoot { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--soft); display: flex; flex-direction: column; gap: 4px; font-size: var(--t-sm); color: var(--ink3); }
+
+.simp { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--soft); display: flex; flex-direction: column; gap: 5px; }
+.simp .hint { margin: 0; }
+/* The three levers appear only once the switch is on: a feature that is off
+   has nothing to set, and three greyed rows would be three things to read
+   past. Their names are longer than this panel's other keys, so the key
+   column widens for them alone. */
+.simp .simpset { display: none; }
+.simp.on .simpset { display: flex; flex-direction: column; gap: 7px; margin-top: 3px; }
+.simpset .set .k { width: 118px; }
+
+/* The carry-on's own line, sitting under the pair but belonging to one of them. */
+.bar-note.twofold { margin-top: 7px; }
+
+/* Auto-download: a switch, the narrowing under it, the count under both. The
+   same row carries Simplify on the settings panel, where every control beside
+   it is a label on the left and a value on the right — so it is left-aligned
+   and never centred. */
+.adl { display: flex; align-items: center; gap: 9px; }
+.adlt { font-size: var(--t-md); color: var(--ink); }
+.narrowb {
+  font: inherit; font-size: var(--t-md); color: var(--ink); text-align: left;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg);
+  padding: 4px 9px; cursor: pointer; display: flex; align-items: center; gap: 7px;
+}
+.narrowb .chev { color: var(--ink3); font-size: var(--t-xs); margin-left: auto; }
+.narrowb:hover { background: var(--sel); }
+.narrowb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.bua { justify-self: end; }
+.mact { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.ver {
+  font-size: var(--t-xs); font-weight: 600; color: var(--ink2); background: var(--sel);
+  border-radius: var(--r-xs); padding: 1px 4px; margin-left: 6px; vertical-align: 1px;
+}
+
+/* A folding heading is a button and must not look like one. */
+button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
+
+/* Every ending has a colour */
+.qst.e-ok { color: var(--ok); font-weight: 600; }
+.qst.e-fail { color: var(--bad); font-weight: 600; }
+.qst.e-stop { color: var(--idle); font-weight: 600; }
+.qst.e-gave { color: var(--busy); font-weight: 600; }
+/* Not an ending but the absence of one, so the phrase carries the difference
+   rather than a fifth colour. Every other ending is one word; this plainly is
+   not, which is a stronger separation than two greys side by side. */
+.qst.e-unk { color: var(--ink3); font-weight: 600; font-style: italic; }
+.unkw { color: var(--ink3); font-style: italic; font-weight: 600; }
+.dimv { color: var(--ink3); font-style: italic; }
+
+/* ── The whole-app failure shape, on a job's entry. Red dot, one plain
+      sentence saying what did not happen, a second only where Smoozy
+      knows, then the controls. No cross: a job's recorded ending is not
+      a condition, so there is nothing to clear.
+
+      The retry is not repeated here. "Render it again" is a group of its
+      own further down the entry, carrying both ranges and the sentence
+      about two folders — a second Try again above it would be the same
+      act stated twice and worse both times. ── */
+.qfail { display: flex; flex-direction: column; gap: 8px; }
+/* The sentence flows as a sentence. The dot sits in the text rather than in a
+   column of its own — a bold opening clause is not a second column. */
+.qfail p { margin: 0; font-size: var(--t-md); color: var(--ink2); line-height: 1.5; }
+.qfail p b { color: var(--ink); font-weight: 620; }
+.qfail .fdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); margin-right: 8px; vertical-align: 1px; }
+/* The second sentence is the one carve-out the spec makes: a cause Smoozy
+   read off the machine rather than guessed at. It sits under the first and
+   indents to it, so the two read as one statement rather than two. */
+.qfail .qf2 { padding-left: 15px; }
+.qfail .rdrow { padding-left: 15px; }
+
+
+/* ── REPORTING A PROBLEM. The second and last addition the failure shape
+      permits, plus the box it opens and the prompt after a crash.
+
+      The control is quiet and it is last, before the cross. The retry stays
+      the loud one: a connection dropping because the user shut their laptop
+      is the commonest failure in the app and is nobody's bug, and a report
+      invited on every one of them buries the ones that matter.
+
+      It takes the same weight as the raw-text control beside it, and it is
+      one shape everywhere rather than sometimes a line and sometimes a
+      button inside the raw-text row. Its own prefix — nothing below shares
+      a name with anything else in this file. ── */
+.rp-ask { display: flex; }
+.rp-ask button {
+  font: inherit; font-size: var(--t-sm); font-weight: 550; cursor: pointer;
+  color: var(--ink2); background: var(--bg); border: 1px solid var(--line);
+  border-radius: var(--r-sm); padding: 3px 9px;
+}
+.rp-ask button:hover { border-color: var(--ink3); color: var(--ink); }
+.rp-ask button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The box. What it will write, said rather than shown — the Creator ruled on
+   2026-08-25 that the user does not need it readable, and the file is plain
+   text in a folder they chose, so anyone who wants to look already can. */
+.rp-lab { font-size: var(--t-md); color: var(--ink2); font-weight: 550; }
+.rp-say { width: 100%; }
+.rp-what { font-size: var(--t-sm); color: var(--ink3); line-height: 1.6; }
+/* Which failure this was opened from, so the user does not describe what
+   Smoozy already knows. Absent when the box comes from the Smoozy menu. */
+.rp-about { font-size: var(--t-sm); color: var(--ink2); background: var(--sunk); border: 1px solid var(--soft); border-radius: var(--r-sm); padding: 7px 10px; }
+.rp-about b { color: var(--ink); font-weight: 600; }
+.rp-where { display: flex; align-items: center; gap: 9px; font-size: var(--t-md); color: var(--ink2); }
+.rp-where .rp-wp { flex: 1; min-width: 0; font-size: var(--t-sm); color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The address is the only thing on the saved reading worth reading twice, so
+   it is the one thing drawn large. */
+.rp-send { font-size: var(--t-md); color: var(--ink2); }
+.rp-addr { font-size: var(--t-xl); font-weight: 600; color: var(--ink); user-select: all; }
+
+
+/* ══ KEYS. A list and almost nothing else. The fingerprint is on every row
+      rather than behind a control, because a name can repeat and never
+      identifies anything — two rows sharing a name and differing by
+      fingerprint is the case this screen exists to make readable. ══ */
+.ky-list { flex: 1; min-height: 0; overflow-y: auto; }
+.ky-row {
+  display: grid; grid-template-columns: minmax(0,1fr) 200px; gap: var(--rowgap);
+  padding: 13px var(--gutter); border-bottom: 1px solid var(--soft); align-items: start;
+}
+.ky-row:nth-child(even) { background: var(--sunk); }
+/* One statement on a computer whose SSH tools are missing: said once above
+   the list, never per row — the keys are fine and the tool is absent. The
+   same statement, word for word, sits on the server list, whose key marks
+   rest on the same readings. */
+.ky-notool, .sv-notool { border-bottom: 1px solid var(--line); background: var(--rail); padding: 9px var(--gutter); font-size: var(--t-sm); color: var(--ink3); }
+.ky-notool b, .sv-notool b { color: var(--ink); font-weight: 620; }
+/* New key cannot work there, and a control that cannot work reads unavailable. */
+.svhead .btn[disabled] { opacity: .45; cursor: default; }
+.ky-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+/* No tag ever sits beside the name. The two kinds of key are said by the
+   control, the servers are named on their own line, and a key's verdict is
+   drawn in the one place a verdict goes — under the path. A third way of
+   saying the same thing is what a screen with three keys on it cannot afford. */
+.ky-name { font-size: var(--t-base); font-weight: 600; color: var(--ink); }
+/* The fingerprint is the identity, so it reads as data and never as a note. */
+.ky-fp { font-size: var(--t-sm); color: var(--ink2); overflow-wrap: break-word; }
+/* Where the file sits decides whether deleting takes it or only forgets it. */
+.ky-where { font-size: var(--t-sm); color: var(--ink3); overflow-wrap: break-word; }
+.ky-use { font-size: var(--t-sm); color: var(--ink2); margin-top: 6px; display: flex; align-items: center; flex-wrap: wrap; gap: 0; }
+/* The badge keeps its 7px to the name it labels; the 12 separates one server
+   from the next. A run gap did both jobs and made the badge's distance 19.
+   The line leads with Used by and joins with and, because the servers are
+   named rather than counted and a run of badges and names with nothing saying
+   what they are reads as neither. */
+.ky-use .badge { margin-left: 12px; margin-right: 7px; }
+.ky-and { margin: 0 4px 0 12px; }
+.ky-use .ky-and + .badge { margin-left: 0; }
+.ky-pass { font-size: var(--t-sm); color: var(--ink2); margin-top: 6px; }
+.ky-lnk { color: var(--accent); font-weight: 550; text-decoration: none; }
+.ky-lnk:hover { text-decoration: underline; }
+/* The row stays dimmed, and that is not the failure speaking: dimming here says
+   the key cannot be chosen or opened, which is exactly what the pick-a-key mode
+   needs of it. The message on the row is the failure, and it takes the whole-app
+   shape — dot, plain sentence, then the two ways out beneath.
+
+   Only the unusable key is a failure. The row saying there is no public half
+   beside a key is a state — the key itself works — so it carries no dot and no
+   way out, and it is right that the two do not read alike. */
+.ky-why { font-size: var(--t-sm); color: var(--bad); margin-top: 6px; }
+.ky-why .fdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 7px; vertical-align: 1px; }
+.ky-why.ky-state { color: var(--ink3); }
+/* A key still being checked. The mark goes where the verdict will go, which on
+   this row is this line and not the name — and it is not on a control, because
+   no control was pressed: the screen simply opened. */
+.ky-why.ky-wk { color: var(--busy); animation: working 1.6s ease-in-out infinite; }
+/* The two fingerprints under the wrong-key refusal, indented to the sentence
+   above them the way the failure shape's second sentence is. They wrap the way
+   .ky-fp does — a fingerprint reaches the screen untouched, so the wrapping is
+   the stylesheet's job and never an invented space inside the value. */
+.rdfail p.ky-fps { padding-left: 15px; text-indent: 0; line-height: 1.6; }
+.ky-fps .mono, .ky-fpv { overflow-wrap: break-word; }
+.ky-ways { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 7px; }
+.ky-note { font-size: var(--t-sm); color: var(--ink3); flex: 1 1 240px; line-height: 1.45; }
+/* Three named slots rather than a flex run: copy at one x, the one that takes
+   the key away at another, in every row — including the row that has no copy.
+   The choose slot only exists while a key is being picked for a server. */
+.ky-acts { display: grid; grid-template-columns: 118px 76px; gap: 6px; align-items: center; align-self: start; }
+.ky-list.picking .ky-acts { grid-template-columns: 92px 118px 76px; }
+.ky-list.picking .ky-row { grid-template-columns: minmax(0,1fr) 298px; }
+.ky-acts > * { width: 100%; }
+.ky-acts .choose { grid-column: 1; }
+.ky-list.picking .ky-copy { grid-column: 2; }
+.ky-list.picking .ky-go { grid-column: 3; }
+.ky-acts .mini { padding: 4px 6px; text-align: center; }
+/* Unusable: dimmed and shown, never hidden. A key that vanished with its drive
+   would otherwise look like a key that was never there. */
+.ky-row.ky-gone .ky-name, .ky-row.ky-gone .ky-fp, .ky-row.ky-gone .ky-where { opacity: .55; }
+/* No verdict anywhere on a computer without the SSH tools. `Keys` U6a: the row is
+   shown as neither usable nor unusable and no member of `Keys` U6's set is
+   composed for it, so the reason line, the ways out that rest on a reason, and
+   the fading that marks a row unusable all go. What is left is what Smoozy
+   remembers. */
+.ky-list.noverdict .ky-why, .ky-list.noverdict .ky-ways { display: none; }
+.ky-list.noverdict .ky-row.ky-gone .ky-name,
+.ky-list.noverdict .ky-row.ky-gone .ky-fp,
+.ky-list.noverdict .ky-row.ky-gone .ky-where { opacity: 1; }
+.mlist { display: flex; align-items: center; flex-wrap: wrap; gap: 0; font-size: var(--t-md); color: var(--ink); margin: 2px 0 4px; }
+/* Same split as .ky-use: 7 to the name, 14 between one server and the next. */
+.mlist .badge { margin-left: 14px; margin-right: 7px; }
+.mlist .badge:first-child { margin-left: 0; }
+.ky-form { display: grid; grid-template-columns: 92px minmax(0,1fr); gap: 12px 12px; align-items: start; margin: 4px 0 6px; }
+.ky-fl { font-size: var(--t-md); color: var(--ink2); padding-top: 5px; }
+.ky-fi { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+/* This dialog's field and note. It used to borrow .fake and .fnote from the
+   settings footer, which style them only inside .sfoot — so the fields here
+   rendered as bare text with no box, and the note at body size. That is the
+   same class-borrowing this screen was already caught by once, in a new form,
+   which is why these carry the ky- prefix like the rest of it. */
+.ky-fk { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px 9px; background: var(--bg); font-size: var(--t-md); color: var(--ink3); }
+.ky-nt { font-size: var(--t-xs); color: var(--ink3); }
+
+/* ══ The state bar. Mockup-only furniture, and it says so: it sits outside
+      the window, in a face and a weight nothing in Smoozy uses, so it can
+      never be mistaken for part of the app. ══ */
+/* Mockup-only. Whatever is looking at this file lays the page out at a width of
+   its own choosing, so the window control has to be able to go wider than that
+   as well as narrower — and when it does, the app scrolls sideways on its stage
+   while the bar below stays put. */
+.stage { flex: 1; min-height: 0; display: flex; }
+.stage.wide { overflow: hidden; }
+.stage.wide > .app { flex: none; }
+
+.statebar {
+  flex: none; border-top: 1px solid var(--line); background: var(--rail);
+  font-size: var(--t-sm); max-height: 25vh; display: flex; flex-direction: column;
+}
+.sbtoggle {
+  flex: none; display: flex; align-items: center; gap: 7px; width: 100%;
+  font: inherit; font-size: var(--t-xs); letter-spacing: .07em; text-transform: uppercase;
+  font-weight: 700; color: var(--ink3); background: none; border: 0;
+  padding: 5px 14px; cursor: pointer; text-align: left;
+}
+.sbtoggle:hover { color: var(--ink2); }
+.sbchev { font-size: 8px; transition: transform .12s; }
+.sbtoggle[aria-expanded="false"] .sbchev { transform: rotate(-90deg); }
+.sbwidths { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 0 14px 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+.statebar[data-open="false"] .sbwidths { display: none; }
+.sbgroups { overflow-y: auto; padding: 0 14px 10px; display: flex; flex-wrap: wrap; gap: 3px 18px; }
+.statebar[data-open="false"] .sbgroups { display: none; }
+.sbgrp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 3px 0; }
+.sbgl { font-size: var(--t-xs); color: var(--ink3); font-weight: 600; white-space: nowrap; }
+.sbchip {
+  font: inherit; font-size: var(--t-xs); padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink2); cursor: pointer;
+}
+.sbchip:hover { border-color: var(--ink3); color: var(--ink); }
+.sbchip[aria-current="true"] { background: var(--accent-fill); border-color: var(--accent-fill); color: var(--on-fill); font-weight: 600; }
+.sbchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.agroup { display: flex; gap: 0; }
+.agroup .mini { border-radius: 0; margin-left: -1px; }
+.agroup .mini:first-child { border-radius: var(--r-md) 0 0 var(--r-md); margin-left: 0; }
+.agroup .mini:last-child { border-radius: 0 6px 6px 0; }
+/* A lone button in the group is rounded on all sides: the app draws no
+   server button there (a waiting job with no folder, a server not
+   connected), the drawing only hides it, and a gone server puts a line in
+   its place (Creator's thirteenth notes, note 3, 2026-10-18). */
+.agroup .mini:only-of-type, .agroup .mini[hidden] + .mini, .agroup .gonel:not([hidden]) + .mini { border-radius: var(--r-md); margin-left: 0; }
+/* The gone line keeps the actions' own gap from the button after it; it touched
+   it until 2026-10-18. */
+.agroup .gonel { margin-right: 10px; }
+.agroup .mini:hover { position: relative; z-index: 1; }
+
+.gone { margin: 0; padding-left: 19px; font-size: var(--t-md); color: var(--ink2); display: flex; flex-direction: column; gap: 5px; }
+.gone b { color: var(--ink); font-weight: 600; }
+
+/* ── Servers screen ── */
+#serversview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+#serversview[hidden] { display: none; }
+#machineview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+#machineview[hidden] { display: none; }
+
+.svhead { display: flex; align-items: center; gap: 14px; padding: 14px var(--gutter); border-bottom: 1px solid var(--line); }
+.svhead h1 { margin: 0; font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
+.svhead .btn { padding: 6px 14px; font-size: var(--t-md); }
+/* A quiet control beside a loud one matches its size: primary is said by
+   the fill, and a second difference reads as a mistake rather than as
+   emphasis. */
+.svhead .mini { padding: 6px 12px; font-size: var(--t-md); }
+
+.svlist { flex: 1; min-height: 0; overflow-y: auto; }
+/* Every row is the same four columns at the same widths, and the actions
+   column is fixed tracks rather than a flex run — so connect sits at one x
+   in every row. A column that sized itself to its own row is what had the
+   buttons wandering. */
+.svrow {
+  display: grid; grid-template-columns: minmax(0,1.15fr) minmax(104px,0.6fr) minmax(0,1.45fr) 248px;
+  gap: var(--rowgap); align-items: start; padding: 13px var(--gutter);
+  border-bottom: 1px solid var(--soft);
+}
+.svrow:hover { background: var(--sunk); }
+.svrow .badge, .svrow .dot { margin-top: 6px; }
+.svmain { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.svextra { display: block; margin-top: 5px; font-size: var(--t-sm); color: var(--ink2); }
+.svname { font-size: var(--t-base); font-weight: 600; color: var(--ink); overflow-wrap: break-word; }
+.svaddr { font-size: var(--t-sm); color: var(--ink3); overflow-wrap: break-word; }
+/* The line says what it costs, not what happened. The user does not need
+   telling that a key went missing; they need telling that the working
+   connection in front of them is the last one they get. */
+.svkeynote { font-size: var(--t-sm); color: var(--ink2); }
+.svrow.lit { background: var(--sel); }
+/* An action written as a word rather than drawn as a button. It was declared
+   only inside .acts, so the two that sit inside a row's own text — Accept and
+   Use it — fell through to the browser's own button chrome and its own face.
+   That is where Arial was getting into the drawing. */
+.a { font: inherit; font-size: var(--t-sm); font-weight: 550; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.a[disabled] { color: var(--ink3); cursor: default; }
+/* ── The whole-app failure shape, collapsed onto a list row. Dot, plain
+      sentence, then the controls — with the retry left out, because the row
+      already carries Connect and the failure repeating it would be the same
+      act offered twice on one line. That is the shape's row form rather than
+      this screen inventing one. ── */
+.svfail { font-size: var(--t-sm); color: var(--bad); margin-top: 4px; }
+.svfail .fdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 7px; vertical-align: 1px; }
+.svwork, .svhw { font-size: var(--t-md); color: var(--ink2); min-width: 0; }
+.svwork b { color: var(--ink); font-weight: 600; }
+.svwork .sub, .svhw .sub { display: block; font-size: var(--t-sm); color: var(--ink3); }
+.svhw.stale { color: var(--ink3); }
+.svhw.none { color: var(--ink3); font-style: italic; }
+/* Three fixed tracks rather than a flex run, so connect sits at one x and the
+   three dots at another, in every row. Connect spans the first two, which is
+   what gives a long label like Connect and set up its room. */
+.svacts { display: grid; grid-template-columns: 120px 86px 22px; gap: 6px; align-items: center; }
+.svacts .cbtn { grid-column: 1 / span 2; grid-row: 1; width: 100%; justify-content: center; }
+.svacts .more { grid-column: 3; grid-row: 1; justify-self: center; }
+.cbtn {
+  font: inherit; font-size: var(--t-sm); font-weight: 600; padding: 4px 11px;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg);
+  color: var(--ink2); cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+  white-space: nowrap;
+}
+.cbtn:hover { border-color: var(--ink3); color: var(--ink); }
+.cbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cbtn { position: relative; z-index: 1; }
+.cdot { width: 7px; height: 7px; border-radius: 50%; flex: none; border: 1.5px solid var(--ink3); }
+.cbtn.live { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); background: color-mix(in srgb, var(--ok) 9%, var(--bg)); }
+.cbtn.live .cdot { background: var(--ok); border-color: var(--ok); }
+.cbtn.live:hover { border-color: var(--ok); }
+.cbtn.trying { color: var(--busy); border-color: color-mix(in srgb, var(--busy) 45%, var(--line)); background: color-mix(in srgb, var(--busy-fill) 11%, var(--bg)); }
+.cbtn.trying .cdot { background: var(--busy-fill); border-color: var(--busy-fill); opacity: .55; }
+.cbtn.dead { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); background: transparent; cursor: not-allowed; opacity: .8; }
+.cbtn.dead .cdot { border-color: var(--bad); }
+.svacts .more { font-size: var(--t-base); color: var(--ink3); cursor: pointer; background: none; border: 0; padding: 2px 5px; font-family: inherit; border-radius: var(--r-sm); }
+.svacts .more:hover { color: var(--ink); background: var(--sel); }
+.svrow[role="button"] { cursor: pointer; }
+.svrow[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.svhint { font-size: var(--t-sm); color: var(--ink3); }
+.svfoot { border-top: 1px solid var(--line); background: var(--rail); padding: 9px var(--gutter); display: flex; gap: 14px; flex-wrap: wrap; font-size: var(--t-sm); color: var(--ink3); }
+
+/* Empty list */
+.svempty { position: absolute; inset: 0; z-index: 5; background: var(--bg); display: grid; place-items: center; padding: 26px; overflow-y: auto; }
+.svempty[hidden] { display: none; }
+.emptybox { width: min(560px, 100%); display: flex; flex-direction: column; gap: 13px; }
+.emptybox h2 { margin: 0; font-size: var(--t-xl); font-weight: 620; letter-spacing: -0.015em; }
+.emptybox .es { font-size: var(--t-base); color: var(--ink2); }
+.esteps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; font-size: var(--t-base); color: var(--ink2); }
+.esteps b { color: var(--ink); font-weight: 600; }
+.esteps a { color: var(--accent); font-weight: 550; }
+.emptybox .btn { align-self: flex-start; margin-top: 4px; }
+
+/* Add-server form */
+.frm { display: grid; grid-template-columns: 78px 1fr; gap: 8px 12px; align-items: center; }
+.frm label { font-size: var(--t-md); color: var(--ink2); }
+.frm .fld { font-style: normal; color: var(--ink); }
+.frm .fld.wide { width: 100%; }
+.frm .fld em { font-style: normal; color: var(--ink3); font-size: var(--t-sm); margin-left: 6px; }
+.frm .fld.svbad { border-color: var(--alert); background: var(--alert-bg); color: var(--alert); font-weight: 600; }
+/* A box that asks for typing opens with the caret in its first field, drawn
+   as a row being typed is: a one-pixel accent border and a thin caret after
+   the text (Design/Whole app; the Creator's third notes, note 1). */
+.frm .fld.fcaret { border-color: var(--accent); }
+.frm .fld.fcaret::after { content: ""; display: inline-block; width: 1px; height: 1em; margin-left: 1px; vertical-align: text-bottom; background: var(--ink); }
+.krow { display: flex; align-items: center; gap: 10px; }
+.krow a { font-size: var(--t-sm); color: var(--accent); font-weight: 550; }
+.togs2 { display: flex; flex-direction: column; gap: 7px; }
+.mnote2 { font-size: var(--t-sm); color: var(--ink3); }
+
+/* Two-choice removal */
+.choices { display: flex; flex-direction: column; gap: 8px; }
+.choice {
+  text-align: left; font: inherit; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg);
+  padding: 11px 13px; display: flex; flex-direction: column; gap: 3px;
+}
+.choice:hover { border-color: var(--ink3); background: var(--sunk); }
+.choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.choice .ch { font-size: var(--t-base); font-weight: 600; color: var(--ink); }
+.choice .cd { font-size: var(--t-sm); color: var(--ink2); }
+.svoff { display: flex; flex-direction: column; gap: 3px; margin-top: 2px; }
+.svoff label { font-size: var(--t-sm); color: var(--ink2); display: flex; gap: 7px; align-items: center; }
+.svoff .mnote2 { padding-left: 20px; }
+
+.ctx button.off { color: var(--ink3); cursor: not-allowed; }
+.ctx button.off:hover { background: none; }
+
+/* ══ Settings. A section list down the side, one section at a time.
+      A switch turns one thing on or off; a checkbox picks out of a set. ══ */
+#stgview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+#stgview[hidden] { display: none; }
+/* Wide enough for the longest section name in the weight it takes when it is
+   the chosen one. At 196 it fitted in the ordinary weight and not in the bold,
+   so choosing Warnings and notifications wrapped it to two lines and pushed
+   every section under it down. The rail's own width is the number. */
+.stgwrap { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); }
+.stgnav { border-right: 1px solid var(--line); background: var(--sunk); padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.stgnav button { font: inherit; font-size: var(--t-md); text-align: left; color: var(--ink2); background: none; border: 0; border-radius: var(--r-md); padding: 6px 10px; cursor: pointer; }
+.stgnav button:hover { background: var(--sel); }
+.stgnav button[aria-current="true"] { background: var(--sel); color: var(--ink); font-weight: 600; }
+.stgnav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.stgbody { min-height: 0; overflow-y: auto; padding: 20px var(--gutter) 26px; }
+.stgs { display: flex; flex-direction: column; gap: 9px; max-width: 700px; }
+.stgs[hidden] { display: none; }
+.stgs h2 { margin: 0; font-size: var(--t-base); font-weight: 620; color: var(--ink); }
+.stgs h2.gap, .stgs .gap { margin-top: 15px; }
+.stgrow { display: flex; align-items: center; gap: 10px; }
+.stgs .lab { font-size: var(--t-md); color: var(--ink); }
+.stgs .hintl, #stgbot .hintl, #stgbotok .hintl { font-size: var(--t-sm); color: var(--ink3); line-height: 1.5; }
+.stgs .path { font-size: var(--t-md); padding: 4px 9px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--sunk); color: var(--ink); }
+.stgs .num, #stgbot .num { font: inherit; font-size: var(--t-md); width: 78px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); color: var(--ink); }
+.stgs .num::placeholder, #stgbot .num::placeholder { color: var(--ink3); }
+.num.wide { width: 100%; }
+
+.folders, .cmp { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.sfrow, .cmp .trow { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--soft); }
+.sfrow:last-child, .cmp .trow:last-child { border-bottom: 0; }
+.sfrow .ord { font-size: var(--t-xs); color: var(--ink3); width: 12px; flex: 0 0 auto; }
+.sfrow .grip { color: var(--ink3); cursor: grab; font-size: var(--t-sm); flex: 0 0 auto; }
+.sfrow.missing .path { color: var(--ink3); }
+/* One honest word. "Not found" says the folder is gone, and the reading behind
+   it cannot tell missing from moved from refused — three states with three
+   different fixes. And the mark is the last search's rather than the row's:
+   nothing probes a folder when this screen opens, so a standing mark would
+   state a reading nobody ever took.
+
+   The row takes the collapsed failure shape: the red dot, then the plain
+   sentence in ordinary ink. No cross — the mark is a record of a search that
+   ran, not a condition still true, and a record is not the user's to clear. */
+.sfrow .fdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 7px; vertical-align: 1px; }
+.sfrow .fmsg { font-size: var(--t-sm); color: var(--ink2); }
+.sfrow .fwhen { color: var(--ink3); }
+
+/* Dragging a row: the row lifts and a line shows where it would land. No gap
+   opens in the list, which is what makes a list jump about as the pointer
+   moves. The list is short and does not scroll while a row is being dragged. */
+.sfrow.sflift { background: var(--bg); box-shadow: 0 7px 18px -7px var(--shade); border-radius: var(--r-sm); position: relative; z-index: 2; cursor: grabbing; }
+.sfrow.sflift .grip { cursor: grabbing; }
+.sfdrop { height: 0; border-top: 2px solid var(--accent); }
+
+/* A folder already on the list is not added twice and is not refused: the row
+   it is already on flashes, which answers the question without a box saying
+   nothing the user can act on. */
+.sfrow.sfhit { animation: sfflash 1.15s ease-out 2; }
+@keyframes sfflash {
+  0% { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+  100% { background: transparent; }
+}
+
+.cmp .tt { font-size: var(--t-md); color: var(--ink); }
+.cmp .tt .tag { font-size: var(--t-xs); color: var(--ink2); background: var(--sel); border-radius: var(--r-xs); padding: 1px 5px; margin-left: 4px; }
+
+/* A switch. On or off, and nothing else. */
+.sws { width: 30px; height: 17px; flex: 0 0 auto; border: 0; border-radius: 9px; background: var(--track); position: relative; cursor: pointer; padding: 0; }
+.sws i { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--bg); box-shadow: 0 1px 2px rgba(0,0,0,.28); }
+.sws.on { background: var(--ok); }
+.sws.on i { left: 15px; }
+.sws:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sws:disabled { opacity: .45; cursor: default; }
+
+.bsteps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; font-size: var(--t-md); color: var(--ink); }
+
+.todo { padding: 26px 24px; max-width: 620px; display: flex; flex-direction: column; gap: 11px; }
+.todo p { font-size: var(--t-base); color: var(--ink2); line-height: 1.55; }
+.todo .th { font-size: var(--t-lg); font-weight: 620; color: var(--ink); }
+
+/* Mockup-only: says when a control has nothing drawn behind it. */
+.nowhere {
+  position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); font-size: var(--t-sm);
+  padding: 7px 14px; border-radius: var(--r-md); z-index: 300;
+  box-shadow: 0 8px 24px -8px rgba(0,0,0,.5); pointer-events: none;
+  opacity: 0; transition: opacity .14s;
+}
+.nowhere.up { opacity: 1; }
+
+.tnone { padding: 26px var(--gutter); font-size: var(--t-base); color: var(--ink3); }
+.grouper { display: flex; align-items: center; gap: 6px; }
+.grouper label { font-size: var(--t-sm); color: var(--ink3); }
+.grouper select {
+  font: inherit; font-size: var(--t-sm); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 2px 6px; background: var(--bg); color: var(--ink); cursor: pointer;
+}
+.grouper select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Mockup-only state switcher */
+/* Mockup-only, and it may shrink. It could not, so at the two narrow steps the
+   state list pushed the title bar wider than the window it is drawn inside. */
+.states { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.states select { min-width: 0; }
+.app[data-narrow~="s3"] .titlebar .rate,
+.app[data-narrow~="s3"] .states > span { display: none; }
+.states span { font-size: var(--t-xs); color: var(--ink3); }
+.states select {
+  font: inherit; font-size: var(--t-sm); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 2px 6px; background: var(--bg); color: var(--ink2); cursor: pointer;
+}
+.states select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.crumbs { display: flex; align-items: center; gap: 8px; padding: 10px var(--gutter); border-bottom: 1px solid var(--soft); font-size: var(--t-md); color: var(--ink3); flex-wrap: wrap; }
+.crumbs a { color: var(--accent); text-decoration: none; cursor: pointer; }
+.crumbs a:hover { text-decoration: underline; }
+.crumbs .here { color: var(--ink); font-weight: 550; }
+.crumbs .up { margin-left: auto; display: flex; gap: 6px; }
+.mini { font: inherit; font-size: var(--t-sm); font-weight: 550; padding: 4px 10px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.mini:hover { border-color: var(--ink3); }
+.mini:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mini.danger { color: var(--bad); }
+.mini.danger:hover { border-color: var(--bad); }
+/* One that cannot be pressed. .mini sets its own colour and a pointing cursor,
+   both of which override the browser's own greying, so without this a disabled
+   small control looks exactly like a live one. */
+.mini[disabled] { opacity: .45; cursor: default; }
+.mini[disabled]:hover { border-color: var(--line); }
+
+.ftools {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  padding: 8px var(--gutter); border-bottom: 1px solid var(--soft); background: var(--sunk);
+}
+.ftools .selnote { font-size: var(--t-sm); color: var(--ink3); }
+.ftools .blendonly { display: contents; }
+.ftools .mini.strong { border-color: var(--ink3); font-weight: 600; }
+/* As tall as an icon, so the row does not grow when the two words appear. */
+.ftools .mini { height: 26px; padding-block: 0; }
+.ftools.notblend .blendonly { display: none; }
+.ric { width: 15px; height: 15px; flex: none; color: var(--ink3); }
+.rail .item[aria-current="true"] .ric { color: var(--ink); }
+
+/* ══ An icon button. The eight a file manager offers are the same eight in every
+      file manager, so an artist reads the shape faster than the word — and eight
+      words across the top is most of the row's width spent on controls rather
+      than on files. The two a .blend adds keep their words: those are Smoozy's
+      own and nobody has an icon for them.
+
+      Each carries its word on hover AND on keyboard focus. A title attribute
+      appears on hover and never on focus, so a keyboard user reaching the
+      toolbar would meet eight unlabelled shapes — and an icon is a reminder,
+      never a first explanation. ══ */
+.ib {
+  /* font: inherit, or the count drawn on it takes the browser's own face. */
+  font: inherit;
+  width: 28px; height: 26px; display: inline-grid; place-items: center; position: relative;
+  border: 1px solid transparent; border-radius: var(--r-md); background: none;
+  color: var(--ink2); cursor: pointer; padding: 0; flex: none;
+}
+.ib svg { width: 16px; height: 16px; }
+.ib:hover { background: var(--sel); color: var(--ink); }
+.ib:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Greyed: Rename while several rows are chosen (Design/File Browser; the
+   Creator's thirteenth notes, note 6, 2026-10-18). It keeps its word on hover. */
+.ib[disabled] { opacity: .45; cursor: default; }
+.ib[disabled]:hover { background: none; color: var(--ink2); }
+.ib.danger { color: var(--bad); }
+.ib.danger:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.ib .pb {
+  position: absolute; right: 1px; bottom: 0;
+  font-size: var(--t-xs); font-weight: 700; line-height: 1;
+  background: var(--accent-solid); color: var(--on-fill); border-radius: var(--r-md); padding: 1px 3px;
+}
+.ibl {
+  position: absolute; top: calc(100% + 5px); left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); font-size: var(--t-xs); font-weight: 550;
+  padding: 3px 7px; border-radius: var(--r-sm); white-space: nowrap;
+  opacity: 0; pointer-events: none; z-index: 15;
+}
+.ib:hover .ibl, .ib:focus-visible .ibl { opacity: 1; }
+.tdiv { width: 1px; height: 16px; background: var(--line); margin: 0 3px; }
+
+.flist { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
+.frow {
+  display: grid; grid-template-columns: 17px minmax(0, 1fr) 110px 100px 130px;
+  gap: 0 var(--rowgap); align-items: baseline; width: 100%; text-align: left;
+  padding: 8px var(--gutter); border: 0; background: none; font: inherit; color: inherit;
+  cursor: default; border-bottom: 1px solid var(--soft);
+}
+.frow:hover { background: var(--sunk); }
+.frow[aria-current="true"] { background: var(--sel); }
+.frow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* A folder is solid, a file is outlined. That is what separates them at a glance,
+   before the icon's own shape is read at all. */
+.fic { width: 16px; height: 16px; align-self: center; color: var(--ink3); flex: none; }
+.fic.folder { color: var(--ink2); }
+.frow.denied .fic { color: var(--ink3); opacity: .55; }
+.fhead .fic { visibility: hidden; }
+
+.fname { font-size: var(--t-base); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmeta { font-size: var(--t-sm); color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fmeta.r { text-align: right; }
+.fhead { font-size: var(--t-sm); color: var(--ink3); font-weight: 600; background: var(--bg); position: sticky; top: 0; }
+.fhead:hover { background: var(--bg); }
+.fbar { display: flex; align-items: center; gap: 14px; padding: 9px var(--gutter); border-top: 1px solid var(--line); background: var(--rail); font-size: var(--t-sm); color: var(--ink3); flex-wrap: wrap; }
+.fbar .fhid { font-size: inherit; color: var(--ink2); gap: 7px; }
+
+/* ══ A PANEL over the server — settings and the check are the same kind ══ */
+.sheetwrap { position: absolute; inset: 0; z-index: 20; background: var(--shade); display: flex; flex-direction: column; justify-content: flex-end; }
+.sheetwrap[hidden] { display: none; }
+.sheet {
+  height: calc(100% - 26px); background: var(--bg);
+  border-top: 1px solid var(--line); border-radius: var(--r-xl) var(--r-xl) 0 0;
+  box-shadow: 0 -8px 40px -12px rgba(0,0,0,.30);
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+}
+.shead {
+  padding: 14px 52px 13px var(--gutter); border-bottom: 1px solid var(--line);
+  display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap; position: relative;
+}
+/* Pinned to the corner rather than laid out with the rest: a collapse control
+   that wraps below the title is a collapse control nobody finds. */
+.collapse {
+  position: absolute; top: 12px; right: 16px;
+  width: 26px; height: 24px; display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--bg); color: var(--ink2); cursor: pointer; padding: 0; font: inherit;
+}
+.collapse:hover { border-color: var(--ink3); color: var(--ink); }
+.collapse:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.collapse svg { width: 13px; height: 13px; }
+.shead h2 { margin: 0; font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
+.htitle { display: flex; flex-direction: column; gap: 7px; }
+.hdrow { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.hdrow .hk { font-size: var(--t-md); color: var(--ink2); }
+.shead .sub { font-size: var(--t-sm); color: var(--ink3); }
+.shead .sub a { color: var(--accent); }
+.btn {
+  font: inherit; font-size: var(--t-base); font-weight: 600; padding: 8px 16px;
+  border-radius: var(--r-md); border: 1px solid var(--accent-solid); background: var(--accent-solid);
+  color: var(--on-fill); cursor: pointer;
+}
+.btn:hover { filter: brightness(1.07); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.quiet { background: var(--bg); color: var(--ink); border-color: var(--line); font-weight: 550; padding: 5px 12px; font-size: var(--t-md); }
+.btn.quiet:hover { filter: none; border-color: var(--ink3); }
+
+/* ── Settings body: columns, not one thin stack ── */
+.cols {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 20px var(--gutter) 26px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  gap: 22px 34px; align-content: start;
+}
+.col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+
+.grp { display: flex; flex-direction: column; gap: 9px; }
+.grp > h3 { margin: 0; font-size: var(--t-sm); font-weight: 620; color: var(--ink3); }
+.grp > h3 .lit { font-weight: 400; font-style: italic; }
+.owbody { display: flex; flex-direction: column; gap: 9px; }
+
+/* THE CONVENTION — italic grey is the file's; upright bold is yours.
+   Fields are sized to their content so the cross sits right beside the value. */
+.set { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.set .k { font-size: var(--t-md); color: var(--ink2); width: 84px; flex: none; }
+.fld {
+  font-size: var(--t-md); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 4px 9px; background: var(--bg); flex: none; text-align: left;
+}
+.w-num { width: 78px; text-align: right; }
+.w-frame { width: 58px; text-align: right; }
+.w-list { width: 148px; }
+.w-sel { width: 120px; }
+.w-ver { width: 106px; }
+
+/* Real dropdowns, styled to match the fields */
+.pick { position: relative; display: inline-flex; flex: none; }
+.pick::after {
+  content: "▾"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  font-size: 9px; color: var(--ink3); pointer-events: none;
+}
+/* .pkb is Smoozy's own closed dropdown, a button drawn exactly as the system
+   one around it (Render Settings, as built in the Creator's fifth notes,
+   piece U); pressed, it opens the .ddl list below. */
+.pick select, .pick .pkb {
+  font: inherit; font-size: var(--t-md); appearance: none; -webkit-appearance: none;
+  border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px 24px 4px 9px;
+  background: var(--bg); color: var(--ink); cursor: pointer; width: 100%;
+}
+.pick .pkb { text-align: left; line-height: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pick select:focus-visible, .pick .pkb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.set.fromfile .pick select, .set.fromfile .pick .pkb { font-style: italic; color: var(--ink2); }
+.set.typed .pick select, .set.typed .pick .pkb { font-style: normal; color: var(--ink); font-weight: 600; border-color: var(--ink3); }
+/* Smoozy draws its own dropdown list (the Creator's fifth notes, note 2:
+   the system's list "looks like it doesn't belong in this design"). A pressed
+   dropdown opens a list drawn as the right-click menu is — .ctx's ground,
+   border, corner, shadow and row hover — under the control and at least as wide
+   as it, the picked row in the menu's own bold (.ctx button.hd). A pick closes
+   it and leaves the control as it looked before it was pressed: the ring above
+   is :focus-visible, so it shows only while the keyboard is in use. */
+.pick .ddl { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; width: auto; min-width: 100%; }
+.pick .ddl[hidden] { display: none; }
+.pick .ddl button { white-space: nowrap; }
+/* A list with no room below it opens upward, the same gap kept above the
+   control (Design/Whole app, the Creator's thirteenth notes, note 1). Drawn
+   at Render Settings' foot, where Telegram's list opens (2026-10-19). */
+.pick .ddl.up { top: auto; bottom: calc(100% + 4px); }
+.set.fromfile .fld { font-style: italic; color: var(--ink2); }
+.set.typed .fld { font-style: normal; color: var(--ink); font-weight: 600; border-color: var(--ink3); }
+/* A number Smoozy will not take. The foot's minutes field is not in a .set
+   row, so it carries .bad itself (2026-10-19). */
+.set.bad .fld, .sftg .fld.bad { border-color: var(--alert); background: var(--alert-bg); color: var(--alert); font-style: normal; font-weight: 600; }
+.set .unit, .set .sep { font-size: var(--t-md); color: var(--ink3); flex: none; }
+.set .after { font-size: var(--t-sm); color: var(--ink3); flex: none; margin-left: 3px; }
+.clear {
+  font: inherit; font-size: var(--t-md); line-height: 1; color: var(--ink3);
+  background: none; border: 0; cursor: pointer; padding: 3px 5px; border-radius: var(--r-sm); flex: none;
+}
+.clear:hover { color: var(--bad); background: var(--sunk); }
+.clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* A note belonging to a value lines up with the value column and not with
+   anything else: the label's 84px plus the row's own 7px gap. Written once,
+   because the two kinds of note had drifted to 88 and 91. */
+.underval { padding-left: 91px; }
+.alertnote { font-size: var(--t-sm); color: var(--alert); padding-left: 91px; }
+
+/* ══ A reading, not a setting. The percentage is what is set; the pixels
+      follow from it and can never be typed into — so no box, no border, no
+      control, and it must look nothing like the field beside it. ══ */
+.set .reading { font-size: var(--t-sm); color: var(--ink3); flex: none; margin-left: 4px; }
+.set .reading.dim { font-style: italic; }
+
+/* ══ Two or three answers do not need a list. The file's own value sits
+      first and reads as the file's, in the same italic grey used everywhere
+      else for a value the user has not taken over. ══ */
+.set.tall { align-items: flex-start; }
+.set.tall .k { padding-top: 2px; }
+.rads { display: flex; flex-direction: column; gap: 5px; }
+.rad { display: flex; align-items: center; gap: 7px; font-size: var(--t-md); color: var(--ink); cursor: pointer; }
+.rad > i { flex: none; width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--ink3); }
+.rad.on > i { border-color: var(--accent); border-width: 4px; }
+.rad em { font-style: italic; color: var(--ink2); }
+.rad.chosen { font-weight: 600; }
+
+/* ══ The missing-pieces band. Three ways on hang off it, so it is a band
+      and not a line — a one-liner with three controls after it reads as a
+      line that has gone wrong. It blocks none of them. ══ */
+.band {
+  border: 1px solid var(--busy); border-radius: var(--r-md);
+  background: var(--sunk); padding: 11px 13px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+.band .bt { font-size: var(--t-md); color: var(--ink); line-height: 1.5; }
+.band .bt b { font-weight: 620; }
+.band .ways { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.band .wnote { font-size: var(--t-sm); color: var(--ink3); }
+.band .off { font-size: var(--t-sm); color: var(--ink3); display: flex; gap: 7px; align-items: center; }
+.band .off .cb { flex: none; }
+
+.boxes { display: flex; flex-direction: column; gap: 7px; }
+.box { display: flex; align-items: center; gap: 9px; font-size: var(--t-md); color: var(--ink2); font-style: italic; cursor: pointer; }
+.box.pinned { font-style: normal; color: var(--ink); font-weight: 600; }
+.box.plain { font-style: normal; color: var(--ink); }
+.box i { width: 13px; height: 13px; border-radius: var(--r-xs); border: 1.5px solid var(--ink3); display: grid; place-items: center; flex: none; font-style: normal; font-size: var(--t-xs); line-height: 1; color: var(--bg); }
+.box.on i { background: var(--ink2); border-color: var(--ink2); }
+/* The tick on a filled accent box is white in both themes: the box is a dark
+   blue either way, so a tick that flips with the theme goes dark on dark blue.
+   The grey box above keeps the ground colour, because that box does flip. */
+.box.pinned.on i, .box.plain.on i, .cb.on { color: var(--on-fill); }
+.box.pinned.on i, .box.plain.on i { background: var(--accent-solid); border-color: var(--accent-solid); }
+.box .tag { font-size: var(--t-xs); color: var(--ink3); font-style: normal; font-weight: 400; }
+/* The same small tag on a radio row of this page's, so a tag inside a row
+   stops inheriting the row's own size and darkness and reading as part of the
+   option's name. Scoped to the settings row: another screen's radios are that
+   screen's own to settle. */
+.set .rad .tag { font-size: var(--t-xs); color: var(--ink3); font-style: normal; font-weight: 400; }
+.dia { width: 9px; height: 9px; transform: rotate(45deg); flex: none; border: 1.5px solid var(--key); }
+.dia.keyed { background: var(--key); }
+
+.vlrow { display: flex; align-items: center; gap: 4px; }
+/* More than one scene ticked. The control keeps its place and its label and
+   shows no value: with several scenes ticked there is no one scene to read
+   from, and a number on the page would be another scene's. A blank inside a
+   greyed control reads as "nothing to say" rather than as nought, which is
+   the opposite of what a blank in a live field reads as. */
+.grp.greyed { opacity: .45; pointer-events: none; }
+.sudid .sumiss { color: var(--ink); }
+.sudid .sumiss .mini { margin-left: 6px; }
+.tf.changed .tm { color: var(--busy); }
+.tf.changed .tm a { color: var(--accent); }
+.tf.waitpart .tm { color: var(--busy); }
+.req.done > :not(.rqh), .req.done .rqh > :not(.rqm.e-ok):not(.rqm.e-fail) { opacity: .72; }
+.rqm.e-ok { color: var(--ok); font-weight: 600; }
+.rqm.e-fail { color: var(--bad); font-weight: 600; }
+/* Room around the summary: under the title's divider, between the summary and
+   the line under it, and above the search line, judged together (the
+   Creator's twentieth notes, note 6, 2026-10-28: "It's a little too tight
+   there"). The statements under the summary keep their close 5. */
+.cstate { padding: 12px var(--gutter) 12px; display: flex; flex-direction: column; gap: 5px; }
+.cstate p { font-size: var(--t-sm); color: var(--ink2); line-height: 1.5; margin: 0; }
+.cstate b { color: var(--ink); font-weight: 600; }
+/* One of these statements is a failure rather than a note, so it takes the
+   whole failure shape: the red dot in place of the block's grey bullet, the
+   plain sentence, and the cross that clears it. The grey bullet is not a
+   marker for a failure — it is the same bullet the four ordinary statements
+   carry — so the dot replaces it rather than sitting beside it. A folder that
+   refused a write is a live condition, which is what the cross is for. */
+.cstate .cbad b { color: var(--bad); }
+.cstate .fdot { display: inline-block; margin-right: 5px; }
+.cstate a { color: var(--accent); font-weight: 550; text-decoration: none; margin-left: 4px; }
+.cstate a:hover { text-decoration: underline; }
+/* A searched folder's name is a link that opens it in the computer's own file
+   manager, so it sits in the sentence with no gap of its own (Design/Dependency
+   Upload & Remap; the Creator's note 5 on their second notes, 2026-10-04). */
+.cstate a.ckfl { margin-left: 0; }
+/* The folders line's small button sits on the line without making it taller:
+   its padding hangs into the gap above and below, and its middle stays on the
+   text's (the Creator's thirteenth notes, note 2, 2026-10-18). */
+.cstate p .mini { margin-block: -5px; }
+/* Where nothing was searched the line has no words, so no bullet: Check again
+   alone, at the line's left under the summary, and it is not in running text,
+   so it keeps its own height (the Creator's fourteenth notes, note 3,
+   2026-10-18). */
+.cstate p.alone .mini { margin-block: 0; }
+/* The summary sentence, first under the title: the answer to the whole check.
+   Its figures keep the colours the foot's had. */
+.cstate .csum { font-size: var(--t-md); color: var(--ink); margin-bottom: 4px; }
+.cstate .csum .bad, .cstate .csum .bad b { color: var(--bad); }
+.cstate .csum .busy, .cstate .csum .busy b { color: var(--busy); }
+.cstate .csum .ok, .cstate .csum .ok b { color: var(--ok); }
+.cempty { padding: 22px var(--gutter); font-size: var(--t-md); color: var(--ink3); text-align: center; }
+/* No check of this file has run since Smoozy was opened: the centred sentence
+   and, under it, the one button that starts the check (the Creator's
+   thirteenth notes, note 2, 2026-10-18). */
+.cnone { padding: 22px var(--gutter); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.cnone .cempty { padding: 0; }
+.bulive { list-style: none; margin: 6px 0 2px; padding: 0; display: flex; flex-direction: column; gap: 7px; font-size: var(--t-md); }
+.bulive b { font-weight: 600; }
+.bulive .stm { color: var(--ink3); font-size: var(--t-sm); display: block; margin-top: 1px; }
+.grp.greyed .fld, .grp.greyed .after, .grp.greyed .reading, .grp.greyed .clear, .grp.greyed .hint, .grp.greyed .bar-note, .grp.greyed .addon, .grp.greyed .tag,
+/* The unit belongs to the value, so it goes with it. It was left behind, and
+   the row read as a label and a lone per-cent sign. */
+.grp.greyed .unit { visibility: hidden; }
+/* A choice between two shows both, chosen neither: the user has chosen
+   nothing and each scene has its own. The file's own row goes — it is one
+   scene's value — and an italic label stops being one. */
+.grp.greyed .rad[data-eng] { display: none; }
+.grp.greyed .rad.on i { background: transparent; border-color: var(--ink3); }
+.grp.greyed .rads em { font-style: normal; color: inherit; }
+.vlrow .clear { font-size: var(--t-sm); padding: 2px 4px; }
+.box.allsc { font-weight: 700; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--soft); }
+
+/* Tooltip — hover or keyboard focus */
+.tip { position: relative; display: inline-flex; flex: none; }
+.tip > .q {
+  width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--bg); color: var(--ink3); font-size: var(--t-xs); font-weight: 700;
+  display: grid; place-items: center; cursor: help; padding: 0; font-family: inherit;
+}
+.tip > .q:hover { color: var(--ink); border-color: var(--ink3); }
+.tip > .q:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tip .bubble {
+  position: absolute; left: 0; top: calc(100% + 7px); z-index: 5;
+  width: 250px; padding: 10px 12px; border-radius: var(--r-md);
+  background: var(--bg); border: 1px solid var(--line);
+  box-shadow: 0 6px 22px -8px rgba(0,0,0,.34);
+  font-size: var(--t-sm); color: var(--ink2); line-height: 1.55;
+  display: none;
+}
+.tip:hover .bubble, .tip:focus-within .bubble { display: block; }
+.tip .bubble dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; }
+.tip .bubble dt { font-family: var(--face-mono); color: var(--ink); }
+.tip .bubble dd { margin: 0; }
+
+.hint { font-size: var(--t-sm); color: var(--ink2); background: var(--sunk); border-left: 2px solid var(--busy); padding: 9px 11px; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.hint b { color: var(--ink); font-weight: 600; }
+.hint.flat { border-left-color: var(--line); }
+
+/* ══ The marks on an entry. One line each, and every one of them reads as a
+      statement rather than a warning: none is a fault and three of the four
+      are things the user chose. A red mark on a job that may be perfectly
+      fine would train the reader to ignore all four. ══ */
+.mks { display: flex; flex-direction: column; gap: 7px; }
+.mk1 { display: flex; gap: 9px; font-size: var(--t-md); color: var(--ink2); line-height: 1.5; }
+/* A small filled dot, not a ring: a hollow circle at this size reads as an
+   unselected radio button, and these are statements with nothing to answer. */
+.mk1 > i {
+  flex: none; width: 4px; height: 4px; margin-top: 8px; border-radius: 50%;
+  background: var(--ink3);
+}
+.mk1 b { color: var(--ink); font-weight: 600; }
+.mk1 a { color: var(--accent); font-weight: 550; text-decoration: none; }
+.mk1 a:hover { text-decoration: underline; }
+
+/* ══ What the job writes — the six statements. Four are statements with
+      nothing to answer; two hold the job, and those two are the only place
+      an entry ever asks the user something. ══ */
+.jw { display: flex; flex-direction: column; gap: 7px; }
+.jw1 { display: flex; gap: 9px; font-size: var(--t-md); color: var(--ink2); line-height: 1.5; }
+.jw1 > i { flex: none; width: 4px; height: 4px; margin-top: 8px; border-radius: 50%; background: var(--ink3); }
+.jw1 b { color: var(--ink); font-weight: 600; }
+.jw1 .mono { color: var(--ink2); }
+.jwheld {
+  border: 1px solid var(--busy); background: var(--sunk);
+  border-radius: var(--r-md); padding: 11px 12px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+.jwheld p { font-size: var(--t-md); color: var(--ink); line-height: 1.5; }
+.jwheld p b { font-weight: 620; }
+/* Two controls and a note beside them, in a pane narrow enough that all three
+   on one line broke every one of them over two: "Render the rest —" over "239
+   frames", "Cancel" over "it". They wrap as whole items now, and the note
+   takes the line under them where there is no room beside. */
+.jwheld .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.jwheld .row > button { flex: none; white-space: nowrap; }
+.jwheld .row .note { font-size: var(--t-sm); color: var(--ink3); flex: 1 1 100%; }
+
+/* ══ The line on an entry whose render reported no errors. An empty
+      panel is exactly what a broken Smoozy would look like, so the silence is
+      said in words — but it is one stream's silence, not the render's, and the
+      panel stays: the other stream has words in it. Rewritten 2026-09-02; this
+      said the panel was not shown at all. ══ */
+.silent {
+  font-size: var(--t-md); color: var(--ink2); background: var(--sunk);
+  border: 1px dashed var(--line); border-radius: var(--r-md); padding: 11px 12px; line-height: 1.5;
+}
+.silent b { color: var(--ink); font-weight: 600; }
+
+/* ══ The two ways to render a short-ended job again. Each names its own
+      range, because a pair reading "Submit again" and "Resume" leaves the
+      reader to work out the difference. ══ */
+.again { display: flex; flex-direction: column; gap: 10px; }
+.again .pair { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
+/* One sentence with a field in the middle of it, so it is written as one and
+   wraps like one. It was a row of three, and each part wrapped inside its own
+   column: the label read "Carrying on from" over "frame", with the field
+   beside the pair and the rest of the sentence in a third column. */
+.again .from { font-size: var(--t-md); color: var(--ink2); line-height: 2; }
+.again .from .fld { display: inline-block; vertical-align: middle; margin: 0 5px; }
+.again .from .fld { padding: 2px 8px; }
+.again .why { font-size: var(--t-sm); color: var(--ink3); line-height: 1.45; }
+
+.writes { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 5px 12px; font-size: var(--t-md); color: var(--ink2); align-items: baseline; }
+.writes .p { overflow-wrap: break-word; }
+.writes .n { text-align: right; }
+.writes .f { color: var(--ink3); }
+.writes .tot { color: var(--ink); font-weight: 600; padding-top: 6px; border-top: 1px solid var(--soft); margin-top: 2px; }
+.writes .tot2 { color: var(--ink); font-weight: 600; }
+
+/* ══ The submit strip is two lines, every group aligned to the top (the
+      Creator's tenth notes, note 8). One grid, so the name, the switches and
+      Render share their lines instead of each centring itself in a tall row:
+      line 1 is the name and its field, the download switch with its summary,
+      and Render; line 2 is the name's hint, the first-frame switch with
+      Telegram, and the submitted line, which runs to Render's right edge so
+      it sits under Render without widening Render's column; line 3 is there
+      only when something is wrong or under way. The 15 pixels on the middle
+      and on Render make 24 between the groups, against 9 between the name
+      and its field. ══ */
+.sfoot {
+  border-top: 1px solid var(--line); background: var(--rail); padding: 12px var(--gutter);
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; column-gap: 9px;
+  grid-template-areas: "nlabel nfield l1 go" ". nhint l2 l2" ". . l3 l3";
+}
+.sfoot > .btn, .sfoot > .ax-off { grid-area: go; justify-self: end; margin-left: 15px; }
+.sfoot .field { display: contents; }
+.sfoot .field label { grid-area: nlabel; font-size: var(--t-sm); color: var(--ink3); }
+.sfoot .fnote { grid-area: nhint; margin-top: 3px; font-size: var(--t-xs); color: var(--ink3); }
+.sfoot .fake { grid-area: nfield; justify-self: start; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px 9px; background: var(--bg); font-size: var(--t-md); color: var(--ink3); width: 168px; }
+.sfoot .sfl1 { grid-area: l1; margin-left: 15px; }
+/* The summary overhangs the switch's line rather than growing it, so turning
+   download on moves nothing, at any width (the Creator's twentieth notes,
+   note 2, 2026-10-28) — the same overhang .cstate p .mini uses. */
+.sfoot .sfl1 .mini { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-block: -5px; }
+.sfoot .sfl2 { grid-area: l2; margin: 3px 0 0 15px; flex-wrap: wrap; gap: 5px 14px; }
+.sfoot .sfl3 { grid-area: l3; margin-left: 15px; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 16px; }
+.sfoot .sfl3 > * { margin-top: 8px; }
+.sfoot .sfdep { margin-left: auto; text-align: right; }
+/* A refusal on the third line starts at the line's left like the others,
+   not at the value column's inset (the minutes, 2026-10-19). */
+.sfoot .sfl3 .alertnote { padding-left: 0; }
+.sftg { display: inline-flex; align-items: center; gap: 6px; }
+.sfoot .hintl { font-size: var(--t-sm); color: var(--ink3); }
+/* Telegram's dropdown is only as wide as its longest choice, Only what needs
+   you; a width written on the element is refused by the application (H33). */
+.w-tg { width: 160px; }
+/* In the Queue's entry, Downloading and Telegram are one pair, and the two
+   lists are one width: each as wide as its column, the minutes, where they
+   are asked, under Telegram's (the Creator's twenty-fifth notes, note 1,
+   2026-10-31). In the preview's column the two stack. */
+.dltg { display: flex; flex-direction: column; gap: 19px; }
+.dltg .w-tg { width: 100%; }
+.dltg .sftg { display: flex; flex-wrap: wrap; }
+/* A switch and its label on the submit strip. The switch component is the
+   whole app's; the box the settings screens put round it is not, on a strip
+   whose real subject is the Render control. */
+.swline { display: flex; align-items: center; gap: 9px; font-size: var(--t-md); color: var(--ink); flex: none; }
+.sfoot .btn[disabled] { opacity: .45; cursor: default; }
+/* A submission that went, under Render and right-aligned to it: ordinary
+   ink, the page's own text size, a check mark, no colour. Where line 2 has no
+   room for it, it drops under, still at the right. */
+.rs-sent { font-size: var(--t-base); color: var(--ink); margin-left: auto; white-space: nowrap; }
+.rs-tick { margin-right: 6px; }
+.rs-sent a { color: var(--accent); font-weight: 550; text-decoration: none; margin-left: 4px; }
+
+/* ── Check rows ── */
+.shift { margin: 13px var(--gutter) 0; padding: 10px 13px; border-radius: var(--r-md); background: var(--sunk); border: 1px solid var(--soft); display: flex; align-items: baseline; gap: 13px; flex-wrap: wrap; font-size: var(--t-md); color: var(--ink2); }
+.shift b { color: var(--ink); font-weight: 600; }
+.shift .undo { margin-left: auto; color: var(--accent); font-weight: 550; cursor: pointer; font-size: var(--t-sm); }
+.rows { flex: 1; min-height: 0; overflow-y: auto; padding: 13px var(--gutter) 16px; }
+.row { display: grid; grid-template-columns: minmax(0,1fr) 68px auto; gap: var(--rowgap); align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--soft); }
+/* The rows are grouped by state, in the order of what the user has to do about
+   them, and the two failures sit above all of them while they exist. A heading
+   is what makes the order readable as an order rather than as a list that
+   happens to be sorted. */
+.cgrp { display: flex; align-items: baseline; gap: 8px; margin: 14px 0 0; padding: 7px 0 5px; font-size: var(--t-sm); font-weight: 620; color: var(--ink3); }
+.cgrp:first-child { margin-top: 0; }
+.cgrp .k { font-weight: 550; }
+/* The heading says the state once: its dot, its word and how many rows, in
+   the state's colour. To upload takes no colour and no dot,
+   because Smoozy uploads those itself and nothing is asked (the Creator's
+   sixth notes, note 4). */
+.cgrp .cdot { width: 7px; height: 7px; border-radius: 50%; flex: none; align-self: center; background: currentColor; }
+.cgrp.bad { color: var(--bad); } .cgrp.bad .cdot { background: var(--bad); }
+.cgrp.busy { color: var(--busy); } .cgrp.busy .cdot { background: var(--busy-fill); }
+.cgrp.ok { color: var(--ok); } .cgrp.ok .cdot { background: var(--ok); }
+.cside > summary .cdot { width: 7px; height: 7px; border-radius: 50%; flex: none; align-self: center; background: var(--idle); }
+.cside > summary { color: var(--idle); }
+/* Already on the server is folded away too, green, with its size on the
+   heading: nothing is left to do there. */
+.cside.ok > summary { color: var(--ok); }
+.cside.ok > summary .cdot { background: var(--ok); }
+/* Ignored rows are the ones the user has already answered, so they sit at the
+   bottom in a group of their own, collapsed. Keeping them among the rest would
+   make a check that is done read as a check with work left in it. */
+.cside { margin-top: 14px; }
+.cside > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 7px 0 5px; font-size: var(--t-sm); font-weight: 620; color: var(--ink3); }
+.cside > summary::-webkit-details-marker { display: none; }
+.cside > summary .open { color: var(--accent); font-weight: 550; }
+.cside > summary .open::after { content: "Open"; }
+.cside[open] > summary .open { color: var(--ink3); }
+.cside[open] > summary .open::after { content: "Close"; }
+.cside > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* check toolbar */
+.ctools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px var(--gutter); border-bottom: 1px solid var(--soft); background: var(--sunk); }
+.ctools .prog { font-size: var(--t-sm); color: var(--ink2); }
+.ctools .warn { font-size: var(--t-sm); color: var(--busy); }
+.ctools .lnk { font-size: var(--t-sm); color: var(--accent); font-weight: 550; cursor: pointer; background: none; border: 0; padding: 0; font-family: inherit; }
+.ctools .lnk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.bulk { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px var(--gutter); background: var(--sel); border-bottom: 1px solid var(--line); }
+.bulk .n { font-size: var(--t-sm); font-weight: 600; }
+.bulk .lnk { font-size: var(--t-sm); color: var(--accent); font-weight: 550; cursor: pointer; background: none; border: 0; padding: 0; font-family: inherit; }
+.bulk .lnk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.cb { width: 13px; height: 13px; border-radius: var(--r-xs); border: 1.5px solid var(--ink3); display: grid; place-items: center; font-size: var(--t-xs); line-height: 1; color: var(--bg); cursor: pointer; }
+.cb.on { background: var(--accent-solid); border-color: var(--accent-solid); }
+
+.acts { display: flex; align-items: baseline; gap: 8px; }
+.acts .a { font-size: var(--t-sm); color: var(--accent); font-weight: 550; cursor: pointer; background: none; border: 0; padding: 0; font-family: inherit; }
+.acts .a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.acts .more { font-size: var(--t-md); color: var(--ink3); cursor: pointer; background: none; border: 0; padding: 0 3px; font-family: inherit; }
+.acts .more:hover { color: var(--ink); }
+/* A row names the file once: its name and kind, one location, notes only
+   where there is something to say, every one that applies, in a fixed order.
+   break-word, never anywhere: "anywhere" also lets the column shrink to a
+   single character when the window narrows. The colour of a note says what the
+   user has to do, as the group heading's does: red where they must act, amber
+   where they should look, green where nothing is left, none where Smoozy will
+   upload the file itself (the Creator's sixth notes, note 4). */
+.rows .row .what { min-width: 0; }
+.rows .row .nm { font-size: var(--t-md); color: var(--ink); font-weight: 550; overflow-wrap: break-word; }
+.rows .row .nm.lib { color: var(--lib); }
+.rows .row .kd { font-size: var(--t-sm); color: var(--ink3); margin-left: 8px; }
+.rows .row .loc { display: block; font-size: var(--t-sm); color: var(--ink2); overflow-wrap: break-word; margin-top: 2px; }
+.rows .row .note { display: block; font-size: var(--t-sm); color: var(--ink3); overflow-wrap: break-word; margin-top: 1px; }
+.rows .row .note.bad { color: var(--bad); } .rows .row .note.busy { color: var(--busy); }
+.rows .row .note.ok { color: var(--ok); } .rows .row .note.idle { color: var(--idle); }
+.row .sz { font-size: var(--t-sm); color: var(--ink3); text-align: right; }
+/* Rows are chosen the way a file manager chooses them, and a chosen row takes
+   the selected ground, carried past the row's edges into the gutter. */
+.rows .row.sel { background: var(--sel); box-shadow: -8px 0 0 var(--sel), 8px 0 0 var(--sel); }
+.cfoot { border-top: 1px solid var(--line); background: var(--rail); padding: 11px var(--gutter); display: flex; align-items: center; gap: 6px 18px; flex-wrap: wrap; }
+.cfoot .btn[disabled] { opacity: .45; cursor: default; }
+/* The connection is down. Uploading, verifying and trying again need the
+   server, so those three read unavailable; locating a file, ignoring a row,
+   restoring one and undoing a guess are decisions about the user's
+   own computer and stay live. */
+.acts .a[disabled] { color: var(--ink3); cursor: default; }
+.acts .a[disabled]:hover { text-decoration: none; }
+
+/* ── Collapsed strips, stacked ── */
+.strips { flex: none; display: flex; flex-direction: column; }
+.strip {
+  display: flex; align-items: center; gap: 14px; padding: 10px var(--gutter);
+  background: var(--rail); border: 0; border-top: 1px solid var(--line);
+  cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit;
+}
+.strip[hidden] { display: none; }
+.strip:hover { background: var(--sel); }
+.strip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.strip .t { font-size: var(--t-md); font-weight: 550; }
+.strip .d { font-size: var(--t-sm); color: var(--ink3); }
+.strip .open { margin-left: auto; font-size: var(--t-sm); color: var(--accent); font-weight: 600; }
+/* A panel never opened over this server: its strip reads its name alone —
+   no count, no state (the Creator's seventh notes, note 2). No strip carries
+   a mark (the Creator's tenth notes, note 5). */
+.strip.fresh .d { display: none; }
+
+/* ── Notes ── */
+.veil { position: fixed; inset: 0; z-index: 60; background: var(--shade); display: flex; justify-content: flex-end; }
+.veil[hidden] { display: none; }
+.notes { width: min(580px, 100%); height: 100%; background: var(--bg); border-left: 1px solid var(--line); overflow-y: auto; padding: 24px 28px 48px; display: flex; flex-direction: column; gap: 15px; }
+.notes h2 { margin: 0; font-size: var(--t-xl); font-weight: 640; letter-spacing: -0.01em; }
+.notes h3 { margin: 10px 0 0; font-size: var(--t-base); font-weight: 620; }
+.notes p, .notes li { font-size: var(--t-base); color: var(--ink2); }
+.notes strong { color: var(--ink); font-weight: 600; }
+.notes ul, .notes ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; }
+.notes .close { align-self: flex-start; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ══════════════════════════════════════════════════════════════════
+   NARROWING THE WINDOW.
+
+   Everything about narrowing is here and nowhere else. Three rules used to sit
+   beside the components they governed, keyed to the screen: one hid the rail
+   outright, one hid a job's entry, one dropped the preview column early. They
+   fought these, and the rail one was the very gap this set was written to close.
+
+   The layout is horizontal first, and a pane leaves whole rather than
+   everything shrinking together. Four steps, in the order of what the user
+   can most afford to lose, and Smoozy stops at the fourth — below 680 it does
+   not go, because a fifth step would mean reflowing into a strip, which is
+   what a page does and software does not.
+
+   The window is the container, not the screen: every step below is asked of
+   Smoozy's own window, which is what the layout actually has to fit inside.
+
+   ══════════════════════════════════════════════════════════════════
+
+   Step 1, under 1180 — the preview column goes. It is the one thing on the
+   entry that is a glance rather than work, and everything it showed is a
+   click away. It moves under the main column rather than disappearing.
+
+   Step 2, under 1020 — the server list folds its hardware into the work
+   column, and the file list drops Kind. Both are the column a user scanning
+   the list reads last. The settings panel drops to two columns here as well,
+   and the entry screen's two cards go one above the other.
+
+   Step 3, under 900 — the rail narrows to names alone, the list narrows with
+   it, the file list drops Changed, Settings' own section list narrows, and
+   the seams stop dragging: there is nothing left to move that is the user's
+   to decide.
+
+   Step 4, under 780 — the rail keeps every place and loses every word. A badge
+   is already the thing that says which server, so a rail of badges is the rail
+   doing its one job in 52 pixels instead of 214; the five places below it take
+   the icons they were drawn for. Nothing leaves, which is the point: this is
+   the only way to reach a server, and the earlier plan had it narrowing until
+   it could not hold a name and then stopping there. The rail and the list
+   narrow again here, and the side gutter narrows with them — once, at the
+   last step, for everything at the same moment.
+   ══════════════════════════════════════════════════════════════════ */
+
+.app[data-narrow~="s1"] .qdbody { grid-template-columns: minmax(0, 1fr); }
+/* The submit strip's switches drop under the name before anything else
+   moves, and Render stays at the right of the name's line. */
+.app[data-narrow~="s1"] .sfoot { grid-template-areas: "nlabel nfield . go" ". nhint . ." "l1 l1 l1 l1" "l2 l2 l2 l2" "l3 l3 l3 l3"; }
+.app[data-narrow~="s1"] .sfoot .sfl1 { margin: 10px 0 0; }
+.app[data-narrow~="s1"] .sfoot .sfl2,
+.app[data-narrow~="s1"] .sfoot .sfl3 { margin-left: 0; }
+/* The summary overhangs its line here too, so the second line keeps the
+   gap it has beside Render and the summary never touches the Telegram
+   control (the Creator's twenty-first notes, note 4, 2026-10-29). */
+.app[data-narrow~="s1"] .sfoot .sfl2 { margin-top: 12px; }
+.app[data-narrow~="s1"] .seam[data-seam="preview"] { display: none; }
+.app[data-narrow~="s1"] .qdside { flex-direction: row; flex-wrap: wrap; gap: 22px; }
+.app[data-narrow~="s1"] .qdside > .grp { flex: 1 1 210px; }
+/* Side by side, the pair shares its lines: the switch level with the
+   Telegram heading, centred on its line, and the two lists level on the
+   second (the Creator's twenty-fifth notes, note 1). */
+.app[data-narrow~="s1"] .dltg { flex: 1 1 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 22px; align-items: start; }
+.app[data-narrow~="s1"] .dltg > .grp { display: contents; }
+.app[data-narrow~="s1"] .dltg > .grp > * { grid-column: 1; }
+.app[data-narrow~="s1"] .dltg > .grp + .grp > * { grid-column: 2; }
+.app[data-narrow~="s1"] .dltg > .grp > .adl,
+.app[data-narrow~="s1"] .dltg > .grp + .grp > h3 { grid-row: 1; align-self: center; }
+.app[data-narrow~="s1"] .dltg > .grp + .grp > h3 + * { grid-row: 2; }
+.app[data-narrow~="s1"] .dltg > .grp + .grp > h3 + * + * { grid-row: 3; }
+
+.app[data-narrow~="s2"] .svrow { grid-template-columns: minmax(0,1fr) minmax(0,1.25fr) 248px; }
+.app[data-narrow~="s2"] .svmain { grid-column: 1; grid-row: 1 / span 2; }
+.app[data-narrow~="s2"] .svwork { grid-column: 2; grid-row: 1; }
+.app[data-narrow~="s2"] .svhw { grid-column: 2; grid-row: 2; margin-top: 5px; font-size: var(--t-sm); color: var(--ink3); }
+.app[data-narrow~="s2"] .svacts { grid-column: 3; grid-row: 1 / span 2; align-content: start; }
+.app[data-narrow~="s2"] .frow { grid-template-columns: 17px minmax(0, 1fr) 100px 130px; }
+.app[data-narrow~="s2"] .frow .fmeta.kind,
+.app[data-narrow~="s2"] .frow .sortb.kind { display: none; }
+.app[data-narrow~="s2"] .cols { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+.app[data-narrow~="s3"] .body { --rail-w: 168px; --list-w: 300px; }
+.app[data-narrow~="s3"] .frow { grid-template-columns: 17px minmax(0, 1fr) 100px; }
+/* The check's actions take only what they need. (Until 2026-10-18 the
+   size went here too, when two path columns shared the row.) */
+.app[data-narrow~="s3"] .row .acts .a { white-space: nowrap; }
+.app[data-narrow~="s3"] .frow .fmeta.when,
+.app[data-narrow~="s3"] .frow .sortb.when { display: none; }
+.app[data-narrow~="s3"] .stgwrap { grid-template-columns: 156px minmax(0, 1fr); }
+.app[data-narrow~="s3"] .seam { display: none; }
+
+.app[data-narrow~="s4"] .body { --rail-w: 52px; --list-w: 264px; --gutter: 14px; }
+/* The setup's output window goes under the steps, at the card's width. */
+.app[data-narrow~="s4"] .suwork { flex-direction: column; align-items: stretch; gap: 10px; }
+.app[data-narrow~="s4"] .suwork > .log { flex: none; }
+.app[data-narrow~="s4"] .rail .item { justify-content: center; padding: 8px 0; gap: 0; }
+.app[data-narrow~="s4"] .rail .item .lbl,
+.app[data-narrow~="s4"] .rail .item .tl { display: none; }
+/* The badge is the row now, so it sizes up and centres. */
+.app[data-narrow~="s4"] .rail .item { position: relative; }
+.app[data-narrow~="s4"] .rail .badge { margin-right: 0; width: 14px; height: 14px; }
+/* And the row's dot sits on the badge rather than beside it: two blobs side
+   by side in a 52-pixel rail pushed the badge off centre and read as one
+   lopsided shape. A ring of the rail's own ground keeps the two apart. */
+.app[data-narrow~="s4"] .rail .rdot {
+  position: absolute; top: 5px; left: 50%; margin-left: 3px;
+  width: 7px; height: 7px; box-shadow: 0 0 0 2px var(--rail);
+}
+.app[data-narrow~="s4"] .rail .item[aria-current="true"] .rdot { box-shadow: 0 0 0 2px var(--sel); }
+/* The Queue's dot goes onto the icon's corner, as a server's goes onto its
+   badge (the Creator's twenty-fourth notes, note 2). */
+.app[data-narrow~="s4"] .rail .qask {
+  position: absolute; top: 5px; left: 50%; margin-left: 3px;
+  width: 7px; height: 7px; box-shadow: 0 0 0 2px var(--rail);
+}
+.app[data-narrow~="s4"] .rail .item[aria-current="true"] .qask { box-shadow: 0 0 0 2px var(--sel); }
+.app[data-narrow~="s4"] .rail .ric { width: 16px; height: 16px; }
+.app[data-narrow~="s4"] .rsec { padding: 10px 6px 3px; }
+.app[data-narrow~="s4"] .rhd { padding: 0 0 4px; justify-content: center; }
+.app[data-narrow~="s4"] .rhd span { display: none; }
+
+/* Under 680 Smoozy is not asked to hold together, and says so rather than
+   folding into something it was never drawn as. */
+.toosmall {
+  position: absolute; inset: 0; z-index: 60; display: none; place-items: center;
+  background: var(--bg); color: var(--ink2); font-size: var(--t-base);
+  padding: 30px; text-align: center;
+}
+.app[data-narrow~="floor"] .toosmall { display: grid; }
+
+/* Shared unavailable-control reason, also used by Queue. */
+.ax-off { display: flex; align-items: center; gap: 9px; }
+.ax-off .btn[disabled] { opacity: .45; cursor: default; }
+.ax-why { font-size: var(--t-sm); color: var(--ink2); }
+.ax-why b { color: var(--ink); font-weight: 600; }
+
+
+
+
+/* ══════════════════════════════════════════════════════════════════
+   RESIZING A PANE.
+
+   Every seam between two panes drags. A desktop application whose panes
+   are a fixed size reads as a web page, which is the first thing this
+   design decided against.
+
+   Three rules hold it together:
+
+   Each pane has a smallest useful width and the drag stops there, so a
+   pane cannot be dragged into uselessness and then have to be found
+   again.
+
+   The narrowing steps still govern underneath. A dragged width is set on
+   the window, and each step re-declares the same value on the body, so
+   from the step's own width down the step wins and the dragged width is
+   set aside — and comes back when there is room again. The user's
+   choice is never destroyed by making the window small.
+
+   Double-clicking a seam puts it back where it started. That is the way
+   out of a mess, and it is the only reset there is.
+   ══════════════════════════════════════════════════════════════════ */
+.seam {
+  position: absolute; top: 0; bottom: 0; width: 9px; margin-left: -4px;
+  cursor: col-resize; z-index: 8; background: none; border: 0; padding: 0;
+}
+.seam::after {
+  content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px;
+  background: var(--accent); opacity: 0; transition: opacity .12s;
+}
+.seam:hover::after, .seam.dragging::after { opacity: .7; }
+.seam:focus-visible::after { opacity: .7; }
+body.resizing { cursor: col-resize; user-select: none; }
+
+/* The seam sits on the line it moves, so each of its hosts has to be a
+   positioning context. None of them was before. */
+.body, .qsplit, .qdbody { position: relative; }
+
+/* ══════════════════════════════════════════════════════════════════
+   NOTIFICATIONS.
+
+   The operating system draws these, not Smoozy, so what is settled here
+   is only what each says and what happens when one is clicked. They are
+   drawn in a system's ordinary shape — an icon, a title, a line under
+   it, a picture where there is one — to be argued with, not copied.
+
+   Four kinds and no fifth. A batch speaks once. A job the user stopped
+   posts nothing, because they were sitting there when they stopped it.
+   ══════════════════════════════════════════════════════════════════ */
+.notes-stack {
+  position: absolute; inset: var(--title-h) 0 0 0; z-index: 50; /* above any box: it stands for what is outside Smoozy's window */
+  background: var(--shade); padding: 18px; overflow-y: auto;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 9px;
+}
+.nt {
+  width: 330px; display: flex; gap: 10px; padding: 11px 12px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: 0 6px 20px var(--shade); cursor: pointer;
+}
+.nt:hover { border-color: var(--ink3); }
+.nt .nic {
+  width: 26px; height: 26px; flex: none; border-radius: 6px;
+  background: var(--accent-solid); color: var(--on-fill); display: grid; place-items: center;
+  font-size: var(--t-sm); font-weight: 700;
+}
+.nt .ntx { flex: 1; min-width: 0; }
+.nt .ntt { display: block; font-size: var(--t-md); font-weight: 600; }
+.nt .ntb { display: block; font-size: var(--t-sm); color: var(--ink2); }
+/* A picture's own corner, not one of the five radius steps. */
+.nt .ntp { width: 62px; flex: none; border-radius: 4px; overflow: hidden; align-self: center; }
+.nt .ntp svg { display: block; width: 100%; height: auto; }
+.nt-said {
+  align-self: flex-start; max-width: 380px; font-size: var(--t-sm); color: var(--bg);
+  background: var(--ink); border-radius: var(--r-md); padding: 8px 11px; opacity: .82;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   WHAT THE MACHINE PRINTED.
+
+   The second half of the whole-app failure rule: a plain sentence
+   first, and the raw output one control away. Every "What the server
+   said" and every "Blender output" opens this, so there is one of it
+   rather than one per screen.
+
+   A render has two streams and they are kept apart, so it has two
+   tabs. Anything with one stream has none.
+
+   Four things a tab's record can be, and a fifth that is none of them —
+   and the panel says which. An empty panel is the one answer it must never
+   give.
+
+   The fourth is "the render reported no errors", and it came back on
+   2026-09-02 after a spell out of the file. It had been removed on the
+   reasoning that such a render is answered on the entry in words with no
+   control at all, since a panel reached by pressing something and then
+   saying there is nothing in it leaves the user working out whether Smoozy
+   failed to collect the words or there were none. That reasoning was sound
+   and its premise was false: the outcomes are one per stream, not one per
+   render, so what is empty is the complaints stream while the ordinary one
+   still holds the render's lines. Taking the control away hid those lines
+   to avoid a blank box that the sentence itself prevents.
+   ══════════════════════════════════════════════════════════════════ */
+.lbox {
+  /* Sized against Smoozy's window, not the screen. It was the one thing in the
+     app measured in viewport units, so at the three narrow steps it stayed 860
+     wide and hung out over both edges of the window. The box it sits in
+     already keeps a gutter, so the whole of the room left is the limit. */
+  width: min(860px, 100%); max-height: 100%; display: flex; flex-direction: column;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-xl);
+  box-shadow: 0 18px 48px var(--shade); overflow: hidden;
+}
+.lhead { display: flex; align-items: baseline; gap: 11px; padding: 13px 16px 10px; }
+.lhead h3 { font-size: var(--t-lg); font-weight: 600; margin: 0; }
+.lhead .lsub { font-size: var(--t-sm); color: var(--ink3); }
+.lhead .grow { flex: 1; }
+.ltabs { display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.ltab {
+  font: inherit; font-size: var(--t-md); font-weight: 550; color: var(--ink3);
+  background: none; border: 0; border-bottom: 2px solid transparent;
+  padding: 5px 10px 6px; cursor: pointer; margin-bottom: -1px;
+}
+.ltab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.ltab .lc {
+  font-size: var(--t-xs); background: var(--alert-bg); color: var(--alert);
+  border-radius: var(--r-xs); padding: 0 4px; margin-left: 5px;
+}
+/* Where no count has been written down there is no count to draw. It was drawn
+   anyway, as an empty coloured pill, which reads as something broken rather
+   than as nothing known. */
+.ltab .lc:empty { display: none; }
+/* A count of none is not a refusal, so it does not take the refusal's colours. */
+.ltab .lc.none { background: var(--sel); color: var(--ink2); }
+.lstate {
+  font-size: var(--t-sm); color: var(--ink2); background: var(--sunk);
+  border-left: 2px solid var(--busy); padding: 8px 11px; margin: 12px 16px 0;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.lstate b { color: var(--ink); font-weight: 600; }
+.lbody {
+  flex: 1; min-height: 0; overflow: auto; margin: 12px 16px 0; padding: 11px 13px;
+  background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r-md);
+  font-family: var(--face-mono);
+  font-size: var(--t-sm); line-height: 1.7; white-space: pre; user-select: text;
+}
+.lnone { margin: 12px 16px 0; font-size: var(--t-md); color: var(--ink2); }
+.lnone b { color: var(--ink); font-weight: 600; }
+/* The words sit in a frame that does not scroll, so the copy icon in its
+   bottom-right corner stays where it is while the words scroll under it. It sits
+   inside the record's own corner, on the record's own ground, clear of the
+   record's border by the record's own padding (11px down, 13px across, past the
+   1px border and the record's 16px side margin), and where it is drawn the words
+   keep room for it, so no line runs under it. The server's own words carry no
+   icon and keep no room. It sat in the top-right corner, 4px inside the border,
+   until the Creator's fifth notes, note 6: "It's like on the border of the
+   window." Since the seventh notes, note 7 ("an equal margin from the right
+   and the bottom ... from the inner window"), the page measures the shown
+   record's visible inside - inside its border, clear of its scroll bar - and
+   hands the icon its place 12px in from both edges as --lcopy-right and
+   --lcopy-bottom; the figures here are only where it sits unmeasured. */
+.lwords { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.lwords .lcopy { position: absolute; bottom: var(--lcopy-bottom, 12px); right: var(--lcopy-right, 30px); z-index: 1; background: var(--sunk); }
+.lwords .lcopy:hover { background: var(--sel); }
+.lwords.withcopy .lbody, .lwords.withcopy .lstate, .lwords.withcopy .lnone { padding-right: 40px; }
+.lfoot { display: flex; align-items: center; gap: 10px; padding: 12px 16px; }
+.lfoot .lnote { font-size: var(--t-sm); color: var(--ink3); }
+.lfoot .grow { flex: 1; }
+
+/* ── Clearing a failure. The cross belongs to a failure describing a live
+      condition: it stays until the user clears it, or until the condition
+      plainly ends. A job's recorded ending is not a condition and carries
+      no cross at all. ── */
+.ckdot { display: inline-block; width: 9px; height: 9px; margin-right: 6px;
+  border: 1.5px solid var(--ink3); border-top-color: transparent; border-radius: 50%;
+  animation: wksp .7s linear infinite; vertical-align: -1px; }
+
+.fx {
+  font: inherit; font-size: var(--t-md); line-height: 1; color: var(--ink3);
+  background: none; border: 0; cursor: pointer; padding: 0 3px; margin-left: 5px;
+  border-radius: var(--r-xs);
+}
+.fx:hover { background: var(--sel); color: var(--ink); }
+
+/* .wk is declared with .uway above — one underway shape, attached two ways. */
+
+/* ══════════════════════════════════════════════════════════════════
+   TELEGRAM — the conversation on the phone.
+
+   Not Smoozy's window. This is the one surface in the project that is
+   somebody else's app, so nothing here imitates Telegram's own chrome:
+   what is drawn is the shape of what Smoozy sends — bubbles, buttons
+   under a message, a pinned note at the top. The phone drawn around
+   them carries no design decisions of its own.
+
+   Every message names its server, because with three running that is
+   what makes one conversation readable.
+
+   Prefixed tg- throughout.
+   ══════════════════════════════════════════════════════════════════ */
+.tgview {
+  position: absolute; inset: var(--title-h) 0 0 0; z-index: 50; /* above any box: it stands for what is outside Smoozy's window */
+  background: var(--rail); display: flex; flex-direction: column; align-items: center;
+  gap: 10px; padding: 12px 0 0; overflow: hidden;
+}
+.tg-said { font-size: var(--t-sm); color: var(--ink3); }
+.tg-phone {
+  width: 372px; flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: 14px 14px 0 0; overflow: hidden;
+}
+
+/* The pinned note. It is Smoozy's own working message between servers, and
+   it says so — a pinned message the user cannot make sense of and cannot
+   dismiss is worse than one that names itself. */
+.tg-pinbar {
+  display: flex; align-items: flex-start; gap: 9px; padding: 8px 11px;
+  background: var(--sunk); border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.tg-pinbar .tg-pi { color: var(--ink3); font-size: var(--t-sm); line-height: 1.5; }
+.tg-pinbar .tg-pt { font-size: var(--t-sm); font-weight: 600; }
+.tg-pinbar .tg-pd { font-size: var(--t-sm); color: var(--ink3); }
+.tg-note { display: grid; grid-template-columns: 76px 1fr; gap: 2px 10px; margin-top: 6px; }
+.tg-note dt { font-size: var(--t-sm); color: var(--ink3); }
+.tg-note dd { font-size: var(--t-sm); margin: 0; }
+/* Everything after the head is a spoiler (Creator-stated, 2026-09-14). The
+   head stays plain; the rows under it are blurred until they are tapped,
+   so a person meets the head and a blur, never the machine content. */
+.tg-spoil { filter: blur(4px); user-select: none; cursor: pointer; }
+.tg-spoil.shown { filter: none; user-select: auto; }
+
+.tg-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 11px 11px 14px; background: var(--sunk); }
+.tg-msg {
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-xl);
+  padding: 9px 11px; margin-bottom: 9px; font-size: var(--t-md); line-height: 1.55;
+}
+.tg-msg.me { background: var(--sel); border-color: var(--sel); margin-left: 74px; }
+/* One look for every message (Architecture `Telegram` R7a; the Creator's
+   twenty-first notes, note 5, 2026-10-29): the server's colour square and its
+   name in bold, then the job's name in italic, all at the message's own size
+   and ink, because that is all Telegram draws. The square is a character the
+   server sends, drawn here from data-sq. Stop carries Telegram's red style. */
+.tg-who { font-size: var(--t-md); font-weight: 700; color: var(--ink); }
+.tg-who[data-sq]::before { content: attr(data-sq) "\00a0"; font-weight: 400; }
+.tg-job { font-size: var(--t-md); color: var(--ink); }
+.tg-b.tgstop { color: var(--bad); }
+.tg-line { display: flex; gap: 8px; }
+.tg-line .tg-k { color: var(--ink3); min-width: 74px; }
+.tg-line.wide .tg-k { min-width: 106px; }
+.tg-at { font-size: var(--t-xs); color: var(--ink3); margin-top: 4px; }
+.tg-msg b { font-weight: 600; }
+/* A failure has one shape wherever it attaches, and the phone is no
+   exception: the red dot carries the colour and the sentence stays in
+   ordinary ink. The words were red here and the dot was missing, which is
+   the shape inverted. No cross — a recorded ending is not a condition. */
+.tg-warn .fdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 7px; vertical-align: 1px; }
+.tg-gone { color: var(--ink3); font-style: italic; }
+/* The render's own words, sent on the tap (Creator-stated, 2026-09-14): one
+   plain line naming the stream, then the words in a fixed-width block. How
+   Telegram wraps or scrolls a long line is stated nowhere, so the block wraps
+   only to keep the drawing inside the phone. The whole record, where it goes,
+   is a file message of its own under it. */
+.tg-pre {
+  margin: 6px 0 0; padding: 8px 10px; background: var(--sunk);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  font-family: var(--face-mono); font-size: var(--t-sm); line-height: 1.6;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: text;
+}
+.tg-file { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.tg-file .tg-fi { width: 34px; height: 34px; border-radius: var(--r-md); background: var(--sel); color: var(--accent); display: grid; place-items: center; flex: none; }
+.tg-file .tg-fi svg { width: 18px; height: 18px; }
+.tg-file .tg-fn { font-size: var(--t-md); font-weight: 550; overflow-wrap: anywhere; }
+.tg-file .tg-fs { font-size: var(--t-sm); color: var(--ink3); }
+
+/* Buttons under a message. Every action here is one the app already has. */
+.tg-btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.tg-b {
+  font: inherit; font-size: var(--t-md); font-weight: 550; color: var(--accent);
+  background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 4px 10px; cursor: pointer; flex: 1 1 auto;
+}
+.tg-b:hover { background: var(--sel); }
+/* One button a row, for a list of choices (the Telegram discussion,
+   2026-10-31: /reporting's five). */
+.tg-btns.col { flex-direction: column; }
+
+/* A frame, a few seconds of moving picture, and the contact sheet. Small
+   copies made on the server: nothing full-size ever goes to a phone. */
+.tg-pic { border-radius: var(--r-md); overflow: hidden; margin: 6px 0 2px; display: block; width: 100%; }
+.tg-pic svg { display: block; width: 100%; height: auto; }
+.tg-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 34px; height: 34px; border-radius: 50%; background: var(--pic-shade);
+  display: grid; place-items: center; color: var(--on-fill); font-size: 13px;
+}
+.tg-vid { position: relative; }
+.tg-sheet { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; margin: 6px 0 2px; }
+.tg-sheet svg { display: block; width: 100%; height: auto; border-radius: 2px; }
+
+.stale-bar.find .mk { background: var(--accent-fill); }
+.agnband { margin: 0 var(--gutter) 2px; padding: 8px 11px; background: var(--sunk); border-left: 2px solid var(--accent); border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: var(--t-md); color: var(--ink2); }
+.agnband.wait { border-left-color: var(--busy); }
+.agnband b { color: var(--ink); font-weight: 600; }
+
+/* The banner sits in a 380px column, so this one stacks rather than putting
+   its actions in a second column beside three lists of scene names. */
+#qpart { flex-direction: column; align-items: stretch; gap: 9px; }
+#qpart .qbacts { display: flex; align-items: center; justify-content: flex-start; gap: 9px 11px; flex-wrap: wrap; }
+#qpart .qbacts .grow { flex: 1 0 auto; }
+.qparts { display: grid; grid-template-columns: 92px 1fr; gap: 2px 10px; margin-top: 8px; }
+.qparts dt { font-size: var(--t-sm); color: var(--ink3); }
+.qparts dd { font-size: var(--t-sm); margin: 0; }
+.qparts .qpn { color: var(--ink3); }
+
+.tg-nm { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+.tg-nm .tg-nl { font-size: var(--t-sm); color: var(--ink3); min-width: 62px; }
+.tg-nm .mono { flex: 1; }
+
+.tg-bar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 11px;
+  border-top: 1px solid var(--line); background: var(--bg);
+}
+.tg-in {
+  flex: 1; font-size: var(--t-md); color: var(--ink3);
+  border: 1px solid var(--line); border-radius: 14px; padding: 4px 11px;
+}
+/* The Telegram discussion, 2026-10-31. Telegram's Menu button beside the
+   message box, and the bot's command list it opens, and that typing "/"
+   opens: each command and its one line. Telegram draws both; what is drawn
+   is their shape, holding Smoozy's four commands (Architecture Telegram
+   R17). */
+.tg-menu {
+  flex: none; font-size: var(--t-sm); font-weight: 600; color: var(--on-fill);
+  background: var(--accent); border-radius: 14px; padding: 4px 10px;
+}
+.tg-in.typed { color: var(--ink); }
+.tg-cmds { border-top: 1px solid var(--line); background: var(--bg); padding: 4px 0; }
+.tg-cmds[hidden] { display: none; }
+.tg-cmd { display: flex; align-items: baseline; gap: 10px; padding: 6px 13px; font-size: var(--t-md); }
+.tg-cmd b { font-weight: 600; min-width: 82px; }
+.tg-cmd span { color: var(--ink3); }
+
+/* The seventeenth notes, 2026-10-23. The same held preview, enlarged;
+   steady controls; start times; the rail's existing server menu. */
+.pvstep { display: grid; grid-template-columns: 24px minmax(84px, 1fr) 24px 76px; gap: 4px; }
+.pvstep .sb { display: grid; place-items: center; padding: 0; line-height: 1; }
+.pvstep .mini { margin-left: 0; width: 76px; padding-inline: 2px; }
+.pvframe { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.pvframe input { width: 44px; min-width: 0; text-align: center; padding: 2px 4px; }
+.pvframe input[aria-invalid="true"] { border-color: var(--bad); }
+.pvshown { font-size: var(--t-sm); color: var(--ink3); margin: 0; }
+.pverror { font-size: var(--t-sm); color: var(--bad); margin: 0; }
+.preview[role="button"] { cursor: zoom-in; }
+.preview[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pvlarge { z-index: 35; }
+.pvlarge .pvbox { width: min(100%, 1000px); height: 100%; max-height: 720px; display: flex; flex-direction: column; gap: 12px; padding: 18px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: auto; }
+.pvlarge .pvtitle { display: flex; align-items: center; gap: 12px; }
+.pvlarge h3 { margin: 0; flex: 1; font-size: var(--t-lg); }
+.pvlarge #pvlarge-content { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.pvlarge .preview { flex: 1; height: auto; min-height: 100px; }
+.pvlarge .preview svg { height: 100%; width: 100%; object-fit: contain; }
+.pvlarge .pvtools { display: flex; flex-direction: column; gap: 9px; max-width: 460px; width: 100%; align-self: center; }
+.rqstarted { font-size: var(--t-xs); color: var(--ink3); white-space: nowrap; }
+.reqgroup { padding: 12px var(--gutter) 5px; margin: 0; font-size: var(--t-sm); color: var(--ink3); font-weight: 550; }
+.mtop .cbtn { flex: none; margin-left: auto; }
+.mconnectnote { font-size: var(--t-sm); color: var(--bad); margin: 5px 0 0; }
+.railctx { position: absolute; z-index: 32; max-height: calc(100% - 80px); overflow: auto; min-width: 230px; }
+.tg-album { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 7px; }
+.tg-album figure { margin: 0; }
+.tg-album svg { width: 100%; display: block; border-radius: var(--r-sm); }
+.tg-album figcaption { font-size: var(--t-xs); color: var(--ink2); }
+/* Settings' Telegram bot step, lifted 2026-10-24 from the drawing's two
+   design passes (the seventeenth notes' piece 7). Choice first; each route its
+   own steps; the names' copy icons; one checked link at Start. */
+.botroute { display: flex; gap: 8px; }
+.botroute .btn { flex: 1; }
+#stgbotgo:disabled { opacity: .45; cursor: default; }
+.botroute .btn[aria-pressed="true"] { background: var(--sel); border-color: var(--ink3); color: var(--ink); }
+.botroute .btn:disabled { opacity: .45; cursor: default; }
+#botexisting { display: flex; flex-direction: column; gap: 12px; }
+#botexisting .bsteps { gap: 12px; }
+#botexisting .num, #botcreate .num { width: 100%; margin-top: 7px; }
+#botexisting .hintl, #botcreate .hintl { margin-top: 5px; }
+#botcreate .tg-nm .mono { flex: none; }
+#botcreate .tg-nm .ib + .mini { margin-left: 4px; }
+.botstartlink { display: flex; align-items: center; gap: 5px; margin-top: 5px; }
+.botstartlink a { min-width: 0; overflow-wrap: anywhere; color: var(--accent); }
+#botcopyresult { margin-top: 5px; }
+#botcopyresult.bad { color: var(--bad); }
+
+/* The eighteenth notes, 2026-10-24. The stopped card's Server output and
+   ten-step numbers; both streams in the setup window; the compact frame row;
+   the large preview over the whole window; removed servers in History. */
+.steps { padding-left: 28px; }
+.steps li::marker { font-variant-numeric: tabular-nums; }
+.suout { padding-left: 28px; }
+/* Under the finished card's bulleted list the control starts at that list's
+   text edge, not at the numbered steps' (the Creator's twenty-first notes,
+   note 1, 2026-10-29). */
+.sudid + .suout { padding-left: 17px; }
+/* A hidden row, shown because the box is ticked, is drawn grey and is
+   otherwise every inch a row (the Creator's twenty-first notes, note 3). */
+.frow.fhidden .fname { color: var(--ink3); }
+.frow.fhidden .fic { opacity: .55; }
+/* A folder's size, counted on request (the Creator's twenty-third notes,
+   note 2): the folder menu drawn where it opens on the row, and the hover
+   line drawn as the toolbar's own hover word is (.ibl). */
+.fszctx { position: absolute; z-index: 11; }
+.fszctx[hidden] { display: none; }
+.fsztip {
+  position: absolute; z-index: 13; background: var(--ink); color: var(--bg);
+  font-size: var(--t-xs); font-weight: 550; line-height: 1.5;
+  padding: 3px 7px; border-radius: var(--r-sm); white-space: nowrap; pointer-events: none;
+}
+.fsztip[hidden] { display: none; }
+.log .qlines > span.err { color: var(--ink); }
+.pvstep { display: flex; align-items: center; gap: 0; }
+.pvstep .pvframe { display: contents; }
+.pvstep [data-pvgo="-1"] { order: 1; margin-left: 7px; }
+.pvstep .pvframe input { order: 2; width: 58px; flex: none; margin: 0 2px; }
+.pvstep [data-pvgo="1"] { order: 3; }
+.pvstep [data-pvlatest] { order: 4; margin-left: 10px; }
+.pvstep .sb { width: 24px; height: 24px; flex: none; }
+.pvlarge .pvbox { width: 100%; max-height: none; }
+/* A picture looked at in Files (the Creator's seventeenth notes, note 11):
+   the large preview's box with the file's size and pixel size beside its
+   name, the picture fitted whole, a line in its place where it cannot be
+   shown, and the two arrows under it. */
+.fbview .fbvmeta { font-size: var(--t-sm); color: var(--ink3); white-space: nowrap; }
+.fbview .fbvpic { flex: 1; min-height: 0; display: grid; place-items: center; background: var(--sunk); border-radius: var(--r-md); overflow: hidden; }
+.fbview .fbvpic > span { display: contents; }
+.fbview .fbvpic svg { display: block; width: 100%; height: 100%; }
+.fbview .fbvpic > span[hidden] { display: none; }
+.fbview .fbvsay { margin: 0; padding: 0 24px; font-size: var(--t-md); color: var(--ink2); text-align: center; }
+.fbview .fbvsay[hidden] { display: none; }
+.fbview .fbvstep { display: flex; justify-content: center; gap: 6px; }
+.fbview .fbvstep .sb { width: 30px; height: 26px; }
+.badge.brm { background: var(--ink3); }
+.hgonehead { background: var(--sunk); border-bottom: 1px solid var(--soft); border-top: 1px solid var(--soft); padding-bottom: 8px; }
+.hgonehead .qmach { position: static; border: 0; background: transparent; }
+.hgonehead .mini { margin-left: var(--gutter); }
+
+/* A first-frame check and the full range waiting on it are one row and one
+   entry, in Queue and in History (Design/Queue & History, A first-frame check
+   and its job; the Creator's nineteenth notes, note 7, 2026-10-27). Under the
+   name, one line per part, each with its own dot: filled green when done,
+   pulsing amber while it renders, hollow when not started. */
+.ffparts { grid-column: 2 / -1; display: block; margin-top: calc(3px - var(--rowgap)); min-width: 0; }
+.ffpart { display: flex; align-items: center; gap: 6px; font-size: var(--t-sm); font-weight: 400; color: var(--ink2); line-height: 1.5; min-width: 0; }
+.ffpart::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--ink3); }
+.ffpart.done::before { background: var(--ok); border-color: var(--ok); }
+.ffpart.now::before { background: var(--busy); border-color: var(--busy); animation: working 1.7s ease-in-out infinite; }
+.ffpart .fft { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ffpart .ffw { flex: none; color: var(--ink3); }
+.hff { grid-column: 1 / -1; }
+.qst.e-chk { color: var(--ink3); font-weight: 600; }
+/* The check on the entry: its picture, what it is, what came of it. */
+.ffunit { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--sunk); }
+.ffunit .ffu { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ffunit > .mini { flex: none; }
+.ffw1 { font-size: var(--t-sm); font-weight: 600; color: var(--ink); }
+.ffw2 { font-size: var(--t-sm); color: var(--ink2); line-height: 1.45; }
+.ffw2 b { font-weight: 600; color: var(--ink); }
+.ffpic { flex: none; display: block; padding: 0; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; background: #22262c; cursor: zoom-in; line-height: 0; }
+.ffpic svg { position: static; display: block; width: 100%; height: auto; aspect-ratio: 1; }
+.ffpic:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ffunit .ffpic { width: 52px; }
+/* While it waits, the picture sits in the question box beside the question
+   and its two answers; the side column's copy is not drawn then. */
+.jwheld.ffask { display: grid; grid-template-columns: minmax(96px, 40%) minmax(0, 1fr); gap: 12px; align-items: start; }
+.jwheld.ffask .ffq { display: flex; flex-direction: column; gap: 9px; min-width: 0; }

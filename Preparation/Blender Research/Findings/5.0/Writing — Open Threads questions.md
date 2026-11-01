@@ -1,0 +1,701 @@
+# Writing — Open Threads questions (Blender 5.0)
+
+Sources consulted, all inside `Blender Sources/`, all read on **2026-07-30** (the snapshot date):
+the Blender 5.0 manual (`manual_5.0`, including one image from `manual_5.0/_images`), the Blender 5.0
+Python API documentation (`api_5.0`), the Blender 5.0 release notes (`release_notes_5.0`), and Cycles'
+own files (`cycles_5.0`).
+
+I read only the question sheet and files inside Blender Sources/. I did not open any other part of this project.
+
+(No helper agents were used. Everything below was searched and read by me.)
+
+---
+
+## Question 14
+
+**When a render works through a range of frames, how do the writes belonging to one frame stand in time against the writes belonging to the frame after it?**
+
+### How I read the question
+
+I read "the writes belonging to one frame" as the file writing Blender does on account of a single
+frame of an animation render — the saving of that frame's output. The question asks how those writes
+sit in time relative to the same writes for the next frame: strictly one after the other, or
+overlapping. The question was not ambiguous to me in any other way.
+
+### LABEL: the answer is split — each part below carries one of the four labels
+
+The sources settle some of this and are silent on the exact part the question turns on. I have split
+the answer so the labels are not blurred together.
+
+---
+
+### Part A — Each frame is saved after that frame is rendered, and during the run, not at the end. **documented**
+
+The manual says, of an animation render:
+
+> "While rendering stills will allow you to view and save the image from the render buffer when
+> it is complete, animations are a series of images, or frames,
+> and are automatically saved directly out to a drive after being rendered."
+
+- Source: manual, https://docs.blender.org/manual/en/5.0/render/output/animation.html
+- Date read: 2026-07-30
+
+The Python API says the same about the saving being something that happens while the animation is
+running, in the description of a render engine's flag:
+
+> "Save images/movie to disk while rendering an animation. Disabling image saving is only supported
+> when bl_use_postprocess is also disabled."
+
+- Source: Python API documentation, `bl_use_image_save` on
+  https://docs.blender.org/api/5.0/bpy.types.RenderEngine.html
+- Date read: 2026-07-30
+
+There is a per-frame event that fires when a frame has been written:
+
+> "on writing a render frame (directly after the frame is written)"
+
+- Source: Python API documentation, `bpy.app.handlers.render_write` on
+  https://docs.blender.org/api/5.0/bpy.app.handlers.html
+- Date read: 2026-07-30
+
+So the sources do state a per-frame write that happens as the run proceeds, and they state that the
+write for a frame comes after that frame is rendered.
+
+---
+
+### Part B — The run covers the range from start to end, and advances a set number of frames for each frame rendered. **documented**
+
+Command line:
+
+> "-a, --render-anim
+>
+> Render frames from start to end (inclusive)."
+
+- Source: manual, https://docs.blender.org/manual/en/5.0/advanced/command_line/arguments.html
+- Date read: 2026-07-30
+
+The frame range panel describes the run as advancing a set number of frames for each frame rendered:
+
+> "Controls the number of frames to advance for each frame rendered, a value above 1 skips frames."
+
+- Source: manual, https://docs.blender.org/manual/en/5.0/render/output/properties/frame_range.html
+- Date read: 2026-07-30
+
+There is also a named per-frame boundary in the render engine interface:
+
+> "render_frame_finish()
+>
+> Perform finishing operations after all view layers in a frame were rendered"
+
+- Source: Python API documentation, https://docs.blender.org/api/5.0/bpy.types.RenderEngine.html
+- Date read: 2026-07-30
+
+What these words do not carry is that only one frame is in hand at a time. "Render frames from start
+to end (inclusive)" gives the range and its direction; "advance for each frame rendered" gives how far
+the run moves each time; `render_frame_finish()` says a per-frame boundary exists. None of them says
+that nothing of the next frame begins before the frame before it is done. That is Part C.
+
+---
+
+### Part C — Whether frame N's write is finished before frame N+1 begins: **not in the sources**
+
+Nothing I found in the manual, the API documentation, the release notes or Cycles' files states
+whether the write for one frame is complete — file closed, everything flushed to disk — before the
+next frame's rendering or writing starts. There is no statement of a guarantee either way: no
+statement that writes are strictly sequential and non-overlapping, and no statement that a frame is
+written by a background worker while the next frame renders. The words "overlap", "queue",
+"prefetch", "asynchronous" and "in parallel" produce nothing about render output writing anywhere in
+these sources (searches listed below).
+
+The nearest the sources come is indirect, and I give it as inference rather than as fact:
+
+**Inferred:** a frame's image file is complete on disk well before the job ends, not written up at the
+end of the run. The step: the manual says a stopped animation render can be picked up again at the
+frame where it stopped, and that the frames already done are sitting in the output folder —
+
+> "For example, when rendering animations to image file formats the render job can be canceled
+> and resumed at the last rendered frame by changing the frame range."
+> (manual, https://docs.blender.org/manual/en/5.0/render/output/introduction.html)
+
+> "This allows you an easy recovery if there is a problem and you have to re-start the rendering,
+> since the frames you have already rendered will still be in the output directory.
+>
+> Just disable the Overwrite option to start rendering where you left off."
+> (manual, https://docs.blender.org/manual/en/5.0/render/output/animation.html)
+
+For a re-started render to be able to reuse those files, each one must already have been finished
+during the run. What that does *not* settle is the fine ordering the question asks about: it does not
+say whether the finishing of frame N's file happens before frame N+1's rendering begins, or somewhere
+during it. Both readings fit the quoted words.
+
+- Date read: 2026-07-30
+
+---
+
+### Part D — With Placeholders turned on, a write for a frame comes *before* that frame's own image write. **inferred**
+
+The output panel offers two settings. The API documentation describes them:
+
+> "use_overwrite
+>
+> Overwrite existing files while rendering"
+
+> "use_placeholder
+>
+> Create empty placeholder files while rendering frames (similar to Unix ‘touch’)"
+
+- Source: Python API documentation, https://docs.blender.org/api/5.0/bpy.types.RenderSettings.html
+- Date read: 2026-07-30
+
+The manual gives the reason they exist:
+
+> "Primitive Render Farm
+>
+> An easy way to get multiple machines to share the rendering workload is to:
+>
+> Set up a shared directory over a network file system.
+>
+> Disable Overwrite, enable Placeholders in the Render Output panel.
+>
+> Start as many machines as you wish rendering to that directory."
+
+- Source: manual, https://docs.blender.org/manual/en/5.0/render/output/properties/output.html
+- Date read: 2026-07-30
+
+I also opened the picture on that page, `_images/render_output_properties_output_panel.png` (shown on
+the same page as "Output panel."), because the surrounding text is garbled in this snapshot — both
+settings appear there as two lines reading "Image Sequence – Overwrite Image Multi-Layer EXR". The
+picture shows an Output panel with a path field reading `/tmp/` and checkboxes labelled **Overwrite**
+(ticked), **File Extensions** (ticked), **Placeholders** (unticked) and **Cache Result** (unticked),
+plus File Format PNG, Color BW/RGB/RGBA, Color Depth 8/16 and Compression 15%. That the two named
+settings exist under those labels is **documented** by the picture. Nothing about timing is visible in
+it.
+
+**Inferred**, with the step written out: for several machines writing into one shared folder to divide
+the frames between them without two of them doing the same frame, the empty file that stands for a
+frame has to appear before that frame is rendered — otherwise a second machine, which only skips
+frames whose files already exist, would start the same frame. The words for that skipping are the
+manual's, quoted in Part C above: "Just disable the Overwrite option to start rendering where you left
+off." So the placeholder write for a frame comes before that frame's real image write, and therefore
+before anything belonging to the next frame. The sources do not say this outright; they say only
+"Create empty placeholder files while rendering frames" and give the farm recipe above. This inference
+applies only when Placeholders is on; it says nothing about the ordering when it is off. Its default is
+off — "boolean, default False", from the same `use_placeholder` entry on the API page cited just above.
+
+---
+
+### Part E — When the output is a video, successive frames go into one file that keeps growing. **documented for the file, inferred for what that means about ordering**
+
+> "Blender creates one file that holds all the frames of your animation."
+
+- Source: manual, https://docs.blender.org/manual/en/5.0/render/output/animation.html
+- Date read: 2026-07-30
+
+> "Autosplit Output
+>
+> If your video is huge and exceeds 2GiB, enable Autosplit Output.
+> This will automatically split the output into multiple files after the first file is 2GiB in size."
+
+> "It's not recommended to render directly to a video format in the first instance.
+> If a problem occurs while rendering, the file might become unplayable and you will
+> have to re-render all frames from the beginning."
+
+- Source: manual, https://docs.blender.org/manual/en/5.0/render/output/properties/output.html
+- Date read: 2026-07-30
+
+**Inferred:** with a video output, one frame's writes are not a separate finished thing that the next
+frame's writes follow; they are additions to one file that grows as the run proceeds. The step: the
+manual says all frames live in one file, that the file is split once the first one passes 2GiB in size,
+and that an interrupted run can leave it unplayable and force a re-render from the beginning — none of
+which would be so if each frame's contribution stood on its own. Two things the sources do not carry,
+so I do not claim them: whether the file is held open throughout, and whether it is unusable before the
+run ends — the manual says only that a problem during the run "might" leave it unplayable. The sources
+do not describe the moment at which any individual frame's bytes reach that file. I note that the same page offers "Max B-frames"
+and a "Keyframe Interval" with "Set to 0 for 'intra_only', which disables inter-frame video", but the
+sources do not explain what those do to the timing of writing, and I am not going beyond them.
+
+---
+
+### Part F — What counts as "the writes belonging to one frame" can be more than one file. **documented that the extra writes exist; not in the sources for where they fall in time**
+
+The compositor's File Output node writes its own files during a render:
+
+> "The File Output node writes one or more images to disk during rendering or compositing.
+> Each connected input is saved to the specified directory and filename,
+> with the frame number appended to create a sequence."
+
+- Source: manual, https://docs.blender.org/manual/en/5.0/compositing/types/output/file_output.html
+- Date read: 2026-07-30
+
+The 5.0 release notes add, about that node:
+
+> "The **File Output** node now only appends the frame number to the image name when doing an
+> animation render. Rendering through the command line always does an animation render, so no change
+> of behavior is expected."
+
+- Source: release notes, https://developer.blender.org/docs/release_notes/5.0/compositor/
+- Date read: 2026-07-30
+
+The sources say these writes happen "during rendering or compositing", but say nothing about where
+they fall in time against the main output write of the same frame, or against the next frame's writes.
+That part is **not in the sources**.
+
+---
+
+### Not covered
+
+- Whether the write for frame N is fully finished (file closed and flushed) before frame N+1 starts
+  rendering, and whether any part of the two can overlap. This is the heart of the question and the
+  sources do not settle it.
+- Whether writing happens on the same thread as rendering, or on a separate one.
+- What the operating system's own file caching does to when a written frame becomes visible to another
+  program watching the folder.
+- The order, within a single frame, of the main output write against File Output node writes.
+- The moment at which a single frame's data reaches a video file.
+- Anything about several machines each rendering their own frames — beyond the placeholder inference
+  above, the sources describe no coordination.
+- Ordering when frames are named by a comma-separated list on the command line rather than a range.
+- Sequencer renders and scene strips.
+
+### Outside the interface
+
+Nothing in the sources says the ordering is different when Blender is driven from outside its own
+window. The command line option is described in the same terms as the menu action — "Render frames
+from start to end (inclusive)" — and the per-frame write event and the engine's per-frame finishing
+step are described without any mention of the interface. One documented difference does bear on *what*
+writes belong to a frame: the 5.0 release notes say "Rendering through the command line always does an
+animation render", which is why the File Output node appends frame numbers there. Beyond that, the
+sources do not say.
+
+**Brought up to date by the hand tests of 2026-08-30.** This is now settled by test rather than left to the sources. The same five-frame render was run in this version on two machines, once with no window at all and once with Blender's own window open, the render started the way the Render Animation menu item starts it — as a job the interface keeps running alongside. **The ordering was the same in all four runs**: for every frame, the write event for frame N came before the render event for frame N+1, and on disk no file was still growing when the next frame's file appeared. See *What the hand tests settled — question 14* at the foot of this document, tests 1 and 13.
+
+### Operating system
+
+The sources do not say. None of the passages above is qualified by operating system. The only mention
+of one at all is the API's aside that placeholder files are "similar to Unix 'touch'", which is an
+analogy for what the file is, not a statement that the behaviour is limited to that kind of system.
+The 2GiB autosplit figure is given with no operating system attached. The record of looking below
+carries no search on the operating-system names themselves, so this line rests on the passages that
+were read rather than on a search aimed at it.
+
+**Brought up to date by the hand tests of 2026-08-30.** Two operating systems are now settled by test: **macOS**, on the Creator's own Mac, and **Linux**, on a rented machine whose Blender matched the Mac's to the exact build hash. The two agreed on every test. **Windows is still not settled** — not by the sources and not by any test — and four Windows entries are written out ready to run in `Audits/Blender Research/Writing/Hand tests — Open Threads questions.md`. A Windows result must name the edition it was taken on. See *What the hand tests settled — question 14* at the foot of this document.
+
+---
+
+## Record of where I looked
+
+Searched, case-insensitively, across the whole of `manual_5.0`, `api_5.0` and `release_notes_5.0`:
+
+- "one frame at a time", "sequentially", "in sequence", "frame by frame", "next frame",
+  "before the next", "one at a time", "one after", "successive", "subsequent frame", "each frame is",
+  "per frame", "after each frame", "as they are rendered", "as it renders"
+- "simultaneously", "in parallel", "concurrently", "at the same time", "asynchronous",
+  "background thread", "overlap", "queue", "prefetch", "renders ahead"
+- "written to disk", "saved to disk", "directly to disk", "flush", "buffered", "closed",
+  "still being written", "partially written", "incomplete file", "atomic"
+- "placeholder", "while rendering", "touch", "Render Animation", "use_overwrite", "use_placeholder",
+  "render_write", "render_post", "render_pre", "render_init", "render_complete", "render_stats",
+  "render_frame_finish"
+
+Pages opened in full or in part:
+
+- manual: Rendering Animations (`render/output/animation`), Output introduction
+  (`render/output/introduction`), Output properties (`render/output/properties/output`, including the
+  Encoding section and the video tips at the end), Format (`render/output/properties/format`),
+  Frame Range (`render/output/properties/frame_range`), Post Processing
+  (`render/output/properties/post_processing`), File Output node
+  (`compositing/types/output/file_output`), command line arguments
+  (`advanced/command_line/arguments`), the Render menu part of the topbar page
+  (`interface/window_system/topbar`), Cycles performance settings
+  (`render/cycles/render_settings/performance`), the Images part of Display & Views
+  (`render/color_management/displays_views`).
+- manual image: `_images/render_output_properties_output_panel.png`.
+- API: `bpy.app.handlers`, `bpy.types.RenderEngine`, `bpy.types.RenderSettings`, `bpy.ops.render`.
+- release notes: `rendering.md`, `pipeline_io.md`, `compositor.md`, and a scan of the whole folder for
+  "frame" together with writing/saving/output words (which turned up only the File Output naming change
+  and two bug-fix lines).
+- Cycles' files: the whole of `cycles_5.0` outside `source/`, `shader/` and `license/` searched for
+  "frame", "filepath", "write", "save", "output". `engine.py` and `__init__.py` were read around
+  `render_frame_finish`. In what was searched, the only file writing is compiling shader scripts
+  (`osl.py`) and a separate denoising operator (`operators.py`), neither of which is a render output
+  write. `source/` was not searched, so nothing here says what is in there. On what was read, Cycles
+  was ruled out as a source for this question.
+
+Ruled out and why: the video editing and sequencer pages, because the question is about a render
+working through a range of frames rather than about editing strips; the Cycles rendering-settings pages
+other than Performance, because they concern image quality rather than output writing; the EEVEE and
+Workbench pages for the same reason; the physics baking pages, which is where most "resume"/"bake job"
+wording lives and which is a different mechanism from rendering.
+
+---
+
+## What the hand tests settled — question 14
+
+Fourteen tests were run for this question on **2026-08-30** by Claude Opus 5 in Claude Code, in all four researched versions of Blender, on two machines. Everything below is what **Blender 5.0.1** did. The full list, with every script written out in full and every entry's negative result stated, is `Audits/Blender Research/Writing/Hand tests — Open Threads questions.md`.
+
+### The two machines
+
+**The Creator's own Mac.** A MacBook Pro with an Apple M1 Pro chip, macOS **26.6.2** (build 25G83, kernel `Darwin 25.6.0`, arm64), Apple's own graphics and no second card. Blender **5.0.1**, hash `a3db93c5b259`, started from `/Applications/Blender 5.0.1.app/Contents/MacOS/Blender`. No system setting on that machine was changed.
+
+**A rented Linux machine, in the United Kingdom.** Vast.ai instance `49255001`, machine `143739`, rented and destroyed on 2026-08-30. **A container, not a whole machine**, established by reading rather than assumed: `/.dockerenv` is present, `systemd-detect-virt` says `docker`, `/proc/1/cgroup` prints `0::/`, and process 1 is the provider's own launch script. Ubuntu **22.04.4 LTS**, kernel `7.0.0-28-generic`, glibc 2.35, x86-64. An **AMD Ryzen 9 3900X** with 24 visible threads against a quota of **11.52 cores**; **the container misreports its own size** — the ordinary memory reading says 50,423,779,328 bytes while its own ceiling is 34,227,617,792. A 40 GB overlay root. One **NVIDIA GeForce RTX 5060 with 8151 MiB on driver 595.71.05**. **No display server as rented**; `Xvfb` was added to it for the window test, where the graphics are software (`llvmpipe`). Blender **5.0.1**, hash `a3db93c5b259`, at `/opt/blender/5.0/blender`, taken from Blender's own download server as the Linux x64 build — **its hash matches the Mac's exactly**, so any difference between the two machines is a difference of operating system and not of build.
+
+**Every render on both machines was a processor render.** Cycles was set to `CPU` throughout, except in the one test that used EEVEE.
+
+**The two results are never merged.** The Mac settles macOS; the Linux machine settles Linux. **Windows is settled by neither.** Four Windows entries are written out ready to run in the list named above, for the runner's separate Windows batch, and no Windows answer is claimed here.
+
+### How fine the instrument was
+
+This question can be answered wrongly by a slow instrument: a watcher reading the folder once a second sees every frame already finished and calls that "one after the other" whatever Blender did. So the folder was read **every two milliseconds** — on the Mac a reading completed every 3.2 milliseconds on average — and the write was made slow on purpose, a 3000 by 3000 OpenEXR at 32 bits with no compression, 144 megabytes a frame. One frame's write took about 190 milliseconds on the Mac and about 60 on Linux, and the watcher caught **63 separate readings of one file growing** on the Mac and **31** on Linux. Two frames' writes running at the same time could not have been missed at that rate. Blender was also asked, not only watched: a script printed a stamped line at every render event. And on Linux **every file call Blender made was traced**, thread by thread, so one result rests on no polling at all.
+
+Every run used `--factory-startup` and Blender's own default scene, so no add-on and no saved preference could reach any of it, and no `.blend` file was used.
+
+### 1. The order Blender itself reports, driven from outside its own window
+
+Five frames to PNG, 512 by 512, one sample. For every frame in the range, `render_write` for frame N was printed **before** `render_pre` for frame N+1.
+
+- On the **Mac**, the four gaps were +0.000037, +0.000033, +0.000029, +0.000030 seconds. Frames out of order: **0**.
+- On the **rented Linux machine**, +0.000029, +0.000026, +0.000025, +0.000027 seconds. Frames out of order: **0**.
+
+The two machines agreed.
+
+### 2. The disk itself, with a write slow enough to catch in the act
+
+Five frames, 3000 by 3000 OpenEXR, uncompressed. Each file's first appearance, its last change of size, and its final size — on the **Mac**:
+
+```
+frame_0001.exr                     1788091563.251120   725261 1788091563.251120 1788091563.542674    144048845
+frame_0002.exr                     1788091564.555199    37133 1788091564.555199 1788091564.912932    144048845
+frame_0003.exr                     1788091566.072437   119053 1788091566.072437 1788091566.413501    144048845
+frame_0004.exr                     1788091567.588916   901389 1788091567.588916 1788091567.923134    144048845
+frame_0005.exr                     1788091568.687097   295181 1788091568.687097 1788091568.977054    144048845
+```
+
+On the **rented Linux machine**:
+
+```
+frame_0001.exr                     1788091451.528869  2342912 1788091451.528869 1788091451.585546    144048845
+frame_0002.exr                     1788091452.568118    24581 1788091452.568118 1788091452.638303    144048845
+frame_0003.exr                     1788091453.689932    24581 1788091453.689932 1788091453.755406    144048845
+frame_0004.exr                     1788091454.847902  2908160 1788091454.847902 1788091454.909643    144048845
+frame_0005.exr                     1788091456.007697  1179648 1788091456.007697 1788091456.067580    144048845
+```
+
+Whether any file's size changed **after** a later file first appeared: **none** on the Mac, **none** on Linux. No name ever appeared in the folder that was not one of the final frame names, so no file was written under a temporary name and moved into place. The two machines agreed.
+
+### 3. Whether the file is finished at the moment Blender says it is written
+
+The write handler asked Blender for the frame's path with `scene.render.frame_path(frame=scene.frame_current)`, then read the whole file and printed the byte count beside the size the file system reported. On the **Mac**:
+
+```
+EVT 1788091572.569185 readback frame=1 stat=144048845 read=144048845 path=…/frame_0001.exr
+EVT 1788091574.043730 readback frame=2 stat=144048845 read=144048845 path=…/frame_0002.exr
+EVT 1788091575.522654 readback frame=3 stat=144048845 read=144048845 path=…/frame_0003.exr
+EVT 1788091576.829712 readback frame=4 stat=144048845 read=144048845 path=…/frame_0004.exr
+EVT 1788091578.178235 readback frame=5 stat=144048845 read=144048845 path=…/frame_0005.exr
+```
+
+On the **rented Linux machine**:
+
+```
+EVT 1788091459.060616 readback frame=1 stat=144048845 read=144048845 path=…/frame_0001.exr
+EVT 1788091460.292266 readback frame=2 stat=144048845 read=144048845 path=…/frame_0002.exr
+EVT 1788091461.558161 readback frame=3 stat=144048845 read=144048845 path=…/frame_0003.exr
+EVT 1788091462.819726 readback frame=4 stat=144048845 read=144048845 path=…/frame_0004.exr
+EVT 1788091464.016804 readback frame=5 stat=144048845 read=144048845 path=…/frame_0005.exr
+```
+
+Those counts are the same numbers test 2 recorded as the finished size of a frame. The two machines agreed.
+
+### 4. Placeholders on, overwrite off
+
+Five frames, the same large EXR, with `use_placeholder` on and `use_overwrite` off. The empty files appear **one at a time, not all at the start**. On the **Mac**:
+
+```
+frame_0001.exr                     1788091580.555199        0 1788091581.644505 1788091581.844051    144048845
+frame_0002.exr                     1788091581.844051        0 1788091582.875854 1788091583.073377    144048845
+frame_0003.exr                     1788091583.073377        0 1788091584.037991 1788091584.234444    144048845
+frame_0004.exr                     1788091584.234444        0 1788091585.241308 1788091585.445632    144048845
+frame_0005.exr                     1788091585.445632        0 1788091586.464069 1788091586.657087    144048845
+```
+
+On the **rented Linux machine**:
+
+```
+frame_0001.exr                     1788091465.805445        0 1788091466.882108 1788091466.945068    144048845
+frame_0002.exr                     1788091466.945068        0 1788091468.052760 1788091468.114067    144048845
+frame_0003.exr                     1788091468.114067        0 1788091469.308762 1788091469.370299    144048845
+frame_0004.exr                     1788091469.370299        0 1788091470.481073 1788091470.540528    144048845
+frame_0005.exr                     1788091470.542642        0 1788091471.629593 1788091471.691383    144048845
+```
+
+The `at_size` column is zero for every file at first sight, and `first_nonzero` is when the picture began to be written into it. The empty file for a frame appears within a few milliseconds of that frame's render beginning, sits at zero for the whole of that frame's render, and then grows to full size; the next frame's empty file appears within one reading of that. Only one empty file is ever waiting at a time, and the write event fires once per frame, not twice. The two machines agreed.
+
+### 5. A File Output node's file against the main output file
+
+Three frames, the same large EXR, with a File Output node in the compositor writing into a second folder and compositing switched on. Both folders were watched together. On the **Mac**:
+
+```
+file_name0001.exr                  1788092116.119905   123060 1788092116.119905 1788092116.379318    144048756
+frame_0001.exr                     1788092116.382728  1749261 1788092116.382728 1788092116.729169    144048845
+file_name0002.exr                  1788092117.558868  1015988 1788092117.558868 1788092117.811462    144048756
+frame_0002.exr                     1788092117.811462   454925 1788092117.811462 1788092118.062853    144048845
+file_name0003.exr                  1788092118.907781  2179252 1788092118.907781 1788092119.164364    144048756
+frame_0003.exr                     1788092119.167840  1941773 1788092119.167840 1788092119.472132    144048845
+```
+
+On the **rented Linux machine**:
+
+```
+file_name0001.exr                  1788092156.673009    16388 1788092156.673009 1788092156.734730    144048756
+frame_0001.exr                     1788092156.734730    24581 1788092156.734730 1788092156.796428    144048845
+file_name0002.exr                  1788092157.829034   196608 1788092157.829034 1788092157.890634    144048756
+frame_0002.exr                     1788092157.892748  2564096 1788092157.892748 1788092157.954431    144048845
+file_name0003.exr                  1788092158.957788    24580 1788092158.957788 1788092159.020102    144048756
+frame_0003.exr                     1788092159.020102        0 1788092159.022265 1788092159.082691    144048845
+```
+
+The node's file for a frame is written first, the scene's own output file second, and both are finished before the next frame's node file appears. The two machines agreed.
+
+### 6. The preview picture saved beside a frame
+
+Three frames, the same large EXR, with `image_settings.use_preview` on. On the **Mac**:
+
+```
+frame_0001.exr                     1788091595.712052   164109 1788091595.712052 1788091595.940641    144048845
+frame_0001.jpg                     1788091596.133076        0 1788091596.136363 1788091596.195738       236624
+frame_0002.exr                     1788091597.046194   225549 1788091597.046194 1788091597.269297    144048845
+frame_0002.jpg                     1788091597.342775        0 1788091597.350639 1788091597.375500       236624
+frame_0003.exr                     1788091598.322707  1130765 1788091598.322707 1788091598.538741    144048845
+frame_0003.jpg                     1788091598.620222     8192 1788091598.620222 1788091598.651855       236624
+```
+
+On the **rented Linux machine**:
+
+```
+frame_0001.exr                     1788091479.898696    24581 1788091479.898696 1788091479.957939    144048845
+frame_0001.jpg                     1788091480.104024        0 1788091480.106164 1788091480.131460       236850
+frame_0002.exr                     1788091481.269103        0 1788091481.271256 1788091481.330431    144048845
+frame_0002.jpg                     1788091481.404995     4096 1788091481.404995 1788091481.432577       236850
+frame_0003.exr                     1788091482.536798   936997 1788091482.536798 1788091482.598419    144048845
+frame_0003.jpg                     1788091482.671930        0 1788091482.674106 1788091482.699637       236850
+```
+
+The frame's own file is written first and the preview second, and both are finished before the next frame's file appears. The two machines agreed.
+
+### 7. Two views in one frame
+
+Three frames with `use_multiview` on, `views_format` `STEREO_3D`, and the image settings' `views_format` `INDIVIDUAL`, so each view gets a file. On the **Mac**:
+
+```
+frame_0001_L.exr                   1788091602.309273   688397 1788091602.309273 1788091602.528978    144048845
+frame_0001_R.exr                   1788091602.528978  1896717 1788091602.528978 1788091602.784340    144048845
+frame_0002_L.exr                   1788091603.834646        0 1788091603.837801 1788091604.059252    144048845
+frame_0002_R.exr                   1788091604.059252    21325 1788091604.059252 1788091604.286975    144048845
+frame_0003_L.exr                   1788091605.523025    94477 1788091605.523025 1788091605.755139    144048845
+frame_0003_R.exr                   1788091605.755139   815373 1788091605.755139 1788091605.971334    144048845
+```
+
+On the **rented Linux machine**:
+
+```
+frame_0001_L.exr                   1788091486.651033  2233213 1788091486.651033 1788091486.710017    144048845
+frame_0001_R.exr                   1788091486.710017   504925 1788091486.710017 1788091486.771418    144048845
+frame_0002_L.exr                   1788091489.011804  3526656 1788091489.011804 1788091489.071084    144048845
+frame_0002_R.exr                   1788091489.071084    24581 1788091489.071084 1788091489.132663    144048845
+frame_0003_L.exr                   1788091491.415693   741376 1788091491.415693 1788091491.475573    144048845
+frame_0003_R.exr                   1788091491.475573   360901 1788091491.475573 1788091491.533388    144048845
+```
+
+The left view is written first and the right second, and both are finished before the next frame's left view appears. In several runs the left view's last change and the right view's first appearance fall in the **same** reading; at two milliseconds those two events cannot be told apart and nothing is claimed about them. What is claimed is only the gap of one to three seconds before the next frame's files.
+
+### 8. A video container: does the one file grow as the run goes
+
+Forty frames at 1920 by 1920 into a video container, written losslessly with the `HUFFYUV` codec so that the finished file is about 153 megabytes — far larger than any write buffer. At the default settings the same scene compresses down to about twenty kilobytes for a short run, which is small enough to sit inside a write buffer and settle nothing.
+
+| | Mac | rented Linux machine |
+|---|---|---|
+| size changes seen during the run | 58 | 59 |
+| bytes on disk at the half-way frame | 72,613,888 | 72,613,888 |
+| bytes on disk when the last frame was written | 141,557,760 | 145,227,776 |
+| final size | 153,142,267 | 153,143,547 |
+| size changes after the last frame's write | 4 | 2 |
+
+The file grows steadily through the run: about half of it is on disk by the half-way frame and about nine tenths by the time the last frame is written, with the rest added afterwards. The two machines agreed.
+
+### 9. The same video render stopped part way
+
+Run only on the **rented Linux machine**, because a media reader was needed and `ffprobe` was installed there; nothing was installed on the Creator's Mac. The same forty-frame lossless video render was interrupted after six seconds and the part-finished file handed to `ffprobe`.
+
+A file was left behind, **88,057,840 bytes**. `ffprobe` read it as `matroska,webm` with codec `huffyuv` and a duration of 0.959000 seconds, and a decoder walking it with `-count_frames` read **23 frames**. Blender had announced **23** frames written before the interrupt. *(The frame counts differ between versions because the interrupt landed at a fixed six seconds into renders of different speeds, not because Blender differs.)*
+
+**This settles macOS not at all.** It is a Linux result only.
+
+### 10. A list of frames given out of order instead of a range
+
+Started with Blender's own frame argument rather than from a script — `-o <folder>/f_#### -F OPEN_EXR -x 1 -f 5,1,3` — with a script that only set the engine, samples and resolution and rendered nothing. Blender's own lines on the **Mac**:
+
+```
+00:00.303  render           | Saved: '…/f_0005.exr'
+00:00.337  render           | Saved: '…/f_0001.exr'
+00:00.369  render           | Saved: '…/f_0003.exr'
+```
+
+and the watcher's order of first appearance:
+
+```
+1788091793.124075  f_0005.exr
+1788091793.156685  f_0001.exr
+1788091793.189253  f_0003.exr
+```
+
+On the **rented Linux machine**:
+
+```
+1788091522.640343  f_0005.exr
+1788091522.707299  f_0001.exr
+1788091522.756141  f_0003.exr
+```
+
+The frames are written **in the order the list gives them**, not in numeric order. The two machines agreed.
+
+### 11. The other thing a frame writes: Cycles' tile cache
+
+Three frames at 4000 by 4000 with `use_auto_tile` on and `tile_size` 256, with Blender's temporary folder pointed at a folder of the test's own and watched alongside the output folder. On the **Mac**:
+
+```
+cycles-tile-buffer-71682-37246166752-0-0.exr 1788091795.175818        0 1788091795.179493 1788091796.416397      9564035
+frame_0001.exr                     1788091796.419098  1699917 1788091796.419098 1788091796.834487    256064845
+cycles-tile-buffer-71682-37246166752-1-0.exr 1788091796.837686     8192 1788091796.837686 1788091797.964547      9564035
+frame_0002.exr                     1788091797.964547   143437 1788091797.964547 1788091798.381512    256064845
+cycles-tile-buffer-71682-37246166752-2-0.exr 1788091798.385768        0 1788091798.389401 1788091799.536066      9564035
+frame_0003.exr                     1788091799.536066  1912909 1788091799.536066 1788091799.944495    256064845
+```
+
+and the watcher's record of those files going away:
+
+```
+1788091796.416397 GONE  …/cycles-tile-buffer-71682-37246166752-0-0.exr
+1788091797.964547 GONE  …/cycles-tile-buffer-71682-37246166752-1-0.exr
+1788091799.536066 GONE  …/cycles-tile-buffer-71682-37246166752-2-0.exr
+```
+
+On the **rented Linux machine**:
+
+```
+cycles-tile-buffer-4716-129286877374144-0-0.exr 1788091524.561627     8192 1788091524.561627 1788091527.652313      9563900
+frame_0001.exr                     1788091527.655902   672925 1788091527.655902 1788091527.754300    256064845
+cycles-tile-buffer-4716-129285516954304-1-0.exr 1788091527.773407     8192 1788091527.773407 1788091530.546050      9563900
+frame_0002.exr                     1788091530.548394    40960 1788091530.548394 1788091530.647419    256064845
+cycles-tile-buffer-4716-129286384192192-2-0.exr 1788091530.664438        0 1788091530.666610 1788091533.277997      9563900
+frame_0003.exr                     1788091533.280188   679936 1788091533.280188 1788091533.375002    256064845
+```
+
+One tile file per frame, written in the temporary folder during that frame's render, finished and **removed** no later than the reading in which that frame's own output file first appears. The two machines agreed. *(Narrowed by the citation check of 2026-08-30: the watcher stamps every event in one sweep with a single time, so where a removal and the next file's first appearance carry the same stamp — two of the three frames in the Mac run above — the log cannot show which came first. Test 14's system-call trace does show it, and shows the removal about two milliseconds before the frame's own file is opened, but that trace was taken on the Linux machine only and does not speak for the Mac.)*
+
+### 12. The same run with EEVEE instead of Cycles
+
+Five frames, the same large EXR, with the engine set to EEVEE. This version offers the engine under the name **`BLENDER_EEVEE`**, which the script printed. On the **Mac**:
+
+```
+frame_0001.exr                     1788091612.223131   790608 1788091612.223131 1788091612.555802    144048656
+frame_0002.exr                     1788091614.853098    21136 1788091614.853098 1788091615.081851    144048656
+frame_0003.exr                     1788091617.242120   389200 1788091617.242120 1788091617.528619    144048656
+frame_0004.exr                     1788091619.679131  1560656 1788091619.679131 1788091619.960126    144048656
+frame_0005.exr                     1788091622.245981   651344 1788091622.245981 1788091622.551019    144048656
+```
+
+On the **rented Linux machine**:
+
+```
+frame_0001.exr                     1788091511.414315    65536 1788091511.414315 1788091511.481315    144048656
+frame_0002.exr                     1788091511.854213  1982464 1788091511.854213 1788091511.917328    144048656
+frame_0003.exr                     1788091512.312080   888800 1788091512.312080 1788091512.375287    144048656
+frame_0004.exr                     1788091512.804596  3575808 1788091512.804596 1788091512.865890    144048656
+frame_0005.exr                     1788091513.346973        0 1788091513.349143 1788091513.412908    144048656
+```
+
+Whether any file's size changed after a later file appeared: **none** on the Mac, **none** on Linux. The answer is the same as Cycles', so the ordering is not a property of the render engine. The two machines agreed.
+
+### 13. The same render with Blender's own window open
+
+Five frames, the same large EXR, with Blender started **without** `-b`, so it opened its own window, and the render started with `bpy.ops.render.render('INVOKE_DEFAULT', animation=True)` — which is how the Render Animation menu item starts it, as a job the interface keeps running alongside. A script quit Blender once the job reported itself finished, so no hand touched a mouse. On the Mac this was Blender's own window on the Creator's screen; on Linux it was a window on an `Xvfb` display server added to the machine for this test, where the graphics are software.
+
+The script printed `background False` and `WINDOWS 1`, and `INVOKE-RETURNED` printed about twenty milliseconds after the render was started, so the render really was a job running alongside rather than a call that blocks.
+
+For every frame in the range, `render_write` for frame N was printed **before** `render_pre` for frame N+1.
+
+- On the **Mac**, the four gaps were +0.000030, +0.000031, +0.000031, +0.000033 seconds. Frames out of order: **0**.
+- On the **rented Linux machine**, +0.000054, +0.000044, +0.000074, +0.000057 seconds. Frames out of order: **0**.
+
+And the disk agreed. On the **Mac**:
+
+```
+frame_0001.exr                     1788092864.551624  1052941 1788092864.551624 1788092864.812962    144048845
+frame_0002.exr                     1788092865.953791   459021 1788092865.953791 1788092866.213354    144048845
+frame_0003.exr                     1788092867.380481   110861 1788092867.380481 1788092867.595520    144048845
+frame_0004.exr                     1788092868.724118   692493 1788092868.724118 1788092868.949822    144048845
+frame_0005.exr                     1788092870.042461    21325 1788092870.042461 1788092870.266880    144048845
+```
+
+On the **rented Linux machine**:
+
+```
+frame_0001.exr                     1788092590.562256   120861 1788092590.562256 1788092590.636526    144048845
+frame_0002.exr                     1788092594.907864    24581 1788092594.907864 1788092594.975287    144048845
+frame_0003.exr                     1788092596.762069  1273053 1788092596.762069 1788092596.844325    144048845
+frame_0004.exr                     1788092598.336397  2621440 1788092598.336397 1788092598.402866    144048845
+frame_0005.exr                     1788092599.666807  1417077 1788092599.666807 1788092599.724482    144048845
+```
+
+Whether any file's size changed after a later file appeared: **none** on the Mac, **none** on Linux.
+
+### 14. The file calls themselves, traced thread by thread
+
+Run only on the **rented Linux machine**. `strace` has no equivalent on the Creator's Mac that does not need a system setting changed, and no system setting on that machine was touched. Three frames of the same large EXR, traced with:
+
+```
+strace -f -tt -T -s 0 -e trace=openat,creat,write,pwrite64,writev,close,rename,renameat,renameat2,unlink,ftruncate -o trace.txt <blender> -b --factory-startup --python <the script>
+```
+
+For each output file: which thread opened it, when it was first and last written, when it was closed, how many write calls it took, and from which threads. The times are seconds since midnight, as `strace` prints them.
+
+```
+file                           opened opentid    first_w     last_w     closed   writes  writing threads
+cycles-tile-buffer-6166-137063666443968-0-0.exr 43925.378254   6219 43925.380144 43925.872207 43926.201542      462  6219:462
+frame_0001.exr             43926.285692   6166 43926.285957 43926.523162 43926.523268     3006  6166:3006
+cycles-tile-buffer-6166-137063666436800-1-0.exr 43926.763702   6220 43926.764914 43927.214609 43927.566443      462  6220:462
+frame_0002.exr             43927.651219   6166 43927.651486 43927.907452 43927.907556     3006  6166:3006
+cycles-tile-buffer-6166-137063666443968-2-0.exr 43928.157444   6221 43928.158783 43928.632954 43928.950140      462  6221:462
+frame_0003.exr             43929.034486   6166 43929.034720 43929.277361 43929.277470     3006  6166:3006
+
+Did any write to one frame's file happen after the NEXT frame's file was opened?
+  no
+```
+
+Three things this shows that no polling could.
+
+- **The frame's own file is opened, written and closed by the process's first thread** — the thread number is the process number itself — with a little over three thousand write calls each, all from that one thread, and the close following the last write within a tenth of a millisecond.
+- **Cycles' tile buffer is written by a different thread each frame**, and each one is finished and closed before that frame's own file is opened. The first thread then removes it, a couple of milliseconds before the frame's file is opened. There are exactly three unlink calls in the whole trace, one per frame.
+- **There is no rename call anywhere in the trace.** Every file is written under its final name from the first byte.
+
+**This settles Linux only.** The Mac's answer to the same question rests on tests 2 and 3, which cannot see threads.
+
+### What these tests do not settle
+
+- **Windows.** Neither machine speaks for it. The Windows entries are written and waiting.
+- **Several machines writing into one shared folder** — the "primitive render farm" the manual describes — and **an output folder on a network share**. Both need a second computer of the same kind and a file system shared between them, which this project's equipment does not provide, and nothing here established that a rented container can mount a network share at all. This is recorded in the list named above under *Cannot be run*.
+- **How long any of this took on the rented machine.** Its processor is shared and it misreports its own size. Nothing above turns on a duration; every claim is about what came before what, read from one process's own clock.
+- **What a viewport draws, or how fast.** The Linux display server's graphics are software.
+
+---
+
+## Things only a running Blender could settle — what is left
+
+The fourteen tests recorded above settled everything that stood on this list. Two things remain.
+
+1. **Everything on Windows.** Neither machine used above speaks for it. Four entries are written out in full and ready to run in `Audits/Blender Research/Writing/Hand tests — Open Threads questions.md`, under *Windows — for the runner's separate batch*: the order Blender reports with no window, the disk watched with a write slow enough to catch in the act, placeholders, and whether the file is finished at the moment Blender says it is written. **A Windows result must name the edition it was taken on** — every Windows machine this project has read so far turned out to be a Server edition, and a finding that says only "Windows" is not yet an answer.
+2. **Several machines writing into one shared folder**, which the manual's "primitive render farm" hint describes, and **an output folder on a network share**. Both need a second computer of the same kind and a file system shared between them, which this project's equipment does not provide. They are recorded as *cannot be run*, with that reason, in the list named above.
+
+---
+
+2026-08-29 — Claude Opus 5 (Claude Code) — Writing (Open Threads), Blender 5.0

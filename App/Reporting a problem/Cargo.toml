@@ -1,0 +1,10 @@
+[package]
+license.workspace = true
+name = "smoozy-reporting"
+description = "The diary: what it is, what may enter it, and what it costs. The service that writes it is Desktop app and delivery's."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+smoozy-state = { path = "../State, identity and recovery" }
+smoozy-security-and-licence = { path = "../Security and licence" }

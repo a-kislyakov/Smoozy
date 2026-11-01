@@ -1,0 +1,6 @@
+# Signatures — Settings — Architecture item 24, second pass, Blender 5.1
+
+- 2026-08-29 — Claude Opus 5 (Claude Code) — second pass: answered Settings question 17 again from the Blender 5.1 sources, cold, with the record of where it looked written as part of the answer.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — audit of the second pass: eight faults, one High — an absence established by searching, labelled documented, where the same step is labelled *not in the sources* four screens later in the same document.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — citation check: every quote opened against the 5.1 sources. Two changes — one Cycles line range corrected, and a note that the terms searched include no Workbench term, so the missing `render_aa` is a gap in the looking.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — hand tests written back: the fifteen runs of 2026-08-29 recorded as **observed** beside the reading, with the absences keeping their *not in the sources* labels and gaining separate observed answers. Every joined dotted path exercised from a launch instruction. Both standing lines brought up to date, the operating-system line held to macOS on Apple silicon. One of six by-hand items pruned; three remain.

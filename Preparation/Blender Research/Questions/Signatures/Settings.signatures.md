@@ -1,0 +1,5 @@
+# Signatures — Settings (question sheet)
+
+- 2026-08-04 — Opus 5 (Claude Code) — wrote the sheet blind from the register's numbered questions, keeping their numbers and removing every origin, stake, and expected answer.
+- 2026-08-09 — Opus 5 (Claude Code) — added questions 14 and 15 word for word from the register, with the line the register asked for saying which part is new against question 1
+- 2026-08-29 — Claude Opus 5 (Claude Code), the researcher-runner — added questions 18 and 19 blind. 18 asks what values a sample count takes and what happens outside them, worded as questions 14 and 15 are worded for the resolution percentage, with no suggestion that the two settings behave alike. 19 asks what denoising settings a scene or view layer carries; the register's note that Blender 5.2 was seen carrying two the others have not got is left behind, since naming a version difference is exactly what a blind sheet must not do. A line was added for each saying which existing questions it is not repeating.

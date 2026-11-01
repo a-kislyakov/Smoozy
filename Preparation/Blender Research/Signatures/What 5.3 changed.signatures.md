@@ -1,0 +1,7 @@
+# Signatures — What 5.3 changed
+
+- 2026-10-18 — Claude Opus 5.5 (Claude Code) — wrote the hand-over from the Blender 5.3 research to Build: from the fifteen comparisons alone, the 124 questions where 5.3 differs from 5.2, is not established, or reopened an earlier reading, each with one line, the joined answers that name it and every plan and code file that cites it, most-cited first.
+- 2026-10-18 — Gemini 3.8 Flash High — checked the hand-over against the fifteen comparisons and the seam-audit record: ruled all 124 entries, confirmed the kinds, narrowed ten lines to reflect cross-topic runs and bounds, removed a signatures file from Reading a file 3 citations, and verified citation lists across the codebase.
+- 2026-10-18 — GPT-6 (Codex) — Checked all 179 live comparison questions; corrected the 5.3 hand-over's scope, kinds, omissions and citations.
+- 2026-10-18 — Claude Opus 5.5 (Claude Code), the researcher-runner — the line above is GPT-6.1-Sol High's, at high reasoning, run on the Creator's word as a second check; its model name came out cut short. Record: `Audits/Blender Research/Hand-over to Build — checked by GPT-6.1-Sol High.md` (renamed from the shortened name it saved under). 103 lines follow, 12 narrowed, 5 completed, 3 kinds changed, 3 questions added and 4 removed, 6 citation lists corrected; 123 questions on the list.
+- 2026-10-18 — GPT-6.1-Sol High (Codex) — aligned six hand-over entries with their checked comparisons; kinds, counts and citation lists unchanged.

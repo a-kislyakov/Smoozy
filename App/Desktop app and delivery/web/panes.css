@@ -1,0 +1,65 @@
+/* The narrowing, the floor and the seams — the mechanism's own rules, beside
+ * `web/panes.js`. Everything the user actually sees here is drawn by
+ * `the-drawing.css`; what is below is the four things that file cannot carry
+ * because they belong to the mechanism rather than to the drawing.
+ *
+ * **Nothing here invents a number.** Every value is a token from the drawing,
+ * whose own header says the numbers' one home is the mockup.
+ */
+
+/* ── 1. Where each seam sits ─────────────────────────────────────────────────
+ *
+ * A seam sits on the line it moves, so its own position is the width it moves.
+ * **The mockup writes this as an inline `style=` attribute on each seam**, and
+ * **a style written into the document is inert in the shipped application** —
+ * H33's `style-src 'self'` with no unsafe-inline — so it is a rule here
+ * instead, keyed to the seam's own name. One line per seam, and the seam set is
+ * closed.
+ *
+ * **The narrower wording is the true one, and it was corrected on 2026-09-12
+ * (F-14).** This read *an inline style is inert*, which is broader than the
+ * policy and is falsified two files away: the drag works by setting a style
+ * property on `.app` from `web/panes.js`, and the whole drag depends on that
+ * working. What the policy forbids is a style **in the document**; a property
+ * set from a module is not one, and a later builder acting on the broader
+ * reading would conclude the drag cannot work.
+ *
+ * It reads whichever declaration of the property is in force, so a narrowing
+ * step that re-declares the width moves the seam with it for nothing. */
+.seam[data-seam="rail"] { left: var(--rail-w); }
+.seam[data-seam="list"] { left: var(--list-w); }
+.seam[data-seam="preview"] { right: var(--side-w); }
+
+/* ── 2. The floor panel's own box ────────────────────────────────────────────
+ *
+ * The panel is `place-items: center` in the drawing, so its two sentences go in
+ * one box rather than becoming two centred rows with the gap between them
+ * reading as a mistake. */
+.toosmall-in { max-width: 34ch; display: flex; flex-direction: column; gap: 6px; }
+.toosmall-said { font-size: var(--t-lg); font-weight: 620; color: var(--ink); }
+.toosmall-how { font-size: var(--t-md); color: var(--ink2); }
+
+/* ── 3. What was here, and where it went ─────────────────────────────────────
+ *
+ * **Three rules held this file's own proof surface up until 2026-09-13**, when
+ * step 10a piece 2 took that surface down. Two of them moved to
+ * `web/the-rail.css` unchanged — `.pane` and `.pane > .body`, which make the
+ * shell fill the one empty pane `index.html` holds — because the thing they
+ * hold up is no longer a proof surface but the shell itself. **The third went
+ * with the surface** rather than moving: it gave a minimum height to the empty
+ * preview column that surface drew, and there is no such column now.
+ */
+
+/* ── The widths that could not be read ───────────────────────────────────────
+ *
+ * **The failure shape takes no room of its own**: the drawing gives it none,
+ * because everywhere else it sits inside an entry or a row that does. Here it
+ * sits in a line across the foot of the window, below the panes, inset by the
+ * drawing's own gutter and set off by its own rule line. Added 2026-09-19 after
+ * it was seen landing as a bare, clipped line (the Gemini catch-up of step
+ * 10a, Area 4). */
+.panes-unread {
+  padding: calc(var(--rowgap) / 2) var(--gutter);
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}

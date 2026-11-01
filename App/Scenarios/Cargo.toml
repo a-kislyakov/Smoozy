@@ -1,0 +1,64 @@
+# **The scenarios, played as tests — not a module, and nothing ships it.**
+#
+# Step 12 replays the scenarios in `Preparation/Scenarios/` through the app's
+# own acts. **The tests live here rather than in the desktop crate's own test
+# folder**, because every file there moves that crate's file count and every
+# piece of the desktop lane moves it too, so two agents would fight over one
+# number. The map that says so is `Audits/Build/Step 12/Step 12 — what each
+# piece is, which files it owns, and in what order.md`, section 1.
+#
+# **`src/` is the desk machine every scenario test plays against**, and
+# `tests/` holds one file per scenario. Nothing in Smoozy depends on this
+# crate.
+#
+# **Every dependency is a workspace member or a workspace pin already in the
+# tree**, so no version moves and `App/Cargo.lock` gains this crate's own
+# entry and nothing else.
+[package]
+license.workspace = true
+name = "smoozy-scenarios"
+description = "The desk machine the scenario tests play against — OpenSSH's own server behind a line that can go silent, reset or restart, the machine's own program in a throwaway package area, a stand-in Blender, and a local record — and the scenario tests themselves."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# The desktop's own acts: the per-server point, the local record, the
+# submission, and every screen's reading the tests read.
+smoozy-desktop = { path = "../Desktop app and delivery" }
+# The transport the desktop drives, the framing both ends speak, and the
+# carriage link the point plants.
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+smoozy-servers = { path = "../Servers" }
+# The machine's own records: the package area, the active-package pointer, the
+# phase record and the endpoint the supervisor binds.
+smoozy-runtime = { path = "../Rented-server runtime" }
+smoozy-state = { path = "../State, identity and recovery" }
+# **The lock policy, and only for the one helper in `src/lib.rs`** that opens
+# it before a test adds a server, uploads or submits. The open-source change
+# deletes that helper and this line.
+# The development switch that keeps the machine's Telegram worker off the line.
+smoozy-telegram = { path = "../Telegram" }
+smoozy-job-files = { path = "../Job files and outputs" }
+smoozy-keys = { path = "../Keys" }
+smoozy-queue-history = { path = "../Queue & History" }
+smoozy-render-settings = { path = "../Render Settings" }
+smoozy-rendering = { path = "../Rendering" }
+# The material's marker head, which the stand-in Blender prints.
+smoozy-rendering-machine = { path = "../Rendering — machine" }
+smoozy-server-setup = { path = "../Server Setup" }
+# **A whole job's download**, as a History or queue entry's *Download all to…*
+# composes it: the trait its job-record reading implements belongs here.
+# Added 2026-10-24 by the runner's ruling on SC1 and SC8's finding.
+smoozy-download = { path = "../Download" }
+# **An upload through Files, as its own acts take it**: the already-exists
+# answer the box hands back is `File Browser`'s own type, and the machine key a
+# publication through Files marks and the dependency band reads is `Dependency
+# Upload & Remap`'s. Added 2026-10-25 by step 12's SC5, *The user adds a
+# texture and renders again*. Both are workspace members already in the
+# desktop's tree.
+smoozy-file-browser = { path = "../File Browser" }
+smoozy-dependencies = { path = "../Dependency Upload & Remap" }
+tokio.workspace = true
+libc.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true

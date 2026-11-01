@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Editor / OS cruft
+*.swp
+Thumbs.db
+
+# Blender reference sources — kept locally, never in the repo.
+# They skew GitHub's language statistics and nothing in the project builds from them.
+Blender Sources/

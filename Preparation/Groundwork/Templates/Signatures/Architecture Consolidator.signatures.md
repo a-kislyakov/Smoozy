@@ -1,0 +1,4 @@
+# Signatures — Architecture Consolidator
+
+- 2026-08-12 — Claude Opus 5 (Claude Code) — created the template, replacing the standing Consolidator brief for an architecture round. Rules defect or preference as its own step before sorting, with the defect count at the top of the Verdict because the close turns on it; replaces the middle pile with the three escalations that come back to Specs and lifts the cap of two off it; and says outright that where that pile is empty the Verdict is written with no Creator gate at all, since Rule 4's checking half is waived for the stage. Where the pile is not empty, the Creator sees only that pile, put as a moment rather than as a technical choice
+- 2026-08-14 — GPT-5.6 Sol (Codex) — removed defect count as a round trigger, added the audit-boundary and concrete-failure tests, required evidence to reopen settled decisions, and prevented repairs from enlarging the Shape into downstream documents

@@ -1,0 +1,97 @@
+/* **The one failure shape's own rules** — Desktop app and delivery §16, and
+ * Preparation/Design/Whole app.md's *The failure shape*.
+ *
+ * **The numbers are the drawing's and their one home is the mockup**, which is
+ * `web/smoozy.css`'s standing rule. Nothing below invents a colour, a size or a
+ * radius: every value is a token from `the-drawing.css`, which is the mockup's
+ * own stylesheet lifted whole by piece B.
+ *
+ * **What this file adds, and why it is small.** The mockup draws the failure
+ * shape eleven times with five class prefixes — `.qfail` on a job's entry,
+ * `.svfail` on a server row, `.tffail` under a transfer row, `.rdfail` in a
+ * key box, `.cstate .cbad` in a statement block — because a mockup has no
+ * components. This application has one shape, so it uses `.qfail` and
+ * `.svfail` as they were lifted and adds only the parts one shape needs that
+ * eleven copies did not: a control row that always has the same order in it, a
+ * value list, and a cross.
+ */
+
+/* The controls, in the shape's own order. The order is decided in
+ * `the-failure-shape.js` and never here — a rule that reordered them would be a
+ * second answer to the question Design already answered. */
+.failure-acts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* The raw-text control. **It names whose text it is** — *Blender output*, *What
+ * the server said* — which is Design's own rule, and it takes the same weight
+ * as the report control beside it. Lifted from `.log button`'s own
+ * declarations, which is the control the drawing uses for exactly this. */
+.failure-words {
+  font: inherit;
+  font-size: var(--t-sm);
+  font-weight: 550;
+  cursor: pointer;
+  color: var(--ink2);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 3px 9px;
+}
+.failure-words:hover { border-color: var(--ink3); color: var(--ink); }
+.failure-words:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The cross. **Only ever drawn on a condition**, which the script decides from
+ * the record's kind — a job's recorded ending is not a condition and carries no
+ * cross at all. It sits last, after the report control. */
+.failure-clear {
+  margin-left: auto;
+  font: inherit;
+  font-size: var(--t-base);
+  line-height: 1;
+  color: var(--ink3);
+  background: none;
+  border: 0;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.failure-clear:hover { color: var(--ink); }
+.failure-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Values beside the sentence — a path, a server's name, a host. **Each under
+ * its own name and none of them inside the sentence**: X7, and the point never
+ * touches one. The fixed-width face is Design's closed list of what lines up in
+ * a column. */
+.failure-values {
+  margin: 0;
+  padding-left: 15px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  font-size: var(--t-sm);
+}
+.failure-values dt { color: var(--ink3); }
+.failure-values dd { margin: 0; color: var(--ink2); overflow-wrap: anywhere; }
+
+/* Two failures standing at once are two, with a gap between them and nothing
+ * drawn across them — M7a: nothing composes a third statement about a shared
+ * cause, and a heading over the pair would be one. */
+.failures {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: var(--gutter);
+}
+
+/* The collapsed form on a list row: dot, sentence, cross, on one line. */
+.failure-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.failure-row .failure-said { margin: 0; }
+.failure-row .failure-acts { margin-left: auto; }

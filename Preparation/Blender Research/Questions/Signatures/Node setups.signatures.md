@@ -1,0 +1,3 @@
+# Signatures — Node setups (question sheet)
+
+- 2026-08-06 — Opus 5 (Claude Code) — wrote this sheet blind when the Creator opened the stage again and *Node setups* took its number as one of three new topics. Both questions were written from the [Question register](../../Question%20register.md), carrying none of its origins or stakes. *(Filed late, on 2026-08-29, by the researcher-runner. The sheet was written on the date above and this file was never created with it, so the sheet stood with no companion for three weeks. Established from the commit that added it, `59a817c6`, whose message names the round, the model and the sheets it wrote. Nothing about the sheet was changed.)*

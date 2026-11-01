@@ -1,0 +1,110 @@
+/* **All servers — only what this shape needs that the drawing did not carry.**
+ *
+ * `web/the-drawing.css` is the mockup's own stylesheet, lifted, and **nobody
+ * edits a declaration in it by hand** — a test compares every declaration in it
+ * against the mockup's. **The classes this screen draws already exist there**:
+ * `svhead`, `svlist`, `svrow`, `svmain`, `svname`, `svaddr`, `svextra`,
+ * `svkeynote`, `svfail`, `svwork`, `svhw`, `svacts`, `cbtn`, `cdot`, `svfoot`,
+ * `svempty`, `emptybox`, `esteps`, `frm`, `fld`, `krow`, `swgroup`, `swatches`,
+ * `sw`, `swnote`, `mwarn`, `togs2`, `box`, `mnote2`, `choices`, `choice`,
+ * `svoff`, `cb`, `alertnote`, `svbad`, `ctx`, `modal`, `mbox`, `msub`, `mrow`,
+ * `lnkb`, and `sv-notool`. **Not one of them is redeclared here.**
+ *
+ * What is here is four things and each says which.
+ */
+
+/* ── 1. Three values the mockup carries in an inline `style=` attribute ─────
+ *
+ * **H33 makes every one of them inert** — `style-src 'self'`, so an inline
+ * style in the shipped application does nothing, reports nothing, and the thing
+ * it was meant to style simply draws wrong.
+ *
+ * The mockup writes `style="margin:-2px 0 10px"` on the Add dialog's own link
+ * back to the guidance, and `style="padding-left:0"` on the two refusal lines
+ * under the form — the second because `.alertnote`'s own 91-pixel inset is for
+ * a different form, and here the empty label cell is what insets the line.
+ */
+.svagain { margin: -2px 0 10px; }
+.frm .alertnote { padding-left: 0; }
+
+/* The mockup writes `style="text-align:left"` on the port in `sv-add` and
+ * `sv-edit` (P2, the Creator's note 2 on 0.1.7): the port keeps `.w-frame`'s
+ * width and reads from the left like the fields around it. `.w-frame` itself
+ * is untouched, so every frame-number field stays right-aligned. Written with
+ * the element and both classes so it outranks `.w-frame` whichever sheet loads
+ * last. */
+input.fld.svport { text-align: left; }
+
+/* ── 2. Fields the mockup drew as spans and the application draws as inputs ──
+ *
+ * A mockup has nothing to type into, so `.fld` is a `<span>` there. **The
+ * drawing's own look is kept exactly** and what is added is only what an input
+ * needs that a span does not: the interface face rather than the engine's, and
+ * no outline of its own where the drawing already gives one on focus.
+ */
+input.fld,
+.svnamefield input {
+  font: inherit;
+  font-size: var(--t-md);
+  color: inherit;
+  background: none;
+}
+input.fld { background: var(--bg); }
+.svnamefield { display: flex; align-items: center; cursor: text; }
+.svnamefield input { border: 0; padding: 0; min-width: 0; flex: 0 1 12em; }
+.svnamefield input:focus-visible { outline: none; }
+.svkeyfield { flex: 1; min-width: 0; width: 100%; }
+
+/* ── 3. A swatch the user can press ─────────────────────────────────────────
+ *
+ * `.sw` is drawn as a span. **The badge's one job is *which server***, so it is
+ * pressable here and the drawing's own size, radius and two states are left
+ * exactly as they are.
+ */
+button.sw { padding: 0; font: inherit; border-color: transparent; }
+
+/* ── 4. The row's own menu, placed where it was asked for ───────────────────
+ *
+ * **`.ctx` is the drawing's own panel** and every rule inside it — the width,
+ * the ground, the border, the shadow, the item, its hover, `.hd`, `.off`,
+ * `.dg`, and the rule between slots — is the drawing's. What the drawing has no
+ * rule for is **where one sits**, because the mockup draws all five side by
+ * side under `.menuset` to show them at once rather than opening one.
+ *
+ * The two numbers arrive as custom properties set from the page, which is the
+ * same route `web/panes.js` already takes for the three seam widths. **They are
+ * values rather than declarations**, so H33's rule is kept.
+ */
+.svctx {
+  position: fixed;
+  left: var(--svctx-x, 0);
+  top: var(--svctx-y, 0);
+  z-index: 30;
+}
+
+/* The dialogs sit inside `#serversview`, which the drawing already makes the
+ * positioned box `.modal`'s `inset: 0` resolves against. This holder exists so
+ * one line can close whatever is open, and it takes no room of its own. */
+.svdialogs { display: contents; }
+
+/* The line that says an act is not built. It wears the same shape as the one
+ * statement above the list, which is the drawing's `.sv-notool`, and adds
+ * nothing but its own hiding. */
+.svnotyet[hidden] { display: none; }
+
+/* ── 5. What step 10a round 1 added ─────────────────────────────────────────
+ *
+ * The line inside a dialog where an act that did not land is said (item 12),
+ * and the place the list goes when the list could not be read (item 4). Each
+ * is hidden with the attribute. (The key control's own button rule, item 2,
+ * went when the key field became a dropdown.) */
+.svfailed[hidden],
+.mbox .mwarn[hidden],
+.alertnote[hidden] {
+  display: none;
+}
+
+/* Shared boxes must cover whichever screen opened a rail action. */
+body > .svdialogs > .modal { position: fixed; }
+
+body > .svdialogs > .svnotyet { position: fixed; left: 8px; bottom: 8px; z-index: 30; }

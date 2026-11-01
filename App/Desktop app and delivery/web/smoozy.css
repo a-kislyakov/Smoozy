@@ -1,0 +1,56 @@
+/* **Every piece's own stylesheet arrives here, and a piece adds one line.**
+ *
+ * The page's whole file layout rule is at the head of smoozy.js. This list is
+ * the third of the three shared files it names. An @import has to come before
+ * any rule, which is why the list is above everything including this file's own
+ * header — the header follows it.
+ *
+ * **The order of the list decides one thing and only one**: the drawing comes
+ * first, so a rule of the application's own can be the later of two at equal
+ * weight. Everything after it uses the tokens rather than redefining them, and
+ * the cascade resolves a custom property wherever in the document it was
+ * declared, so nothing else here turns on the order.
+ */
+@import "the-drawing.css";
+@import "selecting-text.css";
+@import "chrome.css";
+@import "menus.css";
+@import "panes.css";
+@import "the-failure-shape.css";
+@import "the-underway-shape.css";
+@import "said-once.css";
+@import "the-machines-own-words.css";
+@import "the-rail.css";
+@import "the-queue.css";
+@import "the-history.css";
+@import "servers.css";
+@import "keys.css";
+@import "a-server.css";
+@import "files.css";
+@import "set-up.css";
+@import "render-settings.css";
+@import "the-dependency-check.css";
+@import "transfers.css";
+@import "settings.css";
+@import "telegram.css";
+@import "reporting.css";
+
+/* Smoozy's stylesheet — the list above, and nothing else.
+ *
+ * **The numbers are the drawing's. Their one home is the token block at the top
+ * of `Preparation/Design/Mockup/Smoozy.html`**, and `Preparation/Design/Design
+ * values.md` says what each one means. Change a value there first, then here.
+ *
+ * **The mockup's stylesheet is lifted whole into `the-drawing.css`**, by step
+ * 10a piece B on 2026-09-08, and there is no rule in this file at all any more.
+ *
+ * **THE ONE THING THAT DIFFERS FROM THE MOCKUP IS THE NARROWING'S MECHANISM,
+ * AND IT IS NOT A VALUE.** The mockup narrows with CSS container queries; the
+ * application narrows from `.app`'s own measured width, in `panes.js`, at the
+ * same five boundaries with every declaration untouched — because container
+ * queries need macOS 13 and the built artifact runs from 10.13, so on every Mac
+ * below Ventura the four steps and the 680 floor silently did not happen at
+ * all. `Desktop app and delivery` H12 forbids exactly that. The ruling is
+ * `Audits/Build/Step 10a/Ruling — how the narrowing is built.md`, and this is
+ * the one place the difference is stated.
+ */

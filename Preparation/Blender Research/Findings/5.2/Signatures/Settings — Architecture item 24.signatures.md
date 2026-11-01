@@ -1,0 +1,6 @@
+# Signatures — Settings — Architecture item 24, Blender 5.2
+
+- 2026-08-29 — Claude Opus 5 (Claude Code) — answered Settings question 17 from the Blender 5.2 sources in a blind pass, and recorded the checks needed beyond those sources.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — audit of question 17: eight faults, five of them reasoning dressed as reading, and two standing lines that said *these four names* where the answer gives six — leaving two settings unanswered on both lines.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — citation check: every quote opened against the 5.2 sources and every hand-test run repeated on the Creator's Mac. One change — "Both point back to the argument list as the complete list" corrected to the one page that does; the index page carries no such sentence.
+- 2026-08-29 — Claude Opus 5 (Claude Code) — hand tests written back: the fifteen runs of 2026-08-29 recorded as **observed** beside the reading. The route `scene.display.render_aa` settled by run, which this answer had left unwritten; whether it counts as a sample count left as the judgement it is, with Workbench's own panel photographed. Both standing lines brought up to date, the operating-system line held to macOS on Apple silicon. Five of six by-hand items pruned; three remain.

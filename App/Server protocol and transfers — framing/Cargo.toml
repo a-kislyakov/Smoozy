@@ -1,0 +1,18 @@
+[package]
+license.workspace = true
+name = "smoozy-framing"
+description = "The half of `Server protocol and transfers` that both ends speak: §2's request framing and versioning over the machine-local endpoint, and the shapes a result carries. It opens no connection and drives none."
+version.workspace = true
+edition.workspace = true
+
+# **Nothing here reaches a network, a disk or another process.** That is the
+# whole reason this crate exists, and it is a property to be kept rather than a
+# happy state: the machine-side program `smoozy-server` depends on this crate
+# and on none of the connection half, so the SSH client and its C cryptography
+# are not in that program's tree at all.
+
+[dependencies]
+# The correlation identity's own kind, and the two identity kinds a request may
+# carry — `State, identity and recovery` §2.1 and §2.2, taken whole rather than
+# re-shaped here. It brings no C build script and no transport with it.
+smoozy-state = { path = "../State, identity and recovery" }

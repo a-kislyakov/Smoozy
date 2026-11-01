@@ -1,0 +1,70 @@
+[package]
+license.workspace = true
+name = "smoozy-runtime"
+description = "How the server package is placed, committed, rolled back, repaired and replaced on a machine whose boot return is two arrangements rather than one; what the supervisor is and what restarts it; how every worker is started, arbitrated and stopped; how work waiting for a person is held; and how a render's two streams and its exit are captured and reported."
+version.workspace = true
+edition.workspace = true
+
+# **This package carries no binary, and where the program went is the point.**
+# `smoozy-server`, the program the rented machine runs, was a target of this
+# package at step 8a and is now `App/Rented-server runtime — program/`, a member
+# of its own. **This module is one plan in two folders**, the way
+# `Server protocol and transfers` has been since step 8a: this folder is what the
+# supervisor, the endpoint, the workers and the package transaction *are*, and
+# that folder is the program that runs them.
+#
+# **Why it moved.** Cargo's dependencies belong to a package rather than to a
+# target, so a binary here could reach only what this library reaches — and every
+# crate holding machine-side work the supervisor must call depends on this one, so
+# reaching them from here would close a loop the resolver refuses. A package
+# nothing depends on can depend on all of them. The ruling is at
+# `Audits/Build/The machine program/Decisions record.md` and that folder's own
+# manifest carries the reasoning and the quotation behind it.
+#
+# **What this package must go on being able to do is compile for the machine's own
+# target at the desk**, which is what step 8a's framing split bought: nothing here
+# may take a dependency that reaches `smoozy-server-protocol`, whose SSH client
+# brings a C build script the desk has no cross toolchain for.
+
+[dependencies]
+# Identities, the observed reading and its clock, the durable operation record
+# and its four outcomes — `State, identity and recovery` §2, §3, §5.1. Taken
+# whole rather than re-shaped here, which is that document's own rule.
+smoozy-state = { path = "../State, identity and recovery" }
+
+# The diary's kinds, for §15's declaration — which is a declaration of none.
+smoozy-reporting = { path = "../Reporting a problem" }
+
+# §2's request framing, and the free-space reading's own shape and its stated
+# absence — `Server protocol and transfers` F1, F3 and F16, which V7 says owns
+# the mechanism. M4a's capture ceiling and V12's per-path reading are both taken
+# through it rather than through a second shape invented here.
+#
+# **This is the framing half of that module and not the connecting half, and
+# that is the whole point.** This crate carries `smoozy-server`, the program the
+# rented machine runs, and that machine is the far end of an SSH connection and
+# never opens one. Depending on the connecting half put the desktop's SSH client
+# and that client's C cryptography into this program's tree, which cost weight
+# in the artifact the desktop uploads to every rented machine — whose byte length
+# and digest the signed release manifest carries, `Server protocol and transfers`
+# B8 and B10 — and made a Linux build impossible at the desk, the C library's
+# build script wanting a cross toolchain that is not installed. Split at step 8a.
+smoozy-framing = { path = "../Server protocol and transfers — framing" }
+
+# **The acting half's own weight, and none of it is new to the workspace.**
+# Each is already pinned in `App/Cargo.toml` and already in the tree, so nothing
+# outside the workspace was added and no pin was loosened.
+
+# The machine's own calls, reached directly rather than through a shell — the
+# locking of the package claim (`flock(2)`), the signal a termination contract
+# names (`kill(2)`), and the effective login the grant must name (`geteuid(2)`,
+# `getpwuid_r(3)`). The acting half runs on the rented Linux machine.
+libc = { workspace = true }
+
+# The written form of this document's own four durable stores in the package
+# area — the phase record (G2), the hold record (U2), the setup-in-progress
+# state (P1) and the boot-registration record (K16). The form is a Build
+# decision recorded in this module's decisions record; the stores themselves
+# are this document's, not another's.
+serde = { workspace = true }
+serde_json = { workspace = true }

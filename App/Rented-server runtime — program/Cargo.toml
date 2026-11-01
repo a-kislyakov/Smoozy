@@ -1,0 +1,159 @@
+# **The program the rented machine runs, and it is a member of its own.**
+#
+# `The shape` says the server package holds three executable classes, and
+# `Server protocol and transfers` B8 requires the signed release manifest to name
+# one fixed entry-point name per artifact — so the artifact is one executable file
+# and this package produces it. **The name is fixed and does not move with the
+# package version**, because G7 makes the boot registration start whatever the
+# active-package pointer names.
+#
+# **This is one module in two folders, the way `Server protocol and transfers` has
+# been since step 8a.** The plan both folders answer to is
+# `Preparation/Architecture/Rented-server runtime.md`. `App/Rented-server runtime/`
+# is the library — the supervisor, the machine-local endpoint, every worker's
+# lifecycle, the machine half of the package transaction — and this folder is the
+# program that runs them.
+#
+# **Why the program is not a target of that library's package, which is where it
+# was built at step 8a.** Cargo's dependencies belong to a package and not to a
+# target, so a binary inside the library's package can reach only what the library
+# reaches. The machine-side work the supervisor has to call — reconciliation's
+# disposition table, the render worker's capture loop, the machine-local queue,
+# the setup run — lives in crates that depend on the library, so a library that
+# reached them would close a loop, and **Cargo's own manual says the resolver does
+# not allow one**: *"Usually the resolver does not allow cycles in the graph, but
+# it does allow them for dev-dependencies"*, and *"If possible, try to split your
+# package into multiple packages and restructure it so that it remains strictly
+# acyclic"* — the Cargo Book, *Dependency Resolution*, section *dev-dependency
+# cycles*, https://doc.rust-lang.org/cargo/reference/resolver.html, read
+# 2026-09-06. **A package nothing depends on can depend on all of them**, which is
+# what this one is. The ruling and its reasoning are at
+# `Audits/Build/The machine program/Decisions record.md`.
+#
+# **What must not come back into this package's tree is the SSH client and its C
+# cryptography.** The machine is the far end of an SSH connection and never opens
+# one. Step 8a's second piece took that weight out — 142 dependency crates down to
+# 19 — and it is what lets a Linux check of this program be taken at the desk and
+# what keeps the artifact the desktop uploads over a metered link small, its byte
+# length and digest being carried in the signed release manifest,
+# `Server protocol and transfers` B8 and B10. **So a dependency added here is
+# weighed against that** and a crate that reaches
+# `smoozy-server-protocol` may not be added at all.
+[package]
+license.workspace = true
+name = "smoozy-server"
+description = "The program a rented machine runs: the SSH command adapter, the server supervisor and the operation workers, which are `The shape`'s three executable classes as three roles of one binary."
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "smoozy-server"
+path = "src/main.rs"
+
+[dependencies]
+# The library half of this module: what the supervisor is, what the endpoint is,
+# what a worker of each kind is, and the machine half of the package transaction.
+smoozy-runtime = { path = "../Rented-server runtime" }
+
+# §2's request framing — the vocabulary both ends speak. **The framing half of
+# `Server protocol and transfers` and not the connecting half**, for the reason
+# in the note above.
+smoozy-framing = { path = "../Server protocol and transfers — framing" }
+
+# Identities, and the durable operation record's own form —
+# `State, identity and recovery` §2 and §5.1.
+smoozy-state = { path = "../State, identity and recovery" }
+
+# **The machine halves of `Queue & History` and `Rendering`, taken at step 10c
+# piece 3** — the machine-local queue, the per-job note, the command records,
+# reconciliation and the held jobs' release, which the supervisor writes and
+# runs, and the render worker, which it starts. Each is the half of its module
+# that opens no connection, split out so that this program could take it
+# without the SSH client. **They bring the other five machine halves with them**
+# — `Servers — values`, `Server Setup — machine`, `Job files and outputs —
+# machine`, `Render Settings — machine` and `Dependency Upload & Remap —
+# machine` — and nothing else: no crate from outside the workspace that this
+# tree did not already hold. `tests/the_trees_shape_holds.rs` names all seven.
+smoozy-queue-history-machine = { path = "../Queue & History — machine" }
+smoozy-rendering-machine = { path = "../Rendering — machine" }
+
+# **`Job files and outputs`' machine half, named directly at step 10c piece 5**
+# — it was already in this tree beneath the two above, so naming it adds no
+# crate. The supervisor reads the recorded root (L1) and the job's published
+# manifest (M1) when it writes a job record, and composes the job record
+# directory from them (N3).
+smoozy-job-files-machine = { path = "../Job files and outputs — machine" }
+
+# **The render worker's own reads, named directly at step 10c piece 5's second
+# sitting** — the remap material (`Dependency Upload & Remap` M10), the settings
+# payload (`Render Settings`), the version the manifest names (`Server Setup`
+# B2) and the cards `Rendering` L23 looks up (`Servers`), which the render worker
+# composes its attempt from; the per-kind field's written form (`serde` and
+# `serde_json`); and the available figure `Rented-server runtime` M4a's ceiling
+# is taken from (`libc`'s `statvfs`). **Every one was already in this tree**
+# beneath the machine halves above and beneath `smoozy-runtime`, so naming them
+# adds no crate — `tests/the_trees_shape_holds.rs` holds the count.
+smoozy-dependencies-machine = { path = "../Dependency Upload & Remap — machine" }
+smoozy-render-settings-machine = { path = "../Render Settings — machine" }
+smoozy-server-setup-machine = { path = "../Server Setup — machine" }
+smoozy-servers-values = { path = "../Servers — values" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+libc = { workspace = true }
+
+# **`Server protocol and transfers` S23's digest function, named directly on
+# 2026-10-04 (the 38's piece 7)**, so the file-inspection worker's contents
+# reading (`Dependency Upload & Remap` Q3) digests a file on the machine with
+# the very function the desktop's own digest is. **It was already in this
+# tree** beneath `smoozy-server-setup-machine`, whose fetch checks a Blender
+# archive with it, so naming it adds no crate — `tests/the_trees_shape_holds.rs`
+# holds the count.
+sha2 = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+# **The workspace's one HTTPS client, taken here on the build runner's R1
+# ruling of 2026-09-19.** `Server Setup` B4 puts the Blender fetch on the
+# machine's own line, so without it the setup worker cannot fetch a Blender at
+# all and step 6's milestone cannot be met; the Telegram role worker's inside
+# has waited on the same cost since 2026-09-07 and one decision pays both.
+#
+# **It is the client the desktop already carries**, chosen and measured on
+# 2026-09-07 and pinned in the workspace manifest, so there is no second HTTPS
+# implementation in this build. **It reaches `smoozy-server-protocol` nowhere**:
+# it is blocking and brings no asynchronous runtime. **Its cryptography is
+# `rustls`'s own `ring` provider since 2026-10-24** (the Creator's eighteenth
+# notes, note 3), replacing `rustls-graviola`, whose processor floor stopped
+# setup on older rented servers. `ring` carries C and assembly, compiled for
+# this program's Linux target at the desk by `App/.cargo/config.toml`.
+#
+# **What it costs this program is written down in the piece's own account** and
+# is watched by `tests/the_trees_shape_holds.rs`'s count, which moved with it.
+#
+# **It, and the Telegram crate below, are taken on Unix systems only**, since
+# 2026-10-24. Every module that uses them is gated the same way, and on
+# Windows this program is a stub that says it is not for that system. So the
+# Windows check of this program at the desk (`cargo check --target
+# x86_64-pc-windows-msvc -p smoozy-server`) builds no C: `ring`'s cannot be
+# compiled for Windows here, with no Windows C headers on the Mac.
+ureq = { workspace = true }
+rustls = { workspace = true }
+
+# **The Telegram bot's whole inside, taken as an ordinary dependency on
+# 2026-10-16** — the second piece of the Telegram worker's map (its section
+# 2.6), when `smoozy-server work telegram` became the role worker itself rather
+# than a mode refused by kind. **It adds exactly one crate to this program's
+# tree, itself**: the client, `base64` and `getrandom` it needs were all here
+# already, and the SSH client does not come with it — its own
+# `tests/the_crates_shape_holds.rs` forbids the crates that would bring it. Until that day it was a development dependency only, for the test
+# that follows a job sent with no name from the submission to the phone's words
+# (`Telegram` R7, Vast-pass fix piece 3). `tests/the_trees_shape_holds.rs`
+# names it and holds the count.
+smoozy-telegram = { path = "../Telegram" }
+
+[dev-dependencies]
+# **A manifest for the tests to publish before they submit**, from the one
+# composition `Rendering — machine` keeps for tests behind its `testing`
+# switch. Development dependencies reach no built artifact, so the switch is
+# never on in the program a rented machine runs.
+smoozy-rendering-machine = { path = "../Rendering — machine", features = ["testing"] }
+

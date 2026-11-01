@@ -1,0 +1,53 @@
+/* **The Queue screen's own rules.** One, and from the 38's piece 8 the
+ * dragging and the row's menu at the end, which the drawing draws still and
+ * so has no rule for.
+ *
+ * **`the-drawing.css` already carries every class this screen draws** — the
+ * split, the list, the three banners, the server headings, the rows, the two
+ * bars, the entry and its groups, the preview and the boxes are all lifted from
+ * the mockup and a test compares every declaration in that file against the
+ * mockup's. **What is here is only what this shape needs that the drawing did
+ * not carry**, and the first is a value the drawing writes as an inline
+ * `style=` attribute, which H33 makes inert in the shipped application.
+ *
+ * The page half's own rules are at the head of `web/the-queue.js`. */
+
+/* The part-submission banner's control while it cannot act, which the drawing
+ * writes as `style="opacity:.45"`. **The control stays exactly where it was and
+ * reads unavailable, with the reason beside it** — the same shape `.ax-off`
+ * gives a control a lock closes, and the same reason: a button that disappeared
+ * would make the app look different rather than unavailable. */
+.qbacts .btn[disabled] { opacity: .45; cursor: default; }
+
+/* **Moving a row up its server's queue — the 38's piece 8.** The row, or a
+ * group's whole block, lifts while it is held, the look the drawing gives a
+ * search folder being dragged (`.sfrow.sflift`); the line where it would land
+ * is the drawing's own `.sfdrop`, which is not tied to that list. No gap
+ * opens, so the list does not jump about under the pointer. */
+.qrow.qlift, .qgroup.qlift { background: var(--bg); box-shadow: 0 7px 18px -7px var(--shade); border-radius: var(--r-sm); position: relative; z-index: 2; cursor: grabbing; }
+.qlift .qgrip { cursor: grabbing; }
+
+/* **A row's own menu**, placed under the row it belongs to — the way
+ * Transfers places its one menu, rather than at a position a style would have
+ * to carry. The panel itself is the drawing's `.ctx`. */
+.ctx.queue-ctx { margin: 2px 0 4px 14px; width: max-content; }
+
+/* **The one or two lines under *Writing to*'s path where the job's folder
+ * fell back** — the drawing writes them as `style="display:block;margin-top:3px"`
+ * on each span in `q-fallback` and `q-fallchosen`. The Creator's second notes,
+ * piece 4's queue half. */
+.facts dd .qfell { display: block; margin-top: 3px; }
+
+/* The drawing supplies the fixed row. Real held pictures fit whole at both sizes. */
+.pvlarge .preview { aspect-ratio: auto; }
+.pvlarge .preview .thumb { width: 100%; height: 100%; object-fit: contain; }
+.pvlarge .preview img { min-height: 0; }
+.pvstep .mini:disabled { opacity: .45; cursor: default; }
+.pvframe input { width: 9ch; }
+.pvframe { justify-content: center; }
+
+/* **The check's picture in a first-frame pair's box** — the drawing draws it
+ * as a vector (`.ffpic svg`), and the shipped entry holds a real picture, so
+ * the same square holds it whole, never cropped or stretched (`Design/Queue &
+ * History § The rest of the entry`). The nineteenth notes, note 7. */
+.ffpic img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; }

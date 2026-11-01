@@ -1,0 +1,10 @@
+# Built by the workflow, never committed.
+wails/build/
+wails/frontend/dist/
+wails/go.sum
+tauri/dist/
+tauri/src-tauri/target/
+tauri/src-tauri/gen/
+tauri/src-tauri/icons/
+tauri/src-tauri/Cargo.lock
+reading/

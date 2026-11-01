@@ -1,0 +1,54 @@
+[package]
+license.workspace = true
+name = "smoozy-render-settings-machine"
+description = "The half of `Render Settings` the rented machine's own program may take: the settings half of the recorded reading and the names in it, the samples imposition set, the view-layer pin, the engine identifier's provenance, the device choice and its warning, frame lists, the override store, the refusals, the file's half and the submission payload. It opens no connection, reads no disk and runs no process."
+version.workspace = true
+edition.workspace = true
+
+# **Nothing here reaches a network, a disk or another process, and nothing here
+# reaches `smoozy-server-protocol`.** That is the whole reason this crate
+# exists. The render worker composes its launch material from the payload, the
+# reading, the pin and the samples set, and the queue reads the device choice;
+# all of it is values, and while it sat in `smoozy-render-settings`, taking any
+# of it meant taking that crate's SSH client and its C cryptography too.
+# `smoozy-render-settings` re-exports every module here at the path it has
+# always been reached at, and keeps every act and the readings' trait. The
+# ruling is at `Audits/Build/Step 10c/The runner's rulings.md`, under piece 3.
+
+[dependencies]
+# The server and job identities and the observed reading a recorded reading is
+# stamped with — `State, identity and recovery` §2.1 and §3.
+smoozy-state = { path = "../State, identity and recovery" }
+
+# Q13's four-value file identity is `Server protocol and transfers` S13's type,
+# one shape rather than two. This is the half of that module that opens no
+# connection.
+smoozy-framing = { path = "../Server protocol and transfers — framing" }
+
+# D6's table is written across `Servers` H11's four card states and H1's three
+# reading states, and the hardware reading is that document's remembered one
+# (D5). The half of `Servers` that holds the reading's values.
+smoozy-servers-values = { path = "../Servers — values" }
+
+# B2 compares versions parsed as components, which is `Server Setup` B2's
+# discipline and that crate's `Version`, with the whole-app floor of 4.5 kept
+# there once. The half of `Server Setup` that holds the Blender lifecycle's
+# judgements.
+smoozy-server-setup-machine = { path = "../Server Setup — machine" }
+
+# Y2 puts the payload into the manifest as `Job files and outputs` M1's
+# carried-and-not-interpreted field, and the frame list is that manifest's frame
+# range. The half of that module that holds the manifest.
+smoozy-job-files-machine = { path = "../Job files and outputs — machine" }
+
+# The payload and a reading's identity are written as JSON, the form the
+# manifest already carries.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+# **For tests only, and only another crate's.** `smoozy-render-settings` keeps
+# the tests over what stayed there, and they build their readings from
+# `file_half::testing`. It turns this on as a development dependency, so the
+# readings are written once for both folders. Nothing else turns it on.
+testing = []

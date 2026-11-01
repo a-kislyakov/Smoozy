@@ -1,0 +1,14 @@
+/* The report box — the page half of `web/reporting.js`. Built at step 11's
+ * piece R4.
+ *
+ * **The box is the drawing's own and so are its rules**: `.rp-about`,
+ * `.rp-lab`, `.rp-say`, `.rp-what`, `.rp-where`, `.rp-wp`, `.rp-send` and
+ * `.rp-addr` are lifted whole in `the-drawing.css`, with `.modal`, `.mbox`,
+ * `.mact`, `.btn` and `.mini`, and the underway mark on *Save report* is the
+ * drawing's own `.wk`. Nothing here repeats one of them.
+ *
+ * **What this file adds is only what the drawing never drew**: the one failure
+ * shape inside the box, for the write that did not land. It sits in the box's
+ * own column with nothing pushed sideways.
+ */
+.rp-box .rp-not-saved .failure { margin: 0; }

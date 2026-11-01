@@ -1,0 +1,55 @@
+[package]
+license.workspace = true
+name = "smoozy-download"
+description = "How files come back from a rented server to the user's own computer: the manual request and the auto-download arrangement; the record of what an arrangement has brought and what that record survives; the watch on the job's output folder and the two mechanisms that tell a finished file from one still being written; format narrowing against a list that arrives late; the count, the whole, and what ends an arrangement whose count may never be reached; the destination's four causes of trouble and the cadence that never gives up; the download-direction ceiling and the two download classes; and where downloads land on three operating systems."
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Identities, the observed reading with its clock, the §9.4 outcome record, and
+# the lifetimes every record below is named against.
+smoozy-state = { path = "../State, identity and recovery" }
+
+# The transfer contract every fetch rides — the record, the staging path, S13's
+# four values, S26's endings, and G4's report with G4a and G4b's two marks —
+# and the file-transfer subsystem's own statuses, which is what the walk and the
+# enumeration read their refusals off.
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+
+# The inventory, the count, the recorded reading's destinations and the machine
+# layout the walk runs over.
+smoozy-job-files = { path = "../Job files and outputs" }
+
+# The pool of four, the five declared classes and the share rule this document
+# confirms by citation and adds one number to; the already-exists comparison's
+# path helpers; the reserved staging folder's name; and the listed entry's name
+# type, which is the one route a machine's bytes come in by.
+smoozy-file-browser = { path = "../File Browser" }
+
+# The job's four endings, which an arrangement waits on and never decides.
+smoozy-queue-history = { path = "../Queue & History" }
+
+# K18's per-frame reckoning, which J9b reads off the local job record when a
+# job ended short.
+smoozy-rendering = { path = "../Rendering" }
+
+# M22f's placed-copy list — the record N5a's skip is a comparison against.
+smoozy-dependencies = { path = "../Dependency Upload & Remap" }
+
+# The diary's closed kinds and its line, which §12's declaration composes into.
+smoozy-reporting = { path = "../Reporting a problem" }
+
+# The acting half's two workspace dependencies, both already pinned exactly in
+# `App/Cargo.toml` and both already in the tree beneath what this crate
+# depends on, so neither is new weight and neither is a new external crate.
+#
+# The reading route drives `Server protocol and transfers`' own subsystem
+# client, whose channels are asynchronous streams, so the trait bounds on its
+# operations name this runtime's own read and write traits.
+tokio = { workspace = true }
+
+# The written form of the submission manifest — `Job files and outputs` M1 —
+# which §6.1 N2's read reads back. The attempt record's own read-back is that
+# crate's function; the manifest has no such function there, so it is read back
+# here against that crate's own type and never against a shape of this one's.
+serde_json = { workspace = true }

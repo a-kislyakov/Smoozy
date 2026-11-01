@@ -1,0 +1,42 @@
+[package]
+license.workspace = true
+name = "smoozy-server-setup-machine"
+description = "The half of `Server Setup` the rented machine's own program may take: the Blender lifecycle's judgements, the add-on read-backs, the setup run and its record, recovery and re-running, who performs each step, the ready action's steps, and — from step 10c piece 8 — the setup worker's own acts."
+version.workspace = true
+edition.workspace = true
+
+# **Nothing here opens a connection and nothing here reaches
+# `smoozy-server-protocol`.** That is the whole reason this crate exists.
+#
+# **From step 10c piece 8 it does reach the disk**, because the setup worker's
+# own acts are here and staging, renaming and digesting are what those acts are.
+# **A request on the machine's own line and a process run are still not here**:
+# each is a seam in `acting/` whose one real end is the machine's program, which
+# is where the runner's R1 ruling of 2026-09-19 puts the HTTPS client. The setup worker the machine runs performs these steps and writes
+# this record, and the render worker reads a Blender's version the way this
+# crate says; while all of it sat in `smoozy-server-setup`, taking any of it
+# meant taking that crate's SSH client, its HTTPS client and `File Browser`
+# too. `smoozy-server-setup` re-exports everything here at the paths it has
+# always been reached at. The ruling is at
+# `Audits/Build/Step 10c/The runner's rulings.md`, under piece 3.
+
+[dependencies]
+# The setup record's clock — `State, identity and recovery` §3.
+smoozy-state = { path = "../State, identity and recovery" }
+
+# The constant command a step names, as a value — `Server protocol and
+# transfers` §1.1's one command. This is the half of that module that opens no
+# connection.
+smoozy-framing = { path = "../Server protocol and transfers — framing" }
+
+# The keepalive interval the setup run refreshes on — `Servers` §4. This is the
+# half of that module that opens no connection.
+smoozy-servers-values = { path = "../Servers — values" }
+
+# **`Server Setup` B4's published checksum, which the fetch is verified
+# against.** It is the workspace's one digest function — `Server protocol and
+# transfers` S23's, chosen by measurement and pinned — and reusing it is why
+# there is no second implementation of SHA-256 in this build. **It is new weight
+# in the machine's program**, seven packages, and that is said in the piece's
+# own account rather than left to be discovered.
+sha2 = { workspace = true }

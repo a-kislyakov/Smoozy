@@ -1,0 +1,66 @@
+[package]
+license.workspace = true
+name = "smoozy-queue-history-machine"
+description = "The half of `Queue & History` the rented machine's own program may take: the line and the job record, the ending and what the entry says about the devices, the readings the copy loop's reader produces and the reader itself, the waiting predicate, the previews' prefix arithmetic and their queueing, the acts on the machine-side record, and the machine's own stores and acts — the machine-local queue, the per-job note, the command and act records, the held jobs, reconciliation, the machine readings and the words. It opens no connection."
+version.workspace = true
+edition.workspace = true
+
+# **Nothing here opens a connection, and nothing here reaches
+# `smoozy-server-protocol`.** That is the whole reason this crate exists. The
+# supervisor writes the queue, the note, the command records and the
+# observations, runs reconciliation and the held jobs' release, and the render
+# worker's copy loop calls the reader; all of it runs on the rented machine, and
+# while it sat in `smoozy-queue-history`, taking any of it meant taking that
+# crate's SSH client and its C cryptography too. `smoozy-queue-history`
+# re-exports everything here at the path it has always been reached at, and
+# keeps every desktop act, the local job record, the bars, the catch-up and the
+# idle half hour. The ruling is at `Audits/Build/Step 10c/The runner's
+# rulings.md`, under piece 3.
+#
+# **It writes stores, which the other machine halves do not.** The queue, the
+# note, the command and act records and the observations are the machine's own
+# durable stores (`State, identity and recovery` J11), written through
+# `smoozy-runtime`'s one durable write. A store on the machine is not a
+# connection.
+
+[dependencies]
+# Identities, the observed reading and its two clocks, and the machine
+# operation record — `State, identity and recovery` §2, §3 and §5.1.
+smoozy-state = { path = "../State, identity and recovery" }
+
+# The supervisor whose writes this document rides — `Rented-server runtime`
+# S1, S11 to S14 — the hold record and its release evaluation (§8), the sinks
+# and the capture ceiling (§11), the health readings (§12), the machine's kind
+# and the one durable write. **A second one of any of them would be a second
+# thing to keep true**, so none is written here.
+smoozy-runtime = { path = "../Rented-server runtime" }
+
+# The request frame a machine-local endpoint call is made in, and the
+# free-space reading's own shape. The half of `Server protocol and transfers`
+# that opens no connection.
+smoozy-framing = { path = "../Server protocol and transfers — framing" }
+
+# Reconciliation reads the attempt record, the inventory and the reckoning, and
+# the acts on the machine-side record read the layout — `Job files and outputs`
+# M8, H1 and L6. The half of that module that holds them.
+smoozy-job-files-machine = { path = "../Job files and outputs — machine" }
+
+# E12a's entry sets the device field beside what was asked for, which is
+# `Render Settings`' `DeviceChoice`. The half of that module that holds it.
+smoozy-render-settings-machine = { path = "../Render Settings — machine" }
+
+# X1's machine-side record takes the remap material with it — `Dependency
+# Upload & Remap` A1's location. The half of that module that holds it.
+smoozy-dependencies-machine = { path = "../Dependency Upload & Remap — machine" }
+
+# Q1's records have a written form, the one `Job files and outputs` already
+# settled for the manifest and the attempt record.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+# **For tests only, and only another crate's.** `smoozy-queue-history` keeps the
+# tests over what stayed there, and they build their jobs, groups, operations
+# and lines from `line::testing`. It turns this on as a development dependency,
+# so those are written once for both folders. Nothing else turns it on.
+testing = []

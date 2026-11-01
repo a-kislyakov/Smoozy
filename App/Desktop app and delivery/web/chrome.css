@@ -1,0 +1,93 @@
+/* The window's own chrome, and the one empty pane — the page half of
+ * `web/chrome.js` and `src/surface/chrome.rs`.
+ *
+ * **These rules were in `smoozy.css` until 2026-09-08**, where step 1 put them
+ * because there was one stylesheet. Step 10a piece B moved them here, unchanged
+ * but for the duplicates the lift made redundant: the token block, `body`,
+ * `.app`, `.mono`, `.titlebar .nm` and `.grow` are all in `the-drawing.css`
+ * now, carried from the mockup, so this file holds only what the drawing does
+ * not — the three window buttons, which are Smoozy's own and not the mockup's,
+ * and the per-system arrangement of them.
+ *
+ * **It is imported after `the-drawing.css` on purpose.** The mockup draws its
+ * window lights as three plain dots; the application draws real buttons, so
+ * these rules have to be the later ones.
+ *
+ * **Nothing here invents a number.** Every value is a token from the drawing,
+ * whose own header says the numbers' one home is the mockup.
+ */
+
+.titlebar { user-select: none; }
+
+.lights { display: flex; align-self: stretch; }
+.lights:empty { display: none; }
+
+/* ── The window buttons, and none of the three systems draws them alike ──
+   macOS keeps its own frame and draws its own; there is nothing here for it.
+   Windows and Linux give the frame up and Smoozy draws them.
+   Preparation/Design/Whole app.md, "The window's own chrome".
+
+   **Every rule below is narrowed to `.lights`, which is the two containers the
+   window buttons live in and nothing else. Narrowed 2026-09-12, F-9.** The class
+   used to be reachable by anything, and the menu module borrowed it: on Linux
+   the menu button became a 22-pixel grey circle sitting a few pixels from three
+   identical grey circles that close, minimise and maximise the window, and on
+   Windows a 46-pixel full-height plate. **Design's whole reason for asking each
+   system what its window buttons look like was that one system's arrangement
+   worn by two that do not use it is wrong**, and a button that is not a window
+   button at all wearing them is the same mistake by another route. The menu
+   button has its own class in `menus.css` now. */
+
+.lights .wbtn {
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--ink2);
+  cursor: default;
+}
+.lights .wbtn svg { width: 10px; height: 10px; overflow: visible; }
+.lights .wbtn svg path { stroke: currentColor; stroke-width: 1; fill: none; }
+.lights .wbtn svg rect { stroke: currentColor; stroke-width: 1; fill: none; }
+.lights .wbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+/* Windows: a full-height plate for each, at the right, with the mark centred.
+   Microsoft's own page: the buttons are full-bleed plates that answer hover
+   and press, and the system puts close in the upper right. */
+:root[data-system="windows"] .lights-right { margin-right: -14px; }
+:root[data-system="windows"] .lights .wbtn { width: 46px; align-self: stretch; }
+:root[data-system="windows"] .lights .wbtn:hover { background: var(--sel); color: var(--ink); }
+:root[data-system="windows"] .lights .wbtn:active { background: var(--soft); }
+/* The colour Windows puts behind close on hover is the system's own and is
+   published nowhere read, so this is an approximation and is recorded as one
+   in the Design document. It is not one of Smoozy's reserved meanings. */
+:root[data-system="windows"] .lights .wbtn-close:hover { background: #c42b1c; color: #fff; }
+:root[data-system="windows"] .lights .wbtn-close:active { background: #b0271a; color: #fff; }
+
+/* Linux: the desktop says which buttons and which side; the shape stays the
+   round one the drawing already uses, because no single Linux look exists. */
+:root[data-system="linux"] .lights { gap: 7px; align-items: center; align-self: center; }
+:root[data-system="linux"] .lights-left { margin-left: -3px; }
+:root[data-system="linux"] .lights .wbtn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--sel);
+}
+:root[data-system="linux"] .lights .wbtn svg { width: 8px; height: 8px; }
+:root[data-system="linux"] .lights .wbtn:hover { background: var(--track); color: var(--ink); }
+
+/* ── Whose window chrome, per system ──
+   Design settled on 2026-09-02: macOS keeps its own frame, so its own three
+   window buttons sit in their own place with the system's own rounding and
+   shadow, and Smoozy draws none. Windows and Linux give the frame up and take
+   Smoozy's own three. Desktop app and delivery H6a hands that choice to Design
+   and supplies both routes.
+   The bar keeps one height on all three; on macOS it makes room on the left
+   for the buttons the system draws over it. */
+:root[data-system="macos"] .titlebar { padding-left: 85px; }
+
+/* The one mount point. A piece makes its own elements inside it — the page's
+   file layout rule, at the head of `smoozy.js`. */
+.pane { min-height: 0; background: var(--bg); }

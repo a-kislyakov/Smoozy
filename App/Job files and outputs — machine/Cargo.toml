@@ -1,0 +1,31 @@
+[package]
+license.workspace = true
+name = "smoozy-job-files-machine"
+description = "The half of `Job files and outputs` the rented machine's own program may take: the layout and the names under it, the submission manifest and the attempt record, the reading and the map, the inventory, the reckoning, the redirect, the root choice and the holds. It opens no connection and drives none."
+version.workspace = true
+edition.workspace = true
+
+# **Nothing here reaches a network, a disk or another process, and nothing here
+# reaches `smoozy-server-protocol`.** That is the whole reason this crate
+# exists. The render worker, the queue and the reckoning all read the manifest,
+# the layout and the attempt record on the machine, and all of it is values;
+# while it sat in `smoozy-job-files`, taking any of it meant taking that crate's
+# SSH client and its C cryptography too. `smoozy-job-files` re-exports every
+# module here at the path it has always been reached at, and keeps every act on
+# the file-transfer subsystem. The ruling is at
+# `Audits/Build/Step 10c/The runner's rulings.md`, under piece 3.
+
+[dependencies]
+# The job and installation identities the names and the manifest carry —
+# `State, identity and recovery` §2.1 and §2.2.
+smoozy-state = { path = "../State, identity and recovery" }
+
+# The source's four values and the free-space reading's shape — `Server
+# protocol and transfers` S13 and F1. This is the half of that module that
+# opens no connection.
+smoozy-framing = { path = "../Server protocol and transfers — framing" }
+
+# The manifest and the attempt record are written as one JSON document each —
+# M1 and M8, unchanged from the crate next door.
+serde = { workspace = true }
+serde_json = { workspace = true }

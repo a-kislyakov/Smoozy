@@ -1,0 +1,71 @@
+/* The dependency check's own rules — only what one shape needs that the
+   drawing did not carry.
+
+   `web/the-drawing.css` is the mockup's own stylesheet, lifted, and a test
+   compares it against the mockup, so **every class this panel draws is the
+   drawing's**: `.cstate`, `.csum`, `.ctools`, `.bulk`, `.shift`, `.rows`,
+   `.row`, `.what`, `.nm`, `.kd`, `.loc`, `.note`, `.cgrp`, `.cside`, `.cfoot`, `.cempty`, `.cnone`, `.alone`, `.modal`, `.mbox`. What is
+   here is the mockup's inline `style=` attributes, which are inert under
+   `style-src 'self'`, and the one scroller correction piece 8 met first. There
+   is no colour in this file that the drawing does not already name. */
+
+/* **The panel's body is piece 5's `.suscroll`, and the drawing's scroller for
+   this panel is `.rows`**, with the foot under it inside the sheet. The outer
+   one's padding and gap would push the foot off the panel; these take them
+   away inside this panel's own wrapper and nowhere else. The tidy that removes
+   them is the one piece 8 named: let a panel say which body class it wants. */
+[data-panel="chk"] .suscroll {
+  padding: 0;
+  gap: 0;
+}
+
+/* The mockup's `style="margin:0 18px 12px"` around each of the four endings. */
+[data-panel="chk"] .ckend {
+  margin: 0 var(--gutter) 12px;
+}
+
+/* What an act answered where it could not act — said on the panel, beside the
+   statements, rather than on nothing. */
+[data-panel="chk"] .ckanswer {
+  margin: 0;
+  font-size: var(--t-sm);
+  color: var(--ink);
+  font-weight: 550;
+}
+
+/* The drawing writes *Undo this change* as a span; here it is a button, so it
+   can be reached from the keyboard, and it keeps the drawing's look. */
+[data-panel="chk"] .shift .undo {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+}
+
+/* Rows are chosen the way a file manager chooses them (the dependency
+   check's fresh look, decision 2): a row the keyboard can reach shows where
+   it is, and a Shift-click chooses rows rather than selecting their text. */
+[data-panel="chk"] .rows .row[tabindex] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+[data-panel="chk"] .rows .row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The underway mark sits in the header's own line rather than in a row's
+   status column. */
+[data-panel="chk"] .ckstill .underway-row {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* A failed row's cross is the drawing's `.fx`, last among the row's buttons;
+   the drawing gives it no keyboard mark, and a button reached from the
+   keyboard shows where it is. */
+[data-panel="chk"] .acts .fx:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

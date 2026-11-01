@@ -1,0 +1,39 @@
+[package]
+license.workspace = true
+name = "smoozy-release"
+description = "The one act that makes a version of Smoozy: it composes the signed release manifest and the root-signed key-set statement over artifacts that exist, and the desktop update file beside them, signs them with secrets in the Mac's keychain, and verifies what it made through the desktop's own verification paths before anything can be published."
+version.workspace = true
+edition.workspace = true
+
+# **Nothing in Smoozy depends on this crate and nothing ever should.** It is the
+# machinery a release runs, not part of the application, so it is a binary with
+# no library and no other member names it.
+[[bin]]
+name = "smoozy-release"
+path = "src/main.rs"
+
+[dependencies]
+# **The first dependency, and it is the module that owns the release contract.**
+# `Server protocol and transfers` B8, B9 and B10 are built there; this crate
+# composes and checks through that code and never re-implements a byte of it.
+# **No new external dependency is added here**: the fetch this crate makes for
+# its outside check runs the `curl` the Mac already carries, rather than putting
+# an HTTP client into a workspace whose weight is watched.
+smoozy-server-protocol = { path = "../Server protocol and transfers" }
+# **The desktop's own reading of its update file** — `Desktop app and delivery`
+# E15, E19 and E10a, built at step 11's D3 in `src/updating/`. Step 11's D8 has
+# `compose` write that file and `check` read it back, and both go through the
+# desktop's code — the manifest, the trust statement, the container, the
+# verification and the length-and-digest check — and never through a second
+# copy of it. Added 2026-10-25.
+#
+# **The whole desktop crate, not a split of it, and why.** The reading is
+# `pub` already and depends on nothing of the window. A split would move or add
+# a Rust file under `App/Desktop app and delivery/`, whose marker guard counts
+# every such file exactly (`src/markers.rs`), and would add a workspace member;
+# both are other pieces' files. `App/Scenarios/` already depends on the desktop
+# crate the same way. **No new outside dependency**: every crate the desktop
+# brings is already in the workspace's lock, and nothing in Smoozy depends on
+# this crate, so nothing shipped grows. What it costs is build time for this
+# tool alone.
+smoozy-desktop = { path = "../Desktop app and delivery" }
