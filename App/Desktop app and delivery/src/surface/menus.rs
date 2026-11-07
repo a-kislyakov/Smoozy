@@ -271,7 +271,8 @@ const THE_CHECK_ITEM: &str = "smoozy.check-for-updates";
 ///
 /// **And the rollback box's** (step 11's D6b): in a launch that shows that box
 /// and nothing else, *Reinstall* and *Quit* arrive here too, so no command is
-/// added to the one registration list.
+/// added to the one registration list. So does *Quit* from the box over a
+/// record that could not be read (2026-11-01).
 #[tauri::command]
 pub fn the_held_update_is_installed_anyway<R: Runtime>(
     app: AppHandle<R>,
@@ -286,6 +287,17 @@ pub fn the_held_update_is_installed_anyway<R: Runtime>(
             // again. Nothing is written on the way out; no record is open.
             Some("quit") => app.exit(0),
             _ => {}
+        }
+        return;
+    }
+    // **The box over a record that could not be read** (2026-11-01) has
+    // *Quit* alone, which writes nothing: no record is open.
+    if app
+        .try_state::<Arc<crate::updating::the_linux_package::TheUnreadableRecordBox>>()
+        .is_some()
+    {
+        if linux.as_ref().is_some_and(|choice| choice.action == "quit") {
+            app.exit(0);
         }
         return;
     }
@@ -364,6 +376,24 @@ pub fn the_rollback_box(version: &str, asks: bool, failed: bool) -> Event {
     }
     if failed {
         event = event.saying("failed", prose("Reinstall failed."));
+    }
+    event
+}
+
+/// **The same box where the record could not be read** (2026-11-01, Design
+/// *Updating*, the D6b line under Z11): no version to name and nothing to
+/// reinstall from, so the heading names Smoozy alone, the failure line says
+/// why, and *Quit* is the one button. `underway` is whether an update is known
+/// to have been under way, which alone draws the update's sentence.
+pub fn the_unreadable_record_box(underway: bool) -> Event {
+    let prose = |s: &str| Said::Prose(Prose::new(s));
+    let mut event = Event::about(Subject::TheRun, THE_LINUX_ROLLBACK_BOX)
+        .saying("beforeVersion", prose("Smoozy"))
+        .saying("afterVersion", prose("could not start"))
+        .saying("failed", prose("Could not read saved data."))
+        .saying("quit", prose("Quit"));
+    if underway {
+        event = event.saying("unfinished", prose("Update not finished."));
     }
     event
 }
@@ -519,7 +549,7 @@ pub(crate) mod words {
     /// The third, after the version.
     pub const IS_READY: &str = "is ready.";
     /// The third on Mac and Windows.
-    pub const RESTARTS_TO_INSTALL: &str = "Smoozy will restart to install it.";
+    pub const RESTARTS_TO_INSTALL: &str = "Restarts to install.";
     /// The third's held form (Z31).
     pub const IT_WILL_INSTALL_WHEN_NOTHING_RUNS: &str =
         "Installs when no jobs or transfers are running.";
@@ -542,6 +572,9 @@ pub(crate) mod words {
     /// build's only: Design draws no test copy, and a press that drew nothing
     /// would be Smoozy going quiet.
     pub const THIS_COPY_NEVER_CHECKS: &str = "This test copy does not check for updates.";
+    /// **A build that carries no update key** (`Desktop app and delivery`
+    /// E10b) — Design's sixth reading, a plain line, since nothing failed.
+    pub const NO_AUTOMATIC_UPDATES: &str = "Automatic updates aren't available in this version.";
 }
 
 /// **Which box an item opens**, for the two that open one here.
@@ -587,6 +620,7 @@ fn which_reading(reading: &TheReading) -> &'static str {
         TheReading::CouldNotBeReached => "fail",
         TheReading::CouldNotInstall => "install-fail",
         TheReading::ThisCopyNeverChecks => "never",
+        TheReading::ThisBuildCannotUpdate => "no-updates",
     }
 }
 
@@ -670,6 +704,9 @@ fn about_is_said(event: Event, reads: WhatAboutReads) -> Event {
         }
         TheReading::ThisCopyNeverChecks => {
             about = about.saying("neverChecks", prose(words::THIS_COPY_NEVER_CHECKS))
+        }
+        TheReading::ThisBuildCannotUpdate => {
+            about = about.saying("noUpdates", prose(words::NO_AUTOMATIC_UPDATES))
         }
     }
     about
@@ -1011,7 +1048,7 @@ mod tests {
             assert_eq!(
                 said.said.get("afterReady"),
                 Some(&Said::Prose(Prose::new(
-                    "Smoozy will restart to install it."
+                    "Restarts to install."
                 )))
             );
         }
@@ -1172,6 +1209,17 @@ mod tests {
             prose(words::THIS_COPY_NEVER_CHECKS)
         );
 
+        // **E10b: a build that carries no update key says so**, and never
+        // that the update service could not be reached.
+        let no_updates = about_reads(TheReading::ThisBuildCannotUpdate, Some(at));
+        assert_eq!(no_updates.said.get("reading").cloned(), value("no-updates"));
+        assert_eq!(
+            no_updates.said.get("noUpdates").cloned(),
+            prose("Automatic updates aren't available in this version.")
+        );
+        assert_eq!(no_updates.said.get("couldNotReach"), None);
+        assert_eq!(no_updates.said.get("upToDate"), None);
+
         // **No age, anywhere**: nothing in this file reads the clock to
         // subtract a moment.
         let (working, _) = include_str!("menus.rs")
@@ -1239,6 +1287,7 @@ mod tests {
             "said.afterReady",
             "said.couldNotReach",
             "said.neverChecks",
+            "said.noUpdates",
             "said.installingRestarts",
             "said.jobsKeepRendering",
             "said.transfersStop",
@@ -1523,6 +1572,7 @@ mod tests {
             "whileShut": a_reading(TheReading::UpToDate, 7, Some(at)),
             "crossed": a_going(THE_CHECK_ITEM, TheReading::Checking, 5, Some(at)),
             "never": a_going("smoozy.about", TheReading::ThisCopyNeverChecks, 8, None),
+            "noUpdates": a_going(THE_CHECK_ITEM, TheReading::ThisBuildCannotUpdate, 10, None),
             "versionAlone": a_going("smoozy.about", TheReading::NoneYet, 9, None),
             "linux": linux,
             "rollback": delivered(|queue| {
@@ -1533,6 +1583,12 @@ mod tests {
             }),
             "rollbackCleanup": delivered(|queue| {
                 let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_rollback_box("0.3.0", false, true));
+            }),
+            "rollbackUnread": delivered(|queue| {
+                let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_unreadable_record_box(true));
+            }),
+            "rollbackUnreadAlone": delivered(|queue| {
+                let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_unreadable_record_box(false));
             }),
         });
 
@@ -1657,7 +1713,7 @@ mod tests {
                 assert!(!one.is_null(), "{width}: {state} was not reached: {out}");
                 one
             };
-            for state in ["idle", "checking", "new", "held", "fail", "installFail", "crossed", "never", "versionAlone"] {
+            for state in ["idle", "checking", "new", "held", "fail", "installFail", "crossed", "never", "noUpdates", "versionAlone"] {
                 let one = at(state);
                 assert_eq!(one["shown"], true, "{width} {state}: the box is not shown");
                 assert_eq!(one["fits"], true, "{width} {state}: the box does not fit: {one}");
@@ -1750,6 +1806,11 @@ mod tests {
             // A copy that never checks, and the version alone.
             assert_eq!(lines("never"), serde_json::json!(["never"]), "{width}");
             assert_eq!(flat(&at("never")["line"]), plain(words::THIS_COPY_NEVER_CHECKS));
+            // **E10b: a build with no update key, opened from *Check for
+            // updates…***: one plain line, no red dot, no failure words.
+            assert_eq!(lines("noUpdates"), serde_json::json!(["no-updates"]), "{width}");
+            assert_eq!(flat(&at("noUpdates")["line"]), plain(words::NO_AUTOMATIC_UPDATES));
+            assert_eq!(at("noUpdates")["dot"], false, "{width}: nothing failed, yet a red dot");
             assert_eq!(lines("versionAlone"), serde_json::json!([]), "{width}: something invented");
             let linux = &out["linux"];
             assert_eq!(
@@ -1816,6 +1877,33 @@ mod tests {
                 ]),
                 "{width}: the rollback box's answers"
             );
+
+            // **2026-11-01: the box over a record that could not be read** —
+            // Smoozy named with no version, the update's sentence only where
+            // one was under way, the failure line with its red dot, and Quit
+            // alone, focused, which Tab and Escape leave where it is.
+            for (state, lines) in [
+                ("rollbackUnread", vec![plain("Update not finished.")]),
+                ("rollbackUnreadAlone", vec![]),
+            ] {
+                let one = &out[state];
+                assert_eq!(one["fits"], true, "{width} {state}: the box does not fit: {one}");
+                assert_eq!(one["boxes"], 1, "{width} {state}: one box at a time");
+                assert_eq!(one["passwordFields"], 0, "{width} {state}");
+                assert_eq!(flat(&one["heading"]), "Smoozy could not start", "{width} {state}");
+                let drawn: Vec<String> = one["lines"].as_array().unwrap().iter().map(|line| flat(line)).collect();
+                assert_eq!(drawn, lines, "{width} {state}");
+                assert_eq!(flat(&one["failed"]), plain("Could not read saved data."), "{width} {state}");
+                assert_eq!(one["dot"], true, "{width} {state}: no red dot");
+                assert_eq!(one["buttons"], serde_json::json!([Prose::new("Quit").as_str()]), "{width} {state}");
+                assert_eq!(flat(&one["focused"]), plain("Quit"), "{width} {state}: Quit is not focused");
+            }
+            assert_eq!(out["unreadAfterKeys"], serde_json::json!({"boxes": 1, "focused": Prose::new("Quit").as_str()}), "{width}");
+            assert_eq!(
+                out["unreadChoices"],
+                serde_json::json!([{"version":"", "action":"quit"}]),
+                "{width}: the unreadable box's answer"
+            );
         }
 
         if let Some(keep) = std::env::var_os("SMOOZY_THE_ABOUT_PAGE") {
@@ -1859,6 +1947,33 @@ mod tests {
         let cleanup = pairs(the_rollback_box("0.3.0", false, true));
         assert!(get(&cleanup, "password").is_none(), "a password was mentioned where none will be asked for");
         assert_eq!(get(&cleanup, "until").as_deref(), Some("Reinstall the previous version to open Smoozy."));
+    }
+
+    /// **2026-11-01: the box over a record that could not be read** says why
+    /// and offers *Quit* alone, every word through the prose route: no
+    /// version, no *Reinstall*, and the update's sentence only where an update
+    /// is known to have been under way.
+    #[test]
+    fn the_box_over_an_unreadable_record_says_why_and_offers_quit_alone() {
+        let said = |underway: bool| -> serde_json::Map<String, serde_json::Value> {
+            let delivered = delivered(|queue| {
+                let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_unreadable_record_box(underway));
+            });
+            assert_eq!(delivered["kind"], THE_LINUX_ROLLBACK_BOX);
+            delivered["said"].as_object().unwrap().clone()
+        };
+        let flat = |value: &serde_json::Value| value.as_str().unwrap().replace('\u{a0}', " ");
+        let underway = said(true);
+        let keys: Vec<&str> = underway.keys().map(String::as_str).collect();
+        assert_eq!(keys, ["afterVersion", "beforeVersion", "failed", "quit", "unfinished"]);
+        assert_eq!(flat(&underway["beforeVersion"]), "Smoozy");
+        assert_eq!(flat(&underway["afterVersion"]), "could not start");
+        assert_eq!(flat(&underway["unfinished"]), "Update not finished.");
+        assert_eq!(flat(&underway["failed"]), "Could not read saved data.");
+        assert_eq!(flat(&underway["quit"]), "Quit");
+        let alone = said(false);
+        let keys: Vec<&str> = alone.keys().map(String::as_str).collect();
+        assert_eq!(keys, ["afterVersion", "beforeVersion", "failed", "quit"], "an update named where none is known");
     }
 
     /// The page About is drawn in: the application's stylesheets, a stand-in
@@ -1958,6 +2073,7 @@ try {
   await tell(deliveries.crossed); look("crossed");
   await tell(deliveries.never); look("never");
   await tell(deliveries.versionAlone); look("versionAlone");
+  await tell(deliveries.noUpdates); look("noUpdates");
   await tell(deliveries.linux);
   let linux = document.querySelector(".linux-update .mbox");
   const rect = linux.getBoundingClientRect();
@@ -2009,6 +2125,18 @@ try {
   await tell(deliveries.rollbackCleanup);
   out.rollbackCleanup = lookAtTheRollback();
   out.rollbackChoices = window.__linuxChoices;
+  window.__linuxChoices = [];
+  await tell(deliveries.rollbackUnreadAlone);
+  out.rollbackUnreadAlone = lookAtTheRollback();
+  await tell(deliveries.rollbackUnread);
+  out.rollbackUnread = lookAtTheRollback();
+  for (const key of ["Tab", "Escape"]) {
+    document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles:true, cancelable:true }));
+  }
+  await settle();
+  out.unreadAfterKeys = { boxes: document.querySelectorAll(".linux-rollback").length, focused: document.activeElement ? document.activeElement.textContent : "" };
+  theRollbackBox().querySelector("button").click();
+  out.unreadChoices = window.__linuxChoices;
 } catch (trouble) {
   out.error = String(trouble && trouble.stack || trouble);
 }

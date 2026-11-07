@@ -19,3 +19,5 @@
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent) — Wave 9b of the free-and-open-source work: step 5a now lists a ninth signature line changed in the export only, in the Blender research folder.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code), the build runner, outside any round — step 5a's email line: the working repository now uses the stand-in address too, on the Creator's yes, after GitHub refused a push carrying the personal address. No auditor has seen it.
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the key-ceremony agent holding `Audits/Build/Step 11/Brief — making the update keys.md`, step 7, outside any round — step 4's `--update-row` line is now required for all five rows, the master update keys being in the build; step 3a gains the desktop-update floor (`THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE`): 0 through the first release that carries `desktop-update`, raised from the release after it to the last update-carrying release's own sequence. No auditor has seen it.

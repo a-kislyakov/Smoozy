@@ -76,7 +76,10 @@ impl HowTheActWent {
     /// **What the act came to, in words a screen may carry.** The machine's
     /// own words travel whole where it printed any, and are never mined for a
     /// cause; where it printed none, this application's own knowledge of what
-    /// happened is said instead. **Never a debugging rendering** — that is
+    /// happened is said instead. **Y7e, in `Server Setup`, keeps this reason in the
+    /// desktop’s output panel and diary** (`Desktop app and delivery` M32a); those
+    /// callers hold it beside the server’s streams, never inside them.
+    /// **Never a debugging rendering** — that is
     /// what reached the screen on the first pass on a real rental, 2026-09-21.
     pub fn in_words(&self) -> String {
         match self {
@@ -665,6 +668,11 @@ impl HowTheComponentsStepWent {
 
 // --------------------------------------------------------- the driver route
 
+/// **`Server Setup` R1 item 5's words where the route left no driver package**,
+/// behind *What the server said*: Smoozy's own, because the machine's own said
+/// nothing was wrong.
+pub const THE_ROUTE_LEFT_NO_DRIVER: &str = "The install left no GPU driver on the server.";
+
 /// What the driver step came to, step by step, in R1 item 5's own order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HowTheDriverStepWent {
@@ -707,6 +715,11 @@ pub struct HowTheDriverStepWent {
     /// [`crate::ready_action::WhatTheDriverStepDoes::TheSwapUpToTheBar`]. Added
     /// 2026-10-11; the act is [`crate::elevated::THE_UBUNTU_DRIVER_SWAP`].
     pub the_swap: Option<HowTheActWent>,
+    /// **R1 item 5's reading after the detection route, as written 2026-11-03**:
+    /// what the package system holds, where the check still does not answer.
+    /// Nothing where the route was not taken or the check answered. **Where it
+    /// finds no driver package the step fails** ([`Self::what_went_wrong`]).
+    pub the_driver_packages_after: Option<crate::readings::WhatTheDriverPackagesSay>,
     /// **The driver's version, read after the check again answered**, and only
     /// where the run has a bar to read it against (`Servers` H11b's query).
     /// What the step's last word on the bar is read from where the check was
@@ -802,8 +815,19 @@ impl HowTheDriverStepWent {
         // library still not found after a clean install is not a refusal and
         // does not end the setup — the act's own command answers `0` then, and
         // `Rendering` L24b says it when a cards job reaches the machine.
-        match &self.the_optix_library {
-            Some(went) if !went.it_was_carried_out() => Some(went.in_words()),
+        if let Some(went) = &self.the_optix_library {
+            if !went.it_was_carried_out() {
+                return Some(went.in_words());
+            }
+        }
+        // **R1 item 5, as written 2026-11-03: the route left no driver package**,
+        // so the step did not do its work and no restart could. **A reading
+        // that could not be had concludes nothing.**
+        match self.the_driver_packages_after {
+            Some(
+                crate::readings::WhatTheDriverPackagesSay::NoDriverPackage
+                | crate::readings::WhatTheDriverPackagesSay::AKernelHalfIsLeftBehind,
+            ) => Some(THE_ROUTE_LEFT_NO_DRIVER.to_string()),
             _ => None,
         }
     }
@@ -962,6 +986,7 @@ pub async fn carry_out_the_driver_step(
                 the_support_binaries: None,
                 the_optix_library: None,
                 the_swap: None,
+                the_driver_packages_after: None,
                 the_version_after: None,
                 the_check_after: None,
             };
@@ -985,6 +1010,7 @@ pub async fn carry_out_the_driver_step(
                 // the check after a restart is taken on the machine that came
                 // back.
                 the_swap: None,
+                the_driver_packages_after: None,
                 the_version_after: None,
                 the_check_after: None,
             };
@@ -992,10 +1018,19 @@ pub async fn carry_out_the_driver_step(
         // **R1 item 5's swap up to the OptiX bar, added 2026-10-11**: the one
         // act, then the check again — and, where it answers, the version read
         // again for the bar.
-        crate::ready_action::WhatTheDriverStepDoes::TheSwapUpToTheBar => {
-            let the_swap = Some(HowTheActWent::from(
-                issue(channel, crate::elevated::THE_UBUNTU_DRIVER_SWAP, how).await,
-            ));
+        //
+        // **R1 item 5's finishing of a stopped removal, added 2026-11-03**, is
+        // the same act with its readings taken from the packages, so it goes
+        // the same way: a refusal with no driver answering is what went wrong,
+        // and one that went through gets item 6's restart and the check again.
+        crate::ready_action::WhatTheDriverStepDoes::TheSwapUpToTheBar
+        | crate::ready_action::WhatTheDriverStepDoes::TheStoppedRemovalIsFinished => {
+            let the_act = if which_branch == crate::ready_action::WhatTheDriverStepDoes::TheSwapUpToTheBar {
+                crate::elevated::THE_UBUNTU_DRIVER_SWAP
+            } else {
+                crate::elevated::THE_UBUNTU_DRIVER_SWAPS_FINISH
+            };
+            let the_swap = Some(HowTheActWent::from(issue(channel, the_act, how).await));
             let after = crate::readings::run_the_driver_check(channel).await;
             let the_version_after =
                 the_drivers_version_where_a_bar_applies(channel, needs, &after).await;
@@ -1008,6 +1043,7 @@ pub async fn carry_out_the_driver_step(
                 the_support_binaries: None,
                 the_optix_library: None,
                 the_swap,
+                the_driver_packages_after: None,
                 the_version_after,
                 the_check_after: Some(after),
             };
@@ -1038,6 +1074,7 @@ pub async fn carry_out_the_driver_step(
             the_support_binaries: None,
             the_optix_library: None,
             the_swap: None,
+            the_driver_packages_after: None,
             the_version_after: None,
             the_check_after: None,
         };
@@ -1064,6 +1101,7 @@ pub async fn carry_out_the_driver_step(
             the_support_binaries: None,
             the_optix_library: None,
             the_swap: None,
+            the_driver_packages_after: None,
             the_version_after: None,
             the_check_after: None,
         };
@@ -1130,6 +1168,7 @@ pub async fn carry_out_the_driver_step(
             // **Nothing is read again where the step could not finish its own
             // work**, and Y4's *driver placed* is not written over it.
             the_swap: None,
+            the_driver_packages_after: None,
             the_version_after: None,
             the_check_after: None,
         };
@@ -1172,6 +1211,7 @@ pub async fn carry_out_the_driver_step(
             the_support_binaries,
             the_optix_library,
             the_swap: None,
+            the_driver_packages_after: None,
             the_version_after: None,
             the_check_after: None,
         };
@@ -1186,6 +1226,17 @@ pub async fn carry_out_the_driver_step(
     // missed it. Added 2026-10-11.
     let the_version_after =
         the_drivers_version_where_a_bar_applies(channel, needs, &after_the_install).await;
+    // **R1 item 5, as written 2026-11-03: the step never reads *done* over
+    // nothing.** Where the check still fails, what the package system holds is
+    // read. A driver package standing goes on to the restart, because its
+    // module may be built for a kernel not yet booted; none, and the route has
+    // left nothing a restart could load. The Sesterce pass's route read *done*
+    // here after *0 upgraded, 0 newly installed*, and restarted for no gain.
+    let the_driver_packages_after = if matches!(after_the_install, crate::readings::WhatTheDriverCheckSaid::ItAnswered) {
+        None
+    } else {
+        Some(crate::readings::read_the_driver_packages(channel, family).await)
+    };
 
     HowTheDriverStepWent {
         the_check_before,
@@ -1196,6 +1247,7 @@ pub async fn carry_out_the_driver_step(
         the_support_binaries,
         the_optix_library,
         the_swap: None,
+        the_driver_packages_after,
         the_version_after,
         the_check_after: Some(after_the_install),
     }
@@ -1998,6 +2050,7 @@ mod tests {
             the_drivers_version: None,
             the_optix_bar: None,
             anything_is_live: false,
+            the_driver_packages: crate::readings::WhatTheDriverPackagesSay::NotRead,
         }
     }
 
@@ -2281,6 +2334,88 @@ mod tests {
         assert_eq!(went.what_the_step_did(), crate::run::WhatTheStepDid::NothingToDo);
         // **Nothing elevated went out at all**, which is the whole of the harm.
         assert!(channel.asked.is_empty());
+    }
+
+    /// **R1 item 5, as written 2026-11-03: a removal that stopped part-way is
+    /// finished, by one act, with no detection route.** Where the act goes
+    /// through, item 6's restart is owed as after the swap; where it fails, the
+    /// step ends in its words and no restart is owed.
+    #[test]
+    fn a_stopped_removal_is_finished_and_a_refused_finish_ends_the_step() {
+        use crate::readings::WhatTheDriverPackagesSay as Say;
+        let finish = crate::elevated::THE_UBUNTU_DRIVER_SWAPS_FINISH.elevated.as_str();
+        let needs = crate::ready_action::WhatTheMachineNeeds {
+            the_driver_packages: Say::AKernelHalfIsLeftBehind,
+            ..a_machine_with_a_card_and_no_driver_at_all(crate::kind::DistributionFamily::Ubuntu)
+        };
+        let mut channel = AMachine::answering(vec![
+            (finish, said("", 0)),
+            (crate::ready_action::THE_DRIVER_CHECK.as_str(), complained("Driver/library version mismatch", 18)),
+        ]);
+        let mut files = AMachine::default();
+        let went = block_on(carry_out_the_driver_step(
+            &mut channel,
+            &mut files,
+            &needs,
+            the_check_failed_at(127),
+            HowElevationIsObtained::Passwordless,
+        ));
+        assert_eq!(went.which_branch, crate::ready_action::WhatTheDriverStepDoes::TheStoppedRemovalIsFinished);
+        assert!(channel.asked.iter().any(|one| *one == finish), "{:?}", channel.asked);
+        assert!(went.the_install.is_none() && went.the_tool.is_none(), "no detection route");
+        assert_eq!(went.what_went_wrong(), None);
+        assert!(!went.the_check_passes(&needs), "item 6's restart is owed");
+        assert_eq!(went.what_the_step_did(), crate::run::WhatTheStepDid::Performed);
+
+        let mut channel = AMachine::answering(vec![
+            (finish, complained("E: Unable to correct problems", 100)),
+            (crate::ready_action::THE_DRIVER_CHECK.as_str(), complained("nvidia-smi: command not found", 127)),
+        ]);
+        let went = block_on(carry_out_the_driver_step(
+            &mut channel,
+            &mut files,
+            &needs,
+            the_check_failed_at(127),
+            HowElevationIsObtained::Passwordless,
+        ));
+        assert!(
+            went.what_went_wrong().is_some_and(|words| words.contains("Unable to correct problems")),
+            "{:?}",
+            went.what_went_wrong()
+        );
+    }
+
+    /// **R1 item 5, as written 2026-11-03: the step never reads *done* over
+    /// nothing.** The Sesterce pass's route ended cleanly at every act and left
+    /// no driver package on the machine. A driver package standing still goes
+    /// on to the restart, and a reading that could not be had concludes nothing.
+    #[test]
+    fn a_detection_route_that_leaves_no_driver_package_fails_and_says_so() {
+        let the_route_then_says = |answer: smoozy_server_protocol::transport::CommandResult| {
+            let mut channel = AMachine::answering(vec![
+                (crate::elevated::THE_LIST_UPDATE.elevated.as_str(), said("", 0)),
+                (crate::elevated::THE_UBUNTU_DRIVER_TOOL_INSTALL.elevated.as_str(), said("", 0)),
+                (crate::elevated::THE_UBUNTU_DRIVER_INSTALL.elevated.as_str(), said("", 0)),
+                (crate::elevated::THE_UBUNTU_DRIVER_SUPPORT_BINARIES_INSTALL.elevated.as_str(), said("0 upgraded, 0 newly installed", 0)),
+                (crate::elevated::THE_UBUNTU_OPTIX_LIBRARY_INSTALL.elevated.as_str(), said("", 0)),
+                (crate::ready_action::THE_DRIVER_CHECK.as_str(), complained("nvidia-smi: command not found", 127)),
+                (crate::elevated::THE_DRIVER_PACKAGES_READING.as_str(), answer),
+            ]);
+            let mut files = AMachine::default();
+            block_on(carry_out_the_driver_step(
+                &mut channel,
+                &mut files,
+                &a_machine_with_a_card_and_no_driver_at_all(crate::kind::DistributionFamily::Ubuntu),
+                the_check_failed_at(127),
+                HowElevationIsObtained::Passwordless,
+            ))
+        };
+        assert_eq!(
+            the_route_then_says(said("", 0)).what_went_wrong().as_deref(),
+            Some(THE_ROUTE_LEFT_NO_DRIVER)
+        );
+        assert_eq!(the_route_then_says(said("a driver stands\n", 0)).what_went_wrong(), None);
+        assert_eq!(the_route_then_says(complained("dpkg-query: broken", 2)).what_went_wrong(), None);
     }
 
     /// **R1 item 5 as corrected on 2026-09-21: on Ubuntu the detection tool is

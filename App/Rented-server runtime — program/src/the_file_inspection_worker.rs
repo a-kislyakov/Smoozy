@@ -284,8 +284,8 @@ pub struct TheReadingsWork {
     pub script: String,
     /// `Rented-server runtime` M1's two sinks and M4a's ceiling.
     pub capture: CaptureRecord,
-    /// **The fixing's staging path and its pairs**, as the request carried
-    /// them; nothing for the other three.
+    /// The fixing's staging path; pairs also carry `Render Settings` Q4's
+    /// library locations for the file's reading.
     pub staging: Option<Vec<u8>>,
     pub pairs: Option<Vec<u8>>,
     /// **The contents reading's range**: where it starts, and how many bytes,
@@ -499,7 +499,9 @@ pub fn the_work_as_fields(work: &TheReadingsWork, available_bytes: u64) -> Field
         fields = fields.and(asked::THE_FIXINGS_STAGING_FIELD, staging.clone());
     }
     if let Some(pairs) = &work.pairs {
-        fields = fields.and(asked::THE_FIXINGS_PAIRS_FIELD, pairs.clone());
+        fields = fields.and(if work.which == WhichReading::TheFilesReading {
+            asked::THE_READINGS_LIBRARY_PAIRS_FIELD
+        } else { asked::THE_FIXINGS_PAIRS_FIELD }, pairs.clone());
     }
     if let Some((from, length)) = work.range {
         fields = fields.and(asked::THE_RANGE_STARTS_AT_FIELD, from.to_string());
@@ -559,7 +561,9 @@ pub fn the_work_in(answered: &Answered) -> Result<TheReadingsWork, String> {
             .map(str::to_string),
         script: text(THE_SCRIPT_FIELD)?.to_string(),
         staging: fields.value(asked::THE_FIXINGS_STAGING_FIELD).map(<[u8]>::to_vec),
-        pairs: fields.value(asked::THE_FIXINGS_PAIRS_FIELD).map(<[u8]>::to_vec),
+        pairs: fields.value(if which == WhichReading::TheFilesReading {
+            asked::THE_READINGS_LIBRARY_PAIRS_FIELD
+        } else { asked::THE_FIXINGS_PAIRS_FIELD }).map(<[u8]>::to_vec),
         range: the_range_in(fields),
     })
 }
@@ -772,6 +776,14 @@ fn report_the_ending(
     }
 }
 
+/// `Render Settings` Q4: links only, removed on success and every early return.
+struct TheReadingsOpeningFolder(Option<std::path::PathBuf>);
+impl Drop for TheReadingsOpeningFolder {
+    fn drop(&mut self) {
+        if let Some(root) = &self.0 { let _ = std::fs::remove_dir_all(root); }
+    }
+}
+
 /// **One reading, from the script to the ending the worker reports**, with
 /// nobody told its Blender — the tests' own shape.
 #[cfg(test)]
@@ -802,6 +814,29 @@ pub fn one_reading_telling(
         words: Some(words),
         digest: None,
     };
+    // `Render Settings` Q4; `Dependency Upload & Remap` M8b: reuse the
+    // job's folder construction, scoped to this file-inspection operation.
+    let mut opening = TheReadingsOpeningFolder(None);
+    let mut opened_work = work.clone();
+    if work.which == WhichReading::TheFilesReading {
+        if let Some(bytes) = &work.pairs {
+            let pairs: Vec<smoozy_dependencies_machine::remap::Pair> = match serde_json::from_slice(bytes) {
+                Ok(pairs) => pairs,
+                Err(why) => return not_started(format!("the reading's library pairs did not read back: {why}")),
+            };
+            let root = std::path::Path::new(&work.script).parent().unwrap_or(std::path::Path::new("."))
+                .join("opening");
+            if let Some(folder) = smoozy_dependencies_machine::opening::the_folder_the_file_opens_from(
+                &pairs, &work.blend, root.as_os_str().as_bytes()) {
+                opening.0 = Some(root);
+                if let Err(why) = smoozy_rendering_machine::acting::opening::make_the_opening_folder(&folder) {
+                    return not_started(format!("the folder the file opens from could not be made: {why}"));
+                }
+                opened_work.blend = folder.the_file;
+            }
+        }
+    }
+    let work = &opened_work;
     // **`Job files and outputs` R18: every read of the user's file carries
     // `Rendering` L8b's script before the file**, whose handler points every
     // Replay fluid cache and every disk cache at a throwaway folder beside the
@@ -1334,6 +1369,49 @@ mod tests {
         let script = std::fs::read_to_string(root.join("crashed-reading.py")).expect("written");
         assert!(script.starts_with(&format!("import sys\nsys.stdout.write(\"{started}\")")));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // `Render Settings` Q4: the page opens the same library folder as the job.
+    #[test]
+    fn the_pages_reading_opens_its_libraries_and_cleans_up_even_on_failure() {
+        use std::os::unix::fs::PermissionsExt;
+        use smoozy_dependencies_machine::{bytes,check::Kind,remap};
+        let root=std::env::temp_dir().join(format!("smoozy-page-links-{}",a_fresh_identity().unwrap().as_text()));
+        std::fs::create_dir_all(root.join("files")).unwrap();
+        std::fs::write(root.join("files/top.blend"),b"top").unwrap();
+        std::fs::write(root.join("library.blend"),b"linked simulation").unwrap();
+        let pair=remap::compose_pair(Kind::Library,"filepath",
+            &bytes::RecordedLocation::as_the_reading_carried_it(b"//lib/rig.blend"),
+            remap::NewLocation::AFixedCopy(bytes::MachineLocation::composed(root.join("library.blend").as_os_str().as_bytes().to_vec()))).unwrap();
+        let build=root.join("reader");
+        std::fs::write(&build,r#"#!/usr/bin/env python3
+import sys,pathlib
+path=next(pathlib.Path(x) for x in sys.argv[1:] if x.endswith('.blend'))
+assert path.read_bytes()==b'top'
+assert (path.parent/'lib/rig.blend').read_bytes()==b'linked simulation'
+print('linked simulation seen')
+"#).unwrap();
+        std::fs::set_permissions(&build,std::fs::Permissions::from_mode(0o755)).unwrap();
+        let work=TheReadingsWork {
+            operation:a_fresh_identity().unwrap(),run:a_fresh_identity().unwrap(),
+            which:WhichReading::TheFilesReading,build:build.as_os_str().as_bytes().to_vec(),
+            blend:root.join("files/top.blend").as_os_str().as_bytes().to_vec(),version:Some("5.3.0".into()),
+            script:root.join("reading.py").display().to_string(),
+            capture:CaptureRecord {job:a_fresh_identity().unwrap(),attempt:1,
+                ordinary_sink:root.join("ordinary").display().to_string(),
+                complaints_sink:root.join("complaints").display().to_string(),ceiling:CaptureCeiling::from(u64::MAX)},
+            staging:None,pairs:Some(serde_json::to_vec(&vec![pair]).unwrap()),range:None,
+        };
+        for sink in [&work.capture.ordinary_sink,&work.capture.complaints_sink] {std::fs::write(sink,b"").unwrap();}
+        let ended=one_reading(&work);
+        assert_eq!(ended.exit_status,Some(0),"{:?}: {}",ended.words,std::fs::read_to_string(&work.capture.complaints_sink).unwrap());
+        assert!(std::fs::read_to_string(&work.capture.ordinary_sink).unwrap().contains("linked simulation seen"));
+        assert!(!root.join("opening").exists(),"reading folder removed");
+        let mut refused=work.clone();refused.build=b"/no-such-blender".to_vec();
+        assert!(!one_reading(&refused).a_blender_ran);
+        assert!(!root.join("opening").exists(),"folder removed after failed spawn");
+        assert_eq!(std::fs::read(root.join("library.blend")).unwrap(),b"linked simulation");
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     /// **The report reads back into the ending it was made from.**

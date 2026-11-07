@@ -57,7 +57,7 @@
 //!
 //! **`su-tg` and `su-tgnew` are drawn from `Server Setup` Y6b's reading.** This
 //! piece refused them on 2026-09-12 because there was no `Telegram` module;
-//! **step 10 piece 8 added *Install it* on 2026-09-14**, and pressing it gets
+//! **step 10 piece 8 added *Install* on 2026-09-14**, and pressing it gets
 //! this tab's one answer, because `Server Setup` G2's placement is made over a
 //! connection and nothing in this copy takes it over one.
 //!
@@ -68,7 +68,7 @@
 //! **`su-tg` is reachable since 2026-10-03 (the 38's piece 6)**: the tab
 //! takes the role's own reading off the machine. **`su-tgnew`'s offer is drawn
 //! since 2026-10-04 (the 38's piece 11)**: Settings' switch is handed to the
-//! card ([`the_tab_with`]). **Its *Install it* runs `Server Setup` G2's
+//! card ([`the_tab_with`]). **Its *Install* runs `Server Setup` G2's
 //! dedicated entry point** ([`crate::setting_up::the_telegram_placement_on`]),
 //! wired 2026-10-04 once the machine's final check stopped ending that run.
 //!
@@ -214,7 +214,7 @@ pub(crate) mod words {
     pub const THE_SERVER_IS_NOT_RESTARTED: &str = "no restart";
     /// `Design/Server Setup § Adding Telegram to a server already set up`, the
     /// drawing's own control.
-    pub const INSTALL_IT: &str = "Install it";
+    pub const INSTALL_IT: &str = "Install";
 
     // ── `Server Setup` W3a's three lines, in `Design/Server Setup § This
     // server`'s own words.
@@ -241,6 +241,11 @@ pub(crate) mod words {
     pub const THIS_SERVERS_DRIVER: &str = "This server's NVIDIA driver,";
     pub const CUDA: &str = "CUDA";
     pub const IS_TOO_OLD_FOR_OPTIX_IN: &str = "is too old for OptiX in Blender";
+    /// **Where the earliest bar missed is 5.3's**, where the card cannot be used
+    /// at all under Cycles (`Rendering` L23a's bullet of 2026-11-02): *This
+    /// server's NVIDIA driver, 575.64.03 (CUDA 12.9), is too old for Cycles GPU
+    /// rendering in Blender 5.3 and later.*
+    pub const IS_TOO_OLD_FOR_CYCLES_GPU_IN: &str = "is too old for Cycles GPU rendering in Blender";
     pub const AND_LATER: &str = "and later.";
     /// **Its second sentence**: on a container, and where a setup tried and
     /// did not get the driver there.
@@ -248,6 +253,15 @@ pub(crate) mod words {
     pub const SMOOZY_COULDNT_UPDATE_IT: &str = "It could not be updated.";
     /// **The Blender table's tag**, drawn like *below 4.5*.
     pub const DRIVER_TOO_OLD_FOR_OPTIX: &str = "driver too old for OptiX";
+    /// **The same tag on a build of 5.3 or later** (`Rendering` L23a's bullet of
+    /// 2026-11-02).
+    pub const DRIVER_TOO_OLD_FOR_CYCLES_GPU: &str = "driver too old for Cycles GPU";
+    /// **`Servers` H11b's OptiX-library bullet, in `Design/Server Setup § This
+    /// server`'s words**: *This server's NVIDIA driver, 580.178.04 (CUDA
+    /// 13.0), has no OptiX library. Cycles GPU jobs can't render here.* Added
+    /// 2026-11-02, the Creator's ruling that setup checks for it.
+    pub const HAS_NO_OPTIX_LIBRARY: &str = "has no OptiX library.";
+    pub const GPU_JOBS_CANT_RENDER_HERE: &str = "Cycles GPU jobs can't render here.";
 
     // ── `Server Setup` W4's setup fault
     pub const THE_LAST_JOB_ASKED_FOR_THE_GPU: &str =
@@ -409,6 +423,7 @@ pub(crate) mod words {
     pub const VERSIONS: &str = "versions";
     pub const THE_LIST_COULD_NOT_BE_READ: &str = "Could not read Blender's download list.";
     pub const ENTRIES_UNREAD: &str = "entries could not be read";
+    pub const ENTRY_UNREAD: &str = "entry could not be read";
 
     // ── The unpack-tool warning — `Server Setup` W3's own row
     pub const UNPACK_TOOL_FIRST: &str = "This build needs the unpack tool first";
@@ -447,7 +462,7 @@ pub(crate) mod words {
     pub const NOTHING_IS_WRITTEN_FOR: &str = "Not built for";
     pub const AND_SMOOZY_CANNOT_HELP: &str = "; jobs on it are unsupported.";
     pub const IT_WILL_APPEAR: &str = "It can be picked for a job, but never automatically.";
-    pub const DONT_INSTALL_IT: &str = "Don't install it";
+    pub const DONT_INSTALL_IT: &str = "Don't install";
 
     // ── The run, on the card — `Design/Server Setup § A long step`. **On the
     // card and never in a box** since 2026-10-02 (the Creator's note 4 on
@@ -480,11 +495,11 @@ pub(crate) mod words {
     /// **The closing paragraph, word for word from `Design/Server Setup § The
     /// two ways out`**, which writes it out in full and says it is the same
     /// paragraph on both panels.
-    pub const THE_CLOSING_PARAGRAPH_ONE: &str = "Server checked just now. Set up again is safe.";
-    pub const THE_CLOSING_PARAGRAPH_TWO: &str =
-        "ends the setup unfinished. Neither removes what is installed.";
+    pub const THE_CLOSING_PARAGRAPH_ONE: &str = "Server checked just now. Set up again resumes where it stopped.";
+    pub const THE_CLOSING_PARAGRAPH_TWO: &str = "ends it and keeps what is installed.";
+    /// **The retry form names no control**: *Set up again tries again.* said
+    /// what the button says (the last words read before the release, 2026-11-06).
     pub const THE_RETRY_PARAGRAPH_ONE: &str = "Server checked just now.";
-    pub const THE_RETRY_PARAGRAPH_TWO: &str = "keeps what is installed.";
     pub const ABANDON_SETUP: &str = "Abandon setup";
     pub const CLOSE: &str = "Close";
 
@@ -1015,6 +1030,9 @@ pub struct TheDriverAsHeld {
     /// `Server Setup` R1 item 5's miss, as the last run that checked the
     /// driver left it.
     pub the_driver_missed_the_optix_bar: bool,
+    /// **`Servers` H11b's OptiX-library bullet**: the held reading's loader
+    /// did not find the OptiX library. Added 2026-11-02.
+    pub the_optix_library_is_missing: bool,
     /// **Where the reading is not this connection's own**, this computer's
     /// own moment of it (`Servers` H2a) — *last seen*. `None` on a live one.
     pub last_seen_at: Option<std::time::SystemTime>,
@@ -2348,7 +2366,7 @@ fn the_admin_access_box_is_composed<R: tauri::Runtime>(
 ///   by [`crate::setting_up::a_setup_is_abandoned`]. **Built 2026-09-22**; until
 ///   then it answered that the act was not built.
 /// - **Installing Telegram's material** — `Server Setup` G2's dedicated entry
-///   point, *Install it* on the card, driven by
+///   point, *Install* on the card, driven by
 ///   [`crate::setting_up::the_telegram_placement_on`]. **Wired 2026-10-04**;
 ///   until then it answered that the act was not built.
 /// - **Removing a Blender** — `Server Setup` B15's plain deletion, a run of
@@ -2419,7 +2437,7 @@ pub fn a_set_up_act_that_needs_a_connection<R: tauri::Runtime>(
                 the_queue_is_told(&queue, the_run_moved_on(&server));
             }
         }
-        // **`Server Setup` G2's dedicated entry point — *Install it*.** Built
+        // **`Server Setup` G2's dedicated entry point — *Install*.** Built
         // by the 38's piece 11 and wired 2026-10-04, once the machine's final
         // check stopped ending the Telegram placement's run (`Audits/Build/Step
         // 10c/The setup's final check and Install Telegram — what landed.md`).
@@ -2675,6 +2693,8 @@ fn the_line_follows<R: tauri::Runtime>(
     follows: crate::setting_up::WhatFollowsARun,
 ) -> (Vec<crate::setting_up::ASetUpAct>, Option<crate::setting_up::ASetUpAct>) {
     use crate::setting_up::WhatFollowsARun;
+    // **`Server Setup` G2a: the add's own setup can place the role too.**
+    crate::setting_up::the_telegram_role_is_read(app, server);
     match follows {
         WhatFollowsARun::TheNextBegins(next) => {
             the_acts_waiting_are_kept(app, server, &crate::setting_up::the_acts_still_waiting_on(server));
@@ -2703,10 +2723,20 @@ fn the_line_is_driven<R: tauri::Runtime>(
     server: &str,
     first: crate::setting_up::ASetUpAct,
 ) {
-    let mut perform = |act: &crate::setting_up::ASetUpAct| the_act_is_performed(app, server, act);
+    let mut perform = |act: &crate::setting_up::ASetUpAct| {
+        let came_to = the_act_is_performed(app, server, act);
+        if let Some(reason) = the_setup_failure_reason(&came_to) {
+            the_setup_reason_goes_to_the_diary(app, server, reason);
+        }
+        came_to
+    };
     let mut is_told = |event: Event| {
         the_queue_is_told(told, event);
         crate::surface::servers::the_work_column_is_told_again(app);
+        // **`Server Setup` G2a: an act of the line moved, and it may have moved
+        // the role**: read after the line has moved on, so the page's
+        // *Installing…* has gone by the time it is told.
+        crate::setting_up::the_telegram_role_is_read(app, server);
     };
     let mut keep = |line: &[crate::setting_up::ASetUpAct]| the_acts_waiting_are_kept(app, server, line);
     let published = the_acts_are_driven_in_turn(
@@ -2763,6 +2793,12 @@ fn the_act_is_performed<R: tauri::Runtime>(
         }
         ASetUpAct::TheTelegramPlacement => {
             let came_to = crate::setting_up::the_telegram_placement_on(app, &point, server);
+            // **`Server Setup` G2a: what it failed with, for the page it may
+            // have been pressed from.** The card says it too.
+            crate::servers::published::the_telegram_install_failed_with(
+                server,
+                (!the_act_finished(act, &came_to)).then(|| what_the_telegram_placement_came_to(&came_to).said),
+            );
             // **Settings' *not reached* list is drawn from the told-record**,
             // which this run moved (`Telegram` L3).
             if let (Some(started), Some(queue)) = (
@@ -2878,6 +2914,9 @@ fn the_acts_ending(
     what_a_job_is_called: &mut dyn FnMut(&smoozy_state::identities::Identity) -> Option<String>,
 ) -> Event {
     use crate::setting_up::{ASetUpAct, TheRunsEnding, WhereTheSetUpGot};
+    if let Some(reason) = the_setup_failure_reason(came_to) {
+        crate::setting_up::the_setup_reason_is_kept(server, reason.to_string());
+    }
     let installed = matches!(
         came_to,
         WhereTheSetUpGot::TheRunEnded {
@@ -3017,7 +3056,7 @@ pub fn the_ones_not_installed_are_named(came: WhatItCameTo, not_installed: &[Str
 /// build on your own computer`: *Your build blender-4.2-linux.tar.xz was not
 /// installed.* After the run's own sentence where it failed or was stopped;
 /// alone where it reached *done* without publishing it, which is the user's
-/// own *Don't install it* and has nothing else to say. Nothing where it was
+/// own *Don't install* and has nothing else to say. Nothing where it was
 /// installed. Added 2026-10-16, step 10c's owed piece 5.
 pub fn the_users_build_not_installed_is_named(
     came: WhatItCameTo,
@@ -3043,7 +3082,7 @@ pub fn the_users_build_not_installed_is_named(
 }
 
 /// **`Server Setup` G2's dedicated entry point, started off the drawing
-/// thread** (P5) and answered when it ends — *Install it* on the card. The 38's
+/// thread** (P5) and answered when it ends — *Install* on the card. The 38's
 /// piece 11, wired 2026-10-04 ([`a_set_up_act_that_needs_a_connection`]) once
 /// the machine's final check read the run's composed list beside its marker.
 ///
@@ -3061,6 +3100,7 @@ fn the_telegram_placement_is_driven<R: tauri::Runtime>(
         the_queue_is_told(queue, one_line_about(&server, words::NO_SERVER_IS_CONNECTED));
         return;
     }
+    crate::servers::published::the_telegram_install_failed_with(&server, None);
     // **`Server Setup` Y9a item 6: pressed while a run stands, it waits its
     // turn.** The run and its ending are the line's
     // ([`the_act_is_performed`], [`the_acts_ending`]).
@@ -4001,7 +4041,7 @@ pub fn the_line_is_drawn_on(panel: &mut TheRunPanel, server: &str) {
         the_telegram_offer_stands_on(server).then(|| Prose::new(words::INSTALL_TELEGRAM_REPORTING));
 }
 
-/// **Which servers' cards last offered *Install it* on Telegram reporting** —
+/// **Which servers' cards last offered *Install* on Telegram reporting** —
 /// so the running card can offer it too (`Design/Server Setup § Asking for
 /// more while a setup runs`). Written each time the tab is composed;
 /// run-held. Added 2026-10-27.
@@ -4174,7 +4214,14 @@ pub fn the_servers_output_on(server: &str, name: &str) -> Option<TheServersOutpu
     let (output, complaints) = crate::setting_up::the_whole_of_what_was_printed_on(server)?;
     let still_going = crate::setting_up::the_kind_being_driven_on(server).is_some();
     let some_were_not_kept = crate::setting_up::some_of_what_was_printed_was_not_kept_on(server);
-    Some(the_servers_output_kept(name, &output, &complaints, still_going, some_were_not_kept))
+    let mut panel = the_servers_output_kept(name, &output, &complaints, still_going, some_were_not_kept);
+    // `Server Setup` Y7e: a local reason is not the server's output.
+    if !still_going && output.is_empty() && complaints.is_empty() {
+        if let Some(reason) = crate::setting_up::the_setup_reason_on(server) {
+            panel.tabs[0].said = Some(Prose::new(reason));
+        }
+    }
+    Some(panel)
 }
 
 /// **The panel's words, composed** — so it can be tested without a window.
@@ -4545,7 +4592,7 @@ pub fn the_tab_with(
     // without the stopped setup's panel: that panel says its steps were read
     // from the server just now, and both its controls act on the machine.
     if let WhatTheMachineSaid::LastSeen(what_was_read, at) = said {
-        // **No *Install it* while last seen**, for the stopped panel's reason:
+        // **No *Install* while last seen**, for the stopped panel's reason:
         // it acts on the machine, and there is no connection to act over.
         let mut tab = the_tab_with(*what_was_read, server, found, false);
         tab.the_stopped_setup = None;
@@ -4746,9 +4793,15 @@ pub fn the_driver_is_drawn_on(
         &[],
         held.the_driver_missed_the_optix_bar,
     );
-    tab.the_driver_warning = said
-        .the_statement
-        .map(|statement| the_driver_warning(&statement, the_driver.where_k1_placed_the_machine, !is_live));
+    // **`Servers` H11b's OptiX-library bullet, said on every kind and in
+    // place of the bar's statement where both are owed** (2026-11-02): with
+    // no OptiX library no cards job renders, whatever the bar.
+    tab.the_driver_warning = if held.the_optix_library_is_missing {
+        Some(the_no_optix_library_warning(the_driver, !is_live))
+    } else {
+        said.the_statement
+            .map(|statement| the_driver_warning(&statement, the_driver.where_k1_placed_the_machine, !is_live))
+    };
     if is_live
         && tab.the_driver_warning.is_some()
         && matches!(tab.the_card.dot.as_str(), "ok" | "idle")
@@ -4767,8 +4820,18 @@ pub fn the_driver_is_drawn_on(
             .iter()
             .any(|(path, version)| path == row.path.as_str() && below.contains(version));
         if it_falls_on_this_row {
-            row.driver_too_old = Some(Prose::new(words::DRIVER_TOO_OLD_FOR_OPTIX));
+            row.driver_too_old = Some(Prose::new(the_tag_for_the_row_of(row.version.as_str())));
         }
+    }
+}
+
+/// **`Server Setup` B12b's tag follows what that build's row stops**
+/// (`Rendering` L23a's bullet of 2026-11-02).
+fn the_tag_for_the_row_of(version: &str) -> &'static str {
+    if crate::surface::the_queue::the_blender_cannot_use_the_card_below_its_bar(version) {
+        words::DRIVER_TOO_OLD_FOR_CYCLES_GPU
+    } else {
+        words::DRIVER_TOO_OLD_FOR_OPTIX
     }
 }
 
@@ -4802,7 +4865,10 @@ pub fn the_driver_warning(
             "{} {}{cuda}, {} {blender} {}",
             words::THIS_SERVERS_DRIVER,
             statement.the_drivers_version,
-            words::IS_TOO_OLD_FOR_OPTIX_IN,
+            match statement.below_it {
+                smoozy_servers::hardware::WhatTheBarStops::Optix => words::IS_TOO_OLD_FOR_OPTIX_IN,
+                smoozy_servers::hardware::WhatTheBarStops::CyclesOnTheCard => words::IS_TOO_OLD_FOR_CYCLES_GPU_IN,
+            },
             words::AND_LATER,
         )),
         and: Prose::new(match placed {
@@ -4811,6 +4877,32 @@ pub fn the_driver_warning(
             }
             _ => words::SMOOZY_COULDNT_UPDATE_IT,
         }),
+        last_seen,
+    }
+}
+
+/// **`Servers` H11b's OptiX-library bullet in `Design/Server Setup § This
+/// server`'s words**: *This server's NVIDIA driver, 580.178.04 (CUDA 13.0),
+/// has no OptiX library. Cycles GPU jobs can't render here.* — the driver's version,
+/// and the CUDA version where the driver gave one, the way the too-old line
+/// writes them. Added 2026-11-02.
+pub fn the_no_optix_library_warning(
+    the_driver: &smoozy_servers::hardware::TheDriversOwnAnswer,
+    last_seen: bool,
+) -> TheDriverWarning {
+    let cuda = the_driver
+        .cuda_version
+        .as_ref()
+        .map(|cuda| format!(" ({} {cuda})", words::CUDA))
+        .unwrap_or_default();
+    TheDriverWarning {
+        said: Prose::new(format!(
+            "{} {}{cuda}, {}",
+            words::THIS_SERVERS_DRIVER,
+            the_driver.version.as_the_driver_wrote_it(),
+            words::HAS_NO_OPTIX_LIBRARY,
+        )),
+        and: Prose::new(words::GPU_JOBS_CANT_RENDER_HERE),
         last_seen,
     }
 }
@@ -4833,9 +4925,14 @@ pub fn the_driver_as_the_row_holds_it(
             Some(reading.the_desktops_own_moment.taken_at()),
         ),
     };
+    // **`Servers` H11b's OptiX-library bullet**, held with the reading and in
+    // the same state as its driver part (2026-11-02).
+    let the_optix_library_is_missing = the_driver.is_some()
+        && reading.is_some_and(|reading| reading.the_optix_library_is_missing);
     TheDriverAsHeld {
         the_driver,
         the_driver_missed_the_optix_bar: row.the_driver_missed_the_optix_bar,
+        the_optix_library_is_missing,
         last_seen_at,
     }
 }
@@ -4874,6 +4971,16 @@ pub(crate) fn the_driver_as_held_for<R: tauri::Runtime>(
 /// being driven and has its own shape — **not** one that finished, and **not**
 /// `Server Setup` S6's abandon, after which the card reads *Not set up* and
 /// nothing stands to be finished or given up. Added 2026-09-22.
+/// **Whether this server's setup stands stopped**, by the one rule the Set up
+/// tab opens its stopped panel by — so the dependency check (`Design/Dependency
+/// Upload & Remap § When the file could not be read at all`) and this tab cannot
+/// disagree. Added 2026-11-04.
+pub(crate) fn a_stopped_setup_stands(read: &crate::setting_up::TheCardAsRead) -> bool {
+    read.the_run
+        .as_ref()
+        .is_some_and(|run| the_panel_a_stopped_setup_opens_on(run).is_some())
+}
+
 fn the_panel_a_stopped_setup_opens_on(
     read: &crate::setting_up::TheSetupAsRead,
 ) -> Option<TheRunPanel> {
@@ -4896,8 +5003,8 @@ fn the_panel_a_stopped_setup_opens_on(
         panel.abandon = None;
         panel.the_closing_paragraph = Some(TheClosingParagraph {
             before: Prose::new(words::THE_RETRY_PARAGRAPH_ONE),
-            the_controls_name: Prose::new(words::SET_UP_AGAIN),
-            after: Prose::new(words::THE_RETRY_PARAGRAPH_TWO),
+            the_controls_name: None,
+            after: None,
         });
     }
     Some(panel)
@@ -5242,7 +5349,7 @@ pub const ABANDON: &str = "abandon";
 pub const STOP: &str = "stop";
 pub const INSTALL_A_BLENDER: &str = "install-a-blender";
 pub const REMOVE_A_BLENDER: &str = "remove-a-blender";
-/// **`Server Setup` G2's dedicated entry point** — *Install it*. Added by step
+/// **`Server Setup` G2's dedicated entry point** — *Install*. Added by step
 /// 10 piece 8.
 pub const INSTALL_TELEGRAM: &str = "install-telegram";
 /// **`Servers` B6's connect that carries the remembered setup** — the action
@@ -5517,7 +5624,7 @@ fn what_was_done(reading: &ASetUpReading, record: &TheSetupRecord) -> Vec<ALineO
     // something the steps do not.** A run that reached the Telegram step
     // already lists *Install Telegram reporting* with its mark, so where the
     // server agrees it is installed nothing more is drawn. Telegram added later
-    // by *Install it* leaves the ready action's steps without it, and keeps
+    // by *Install* leaves the ready action's steps without it, and keeps
     // the line. The Creator's twenty-first notes, note 1, 2026-10-29.
     let the_steps_list_telegram = record
         .the_boundaries_reached
@@ -5536,7 +5643,7 @@ fn what_was_done(reading: &ASetUpReading, record: &TheSetupRecord) -> Vec<ALineO
     } else if reading.telegram_is_switched_on {
         // **`Design/Server Setup § Adding Telegram to a server already set up`:
         // it appears only where it is owed**, and it sits in the list rather
-        // than beside the state line, with *Install it* on it.
+        // than beside the state line, with *Install* on it.
         //
         // **Pressing it is answered, not acted on, until the machine's program
         // can finish `Server Setup` G2's run** (the 38's piece 11's account,
@@ -5544,7 +5651,7 @@ fn what_was_done(reading: &ASetUpReading, record: &TheSetupRecord) -> Vec<ALineO
         lines.push(ALineOfWhatWasDone {
             said: plainly(words::TELEGRAM_NOT_INSTALLED),
             mark: Some(Prose::new(words::THE_SERVER_IS_NOT_RESTARTED)),
-            // **Not a step's mark**: it says what *Install it* will not do, and
+            // **Not a step's mark**: it says what *Install* will not do, and
             // the drawing leaves it plain.
             colour: Verbatim::new(the_marks_colour::PLAIN),
             missing: true,
@@ -5938,7 +6045,11 @@ pub fn the_list(
                 values: vec![Verbatim::new(
                     listing.entries_that_could_not_be_read.len().to_string(),
                 )],
-                rest: Some(Prose::new(words::ENTRIES_UNREAD)),
+                rest: Some(Prose::new(if listing.entries_that_could_not_be_read.len() == 1 {
+                    words::ENTRY_UNREAD
+                } else {
+                    words::ENTRIES_UNREAD
+                })),
                 the_rest_joins: false,
             });
             (finished, unfinished, short, None)
@@ -6359,12 +6470,13 @@ pub struct TheRunPanel {
 }
 
 /// The closing paragraph, in three parts because the control's own name is
-/// written inside it exactly as it reads on the control.
+/// written inside it exactly as it reads on the control. **The retry form is
+/// the first part alone** (2026-11-06).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct TheClosingParagraph {
     pub before: Prose,
-    pub the_controls_name: Prose,
-    pub after: Prose,
+    pub the_controls_name: Option<Prose>,
+    pub after: Option<Prose>,
 }
 
 /// One step of the run.
@@ -6562,8 +6674,8 @@ pub fn the_run_panel(
         what_cancel_leaves: still_going.then(|| Prose::new(words::CANCEL_SETUP_LEAVES)),
         the_closing_paragraph: ended.then(|| TheClosingParagraph {
             before: Prose::new(words::THE_CLOSING_PARAGRAPH_ONE),
-            the_controls_name: Prose::new(words::ABANDON_SETUP),
-            after: Prose::new(words::THE_CLOSING_PARAGRAPH_TWO),
+            the_controls_name: Some(Prose::new(words::ABANDON_SETUP)),
+            after: Some(Prose::new(words::THE_CLOSING_PARAGRAPH_TWO)),
         }),
         // ***Cancel setup* is offered throughout** — `Design/Server Setup § A
         // long step`. **There is no *Close***: there is no box to close.
@@ -7233,6 +7345,52 @@ fn plainly(said: &str) -> Words {
 /// size.** It is written here so the page holds none of it.
 pub const OF: &str = words::OF;
 
+/// `Server Setup` Y7e: these are local failures before the server can print.
+fn the_setup_failure_reason(came: &crate::setting_up::WhereTheSetUpGot) -> Option<&str> {
+    use crate::setting_up::WhereTheSetUpGot;
+    use smoozy_server_protocol::placement::performing::WhatThePlacementReached;
+    match came {
+        WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut { said } => Some(said),
+        WhereTheSetUpGot::ThePlacement { reached: WhatThePlacementReached::FailedBeforeCommit { because } } => Some(because),
+        _ => None,
+    }.filter(|reason| !reason.trim().is_empty()).map(String::as_str)
+}
+
+fn the_setup_reason_goes_to_the_diary<R: tauri::Runtime>(app: &tauri::AppHandle<R>, server: &str, reason: &str) {
+    use tauri::Manager;
+    let Some(started) = app.try_state::<std::sync::Mutex<crate::start::Started>>() else { return };
+    let Ok(started) = started.lock() else { return };
+    let Some(row) = smoozy_state::identities::Identity::read_back(smoozy_state::identities::IdentityKind::LocalServer, server) else { return };
+    let name = started.record.as_ref().and_then(|record|
+        crate::record::server_rows::one(record.connection(), server).ok().flatten())
+        .and_then(|row| row.label).unwrap_or_default();
+    the_setup_reason_is_recorded(started.diary.as_ref(), started.run.as_ref(), &row, &name, reason);
+}
+
+/// `Desktop app and delivery` M32a: no installation or file is required.
+fn the_setup_reason_is_recorded(
+    diary: Option<&crate::diary_service::DiaryService>,
+    run: Option<&smoozy_state::identities::Identity>,
+    server: &smoozy_state::identities::Identity,
+    name: &str,
+    reason: &str,
+) {
+    use crate::presentation::the_two_hooks::{
+        the_diary_is_handed_a_sentence_with_no_record, APresentationWithNoRecord,
+        WhoseSentenceItIs,
+    };
+    let _ = the_diary_is_handed_a_sentence_with_no_record(
+        diary,
+        run,
+        &APresentationWithNoRecord {
+            server_row: server,
+            the_users_label: name,
+            the_files_recorded_path: "",
+        },
+        WhoseSentenceItIs::TheComposersOwn(reason),
+    );
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -7468,6 +7626,8 @@ mod tests {
     /// built `su-out` and `su-outlog`.)*
     /// *(Twenty-six until 2026-10-16, when step 10c's owed piece 4 drew and
     /// built `su-notbegun`.)*
+    /// *(Thirty-nine until 2026-11-02, when the OptiX-check builder drew and
+    /// built `su-nooptix`, a driver with no OptiX library.)*
     /// *(Twenty-four until 2026-10-11, when the plan pass for OptiX and the
     /// driver drew `su-optixoff` and `su-drvold`, built by that work's fourth
     /// piece.)*
@@ -7477,7 +7637,7 @@ mod tests {
     /// *(Twenty-two until 2026-10-02, when the plan pass for the Creator's
     /// notes drew `su-connect` — the card while an add's connection is made,
     /// the Creator's notes piece 3.)*
-    const THE_DRAWN_STATES: [&str; 39] = [
+    const THE_DRAWN_STATES: [&str; 40] = [
         "su",
         "su-connect",
         "su-connectfail",
@@ -7499,6 +7659,7 @@ mod tests {
         "su-nothing",
         "su-optixoff",
         "su-drvold",
+        "su-nooptix",
         "su-tg",
         "su-tgnew",
         "su-going",
@@ -7912,7 +8073,7 @@ mod tests {
             "the final check ends the list"
         );
 
-        // Set up with Telegram off, then *Install it*: the steps do not say
+        // Set up with Telegram off, then *Install*: the steps do not say
         // it, so the reading's line does, after them.
         let mut reading = a_reading();
         let mut record = a_finished_run(WhatTheStepDid::Performed);
@@ -7927,7 +8088,7 @@ mod tests {
         );
 
         // The step reads *done* and the server no longer reads it installed:
-        // the reading differs, so its line and *Install it* stay.
+        // the reading differs, so its line and *Install* stay.
         let mut reading = a_reading();
         reading.telegram_reporting_is_installed = false;
         let card = the_card_from(&reading);
@@ -8443,6 +8604,24 @@ mod tests {
             panel.steps.iter().all(|it| it.the_failure.is_none()),
             "a run the connection cut carries no failure shape"
         );
+    }
+
+    /// **`Design/Server Setup § The two ways out`, as written 2026-11-03: the
+    /// two paragraphs promise only what each control keeps.** *Set up again* may
+    /// finish a removal or make a swap, so it makes no promise about what is
+    /// installed.
+    #[test]
+    fn the_stopped_cards_words_promise_only_what_each_control_keeps() {
+        assert_eq!(
+            format!(
+                "{} {} {}",
+                words::THE_CLOSING_PARAGRAPH_ONE,
+                words::ABANDON_SETUP,
+                words::THE_CLOSING_PARAGRAPH_TWO
+            ),
+            "Server checked just now. Set up again resumes where it stopped. Abandon setup ends it and keeps what is installed."
+        );
+        assert_eq!(words::THE_RETRY_PARAGRAPH_ONE, "Server checked just now.");
     }
 
     /// **`su-step` — a step that ran and failed carries the one failure shape,
@@ -9124,6 +9303,29 @@ mod tests {
         assert!(list.short.is_some());
     }
 
+    /// **`Server Setup` B2's line of 2026-11-02: the words the list says are
+    /// true**, one entry being one entry, and nothing said where nothing is short.
+    #[test]
+    fn the_install_lists_shortfall_is_counted_in_words_that_are_true() {
+        let short_by = |unread: Vec<&str>| {
+            the_list(
+                Ok(smoozy_server_setup::listing::TheListingAsRead {
+                    channels: Vec::new(),
+                    entries_that_could_not_be_read: unread.into_iter().map(str::to_string).collect(),
+                }),
+                Vec::new(),
+            )
+            .short
+        };
+        assert_eq!(short_by(Vec::new()), None);
+        let one = short_by(vec!["4.5lts/stable at 4.5.14a"]).expect("said");
+        assert_eq!(one.values, vec![Verbatim::new("1")]);
+        assert_eq!(one.rest, Some(Prose::new(words::ENTRY_UNREAD)));
+        let two = short_by(vec!["a", "b"]).expect("said");
+        assert_eq!(two.values, vec![Verbatim::new("2")]);
+        assert_eq!(two.rest, Some(Prose::new(words::ENTRIES_UNREAD)));
+    }
+
     /// **A build the server could not fetch is named, by version and kind** —
     /// `Design/Server Setup § Installing`: *Could not download Blender 5.3.0
     /// Alpha.* The Creator's note 7 on 0.1.7: the step read *the Blender
@@ -9491,6 +9693,7 @@ mod tests {
         TheDriverAsHeld {
             the_driver: Some(driver),
             the_driver_missed_the_optix_bar: missed,
+            the_optix_library_is_missing: false,
             last_seen_at: None,
         }
     }
@@ -9580,6 +9783,19 @@ mod tests {
         assert_eq!(warning.and, Prose::new("It could not be updated."));
         assert_eq!(tab.the_card.dot.as_str(), "busy");
 
+        // **`Rendering` L23a's bullet of 2026-11-02, the live pass's own figures:
+        // below 5.3's row the sentence says what stops there.**
+        let tab = a_ready_tab_with(&held_live(the_driver("575.64.03", Some("12.9"), AContainer), false));
+        let warning = tab.the_driver_warning.expect("said on a container");
+        assert_eq!(
+            warning.said,
+            Prose::new(
+                "This server's NVIDIA driver, 575.64.03 (CUDA 12.9), is too old for Cycles GPU rendering in \
+                 Blender 5.3 and later."
+            )
+        );
+        assert_eq!(warning.and, Prose::new("It can't be updated here."));
+
         // **`su-optixoff` — a machine Smoozy can update says nothing**: setup
         // brings the driver up, and the Blender rows carry the tag instead.
         let tab = a_ready_tab_with(&held_live(the_driver("570.211.01", Some("12.8"), ItsOwnKernel), false));
@@ -9615,6 +9831,52 @@ mod tests {
         assert_eq!(tab.the_card.dot.as_str(), "bad");
     }
 
+    /// **`su-nooptix` — `Servers` H11b's OptiX-library bullet: a driver whose
+    /// loader does not find the OptiX library is told in amber on every
+    /// machine kind, with the amber dot, in place of the too-old line where
+    /// both are true.** The rented RTX 4090 of 2026-11-01 read *Ready to
+    /// render* with nothing said, and its first three cards jobs failed at
+    /// once. Added 2026-11-02.
+    #[test]
+    fn a_driver_with_no_optix_library_is_told_on_every_kind_in_place_of_the_too_old_line() {
+        use smoozy_servers::hardware::WhereK1PlacesIt::{AContainer, ItsOwnKernel};
+        let no_library = |driver| TheDriverAsHeld {
+            the_optix_library_is_missing: true,
+            ..held_live(driver, false)
+        };
+        for placed in [AContainer, ItsOwnKernel] {
+            let tab = a_ready_tab_with(&no_library(the_driver("580.178.04", Some("13.0"), placed)));
+            let warning = tab.the_driver_warning.expect("said on every kind");
+            assert_eq!(
+                warning.said,
+                Prose::new("This server's NVIDIA driver, 580.178.04 (CUDA 13.0), has no OptiX library.")
+            );
+            assert_eq!(warning.and, Prose::new("Cycles GPU jobs can't render here."));
+            assert!(!warning.last_seen);
+            assert_eq!(tab.the_card.dot.as_str(), "busy", "with the amber dot");
+        }
+        // **In place of the too-old line**, which a container would also owe.
+        let tab = a_ready_tab_with(&no_library(the_driver("550.163.01", None, AContainer)));
+        let warning = tab.the_driver_warning.expect("said");
+        assert_eq!(
+            warning.said,
+            Prose::new("This server's NVIDIA driver, 550.163.01, has no OptiX library.")
+        );
+        // **Last seen: greyed, and the dot left alone.**
+        let tab = a_ready_tab_with(&TheDriverAsHeld {
+            last_seen_at: Some(at(1_754_000_000)),
+            ..no_library(the_driver("580.178.04", Some("13.0"), AContainer))
+        });
+        assert!(tab.the_driver_warning.expect("still said").last_seen);
+        assert_eq!(tab.the_card.dot.as_str(), "ok");
+        // **No driver part, nothing said.**
+        let tab = a_ready_tab_with(&TheDriverAsHeld {
+            the_optix_library_is_missing: true,
+            ..TheDriverAsHeld::default()
+        });
+        assert!(tab.the_driver_warning.is_none());
+    }
+
     /// **`Server Setup` B12b's tag on the Blender table — `su-optixoff`'s
     /// rows.** On a 570 driver it falls on 5.2.1 and a 5.3 build and on
     /// nothing earlier; **read live**, so it is gone from the next tab drawn
@@ -9643,7 +9905,7 @@ mod tests {
             tab.the_table
                 .rows
                 .iter()
-                .filter(|row| row.driver_too_old == Some(Prose::new(words::DRIVER_TOO_OLD_FOR_OPTIX)))
+                .filter(|row| row.driver_too_old.is_some())
                 .map(|row| row.version.as_str().to_string())
                 .collect()
         };
@@ -9658,6 +9920,15 @@ mod tests {
         };
         let old = held_live(the_driver("570.211.01", Some("12.8"), ItsOwnKernel), false);
         assert_eq!(tagged(&a_tab(&old)), vec!["5.2.1", "5.3.0"]);
+        // **The tag follows what each row stops** (`Rendering` L23a's bullet of
+        // 2026-11-02): OptiX on 5.2.1, Cycles on the card on 5.3.0.
+        let the_tag_on = |tab: &TheSetUpTab, version: &str| {
+            tab.the_table.rows.iter().find(|row| row.version.as_str() == version).and_then(|row| row.driver_too_old.clone())
+        };
+        let tab = a_tab(&old);
+        assert_eq!(the_tag_on(&tab, "5.2.1"), Some(Prose::new("driver too old for OptiX")));
+        assert_eq!(the_tag_on(&tab, "5.3.0"), Some(Prose::new("driver too old for Cycles GPU")));
+        assert_eq!(the_tag_on(&tab, "5.1.1"), None);
         // **After the swap**, the next reading answers at the bar.
         let new = held_live(the_driver("595.91.07", Some("13.2"), ItsOwnKernel), false);
         assert!(tagged(&a_tab(&new)).is_empty());
@@ -9702,18 +9973,22 @@ mod tests {
                 at(1_754_000_000),
                 None,
             )
-            .with_the_driver(Some(driver.clone())),
+            .with_the_driver(Some(driver.clone()))
+            .with_the_optix_library_missing(true),
         );
         row.the_driver_missed_the_optix_bar = true;
         let live = the_driver_as_the_row_holds_it(&row, HardwareState::Live);
         assert_eq!(live.the_driver, Some(driver.clone()));
         assert_eq!(live.last_seen_at, None);
         assert!(live.the_driver_missed_the_optix_bar);
+        assert!(live.the_optix_library_is_missing, "the reading's missing library is handed over");
         let seen = the_driver_as_the_row_holds_it(&row, HardwareState::LastSeen);
         assert_eq!(seen.the_driver, Some(driver));
         assert_eq!(seen.last_seen_at, Some(at(1_754_000_000)));
+        assert!(seen.the_optix_library_is_missing);
         let never = the_driver_as_the_row_holds_it(&row, HardwareState::NeverRead);
         assert_eq!(never.the_driver, None);
+        assert!(!never.the_optix_library_is_missing);
     }
 
     /// **The page draws all three, from the application's own values** — the
@@ -9727,14 +10002,17 @@ mod tests {
         for word in [
             words::NVIDIA_DRIVER,
             words::DRIVER_TOO_OLD_FOR_OPTIX,
+            words::DRIVER_TOO_OLD_FOR_CYCLES_GPU,
             words::SMOOZY_CANT_UPDATE_IT_HERE,
             words::SMOOZY_COULDNT_UPDATE_IT,
+            words::HAS_NO_OPTIX_LIBRARY,
+            words::GPU_JOBS_CANT_RENDER_HERE,
         ] {
             assert!(!page.contains(word), "{word} is written on the page");
         }
     }
 
-    /// **`su-tg`: the not-installed line carries *Install it*, the installed
+    /// **`su-tg`: the not-installed line carries *Install*, the installed
     /// line carries nothing, and the page hands the act back** — `Design/Server
     /// Setup § Adding Telegram to a server already set up`. Replaces the test
     /// that failed if the control was written, step 10 piece 8.
@@ -9762,7 +10040,7 @@ mod tests {
     /// **Settings' switch reaches the card through the tab, and nowhere
     /// else** — `Design/Server Setup § Adding Telegram…`: *"Telegram is on in
     /// Settings and this server has not got it"*. Off, nothing is offered; and
-    /// **a card last seen offers nothing**, because *Install it* acts on the
+    /// **a card last seen offers nothing**, because *Install* acts on the
     /// machine and there is no connection to act over. The 38's piece 11.
     #[test]
     fn settings_switch_reaches_the_card_and_a_last_seen_card_offers_nothing() {
@@ -9940,7 +10218,7 @@ console.log(JSON.stringify({ before, after, late: versions() }));"#
         assert_eq!(came.the_machines_own_words.as_deref(), Some("no such folder"));
     }
 
-    /// **Pressing *Install it* runs `Server Setup` G2's dedicated entry point**
+    /// **Pressing *Install* runs `Server Setup` G2's dedicated entry point**
     /// and never answers that the act is not built. Wired 2026-10-04; until
     /// then the act fell to the catch-all arm, which says the one sentence for
     /// an act nobody has built.
@@ -9953,7 +10231,7 @@ console.log(JSON.stringify({ before, after, late: versions() }));"#
             .expect("the acts");
         assert!(
             acts.contains("(INSTALL_TELEGRAM, _) => the_telegram_placement_is_driven(app, &queue, server),"),
-            "*Install it* is not driven"
+            "*Install* is not driven"
         );
         let driven = the_working_half()
             .split("fn the_telegram_placement_is_driven<R: tauri::Runtime>(")
@@ -10097,27 +10375,6 @@ console.log(JSON.stringify({ before, after, late: versions() }));"#
         assert!(
             faults.is_empty(),
             "a word is written into a composition rather than into `mod words`: {faults:#?}"
-        );
-    }
-
-    /// **This piece composes no failure sentence of a failure record's, so
-    /// `WhoseSentenceItIs` is not reached** — said here rather than left
-    /// unmentioned.
-    ///
-    /// **The one failure this tab draws is a step of a setup run**, and it is
-    /// drawn by the one failure shape from what the machine recorded. It raises
-    /// no failure record and spends no diary capture, so M32's *"the capture
-    /// belongs to whatever composes the sentence the user reads"* is answered
-    /// by there being no record here at all. **A later agent that raises one
-    /// from this page has to pass `TheComposersOwn`**, and this is the line
-    /// that will fail when it does.
-    #[test]
-    fn nothing_here_reaches_the_diary_capture() {
-        assert!(
-            !the_working_half().contains("WhoseSentenceItIs"),
-            "this piece composes a failure record's sentence. **M32 decides whether the diary \
-             keeps what the user actually read**, and a screen that gets it wrong produces no \
-             error, no failing test and no visible fault"
         );
     }
 
@@ -10642,6 +10899,13 @@ console.log(JSON.stringify({ before, after, late: versions() }));"#
                 what_was_read: "E: Failed to fetch … 404  Not Found".to_string(),
             },
         });
+        // **The dependency check asks this tab's own rule** (2026-11-04).
+        let the_card_of = |read: &TheSetupAsRead| crate::setting_up::TheCardAsRead { the_run: Some(read.clone()), the_rest: None };
+        assert!(a_stopped_setup_stands(&the_card_of(&failed)));
+        assert!(!a_stopped_setup_stands(&crate::setting_up::TheCardAsRead { the_run: None, the_rest: None }));
+        assert!(!a_stopped_setup_stands(&the_card_of(&a_run_ending(HowTheRunEnded::Abandoned {
+            what_the_check_found: TheFailedStepsWords::None,
+        }))));
         let tab = the_tab(WhatTheMachineSaid::ASetupRunAlone(Box::new(failed)), "Hyperstack A6000");
         assert_eq!(tab.the_card.state, Prose::new(words::SETUP_STOPPED_PART_WAY));
         let panel = tab.the_stopped_setup.expect("the stopped setup opens on its panel");
@@ -15735,4 +15999,56 @@ console.log(JSON.stringify({
 }));"#,
         ),
     ];
+}
+
+#[cfg(test)]
+mod wait_reason_tests {
+    use super::*;
+    #[test]
+    fn wait_reason_reaches_the_empty_output_panel_for_both_placement_failures() {
+        use crate::setting_up::{ASetUpAct, WhereTheSetUpGot};
+        use smoozy_server_protocol::placement::performing::WhatThePlacementReached;
+        for (server, came) in [
+            ("wait-reason-placement", WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut { said: "Permission denied.".into() }),
+            ("wait-reason-commit", WhereTheSetUpGot::ThePlacement { reached: WhatThePlacementReached::FailedBeforeCommit { because: "Disk full.".into() } }),
+        ] {
+            crate::setting_up::a_runs_words_begin(server);
+            let reason = the_reason_in(&came).the_machines_own_words.unwrap();
+            the_acts_ending(server, &ASetUpAct::TheReadyAction { a_render_was_running: false }, &came, &[], false, &mut |_| None);
+            let panel = the_servers_output_on(server, "Render server").unwrap();
+            assert_eq!(panel.tabs[0].said, Some(Prose::new(&reason)));
+            assert!(panel.tabs[0].record.is_none(), "the reason is not a server stream");
+            assert_eq!(the_servers_output_on(server, "Render server").unwrap(), panel);
+            crate::setting_up::a_piece_is_kept(server, smoozy_server_setup::ready_action::Step::Libraries,
+                &crate::servers::sessions::APiecePrinted::Output(b"server output\n".to_vec()));
+            assert_eq!(the_servers_output_on(server, "Render server").unwrap().tabs[0].record,
+                Some(Verbatim::new("server output\n")));
+            crate::setting_up::a_runs_words_begin(server);
+            assert_eq!(the_servers_output_on(server, "Render server").unwrap().tabs[0].said,
+                Some(Prose::new(words::THE_SERVER_PRINTED_NO_OUTPUT)));
+        }
+    }
+}
+
+
+
+#[cfg(test)]
+mod wait_diary_tests {
+    use super::*;
+    #[test]
+    fn wait_reason_is_in_the_diary_before_an_installation_exists() {
+        use smoozy_state::identities::{Identity, IdentityKind};
+        let folder = std::env::temp_dir().join(format!("smoozy-wait-reason-{}", std::process::id()));
+        let diary = crate::diary_service::DiaryService::open_at(folder.clone()).unwrap();
+        let run = Identity::issue(IdentityKind::Run).unwrap();
+        let row = Identity::issue(IdentityKind::LocalServer).unwrap();
+        the_setup_reason_is_recorded(Some(&diary), Some(&run), &row, "Render server", "Permission denied.");
+        let lines = diary.read_back().unwrap();
+        assert_eq!(lines.lines.len(), 1);
+        assert_eq!(lines.lines[0].text, "Permission denied.  Render server");
+        assert_eq!(lines.lines[0].concerning, vec![row]);
+        assert_eq!(lines.lines[0].run, run);
+        drop(diary);
+        std::fs::remove_dir_all(folder).unwrap();
+    }
 }

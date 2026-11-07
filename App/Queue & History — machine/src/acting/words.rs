@@ -142,8 +142,9 @@ pub struct ALineAsWritten {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AColourLineAsWritten {
-    /// **The substance, as one of the three kinds** — the exact printed text
-    /// of the three is on record in no version, so nothing here writes one.
+    /// **The substance, as one of the three kinds** — no exact printed text is
+    /// held for the three (`crate::ending::ThePrintedText`), so nothing here
+    /// writes one.
     pub kind: TheColourKindAsWritten,
     pub the_line_as_printed: String,
     pub on_stream: TheStreamAsWritten,

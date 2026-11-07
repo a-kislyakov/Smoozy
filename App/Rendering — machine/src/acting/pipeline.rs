@@ -220,6 +220,14 @@ pub trait TheWorkersOwnSteps {
     /// machine says so in its own words.
     fn write_the_placed_copies(&mut self, placed: &ThePlacedCopies);
 
+    /// **`Dependency Upload & Remap` M8b, on the machine's own disk**: the folder
+    /// the file opens from, so its libraries load with it. See
+    /// [`crate::acting::opening::make_the_opening_folder`].
+    fn make_the_opening_folder(
+        &mut self,
+        folder: &smoozy_dependencies_machine::opening::TheOpeningFolder,
+    ) -> Result<(), String>;
+
     /// **Step 7, L5**: the render process's identity paired with its
     /// kernel-set start time, written into the operation record at the moment
     /// it was started.
@@ -488,6 +496,11 @@ struct WhatTheStepsSettled {
     /// still picture** — a first-frame check of a video-only job — which is
     /// what L10c's entry in the material is gated on.
     the_check_is_written_as_a_picture: bool,
+    /// **`Dependency Upload & Remap` M8b's folder, made at step 4 before the
+    /// reading** (`Job files and outputs` R1a), which the reading opens the file
+    /// from and the launch line does too. None where no library pair is relative
+    /// to the file: the file then opens where it sits.
+    the_folder_it_opens_from: Option<smoozy_dependencies_machine::opening::TheOpeningFolder>,
 }
 
 /// The pipeline, holding its seams.
@@ -546,7 +559,7 @@ where
                     self.step_three(&attempt, &mut settled);
                     None
                 }
-                4 => self.step_four(&attempt, step, &mut settled),
+                4 => self.step_four(&attempt, step, remap.as_ref(), &mut settled),
                 5 => self.step_five(&attempt, &settled),
                 6 => self.step_six(&attempt, step, &mut settled),
                 7 => Some(self.step_seven(&attempt, step, remap.as_ref(), &settled)),
@@ -635,6 +648,7 @@ where
         &mut self,
         attempt: &TheAttempt<'_>,
         step: Step,
+        remap: Option<&RemapMaterial>,
         settled: &mut WhatTheStepsSettled,
     ) -> Option<WhereTheAttemptEnded> {
         // **L14, and §9 item 16 is left no space**: Fact 105 is not
@@ -645,6 +659,30 @@ where
             .what_version_it_names(attempt.the_blender_build_path);
         if let Err(refused) = confirm_the_version(attempt.the_manifests_version, answered) {
             return Some(failed(step, the_refusal(refused)));
+        }
+
+        // **`Job files and outputs` R1a and `Dependency Upload & Remap` M8b: the
+        // folder the file opens from is made here, before the reading**, so the
+        // reading sees what the render will see: a bake setting, a simulation or a
+        // baked cache on a linked object is in neither the map nor the gate
+        // otherwise (the film's first job). Made whether or not a reading is owed,
+        // because the launch line opens it too. **A folder that cannot be made ends
+        // the attempt**: the reading would misread the file, and the render would be
+        // the finished wrong picture `Dependency Upload & Remap` M8b exists to stop.
+        if let Some(remap) = remap {
+            settled.the_folder_it_opens_from = smoozy_dependencies_machine::opening::the_folder_the_file_opens_from(
+                &remap.pairs,
+                attempt.manifest.blend_path_on_the_machine.as_bytes(),
+                the_opening_folders_place(attempt).as_bytes(),
+            );
+            if let Some(folder) = &settled.the_folder_it_opens_from {
+                if let Err(why) = self.steps.make_the_opening_folder(folder) {
+                    return Some(WhereTheAttemptEnded::TheAttemptCouldNotBeComposed {
+                        at: step,
+                        what_happened: format!("the folder the file opens from could not be made: {why}"),
+                    });
+                }
+            }
         }
 
         // **The reading is owed wherever the driver does not already hold both
@@ -728,9 +766,19 @@ where
             FrameRange::TheUsersParsedIntegers(frames) => Some(frames.clone()),
             FrameRange::TheFilesOwn => None,
         };
+        // **`Job files and outputs` R1a: through the folder, where there is one.**
+        // Outputs still resolve against the file's real folder, which is handed
+        // separately below, and everything else in the reading goes by the file's
+        // name, which the link keeps.
+        let the_file_it_opens = settled
+            .the_folder_it_opens_from
+            .as_ref()
+            .map(|folder| String::from_utf8_lossy(&folder.the_file).into_owned());
         let taking = TheReadingToTake {
             the_blender_build_path: attempt.the_blender_build_path,
-            the_blend_path_on_the_machine: &attempt.manifest.blend_path_on_the_machine,
+            the_blend_path_on_the_machine: the_file_it_opens
+                .as_deref()
+                .unwrap_or(&attempt.manifest.blend_path_on_the_machine),
             the_version_it_will_render_by: the_version_in_hand(attempt.the_manifests_version),
             the_frames_the_job_covers: asked.as_deref().unwrap_or(&[]),
             the_jobs_scene,
@@ -1123,16 +1171,12 @@ where
         }
         let mut placed = ThePlacedCopies::default();
         let mut sent_to: Vec<Vec<u8>> = Vec::new();
-        let no_folder = |copy: String, recorded: &[u8]| {
+        // **No place in the map: the reason names the copy and nothing further**
+        // (`Rendering — machine`'s `endings` says why).
+        let no_folder = |copy: String| {
             failed(
                 step,
-                BeforeTheRenderInstruction::AnUploadedBakeCouldNotBeCopied {
-                    copy,
-                    why: format!(
-                        "this job's folder has no place for {}",
-                        String::from_utf8_lossy(recorded)
-                    ),
-                },
+                BeforeTheRenderInstruction::AnUploadedBakeCouldNotBeCopied { copy, why: String::new() },
             )
         };
         for copy in &remap.copies_owed {
@@ -1142,7 +1186,7 @@ where
                 .map(|map| copy.where_it_goes(map))
                 .unwrap_or_default();
             if folders.is_empty() {
-                return Some(no_folder(copy.in_words(), copy.recorded.as_bytes()));
+                return Some(no_folder(copy.in_words()));
             }
             for to in folders {
                 match self.steps.copy_into_the_job_folder(copy.from.as_bytes(), &to) {
@@ -1167,10 +1211,7 @@ where
                 .map(|map| copy.where_it_goes(map))
                 .unwrap_or_default();
             if folders.is_empty() {
-                return Some(no_folder(
-                    copy.in_words(),
-                    copy.recorded.as_deref().unwrap_or(b"its default folder"),
-                ));
+                return Some(no_folder(copy.in_words()));
             }
             for to in folders {
                 if sent_to.contains(&to) {
@@ -1288,7 +1329,9 @@ where
         // OptiX library before anything is launched** — here, at the step
         // where L23's lookup ends a make with no row, and before the copies,
         // the scripts and the attempt record, so a machine that cannot render
-        // the job costs nothing past this line.
+        // the job costs nothing past this line. **Only a Cycles job names it
+        // (L21's bullet of 2026-11-02), so a job on another engine never gets
+        // here.**
         //
         // **Only *not found* ends the attempt.** Found, nothing changes. **A
         // lookup that did not answer is not read as either**: it knows nothing
@@ -1311,6 +1354,21 @@ where
         if let Some(ended) = self.the_copies_owed(step, remap, settled) {
             return ended;
         }
+
+        // **`Dependency Upload & Remap` M8b: where a library is recorded relative
+        // to the file, the file opens from a folder where it resolves**, because
+        // the file's own start scripts run as it loads and before anything of ours.
+        // **The folder is made at step 4** (`Job files and outputs` R1a), and the line
+        // opens the link the reading opened.
+        let composed = match &settled.the_folder_it_opens_from {
+            None => composed,
+            Some(folder) => {
+                let line = composed.line.opening_the_file_at(
+                    String::from_utf8_lossy(&folder.the_file).into_owned(),
+                );
+                crate::composition::TheComposedAttempt { line, ..composed }
+            }
+        };
 
         // **L8b's script before the file, placed and read back the same way
         // (L12)** — its handler sets the places `Job files and outputs` D1a
@@ -1389,6 +1447,18 @@ where
         }
         WhereTheAttemptEnded::TheRenderWasLaunched(started)
     }
+}
+
+/// **`Dependency Upload & Remap` M8b: where an attempt's opening folder goes** —
+/// beside this attempt's scripts in the job's record directory, so it goes when the
+/// job's records go, under this attempt's own number.
+fn the_opening_folders_place(attempt: &TheAttempt<'_>) -> String {
+    let scripts = std::path::Path::new(attempt.the_load_time_scripts_path);
+    let folder = scripts.parent().unwrap_or_else(|| std::path::Path::new(""));
+    folder
+        .join(format!("opening-{}", attempt.number))
+        .display()
+        .to_string()
 }
 
 /// **`Rendering` L17a, `Job files and outputs` I19: whether any destination
@@ -1667,6 +1737,7 @@ mod tests {
 
     fn plain_gating() -> GatingConditions {
         GatingConditions {
+            the_effects_on_for_render: None,
             compositing_switch: true,
             a_compositing_tree_is_present: true,
             a_live_final_output_node: true,
@@ -1688,6 +1759,7 @@ mod tests {
     fn a_node_destination(node: &str, output: &str, at: &str) -> Destination {
         Destination {
             kind: DestinationKind::AnOutputOfAFileOutputNode {
+                the_effect: None,
                 node: text(node),
                 output: text(output),
                 the_nodes_base_file_name: None,
@@ -1784,6 +1856,8 @@ mod tests {
         /// **`Job files and outputs` R4c**: whether each reading was told it
         /// is a first-frame check's.
         told_a_check: std::cell::RefCell<Vec<bool>>,
+        /// **`Job files and outputs` R1a**: the path each reading opened the file at.
+        opened: std::cell::RefCell<Vec<String>>,
     }
 
     impl AReadingThat {
@@ -1792,6 +1866,7 @@ mod tests {
                 printed: Some(printed),
                 handed: std::cell::RefCell::new(Vec::new()),
                 told_a_check: std::cell::RefCell::new(Vec::new()),
+                opened: std::cell::RefCell::new(Vec::new()),
             }
         }
         fn answers_nothing() -> AReadingThat {
@@ -1799,6 +1874,7 @@ mod tests {
                 printed: None,
                 handed: std::cell::RefCell::new(Vec::new()),
                 told_a_check: std::cell::RefCell::new(Vec::new()),
+                opened: std::cell::RefCell::new(Vec::new()),
             }
         }
     }
@@ -1811,6 +1887,9 @@ mod tests {
             self.told_a_check
                 .borrow_mut()
                 .push(taking.the_check_is_written_as_a_picture);
+            self.opened
+                .borrow_mut()
+                .push(taking.the_blend_path_on_the_machine.to_string());
             self.printed
                 .clone()
                 .ok_or_else(|| "the reading printed no document".to_string())
@@ -1833,6 +1912,8 @@ mod tests {
         /// Each copy asked of the machine, as (from, to).
         copies: Vec<(Vec<u8>, Vec<u8>)>,
         copy_refuses: Option<String>,
+        opening_folders: Vec<smoozy_dependencies_machine::opening::TheOpeningFolder>,
+        opening_refuses: Option<String>,
         placed_written: Vec<ThePlacedCopies>,
         /// The last text placed — the launch material, which is placed after
         /// L8b's script — kept before the run's folder is removed.
@@ -1917,6 +1998,17 @@ mod tests {
                 modification_time: 1_700_000_000,
                 change_time: 1_700_000_001,
             }])
+        }
+        fn make_the_opening_folder(
+            &mut self,
+            folder: &smoozy_dependencies_machine::opening::TheOpeningFolder,
+        ) -> Result<(), String> {
+            self.order.push("opening");
+            self.opening_folders.push(folder.clone());
+            match &self.opening_refuses {
+                Some(why) => Err(why.clone()),
+                None => Ok(()),
+            }
         }
         fn write_the_placed_copies(&mut self, placed: &ThePlacedCopies) {
             self.order.push("placed-copies");
@@ -2005,6 +2097,8 @@ mod tests {
             recorded_pairs: 0,
             copies: Vec::new(),
             copy_refuses: None,
+            opening_folders: Vec::new(),
+            opening_refuses: None,
             placed_written: Vec::new(),
             the_last_text_placed: String::new(),
             order: Vec::new(),
@@ -2419,6 +2513,29 @@ mod tests {
         started.child.wait().ok();
     }
 
+    /// **`Rendering` L21's bullet of 2026-11-02, and L24b with it: a job on any
+    /// engine but Cycles names no technology, so a machine with no OptiX library
+    /// launches it and the lookup is never made**, though its device says the
+    /// cards.
+    #[test]
+    fn an_eevee_job_on_the_cards_never_asks_for_the_optix_library() {
+        use smoozy_render_settings_machine::engine::{EngineEntry, OfferedEngine};
+        let mut machine = answers();
+        let mut it = ARun::ordinary();
+        it.payload.device = Some(smoozy_render_settings_machine::device::DeviceChoice::TheCards);
+        it.payload.engine = Some(EngineEntry {
+            pick: OfferedEngine::Eevee,
+            identifier: None,
+        });
+        it.optix = WhatTheLoaderFound::NoLibrary;
+        let (went, words, asked) = run_it_counting(&mut machine, &it);
+        assert_eq!(asked, 0, "L24b's lookup is not made");
+        assert!(!words.iter().any(|word| word == "OPTIX" || word == "--"), "{words:?}");
+        let mut started = launched(went);
+        started.child.kill().ok();
+        started.child.wait().ok();
+    }
+
     /// **`Job files and outputs` R13's forbidden case, by name.**
     ///
     /// The file changed after submission and the manifest carries a map. **The
@@ -2546,11 +2663,12 @@ mod tests {
     #[test]
     fn the_stepping_follows_the_step_four_reading_whether_or_not_the_map_is_the_manifests() {
         let step = r#"{"do":"Step","highest":3,"lowest":1}"#;
-        for (says, carried_map) in [(false, false), (true, false), (true, true)] {
+        for (says, carried_map, on) in [(false, false, true), (true, false, true), (true, true, true), (true, false, false), (true, true, false)] {
             let mut machine = answers();
             let mut it = ARun::ordinary();
             let mut printed = an_ordinary_reading();
             printed.the_scene_holds_a_simulation_not_baked = says;
+            it.payload.prepare_simulations = on;
             it.reading = AReadingThat::prints(printed);
             if carried_map {
                 it.manifests_reading = Some(TheReadingAndEverythingDerivedFromIt {
@@ -2580,7 +2698,7 @@ mod tests {
             started.child.wait().ok();
             let text = &machine.the_last_text_placed;
             assert!(text.contains(r#"{"do":"ReadBack""#), "the launch material was the last text placed");
-            assert_eq!(text.contains(step), says, "item 8 {says}, the manifest's map {carried_map}");
+            assert_eq!(text.contains(step), says && on, "item 8 {says}, choice {on}, the manifest's map {carried_map}");
         }
     }
 
@@ -3405,6 +3523,105 @@ mod tests {
         assert_eq!(machine.placed_written[0].files[0].inode, "4242");
     }
 
+    /// **`Dependency Upload & Remap` M8b: a library recorded relative to the file
+    /// has the file opened from a folder where it resolves**, made before the attempt
+    /// record and named on the line.
+    #[test]
+    fn a_library_recorded_relative_to_the_file_has_it_opened_where_it_resolves() {
+        let mut machine = answers();
+        machine.remap = Some(a_remap(&a_job(), true));
+        let it = ARun::ordinary();
+        let (went, words) = run_it(&mut machine, &it);
+        launched(went);
+        assert_eq!(machine.order, vec!["opening", "attempt record"]);
+        let folder = &machine.opening_folders[0];
+        assert_eq!(folder.root, b"/ephemeral/smoozy/job-records/j1/opening-1");
+        let opened = String::from_utf8(folder.the_file.clone()).unwrap();
+        assert!(opened.starts_with("/ephemeral/smoozy/job-records/j1/opening-1/"), "{opened}");
+        assert!(opened.ends_with(".blend"), "{opened}");
+        assert!(words.contains(&opened), "{words:?}");
+        assert_eq!(
+            words.iter().filter(|word| word.ends_with(".blend")).count(),
+            1,
+            "the line opens one file: {words:?}"
+        );
+    }
+
+    /// **No library pair, no folder, and the file opens where it sits.**
+    #[test]
+    fn a_file_with_no_relative_library_opens_where_it_sits() {
+        let mut machine = answers();
+        let it = ARun::ordinary();
+        let (went, words) = run_it(&mut machine, &it);
+        launched(went);
+        assert!(machine.opening_folders.is_empty());
+        assert!(!words.iter().any(|word| word.contains("opening-")), "{words:?}");
+    }
+
+    /// **A folder that cannot be made ends the attempt and says so** — rendering
+    /// anyway is the finished wrong picture `Dependency Upload & Remap` M8b exists
+    /// to stop.
+    #[test]
+    fn an_opening_folder_that_cannot_be_made_ends_the_attempt_before_the_render() {
+        let mut machine = answers();
+        machine.remap = Some(a_remap(&a_job(), true));
+        machine.opening_refuses = Some("No space left on device".to_string());
+        let it = ARun::ordinary();
+        let (went, words) = run_it(&mut machine, &it);
+        let WhereTheAttemptEnded::TheAttemptCouldNotBeComposed { at, what_happened } = went.ended else {
+            panic!("{:?}", went.ended);
+        };
+        assert_eq!(at.number, 4, "`Job files and outputs` R1a: it is made before the reading");
+        assert!(what_happened.contains("the folder the file opens from"), "{what_happened}");
+        assert!(what_happened.contains("No space left on device"), "{what_happened}");
+        assert!(words.is_empty(), "no render was started: {words:?}");
+        assert!(machine.wrote.is_empty(), "no attempt record was written");
+        assert!(it.reading.opened.borrow().is_empty(), "no reading was taken");
+    }
+
+    /// **`Job files and outputs` R1a, 2026-11-04: the reading opens the file from the
+    /// folder the render opens it from**, so it sees what the render will see. Made
+    /// once: the reading and the line name the same link.
+    #[test]
+    fn the_reading_opens_the_file_from_the_folder_the_render_opens_it_from() {
+        let mut machine = answers();
+        machine.remap = Some(a_remap(&a_job(), true));
+        let it = ARun::ordinary();
+        let (went, words) = run_it(&mut machine, &it);
+        launched(went);
+        assert_eq!(machine.opening_folders.len(), 1, "made once");
+        let opened = String::from_utf8(machine.opening_folders[0].the_file.clone()).unwrap();
+        assert_eq!(*it.reading.opened.borrow(), vec![opened.clone()]);
+        assert!(words.contains(&opened), "{words:?}");
+    }
+
+    /// **The file with no relative library costs nothing new**: no folder, and the
+    /// reading opens it where it sits, as it always has.
+    #[test]
+    fn a_file_with_no_relative_library_is_read_where_it_sits() {
+        let mut machine = answers();
+        let it = ARun::ordinary();
+        let (went, _) = run_it(&mut machine, &it);
+        launched(went);
+        assert!(machine.opening_folders.is_empty());
+        let opened = it.reading.opened.borrow();
+        assert_eq!(opened.len(), 1);
+        assert!(!opened[0].contains("opening-"), "{opened:?}");
+    }
+
+    /// **A version refused costs no folder**: L14 stands first, so a binary that
+    /// names another version is refused before anything is made for it.
+    #[test]
+    fn a_version_refused_makes_no_opening_folder() {
+        let mut machine = answers();
+        machine.remap = Some(a_remap(&a_job(), true));
+        let mut it = ARun::ordinary();
+        it.names = None;
+        let (went, _) = run_it(&mut machine, &it);
+        assert!(!matches!(went.ended, WhereTheAttemptEnded::TheRenderWasLaunched(_)));
+        assert!(machine.opening_folders.is_empty());
+    }
+
     /// **`Job files and outputs` D21b-i, added 2026-10-02: a baked physics
     /// cache the reading found on the machine is copied to the point cache's
     /// folder for its recorded location before the render, and recorded with
@@ -3483,7 +3700,8 @@ mod tests {
         };
         assert_eq!(at.number, 7);
         assert!(copy.contains("bake output folder"), "{copy}");
-        assert!(copy.contains("/ephemeral/smoozy/assets/files/home/artist/bake"), "{copy}");
+        assert!(copy.contains("//bake/"), "named as the file records it: {copy}");
+        assert!(!copy.contains("/ephemeral"), "never Smoozy's own copy of it: {copy}");
         assert_eq!(why, "No space left on device");
         assert!(words.is_empty(), "no render was started: {words:?}");
         assert!(machine.wrote.is_empty(), "no attempt record was written");
@@ -3499,13 +3717,14 @@ mod tests {
         let (went, words) = run_it(&mut machine, &it);
         let WhereTheAttemptEnded::FailedBeforeTheRenderInstruction {
             at,
-            reason: BeforeTheRenderInstruction::AnUploadedBakeCouldNotBeCopied { why, .. },
+            reason: BeforeTheRenderInstruction::AnUploadedBakeCouldNotBeCopied { copy, why },
         } = went.ended
         else {
             panic!("{:?}", went.ended);
         };
         assert_eq!(at.number, 7);
-        assert!(why.contains("//an-older-bake/"), "{why}");
+        assert!(copy.contains("//an-older-bake/"), "{copy}");
+        assert!(why.is_empty(), "nothing further a user can use: {why}");
         assert!(machine.copies.is_empty());
         assert!(words.is_empty(), "no render was started: {words:?}");
     }

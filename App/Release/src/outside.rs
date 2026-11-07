@@ -908,7 +908,8 @@ mod tests {
             table: a_published_update(&carried),
             asked_for: Vec::new(),
         };
-        // **This very build**, which carries no master key.
+        // **This very build**, which carries the Creator's master keys and
+        // not the test's.
         assert!(matches!(
             check_the_published_update_file(
                 &TheCarriedSet::this_build(),

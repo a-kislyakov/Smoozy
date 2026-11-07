@@ -222,6 +222,13 @@ pub trait TheRecordAnUploadWrites: Send + Sync {
 /// stores it reaches are not this file's.
 pub trait WhenAFileIsPublished: Send + Sync {
     fn a_file_was_published(&self, landing_path: &[u8], outcome: &UnitOutcome);
+
+    /// **`Dependency Upload & Remap` G17b: a file begins going up to this machine.**
+    /// A reading of the check taken while it does is not kept.
+    fn a_file_begins_going_up(&self) {}
+
+    /// **It has ended, however it ended.**
+    fn a_file_stopped_going_up(&self) {}
 }
 
 /// **What the user asked to upload, and where.**
@@ -1324,11 +1331,13 @@ async fn one_unit_of_the_upload<C: AHeldConnection>(
         let request = the_request(&running.request);
         the_intent_for(&request, &running.the_walk, at)
     };
-    match one_file_goes_up(
+    publishing.a_file_begins_going_up();
+    let went = one_file_goes_up(
         running, at, &landing, intent, sessions, the_run, record, taken_up,
     )
-    .await
-    {
+    .await;
+    publishing.a_file_stopped_going_up();
+    match went {
         Some(UnitOutcome::Done) => {
             publishing.a_file_was_published(&landing, &UnitOutcome::Done);
             WhatOneUnitCameTo::Uploaded

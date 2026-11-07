@@ -57,10 +57,11 @@ pub use smoozy_dependencies_machine::remap::{
 
 /// **M7's first half: no pair is ever composed for a curly-brace expression,
 /// and it is kept by construction rather than by a test over the bytes.** G9
-/// allows a curly-brace expression only in the render output path and the
-/// File Output node; both are [`crate::check::WriteOnlyDestination`]s that
-/// produce no reference, so nothing this module ever composes a pair from can
-/// be one.
+/// allows a curly-brace expression in the render output path and the File
+/// Output node; both are [`crate::check::WriteOnlyDestination`]s that produce no
+/// reference, so nothing this module ever composes a pair from can be one. **From
+/// 5.3 a geometry-nodes bake folder may hold one too (G9a)**, and it is one of
+/// [`THE_WRITE_PLACES_THE_REDIRECT_ASSIGNS`], which take no pair.
 ///
 /// **This replaces a text test that cost the user a row.** `classify` used to
 /// call any location holding a `{` anywhere and a `}` anywhere a template:
@@ -243,6 +244,8 @@ fn one_pair(
         None => crate::landing::mirror_of(layout, resolution.to.location())
             .map_err(NoPairFor::TheMirrorCouldNotBeComposed)?,
     };
+    let machine_copy = the_sets_file_named(machine_copy, resolution, &answer.answer.key.reference)
+        .map_err(NoPairFor::TheMirrorCouldNotBeComposed)?;
 
     let new = if answer.kind == Kind::Library {
         // **M4: a library pair never names a copy that has not been fixed.**
@@ -267,6 +270,29 @@ fn one_pair(
         new,
     )
     .map_err(NoPairFor::ItCouldNotBeComposed)
+}
+
+/// **M4b: a set row's new location keeps the file's name, marks and all.** The
+/// answer is the folder the check looked in (K4, G22), and the setting holds a
+/// file's name. **Only where the recorded location's own last segment carries a
+/// set's marks** (G9): a bake's folder is answered the same way, carries none and
+/// its setting holds a folder.
+fn the_sets_file_named(
+    machine_copy: MachineLocation,
+    resolution: &crate::record::Resolution,
+    reference: &RecordedLocation,
+) -> Result<MachineLocation, crate::landing::CouldNotBeSent> {
+    let a_set = matches!(resolution.to, crate::record::ResolvedTo::AFolderForASetRow(_))
+        && matches!(
+            crate::check::classify(reference, crate::check::StoredSource::NotSaidToBeOneFile),
+            crate::check::Form::ASet(_)
+        );
+    if !a_set {
+        return Ok(machine_copy);
+    }
+    let whole = crate::bytes::join(machine_copy.as_bytes(), reference.wanted_name());
+    crate::landing::fits_the_budgets(&whole).map_err(crate::landing::CouldNotBeSent::TheMirrorWillNotFit)?;
+    Ok(MachineLocation::composed(whole))
 }
 
 /// **M7's other half: no pair is ever composed for a path held in a custom
@@ -438,6 +464,63 @@ mod tests {
             setting: "filepath".to_string(),
             already_on_the_machine: None,
         }
+    }
+
+    /// **M4b: a set row's new location keeps the file's name, marks and all.**
+    /// A live pass on a real shot: the location ended at the folder, Blender
+    /// said *is a directory, cannot use as image*, and the job ended
+    /// *Finished* with the textures missing.
+    #[test]
+    fn a_set_rows_new_location_keeps_the_files_name() {
+        let layout = a_layout();
+        let in_a_folder = |reference: &[u8], folder: &[u8]| {
+            let mut answer = an_answer(Kind::Image, reference, Some(folder));
+            answer.answer.resolution = Some(crate::record::Resolution {
+                to: crate::record::ResolvedTo::AFolderForASetRow(stored(folder)),
+                how: crate::record::HowResolved::TheRecordedLocationItself,
+            });
+            answer
+        };
+        for (reference, name) in [
+            (&b"//maps/set/tile_<UDIM>.tif"[..], &b"tile_<UDIM>.tif"[..]),
+            (b"//maps/set/tile.<UVTILE>.png", b"tile.<UVTILE>.png"),
+            (b"//seq/frame_####.exr", b"frame_####.exr"),
+            (b"//views/eye_%.png", b"eye_%.png"),
+        ] {
+            let composed = compose_the_pairs(
+                &layout,
+                &the_top_file(),
+                &[in_a_folder(reference, b"/Work/maps/set")],
+                &[],
+            );
+            let folder = crate::landing::mirror_of(&layout, &stored(b"/Work/maps/set")).unwrap();
+            let mut wanted = folder.as_bytes().to_vec();
+            wanted.push(b'/');
+            wanted.extend_from_slice(name);
+            assert_eq!(composed.pairs[0].new_location.as_bytes(), &wanted[..]);
+        }
+
+        // **No marks in the last segment: the folder, as it always was** — a
+        // folder-shaped reference answered the same way, whose setting holds a folder.
+        let mut folder_shaped = in_a_folder(b"//strips/", b"/Work/strips");
+        folder_shaped.kind = Kind::Volume;
+        let composed = compose_the_pairs(&layout, &the_top_file(), &[folder_shaped], &[]);
+        assert_eq!(
+            composed.pairs[0].new_location,
+            crate::landing::mirror_of(&layout, &stored(b"/Work/strips")).unwrap()
+        );
+
+        // **A name held whole stays as written.**
+        let whole = an_answer(
+            Kind::Image,
+            b"//tex/tile_<UDIM>.png",
+            Some(b"/Work/tex/tile_<UDIM>.png"),
+        );
+        let composed = compose_the_pairs(&layout, &the_top_file(), &[whole], &[]);
+        assert_eq!(
+            composed.pairs[0].new_location,
+            crate::landing::mirror_of(&layout, &stored(b"/Work/tex/tile_<UDIM>.png")).unwrap()
+        );
     }
 
     #[test]

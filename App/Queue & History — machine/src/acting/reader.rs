@@ -24,9 +24,9 @@
 //!
 //! Every line form is quoted from this project's own Blender research, at
 //! the comparison questions the joined answers name, and **nothing is
-//! written from memory.** Where the research does not carry a shape, there
-//! is no match for it and the absence is a value — see the colour lines
-//! below, which are the one case of it.
+//! written from memory.** Where there is no shape to build on, there is no
+//! match and the absence is a value — see the colour lines below, which are
+//! the one case of it.
 //!
 //! - **The progress line, both grammars** — *Reports 3*: in 4.5
 //!   `Fra:1 Mem:9.77M (Peak 9.77M) | Time:00:00.02 | Remaining:00:00.05 |
@@ -82,20 +82,22 @@
 //!   Every version prints it."* In 4.5 it is Cycles' own printing on the
 //!   error stream; from 5.0 it comes through the log on standard output.
 //!
-//! # The one shape that is on record in no version, and is left absent
+//! # The one shape left absent on purpose
 //!
-//! **The colour-substitution lines' printed text is on record in no version**
-//! — [`crate::ending::ThePrintedText`] is that absence as a value, and it has
-//! one variant on purpose. *Dependencies 15* records what the three lines
-//! **say** — the scene view not found and a default set, the image colour
-//! space not found and a default to be used instead, and a warning that the
-//! current value matches no entry in the list — and the exact printed text of
-//! each sits outside this stage's citation surface. **So there is no match
-//! for one here.** [`WhatTheLineWas`] carries no colour arm, and E13a's
-//! observation reaches [`crate::ending::what_the_entry_says_about_colour`]
-//! only from a reader somebody writes when the text is on record. **Absence
-//! is never evidence that no substitution happened**, which is E13a's own
-//! rule, and the entry saying nothing is what it already does.
+//! **No colour-substitution line is read here, in any version** —
+//! [`crate::ending::ThePrintedText`] is that absence as a value, and it has
+//! one variant on purpose. For 4.5 to 5.2, *Dependencies 15* records what the
+//! three lines **say** — the scene view not found and a default set, the image
+//! colour space not found and a default to be used instead, and a warning that
+//! the current value matches no entry in the list — and the exact printed text
+//! of each sits outside this stage's citation surface. For 5.3 it quotes the
+//! text, from a beta on a Mac, and the view's replacement prints no line. **The
+//! build runner's ruling of 2026-11-02 parks a reader for those in Open Threads
+//! until the release re-read.** [`WhatTheLineWas`] carries no colour arm, and
+//! E13a's observation reaches [`crate::ending::what_the_entry_says_about_colour`]
+//! only from a reader somebody writes then. **Absence is never evidence that no
+//! substitution happened**, which is E13a's own rule, and the entry saying
+//! nothing is what it already does.
 //!
 //! # R3 and R8, kept by the shape of the answer
 //!
@@ -185,6 +187,8 @@ impl TheGrammar {
 /// R3's rule rather than an error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WhatTheLineWas {
+    /// `Queue & History` R6a: Smoozy's own simulation progress and closing line.
+    Simulation { frames: Option<(i64, i64)> },
     /// A progress line, as the grammar read it. **R6's closed list of
     /// readings is what [`crate::readings::fold_a_line`] folds it into**, and
     /// nothing here folds.
@@ -230,6 +234,22 @@ pub enum WhatTheLineWas {
 /// knows it (`the_scene`), which is how the view layer is told apart from a
 /// scene whose name holds `, ` ([`the_layer_after_the_scene`]).
 pub fn read_one_line(grammar: TheGrammar, the_scene: Option<&str>, line: &str) -> WhatTheLineWas {
+    // `Queue & History` R6a and `Rendering` L10b: this is Smoozy's own
+    // marker, identical in every version, not part of a Blender grammar.
+    if let Some(json) = line.trim_end().strip_prefix("SMOOZY-SIMULATION ") {
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
+            if value.get("finished").and_then(|one| one.as_bool()) == Some(true) {
+                return WhatTheLineWas::Simulation { frames: None };
+            }
+            if let Some((frame, to)) = value.get("frame").and_then(|one| one.as_i64())
+                .zip(value.get("to").and_then(|one| one.as_i64()))
+                .filter(|(frame, to)| frame <= to)
+            {
+                return WhatTheLineWas::Simulation { frames: Some((frame, to)) };
+            }
+        }
+        return WhatTheLineWas::NothingReadable;
+    }
     let body = the_message_part(grammar, line);
 
     // The device line is Cycles' own closing report and sits inside its own
@@ -333,6 +353,10 @@ pub fn read_one_line(grammar: TheGrammar, the_scene: Option<&str>, line: &str) -
         samples,
         tiles,
         estimate,
+        // **R12's line of 2026-11-02.** Read off the line's last field in both
+        // grammars, like the samples beside it, and never for what it says about
+        // a file (`Queue & History` E3).
+        the_line_says_finished: last == THE_FINISHED_STAGE_WORD,
     })
 }
 
@@ -447,6 +471,11 @@ fn between_single_quotes(text: &str) -> Option<String> {
 const THE_TILED_HEAD: &str = "Rendered ";
 /// *Reports 7*: what sits between the tile figure and the sample pair.
 const THE_TILED_JOIN: &str = " Tiles, ";
+/// *Reports 11*: the stage word that closes a frame's sampling, on the line after
+/// its last count. **On a frame with tiles too, once per layer, in 4.5.12,
+/// 5.0.1, 5.1.2, 5.2.3 and the 5.3.0 Beta** (`Queue & History` R12's second line
+/// of 2026-11-02, observed at the desk).
+const THE_FINISHED_STAGE_WORD: &str = "Finished";
 /// *Reports 3* and *Reports 8*: Cycles' own sample field.
 const CYCLES_SAMPLE_HEAD: &str = "Sample ";
 /// *Reports 3*: EEVEE's, which carries the count with spaces around the
@@ -472,11 +501,12 @@ const THE_DEVICE_LINES_HEAD: &str = "Path tracing on:";
 /// **The colour-substitution lines are matched by nothing here, and that is
 /// the point.**
 ///
-/// [`crate::ending::ThePrintedText`] states the absence: the exact printed
-/// text of the three is on record in no version. **A grammar written for one
-/// would be written from memory**, which is the one thing this file may not
-/// do, and it would be invisible until a real render — matching nothing, or
-/// worse, matching the wrong line. **E13a's rule already covers what stands
+/// [`crate::ending::ThePrintedText`] states the absence. For 4.5 to 5.2 the
+/// exact printed text of the three is on record nowhere, and **a grammar
+/// written for one would be written from memory**, which is the one thing this
+/// file may not do, and it would be invisible until a real render — matching
+/// nothing, or worse, matching the wrong line. 5.3's is parked (the head of
+/// this file). **E13a's rule already covers what stands
 /// meanwhile**: where no such line was observed the entry says nothing at
 /// all, and absence is never evidence that no substitution happened.
 pub const NO_COLOUR_SUBSTITUTION_LINE_IS_MATCHED_HERE: bool = true;
@@ -551,9 +581,10 @@ mod tests {
     }
 
     /// **R7 and R12, on the thirteen-line run's own first and last lines.**
-    /// The last line of a 2049 by 2049 run that exited 0 and wrote its
-    /// picture ends on a trailing zero — which is why the tiling condition
-    /// is read off the line and never from a size.
+    /// Up to 5.2 the last line of a 2049 by 2049 run that exited 0 and wrote its
+    /// picture ends on a trailing zero, and 5.3's on the last tile's full count
+    /// (*Reports 7*) — which is why the tiling condition is read off the line
+    /// and never from a size.
     #[test]
     fn a_tiled_line_gives_the_tile_pair_and_the_tiles_own_sample_pair_in_both_grammars() {
         let read = a_progress_line(read_one_line(
@@ -842,6 +873,207 @@ mod tests {
         assert_eq!(read.samples, None);
     }
 
+    /// **`Queue & History` R12's second source, added 2026-11-02 (*Reports 3*,
+    /// *Reports 7*, *Reports 11*): a frame cut short in 5.3 goes `Sample
+    /// 160/4096`, then `Finished`, with no closing zero.** `Finished` on an
+    /// untiled frame short of its count is the mark, by the one rule that reads
+    /// every version — **and it harms nothing older or tiled**: the same frame
+    /// in 5.2 and 4.5 reads as it did, a frame at its full count sets nothing, a
+    /// tiled frame sets nothing, and `Cancelled` is no such word.
+    #[test]
+    fn finished_marks_an_untiled_frame_cut_short_and_harms_no_older_or_tiled_reading() {
+        use crate::readings::{fold_a_line, LiveReadings, SamplePair};
+        let fold = |grammar: TheGrammar, lines: &[&str]| {
+            let mut held = LiveReadings::default();
+            for line in lines {
+                if let WhatTheLineWas::AProgressLine(read) = read_one_line(grammar, None, line) {
+                    held = fold_a_line(&held, &read);
+                }
+            }
+            held
+        };
+        let reached = Some(SamplePair { seen: 160, of: 4096 });
+
+        // **5.3 under adaptive sampling**, as *Reports 11* has it.
+        let up_to_the_last_sample = [
+            "00:01.000  render           | Fra: 1 | Remaining: 00:20.00 | Mem: 5M | Sample 1/4096",
+            "00:02.000  render           | Fra: 1 | Remaining: 00:19.00 | Mem: 5M | Sample 160/4096",
+        ];
+        let held = fold(FROM_FIVE, &up_to_the_last_sample);
+        assert_eq!(held.samples, reached);
+        assert!(!held.stopped_short, "still sampling");
+        let finished = "00:02.500  render           | Fra: 1 | Mem: 5M | Finished";
+        let held = fold(FROM_FIVE, &[up_to_the_last_sample[0], up_to_the_last_sample[1], finished]);
+        assert_eq!(held.samples, reached, "the figures stay as printed (`Queue & History` R11)");
+        assert!(held.stopped_short, "the frame ended short of its count");
+
+        // **4.5 to 5.2's own ending reads the same, and its zero is what marks it.**
+        let held = fold(
+            FROM_FIVE,
+            &[
+                up_to_the_last_sample[1],
+                "00:02.400  render           | Fra: 1 | Mem: 5M | Sample 0/4096",
+                finished,
+            ],
+        );
+        assert_eq!(held.samples, reached);
+        assert!(held.stopped_short);
+        let held = fold(
+            FOUR_FIVE,
+            &[
+                "Fra:1 Mem:10.36M (Peak 10.95M) | Time:00:00.16 | Mem:1.48M, Peak:1.48M | Scene, ViewLayer | Sample 160/4096",
+                "Fra:1 Mem:10.36M (Peak 10.95M) | Time:00:00.16 | Mem:1.48M, Peak:1.48M | Scene, ViewLayer | Sample 0/4096",
+                "Fra:1 Mem:10.36M (Peak 10.95M) | Time:00:00.16 | Mem:1.48M, Peak:1.48M | Scene, ViewLayer | Finished",
+            ],
+        );
+        assert_eq!(held.samples, reached);
+        assert!(held.stopped_short);
+
+        // **A frame at its full count, in any version, is not short.**
+        let held = fold(
+            FROM_FIVE,
+            &["00:02.000  render           | Fra: 1 | Mem: 5M | Sample 4096/4096", finished],
+        );
+        assert!(!held.stopped_short);
+        let held = fold(
+            FOUR_FIVE,
+            &[
+                "Fra:1 Mem:10.36M (Peak 10.95M) | Time:00:00.16 | Mem:1.48M, Peak:1.48M | Scene, ViewLayer | Sample 16/16",
+                "Fra:1 Mem:10.36M (Peak 10.95M) | Time:00:00.16 | Mem:1.48M, Peak:1.48M | Scene, ViewLayer | Finished",
+            ],
+        );
+        assert!(!held.stopped_short);
+
+        // **Tiled: `Finished` is the mark at any count (`Queue & History` R12's
+        // line of 2026-11-02), and the figures stay as printed.** The tiled test
+        // below reads the whole of it.
+        for (last, seen) in [
+            ("Rendered 3/4 Tiles, Sample 16/16", 16),
+            ("Rendered 3/4 Tiles, Sample 0/16", 0),
+            ("Rendered 3/4 Tiles, Sample 4/16", 4),
+        ] {
+            let held = fold(
+                FROM_FIVE,
+                &[
+                    &format!("00:04.055  render           | Fra: 1 | Mem: 1M | {last}"),
+                    finished,
+                ],
+            );
+            assert!(held.stopped_short, "{last}");
+            assert_eq!(held.tiles.map(|pair| (pair.done, pair.of)), Some((3, 4)), "{last}");
+            assert_eq!(held.samples, Some(SamplePair { seen, of: 16 }), "{last}");
+        }
+
+        // **`Cancelled` ends no unit here**: *Reports 11*'s stopped 5.3 frame.
+        let held = fold(
+            FROM_FIVE,
+            &[
+                "00:12.000  render           | Fra: 1 | Mem: 5M | Sample 1025/1000000",
+                "00:12.100  render           | Fra: 1 | Mem: 5M | Cancelled",
+            ],
+        );
+        assert!(!held.stopped_short);
+
+        // **No count at all, nothing to be short of**: a stream that printed none.
+        let held = fold(FROM_FIVE, &[finished]);
+        assert!(!held.stopped_short);
+        assert_eq!(held.samples, None);
+    }
+
+    /// **`Queue & History` R12's line of 2026-11-02 and B3b: `Finished` ends a
+    /// frame with tiles too, in every version.** The lines are the ones a real
+    /// frame prints: 4.5.12, 5.2.3 and the 5.3.0 Beta at 2049 by 2049 on the
+    /// Creator's Mac (observed that day), and 5.3 on Linux and a card under
+    /// OptiX (the first live pass, *A5e*). **What it bites on**: a tiled
+    /// frame took no mark, so both bars sat where the tile figures put them.
+    #[test]
+    fn finished_ends_a_frame_with_tiles_in_every_version_and_harms_nothing_else() {
+        use crate::readings::{fold_a_line, LiveReadings, SamplePair, TilePair};
+        let fold = |grammar: TheGrammar, lines: &[&str]| {
+            let mut held = LiveReadings::default();
+            for line in lines {
+                if let WhatTheLineWas::AProgressLine(read) = read_one_line(grammar, None, line) {
+                    held = fold_a_line(&held, &read);
+                }
+            }
+            held
+        };
+
+        // **The live pass's own lines, then what comes after `Finished`.**
+        let the_pass = [
+            "00:39.309  render           | Fra: 2 | Remaining: 00:01.91 | Mem: 574M | Rendered 3/4 Tiles, Sample 48/4096",
+            "00:39.430  render           | Fra: 2 | Remaining: 00:01.92 | Mem: 574M | Finished",
+        ];
+        let held = fold(FROM_FIVE, &the_pass[..1]);
+        assert!(!held.stopped_short, "still sampling");
+        let held = fold(FROM_FIVE, &the_pass);
+        assert!(held.stopped_short, "sampling has ended");
+        assert_eq!(held.tiles, Some(TilePair { done: 3, of: 4 }), "as printed");
+        assert_eq!(held.samples, Some(SamplePair { seen: 48, of: 4096 }), "as printed");
+        let held = fold(
+            FROM_FIVE,
+            &[
+                the_pass[0],
+                the_pass[1],
+                "00:39.454  render           | Fra: 2 | Remaining: 00:01.92 | Mem: 496M | Reading full buffer from disk",
+                "00:40.178  render           | Fra: 2 | Remaining: 00:01.96 | Mem: 496M | ViewLayer | Denoising",
+                "01:11.166  render           | Fra: 2 | Remaining: 00:03.63 | Mem: 1413M | ViewLayer | Finishing",
+            ],
+        );
+        assert!(held.stopped_short, "denoising and saving do not take it back");
+        assert_eq!(held.tiles, Some(TilePair { done: 3, of: 4 }));
+
+        // **4.5 to 5.2 end the tile lines on a zero and 5.3 on a full count**;
+        // the same mark, and each figure as printed.
+        let older = fold(
+            FROM_FIVE,
+            &[
+                "00:03.151  render           | Fra: 1 | Mem: 1M | Rendered 3/4 Tiles, Sample 16/16",
+                "00:03.151  render           | Fra: 1 | Mem: 1M | Rendered 3/4 Tiles, Sample 0/16",
+                "00:03.151  render           | Fra: 1 | Mem: 1M | Finished",
+            ],
+        );
+        assert!(older.stopped_short);
+        assert_eq!(older.samples, Some(SamplePair { seen: 0, of: 16 }), "the tile's own, as printed");
+        let four_five = fold(
+            FOUR_FIVE,
+            &[
+                "Fra:1 Mem:8.38M (Peak 88.38M) | Time:00:02.71 | Mem:0.09M, Peak:80.09M | Scene, ViewLayer | Rendered 3/4 Tiles, Sample 16/16",
+                "Fra:1 Mem:8.38M (Peak 88.38M) | Time:00:02.71 | Mem:0.09M, Peak:80.09M | Scene, ViewLayer | Rendered 3/4 Tiles, Sample 0/16",
+                "Fra:1 Mem:8.38M (Peak 88.38M) | Time:00:02.71 | Mem:0.09M, Peak:80.09M | Scene, ViewLayer | Finished",
+            ],
+        );
+        assert!(four_five.stopped_short);
+        assert_eq!(four_five.tiles, Some(TilePair { done: 3, of: 4 }));
+
+        // **The zero alone is still no mark**: the frame has not said it ended.
+        let held = fold(FROM_FIVE, &["00:03.151  render           | Fra: 1 | Mem: 1M | Rendered 3/4 Tiles, Sample 0/16"]);
+        assert!(!held.stopped_short);
+
+        // **A stopped frame prints no `Finished`, and `Finishing` is not it.**
+        let held = fold(
+            FROM_FIVE,
+            &[
+                "00:12.000  render           | Fra: 1 | Mem: 5M | Rendered 2/4 Tiles, Sample 1025/1000000",
+                "00:12.100  render           | Fra: 1 | Mem: 5M | Cancelled",
+                "00:12.200  render           | Fra: 1 | Mem: 5M | ViewLayer | Finishing",
+            ],
+        );
+        assert!(!held.stopped_short);
+
+        // **The next frame and the next layer start over**, so nothing carries.
+        let held = fold(
+            FROM_FIVE,
+            &[
+                the_pass[0],
+                the_pass[1],
+                "00:41.000  render           | Fra: 3 | Mem: 574M | Rendered 0/4 Tiles, Sample 1/4096",
+            ],
+        );
+        assert!(!held.stopped_short);
+        assert_eq!(held.tiles, Some(TilePair { done: 0, of: 4 }));
+    }
+
     /// **The grammar branches at 5 and on nothing else** — the same boundary
     /// every other version branch in this step turns on.
     #[test]
@@ -866,7 +1098,7 @@ mod tests {
         assert_eq!(
             crate::ending::ColourSubstitutionKind::TheSceneViewNotFoundAndADefaultSet
                 .the_printed_text(),
-            crate::ending::ThePrintedText::OnRecordInNoVersion
+            crate::ending::ThePrintedText::NotHeldHere
         );
         // The one thing *Dependencies 15* does quote is the pair of values a
         // script read back after the substitution, which is not a printed

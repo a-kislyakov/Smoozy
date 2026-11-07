@@ -1433,6 +1433,7 @@ mod tests {
                         eevee: None,
                     },
                 announced_add_on_case: None,
+                the_folders_at_the_machines_top: None,
             },
             Some(&a_blender()),
             &four_values(),

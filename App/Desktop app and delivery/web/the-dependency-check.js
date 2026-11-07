@@ -56,6 +56,7 @@ import {
   thePanelCollapsesAsItsChevronDoes,
   THE_DEPENDENCY_CHECK,
   FILES,
+  SET_UP,
 } from "./a-server.js";
 import { theBrowserIsOpenedAt } from "./files.js";
 import { whenTold } from "./event-route.js";
@@ -202,6 +203,21 @@ function theControlIsPressed(server, said, act, row) {
     theMachinesOwnWordsFor(said.the_machines_words_subject, server);
     return;
   }
+  // **`§ When the file could not be read at all`: *Set up again* folds this panel
+  // down and asks for the Set up tab's own ready action there**, whose warning and
+  // answers arrive on that tab as events, as they do for its own control.
+  if (act === "set-up-again") {
+    thePanelCollapsesAsItsChevronDoes(server);
+    theCurrentTabIs(SET_UP);
+    shell.core.invoke("a_set_up_act_that_needs_a_connection", {
+      act: "the-ready-action",
+      server,
+      version: null,
+      waiting: null,
+      path: null,
+    });
+    return;
+  }
   theActIsTaken(server, act, row);
 }
 
@@ -278,8 +294,15 @@ function theHeadIsDrawn(server, said, head) {
     const still = document.createElement("span");
     still.className = "ckstill";
     still.appendChild(theMarkOnARow(null));
-    saidInto(still, said.still_reading, { valueTag: "span", valueClass: "mono" });
+    // **A count's figures are the sentence's own**; a linked file's name is a path.
+    saidInto(still, said.still_reading, said.the_walks_stop ? { valueTag: "span" } : { valueTag: "span", valueClass: "mono" });
     line.appendChild(still);
+    // ***Stop* beside the walk's count** (`§ While it is still reading below a
+    // linked file`), the same act as *Stop* beside a search.
+    if (said.the_walks_stop) {
+      between();
+      line.appendChild(aLink(said.the_walks_stop, "stop-the-search", () => theActIsTaken(server, "stop-the-search")));
+    }
   }
   head.appendChild(line);
 }

@@ -652,6 +652,7 @@ mod tests {
         reading.the_tree_is_shared_with = Some(text("Second"));
         reading.the_beauty_walk = WhatTheWalkFound::Reached {
             destinations: vec![ADestinationTheBeautyReached {
+                the_effect: None,
                 node: text("Beauty"),
                 output: Some(text("beauty")),
             }],
@@ -708,6 +709,7 @@ mod tests {
             destinations: inputs
                 .iter()
                 .map(|(node, output)| ADestinationTheBeautyReached {
+                    the_effect: None,
                     node: text(node),
                     output: Some(text(output)),
                 })

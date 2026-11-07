@@ -782,3 +782,13 @@ Gathered here as well as in place, because a shape-3 entry is the one a reader m
 The `channel-map` named `latest/stable` version **5.2.2**, released `2026-09-15T11:03:13.935007+00:00`; `5.2lts/stable` version **5.2.3**, released `2026-10-22T08:50:33.847431+00:00`; and `latest/candidate` version **5.2.3**, released `2026-10-22T08:55:21.365037+00:00`. The default track's stable version was therefore older than another track's stable version.
 
 **Not covered:** when channels will next change, or whether the named archives can be fetched. This reading concerns the listing only. *Added 2026-10-27; no auditor has seen it.*
+
+## `apt-get(8)`, `dpkg(1)` and `apt(8)`, for R1 item 5's removal and its reading
+
+`https://manpages.ubuntu.com/manpages/noble/man8/apt-get.8.html`, read **2026-11-03**, apt 2.8.3. `-s`: *"No action; perform a simulation of events that would occur based on the current system state but do not actually change the system."* *"Simulated runs print out a series of lines, each representing a dpkg operation: configure (Conf), remove (Remv) or unpack (Inst)."* On `install`: *"If a hyphen is appended to the package name (with no intervening space), the identified package will be removed if it is installed."* `apt-get returns zero on normal operation, decimal 100 on error.` Label: **documented**.
+
+`https://manpages.ubuntu.com/manpages/noble/man1/dpkg.1.html`, read **2026-11-03**. `--force` thing `overwrite`: *"Overwrite one package's file with another's file."* Label: **documented**.
+
+`https://manpages.ubuntu.com/manpages/noble/man8/apt.8.html`, read **2026-11-03**: its page *"only mentions the most used commands and options"* and does not list `-s`. So that `apt` takes `-s` is an **assumption**, labelled where it is used. That it takes `-y` and two `-o` on a glob removal is **observed**, the Sesterce pass's hand repair of 2026-11-02.
+
+**Not covered:** whether a real removal on any other image meets the same file, and what apt prints for a name ending in a hyphen when no such package exists. *Added 2026-11-03; no auditor has seen it.*

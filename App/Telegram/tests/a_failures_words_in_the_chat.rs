@@ -222,6 +222,8 @@ fn a_failure(job: &str, label: &str, ordinary: ACollectionOutcome, complaints: A
         // The file's own: no *Retry*, so the only buttons are words.
         cause: TheCause::TheFilesOwn,
         disk_free_at_the_ending: None,
+        no_render_began: false,
+        the_reason_the_machine_recorded: None,
     }
 }
 

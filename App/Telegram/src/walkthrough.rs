@@ -523,7 +523,9 @@ impl TheWaitForStart {
 /// 2026-09-14 by the round *setting it up, and what the desktop keeps*.
 /// Step 13's words sweep: *Hello from Smoozy. This chat is connected.* until
 /// then (Rule 9: one sentence, no greeting).
-pub const HELLO_BACK: &str = "Smoozy is connected to this chat.";
+/// *Changed 2026-11-06, the last words read before the release* (was *Smoozy is
+/// connected to this chat.*): the bot is the one speaking.
+pub const HELLO_BACK: &str = "Connected to this chat.";
 
 /// **P1: a Start received, and the conversation it came from.** Nothing is
 /// recorded or stored yet.
@@ -1195,6 +1197,7 @@ mod tests {
     #[test]
     fn hello_back_says_only_that_the_chat_is_connected() {
         assert!(!HELLO_BACK.contains("set up"), "{HELLO_BACK}");
-        assert!(HELLO_BACK.contains("connected"), "{HELLO_BACK}");
+        assert!(HELLO_BACK.to_lowercase().contains("connected"), "{HELLO_BACK}");
+        assert!(!HELLO_BACK.contains("Smoozy"), "{HELLO_BACK}");
     }
 }

@@ -195,7 +195,7 @@ pub enum Argument {
     },
     /// L8 item 9.
     BareDoubleDash,
-    /// L8 item 9, L21, L24a — present exactly where the job is set to use
+    /// L8 item 9, L21, L24a — present exactly where a Cycles job is set to use
     /// the cards, carrying the technology looked up from the make.
     Device {
         version: TheFourVersions,
@@ -543,6 +543,19 @@ impl LaunchLine {
         Ok(LaunchLine { placed })
     }
 
+    /// **`Dependency Upload & Remap` M8b: the same line, opening the file through
+    /// the folder where its libraries resolve.** The one argument changes and its
+    /// place does not, so the gate above has nothing new to hold.
+    pub fn opening_the_file_at(mut self, path: String) -> LaunchLine {
+        for argument in &mut self.placed {
+            if let Argument::TheFile { path: opened } = argument {
+                *opened = path;
+                break;
+            }
+        }
+        self
+    }
+
     /// **L8, performed: the line composed in the contract's order from its
     /// inputs.** Every argument goes to its own position; nothing here
     /// chooses a position, and the result passes through
@@ -657,9 +670,9 @@ pub struct LineInputs {
     /// is, the render instruction is the first frame, the last and the
     /// animation instruction rather than the list.
     pub a_destination_is_video_shaped: bool,
-    /// The technology looked up from the make, exactly where the job is set
-    /// to use the cards (L21, L23); `None` where the file asks for the
-    /// processor.
+    /// The technology looked up from the make, exactly where a Cycles job is
+    /// set to use the cards (L21, L23); `None` where the file asks for the
+    /// processor or the job's engine is not Cycles.
     pub technology: Option<Technology>,
 }
 

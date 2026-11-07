@@ -1146,6 +1146,9 @@ pub struct WhatThisRunHolds {
     /// dropped with a period**, because it is the job's whole and not the
     /// connection's. Added 2026-09-29, step 10c's transfer wave piece 4.
     the_wholes: Mutex<HashMap<String, TheJobsWhole>>,
+    /// **`Download` E2b: the jobs whose download a connection's passes have
+    /// seen stand still for a minute.** Run-held, as the wholes are.
+    the_downloads_not_moving: Mutex<std::collections::HashSet<String>>,
     /// **The name of each held job the machine dropped, read before the
     /// removal took its local record**, keyed by the job identity. `Queue &
     /// History` H11: the user is told, and by name, and nothing else is left
@@ -1703,6 +1706,26 @@ impl WhatThisRunHolds {
         if let Ok(mut held) = self.the_wholes.lock() {
             held.insert(job.to_string(), whole);
         }
+    }
+
+    /// **`Download` E2b: what the passes on a connection make of a job's
+    /// download, handed over after every pass.**
+    pub fn a_jobs_download_was_read(&self, job: &str, it_is_not_moving: bool) {
+        if let Ok(mut held) = self.the_downloads_not_moving.lock() {
+            if it_is_not_moving {
+                held.insert(job.to_string());
+            } else {
+                held.remove(job);
+            }
+        }
+    }
+
+    /// **`Download` E2b's reading of a job's download.**
+    pub fn the_download_is_not_moving(&self, job: &str) -> bool {
+        self.the_downloads_not_moving
+            .lock()
+            .map(|held| held.contains(job))
+            .unwrap_or(false)
     }
 
     /// **The whole this run has read for a job**, and nothing where no pass in
@@ -2300,11 +2323,13 @@ fn the_main_outputs_folder(
         .pairs
         .iter()
         .find(|pair| match &pair.destination.kind {
-            DestinationKind::AnOutputOfAFileOutputNode { node, output, .. } => {
-                node == &main.node && main.output.as_ref() == Some(output)
+            // **`Job files and outputs` R4 item 2**: from 5.3 by the node's
+            // effect as well.
+            DestinationKind::AnOutputOfAFileOutputNode { node, output, the_effect, .. } => {
+                node == &main.node && main.output.as_ref() == Some(output) && the_effect == &main.the_effect
             }
-            DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile { node, .. } => {
-                node == &main.node && main.output.is_none()
+            DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile { node, the_effect, .. } => {
+                node == &main.node && main.output.is_none() && the_effect == &main.the_effect
             }
             _ => false,
         })
@@ -5206,7 +5231,7 @@ pub(crate) mod tests {
 
     // ── A record, in memory ──────────────────────────────────────────────────
 
-    struct ARecordInHand(rusqlite::Connection);
+    pub(crate) struct ARecordInHand(pub(crate) rusqlite::Connection);
 
     impl LendsTheRecord for ARecordInHand {
         fn lend(&self, act: &mut dyn FnMut(&rusqlite::Connection)) {
@@ -5215,7 +5240,7 @@ pub(crate) mod tests {
         fn write_a_diary_line(&self, _act: &smoozy_keys::diary::Act) {}
     }
 
-    fn a_record_with_a_server() -> (ARecordInHand, Identity) {
+    pub(crate) fn a_record_with_a_server() -> (ARecordInHand, Identity) {
         let connection = rusqlite::Connection::open_in_memory().unwrap();
         for migration in crate::record::migrations::ALL {
             if let crate::record::migrations::WhatItRuns::TheseStatements(statements) =
@@ -5539,6 +5564,7 @@ pub(crate) mod tests {
                 exit_status: Some(if the_reason.is_some() { 3 } else { 0 }),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: the_reason.map(str::to_string),
+                no_render_began: false,
                 the_device_line_as_observed: Some(line.to_string()),
             });
             // **The machine's own composition**, which `smoozy-server` sends.
@@ -8039,7 +8065,7 @@ pub(crate) mod tests {
     /// **The note's half carried over, as the fill-in carries it** — an ending,
     /// its two machine-clock moments, and the frame a job short of a clean
     /// finish was on.
-    fn it_ended(
+    pub(crate) fn it_ended(
         record: &ARecordInHand,
         job: &Identity,
         outcome: TheOutcomeAsWritten,
@@ -8062,6 +8088,7 @@ pub(crate) mod tests {
             exit_status: Some(0),
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         JobRecords::over(&record.0).the_fill_in(job, &note).unwrap();
@@ -9175,6 +9202,7 @@ pub(crate) mod tests {
         use smoozy_job_files::reading_script::{TheObservedOutputs, ThePrintedReading};
         let layer = || ArtistsText::of(b"ViewLayer".to_vec());
         let gating = GatingConditions {
+            the_effects_on_for_render: None,
             compositing_switch: true,
             a_compositing_tree_is_present: false,
             a_live_final_output_node: false,
@@ -9773,6 +9801,7 @@ pub(crate) mod tests {
         let held = JobRecords::over(&record.0).read(&job).unwrap().unwrap();
         JobRecords::over(&record.0).remove(&job).unwrap();
         let kept = Payload {
+            prepare_simulations: true,
             version_pick: VersionPick {
                 build_path: "/opt/blender".to_string(),
                 version: "5.2.2".to_string(),
@@ -10086,8 +10115,8 @@ pub(crate) mod tests {
         let after = posted(&record);
         assert_eq!(
             crate::notifications::picture::as_path(&after[0].picture),
-            (std::env::consts::OS == "macos" || std::env::consts::OS == "windows")
-                .then_some(copy.as_path())
+            Some(copy.as_path()),
+            "every system takes the held picture: Linux by its file address in a hint"
         );
         std::fs::remove_dir_all(&folder).unwrap();
     }

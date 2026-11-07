@@ -122,3 +122,12 @@ X1a, 2026-10-27, Claude Opus 5.5, the nineteenth notes' note 7 design pass. No a
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the Telegram discussion's two wants, plan and drawing pass.md`, outside any round — A1: the reading carries each job's current reporting choice and the machine's phone's choice (`Telegram` V1d). No auditor has seen it.
 
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the server-half builder holding `Audits/Build/Step 10c/Brief — the Telegram discussion, the server half.md`, outside any round — A1: the phone's choice carries the update identity too. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 2, outside any round — E2 and E3 carry `Rendering` K14b; R12 and B3b read 5.3's `Finished`. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 5, outside any round — E3's exception reversed. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — E13a and §18 item 27 corrected for 5.3's lines; the telling stays unbuilt. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a preview too heavy for Telegram.md`, outside any round — P1: the extra Blender starts. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — R12, B3b, B4: `Finished` ends a frame with tiles; H12 and N23's wording. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the real files found.md`, outside any round — E12a: only a Cycles job states the ask. No auditor has seen it.
+2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job's reading sees its libraries, and failing before a render.md`, outside any round — §10's paragraph after N3: the ending says whether a render began. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.

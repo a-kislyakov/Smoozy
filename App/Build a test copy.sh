@@ -17,6 +17,13 @@
 # so it cannot open or change the installed Smoozy, its record, its keys or its
 # servers. The account is Audits/Build/Step 10c/A test copy the Creator builds
 # — what landed.md.
+#
+# The program itself is the bundle's starting file, as in a release, and the
+# bundle has a local signature under its own identity, so macOS can match the
+# program to the bundle and the copy can show notifications. Its folder and the
+# server program beside it are built into the program rather than handed to it
+# by a launcher script (Audits/Build/Step 11/The Mac watch's three findings —
+# what landed.md).
 
 set -euo pipefail
 
@@ -104,9 +111,19 @@ file "$server" | grep -q 'ELF 64-bit LSB.*x86-64' || stop "the server program ca
 # A test copy never checks for an update. `SMOOZY_TEST_COPY` is read when the
 # app is built, by `Desktop app and delivery/src/updating/checking.rs`, to keep
 # the update check off. A release never sets it.
+#
+# The copy's own folder, and the server program it places, are built in the
+# same way: `SMOOZY_TEST_COPY_FOLDER` and `SMOOZY_TEST_COPY_DESK_PROGRAM` are
+# read by `Desktop app and delivery/src/platform/locations.rs`, only in a
+# development build, so the copy starts on its own folder however it is opened.
+# The desk program is named from the program's own folder, so the app still
+# works if it is moved.
 say "Step 2 of 3: the app itself."
 build_step "app" "$build/desktop.log" \
-  env SMOOZY_TEST_COPY=1 cargo build --locked -p smoozy-desktop --target-dir "$build/desktop"
+  env SMOOZY_TEST_COPY=1 \
+  SMOOZY_TEST_COPY_FOLDER="$record" \
+  SMOOZY_TEST_COPY_DESK_PROGRAM="../Resources/smoozy-server" \
+  cargo build --locked -p smoozy-desktop --target-dir "$build/desktop"
 desktop="$build/desktop/debug/smoozy-desktop"
 [ -x "$desktop" ] || stop "the app did not come out of the build."
 
@@ -119,27 +136,13 @@ cp "$desktop" "$staged/Contents/MacOS/smoozy-desktop"
 cp "$server" "$staged/Contents/Resources/smoozy-server"
 cp "$build/export/App/Desktop app and delivery/icons/icon.icns" "$staged/Contents/Resources/icon.icns"
 
-# What opening the app runs. It always names the copy's own folder, so the
-# copy never starts on the installed Smoozy's record.
-cat >"$staged/Contents/MacOS/Smoozy Test" <<LAUNCH
-#!/bin/bash
-# Smoozy Test, built from commit $commit.
-# Always starts on its own folder, never on the installed Smoozy's record.
-here="\$(cd "\$(dirname "\$0")" && pwd)"
-resources="\$(cd "\$here/../Resources" && pwd)"
-folder="\$HOME/Library/Application Support/Smoozy Test"
-mkdir -p "\$folder"
-exec "\$here/smoozy-desktop" --throwaway-copy="\$folder" --desk-program="\$resources/smoozy-server"
-LAUNCH
-/bin/chmod 755 "$staged/Contents/MacOS/Smoozy Test"
-
 cat >"$staged/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
-  <key>CFBundleExecutable</key><string>Smoozy Test</string>
+  <key>CFBundleExecutable</key><string>smoozy-desktop</string>
   <key>CFBundleIconFile</key><string>icon.icns</string>
   <key>CFBundleIdentifier</key><string>dev.smoozy.throwaway.test</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
@@ -155,6 +158,14 @@ cat >"$staged/Contents/Info.plist" <<PLIST
 PLIST
 plutil -lint "$staged/Contents/Info.plist" >/dev/null || stop "the app's description file came out wrong."
 
+# A local signature under the copy's own identity. macOS will not let a program
+# ask to show notifications unless it can match it to a signed bundle; this
+# signature is only for this Mac and is not the release's.
+codesign --force --sign - --identifier dev.smoozy.throwaway.test "$staged" >"$build/sign.log" 2>&1 \
+  || stop "the app could not be signed on this Mac. The output is in: $build/sign.log"
+codesign --verify --strict "$staged" >>"$build/sign.log" 2>&1 \
+  || stop "the app's signature did not check out. The output is in: $build/sign.log"
+
 if pgrep -f "$running_copy" >/dev/null 2>&1; then
   stop "Smoozy Test was opened during the build. Quit it, then run this again."
 fi
@@ -162,6 +173,16 @@ if [ -e "$app" ]; then
   rm -rf "$app"
 fi
 mv "$staged" "$app"
+
+# The copy's own folder; the program makes what it needs inside it.
+mkdir -p "$record"
+
+# Tell macOS about the new app at its place, so the next start is matched to
+# this bundle rather than to the copy it replaced.
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+if [ -x "$lsregister" ]; then
+  "$lsregister" -f "$app" >/dev/null 2>&1 || true
+fi
 
 # --- 5. Time, disk, and cleaning up ----------------------------------------
 

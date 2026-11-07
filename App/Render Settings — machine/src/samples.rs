@@ -15,8 +15,9 @@
 use crate::engine::OfferedEngine;
 use crate::reading::{LayerSamplesRule, SceneReading, ViewLayerReading};
 use crate::spellings::{
-    Spelling, ADAPTIVE_SAMPLING_OFF, CYCLES_SAMPLES, EEVEE_SAMPLES, LAYER_SAMPLES_RULE,
-    RESOLUTION_PERCENTAGE, SAMPLE_SUBSET_OFF, THE_TIME_LIMITS_OFF_VALUE, TIME_LIMIT_OFF,
+    Spelling, ADAPTIVE_SAMPLING_OFF, CYCLES_SAMPLES, EEVEE_HAS_A_TIME_LIMIT_FROM, EEVEE_SAMPLES,
+    EEVEE_TIME_LIMIT_OFF, LAYER_SAMPLES_RULE, RESOLUTION_PERCENTAGE, SAMPLE_SUBSET_OFF,
+    THE_TIME_LIMITS_OFF_VALUE, TIME_LIMIT_OFF,
 };
 
 pub use crate::spellings::MissingSpelling;
@@ -47,18 +48,22 @@ pub enum PairValue {
 /// 1. the chosen engine's own sample count, set to the typed number;
 /// 2. adaptive sampling, switched off — the early stop is on in every
 ///    version's starting state;
-/// 3. the time limit, set to its off value;
+/// 3. the time limit, set to its off value — and from 5.3, under EEVEE,
+///    EEVEE's own time limit too;
 /// 4. the layer-samples rule, set to `IGNORE` — the one value that throws
 ///    every per-view-layer count away in a single act;
 /// 5. the sample subset, switched off — the fourth known displacer.
 ///
 /// **C3: under EEVEE the count pair targets EEVEE's own count setting**, and
 /// the reasoning for setting nothing aside reaches exactly the two displacers
-/// it names — the early stop and the time limit are Cycles' alone — while
-/// **it does not reach item 4**, a view layer's own sample count not being
-/// Cycles alone. Items 2, 3 and 5 ride with every typed count (§13 item 29's
-/// own words), whatever engine; under EEVEE two of them have nothing to bite
-/// on. **C2: the set is the extension point** — a newly found displacer is one
+/// it names — the early stop is Cycles' alone, and the time limit is Cycles'
+/// alone up to 5.2 — while **it does not reach item 4**, a view layer's own
+/// sample count not being Cycles alone. Items 2, 3 and 5 ride with every typed
+/// count (§13 item 29's own words), whatever engine; under EEVEE two of them
+/// have nothing to bite on. **From 5.3 a limit EEVEE's file was saved with would
+/// cut a typed count short and say nothing (*Settings 2*), so that pair is
+/// composed per version**: `the_version` is the manifest's, as major and minor,
+/// and an older version never meets the name. **C2: the set is the extension point** — a newly found displacer is one
 /// more pair added here, with nothing else moving; what stands against a
 /// displacer not on this list is only this list's completeness (§13 item 10).
 ///
@@ -76,12 +81,22 @@ pub enum PairValue {
 pub fn the_imposition_set(
     engine: OfferedEngine,
     typed_count: u64,
+    the_version: (u32, u32),
 ) -> Result<Vec<SettingsPair>, MissingSpelling> {
     let count_setting: Spelling = match engine {
         OfferedEngine::Cycles => CYCLES_SAMPLES,
         OfferedEngine::Eevee => EEVEE_SAMPLES,
     };
-    Ok(vec![
+    let eevees_own_limit = (engine == OfferedEngine::Eevee
+        && the_version >= EEVEE_HAS_A_TIME_LIMIT_FROM)
+        .then(|| {
+            Ok(SettingsPair {
+                property: EEVEE_TIME_LIMIT_OFF.written_out()?,
+                value: PairValue::Number(THE_TIME_LIMITS_OFF_VALUE),
+            })
+        })
+        .transpose()?;
+    let mut set = vec![
         SettingsPair {
             property: count_setting.written_out()?,
             value: PairValue::Number(typed_count),
@@ -98,6 +113,9 @@ pub fn the_imposition_set(
             property: TIME_LIMIT_OFF.written_out()?,
             value: PairValue::Number(THE_TIME_LIMITS_OFF_VALUE),
         },
+    ];
+    set.extend(eevees_own_limit);
+    set.extend([
         SettingsPair {
             property: LAYER_SAMPLES_RULE.written_out()?,
             value: PairValue::Identifier(LayerSamplesRule::Ignore.identifier()),
@@ -106,7 +124,8 @@ pub fn the_imposition_set(
             property: SAMPLE_SUBSET_OFF.written_out()?,
             value: PairValue::Switch(false),
         },
-    ])
+    ]);
+    Ok(set)
 }
 
 /// **C4: an untouched count is no entry** (J4): the file renders its own
@@ -222,7 +241,7 @@ mod tests {
             (OfferedEngine::Cycles, "scene.cycles.samples"),
             (OfferedEngine::Eevee, "scene.eevee.taa_render_samples"),
         ] {
-            let set = the_imposition_set(engine, 128).expect("C10 carries every name");
+            let set = the_imposition_set(engine, 128, (5, 2)).expect("C10 carries every name");
             let names: Vec<&str> = set.iter().map(|pair| pair.property).collect();
             assert_eq!(
                 names,
@@ -240,6 +259,40 @@ mod tests {
             assert_eq!(set[2].value, PairValue::Number(0));
             assert_eq!(set[3].value, PairValue::Identifier("IGNORE"));
             assert_eq!(set[4].value, PairValue::Switch(false));
+        }
+    }
+
+    /// **C1 item 3 and C3, corrected 2026-11-02: from 5.3 EEVEE's own time limit
+    /// goes off too, under EEVEE alone**, right after Cycles', and no older
+    /// version ever meets the name, because `Rendering` L10a would fail the job
+    /// on it (*Settings 2*).
+    #[test]
+    fn a_typed_count_under_eevee_turns_eevees_own_limit_off_from_5_3_and_never_before() {
+        let names = |engine, version| -> Vec<&'static str> {
+            the_imposition_set(engine, 128, version)
+                .expect("C10 carries every name")
+                .iter()
+                .map(|pair| pair.property)
+                .collect()
+        };
+        let with_it = vec![
+            "scene.eevee.taa_render_samples",
+            "scene.cycles.use_adaptive_sampling",
+            "scene.cycles.time_limit",
+            "scene.eevee.time_limit",
+            "scene.cycles.use_layer_samples",
+            "scene.cycles.use_sample_subset",
+        ];
+        assert_eq!(names(OfferedEngine::Eevee, (5, 3)), with_it);
+        assert_eq!(names(OfferedEngine::Eevee, (5, 4)), with_it);
+        let set = the_imposition_set(OfferedEngine::Eevee, 128, (5, 3)).unwrap();
+        assert_eq!(set[3].value, PairValue::Number(0), "Zero disables the limit.");
+
+        for version in [(4, 5), (5, 0), (5, 1), (5, 2)] {
+            assert!(!names(OfferedEngine::Eevee, version).contains(&"scene.eevee.time_limit"));
+        }
+        for version in [(4, 5), (5, 2), (5, 3), (5, 4)] {
+            assert!(!names(OfferedEngine::Cycles, version).contains(&"scene.eevee.time_limit"));
         }
     }
 

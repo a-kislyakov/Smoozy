@@ -626,6 +626,19 @@ pub fn compose_the_inventory(reading: &TheOutputsHalf, map: &TheMap) -> WhatTheI
     })
 }
 
+/// **Whether a destination will write something the reading cannot name** (I2's
+/// *What an unresolved name does*). It owes no entry, so its figure is nought,
+/// and it is not a destination that writes nothing: the page keeps its row.
+pub fn it_writes_what_the_reading_cannot_name(reading: &TheOutputsHalf, destination: &Destination) -> bool {
+    if destination.format.as_ref().is_some_and(|format| format.is_video_shaped) {
+        return destination.its_folder_is_unresolved();
+    }
+    reading
+        .per_frame
+        .iter()
+        .any(|frame| matches!(the_name_owed_at(reading, destination, frame), WhatIsOwedAt::TheNameIsUnresolved))
+}
+
 /// **Whether an added write place's mapped folder is its own** — D21f's
 /// condition, read off the map.
 ///
@@ -864,12 +877,20 @@ fn the_scenes_nodes_will_write(
     frame: &crate::reading::AtOneFrame,
 ) -> bool {
     match &destination.scene {
-        WhichScene::TheJobsOwnScene => frame.gating.a_file_output_node_will_write(),
+        // **I8's second paragraph: from 5.3 a node writes only at a frame its
+        // own effect is on for render**, set, keyed or driven.
+        WhichScene::TheJobsOwnScene => {
+            frame.gating.a_file_output_node_will_write()
+                && frame.gating.a_nodes_effect_is_on(destination.the_effect())
+        }
         WhichScene::ReachedThroughASequencerStrip { scene, .. } => reading
             .scenes_reached_through_a_sequencer_strip
             .iter()
             .find(|reached| reached.scene.as_bytes() == scene.as_bytes())
-            .is_some_and(|reached| reached.gating.a_file_output_node_will_write()),
+            .is_some_and(|reached| {
+                reached.gating.a_file_output_node_will_write()
+                    && reached.gating.a_nodes_effect_is_on(destination.the_effect())
+            }),
     }
 }
 
@@ -1046,6 +1067,7 @@ pub(crate) mod tests {
     pub(crate) fn a_node_destination(node: &str, output: &str, at: &str, base: Option<&str>) -> Destination {
         let mut destination = a_destination(
             DestinationKind::AnOutputOfAFileOutputNode {
+                the_effect: None,
                 node: text(node),
                 output: text(output),
                 the_nodes_base_file_name: base.map(text),
@@ -1320,7 +1342,7 @@ pub(crate) mod tests {
         let version = TheVersionInHand::of(5, 3);
         let read = |base: &str| {
             let mut one = a_node_destination(base, "Image", "/home/a/out", Some(base));
-            one.put_in_the_replaced_text(Some(b"standin"));
+            one.put_in_the_replaced_text(Some(b"standin"), TheVersionInHand::of(5, 2));
             one
         };
         let (fps, blend_name) = (read("{fps} - a"), read("{blend_name} - b"));
@@ -1603,5 +1625,37 @@ pub(crate) mod tests {
         );
         // The colliding entry is grouped under the first destination's format.
         assert_eq!(split, vec![(Some(b"PNG".to_vec()), 2)]);
+    }
+
+    /// **I8's second paragraph: from 5.3 a node owes only at the frames its own
+    /// effect is on**, and a node of another effect by the same name is not held
+    /// by that.
+    #[test]
+    fn a_node_in_an_effect_off_at_a_frame_owes_nothing_at_that_frame() {
+        let version = TheVersionInHand::of(5, 3);
+        let in_the_effect = |effect: &str, node: &str| {
+            let mut one = a_node_destination(node, "Image", effect, Some("x_"));
+            let DestinationKind::AnOutputOfAFileOutputNode { the_effect, .. } = &mut one.kind else {
+                panic!("a node's destination");
+            };
+            *the_effect = Some(text(effect));
+            one
+        };
+        let at = |frame: i64, on: &[&str]| {
+            let mut one = a_frame(frame, &["ViewLayer"], None);
+            one.gating.the_effects_on_for_render = Some(on.iter().map(|name| text(name)).collect());
+            one
+        };
+        let reading = a_reading(
+            vec![in_the_effect("One", "File Output"), in_the_effect("Two", "File Output")],
+            vec![at(1, &["One", "Two"]), at(2, &["One"]), at(3, &[])],
+            version,
+        );
+        assert_eq!(composed(&reading, version).the_count(), 3);
+        // **A reading with no stack is held by nothing here**, which is 4.5 to 5.2.
+        let mut older = a_node_destination("File Output", "Image", "//passes/", Some("x_"));
+        older.the_view_layers_that_feed_it = Vec::new();
+        let reading = a_reading(vec![older], vec![a_frame(1, &["ViewLayer"], None)], TheVersionInHand::of(5, 2));
+        assert_eq!(composed(&reading, TheVersionInHand::of(5, 2)).the_count(), 1);
     }
 }

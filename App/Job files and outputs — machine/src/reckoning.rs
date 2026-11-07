@@ -575,6 +575,14 @@ impl TheCompletenessStatement {
     pub fn the_count_came_up_short(&self) -> bool {
         self.present.len() < self.expected
     }
+
+    /// **The one thing `Rendering` K14b reads here: the job owed at least one
+    /// file and none of them is present.** A file at zero bytes is not present,
+    /// as C27's sets keep it. **A job that owed nothing is not this**: it wrote
+    /// everything it owed (`Preparation/Specs/What a job writes.md`).
+    pub fn none_of_what_was_owed_was_written(&self) -> bool {
+        self.expected > 0 && self.present.is_empty()
+    }
 }
 
 /// **C27, C27a and C28, composed against the same one walk (C10).**
@@ -687,6 +695,10 @@ pub const NOTHING_HERE_TREATS_A_SHORT_FILE_ON_LINUX_AS_CERTAINLY_EMPTY: bool = t
 /// **There is no already-there machinery to recover it** (I22), which is why this
 /// is stated as a constraint on the stop rather than as something the re-run
 /// absorbs.
+///
+/// **Caution, 2026-11-02:** 5.3's stopped videos were read by Blender's own
+/// reader alone, so whether they play anywhere else is not known (*Frames 5*).
+/// That only an interrupt leaves frames held there too.
 pub fn what_a_stop_leaves_of_a_video(how: HowARenderIsEnded) -> bool {
     matches!(how, HowARenderIsEnded::TheInterrupt)
 }

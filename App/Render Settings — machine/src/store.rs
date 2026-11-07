@@ -23,7 +23,7 @@
 //! and the arrow between them points only through the user's own act.
 //!
 //! **Markers used in this file that belong to another document, each with the
-//! document it belongs to.** `Rendering` A1, A1b, A1d, S6. `Queue & History`
+//! document it belongs to.** `Rendering` A1, A1b, A1d, A4, S6. `Queue & History`
 //! N10a. `File Browser` §12.
 
 use std::collections::HashMap;
@@ -86,6 +86,8 @@ pub struct Pin {
 /// of the pre-read answer set too.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SceneEntries {
+    /// `Render Settings` Y1c: no answer means on.
+    pub prepare_simulations: Option<bool>,
     pub frame_range: Option<FrameForm>,
     /// `Render Settings` F1: display only; never read for a number.
     pub frame_range_text: Option<String>,
@@ -96,12 +98,27 @@ pub struct SceneEntries {
     pub device: Option<DeviceChoice>,
     pub pins: Vec<Pin>,
     pub simplify: SimplifyEntries,
+    /// **Y15b: where the range here came with a loaded setup, what stood here
+    /// before the load.** `None` for a range the user typed, and for no range.
+    /// It sits on the entries so that J3's re-key of the pre-read set carries
+    /// it, and so that F1's accepted range and J5's cross end it by themselves.
+    pub what_a_loaded_range_stands_on: Option<WhatStoodBeneath>,
+}
+
+/// **Y15b: the range and F1's display copy that stood where a load wrote**,
+/// both empty where nothing did. What the page reads again once the loaded
+/// range goes.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct WhatStoodBeneath {
+    pub frame_range: Option<FrameForm>,
+    pub frame_range_text: Option<String>,
 }
 
 /// One answer the user gave, in F1's parsed form or J11's accepted value —
 /// **never text**, because the boxes refuse before anything reaches here.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Answer {
+    PrepareSimulations(bool),
     FrameRange(FrameForm),
     SampleCount(u64),
     ResolutionPercentage(u32),
@@ -116,6 +133,7 @@ pub enum Answer {
 /// **J5: the per-setting cross deletes that entry.** Which one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Setting {
+    PrepareSimulations,
     FrameRange,
     SampleCount,
     ResolutionPercentage,
@@ -145,9 +163,11 @@ impl SceneEntries {
             }
         }
         match answer {
+            Answer::PrepareSimulations(on) => self.prepare_simulations = Some(on),
             Answer::FrameRange(form) => {
                 self.frame_range = Some(form);
                 self.frame_range_text = None;
+                self.what_a_loaded_range_stands_on = None;
             },
             Answer::SampleCount(count) => self.sample_count = Some(count),
             Answer::ResolutionPercentage(percentage) => {
@@ -168,9 +188,11 @@ impl SceneEntries {
     /// either exists or does not.
     fn delete(&mut self, setting: &Setting) {
         match setting {
+            Setting::PrepareSimulations => self.prepare_simulations = None,
             Setting::FrameRange => {
                 self.frame_range = None;
                 self.frame_range_text = None;
+                self.what_a_loaded_range_stands_on = None;
             },
             Setting::SampleCount => self.sample_count = None,
             Setting::ResolutionPercentage => self.resolution_percentage = None,
@@ -202,6 +224,16 @@ impl SceneEntries {
         }
         self.delete(setting);
         Ok(())
+    }
+
+    /// **Y15b: what a load here would have to give back** — a record already
+    /// standing, so a second load gives back what the user had and never the
+    /// first load's range; else the range as it stands.
+    fn what_stands_beneath_a_load(&self) -> WhatStoodBeneath {
+        self.what_a_loaded_range_stands_on.clone().unwrap_or_else(|| WhatStoodBeneath {
+            frame_range: self.frame_range.clone(),
+            frame_range_text: self.frame_range_text.clone(),
+        })
     }
 
     fn pin(&mut self, layer: NamedAnswer, on: bool) {
@@ -309,14 +341,68 @@ impl Store {
         }
     }
 
-    /// F1: an accepted range and its display copy are replaced together.
-    pub fn answer_the_typed_range(&mut self, at: Where, form: FrameForm, text: &str) {
-        let entries = match at {
+    fn entries_at(&mut self, at: Where) -> &mut SceneEntries {
+        match at {
             Where::AScene { file, scene } => self.file(file).per_scene.entry(scene).or_default(),
             Where::ThePreReadSet { file } => self.file(file).pre_read.get_or_insert_with(SceneEntries::default),
-        };
+        }
+    }
+
+    /// F1: an accepted range and its display copy are replaced together.
+    /// **Y15b: a range the user typed is theirs**, whatever stood there.
+    pub fn answer_the_typed_range(&mut self, at: Where, form: FrameForm, text: &str) {
+        let entries = self.entries_at(at);
         entries.frame_range = Some(form);
         entries.frame_range_text = Some(text.trim().to_string());
+        entries.what_a_loaded_range_stands_on = None;
+    }
+
+    /// **Y15b: `Rendering` A4's range, written over what the load brought**:
+    /// the load's own record goes on standing under it.
+    pub fn a_range_is_loaded(&mut self, at: Where, form: FrameForm) {
+        let entries = self.entries_at(at);
+        let beneath = entries.what_stands_beneath_a_load();
+        entries.frame_range = Some(form);
+        entries.frame_range_text = None;
+        entries.what_a_loaded_range_stands_on = Some(beneath);
+    }
+
+    /// **Y15b, for a load that writes the pre-read set answer by answer**
+    /// (`Rendering`'s load of an entry that named no scene): what stands in the
+    /// set before it clears it.
+    pub fn what_stands_beneath_a_load_of_the_pre_read_set(&self, file: &FileKey) -> WhatStoodBeneath {
+        self.files
+            .get(file)
+            .and_then(|held| held.pre_read.as_ref())
+            .map(SceneEntries::what_stands_beneath_a_load)
+            .unwrap_or_default()
+    }
+
+    /// **Y15b: that load's record, written once its answers are in.** A load
+    /// that left no range and took none away has nothing to record.
+    pub fn the_pre_read_set_was_loaded(&mut self, file: FileKey, beneath: WhatStoodBeneath) {
+        let there_was_one = beneath != WhatStoodBeneath::default();
+        let Some(set) = self.file(file).pre_read.as_mut() else {
+            return;
+        };
+        if there_was_one || set.frame_range.is_some() {
+            set.what_a_loaded_range_stands_on = Some(beneath);
+        }
+    }
+
+    /// **Y15b: the one job went, or the page was left.** Every entry of this
+    /// (server, file) a load wrote a range into reads what stood there before.
+    /// A range typed since has no record and is not touched.
+    pub fn a_loaded_range_goes(&mut self, file: &FileKey) {
+        let Some(held) = self.files.get_mut(file) else {
+            return;
+        };
+        for entries in held.pre_read.iter_mut().chain(held.per_scene.values_mut()) {
+            if let Some(beneath) = entries.what_a_loaded_range_stands_on.take() {
+                entries.frame_range = beneath.frame_range;
+                entries.frame_range_text = beneath.frame_range_text;
+            }
+        }
     }
 
     /// F1 and J3: the group display copy shadows the scene's copy too.
@@ -414,6 +500,12 @@ impl Store {
                 held.per_scene.remove(&scene);
             }
             PageInHand::AGroup => {
+                // `Render Settings` Y1c: reset the simulation choices shown for this group.
+                for ticked in &held.scenes_ticked {
+                    if let Some(entries) = held.per_scene.get_mut(&ticked.name) {
+                        entries.prepare_simulations = None;
+                    }
+                }
                 held.group_frame_range = None;
                 held.group_frame_range_text = None;
             },
@@ -539,8 +631,17 @@ impl Store {
     /// scene name. The kept scene is ticked with its kept-setup provenance,
     /// so the job the page re-submits carries that job's scene name (Y10).
     pub fn load_a_kept_setup(&mut self, file: FileKey, kept: KeptSetup, the_offer_is_drawn: bool) {
-        let entries = what_the_load_carries(&kept, the_offer_is_drawn);
+        let mut entries = what_the_load_carries(&kept, the_offer_is_drawn);
         let held = self.file(file);
+        // **Y15b: what stood under this load, kept with what it writes**, a
+        // load that brings no range included: it takes a typed one away too.
+        let beneath = held
+            .per_scene
+            .get(&kept.scene.name)
+            .map(SceneEntries::what_stands_beneath_a_load)
+            .unwrap_or_default();
+        entries.what_a_loaded_range_stands_on =
+            (entries.frame_range.is_some() || beneath != WhatStoodBeneath::default()).then_some(beneath);
         held.per_scene.insert(kept.scene.name.clone(), entries);
         held.scenes_ticked = vec![kept.scene];
         held.version_pick = match kept.version {
@@ -629,6 +730,113 @@ mod tests {
             file: file.clone(),
             scene: kitchen(),
         }
+    }
+
+    /// **Y15b: a loaded range belongs to one job.** A load over nothing, and
+    /// `Rendering` A4's range over it, read the file's own again once it goes;
+    /// over a typed range, that range and its text come back. **Undone (the
+    /// range left where the load wrote it), this fails.**
+    #[test]
+    fn a_loaded_range_goes_and_the_page_reads_what_stood_before() {
+        let file = a_key(&a_server());
+        let setup = |frames: Option<FrameForm>| KeptSetup {
+            scene: named("Kitchen"),
+            entries: SceneEntries { frame_range: frames, sample_count: Some(64), ..SceneEntries::default() },
+            version: KeptVersion::ResolvedAutomatically,
+        };
+        let range = |first, last| FrameForm::Triple { first, last, step: 1 };
+
+        // **Over nothing: a *Resume*, the kept range then A4's.**
+        let mut store = Store::new();
+        store.load_a_kept_setup(file.clone(), setup(Some(range(1, 40))), false);
+        store.a_range_is_loaded(at_kitchen(&file), range(11, 40));
+        assert_eq!(store.entries_for(&file, &kitchen()).unwrap().frame_range, Some(range(11, 40)));
+        store.a_loaded_range_goes(&file);
+        let after = store.entries_for(&file, &kitchen()).unwrap();
+        assert_eq!(after.frame_range, None, "the file's own range stands again");
+        assert_eq!(after.what_a_loaded_range_stands_on, None);
+        assert_eq!(after.sample_count, Some(64), "every other answer stays as Y15 has it");
+
+        // **Over a typed range, twice over**: what comes back is what the user had.
+        let mut store = Store::new();
+        store.answer_the_typed_range(at_kitchen(&file), range(5, 9), "5-9");
+        store.load_a_kept_setup(file.clone(), setup(Some(range(1, 40))), false);
+        store.load_a_kept_setup(file.clone(), setup(Some(range(2, 30))), false);
+        store.a_range_is_loaded(at_kitchen(&file), range(11, 30));
+        store.a_loaded_range_goes(&file);
+        let after = store.entries_for(&file, &kitchen()).unwrap();
+        assert_eq!(after.frame_range, Some(range(5, 9)));
+        assert_eq!(after.frame_range_text.as_deref(), Some("5-9"));
+
+        // **A load that brings no range took the typed one away, and gives it back.**
+        let mut store = Store::new();
+        store.answer_the_typed_range(at_kitchen(&file), range(5, 9), "5-9");
+        store.load_a_kept_setup(file.clone(), setup(None), false);
+        assert_eq!(store.entries_for(&file, &kitchen()).unwrap().frame_range, None);
+        store.a_loaded_range_goes(&file);
+        assert_eq!(store.entries_for(&file, &kitchen()).unwrap().frame_range, Some(range(5, 9)));
+    }
+
+    /// **Y15b: a range the user typed stays, and a cross stays cleared.** Each
+    /// of F1's two writes and J5's cross ends the record. **Undone, the load's
+    /// going takes the typed range with it, and this fails.**
+    #[test]
+    fn a_range_typed_after_a_load_stays_when_the_load_goes() {
+        let file = a_key(&a_server());
+        let setup = KeptSetup {
+            scene: named("Kitchen"),
+            entries: SceneEntries {
+                frame_range: Some(FrameForm::Triple { first: 1, last: 40, step: 1 }),
+                ..SceneEntries::default()
+            },
+            version: KeptVersion::ResolvedAutomatically,
+        };
+        let typed = FrameForm::Triple { first: 3, last: 4, step: 1 };
+
+        let mut store = Store::new();
+        store.load_a_kept_setup(file.clone(), setup.clone(), false);
+        store.answer_the_typed_range(at_kitchen(&file), typed.clone(), "3-4");
+        store.a_loaded_range_goes(&file);
+        let after = store.entries_for(&file, &kitchen()).unwrap();
+        assert_eq!(after.frame_range, Some(typed.clone()));
+        assert_eq!(after.frame_range_text.as_deref(), Some("3-4"));
+
+        let mut store = Store::new();
+        store.load_a_kept_setup(file.clone(), setup.clone(), false);
+        store.answer(at_kitchen(&file), Answer::FrameRange(typed.clone()));
+        store.a_loaded_range_goes(&file);
+        assert_eq!(store.entries_for(&file, &kitchen()).unwrap().frame_range, Some(typed));
+
+        let mut store = Store::new();
+        store.answer_the_typed_range(at_kitchen(&file), FrameForm::Triple { first: 5, last: 9, step: 1 }, "5-9");
+        store.load_a_kept_setup(file.clone(), setup, false);
+        store.clear_one(at_kitchen(&file), &Setting::FrameRange).unwrap();
+        store.a_loaded_range_goes(&file);
+        assert_eq!(store.entries_for(&file, &kitchen()).unwrap().frame_range, None, "the cross was the user's");
+    }
+
+    /// **Y15b: the record travels with J3's re-key**, so an entry that named no
+    /// scene gives its range back after a read has landed as well as before.
+    #[test]
+    fn a_loaded_range_in_the_pre_read_set_goes_after_the_rekey_too() {
+        let file = a_key(&a_server());
+        let the_set = Where::ThePreReadSet { file: file.clone() };
+        let range = FrameForm::Triple { first: 11, last: 40, step: 1 };
+        let mut store = Store::new();
+        let beneath = store.what_stands_beneath_a_load_of_the_pre_read_set(&file);
+        store.answer(the_set.clone(), Answer::FrameRange(range.clone()));
+        store.the_pre_read_set_was_loaded(file.clone(), beneath);
+        store.a_reading_first_landed(file.clone(), kitchen());
+        assert_eq!(store.entries_for(&file, &kitchen()).unwrap().frame_range, Some(range.clone()));
+        store.a_loaded_range_goes(&file);
+        assert_eq!(store.entries_for(&file, &kitchen()).unwrap().frame_range, None);
+
+        let mut store = Store::new();
+        let beneath = store.what_stands_beneath_a_load_of_the_pre_read_set(&file);
+        store.answer(the_set, Answer::FrameRange(range));
+        store.the_pre_read_set_was_loaded(file.clone(), beneath);
+        store.a_loaded_range_goes(&file);
+        assert_eq!(store.per_file(&file).unwrap().pre_read.as_ref().unwrap().frame_range, None);
     }
 
     #[test]

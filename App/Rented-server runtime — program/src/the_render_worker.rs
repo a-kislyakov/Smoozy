@@ -129,7 +129,8 @@ use smoozy_job_files_machine::where_the_folder_sits::{
 use smoozy_rendering_machine::acting::reading::TheReadingOnTheMachine;
 use smoozy_rendering_machine::acting::the_optix_library::TheLoadersOwnLookupOnTheMachine;
 use smoozy_rendering_machine::endings::{
-    classify, the_outcome_of, Cause, FailedReason, RecordedOutcome, WhatTheWorkerReaped,
+    classify, the_outcome_against_the_count, the_outcome_of, Cause, FailedReason, RecordedOutcome,
+    WhatTheWorkerReaped,
 };
 use smoozy_runtime::acting::capture::TheCopyIntoTheSinks;
 use smoozy_runtime::acting::endpoint::TheEndpointAsACaller;
@@ -960,6 +961,14 @@ impl<S: AsksTheSupervisor> TheWorkersOwnSteps for TheMachineAnswersTheWorker<'_,
         )
     }
 
+    /// **`Dependency Upload & Remap` M8b, on the machine's own disk.**
+    fn make_the_opening_folder(
+        &mut self,
+        folder: &smoozy_dependencies_machine::opening::TheOpeningFolder,
+    ) -> Result<(), String> {
+        smoozy_rendering_machine::acting::opening::make_the_opening_folder(folder)
+    }
+
     /// **`Dependency Upload & Remap` M22f's list, written into the job record
     /// directory beside the recorded reading**, one per attempt, created only
     /// where nothing stands and flushed the way the attempt record is.
@@ -1652,6 +1661,12 @@ pub fn after_the_launch(
         }),
     );
     let (statement, figure) = the_ending_steps_walk(composed, inventory, whole_range);
+    // **`Rendering` K14b: the walk comes before the outcome is final**, because a
+    // render that ended at 0 having written none of what the job owed is failed.
+    // The one place it is decided: every later reader reads the word recorded
+    // here, across a supervisor's restart too, and reconciliation never writes
+    // *finished* (`Rented-server runtime` S11).
+    let outcome = the_outcome_against_the_count(outcome, statement.as_ref().ok());
     TheEnding {
         outcome,
         hold: None,
@@ -1843,6 +1858,11 @@ impl TheEnding {
             fields = fields
                 .and(THE_CAUSE_FIELD, the_cause_word(*cause))
                 .and(THE_REASON_FIELD, reason.in_words());
+            // **`Design/Queue & History`: *Failed before rendering.*** The machine
+            // knows which side of the render instruction this ended on.
+            if self.outcome.no_render_began() {
+                fields = fields.and(asked::NO_RENDER_BEGAN_FIELD, asked::IT_IS_YES);
+            }
         }
         if let Some(hold) = &self.hold {
             fields = fields.and(asked::THE_HOLD_IT_IS_HELD_UNDER_FIELD, hold.as_text());
@@ -2822,6 +2842,10 @@ pub struct TheEndingAsRecorded {
     /// step 10c's fix piece 2, which reads back as no line observed.
     #[serde(default)]
     pub device_line: Option<String>,
+    /// **Whether the attempt ended before any render began** (`Rendering` K14),
+    /// as the worker reported it. No on a record written before 2026-11-04.
+    #[serde(default)]
+    pub no_render_began: bool,
 }
 
 impl TheEndingAsRecorded {
@@ -2849,6 +2873,7 @@ impl TheEndingAsRecorded {
             marker_passed: yes(THE_MARKER_PASSED_FIELD),
             something_followed_the_marker: yes(SOMETHING_FOLLOWED_THE_MARKER_FIELD),
             device_line: text(asked::THE_DEVICE_LINE_FIELD),
+            no_render_began: fields.text(asked::NO_RENDER_BEGAN_FIELD) == Some(asked::IT_IS_YES),
         })
     }
 }
@@ -2890,10 +2915,32 @@ pub(crate) mod tests {
         );
         let fields = ending.as_fields(Fields::none());
         let recorded = TheEndingAsRecorded::from_the_report(&fields).expect("an ending");
+        assert!(recorded.no_render_began, "`Rendering` K14: it ended before the render instruction");
         let words = recorded.reason.expect("a failed ending carries its reason");
         assert_eq!(words, reason.in_words());
         for type_name in ["BeforeTheRenderInstruction", "TheAttemptCouldNotBeComposed", "{"] {
             assert!(!words.contains(type_name), "{words}");
+        }
+    }
+
+    /// **A render that began and ended badly never says no render began.**
+    #[test]
+    fn a_render_that_began_and_ended_badly_does_not_say_none_began() {
+        for reason in [
+            FailedReason::ANonZeroStatus { exit_status: 1 },
+            FailedReason::NoStatusWasReaped,
+            FailedReason::TheMarkerWasNeverObserved { exit_status: 1 },
+            FailedReason::TheRecordedPairCouldNotBeWritten { why: "no".to_string() },
+            FailedReason::NothingTheJobOwedWasWritten,
+        ] {
+            let ending = TheEnding::before_the_launch(
+                RecordedOutcome::Failed { reason: reason.clone(), cause: Cause::Undetermined },
+                None,
+                Err("no inventory".to_string()),
+                WhatTheFigureIs::TheEndingsStepNeverRan,
+            );
+            let recorded = TheEndingAsRecorded::from_the_report(&ending.as_fields(Fields::none())).expect("an ending");
+            assert!(!recorded.no_render_began, "{reason:?}");
         }
     }
 
@@ -3874,6 +3921,202 @@ pub(crate) mod tests {
             &area.where_blender_writes(),
         );
         (ending, statement)
+    }
+
+    // -----------------------------------------------------------------------
+    // `Rendering` K14b: a render that ends at 0 having written none of what the
+    // job owed is failed. Reports 1 and 12, the 5.3 integration's piece 2.
+    // -----------------------------------------------------------------------
+
+    /// **An attempt launched against a stand-in, against a real inventory and a
+    /// real job output folder.** `{out}` in the script is that folder. **Nothing
+    /// here says what a real Blender does**: *Reports 1* is what says a scene
+    /// with no camera ends at 0 with nothing written in 5.3, and this plays that
+    /// ending through the worker's own ending step.
+    fn an_attempt_against_an_inventory(
+        names_owed: &[(&str, Option<i64>)],
+        a_video: bool,
+        script: &str,
+    ) -> TheEnding {
+        use smoozy_job_files_machine::inventory::{AnEntry, TheInventory, WhichRouteProducedTheName};
+        use smoozy_rendering_machine::acting::launch::StartsTheRender as _;
+        use smoozy_runtime::capture::MakesTheSinks;
+        use std::os::unix::fs::PermissionsExt;
+        let area = AnArea::made();
+        let work = area.a_job(1);
+        let folder = area.root.join("out");
+        std::fs::create_dir_all(&folder).unwrap();
+        smoozy_runtime::acting::capture::TheSinksOnTheMachine
+            .make(&work.capture)
+            .expect("the sinks are made");
+        let stand_in = std::path::Path::new(&work.record_directory).join("a-stand-in-for-blender");
+        std::fs::write(&stand_in, script.replace("{out}", &folder.display().to_string())).unwrap();
+        std::fs::set_permissions(&stand_in, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut composed = a_composed_attempt(&work.job);
+        composed.the_job_output_folder = Some(folder.display().to_string());
+        let inventory = WhatTheInventoryIs::It(TheInventory {
+            entries: names_owed
+                .iter()
+                .map(|(name, frame)| AnEntry {
+                    predicted_path: folder.join(name).display().to_string().into_bytes(),
+                    frame: *frame,
+                    the_route_that_produced_the_name: WhichRouteProducedTheName::ItWasAskedOfBlender,
+                    the_destinations_aiming_at_it: vec![0],
+                    may_grow: a_video,
+                })
+                .collect(),
+            added_write_place_folders: Vec::new(),
+            collision_record: Vec::new(),
+            a_destination_is_video_shaped: a_video,
+            why_it_owes_nothing: None,
+        });
+        let started = TheRenderStartedOnTheMachine {
+            kernel: AKernelThatAnswers,
+        }
+        .start(&smoozy_rendering_machine::acting::launch::TheLaunch {
+            the_blender_build_path: stand_in.display().to_string(),
+            words: Vec::new(),
+        })
+        .expect("the stand-in starts");
+        after_the_launch(
+            started,
+            &work,
+            &composed,
+            Some(&inventory),
+            &[1, 2],
+            &[1, 2],
+            TheFiguresGo {
+                the_plan: None,
+                to: &|_| {},
+            },
+        )
+    }
+
+    const THE_MARKER_AND_EXIT_NOUGHT: &str =
+        "echo 'SMOOZY-MATERIAL {\"job\":\"a stand-in\"}'\nexit 0\n";
+
+    fn at_nought_having_run(before: &str) -> String {
+        format!("#!/bin/sh\n{before}\n{THE_MARKER_AND_EXIT_NOUGHT}")
+    }
+
+    const THE_REASON_IN_WORDS: &str = "Blender exited normally but wrote none of the job's files";
+
+    fn it_is_the_count_that_failed_it(ending: &TheEnding) -> bool {
+        matches!(
+            &ending.outcome,
+            RecordedOutcome::Failed { reason, cause: Cause::Undetermined }
+                if reason.in_words() == THE_REASON_IN_WORDS
+        )
+    }
+
+    const TWO_FRAMES: [(&str, Option<i64>); 2] = [("f_0001.png", Some(1)), ("f_0002.png", Some(2))];
+
+    /// **The ending *Reports 1* records for 5.3: status 0, the marker passed,
+    /// nothing written.** Failed, undetermined, its reason in words, and the
+    /// statement still beside it — and **the report says so in the words the
+    /// supervisor keeps**, so History, the Queue, Telegram and a hold behind it
+    /// all read an ordinary *failed*.
+    #[test]
+    fn a_render_ending_at_nought_having_written_nothing_it_owed_is_failed() {
+        let ending = an_attempt_against_an_inventory(&TWO_FRAMES, false, &at_nought_having_run(""));
+        assert!(it_is_the_count_that_failed_it(&ending), "{:?}", ending.outcome);
+        assert_eq!(ending.exit_status, Some(0), "the status is kept verbatim");
+        let Some(Ok(statement)) = &ending.statement else {
+            panic!("the statement stands beside it: {:?}", ending.statement);
+        };
+        assert_eq!((statement.expected, statement.present.len(), statement.absent.len()), (2, 0, 2));
+        assert_eq!(ending.figure, WhatTheFigureIs::NoFrameCountsAsAlreadyThere);
+        let fields = ending.as_fields(Fields::none());
+        assert_eq!(fields.text(asked::THE_ENDING_FIELD), Some(asked::IT_FAILED));
+        assert_eq!(fields.text(THE_CAUSE_FIELD), Some(UNDETERMINED));
+        assert_eq!(fields.text(THE_REASON_FIELD), Some(THE_REASON_IN_WORDS));
+        assert_eq!(fields.text(asked::THE_EXIT_STATUS_FIELD), Some("0"));
+    }
+
+    /// **A file at zero bytes is not written** — `Job files and outputs` C27's
+    /// own fourth set, and a single still on a full disk can leave exactly that
+    /// on Linux.
+    #[test]
+    fn files_left_at_zero_bytes_are_not_written() {
+        let ending = an_attempt_against_an_inventory(
+            &TWO_FRAMES,
+            false,
+            &at_nought_having_run(": > '{out}/f_0001.png'\n: > '{out}/f_0002.png'"),
+        );
+        assert!(it_is_the_count_that_failed_it(&ending), "{:?}", ending.outcome);
+    }
+
+    /// **The ruling's other half: a partly written job stays as it is**, the
+    /// count short beside *finished* (`Queue & History` E3); so does a whole one.
+    #[test]
+    fn a_job_with_anything_of_what_it_owed_written_stays_finished() {
+        let one = an_attempt_against_an_inventory(
+            &TWO_FRAMES,
+            false,
+            &at_nought_having_run("printf frame > '{out}/f_0001.png'"),
+        );
+        assert_eq!(one.outcome, RecordedOutcome::Finished);
+        let Some(Ok(statement)) = &one.statement else {
+            panic!("{:?}", one.statement);
+        };
+        assert!(statement.the_count_came_up_short());
+        let both = an_attempt_against_an_inventory(
+            &TWO_FRAMES,
+            false,
+            &at_nought_having_run("printf frame > '{out}/f_0001.png'\nprintf frame > '{out}/f_0002.png'"),
+        );
+        assert_eq!(both.outcome, RecordedOutcome::Finished);
+    }
+
+    /// **A video job prints no `Saved:` line and is judged by its one file**: the
+    /// count reads the disk, never the stream.
+    #[test]
+    fn a_video_job_is_judged_by_its_one_file_and_needs_no_saved_line() {
+        let the_video = [("f_0001-0002.mkv", None)];
+        let written = an_attempt_against_an_inventory(
+            &the_video,
+            true,
+            &at_nought_having_run("printf video > '{out}/f_0001-0002.mkv'"),
+        );
+        assert_eq!(written.outcome, RecordedOutcome::Finished);
+        let nothing = an_attempt_against_an_inventory(&the_video, true, &at_nought_having_run(""));
+        assert!(it_is_the_count_that_failed_it(&nothing), "{:?}", nothing.outcome);
+    }
+
+    /// **A job that owes nothing is not a failure** (`Specs/What a job writes`),
+    /// and it stays *finished* with nothing written.
+    #[test]
+    fn a_job_that_owed_nothing_stays_finished() {
+        let ending = an_attempt_against_an_inventory(&[], false, &at_nought_having_run(""));
+        assert_eq!(ending.outcome, RecordedOutcome::Finished);
+    }
+
+    /// **It moves *finished* and nothing else**: a non-zero status and a marker
+    /// never seen keep their own reasons, whatever the count says.
+    #[test]
+    fn the_count_moves_no_other_ending() {
+        let at_three = an_attempt_against_an_inventory(
+            &TWO_FRAMES,
+            false,
+            "#!/bin/sh\necho 'SMOOZY-MATERIAL {\"job\":\"a stand-in\"}'\nexit 3\n",
+        );
+        assert!(
+            matches!(
+                at_three.outcome,
+                RecordedOutcome::Failed { reason: FailedReason::ANonZeroStatus { exit_status: 3 }, .. }
+            ),
+            "{:?}",
+            at_three.outcome
+        );
+        let no_marker = an_attempt_against_an_inventory(&TWO_FRAMES, false, "#!/bin/sh\nexit 0\n");
+        assert!(
+            matches!(
+                no_marker.outcome,
+                RecordedOutcome::Failed { reason: FailedReason::TheMarkerWasNeverObserved { .. }, .. }
+            ),
+            "{:?}",
+            no_marker.outcome
+        );
     }
 
     /// The attempt as `after_the_launch` takes it, for a stand-in.

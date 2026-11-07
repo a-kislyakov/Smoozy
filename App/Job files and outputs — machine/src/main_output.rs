@@ -162,6 +162,15 @@ pub enum NodeKind {
     /// Inside a group's own tree: the picture leaving for outside, at the same
     /// socket index it leaves the group on.
     TheGroupsOwnOutput,
+    /// **B1a, from 5.3: a Group Input at the top of an effect's group**, where
+    /// the render enters. Its outputs are named, and the beauty leaves on the
+    /// one called [`THE_BEAUTYS_SOCKET_NAME`], found by name (B19a).
+    TheRendersEntry { outputs: Vec<ArtistsText> },
+    /// **B1a, from 5.3: one effect of a scene's stack, its name the node's**, and
+    /// its group inside. The stack is read as a tree of these, in list order and
+    /// with no links, so the reading's one tree field carries it.
+    /// [`walk_the_beauty_through_the_effects`] is the walk made of them.
+    AnEffect { inner: TheCompositingTree },
     /// A node that takes one picture and passes one on. **The walk goes
     /// through** — there is one input and one thing that can have come out.
     OnePictureInOnePictureOut,
@@ -214,6 +223,11 @@ pub struct ADestinationTheBeautyReached {
     /// outputs into one file**, in which case the destination is the whole node
     /// (I7).
     pub output: Option<ArtistsText>,
+    /// **R4 item 2 and B4, from 5.3: the effect whose group holds the node**, so
+    /// the main output is the right one of two nodes sharing a name. Absent
+    /// before 5.3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub the_effect: Option<ArtistsText>,
 }
 
 /// **B4: the walk records one of three declared outcomes, and that is how
@@ -304,6 +318,78 @@ pub fn walk_the_beauty(
     // gets submitted.
     let mut already_walked = Vec::new();
     follow(tree, start, version, &mut found, &mut already_walked);
+    found.into_outcome()
+}
+
+/// **Whether a tree as read is 5.3's stack of effects** rather than one tree.
+pub fn it_is_a_stack_of_effects(tree: &TheCompositingTree) -> bool {
+    tree.nodes.iter().any(|node| matches!(node.kind, NodeKind::AnEffect { .. }))
+}
+
+/// **B1a: the walk through a scene's effects, as one chain.**
+///
+/// Several effects run in list order, each taking the one before's result, and
+/// an effect off for render is left out (*The compositor 1*), so
+/// `the_effects_on` is what stands at the job's first frame, which is the frame
+/// B1 enters at.
+///
+/// In each effect a Render Layers node reading the walk's view layer is an
+/// entry as ever. **A top-level Group Input is an entry in the first effect on,
+/// and in a later one only where the beauty reached the Group Output of the one
+/// before.** An effect with no Group Output stops carrying the beauty (B3): what
+/// it hands on is not established. The walk reached the final output node only
+/// where the beauty reaches the Group Output of the last effect on.
+///
+/// **Caution (I8, `Frames 9`, the runner's ruling).** The entry is taken for
+/// whichever view layer the walk is on, though it carried the first view
+/// layer's picture where it was seen. Which layer it carries where the first is
+/// off at a frame is not established: a render with only the second layer on
+/// crashed in 5.3 and in 5.2.2 on the same Mac.
+pub fn walk_the_beauty_through_the_effects(
+    stack: &TheCompositingTree,
+    the_effects_on: &[ArtistsText],
+    enters_at: &WhereTheRenderEnters,
+    version: TheVersionInHand,
+) -> WhatTheWalkFound {
+    let mut found = Found::default();
+    let mut the_group_input_carries_the_beauty = true;
+    for node in &stack.nodes {
+        let NodeKind::AnEffect { inner } = &node.kind else {
+            continue;
+        };
+        if !the_effects_on.contains(&node.name) {
+            continue;
+        }
+        let mut here = Found::default();
+        let mut walked = Vec::new();
+        if let Some(start) = the_beautys_own_socket(inner, enters_at) {
+            follow(inner, start, version, &mut here, &mut walked);
+        }
+        if the_group_input_carries_the_beauty {
+            for (at, one) in inner.nodes.iter().enumerate() {
+                let NodeKind::TheRendersEntry { outputs } = &one.kind else {
+                    continue;
+                };
+                // **B19a: by name and never by position.**
+                if let Some(index) =
+                    outputs.iter().position(|name| name.as_bytes() == THE_BEAUTYS_SOCKET_NAME)
+                {
+                    follow(inner, Socket { node: at, index }, version, &mut here, &mut walked);
+                }
+            }
+        }
+        the_group_input_carries_the_beauty = here.reached_the_final_output_node;
+        found.reached_the_final_output_node = here.reached_the_final_output_node;
+        for mut reached in here.destinations {
+            reached.the_effect = Some(node.name.clone());
+            if !found.destinations.contains(&reached) {
+                found.destinations.push(reached);
+            }
+        }
+        if let Some(named) = here.could_not_pass {
+            found.could_not_pass.get_or_insert(named);
+        }
+    }
     found.into_outcome()
 }
 
@@ -424,6 +510,7 @@ fn arrive(
                 inputs.get(at.index).cloned()
             };
             let destination = ADestinationTheBeautyReached {
+                the_effect: None,
                 node: node.name.clone(),
                 output,
             };
@@ -565,7 +652,10 @@ fn arrive(
                 already_walked,
             );
         }
-        NodeKind::RenderLayers { .. } | NodeKind::TheGroupsOwnInput => {
+        NodeKind::RenderLayers { .. }
+        | NodeKind::TheGroupsOwnInput
+        | NodeKind::TheRendersEntry { .. }
+        | NodeKind::AnEffect { .. } => {
             // Neither takes a picture in. A link arriving at one is not
             // something the walk can carry on from.
             remember_it_could_not_pass(found, node);
@@ -1128,6 +1218,7 @@ pub(crate) mod tests {
             walk_the_beauty(&tree, &enters_at(), TheVersionInHand::of(5, 2)),
             WhatTheWalkFound::Reached {
                 destinations: vec![ADestinationTheBeautyReached {
+                    the_effect: None,
                     node: text("Inner file output"),
                     output: Some(text("Beauty")),
                 }],
@@ -1203,6 +1294,7 @@ pub(crate) mod tests {
             walk_the_beauty(&tree, &enters_at(), TheVersionInHand::of(5, 2)),
             WhatTheWalkFound::Reached {
                 destinations: vec![ADestinationTheBeautyReached {
+                    the_effect: None,
                     node: text("Inner file output"),
                     output: Some(text("Beauty")),
                 }],
@@ -1343,6 +1435,7 @@ pub(crate) mod tests {
             walk_the_beauty(&tree, &enters_at(), TheVersionInHand::of(5, 2)),
             WhatTheWalkFound::Reached {
                 destinations: vec![ADestinationTheBeautyReached {
+                    the_effect: None,
                     node: text("Gathered"),
                     output: None,
                 }],
@@ -1355,6 +1448,7 @@ pub(crate) mod tests {
     fn b7_makes_a_node_destination_win_over_the_regular_output_path() {
         let walk = WhatTheWalkFound::Reached {
             destinations: vec![ADestinationTheBeautyReached {
+                the_effect: None,
                 node: text("Beauty"),
                 output: Some(text("Image")),
             }],
@@ -1408,6 +1502,7 @@ pub(crate) mod tests {
         // A file output node the beauty reached still wins, by B7.
         let a_node = WhatTheWalkFound::Reached {
             destinations: vec![ADestinationTheBeautyReached {
+                the_effect: None,
                 node: text("Beauty"),
                 output: Some(text("Image")),
             }],
@@ -1453,6 +1548,7 @@ pub(crate) mod tests {
         // destination.
         let one = WhatTheWalkFound::Reached {
             destinations: vec![ADestinationTheBeautyReached {
+                the_effect: None,
                 node: text("Beauty"),
                 output: Some(text("Image")),
             }],
@@ -1461,6 +1557,7 @@ pub(crate) mod tests {
         assert!(!the_beauty_reaches_more_than_one_destination(&one, false));
         let two = WhatTheWalkFound::Reached {
             destinations: vec![ADestinationTheBeautyReached {
+                the_effect: None,
                 node: text("Beauty"),
                 output: Some(text("Image")),
             }],
@@ -1603,6 +1700,7 @@ pub(crate) mod tests {
             walk,
             WhatTheWalkFound::Reached {
                 destinations: vec![ADestinationTheBeautyReached {
+                    the_effect: None,
                     node: text("File Output"),
                     output: Some(text("Image")),
                 }],
@@ -1675,6 +1773,171 @@ pub(crate) mod tests {
             walk_the_beauty(&tree, &enters_at(), TheVersionInHand::of(5, 2)),
             WhatTheWalkFound::NoEntry
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // B1a: the stack of effects, from 5.3
+    // -----------------------------------------------------------------------
+
+    fn the_entry() -> Node {
+        Node {
+            name: text("Group Input"),
+            kind: NodeKind::TheRendersEntry { outputs: vec![text("Image")] },
+        }
+    }
+
+    fn the_end() -> Node {
+        Node { name: text("Group Output"), kind: NodeKind::TheFinalOutputNode }
+    }
+
+    fn a_file_output(named: &str) -> Node {
+        Node {
+            name: text(named),
+            kind: NodeKind::AFileOutputNode {
+                inputs: vec![text("Image")],
+                gathering_into_one_file: false,
+                muted: false,
+            },
+        }
+    }
+
+    fn a_link(from: usize, to: usize) -> Link {
+        Link { from: Socket { node: from, index: 0 }, to: Socket { node: to, index: 0 } }
+    }
+
+    fn an_effect(named: &str, nodes: Vec<Node>, links: Vec<Link>) -> Node {
+        Node { name: text(named), kind: NodeKind::AnEffect { inner: TheCompositingTree { nodes, links } } }
+    }
+
+    fn a_stack(effects: Vec<Node>) -> TheCompositingTree {
+        TheCompositingTree { nodes: effects, links: Vec::new() }
+    }
+
+    fn walked(stack: &TheCompositingTree, on: &[&str]) -> WhatTheWalkFound {
+        let on: Vec<ArtistsText> = on.iter().map(|one| text(one)).collect();
+        walk_the_beauty_through_the_effects(stack, &on, &enters_at(), TheVersionInHand::of(5, 3))
+    }
+
+    /// **The tree 5.3's New button makes**: no Render Layers node, and still a
+    /// walk that reaches the final output node.
+    #[test]
+    fn the_tree_the_new_button_makes_reaches_the_final_output_node() {
+        let stack = a_stack(vec![an_effect("Scene Effect", vec![the_entry(), the_end()], vec![a_link(0, 1)])]);
+        assert!(it_is_a_stack_of_effects(&stack));
+        assert_eq!(
+            walked(&stack, &["Scene Effect"]),
+            WhatTheWalkFound::Reached { destinations: Vec::new(), it_reached_the_final_output_node: true }
+        );
+    }
+
+    /// **A node fed from that Group Input is reached, and named by its effect**,
+    /// so the same node name in another effect is another destination.
+    #[test]
+    fn a_node_fed_from_the_group_input_is_reached_and_names_its_effect() {
+        let stack = a_stack(vec![
+            an_effect("One", vec![the_entry(), a_file_output("File Output")], vec![a_link(0, 1)]),
+            an_effect("Two", vec![the_entry(), a_file_output("File Output")], vec![a_link(0, 1)]),
+        ]);
+        // **The first effect has no Group Output, so the second's Group Input
+        // carries no beauty** (B3), and only the first's node is the beauty's.
+        assert_eq!(
+            walked(&stack, &["One", "Two"]),
+            WhatTheWalkFound::Reached {
+                destinations: vec![ADestinationTheBeautyReached {
+                    the_effect: Some(text("One")),
+                    node: text("File Output"),
+                    output: Some(text("Image")),
+                }],
+                it_reached_the_final_output_node: false,
+            }
+        );
+    }
+
+    /// **The Compositor 1: list order, each taking the one before's result.** The
+    /// walk reaches the final output node only through the last effect on, and
+    /// an effect off is left out of the chain.
+    #[test]
+    fn the_chain_carries_the_beauty_through_the_effects_on_and_leaves_out_one_off() {
+        let passes = |named: &str| an_effect(named, vec![the_entry(), the_end()], vec![a_link(0, 1)]);
+        let takes_it = |named: &str| {
+            an_effect(named, vec![the_entry(), a_file_output("Later")], vec![a_link(0, 1)])
+        };
+        let stack = a_stack(vec![passes("First"), takes_it("Middle"), passes("Last")]);
+        // All three on: the middle has no Group Output, so the chain stops there.
+        let all = walked(&stack, &["First", "Middle", "Last"]);
+        assert!(matches!(
+            &all,
+            WhatTheWalkFound::Reached { destinations, it_reached_the_final_output_node: false } if destinations.len() == 1
+        ));
+        // The middle off: it is left out, and the beauty reaches the end.
+        assert_eq!(
+            walked(&stack, &["First", "Last"]),
+            WhatTheWalkFound::Reached { destinations: Vec::new(), it_reached_the_final_output_node: true }
+        );
+        // Every effect off is no entry, and B5 takes it from there.
+        assert_eq!(walked(&stack, &[]), WhatTheWalkFound::NoEntry);
+    }
+
+    /// **A later effect's Render Layers node is an entry as ever**, whatever the
+    /// one before did, and the older walk still knows no stack.
+    #[test]
+    fn a_later_effects_render_layers_node_is_an_entry_as_ever() {
+        let first = an_effect("First", vec![a_file_output("Alone")], Vec::new());
+        let the_beautys_place = match &render_layers().kind {
+            NodeKind::RenderLayers { outputs, .. } => {
+                outputs.iter().position(|name| name.as_bytes() == THE_BEAUTYS_SOCKET_NAME).expect("named")
+            }
+            _ => unreachable!(),
+        };
+        let second = an_effect(
+            "Second",
+            vec![render_layers(), the_end()],
+            vec![Link { from: Socket { node: 0, index: the_beautys_place }, to: Socket { node: 1, index: 0 } }],
+        );
+        let stack = a_stack(vec![first, second]);
+        assert_eq!(
+            walked(&stack, &["First", "Second"]),
+            WhatTheWalkFound::Reached { destinations: Vec::new(), it_reached_the_final_output_node: true }
+        );
+        assert!(!it_is_a_stack_of_effects(&TheCompositingTree {
+            nodes: vec![render_layers()],
+            links: Vec::new()
+        }));
+    }
+
+    /// **A node the walk cannot pass in an effect stops the chain and is named.**
+    #[test]
+    fn a_node_the_walk_cannot_pass_in_an_effect_blocks_the_chain() {
+        let glare = Node { name: text("Glare"), kind: NodeKind::ANodeTheWalkCannotPass };
+        let stack = a_stack(vec![
+            an_effect("First", vec![the_entry(), glare, the_end()], vec![a_link(0, 1), a_link(1, 2)]),
+            an_effect("Second", vec![the_entry(), the_end()], vec![a_link(0, 1)]),
+        ]);
+        assert_eq!(
+            walked(&stack, &["First", "Second"]),
+            WhatTheWalkFound::Blocked { the_node_it_could_not_pass: text("Glare") }
+        );
+    }
+
+    /// **A Group Input inside a nested group stays B3's first limit.**
+    #[test]
+    fn a_group_input_inside_a_nested_group_is_no_entry_of_its_own() {
+        let inner = TheCompositingTree {
+            nodes: vec![
+                Node { name: text("Inner input"), kind: NodeKind::TheGroupsOwnInput },
+                a_file_output("Inside"),
+            ],
+            links: vec![a_link(0, 1)],
+        };
+        let group = Node { name: text("Group"), kind: NodeKind::ANodeGroup { inner } };
+        let not_fed = a_stack(vec![an_effect("One", vec![group.clone()], Vec::new())]);
+        assert_eq!(walked(&not_fed, &["One"]), WhatTheWalkFound::NoEntry);
+        let fed = a_stack(vec![an_effect("One", vec![the_entry(), group], vec![a_link(0, 1)])]);
+        assert!(matches!(
+            walked(&fed, &["One"]),
+            WhatTheWalkFound::Reached { destinations, .. }
+                if destinations.len() == 1 && destinations[0].the_effect == Some(text("One"))
+        ));
     }
 }
 
@@ -2078,7 +2341,8 @@ pub struct ATargetSize {
 /// arithmetic can meet**: nothing here knows what a picture will weigh once it is
 /// written, so the produced file is measured against
 /// [`THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES`] after it is written and the
-/// production is what has to come under it.
+/// production is what has to come under it
+/// ([`the_size_to_write_it_at_next`]).
 pub fn the_target_size(width: u32, height: u32) -> ATargetSize {
     if width == 0 || height == 0 {
         return ATargetSize {
@@ -2111,6 +2375,28 @@ pub fn the_target_size(width: u32, height: u32) -> ATargetSize {
         height: scaled_height,
         it_could_not_be_brought_under_every_cap: beyond_the_ratio,
     }
+}
+
+/// **B26a, *how the production comes under the byte cap*: how many times one copy
+/// is written at most** — its first write and two smaller. A Build figure: the
+/// first smaller size lands under the cap on the frames measured, and the last is
+/// for a picture whose weight does not follow its area.
+pub const THE_MOST_WRITES_OF_ONE_COPY: u32 = 3;
+
+/// **B26a, *how the production comes under the byte cap*: the size a copy over the
+/// cap is written at next**, from the size it was written at and what it weighed.
+/// A PNG's weight follows its area and only roughly, so each side is scaled by the
+/// square root of nine tenths of the cap over the weight, and the ratio is kept.
+/// **Nothing where the copy is not over the cap**, or can be made no smaller.
+pub fn the_size_to_write_it_at_next(written_at: (u32, u32), it_weighed: u64) -> Option<ATargetSize> {
+    let (width, height) = written_at;
+    if it_weighed <= THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES || width == 0 || height == 0 {
+        return None;
+    }
+    let scale = (0.9 * THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES as f64 / it_weighed as f64).sqrt();
+    let scaled = |side: u32| ((f64::from(side) * scale) as u32).max(1);
+    let next = (scaled(width), scaled(height));
+    (next != written_at).then(|| the_target_size(next.0, next.1))
 }
 
 /// **B28: the derivative is written in a viewing format, and that is what removes
@@ -2608,6 +2894,49 @@ mod the_previews_and_the_derivatives {
         assert_eq!((target.width, target.height), (1920, 1080));
     }
 
+    /// **B26a, *how the production comes under the byte cap*.** A 4K frame of
+    /// noise as an eight-bit PNG weighs its pixels, three bytes each.
+    #[test]
+    fn b26a_a_copy_over_the_byte_cap_is_sized_from_how_far_over_it_was() {
+        let cap = THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES;
+        let weighed = 3840 * 2160 * 3;
+        let next = the_size_to_write_it_at_next((3840, 2160), weighed).expect("it is over");
+        assert!(next.width < 3840 && next.height < 2160, "{next:?}");
+        // **The ratio is kept**, to the pixel the rounding costs.
+        let ratio = f64::from(next.width) / f64::from(next.height);
+        assert!((ratio - 3840.0 / 2160.0).abs() < 0.01, "{next:?}");
+        // **A weight that follows the area lands under the cap, and not far under it.**
+        let then = u64::from(next.width) * u64::from(next.height) * 3;
+        assert!(then <= cap, "{then}");
+        assert!(then > cap * 8 / 10, "no smaller than it had to be: {then}");
+        // The further over, the smaller.
+        let further = the_size_to_write_it_at_next((3840, 2160), weighed * 4).expect("it is over");
+        assert!(further.width < next.width, "{further:?}");
+        assert!(!next.it_could_not_be_brought_under_every_cap);
+    }
+
+    #[test]
+    fn b26a_a_copy_at_or_under_the_byte_cap_has_no_next_size() {
+        let cap = THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES;
+        assert_eq!(the_size_to_write_it_at_next((3840, 2160), cap), None);
+        assert_eq!(the_size_to_write_it_at_next((3840, 2160), 1), None);
+        let just_over = the_size_to_write_it_at_next((3840, 2160), cap + 1).expect("over");
+        assert!(just_over.width < 3840, "{just_over:?}");
+    }
+
+    #[test]
+    fn b26a_a_copy_that_can_be_made_no_smaller_has_no_next_size() {
+        let cap = THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES;
+        assert_eq!(the_size_to_write_it_at_next((1, 1), cap * 2), None);
+        assert_eq!(the_size_to_write_it_at_next((0, 100), cap * 2), None);
+        // A side is never scaled down to nothing.
+        let thin = the_size_to_write_it_at_next((9000, 1), cap * 100).expect("the long side can shrink");
+        assert_eq!(thin.height, 1);
+        assert!(thin.width < 9000);
+        // A ratio past twenty stays on the record.
+        assert!(thin.it_could_not_be_brought_under_every_cap);
+    }
+
     #[test]
     fn the_multi_layer_route_is_the_bundled_library_and_the_other_is_blenders_own() {
         // B26: the split is forced by what was observed rather than preferred.
@@ -2705,4 +3034,5 @@ mod the_previews_and_the_derivatives {
         let again: ADerivativesRecord = serde_json::from_str(&serde_json::to_string(&sourced).unwrap()).unwrap();
         assert_eq!(again, sourced);
     }
+
 }

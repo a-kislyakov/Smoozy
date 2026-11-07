@@ -254,6 +254,7 @@ fn tenth_notes_7_a_transparent_copy_comes_out_over_the_checkerboard_in_a_real_bl
         for (made_as, before) in [("after", false), ("before", true)] {
             let staged = out.join(format!("{name}.{made_as}.png"));
             let mut script = the_derivatives_script(&ADerivativeToMake {
+                the_composited_picture: None,
                 source: out.join(name).to_str().unwrap().as_bytes().to_vec(),
                 staged_at: staged.to_str().unwrap().to_string(),
                 treatment: if multi_layer {

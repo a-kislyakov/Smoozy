@@ -258,7 +258,11 @@ pub enum WantedShape {
 /// kind is what decides the shape and a recorded location does not carry it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Outstanding {
+    /// The reference as the file records it: the key of everything kept for it.
     pub reference: RecordedLocation,
+    /// **G9a: what is looked for**, the same bytes as [`Self::reference`] but
+    /// for a template put in ([`crate::check::how_the_render_reads_it`]).
+    pub the_location_read: RecordedLocation,
     pub shape: WantedShape,
     /// **G9 with DW0-3**: how Blender stores the thing, read off the reading
     /// ([`crate::check::ReadReference::stored_source`]). It has already
@@ -276,7 +280,18 @@ impl Outstanding {
     /// thing as one file**, so the stored source is taken here with the kind
     /// and never left for a caller to remember.
     pub fn of(reference: RecordedLocation, kind: Kind, stored: StoredSource) -> Outstanding {
-        let shape = if resolves_to_a_folder(&reference, stored) {
+        Outstanding::read_as(reference.clone(), reference, kind, stored)
+    }
+
+    /// **G9a: the same, where the render reads something other than the
+    /// recorded bytes.** Shape and name both come from what is read.
+    pub fn read_as(
+        reference: RecordedLocation,
+        the_location_read: RecordedLocation,
+        kind: Kind,
+        stored: StoredSource,
+    ) -> Outstanding {
+        let shape = if resolves_to_a_folder(&the_location_read, stored) {
             WantedShape::ASetsFolder
         } else if kind.names_a_folder() {
             WantedShape::AFolder
@@ -285,6 +300,7 @@ impl Outstanding {
         };
         Outstanding {
             reference,
+            the_location_read,
             shape,
             stored,
         }
@@ -294,6 +310,7 @@ impl Outstanding {
     /// caller with no kind to hand has.
     pub fn a_file(reference: RecordedLocation) -> Outstanding {
         Outstanding {
+            the_location_read: reference.clone(),
             reference,
             shape: WantedShape::AFile,
             stored: StoredSource::NotSaidToBeOneFile,
@@ -305,8 +322,8 @@ impl Outstanding {
     /// matched by its members and never by a name, so it has none.
     pub fn wanted_name(&self) -> Option<&[u8]> {
         match self.shape {
-            WantedShape::AFile => Some(self.reference.wanted_name()),
-            WantedShape::AFolder => Some(self.reference.final_named_segment()),
+            WantedShape::AFile => Some(self.the_location_read.wanted_name()),
+            WantedShape::AFolder => Some(self.the_location_read.final_named_segment()),
             WantedShape::ASetsFolder => None,
         }
     }
@@ -316,7 +333,7 @@ impl Outstanding {
     /// view-name mark.
     pub fn the_sets_pattern(&self) -> Option<&[u8]> {
         match self.shape {
-            WantedShape::ASetsFolder => Some(self.reference.wanted_name()),
+            WantedShape::ASetsFolder => Some(self.the_location_read.wanted_name()),
             _ => None,
         }
     }
@@ -478,7 +495,7 @@ pub fn search(
 ) -> SearchOutcome {
     let wanted: Vec<&Outstanding> = outstanding
         .iter()
-        .filter(|reference| classify(&reference.reference, reference.stored).is_searched())
+        .filter(|reference| classify(&reference.the_location_read, reference.stored).is_searched())
         .collect();
     let mut outcome = SearchOutcome::default();
     let mut stopped = false;

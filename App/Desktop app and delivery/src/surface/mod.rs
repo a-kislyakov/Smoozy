@@ -163,6 +163,7 @@ pub fn the_registration_list<R: tauri::Runtime>(
         render_settings::the_missing_assets_warning_is_switched_off,
         render_settings::a_job_is_submitted,
         render_settings::the_version_list_is_asked_for,
+        render_settings::the_page_was_left,
         render_settings::the_download_panel,
         render_settings::the_download_choices_are_made,
         render_settings::the_folder_is_asked_for_in_the_box,
@@ -1688,6 +1689,7 @@ console.log(JSON.stringify(got));
                         the_job_ended_short: false,
                         the_arrangement_is_done: false,
                         the_whole_was_read: false,
+                        nothing_is_moving: false,
                         stands: WhereTheRequestStands::Running,
                         files: vec![AFileKnown {
                             path: value.to_string(),

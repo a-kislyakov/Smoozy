@@ -48,13 +48,14 @@
 //!   manifest, then the row; and after a fetch, the artifact's length and
 //!   digest against the manifest (E16).
 //!
-//! **No recovery key is in this build.** Two are owed (E19, from 2026-10-24)
-//! and both are the Creator's to hold before any public half is written here.
-//! [`trust::THE_RECOVERY_KEYS_THIS_BUILD_CARRIES`] is empty, and a test fails
-//! the day anything is put there. **Until then this build verifies nothing and
-//! so updates nothing**, which is E19's own *"a build that cannot form a chain
-//! from its embedded recovery public key does not verify and therefore does
-//! not update"*.
+//! **The Creator's two recovery keys are in this build from 2026-11-01** (E19,
+//! two from 2026-10-24), with the statement naming the first everyday key:
+//! [`trust::THE_RECOVERY_KEYS_THIS_BUILD_CARRIES`] and
+//! [`trust::THE_STATEMENT_THIS_BUILD_CARRIES`]. Their secret halves are the
+//! Creator's alone. **A build from before that day carries none and verifies
+//! nothing**, which is E19's own *"a build that cannot form a chain from its
+//! embedded recovery public key does not verify and therefore does not
+//! update"* — 0.2.0 is one.
 //!
 //! **The signature itself is not written here.** It is the one the server
 //! package's release already uses — Ed25519 over a context and the canonical

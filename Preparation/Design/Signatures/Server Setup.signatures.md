@@ -72,3 +72,13 @@
 2026-10-31 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 10c/Brief — the twenty-fourth notes, note 1, no Set up again while a setup runs.md`, outside any round — the running card no longer offers *Set up again* (§ Asking for more while a setup runs, § A second setup while one is running, § A long step); back when the run ends. The Creator's twenty-fourth notes, note 1. No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the desk builder of step 13's second words sweep, outside any round — the stopped card's closing paragraph now reads *Server checked just now. Set up again is safe. Abandon setup ends the setup unfinished. Neither removes what is installed.*, its retry form *Server checked just now. Set up again keeps what is installed.*, and a held job's second answer is *Cancel*. Meaning unchanged. Each carries its inline note. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 11/Brief — the OptiX check and two Render Settings faults.md`, outside any round — § This server: the amber line for a driver with no OptiX library.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — The statement's and the tag's 5.3 words. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), a builder on the runner's ruling after the first 5.3 live pass, outside any round — the no-library line says *Cycles GPU jobs*. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — the driver swap on an image with NVIDIA's archive.md`, outside any round — the stopped card's closing paragraph, *Set up again continues where it stopped.* No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding the same brief and the runner's rulings on its further faults, outside any round — the stopped card's and the retry form's words about what is installed. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — the action offered on the page too. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the stopped card's two paragraphs, *Install* and *Don't install*. The last words read before the release. No auditor has seen it.

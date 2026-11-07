@@ -129,6 +129,15 @@ impl TheVersionInHand {
     pub fn has_the_save_output_switch(self) -> bool {
         (self.major, self.minor) >= (5, 2)
     }
+
+    /// **R4 item 1: from 5.3 a scene's compositor is a stack of effects**, each
+    /// pointing at a node group with its own render switch (*The compositor 1*).
+    /// 5.4's names were read the same at the desk
+    /// (`Audits/Build/Blender 5.3/Piece 1, the desk readings — what landed.md`,
+    /// reading 1), so it takes the same route. 4.5 to 5.2 stay as they were.
+    pub fn holds_a_stack_of_effects(self) -> bool {
+        (self.major, self.minor) >= (5, 3)
+    }
 }
 
 /// **R4 item 1: the gating conditions, per scene.**
@@ -166,9 +175,24 @@ pub struct GatingConditions {
     /// file output nodes at all, even though it is the scene being rendered
     /// (§14 item 13).
     pub the_render_goes_out_through_a_sequencer_holding_a_scene_strip: bool,
+    /// **R4 item 1, from 5.3: the effects holding a group that are on for
+    /// render, by name, as they stand at this frame.** Absent before 5.3, and
+    /// from a reading taken before 2026-11-02.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub the_effects_on_for_render: Option<Vec<ArtistsText>>,
 }
 
 impl GatingConditions {
+    /// **I8's second paragraph: a node in an effect that is off writes nothing.**
+    /// A node with no effect named, which is every node before 5.3, is held by
+    /// nothing here; nor is one read before the stack was.
+    pub fn a_nodes_effect_is_on(&self, the_effect: Option<&ArtistsText>) -> bool {
+        match (the_effect, &self.the_effects_on_for_render) {
+            (Some(effect), Some(on)) => on.contains(effect),
+            _ => true,
+        }
+    }
+
     /// **Whether the compositor runs at all**, which B5 reads and which decides
     /// whether the raw render lands at the regular output path with no walk
     /// needed.
@@ -316,6 +340,10 @@ pub enum DestinationKind {
         /// reading taken before that date**, which is taken as its raw text.
         #[serde(default)]
         replaced: Option<TheNodesTextReplaced>,
+        /// **R4 item 2, from 5.3: the effect whose group holds the node**, since
+        /// two effects' groups can hold nodes of one name. Absent before 5.3.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        the_effect: Option<ArtistsText>,
     },
     /// **One destination for the whole node** where it is set to gather its
     /// outputs into a single multi-layer file (I7).
@@ -326,6 +354,9 @@ pub enum DestinationKind {
         /// As above, with no output's own name: the node writes one file.
         #[serde(default)]
         replaced: Option<TheNodesTextReplaced>,
+        /// As above.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        the_effect: Option<ArtistsText>,
     },
     /// One of D20's four (D21b).
     AnAddedWritePlace(AnAddedWritePlace),
@@ -433,9 +464,10 @@ pub fn the_blend_name_of(the_open_files_path: &[u8]) -> Option<Vec<u8>> {
 pub fn the_regular_output_paths_location_read(
     location: &[u8],
     the_blend_name: Option<&[u8]>,
+    version: TheVersionInHand,
 ) -> WithItsBracesReplaced {
     let (folder, _) = crate::mapping::split_the_regular_output_path(location);
-    match with_its_braces_replaced(folder, the_blend_name) {
+    match a_folder_read(folder, the_blend_name, version) {
         WithItsBracesReplaced::Replaced(replaced) => {
             let mut out = replaced.as_bytes().to_vec();
             // What follows the folder — its separator and the front of the
@@ -490,6 +522,119 @@ pub fn with_its_braces_replaced(text: &[u8], the_blend_name: Option<&[u8]>) -> W
         }
     }
     WithItsBracesReplaced::Replaced(ArtistsText::of(out))
+}
+
+/// **The rule, for a folder: `Job files and outputs` P7b, added 2026-11-02.**
+/// [`with_its_braces_replaced`] first. What that leaves unresolved stays so,
+/// and is handed to Blender as written, only where Blender works it out and it
+/// lands under the job's folder: a folder that opens with the blend-file
+/// shorthand or a separator, whose every expression is one this version offers
+/// ([`a_variable_blender_works_out`]). **Every other folder is replaced**, by
+/// [`a_folder_with_its_expressions_named`], so Blender is handed no expression:
+/// `{project_root}` would print *Invalid path template* and the node write
+/// nothing; `{blend_dir}` is a whole path and would put the file's own folder
+/// inside the job's; and a folder that opens with an expression is no path the
+/// rule can measure.
+pub fn a_folder_read(
+    text: &[u8],
+    the_blend_name: Option<&[u8]>,
+    version: TheVersionInHand,
+) -> WithItsBracesReplaced {
+    match with_its_braces_replaced(text, the_blend_name) {
+        WithItsBracesReplaced::Unresolved { .. } if !blender_works_out_all_of(text, version) => {
+            WithItsBracesReplaced::Replaced(ArtistsText::of(a_folder_with_its_expressions_named(text)))
+        }
+        read => read,
+    }
+}
+
+/// **The variables each version offers and works out in a node's folder**:
+/// *Dependencies 5*'s lists, and each observed at the desk on 2026-11-02 (4.5.12,
+/// 5.2.3, 5.3.0 Beta, 5.4.0 Alpha; `Audits/Build/Blender 5.3/Piece 5, what the
+/// desk tests found — what landed.md`). **`{blend_dir}` and `{blend_dir_lib}` are
+/// worked out too and left off on purpose**: each is a whole path, so under the
+/// job's folder it repeats the file's folder there. The research's other
+/// expression, `{project_root}`, is refused where no project is active, and no
+/// project travels to a rented machine.
+fn a_variable_blender_works_out(name: &[u8], version: TheVersionInHand) -> bool {
+    const IN_EVERY_VERSION: [&[u8]; 4] = [b"blend_name", b"fps", b"resolution_x", b"resolution_y"];
+    const FROM_FIVE_ZERO: [&[u8]; 4] = [b"blend_name_lib", b"scene_name", b"camera_name", b"node_name"];
+    IN_EVERY_VERSION.contains(&name)
+        || (version.branch() != WhichBranch::FourFive && FROM_FIVE_ZERO.contains(&name))
+}
+
+/// Whether this folder is one P7b hands on as written.
+fn blender_works_out_all_of(text: &[u8], version: TheVersionInHand) -> bool {
+    if !crate::mapping::it_opens_with_a_place(text) {
+        return false;
+    }
+    let mut at = 0;
+    while at < text.len() {
+        match (text[at], text.get(at + 1)) {
+            (b'{', Some(b'{')) | (b'}', Some(b'}')) => at += 2,
+            (b'{', _) => {
+                let Some(length) = text[at + 1..].iter().position(|byte| *byte == b'}') else {
+                    return false;
+                };
+                if !a_variable_blender_works_out(&text[at + 1..at + 1 + length], version) {
+                    return false;
+                }
+                at += length + 2;
+            }
+            (b'}', _) => return false,
+            _ => at += 1,
+        }
+    }
+    true
+}
+
+/// **P7b's name for a folder that held an expression**: each one stands as its
+/// own word, so the user can tell it from the folder they typed. `{project_root}/out`
+/// reads `project_root/out`, `//{fps:03}` reads `//fps_03`. A stray brace goes,
+/// and whatever is not a letter, a digit, `_` or `-` inside an expression
+/// becomes `_`, so no expression can make a step or a separator.
+pub fn a_folder_with_its_expressions_named(text: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len());
+    let mut at = 0;
+    while at < text.len() {
+        match (text[at], text.get(at + 1)) {
+            (b'{', Some(b'{')) | (b'}', Some(b'}')) => at += 2,
+            (b'{', _) => match text[at + 1..].iter().position(|byte| *byte == b'}') {
+                Some(length) => {
+                    out.extend_from_slice(&a_word_for(&text[at + 1..at + 1 + length]));
+                    at += length + 2;
+                }
+                None => at += 1,
+            },
+            (b'}', _) => at += 1,
+            (byte, _) => {
+                out.push(byte);
+                at += 1;
+            }
+        }
+    }
+    out
+}
+
+/// One expression's own word; *expression* where nothing of it is left.
+fn a_word_for(inside: &[u8]) -> Vec<u8> {
+    let word: Vec<u8> = inside
+        .iter()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || *byte == b'-' || *byte >= 0x80 {
+                *byte
+            } else {
+                b'_'
+            }
+        })
+        .collect();
+    let start = word.iter().position(|byte| *byte != b'_').unwrap_or(word.len());
+    let end = word.iter().rposition(|byte| *byte != b'_').map_or(start, |at| at + 1);
+    if start == end {
+        b"expression".to_vec()
+    } else {
+        word[start..end].to_vec()
+    }
 }
 
 /// **The rule, for an output's own name**: whether that name takes templates
@@ -673,6 +818,18 @@ impl Destination {
         }
     }
 
+    /// **The effect whose group holds this node** (R4 item 2); nothing for any
+    /// other destination, or for any node before 5.3.
+    pub fn the_effect(&self) -> Option<&ArtistsText> {
+        match &self.kind {
+            DestinationKind::AnOutputOfAFileOutputNode { the_effect, .. }
+            | DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile { the_effect, .. } => {
+                the_effect.as_ref()
+            }
+            _ => None,
+        }
+    }
+
     /// **A node destination's text as the reading replaced it**; nothing for
     /// any other destination, or for a reading taken before 2026-10-18.
     pub fn the_replaced_text(&self) -> Option<&TheNodesTextReplaced> {
@@ -719,13 +876,15 @@ impl Destination {
     /// destination, and of the regular output path's folder, from
     /// `{blend_name}`'s value (I2's *How Smoozy gets the replaced text*, and
     /// *The regular output path's folder is read the same way*). An added
-    /// write place is left as it is.
-    pub fn put_in_the_replaced_text(&mut self, the_blend_name: Option<&[u8]>) {
+    /// write place is left as it is. **A folder is read by P7b's rule**
+    /// ([`a_folder_read`]), and a name by the plain one: Smoozy writes no name
+    /// (N12).
+    pub fn put_in_the_replaced_text(&mut self, the_blend_name: Option<&[u8]>, version: TheVersionInHand) {
         if self.kind == DestinationKind::TheRegularOutputPath {
             self.the_location_with_its_folder_replaced = self
                 .recorded_location
                 .as_ref()
-                .map(|location| the_regular_output_paths_location_read(location.as_bytes(), the_blend_name));
+                .map(|location| the_regular_output_paths_location_read(location.as_bytes(), the_blend_name, version));
             return;
         }
         let folder = self
@@ -734,7 +893,7 @@ impl Destination {
             .map(|location| location.as_bytes().to_vec())
             .unwrap_or_default();
         let replaced_of = |base: &Option<ArtistsText>, output: Option<&ArtistsText>| TheNodesTextReplaced {
-            the_folder: with_its_braces_replaced(&folder, the_blend_name),
+            the_folder: a_folder_read(&folder, the_blend_name, version),
             the_base_file_name: base
                 .as_ref()
                 .map(|base| with_its_braces_replaced(base.as_bytes(), the_blend_name)),
@@ -1549,6 +1708,7 @@ pub(crate) mod tests {
 
     pub(crate) fn plain_gating() -> GatingConditions {
         GatingConditions {
+            the_effects_on_for_render: None,
             compositing_switch: true,
             a_compositing_tree_is_present: true,
             a_live_final_output_node: true,
@@ -1623,6 +1783,56 @@ pub(crate) mod tests {
 
         assert_eq!(with_its_braces_doubled(b"/job/{x}/"), b"/job/{{x}}/".to_vec());
         assert_eq!(with_its_braces_doubled(b"/job/out/"), b"/job/out/".to_vec());
+    }
+
+    /// **P7b, each row observed at the desk (5.2.3, 5.3.0 Beta, 5.4.0 Alpha).**
+    /// An expression Blender refuses, or a whole path, or a folder opening with
+    /// no place, is replaced by its own word; what Blender works out in a place
+    /// the rule can measure is handed on, in the versions that offer it.
+    #[test]
+    fn p7b_a_folder_is_replaced_unless_blender_works_it_out_under_the_jobs_folder() {
+        let five = TheVersionInHand::of(5, 2);
+        let four = TheVersionInHand::of(4, 5);
+        let read = |text: &str, version| a_folder_read(text.as_bytes(), Some(b"job"), version);
+        let replaced = |text: &str| WithItsBracesReplaced::Replaced(ArtistsText::of(text.as_bytes().to_vec()));
+        let kept = |expression: &str| WithItsBracesReplaced::Unresolved {
+            the_expression: ArtistsText::of(expression.as_bytes().to_vec()),
+        };
+        // Refused by Blender: replaced, whatever opens the folder.
+        assert_eq!(read("{project_root}/out", five), replaced("project_root/out"));
+        assert_eq!(read("//renders/{project_root}/out", five), replaced("//renders/project_root/out"));
+        assert_eq!(read("//{fps:03}", five), replaced("//fps_03"));
+        assert_eq!(read("//{unknown}/out", five), replaced("//unknown/out"));
+        assert_eq!(read("//{unclosed/out", five), replaced("//unclosed/out"));
+        assert_eq!(read("//}x/out", five), replaced("//x/out"));
+        // A whole path, worked out and still replaced.
+        assert_eq!(read("{blend_dir}/out", five), replaced("blend_dir/out"));
+        assert_eq!(read("//{blend_dir}/out", five), replaced("//blend_dir/out"));
+        assert_eq!(read("//{blend_dir_lib}", five), replaced("//blend_dir_lib"));
+        // Opens with no place: replaced though Blender would work it out.
+        assert_eq!(read("{scene_name}/out", five), replaced("scene_name/out"));
+        assert_eq!(read("{node_name}/out", five), replaced("node_name/out"));
+        // Worked out in a place the rule can measure: as it was.
+        assert_eq!(read("//{scene_name}/out", five), kept("{scene_name}"));
+        assert_eq!(read("/mnt/{fps}", five), kept("{fps}"));
+        assert_eq!(read("//{resolution_x}x{resolution_y}", five), kept("{resolution_x}"));
+        // 4.5 offers four, so the rest are refused there.
+        assert_eq!(read("//{fps}", four), kept("{fps}"));
+        assert_eq!(read("//{scene_name}/out", four), replaced("//scene_name/out"));
+        assert_eq!(read("//{node_name}", four), replaced("//node_name"));
+        // The plain rule still comes first.
+        assert_eq!(read("//{blend_name}/out", five), replaced("//job/out"));
+        assert_eq!(read("{blend_name}/out", five), replaced("job/out"));
+        assert_eq!(read("{{lit}}/out", five), replaced("{lit}/out"));
+        // Nothing an expression holds can make a step or a separator.
+        assert_eq!(a_folder_with_its_expressions_named(b"{a/b}/{..}/{}"), b"a_b/expression/expression".to_vec());
+        // The regular output path's folder takes the same rule, its front as
+        // recorded.
+        assert_eq!(
+            the_regular_output_paths_location_read(b"{blend_dir}/r/f_{fps}", Some(b"job"), five),
+            replaced("blend_dir/r/f_{fps}")
+        );
+        assert_eq!(the_regular_output_paths_location_read(b"//{scene_name}/f_", Some(b"job"), five), kept("{scene_name}"));
     }
 
     #[test]

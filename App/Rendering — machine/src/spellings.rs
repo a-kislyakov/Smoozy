@@ -65,6 +65,23 @@ use crate::versions::TheFourVersions;
 /// Recorded at `Audits/Build/Step 10c/The fixes after the Vast pass before
 /// 0.1.9 — what landed.md`, item 3, and in the plan's companion sources file
 /// under its own entry for this lookup.
+///
+/// **The same reading off the 5.3.0 Beta, 2026-11-02.** The arms below still cite
+/// the alpha; this says the beta agrees. `/Applications/Blender 5.3b.app`, which
+/// answered *5.3.0 Beta*, build hash `5d8151335b6b`, built 2026-10-16, run with
+/// no window beside 5.2.3 (`/Applications/Blender.app`, hash `e13b728c6880`): its
+/// help text, the whole property lists of every structure it registers (4,121),
+/// the 23 scene paths and every name in the fifteen files that compose or carry
+/// Blender's names, the composed line's shape rendering two frames on the
+/// processor, and a script that raises. **Every name used reads the same, and no
+/// name differs**; the help text differs by the same one added argument; the
+/// device line, the frame and save announcements and the failure status came
+/// back identical. The alpha itself is no longer on this Mac, so the two were not
+/// run side by side. Label: **observed in a test**, at the desk, on one Mac,
+/// macOS on Apple silicon — never on Linux, where Smoozy renders. Recorded at
+/// `Audits/Build/Blender 5.3/Piece 1, the desk readings — what landed.md`,
+/// reading 3, and in the plan's companion sources file under its own entry for
+/// this reading.
 pub const THE_5_3_LOOKUP: &str =
     "the 5.3.0 Alpha lookup, 2026-10-02, on the Creator's own install, hash 68609be8e23b (the plan's Rendering sources file, under its own entry)";
 

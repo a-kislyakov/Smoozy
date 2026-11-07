@@ -193,6 +193,11 @@ pub const THE_WORK_MOVED: &str = "servers:the-work-moved";
 /// it has moved past. Added 2026-10-16, the Creator's eighth notes, piece E3.
 pub const A_DIALOG_KEYS_VERDICT: &str = "servers:a-dialog-keys-verdict";
 
+/// **`Keys` U10a's bullet of 2026-11-02: the discovery pass wrote a row while a
+/// dialog's list stood, so the list is to be asked for again.** It carries the
+/// ask it answers.
+pub const A_DIALOG_KEYS_LIST_GREW: &str = "servers:a-dialog-keys-list-grew";
+
 /// **`Servers` W20's suppression identity, declared there and read here.**
 ///
 /// *"one row in the one suppression table, carrying this document and this
@@ -1798,6 +1803,19 @@ fn the_dialogs_keys_are_checked<R: Runtime>(app: &AppHandle<R>, ask: &str, asked
     let Some(area) = crate::platform::locations::smoozys_own_temporary_area() else {
         return;
     };
+    // **`Keys` U10a's bullet of 2026-11-02: `Keys` U1 set 2 here too.** It ran only
+    // when the Keys screen drew, so on a first open a key already in the usual
+    // location was not on this list. Where it wrote a row the list is asked for
+    // again, and that ask's verdicts replace this one's.
+    let discovered = crate::surface::keys::the_discovery_pass(
+        app,
+        &crate::keys::readings::OnThisComputer::over(area.clone()),
+    );
+    if !discovered.is_empty() {
+        let event = a_dialog_keys_list_grew(ask);
+        let _ = queue.read_then_post::<(), std::convert::Infallible>(|| Ok(()), |_| event.clone());
+        return;
+    }
     // **The rows are read under the lock and checked after it is let go** — a
     // check is a filesystem read and a tool run.
     let rows = {
@@ -1874,6 +1892,11 @@ fn the_fingerprints_start(fingerprint: &str) -> (String, bool) {
     let mut start = lead.to_string();
     start.extend(characters.by_ref().take(A_FINGERPRINTS_START));
     (start, characters.next().is_some())
+}
+
+/// **The list grew behind its draw**, as the dialog's list is told it.
+pub fn a_dialog_keys_list_grew(ask: &str) -> Event {
+    Event::about(About::TheRun, A_DIALOG_KEYS_LIST_GREW).saying("ask", Said::Value(Verbatim::new(ask)))
 }
 
 /// **One key's verdict, as the dialog's list is told it.** `verdict` is the
@@ -6006,6 +6029,7 @@ mod tests {
             ),
             read_under: None,
             the_driver: None,
+            the_optix_library_is_missing: false,
         }
     }
 
@@ -8175,6 +8199,7 @@ mod tests {
             exit_status: Some(0),
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         store.the_fill_in(&ended.job, &note).expect("filled in");
@@ -10918,6 +10943,7 @@ console.log(JSON.stringify({
             .replace("THE_SHAPE", &serde_json::Value::Object(shape).to_string())
             .replace("THE_WORDS", &words_for.to_string())
             .replace("THE_IDS", &ids.to_string())
+            .replace("THE_GREW", A_DIALOG_KEYS_LIST_GREW)
             .replace("THE_KIND", A_DIALOG_KEYS_VERDICT)
             .replace("THE_MISSING", &serde_json::to_string(&the_pairs_of(
                 &the_answer_event(TheAnswer::TheseFieldsAreNeeded(vec![
@@ -11005,6 +11031,8 @@ export function theRailIsReadAgain() {}"#
             "escaped": { "dialog": true, "open": false },
             "openKeys": { "picks": [{ "withTheNewKeyDialog": false }], "dialog": true, "open": false },
             "askedAgain": 1,
+            "grewForAnOldAsk": 0,
+            "grew": 1,
             "requiredKey": {
                 "beforePick": [true, true, true],
                 "dropdown": [false, false, true],
@@ -11197,6 +11225,7 @@ verdict(ids.second, "unusable");
 verdict(ids.scaleway, "notChecked");
 await settle();
 out.editRows = theRows();
+globalThis.theLastAskBeforeTheGrowth = theLastAsk().ask;
 invoked = [];
 fire(theRowReading("Hetzner"), "click");
 await settle();
@@ -11204,6 +11233,18 @@ out.theGoneKeyIsPressed = {
   open: !theKeyList().hidden,
   asked: invoked.some((one) => one.command === "the_key_a_dialog_holds"),
 };
+
+// **`Keys` U10a's bullet of 2026-11-02: the pass found a key while the list was
+// drawn, so the list is asked for again.** An answer to an ask the list has
+// moved past asks nothing.
+invoked = [];
+fire(theFace(), "click");
+tell("THE_GREW", { ask: "an ask it has moved past" });
+await settle();
+out.grewForAnOldAsk = invoked.filter((one) => one.command === "the_keys_a_dialog_offers").length;
+tell("THE_GREW", { ask: globalThis.theLastAskBeforeTheGrowth });
+await settle();
+out.grew = invoked.filter((one) => one.command === "the_keys_a_dialog_offers").length;
 console.log(JSON.stringify(out));
 "#;
 
@@ -12066,6 +12107,7 @@ console.log(JSON.stringify(out));
             exit_status: Some(0),
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         crate::record::job_records::JobRecords::over(connection)

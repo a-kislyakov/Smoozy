@@ -837,15 +837,17 @@ mod tests {
         );
     }
 
-    /// **This build carries no recovery key, so it accepts no update file,
-    /// however well signed** — E19's *"does not verify and therefore does not
-    /// update"*, held now and until the Creator's keys are written in.
+    /// **This build accepts no update file signed under keys it does not
+    /// carry, however well signed.** From 2026-11-01 it carries the Creator's
+    /// two master keys and its own statement at trust sequence 1, so a file
+    /// under the test keys — here a newer statement, at 2 — is refused because
+    /// no master key this build carries signed it.
     #[test]
-    fn this_build_with_no_recovery_key_accepts_no_update_file() {
+    fn this_build_accepts_no_update_file_signed_under_keys_it_does_not_carry() {
         let file = a_file(
-            vec![a_signed_statement(&recovery_a(), &the_first())],
+            vec![a_signed_statement(&recovery_a(), &the_overlap())],
             5,
-            &[("online-1", online_1())],
+            &[("online-1", online_1()), ("online-2", online_2())],
         );
         assert!(
             verify(None, &file).is_ok(),

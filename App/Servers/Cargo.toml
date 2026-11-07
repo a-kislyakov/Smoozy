@@ -18,6 +18,13 @@ smoozy-server-protocol = { path = "../Server protocol and transfers" }
 # from `src/lib.rs` at the paths they have always had.
 smoozy-servers-values = { path = "../Servers — values" }
 
+# **`Rendering` L24b's own lookup for the OptiX library**, which `Servers`
+# H11b's OptiX-library bullet asks with the hardware reading (2026-11-02). One
+# line for both, shared rather than copied, so the reading and the render worker
+# cannot ask two different questions of one machine. That crate opens no
+# connection and its tree is already beneath this one's.
+smoozy-server-setup-machine = { path = "../Server Setup — machine" }
+
 # The transport above is driven on it, and the repair's two pauses are waited
 # on it — `Servers` N2 and N6. Already in the tree beneath the shell.
 tokio = { workspace = true }

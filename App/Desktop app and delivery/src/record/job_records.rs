@@ -507,6 +507,11 @@ impl JobRecords<'_> {
                     .filter(|line| !line.is_empty()),
             ],
         )?;
+        // **Record version 60, for the same reason as those two**, and written apart
+        // because nearly every record says no, which the column's default already does.
+        if record.what_the_note_carried.ending.as_ref().is_some_and(|ending| ending.no_render_began) {
+            self.no_render_began_is_kept(&record.job, true)?;
+        }
 
         for (position, disturbance) in record.disturbances.iter().enumerate() {
             self.connection.execute(
@@ -557,6 +562,8 @@ impl JobRecords<'_> {
         // the ending carried one** — so a record written whole, an adopted
         // job's whose note already ended, keeps it.
         self.the_free_space_at_the_ending_is_kept(&record.job, &record.what_the_note_carried)?;
+        // **Record version 59: `Queue & History` E3's count**, the same way.
+        self.the_files_counted_are_kept(&record.job, &record.what_the_note_carried)?;
         if let Some(kept) = kept_setup {
             // **The payload in the form `Render Settings` carries it**, the
             // form the manifest's own settings-payload field holds on the
@@ -687,6 +694,16 @@ impl JobRecords<'_> {
         let written = self.connection.execute(
             "UPDATE job_record SET the_reason_the_machine_recorded = ?2 WHERE job = ?1",
             rusqlite::params![job.as_text(), reason],
+        )?;
+        Ok(written > 0)
+    }
+
+    /// **Record version 60: this ending came before any render began**, kept beside
+    /// the record in the connection's fill-in, as the reason is.
+    pub fn no_render_began_is_kept(&self, job: &Identity, no_render_began: bool) -> Result<bool, RecordFailure> {
+        let written = self.connection.execute(
+            "UPDATE job_record SET no_render_began = ?2 WHERE job = ?1",
+            rusqlite::params![job.as_text(), no_render_began as i64],
         )?;
         Ok(written > 0)
     }
@@ -1029,7 +1046,7 @@ impl JobRecords<'_> {
                     file_values_texture_limit_render, start_never_heard,
                     the_reason_the_machine_recorded, the_device_line_as_observed,
                     frames_asked, frames_cannot_be_counted, job_output_folder,
-                    driver_mark_blender, driver_mark_driver_version
+                    driver_mark_blender, driver_mark_driver_version, no_render_began
              FROM job_record WHERE {clause}"
         ))?;
         let rows = statement.query_map(parameters, |row| {
@@ -1088,6 +1105,7 @@ impl JobRecords<'_> {
                 job_output_folder: row.get(51)?,
                 driver_mark_blender: row.get(52)?,
                 driver_mark_driver_version: row.get(53)?,
+                no_render_began: row.get::<_, i64>(54)? != 0,
             })
         })?;
 
@@ -1187,6 +1205,7 @@ impl JobRecords<'_> {
                         .the_reason_the_machine_recorded
                         .clone()
                         .filter(|reason| !reason.is_empty()),
+                    no_render_began: row.no_render_began,
                     the_device_line_as_observed: row
                         .the_device_line_as_observed
                         .clone()
@@ -1288,6 +1307,7 @@ impl JobRecords<'_> {
                 given_up_where_it_was: row.note_given_up_where_it_was,
                 last_frame_figure: row.note_last_frame_figure,
                 the_free_space_at_the_ending: self.the_free_space_at_the_ending_of(&key)?,
+                the_files_counted: self.the_files_counted_of(&key)?,
             },
             // **A record before version 39 holds nothing here**, and is the
             // job area as every job had it; **a value that will not read back
@@ -1370,6 +1390,46 @@ impl JobRecords<'_> {
     /// the reading is immutable with the ending it rides (`State, identity and
     /// recovery` §8.6). Its moment is a machine's and is refused on any other
     /// clock, as the note's other two are.
+    fn the_files_counted_are_kept(&self, job: &Identity, carried: &WhatTheNoteCarried) -> Result<(), RecordFailure> {
+        let Some(counted) = carried.the_files_counted else {
+            return Ok(());
+        };
+        let as_stored = |figure: u64| {
+            i64::try_from(figure).map_err(|_| RecordFailure::AMomentTheRecordCannotHold {
+                column: "note_files_owed",
+                reported: "the figure is larger than this record's own spelling holds".into(),
+            })
+        };
+        self.connection.execute(
+            "UPDATE job_record SET note_files_written = ?2, note_files_owed = ?3 WHERE job = ?1",
+            rusqlite::params![job.as_text(), as_stored(counted.written)?, as_stored(counted.owed)?],
+        )?;
+        Ok(())
+    }
+
+    /// **Record version 59's two counts**, or nothing where the two are not both
+    /// there and whole.
+    fn the_files_counted_of(
+        &self,
+        job: &str,
+    ) -> Result<Option<smoozy_queue_history::acting::note::TheFilesCounted>, RecordFailure> {
+        use rusqlite::OptionalExtension;
+        let found: Option<(Option<i64>, Option<i64>)> = self
+            .connection
+            .query_row(
+                "SELECT note_files_written, note_files_owed FROM job_record WHERE job = ?1",
+                [job],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        Ok(found.and_then(|(written, owed)| {
+            Some(smoozy_queue_history::acting::note::TheFilesCounted {
+                written: u64::try_from(written?).ok()?,
+                owed: u64::try_from(owed?).ok()?,
+            })
+        }))
+    }
+
     fn the_free_space_at_the_ending_is_kept(
         &self,
         job: &Identity,
@@ -1603,6 +1663,9 @@ impl JobRecords<'_> {
             // **Record version 50: `Rented-server runtime` V12's reading rides
             // the ending into this same transaction.**
             self.the_free_space_at_the_ending_is_kept(job, carried)?;
+            // **Record version 59: `Queue & History` E3's count rides the ending
+            // into this same transaction.**
+            self.the_files_counted_are_kept(job, carried)?;
             if let Some(ending) = carried.ending.as_ref() {
                 if let Some(reason) = ending.the_reason_the_machine_recorded.as_deref() {
                     self.the_reason_the_machine_recorded_is_kept(job, reason)?;
@@ -1610,6 +1673,7 @@ impl JobRecords<'_> {
                 if let Some(line) = ending.the_device_line_as_observed.as_deref() {
                     self.the_device_line_as_observed_is_kept(job, line)?;
                 }
+                self.no_render_began_is_kept(job, ending.no_render_began)?;
             }
             Ok(())
         })();
@@ -2275,6 +2339,8 @@ struct ARowAsRead {
     the_reason_the_machine_recorded: Option<String>,
     /// Record version 28's column.
     the_device_line_as_observed: Option<String>,
+    /// Record version 60's column.
+    no_render_began: bool,
     /// Record version 35's two columns.
     frames_asked: Option<String>,
     frames_cannot_be_counted: bool,
@@ -2588,6 +2654,7 @@ mod tests {
             exit_status: Some(137),
             the_attempt_whose_capture_record_holds_the_words: 2,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         note.attempts = 2;
@@ -3000,6 +3067,7 @@ mod tests {
             frame_range: Some(
                 smoozy_render_settings::frames::parse_the_frame_field("1-240").unwrap(),
             ),
+            prepare_simulations: Some(false),
             sample_count: Some(64),
             engine_pick: Some(OfferedEngine::Cycles),
             ..Default::default()
@@ -3041,6 +3109,7 @@ mod tests {
             panic!("the kept setup did not come back");
         };
         assert_eq!(payload, a_kept_setup());
+        assert!(!payload.prepare_simulations);
         assert_eq!(payload.sample_count, Some(64));
         assert!(payload.frame_range.is_some());
         assert!(payload.engine.is_some());
@@ -3158,6 +3227,47 @@ mod tests {
     }
 
     #[test]
+    fn e3_the_files_counted_are_kept_with_the_ending_and_read_back_after_a_restart() {
+        let connection = a_record_store();
+        let records = JobRecords::over(&connection);
+        let job = a_job();
+        records
+            .write_the_provisional_record(&a_full_record(&job, &a_server()))
+            .unwrap();
+        assert_eq!(records.read(&job).unwrap().unwrap().what_the_note_carried.the_files_counted, None);
+        let mut note = TheNote::created_with_the_job_record("A label");
+        note.attempts = 1;
+        note.the_files_counted_on_the_answer =
+            Some(smoozy_queue_history::acting::note::TheFilesCounted { written: 3, owed: 4 });
+        records.the_fill_in(&job, &note).unwrap();
+        // **A fresh reader of the same store**, as the app after a restart.
+        let read = JobRecords::over(&connection).read(&job).unwrap().unwrap();
+        assert_eq!(
+            read.what_the_note_carried.the_files_counted,
+            Some(smoozy_queue_history::acting::note::TheFilesCounted { written: 3, owed: 4 })
+        );
+    }
+
+    /// **Record version 60: an ending that came before any render began is kept and
+    /// read back**, and nought stands on a record that never said so.
+    #[test]
+    fn whether_a_render_began_is_kept_with_the_record() {
+        let connection = a_record_store();
+        let records = JobRecords::over(&connection);
+        let job = a_job();
+        records.write_the_provisional_record(&a_full_record(&job, &a_server())).unwrap();
+        let column = || -> i64 {
+            connection
+                .query_row("SELECT no_render_began FROM job_record WHERE job = ?1", [job.as_text()], |row| row.get(0))
+                .unwrap()
+        };
+        assert_eq!(column(), 0, "nought until the ending says otherwise");
+        assert!(records.no_render_began_is_kept(&job, true).unwrap());
+        assert_eq!(column(), 1);
+        assert!(!records.no_render_began_is_kept(&a_job(), true).unwrap(), "no record, nothing written");
+    }
+
+    #[test]
     fn the_reason_the_machine_recorded_is_kept_whole_beside_a_standing_record() {
         let connection = a_record_store();
         let records = JobRecords::over(&connection);
@@ -3210,6 +3320,7 @@ mod tests {
             exit_status: Some(3),
             the_attempt_whose_capture_record_holds_the_words: 2,
             the_reason_the_machine_recorded: Some(reason.to_string()),
+            no_render_began: false,
             the_device_line_as_observed: Some(line.to_string()),
         });
         assert!(matches!(

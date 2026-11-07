@@ -87,6 +87,7 @@ import "./the-typed-text.js";
 import "./the-scrolled-place.js";
 import "./the-value-drawn.js";
 import "./a-new-job.js";
+import "./a-notification-clicked.js";
 
 // Whatever happens, the window is drawn and left standing. A window that shows
 // nothing is Smoozy going quiet, which Rule 8 makes a fault however the trouble

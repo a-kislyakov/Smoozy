@@ -25,13 +25,14 @@
 //!
 //! **Markers used in this file that belong to another document, each with the
 //! document it belongs to.** `Render Settings` B2a, B5. `Job files and
-//! outputs` R1, R4a, B4, C9, D21, I3, N15.
+//! outputs` R1, R4a, B4, C9, D21, I2, I3, N15.
 
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 use smoozy_render_settings::file_half::BlenderIdentity;
+use smoozy_job_files::reading::{with_its_braces_replaced, WithItsBracesReplaced};
 use smoozy_render_settings::version::{Resolution, WhyNone};
 
 use crate::bytes::{segments, MachineLocation, RecordedLocation, StoredLocation, SEPARATOR};
@@ -179,6 +180,11 @@ pub struct ReadReference {
     /// A document that carries no such field reads as nothing — serde's own
     /// rule for an absent optional field — which is G9's rule as written.
     pub source: Option<String>,
+    /// **G6d: a library's relative location as the file writes it**, where that
+    /// differs from what this Blender read. Shown and first looked for; never
+    /// the key. **Nothing for every other kind**, and for a reading from a
+    /// server program older than this: serde's own rule for an absent field.
+    pub the_files_own_text: Option<RecordedLocation>,
 }
 
 impl ReadReference {
@@ -333,10 +339,13 @@ pub enum Form {
 }
 
 /// **There is no curly-brace form here, and its absence is the rule rather
-/// than an omission.** G9 allows a curly-brace expression only in the render
-/// output path and the File Output node, and both are
-/// [`WriteOnlyDestination`]s that produce no reference — so no reference this
-/// function ever classifies can be one, and no pair can name one
+/// than an omission.** G9 allows a curly-brace expression in the render output
+/// path and the File Output node, and both are [`WriteOnlyDestination`]s that
+/// produce no reference. **From 5.3 a geometry-nodes bake folder may hold one
+/// too, and that is [`how_the_render_reads_it`]'s (G9a)**, which takes the
+/// version and the file, as this does not: this function is handed the folder
+/// read, with its expressions put in, and one it cannot work out never reaches
+/// here. No pair can name one either
 /// ([`crate::remap::NO_PAIR_IS_COMPOSED_FOR_A_CURLY_BRACE_EXPRESSION`] is
 /// M7's other half kept the same way).
 ///
@@ -375,6 +384,68 @@ pub fn classify(location: &RecordedLocation, stored: StoredSource) -> Form {
     } else {
         Form::Ordinary
     }
+}
+
+/// **G9a: the first Blender whose geometry-nodes bake folder takes a template**,
+/// as major and minor (*Dependencies 5*, *Node setups 1*). Up to 5.2 braces there
+/// are part of the folder's name: 5.2.3 bakes `//bakes/{blend_name}/` into a
+/// folder really called `{blend_name}` (observed at the desk, 2026-11-02).
+pub const A_BAKE_FOLDER_TAKES_TEMPLATES_FROM: (u32, u32) = (5, 3);
+
+/// **G9a: what the render reads where a reference records this.**
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HowTheRenderReadsIt {
+    /// The recorded location itself: every reference but the one G9a is about.
+    AsRecorded,
+    /// **`Job files and outputs` I2's rule put `{blend_name}` and any doubled
+    /// brace in**, and this folder is what is looked at and searched for. The
+    /// recorded bytes stay the key (K4).
+    WithItsTemplatePutIn(RecordedLocation),
+    /// **Any other expression, named, or a brace that does not close.** No
+    /// folder is predicted: on 5.3.0 Beta at the desk each of these printed
+    /// *"Cannot determine bake location on disk. Falling back to packed bake."*
+    /// and wrote none, leaving the setting and its Disk target standing, so
+    /// nothing the reading sees tells such a bake from one that never ran. A
+    /// statement and not a row ([`TheBakeFolderNotWorkedOut`]).
+    NotWorkedOut { the_expression: Vec<u8> },
+}
+
+/// **G9a: a geometry-nodes bake folder, on 5.3 and later, read as the render
+/// will read it**, by I2's rule and no second one. **`the_blend_name` is the
+/// sitting's root's, for a reference in a linked file too**: `{blend_name}` is
+/// the file Blender opens, observed at the desk on 5.3.0 Beta, where `L.blend`'s
+/// `//bakes/{blend_name}/` linked into `T.blend` read `<L's folder>/bakes/T/`.
+/// Nothing where the root's name does not end `.blend`, and I2 then leaves
+/// `{blend_name}` not worked out rather than guessed.
+pub fn how_the_render_reads_it(
+    kind: Kind,
+    recorded: &RecordedLocation,
+    the_version: (u32, u32),
+    the_blend_name: Option<&[u8]>,
+) -> HowTheRenderReadsIt {
+    let bytes = recorded.as_bytes();
+    if kind != Kind::GeometryNodeBakeFolder
+        || the_version < A_BAKE_FOLDER_TAKES_TEMPLATES_FROM
+        || !bytes.iter().any(|byte| *byte == b'{' || *byte == b'}')
+    {
+        return HowTheRenderReadsIt::AsRecorded;
+    }
+    match with_its_braces_replaced(bytes, the_blend_name) {
+        WithItsBracesReplaced::Replaced(text) => HowTheRenderReadsIt::WithItsTemplatePutIn(
+            RecordedLocation::as_the_reading_carried_it(text.as_bytes()),
+        ),
+        WithItsBracesReplaced::Unresolved { the_expression } => HowTheRenderReadsIt::NotWorkedOut {
+            the_expression: the_expression.as_bytes().to_vec(),
+        },
+    }
+}
+
+/// **G9a's statement, in V3a's class**: not a row, no action, nothing to
+/// dismiss, and V11's stop rule never counts it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TheBakeFolderNotWorkedOut {
+    pub recorded: RecordedLocation,
+    pub the_expression: Vec<u8>,
 }
 
 impl Form {
@@ -744,8 +815,9 @@ pub const NEITHER_ENDS_FOLDING_IS_RELIED_ON: bool = true;
 /// **G16 and G17: the sitting is durable as it happens, and nothing carries on
 /// by itself when the connection comes back** — a fresh check starts from
 /// what is already known: the record supplies every located answer by K3's
-/// keying and the reading re-reads every file (K11).
-pub const A_FRESH_CHECK_RE_READS_EVERY_FILE_AND_RE_DECIDES_NOTHING: bool = true;
+/// keying, and a file is read again unless G17b says nothing it rests on has
+/// changed (K11).
+pub const A_FRESH_CHECK_RE_DECIDES_NOTHING: bool = true;
 
 /// **G18: a check sitting is partial across files; one reading is atomic.**
 /// Declared in Section 10 ([`crate::units`]).
@@ -922,7 +994,55 @@ pub mod tests {
             recorded: recorded(recorded_bytes),
             scenes: Attribution::NotEstablished,
             source: None,
+            the_files_own_text: None,
         }
+    }
+
+    /// **G9a, read off the desk's own 5.3.0 Beta and 5.2.3 runs of 2026-11-02.**
+    #[test]
+    fn a_bake_folders_template_is_read_from_5_3_for_that_setting_alone() {
+        let read = |kind, text: &[u8], version| {
+            how_the_render_reads_it(kind, &recorded(text), version, Some(b"t"))
+        };
+        let put_in = |text: &[u8]| {
+            HowTheRenderReadsIt::WithItsTemplatePutIn(recorded(text))
+        };
+        let not_worked_out = |expression: &[u8]| HowTheRenderReadsIt::NotWorkedOut {
+            the_expression: expression.to_vec(),
+        };
+        let bake = Kind::GeometryNodeBakeFolder;
+
+        // Baked into `bakes/t/` and `bakes/{x}/`.
+        assert_eq!(read(bake, b"//bakes/{blend_name}/", (5, 3)), put_in(b"//bakes/t/"));
+        assert_eq!(read(bake, b"//bakes/{{x}}/", (5, 3)), put_in(b"//bakes/{x}/"));
+        assert_eq!(read(bake, b"//bakes/{blend_name}/", (5, 4)), put_in(b"//bakes/t/"));
+
+        // Each of these fell back to a packed bake and made no folder.
+        assert_eq!(read(bake, b"//bakes/{scene_name}/", (5, 3)), not_worked_out(b"{scene_name}"));
+        assert_eq!(read(bake, b"//bakes/{fps}/", (5, 3)), not_worked_out(b"{fps}"));
+        assert_eq!(read(bake, b"//bakes/{hero}/", (5, 3)), not_worked_out(b"{hero}"));
+        assert_eq!(read(bake, b"//bakes/{blend_name/", (5, 3)), not_worked_out(b"{blend_name/"));
+        assert_eq!(
+            read(bake, b"//bakes/{blend_name}_{scene_name}/", (5, 3)),
+            not_worked_out(b"{scene_name}")
+        );
+        // A root whose name does not end `.blend`: left, never guessed.
+        assert_eq!(
+            how_the_render_reads_it(bake, &recorded(b"//bakes/{blend_name}/"), (5, 3), None),
+            not_worked_out(b"{blend_name}")
+        );
+
+        // Up to 5.2 the braces are the folder's own name: every one of these
+        // made a folder of that very name on 5.2.3.
+        for version in [(4, 5), (5, 0), (5, 1), (5, 2)] {
+            for text in [&b"//bakes/{blend_name}/"[..], b"//bakes/{scene_name}/", b"//bakes/{blend_name/"] {
+                assert_eq!(read(bake, text, version), HowTheRenderReadsIt::AsRecorded);
+            }
+        }
+        // No other kind, and a folder with no braces at all.
+        assert_eq!(read(Kind::Image, b"//{hero}/x.png", (5, 3)), HowTheRenderReadsIt::AsRecorded);
+        assert_eq!(read(Kind::BakeFolder, b"//{hero}/", (5, 3)), HowTheRenderReadsIt::AsRecorded);
+        assert_eq!(read(bake, b"//bakes/plain/", (5, 3)), HowTheRenderReadsIt::AsRecorded);
     }
 
     #[test]

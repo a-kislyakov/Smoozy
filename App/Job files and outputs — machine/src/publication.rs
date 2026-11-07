@@ -43,6 +43,13 @@ pub struct AJobsPaths {
 /// same way rather than writing them a second time.
 pub const THE_STAGING_PREFIX: &str = "staging-";
 
+/// **`Server Setup`'s staging folder for its runs, inside its Blender area**: the
+/// one composition, because the supervisor makes it and `Server Setup` B10's
+/// search must leave it out. Moved here 2026-11-03.
+pub fn the_setup_runs_staging_folder(blender_area: &str) -> String {
+    format!("{blender_area}/{THE_STAGING_PREFIX}setup")
+}
+
 /// **The job record directory alone, from the root and the job identity** —
 /// N3: it is named by the identity's textual form alone, so a reader holding
 /// the root and no label can compose it.

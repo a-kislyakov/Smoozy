@@ -32,11 +32,23 @@ pub struct SettingsHalf {
     pub offered_engine_identifiers: OfferedEngineIdentifiers,
     /// **Item 5: the one add-on case a file announces** (E5).
     pub announced_add_on_case: Option<AnnouncedAddOnCase>,
+    /// **Item 7: the folders standing directly under the machine's root**, so
+    /// `Job files and outputs` P21's note can ask `Job files and outputs` P20's first question of the
+    /// machine's own answer. **Nothing where the list would not read, or a
+    /// server program older than this took the reading**, and nothing is then
+    /// assumed: serde's own rule for an absent optional field.
+    pub the_folders_at_the_machines_top: Option<Vec<String>>,
 }
 
 /// **Q2 item 1**, per scene.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SceneReading {
+    /// `Render Settings` Q2b: R4 item 8's existing answer. Old readings are unknown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prepare_simulations: Option<bool>,
+    /// `Render Settings` Q2b: saved shutter; absent in older readings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion_blur: Option<MotionBlur>,
     pub name: ExactName,
     pub frame_start: i64,
     pub frame_end: i64,
@@ -59,6 +71,10 @@ pub struct SceneReading {
     /// and its minimum.
     pub early_stop: EarlyStop,
     pub time_limit: f64,
+    /// **`Render Settings` Q2 item 1, from 5.3: EEVEE's own time limit.** Absent
+    /// where the version has none, and from a reading taken before 2026-11-02.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eevee_time_limit: Option<f64>,
     /// The layer-samples rule's value — identifiers **observed (2026-08-19
     /// test)**.
     pub layer_samples_rule: LayerSamplesRule,
@@ -75,6 +91,36 @@ pub struct SceneReading {
     /// value carried is the read-back value and never a documented default**
     /// (`Rendering` A1d).
     pub simplify: SimplifyReadBack,
+}
+
+/// `Rendering` L10b: how far the saved shutter reaches past the frame.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MotionBlur {
+    pub enabled: bool,
+    pub position: ShutterPosition,
+    pub shutter: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ShutterPosition {
+    #[serde(rename = "START")]
+    Start,
+    #[serde(rename = "CENTER")]
+    Center,
+    #[serde(rename = "END")]
+    End,
+}
+
+impl MotionBlur {
+    pub fn last_played_frame(&self, last: i64) -> i64 {
+        if !self.enabled { return last; }
+        let reach = match self.position {
+            ShutterPosition::Start => self.shutter,
+            ShutterPosition::Center => self.shutter * 0.5,
+            ShutterPosition::End => 0.0,
+        };
+        last.saturating_add(reach.ceil() as i64)
+    }
 }
 
 /// The per-engine sample counts a scene carries, all present at once. The two
@@ -363,6 +409,19 @@ pub fn renders_at(layer: &ViewLayerReading, frame: i64) -> FrameAnswer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // `Render Settings` Q2b; `Rendering` L10b. No record migration is needed.
+    #[test]
+    fn a_saved_shutter_round_trips_and_old_readings_have_none() {
+        let mut scene = crate::file_half::tests::a_scene("Scene");
+        let mut old = serde_json::to_value(&scene).unwrap();
+        old.as_object_mut().unwrap().remove("motion_blur");
+        assert_eq!(serde_json::from_value::<SceneReading>(old).unwrap().motion_blur, None);
+        scene.motion_blur = Some(MotionBlur { enabled: true, position: ShutterPosition::Center, shutter: 2.25 });
+        let read: SceneReading = serde_json::from_value(serde_json::to_value(&scene).unwrap()).unwrap();
+        assert_eq!(read, scene);
+        assert_eq!(read.motion_blur.unwrap().last_played_frame(125),127);
+    }
 
     fn a_layer(animation: SwitchAnimation, table: &[(i64, bool)]) -> ViewLayerReading {
         ViewLayerReading {

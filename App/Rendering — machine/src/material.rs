@@ -472,6 +472,7 @@ pub fn compose(inputs: MaterialInputs<'_>) -> Result<LaunchMaterial, CannotCompo
         inputs.payload,
         inputs.reading_in_force,
         inputs.the_jobs_scene,
+        inputs.version,
     )? {
         let property = pair.property;
         entries.push(Entry::Settings(pair));
@@ -628,7 +629,13 @@ pub fn compose(inputs: MaterialInputs<'_>) -> Result<LaunchMaterial, CannotCompo
 pub enum TheRedirectsHolder<'a> {
     /// **A file output node**, by its own name, and the folder's property on
     /// it — `Job files and outputs` D8's, per version, arriving resolved.
-    AFileOutputNode { node: &'a [u8], property: &'a str },
+    AFileOutputNode {
+        node: &'a [u8],
+        property: &'a str,
+        /// **`Job files and outputs` D8a, from 5.3: the effect whose group holds
+        /// the node**, by its name as the file holds it.
+        effect: Option<&'a [u8]>,
+    },
     /// **One of `Job files and outputs` D20's four added write places**, and
     /// every setting that holds its folder, each on what carries it —
     /// `Job files and outputs`' own `the_settings_of`, read off four running
@@ -687,7 +694,11 @@ pub fn the_redirects_holder(
         }
     };
     let property = assignment.property.as_deref().ok_or_else(refuse)?;
-    Ok(TheRedirectsHolder::AFileOutputNode { node, property })
+    Ok(TheRedirectsHolder::AFileOutputNode {
+        node,
+        property,
+        effect: assignment.destination.the_effect().map(|effect| effect.as_bytes()),
+    })
 }
 
 /// **L10's settings-pair family: every value of the payload that has no
@@ -703,6 +714,7 @@ fn the_settings_pairs(
     payload: &Payload,
     reading: &RecordedReading,
     scene: &SceneReading,
+    version: TheFourVersions,
 ) -> Result<Vec<SettingsPair>, CannotCompose> {
     let mut pairs = Vec::new();
     if let Some(count) = payload.sample_count {
@@ -717,7 +729,10 @@ fn the_settings_pairs(
         };
         let _: OfferedEngine = engine;
         pairs.extend(
-            the_imposition_set(engine, count).map_err(CannotCompose::ASpellingIsNotYetRead)?,
+            // `Render Settings` C1 item 3: which time limits there are to turn off
+            // depends on the version in hand.
+            the_imposition_set(engine, count, version.major_and_minor())
+                .map_err(CannotCompose::ASpellingIsNotYetRead)?,
         );
     }
     if let Some(percentage) = payload.resolution_percentage {
@@ -791,6 +806,8 @@ pub mod testing {
 
     pub fn a_scene(name: &str) -> SceneReading {
         SceneReading {
+            prepare_simulations: None,
+            motion_blur: None,
             name: ExactName::as_the_reading_produced_it(name),
             frame_start: 1,
             frame_end: 10,
@@ -811,6 +828,7 @@ pub mod testing {
                 minimum: 0,
             },
             time_limit: 0.0,
+            eevee_time_limit: None,
             layer_samples_rule: LayerSamplesRule::Use,
             saved_with: "5.2.0".to_string(),
             view_layers: vec![ViewLayerReading {
@@ -852,6 +870,7 @@ pub mod testing {
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_folders_at_the_machines_top: None,
             },
             taken_by: a_blender(),
             file_identity: four_values(),
@@ -861,6 +880,7 @@ pub mod testing {
 
     pub fn an_untouched_payload() -> Payload {
         Payload {
+            prepare_simulations: true,
             version_pick: VersionPick::of(&a_blender()),
             scene: None,
             frame_range: None,
@@ -925,6 +945,7 @@ pub mod testing {
         RedirectAssignment {
             destination: Destination {
                 kind: DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile {
+                    the_effect: None,
                     node: named(),
                     the_nodes_base_file_name: None,
                     replaced: None,
@@ -1303,11 +1324,17 @@ pub(crate) mod tests {
             identifier: None,
         });
         // With the pick, the count pair targets EEVEE's own count.
-        let pairs = the_settings_pairs(&payload, &a_reading(), &a_scene("Kitchen"))
+        let pairs = the_settings_pairs(&payload, &a_reading(), &a_scene("Kitchen"), TheFourVersions::V5_2)
             .expect("every name C1 items 1 to 5 assign against is read");
         assert!(pairs
             .iter()
             .any(|pair| pair.property == "scene.eevee.taa_render_samples"));
+        // **`Render Settings` C1 item 3: EEVEE's own time limit is composed from
+        // 5.3 and never before**, because L10a would fail an older job on it.
+        assert!(!pairs.iter().any(|pair| pair.property == "scene.eevee.time_limit"));
+        let from_5_3 = the_settings_pairs(&payload, &a_reading(), &a_scene("Kitchen"), TheFourVersions::V5_3)
+            .expect("the name is read");
+        assert!(from_5_3.iter().any(|pair| pair.property == "scene.eevee.time_limit"));
         assert!(!pairs
             .iter()
             .any(|pair| pair.property == "scene.cycles.samples"));
@@ -1317,7 +1344,7 @@ pub(crate) mod tests {
         scene.engine_as_read = ExactName::as_the_reading_produced_it("HYDRA_STORM");
         payload.engine = None;
         assert_eq!(
-            the_settings_pairs(&payload, &a_reading(), &scene).unwrap_err(),
+            the_settings_pairs(&payload, &a_reading(), &scene, TheFourVersions::V5_2).unwrap_err(),
             CannotCompose::ATypedCountUnderAnEngineThePageDoesNotOffer
         );
     }

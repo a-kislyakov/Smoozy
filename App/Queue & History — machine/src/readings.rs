@@ -32,11 +32,14 @@ use smoozy_state::identities::Identity;
 use smoozy_state::observed::Reading;
 
 /// **R6's closed list: the readings the reader produces.** Nothing else is
-/// read: no percentage, no card memory, no device name (that is a closing
+/// read, apart from R6a's simulation pair before rendering: no percentage,
+/// no card memory, no device name (that is a closing
 /// report, E13) and no colour-substitution line (E13a). **A builder adding
 /// anything to this list has found a fault rather than a case.**
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LiveReadings {
+    /// `Queue & History` R6a: scene frames being simulated, never rendered work.
+    pub simulation: Option<(i64, i64)>,
     /// **R9: the frame in hand** — read off the line in 4.5, counted off the
     /// announcements in 5.0 and later.
     pub frame_in_hand: Option<i64>,
@@ -50,9 +53,14 @@ pub struct LiveReadings {
     /// printed total beside it**, both shown as printed, never converted into
     /// a claim of completion.
     pub samples: Option<SamplePair>,
-    /// **R12: the frame's stopped-short mark, on an untiled frame only.** The
-    /// trailing zero says the frame ended short of its count and does not
-    /// say which cause.
+    /// **R12: the mark that sampling on this unit has ended.** On an untiled
+    /// frame the trailing zero says the frame ended short of its count and does
+    /// not say which cause; in 5.3, which prints no such zero, `Finished` on a
+    /// frame short of its count says the same (R12's line of 2026-11-02). **On a
+    /// frame with tiles `Finished` sets it at any count** (the same day's second
+    /// line), every count there being a tile's. It fills the bars and says
+    /// nothing else: never a picture on disk (E3), and never a claim about how
+    /// many samples were taken (R11).
     pub stopped_short: bool,
     /// **R13: the tile figures where a tiled line carries them**, shown beside
     /// the samples and never combined with them into one figure.
@@ -91,6 +99,11 @@ pub struct AProgressLine {
     pub samples: Option<SamplePair>,
     pub tiles: Option<TilePair>,
     pub estimate: Option<String>,
+    /// **R12's line of 2026-11-02: the line ends on the stage word `Finished`**,
+    /// the end of the sampling on what it is about. **Never that a picture
+    /// reached disk** (E3), which is why this is not one of R6's readings: it
+    /// reaches nothing but the fold's mark.
+    pub the_line_says_finished: bool,
 }
 
 impl AProgressLine {
@@ -110,9 +123,10 @@ impl AProgressLine {
 /// the pair the line printed — never carried across tiles, never presented as
 /// the frame's count.**
 ///
-/// **R12: on an untiled frame the trailing zero is the stopped-short mark;
-/// on a tiled frame no mark is produced at all.** A new frame in hand starts
-/// the fold over.
+/// **R12: on an untiled frame the trailing zero is the stopped-short mark; on
+/// a tiled frame no line carrying a tile figure produces it, and `Finished`
+/// does** (R12's line of 2026-11-02, B3b). A new frame in hand starts the fold
+/// over.
 ///
 /// **So does a new view layer on the same frame** — B3's *"it fills and
 /// finishes once per renderlet"*, and B3b's *the next unit beginning*. Added
@@ -134,12 +148,14 @@ pub fn fold_a_line(held: &LiveReadings, line: &AProgressLine) -> LiveReadings {
     } else {
         held.clone()
     };
+    next.simulation = None;
     if line.view_layer.is_some() {
         next.view_layer = line.view_layer.clone();
     }
     next.blenders_own_estimate_for_the_frame = line.estimate.clone();
     if line.is_a_tiled_frame() {
-        // The tile's own pair, as printed; no frame-wide fold and no mark.
+        // The tile's own pair, as printed; no frame-wide fold, and no line with
+        // a tile figure sets the mark.
         next.tiles = line.tiles;
         next.samples = line.samples;
         next.stopped_short = false;
@@ -156,6 +172,21 @@ pub fn fold_a_line(held: &LiveReadings, line: &AProgressLine) -> LiveReadings {
             }
             _ => next.samples = Some(printed),
         }
+    }
+    // **R12's line of 2026-11-02, for B3b: 5.3 prints no closing zero**, so a
+    // frame cut short goes `Sample 160/4096`, then `Finished`. The one rule that
+    // reads every version is the largest count seen against its maximum, read
+    // here as the sampling ends; older versions' zero has set the mark by now
+    // and a frame at its full count sets nothing. **The `Finished` line carries
+    // no tile figure, so a tiled frame is known by the figure it already
+    // printed. There every count is a tile's, so a count short of its maximum
+    // says nothing, and `Finished` is the mark at any count** (`Queue & History`
+    // R12's second line of 2026-11-02: every real 4K frame on a card has tiles,
+    // and both bars sat at `3/4` through denoising and saving, in every version).
+    if line.the_line_says_finished
+        && (next.tiles.is_some() || next.samples.is_some_and(|largest| largest.seen < largest.of))
+    {
+        next.stopped_short = true;
     }
     next
 }
@@ -223,6 +254,12 @@ impl AWorkersReport {
             (asked::THE_FIGURES_CLOCK_FIELD, clock),
             (asked::THE_FRAMES_COUNTED_FIELD, read.frames_completed.to_string()),
         ];
+        // `Queue & History` R6a: these optional fields use the same report
+        // on both sides; older reports simply carry no simulation reading.
+        if let Some((frame, to)) = read.simulation {
+            pairs.push((THE_SIMULATION_FRAME, frame.to_string()));
+            pairs.push((THE_SIMULATION_END, to.to_string()));
+        }
         if let Some(frame) = read.frame_in_hand {
             pairs.push((asked::THE_FRAME_IN_HAND_FIELD, frame.to_string()));
         }
@@ -277,6 +314,8 @@ impl AWorkersReport {
         };
         let pair = |one: &str, other: &str| Some((number(one)?, number(other)?));
         let read = LiveReadings {
+            simulation: signed(THE_SIMULATION_FRAME).zip(signed(THE_SIMULATION_END))
+                .filter(|(frame, to)| frame <= to),
             frame_in_hand: signed(asked::THE_FRAME_IN_HAND_FIELD),
             view_layer: text(asked::THE_VIEW_LAYER_IN_HAND_FIELD).map(str::to_string),
             samples: pair(asked::THE_SAMPLES_SEEN_FIELD, asked::THE_SAMPLES_PRINTED_TOTAL_FIELD)
@@ -305,6 +344,8 @@ impl AWorkersReport {
 /// How a moment on the desktop's own clock is named, where one is ever
 /// written — the same words the per-job note's moments use.
 const THIS_COMPUTER: &str = "this computer";
+const THE_SIMULATION_FRAME: &str = "simulation frame";
+const THE_SIMULATION_END: &str = "simulation end";
 
 /// **A rendering job's two sinks, as the queue reading names them** — E8's
 /// *"the desktop reads the sink's current bytes over the connection, on
@@ -590,6 +631,7 @@ mod tests {
             samples: samples.map(|(seen, of)| SamplePair { seen, of }),
             tiles: tiles.map(|(done, of)| TilePair { done, of }),
             estimate: None,
+            the_line_says_finished: false,
         }
     }
 
@@ -624,7 +666,7 @@ mod tests {
         );
         assert!(
             !held.stopped_short,
-            "a finished tiled frame ends on a trailing zero"
+            "up to 5.2 a finished tiled frame ends on a trailing zero; 5.3's ends on `Sample 16/16` (R12)"
         );
     }
 
@@ -651,6 +693,7 @@ mod tests {
             samples: None,
             tiles: None,
             estimate: None,
+            the_line_says_finished: false,
         };
         let mut held = LiveReadings {
             frames_completed: 3,
@@ -713,6 +756,7 @@ mod tests {
                 samples: None,
                 tiles: None,
                 estimate: None,
+                the_line_says_finished: false,
             },
         );
         assert_eq!(held, LiveReadings::default());
@@ -725,6 +769,7 @@ mod tests {
             attempt: 2,
             readings: Reading::taken(
                 LiveReadings {
+                    simulation: None,
                     frame_in_hand: Some(-3),
                     view_layer: Some("Back plate".to_string()),
                     samples: Some(SamplePair { seen: 812, of: 2048 }),
@@ -817,5 +862,26 @@ mod tests {
             TheSinksOfARenderingJob::read_back(the_pairs_read_by_name(&pairs)),
             Some(sinks)
         );
+    }
+}
+
+#[cfg(test)]
+mod wait_count_tests {
+    use super::*;
+    #[test]
+    fn wait_count_survives_the_same_report_the_queue_reads() {
+        let report = AWorkersReport {
+            attempt: 1,
+            readings: Reading::taken(LiveReadings::default(), SystemTime::UNIX_EPOCH,
+                smoozy_state::observed::Clock::ThisComputer),
+            newest_frame_saved: None, the_plan_total: None, the_units_finished: None,
+        };
+        let mut sent = report.as_pairs();
+        sent.extend([("simulation frame", "-2".into()), ("simulation end", "430".into())]);
+        let read = AWorkersReport::read_back(|name| sent.iter().find(|(key, _)| *key == name).map(|(_, value)| value.as_str())).unwrap();
+        assert!(read.as_pairs().contains(&("simulation frame", "-2".into())));
+        assert!(read.as_pairs().contains(&("simulation end", "430".into())));
+        assert_eq!(read.readings.value().frames_completed, 0);
+        assert_eq!(read.readings.value().frame_in_hand, None);
     }
 }

@@ -646,12 +646,12 @@ pub(crate) mod tests {
     /// test derives it again — so a clause added to the plan moves this number
     /// rather than a note somewhere going stale.
     #[test]
-    fn the_plan_defines_one_hundred_and_five_distinct_clauses() {
+    fn the_plan_defines_one_hundred_and_seven_distinct_clauses() {
         let plan =
             fs::read_to_string(the_architecture_folder().join(format!("{THIS_PLANS_NAME}.md")))
                 .expect("the plan is readable");
         let defined: HashSet<String> = the_clauses_defined_by(&plan).into_iter().collect();
-        assert_eq!(defined.len(), 105, "{:?}", {
+        assert_eq!(defined.len(), 107, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

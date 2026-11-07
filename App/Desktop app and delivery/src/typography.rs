@@ -1,7 +1,7 @@
 //! The typography application point, and the verbatim route beside it.
 //!
 //! Keeps `Desktop app and delivery` section 17: X1 (one application point),
-//! X2 (two substitutions and nothing else), X7 (what it must never touch),
+//! X2 (three substitutions and nothing else), X7 (what it must never touch),
 //! X8 (the module chooses at the moment it hands the string over) and
 //! X9 (the verbatim route is named rather than invented).
 //!
@@ -11,6 +11,8 @@
 
 const NBSP: char = '\u{00A0}';
 const EM_DASH: char = '\u{2014}';
+/// **The one apostrophe every screen shows**, as the drawing writes it.
+const APOSTROPHE: char = '\u{2019}';
 
 /// Text for a person. Built only through [`Prose::new`], which is the
 /// application point — `Desktop app and delivery` X1.
@@ -31,14 +33,14 @@ pub struct Verbatim(String);
 impl Prose {
     /// `Desktop app and delivery` X1 and X2. Every string of prose that will
     /// become displayable text passes through here, and the point performs the
-    /// two substitutions and nothing else.
+    /// three substitutions and nothing else.
     ///
     /// A piece of prose is one string as handed in (X2). The point does not
     /// parse sentences out of a paragraph and does not join two strings, and
     /// it never learns to (X10) — a caller that needs the orphan rule inside a
     /// multi-sentence block hands each sentence as its own string.
     pub fn new(text: impl Into<String>) -> Self {
-        Prose(bind_last_pair(&bind_before_em_dashes(&text.into())))
+        Prose(bind_last_pair(&bind_before_em_dashes(&one_apostrophe(&text.into()))))
     }
 
     #[allow(dead_code)]
@@ -66,7 +68,7 @@ impl Verbatim {
 // `Design/Whole app § Typography`, Creator-stated 2026-09-28: *"Every numeric
 // value followed by a unit should be connected with a non-breaking space. So,
 // 47 GB should never become: 47 / GB."* **It is held where the figure is
-// written and not by the point**: X2 gives the point two substitutions and
+// written and not by the point**: X2 gives the point three substitutions and
 // nothing else, and a value reaches the screen by the route that substitutes
 // nothing (X9). So the space is a non-breaking one from the moment the figure
 // and its unit are put together, and these are the two places that happens.
@@ -96,6 +98,26 @@ pub fn a_figure_with_its_unit(figure: impl std::fmt::Display, unit: &str) -> Str
 /// moment, which the page writes as a time, is not handed here.
 pub fn is_a_figure(value: &str) -> bool {
     value.chars().next().is_some_and(|first| first.is_ascii_digit())
+}
+
+/// **Third substitution, added 2026-11-06: a typed apostrophe after a letter or
+/// a figure becomes the typographic one** (U+2019), so *server's* and *can't*
+/// look the same on every screen however the string was typed (`Design/Whole
+/// app § Typography`; Step 13's last read, finding 27). **Only after a letter
+/// or a figure**: that is every contraction and possessive, *servers'*
+/// included, and never a quotation mark opened after a space.
+fn one_apostrophe(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut previous: Option<char> = None;
+    for character in text.chars() {
+        if character == '\'' && previous.is_some_and(char::is_alphanumeric) {
+            out.push(APOSTROPHE);
+        } else {
+            out.push(character);
+        }
+        previous = Some(character);
+    }
+    out
 }
 
 /// First substitution: the space preceding an em dash becomes a non-breaking
@@ -630,5 +652,20 @@ mod tests {
     fn the_verbatim_route_substitutes_nothing() {
         let path = "/home/artist/scene \u{2014} final/frame 001.exr";
         assert_eq!(Verbatim::new(path).as_str(), path);
+        let words = "This server's driver can't";
+        assert_eq!(Verbatim::new(words).as_str(), words);
+    }
+
+    /// **The third substitution: one apostrophe on every screen.** A typed
+    /// one after a letter or a figure becomes U+2019, a typographic one stays,
+    /// and a quotation mark opened after a space is left alone.
+    #[test]
+    fn a_typed_apostrophe_becomes_the_typographic_one() {
+        assert_eq!(point("Can't"), "Can\u{2019}t");
+        assert_eq!(point("This server's driver"), "This server\u{2019}s\u{00A0}driver");
+        assert_eq!(point("the servers' jobs"), "the servers\u{2019}\u{00A0}jobs");
+        assert_eq!(point("This server\u{2019}s driver"), point("This server's driver"));
+        assert_eq!(point("say 'yes'"), "say\u{00A0}'yes\u{2019}");
+        assert_eq!(point("'quoted"), "'quoted");
     }
 }

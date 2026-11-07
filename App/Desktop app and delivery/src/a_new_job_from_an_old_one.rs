@@ -50,7 +50,7 @@ use smoozy_queue_history::record::{AnswerOrigin, LocalJobRecord};
 use smoozy_render_settings::file_half::{BlenderIdentity, FileKey};
 use smoozy_render_settings::frames::FrameForm;
 use smoozy_render_settings::payload::Payload;
-use smoozy_render_settings::store::{Answer, HeldSetup, SceneEntries, Where};
+use smoozy_render_settings::store::{HeldSetup, SceneEntries, Where};
 use smoozy_rendering::again::{
     a_kept_setup_with_no_scene_is_loaded, the_carried_on_range, the_entries_the_payload_kept,
     the_kept_setup_from, the_simplify_offer_is_drawn, where_the_browser_opens,
@@ -487,8 +487,10 @@ pub fn the_setup_is_loaded(
             Where::ThePreReadSet { file: key }
         }
     };
+    // **`Render Settings` Y15b: written as a loaded range, so it belongs to the
+    // one job** and what stood there comes back when that job goes.
     if let Some(range) = range {
-        held.store.answer(at, Answer::FrameRange(range.clone()));
+        held.store.a_range_is_loaded(at, range.clone());
     }
     crate::surface::render_settings::the_page_came_from(held, server, file, came_from);
 }
@@ -858,6 +860,122 @@ mod tests {
 
     /// A job of frames 1 to 240 on `server`, ended `outcome` with the figure
     /// `figure`, its `.blend` at `/root/kitchen.blend`.
+    /// **`Render Settings` Y15b: a *Resume*'s range belongs to that one job.** The
+    /// page held 11–40 for the next job in the second 5.3 live pass. Once it goes,
+    /// the page reads as it did before: the range, the band, and the carry-on
+    /// mark; every other answer stays as `Render Settings` Y15 has it. **Undone (the range and the
+    /// band left standing), this fails.**
+    #[test]
+    fn a_resumes_range_goes_with_its_job_and_the_page_reads_as_it_did() {
+        use crate::surface::render_settings::{the_loaded_range_goes, the_panel};
+        let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+        let file = "/root/kitchen.blend";
+        let key = FileKey { server: server.clone(), path: file.to_string() };
+        let scene = ExactName::as_the_reading_produced_it("Kitchen");
+        let composed = the_press_composed(
+            &an_entry(&server, TheOutcomeAsWritten::LeftStopped, Some(60)),
+            &a_kept_setup(true),
+            &TheWayIn::CarryOn { typed: None },
+            &WhatTheServerIs::NotConnected,
+            WhatTheBlendIs::There,
+            None,
+            None,
+        )
+        .unwrap();
+        let loaded = |held: &mut WhatTheRunHolds| {
+            the_setup_is_loaded(
+                held,
+                &server.as_text(),
+                file,
+                composed.the_setup.clone(),
+                composed.the_range.as_ref(),
+                composed.came_from.clone(),
+            );
+        };
+        let a_range = FrameForm::Triple { first: 60, last: 240, step: 1 };
+        let mut held = WhatTheRunHolds::default();
+        loaded(&mut held);
+        let the_range = |held: &WhatTheRunHolds| held.store.the_answers_composition_reads(&key, Some(&scene));
+        assert_eq!(the_range(&held).frame_range, Some(a_range));
+        assert!(!the_panel(&held, &server.as_text(), file).where_it_came_from.is_empty());
+        assert!(held.where_it_came_from.values().next().unwrap().the_carry_on_mark().is_some());
+
+        the_loaded_range_goes(&mut held, &server.as_text(), file);
+        assert_eq!(the_range(&held).frame_range, None, "the page reads the file's own range again");
+        assert_eq!(the_range(&held).sample_count, Some(512), "every other answer stays as the plan has it");
+        let panel = the_panel(&held, &server.as_text(), file);
+        assert!(panel.where_it_came_from.is_empty(), "the band went with the job");
+        assert!(panel.simplify.is_none());
+        assert!(held.where_it_came_from.is_empty(), "the next job carries no carry-on mark");
+
+        // **A range typed before the press comes back, and one typed after stays.**
+        let typed = FrameForm::Triple { first: 5, last: 9, step: 1 };
+        let at = Where::AScene { file: key.clone(), scene: scene.clone() };
+        let mut held = WhatTheRunHolds::default();
+        held.store.answer_the_typed_range(at.clone(), typed.clone(), "5-9");
+        loaded(&mut held);
+        the_loaded_range_goes(&mut held, &server.as_text(), file);
+        assert_eq!(the_range(&held).frame_range, Some(typed.clone()));
+        assert_eq!(the_range(&held).frame_range_text.as_deref(), Some("5-9"));
+
+        let mut held = WhatTheRunHolds::default();
+        loaded(&mut held);
+        held.store.answer_the_typed_range(at, typed.clone(), "5-9");
+        the_loaded_range_goes(&mut held, &server.as_text(), file);
+        assert_eq!(the_range(&held).frame_range, Some(typed), "a range the user typed stays");
+    }
+
+    /// **`Render Settings` Y15b: *Submit again* loads a range the same way, the
+    /// same rule**, on an entry that named a scene and on one that named none.
+    /// **`Rendering` A1c: a failed entry's Simplify stays drawn with its entries**,
+    /// the band gone, so nothing is composed unshown. **Undone, this fails.**
+    #[test]
+    fn submit_agains_range_goes_with_its_job_and_a_failed_entrys_offer_stays_drawn() {
+        use crate::surface::render_settings::{the_loaded_range_goes, the_panel};
+        let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+        let file = "/root/kitchen.blend";
+        let key = FileKey { server: server.clone(), path: file.to_string() };
+        let scene = ExactName::as_the_reading_produced_it("Kitchen");
+        for (named, the_scene) in [(true, Some(&scene)), (false, None)] {
+            let mut kept = a_kept_setup(named);
+            kept.frame_range = Some(FrameForm::Triple { first: 11, last: 40, step: 1 });
+            let composed = the_press_composed(
+                &an_entry(&server, TheOutcomeAsWritten::Finished, None),
+                &kept,
+                &TheWayIn::SubmitAgain,
+                &WhatTheServerIs::NotConnected,
+                WhatTheBlendIs::There,
+                None,
+                None,
+            )
+            .unwrap();
+            let mut held = WhatTheRunHolds::default();
+            the_setup_is_loaded(&mut held, &server.as_text(), file, composed.the_setup, None, composed.came_from);
+            assert_eq!(held.store.the_answers_composition_reads(&key, the_scene).frame_range, kept.frame_range, "scene {named}");
+            the_loaded_range_goes(&mut held, &server.as_text(), file);
+            assert_eq!(held.store.the_answers_composition_reads(&key, the_scene).frame_range, None, "scene {named}");
+            assert!(the_panel(&held, &server.as_text(), file).where_it_came_from.is_empty(), "scene {named}");
+        }
+
+        let composed = the_press_composed(
+            &an_entry(&server, TheOutcomeAsWritten::Failed, Some(60)),
+            &a_kept_setup(true),
+            &TheWayIn::SubmitAgain,
+            &WhatTheServerIs::NotConnected,
+            WhatTheBlendIs::There,
+            None,
+            None,
+        )
+        .unwrap();
+        let mut held = WhatTheRunHolds::default();
+        the_setup_is_loaded(&mut held, &server.as_text(), file, composed.the_setup, None, composed.came_from);
+        assert!(the_panel(&held, &server.as_text(), file).simplify.is_some());
+        the_loaded_range_goes(&mut held, &server.as_text(), file);
+        let panel = the_panel(&held, &server.as_text(), file);
+        assert!(panel.simplify.is_some(), "the entries stand, so the offer stays drawn");
+        assert!(panel.where_it_came_from.is_empty(), "the band went");
+    }
+
     fn an_entry(server: &Identity, outcome: TheOutcomeAsWritten, figure: Option<i64>) -> LocalJobRecord {
         let mut record = crate::record::deletions::tests::a_record_in_history(server, "Kitchen — final");
         record.blend_path_on_the_machine = Some("/root/kitchen.blend".to_string());
@@ -867,6 +985,7 @@ mod tests {
             exit_status: None,
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         record.what_the_note_carried.last_frame_figure = figure;
@@ -876,6 +995,7 @@ mod tests {
     /// The setup the entry kept: scene *Kitchen*, 512 samples, and Simplify on.
     fn a_kept_setup(scene: bool) -> Payload {
         let mut payload = Payload {
+            prepare_simulations: true,
             version_pick: VersionPick {
                 build_path: "/b".to_string(),
                 version: "4.5.12".to_string(),

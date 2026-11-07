@@ -1,43 +1,28 @@
-//! The four supported versions the contract is composed per, and L14's
-//! version confirmation as a judgement.
+//! The versions the contract is composed per, and L14's version confirmation
+//! as a judgement.
 //!
 //! **The contract is composed per version** — L10's material names the
 //! version it was composed for (`Job files and outputs` D7), the device
 //! argument's spelling is declared per version (L24a), and the device-line
 //! ask is the version's own switch (L26). So a version is a value of this
 //! closed set, and a manifest naming a version outside it composes nothing:
-//! there is no spelling table for a fifth version and no arm invents one.
+//! there is no spelling table for one and no arm invents one.
 //!
-//! **A fifth, 5.3, from 2026-10-02**: the 5.3.0 Alpha Blender's build
-//! service offers, and Smoozy installs, composed nothing until every name the
-//! composition uses was read off it at the desk — on the Creator's own install,
-//! `/Applications/Blender 5.3.0a.app`, which answered *5.3.0 Alpha*, build
-//! hash `68609be8e23b`, built 2026-10-01 — and each came back the same as
-//! 5.2.2's ([`crate::spellings::THE_5_3_LOOKUP`]). The pass before 0.1.9 on
-//! Vast, new fault 1: every job on the alpha failed with *Smoozy cannot
-//! compose a render for Blender 5.3.0*. **The type keeps its name**; it is the
-//! closed set, and the count in the name is the one it was written with.
+//! **The set is 4.5 to 5.4.** The floor is `Server Setup`'s own constant. 5.3
+//! joined on 2026-10-02 and 5.4 on 2026-10-18, each once every name the
+//! composition uses had been read off it at the desk and come back the same
+//! ([`crate::spellings::THE_5_3_LOOKUP`], [`crate::spellings::THE_5_4_LOOKUP`]).
+//! **A version past 5.4 composes nothing**, and says so in the artist's words
+//! ([`crate::composition::CannotComposeTheAttempt::in_words`]). **The type
+//! keeps its name**; the count in it is the one it was written with.
 //!
-//! **A sixth, 5.4, from 2026-10-18**: the 5.4.0 Alpha from Blender's build
-//! service, downloaded for the reading and copied to `/Applications/Blender
-//! 5.4a.app`, which answered *5.4.0 Alpha*, build hash `3f4216e1bad1`, built
-//! 2026-10-18 — every name the composition, the launch material and the reading
-//! script use was read off it at the desk beside the 5.3.0 Beta and each came
-//! back the same ([`crate::spellings::THE_5_4_LOOKUP`]). The Creator's
-//! thirteenth notes, note 8: a 5.2.2 file on the 5.4 alpha went straight to
-//! failed. **A version past 5.4 still composes nothing**, and says so in the
-//! artist's words ([`crate::composition::CannotComposeTheAttempt::in_words`]).
-//!
-//! **The four are the whole-app floor and ceiling** — `Render Settings` B7's
-//! floor of 4.5 and ceiling of 5.2, the floor being `Server Setup`'s own
-//! constant — and the boundary the research draws is at 5: *one name in
-//! 4.5, another from 5.0* (§9 item 2), so 5.1 sits inside the from-5.0
-//! branch everywhere this crate branches, and that inference is recorded
-//! at [`TheFourVersions::is_inferred_across_the_boundary`].
+//! **The boundary the research draws is at 5**: *one name in 4.5, another from
+//! 5.0* (§9 item 2), so 5.1 sits inside the from-5.0 branch, and that inference
+//! is recorded at [`TheFourVersions::is_inferred_across_the_boundary`].
 //!
 //! **Markers used in this file that belong to another document, each with
-//! the document it belongs to.** `Job files and outputs` D7, R1. `Render
-//! Settings` B7. `Server Setup` B2.
+//! the document it belongs to.** `Job files and outputs` D7, R1. `Server Setup`
+//! B2.
 
 use smoozy_server_setup_machine::blender::{Version, THE_FLOOR};
 
@@ -63,7 +48,7 @@ impl TheFourVersions {
         TheFourVersions::V5_4,
     ];
 
-    /// The version the manifest names, as one of the four, keyed on the
+    /// The version the manifest names, as one of the set, keyed on the
     /// major and minor components — patch releases share a line (`Server
     /// Setup` B2's discipline: components, never strings).
     pub fn of(version: Version) -> Option<TheFourVersions> {
@@ -91,6 +76,18 @@ impl TheFourVersions {
     /// draws, and the one every branch here turns on.
     pub fn is_from_five(self) -> bool {
         !matches!(self, TheFourVersions::V4_5)
+    }
+
+    /// The version's major and minor, for a composition that turns on a line.
+    pub fn major_and_minor(self) -> (u32, u32) {
+        match self {
+            TheFourVersions::V4_5 => (4, 5),
+            TheFourVersions::V5_0 => (5, 0),
+            TheFourVersions::V5_1 => (5, 1),
+            TheFourVersions::V5_2 => (5, 2),
+            TheFourVersions::V5_3 => (5, 3),
+            TheFourVersions::V5_4 => (5, 4),
+        }
     }
 
     /// The version written out, for a diary line or a material's stamp.

@@ -126,3 +126,11 @@
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 10c/Brief — the twenty-sixth notes, notes 1 to 3, Telegram.md`, outside any round — the twenty-sixth notes, notes 1 to 3: M10's finished video says nothing about its frame count; B14 drops a machine that does not answer a gather; C1b and V1b take Stop off the *Status* reply. No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the phone builder of step 13's second words sweep, outside any round — the quoted phone words follow the code: R1a's and V1d's *Reporting set to “…”*, R1a's *Could not tell which job … Nothing changed.*, A3a's question names the held range only (*Needs your answer. Render frames 1–240?*), and M10's finished video gives its frame count and render time, then *Video on the server (…)*. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 5, outside any round — E1a. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a preview too heavy for Telegram.md`, outside any round — I3: the one line for all three caps. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a preview too heavy for Telegram.md`, outside any round — Row 267 notes the spec's corrected sentence. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — C1b and B18: a companion goes with its Stop. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — V1c's sentence on G2a. No auditor has seen it.
+2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job's reading sees its libraries, and failing before a render.md`, outside any round — E1: *Failed before rendering.* No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — E1's exit at 0 and the exit code words. The last words read before the release. No auditor has seen it.

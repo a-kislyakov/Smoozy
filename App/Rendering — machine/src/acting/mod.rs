@@ -32,6 +32,8 @@ pub mod load_time;
 #[cfg(unix)]
 pub mod material;
 #[cfg(unix)]
+pub mod opening;
+#[cfg(unix)]
 pub mod pipeline;
 #[cfg(unix)]
 pub mod reading;
@@ -41,5 +43,19 @@ pub mod stopping;
 // ignored by default.
 #[cfg(all(test, unix))]
 mod simplify_at_the_desk;
+// The 5.3 integration's piece 1: three readings run by hand with real Blenders,
+// ignored by default.
+#[cfg(all(test, unix))]
+mod the_5_3_readings_at_the_desk;
+// `Dependency Upload & Remap` M8b and `Dependency Upload & Remap` M4b: a file's start
+// scripts and a set of tiles,
+// run by hand with real Blenders, ignored by default.
+#[cfg(all(test, unix))]
+mod libraries_at_load_at_the_desk;
+// `Job files and outputs` R1a and `Dependency Upload & Remap` M8b: a job's reading
+// through the folder the file opens from, run by hand with real Blenders, ignored
+// by default.
+#[cfg(all(test, unix))]
+mod a_reading_sees_its_libraries_at_the_desk;
 #[cfg(unix)]
 pub mod the_optix_library;

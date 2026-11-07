@@ -59,7 +59,11 @@ Each row is given with `--update-row <row>=<name>`, naming one of the `--also` f
 
 **Until the build carries the two master keys, no update file is written or checked**, and both commands say so in one sentence. No copy of Smoozy could believe one, and a release should not stop for a key nothing can use yet. From the day the master keys are written into the build, every release writes the file, and a missing everyday key stops the release.
 
+**The master keys are in the build from 2026-11-01**, so from then on every release writes and checks the file, all five `--update-row` lines are required, and a missing everyday key stops the release. The keys were made that day (`Audits/Build/Step 11/Making the update keys — what was done.md`).
+
 ### What the Creator does, once, before the first release that carries it
+
+**Done on 2026-11-01**: the entry below was made that day by an agent, on the Creator's word, with exactly this line and the key read from its file, and read back equal. The steps stay for the day the entry has to be made again — on a new Mac, or after the everyday key is replaced.
 
 This is after the update keys are made (the steps are in `Audits/Build/Step 11/D3, the trust set and the manifest — what landed.md`), when the everyday key's text is already in your password manager as *Smoozy update everyday key*.
 

@@ -86,6 +86,10 @@ pub fn the_dedicated_entry_point_restarts_the_machine(_it_would_be_simpler: bool
 }
 
 /// **G2: no other setup step re-runs at the dedicated entry point.**
+///
+/// **G2a is the desktop's**: whether a connected server has the role is Y6b's
+/// reading, taken and held there for Render Settings and Queue, so nothing is
+/// composed here for it.
 pub fn what_else_the_dedicated_entry_point_runs() -> &'static [crate::ready_action::Step] {
     &[]
 }

@@ -592,6 +592,8 @@ fn the_watch(token: &str, conversation: i64, run: &mut TheRun, log: &TheLog, acc
         complaints: ACollectionOutcome::CollectedAndTheStreamWasEmpty,
         cause: TheCause::TheFilesOwn,
         disk_free_at_the_ending: None,
+        no_render_began: false,
+        the_reason_the_machine_recorded: None,
     };
     let c = messages.send_with_buttons(&the_failure_message(&failed), &a_job("job-c")).expect("job C's failure message and its one button");
 

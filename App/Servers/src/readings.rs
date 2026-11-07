@@ -208,6 +208,15 @@ const ASK_THE_DRIVER_FOR_ITS_VERSION: CommandString =
 /// query field for it is cited anywhere in this project**, so none is used.
 const ASK_THE_DRIVER_FOR_ITS_SUMMARY: CommandString = CommandString::constant("nvidia-smi");
 
+/// **H11b's OptiX-library bullet: the machine's loader asked for the OptiX
+/// library**, by `Rendering` L24b's own line — the one the render worker asks
+/// before a job naming `OPTIX` is launched, with the loader's and `grep`'s
+/// publications quoted at `smoozy_server_setup_machine::the_optix_library`.
+/// `0` found, `1` not found, anything else no answer. Added 2026-11-02.
+const LOOK_FOR_THE_OPTIX_LIBRARY: CommandString = CommandString::constant(
+    smoozy_server_setup_machine::the_optix_library::THE_LOADERS_OWN_LOOKUP,
+);
+
 /// The label the summary puts in front of the CUDA version, as recorded above.
 const THE_CUDA_VERSIONS_LABEL: &str = "CUDA Version:";
 
@@ -240,7 +249,7 @@ const THE_MACHINES_OWN_CLOCK: CommandString = CommandString::constant("date +%s"
 
 /// Every command this module sends, so a reader can see the whole set at once
 /// and a test can assert that none of them carries a value.
-pub const EVERY_COMMAND_THIS_MODULE_SENDS: [CommandString; 12] = [
+pub const EVERY_COMMAND_THIS_MODULE_SENDS: [CommandString; 13] = [
     THE_MACHINES_OWN_CLOCK,
     NAME_YOUR_OPERATING_SYSTEM,
     IS_THE_CONTAINER_MARKER_THERE,
@@ -250,6 +259,7 @@ pub const EVERY_COMMAND_THIS_MODULE_SENDS: [CommandString; 12] = [
     ASK_THE_DRIVER_FOR_THE_CARDS,
     ASK_THE_DRIVER_FOR_ITS_VERSION,
     ASK_THE_DRIVER_FOR_ITS_SUMMARY,
+    LOOK_FOR_THE_OPTIX_LIBRARY,
     THE_NEWER_MEMORY_LIMIT,
     THE_OLDER_MEMORY_LIMIT,
     THE_MACHINES_OWN_MEMORY,
@@ -636,6 +646,13 @@ pub async fn take_the_hardware_reading(
         DriverAnswer::Answered(_) => Some(ask_the_drivers_versions(channel).await),
         _ => None,
     };
+    // **H11b's OptiX-library bullet, added 2026-11-02: asked only where the
+    // driver answered, after the cards are in hand.** Only the loader's *not
+    // found* is carried; a lookup that gave no answer says nothing.
+    let the_optix_library_is_missing = match driver {
+        DriverAnswer::Answered(_) => the_loader_does_not_find_the_optix_library(channel).await,
+        _ => false,
+    };
     let cards = crate::hardware::read_the_cards(scan, driver, kind);
 
     let newer = read_a_cgroup_pair(channel, WhichCgroupPair::TheNewer).await;
@@ -674,7 +691,24 @@ pub async fn take_the_hardware_reading(
             where_k1_placed_the_machine: placed,
         }),
         _ => None,
-    }))
+    })
+    .with_the_optix_library_missing(the_optix_library_is_missing))
+}
+
+/// **H11b's OptiX-library bullet: whether the machine's loader does not find
+/// the OptiX library.** `Rendering` L24b's own line, read by its own reading
+/// of the status — so *not found* here is exactly what would end a cards job
+/// there. **A lookup the machine did not answer, or answered with anything but
+/// `0` or `1`, is not *not found*.** Added 2026-11-02.
+async fn the_loader_does_not_find_the_optix_library(channel: &mut impl CommandChannel) -> bool {
+    use smoozy_server_setup_machine::the_optix_library::{what_the_status_says, WhatTheLoaderFound};
+    match channel.run(LOOK_FOR_THE_OPTIX_LIBRARY).await {
+        Ok(result) => {
+            what_the_status_says(result.status.map(|status| status as i32))
+                == WhatTheLoaderFound::NoLibrary
+        }
+        Err(_) => false,
+    }
 }
 
 #[cfg(test)]
@@ -1172,5 +1206,50 @@ mod tests {
             .to(ASK_THE_DRIVER_FOR_ITS_VERSION, 0, "550.163.01\n")
             .to(ASK_THE_DRIVER_FOR_ITS_SUMMARY, 0, A_SUMMARY);
         assert_eq!(the_reading_of(machine).await.the_driver, None);
+    }
+    // ---- H11b's OptiX-library bullet (2026-11-02) ----
+
+    /// **The loader's answer is carried only where it says *not found***:
+    /// `1` is *not found*, `0` is found, and anything else — or a lookup the
+    /// machine did not answer — carries nothing. The rented RTX 4090 of
+    /// 2026-11-01 ended setup ready with driver 580.178.04 and no
+    /// `libnvoptix.so.1`, and the first three cards jobs failed at once.
+    #[tokio::test]
+    async fn a_driver_whose_loader_does_not_find_the_optix_library_is_carried_as_missing() {
+        let answering = || {
+            a_virtual_machine_whose_driver_answers()
+                .to(ASK_THE_DRIVER_FOR_ITS_VERSION, 0, "580.178.04\n")
+                .to(ASK_THE_DRIVER_FOR_ITS_SUMMARY, 0, A_SUMMARY)
+        };
+        let missing = the_reading_of(answering().to(LOOK_FOR_THE_OPTIX_LIBRARY, 1, "")).await;
+        assert!(missing.the_optix_library_is_missing);
+        assert!(missing.the_driver.is_some(), "the driver's part still stands");
+
+        let found = the_reading_of(answering().to(LOOK_FOR_THE_OPTIX_LIBRARY, 0, "")).await;
+        assert!(!found.the_optix_library_is_missing);
+        let no_answer = the_reading_of(answering().to(LOOK_FOR_THE_OPTIX_LIBRARY, 2, "")).await;
+        assert!(!no_answer.the_optix_library_is_missing);
+        let not_answered = the_reading_of(answering()).await;
+        assert!(!not_answered.the_optix_library_is_missing);
+    }
+
+    /// **Asked only where the driver answered**, like the two values: a
+    /// machine whose driver did not answer is never told it lacks the library.
+    #[tokio::test]
+    async fn a_driver_that_did_not_answer_is_not_asked_for_the_optix_library() {
+        let machine = a_virtual_machine_with_no_cgroup_file().to(LOOK_FOR_THE_OPTIX_LIBRARY, 1, "");
+        assert!(!the_reading_of(machine).await.the_optix_library_is_missing);
+    }
+
+    /// **The lookup is `Rendering` L24b's own line, shared rather than
+    /// copied**, so the reading and the render worker cannot ask two
+    /// different questions of one machine.
+    #[test]
+    fn the_optix_lookup_is_the_render_workers_own_line() {
+        assert_eq!(
+            LOOK_FOR_THE_OPTIX_LIBRARY.as_str(),
+            smoozy_server_setup_machine::the_optix_library::THE_LOADERS_OWN_LOOKUP
+        );
+        assert!(EVERY_COMMAND_THIS_MODULE_SENDS.contains(&LOOK_FOR_THE_OPTIX_LIBRARY));
     }
 }

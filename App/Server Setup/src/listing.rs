@@ -327,7 +327,9 @@ pub struct TheListingAsRead {
 /// **What it would cost if that changed**: a supported version published with a
 /// letter after it would be absent from the offered list. **What holds**: it is
 /// named in the second list rather than vanishing, and B5 already establishes
-/// that the offered list and what can be fetched are not the same set.
+/// that the offered list and what can be fetched are not the same set. **Only
+/// there: one below the floor is not named** ([`a_lettered_version_below_the_floor`]),
+/// because the count the user reads has to mean something.
 ///
 /// **An entry whose risk is not one of B2's four is not offered either**, for
 /// the same reason written the other way round: B2 requires the unstable kinds to
@@ -372,8 +374,12 @@ pub fn read_the_listing(answer: &str) -> Result<TheListingAsRead, WhyTheListingC
             continue;
         };
         let Some(version) = Version::parse(&entry.version) else {
-            entries_that_could_not_be_read
-                .push(format!("{named} — the version is not version components"));
+            // **B2's line of 2026-11-02: below the floor it could never have
+            // been offered, so it is not a shortfall.**
+            if !a_lettered_version_below_the_floor(&entry.version) {
+                entries_that_could_not_be_read
+                    .push(format!("{named} — the version is not version components"));
+            }
             continue;
         };
         channels.push(PublishedChannel {
@@ -389,6 +395,19 @@ pub fn read_the_listing(answer: &str) -> Result<TheListingAsRead, WhyTheListingC
         channels,
         entries_that_could_not_be_read,
     })
+}
+
+/// **`Server Setup` B2's line of 2026-11-02: a version that is numbers then
+/// letters, whose numbers are below the whole-app floor.** The first 5.3 live
+/// pass read *3 entries could not be read* on both machines. Read that day from
+/// the Creator's Mac, the three were `2.82a`, `2.81a` and `2.79b`, of the
+/// shop-front's 41 entries. **Observed.** They could never have been offered, as
+/// any entry below the floor never is, so they are not counted among what could
+/// not be read. **A lettered version at or above the floor is still counted**,
+/// because that one is a real shortfall, and so is anything with no numbers.
+fn a_lettered_version_below_the_floor(version: &str) -> bool {
+    Version::parse(version.trim_end_matches(|letter: char| letter.is_ascii_alphabetic()))
+        .is_some_and(|numbers| numbers < crate::blender::THE_FLOOR)
 }
 
 /// **B2's four risk marks, read from the shop-front's own word for each.**
@@ -474,13 +493,21 @@ struct TheShopFrontsDownload {
 pub async fn the_list_smoozy_offers() -> Result<TheListingAsRead, WhyTheListingCouldNotBeRead> {
     let (shop_front, build_service) = tokio::task::spawn_blocking(|| {
         (
-            fetch_the_listing().and_then(|it| read_the_listing(&it)),
+            once_more_if_it_fails(|| fetch_the_listing().and_then(|it| read_the_listing(&it))),
             fetch_the_build_services_listing().and_then(|it| read_the_build_services_listing(&it)),
         )
     })
     .await
     .map_err(|said| WhyTheListingCouldNotBeRead::TheRequestDidNotGetAnAnswer(said.to_string()))?;
     Ok(the_two_listings_offered(shop_front?, build_service))
+}
+
+/// **B2's shop-front is asked once more where its first answer is no use**, at
+/// once. The second Sesterce pass's first *Install Blender…* box read that the list
+/// could not be read, with the line answering and a second opening reading it. What
+/// the first ask met was not caught, so this is a retry and not a cause.
+fn once_more_if_it_fails<T, E>(ask: impl Fn() -> Result<T, E>) -> Result<T, E> {
+    ask().or_else(|_| ask())
 }
 
 /// **B2 over both listings**: the shop-front's `stable` channels and the build
@@ -515,6 +542,22 @@ pub fn the_two_listings_offered(
 
 #[cfg(test)]
 mod tests {
+    /// **B2: a first answer that is no use is asked once more, and no further.**
+    #[test]
+    fn the_shop_front_is_asked_once_more_and_no_further() {
+        let asked = std::cell::Cell::new(0);
+        let answer = |at: u32| {
+            asked.set(asked.get() + 1);
+            if asked.get() >= at { Ok(asked.get()) } else { Err("no answer") }
+        };
+        assert_eq!(once_more_if_it_fails(|| answer(1)), Ok(1));
+        asked.set(0);
+        assert_eq!(once_more_if_it_fails(|| answer(2)), Ok(2));
+        asked.set(0);
+        assert_eq!(once_more_if_it_fails(|| answer(3)), Err("no answer"));
+        assert_eq!(asked.get(), 2);
+    }
+
     use super::*;
 
     /// **The shop-front's own answer, cut down to the entries that make each
@@ -919,13 +962,45 @@ mod tests {
             !read.channels.iter().any(|entry| entry.track == "2.82"),
             "an entry with no version components must not be offered"
         );
-        assert!(
-            read.entries_that_could_not_be_read
-                .iter()
-                .any(|said| said.contains("2.82a")),
-            "it has to be named: {:?}",
-            read.entries_that_could_not_be_read
+        // **Named, where it could have been offered** (`Server Setup` B2's line
+        // of 2026-11-02): at or above the floor, or with no numbers to place.
+        for (version, named) in [("5.2.3a", true), ("4.5.14a", true), ("next", true), ("5..1", true), ("4.2.9a", false)] {
+            let answer = format!(
+                r#"{{"channel-map": [{{"channel": {{"released-at": "2026-08-25T13:56:59+00:00", "risk": "stable", "track": "x"}},
+                   "download": {{"size": 1}}, "version": "{version}"}}]}}"#
+            );
+            let read = read_the_listing(&answer).expect("the answer reads");
+            assert!(read.channels.is_empty(), "{version} is not offered");
+            assert_eq!(read.entries_that_could_not_be_read.len(), usize::from(named), "{version}: {read:?}");
+        }
+    }
+
+    /// **`Server Setup` B2's line of 2026-11-02: the first 5.3 live pass's
+    /// *3 entries could not be read*.** The three, read from the shop-front that
+    /// day from this Mac: `2.82a`, `2.81a` and `2.79b`, tracks far below the
+    /// floor. **They could never have been offered, so they are not counted**,
+    /// and nothing else moves. **What it bites on**: every install list has
+    /// said *3 entries could not be read* since the list was first shown.
+    #[test]
+    fn a_version_with_a_letter_below_the_floor_is_not_counted_as_unread() {
+        let entry = |track: &str, version: &str| {
+            format!(
+                r#"{{"channel": {{"released-at": "2020-06-25T13:05:02+00:00", "risk": "stable", "track": "{track}"}},
+                   "download": {{"size": 170643456}}, "version": "{version}"}}"#
+            )
+        };
+        let answer = format!(
+            r#"{{"channel-map": [{}, {}, {}, {}]}}"#,
+            entry("2.82", "2.82a"),
+            entry("2.81", "2.81a"),
+            entry("2.79", "2.79b"),
+            entry("5.2lts", "5.2.3"),
         );
+        let read = read_the_listing(&answer).expect("the answer reads");
+        assert!(read.entries_that_could_not_be_read.is_empty(), "{read:?}");
+        assert_eq!(read.channels.len(), 1, "the readable one stands");
+        let offered = the_two_listings_offered(read, Ok(TheListingAsRead { channels: Vec::new(), entries_that_could_not_be_read: Vec::new() }));
+        assert!(offered.entries_that_could_not_be_read.is_empty());
     }
 
     /// **An entry whose risk is not one of B2's four is not offered and is

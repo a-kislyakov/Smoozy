@@ -227,6 +227,7 @@ impl TheMachineAfterTheTap {
                 exit_status: None,
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
         }

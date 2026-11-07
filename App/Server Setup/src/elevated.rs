@@ -451,7 +451,12 @@ pub const THE_UBUNTU_DRIVER_INSTALL: AnElevatedStep = AnElevatedStep {
 /// there is no such package, and the caller ends the run with those words
 /// behind it. **Nothing partial is installed and no restart goes out** — the
 /// same rule the tool install above keeps, and for the same reason: a restart
-/// cannot put a missing package on a machine.
+/// cannot put a missing package on a machine. *Not established since
+/// 2026-11-03: `apt-get(8)` reads a name ending in a hyphen as a removal, and
+/// the Sesterce pass's route read done with no driver package standing. Which
+/// act printed its *0 upgraded* is not established.
+/// [`crate::acts::carry_out_the_driver_step`]'s reading after the route is what
+/// holds, whichever it was.*
 ///
 /// **S7b's bounded wait rides it** like every other apt install of a setup run.
 pub const THE_UBUNTU_DRIVER_SUPPORT_BINARIES_INSTALL: AnElevatedStep = AnElevatedStep {
@@ -576,25 +581,111 @@ pub const THE_UBUNTU_OPTIX_LIBRARY_INSTALL: AnElevatedStep = AnElevatedStep {
 /// designed in the third piece's account of that work (`Audits/Build/Step
 /// 10c/`) and built in its second attempt.
 ///
+/// **What the swap and the finishing of a stopped removal share: the trials,
+/// the removal and the install**, once. `$d`, `$f` and `$b` are the act's own
+/// readings. `Server Setup` R1 item 5, written 2026-11-03.
+macro_rules! the_swaps_trials_removal_and_install {
+    () => {
+        "apt-get -o DPkg::Lock::Timeout=900 update && \
+         apt-get -o DPkg::Lock::Timeout=900 -s install \"$d\" \"linux-headers-$(uname -r)\" $f && \
+         for o in $b; do apt -o DPkg::Lock::Timeout=900 -s --purge remove -y \"*nvidia*$o*\" || exit $?; done && \
+         for o in $b; do apt -o DPkg::Lock::Timeout=900 -o Dpkg::Options::=--force-overwrite --purge remove -y \"*nvidia*$o*\" || exit $?; done && \
+         apt-get -o DPkg::Lock::Timeout=900 -o Dpkg::Options::=--force-overwrite install -y \
+         --no-install-recommends \"$d\" \"linux-headers-$(uname -r)\" $f"
+    };
+}
+
 /// **The text, once**, so its three forms cannot drift: [`THE_UBUNTU_DRIVER_SWAP`]
 /// puts each prefix in front of it.
 macro_rules! the_ubuntu_driver_swap {
     () => {
-        "sh -c 'b=\"$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1 | cut -d . -f 1)\" && \
-         case \"$b\" in [0-9][0-9][0-9]) ;; *) exit 3 ;; esac && \
-         if grep -q \"Open Kernel Module\" /proc/driver/nvidia/version; then d=nvidia-driver-580-server-open; \
-         elif grep -q \"Kernel Module\" /proc/driver/nvidia/version; then d=nvidia-driver-580-server; \
-         else exit 4; fi && \
-         f=\"\" && \
-         if dpkg-query -W -f \"\\${db:Status-Abbrev}\\n\" \"nvidia-fabricmanager*\" 2>/dev/null | grep -q \"^.i\"; \
-         then f=\"nvidia-fabricmanager-580 libnvidia-nscq-580\"; fi && \
-         apt-get -o DPkg::Lock::Timeout=900 update && \
-         apt-get -o DPkg::Lock::Timeout=900 -s install \"$d\" \"linux-headers-$(uname -r)\" $f && \
-         apt -o DPkg::Lock::Timeout=900 --purge remove -y \"*nvidia*$b*\" && \
-         apt-get -o DPkg::Lock::Timeout=900 -o Dpkg::Options::=--force-overwrite install -y \
-         --no-install-recommends \"$d\" \"linux-headers-$(uname -r)\" $f'"
+        concat!(
+            "sh -c 'b=\"$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n 1 | cut -d . -f 1)\" && \
+             case \"$b\" in [0-9][0-9][0-9]) ;; *) exit 3 ;; esac && \
+             if grep -q \"Open Kernel Module\" /proc/driver/nvidia/version; then d=nvidia-driver-580-server-open; \
+             elif grep -q \"Kernel Module\" /proc/driver/nvidia/version; then d=nvidia-driver-580-server; \
+             else exit 4; fi && \
+             f=\"\" && \
+             if dpkg-query -W -f \"\\${db:Status-Abbrev}\\n\" \"nvidia-fabricmanager*\" 2>/dev/null | grep -q \"^.i\"; \
+             then f=\"nvidia-fabricmanager-580 libnvidia-nscq-580\"; fi && ",
+            the_swaps_trials_removal_and_install!(),
+            "'"
+        )
     };
 }
+
+/// **The kernel half of a driver left behind, as names**: `Server Setup` R1 item
+/// 5's reading of 2026-11-03, once, because the reading and the act that
+/// finishes a removal must mean the same thing. `db:Status-Abbrev` is three
+/// characters, so `cut -c4-` leaves the name; its second letter *n* or *c*
+/// is a package gone or gone with its settings left (`dpkg-query(1)`, quoted at
+/// [`THE_UBUNTU_DRIVER_SUPPORT_BINARIES_INSTALL`]).
+macro_rules! the_kernel_half_left_behind {
+    () => {
+        "dpkg-query -W -f \"\\${db:Status-Abbrev}\\${Package}\\n\" \"nvidia-dkms-[0-9]*\" \"nvidia-kernel-source-[0-9]*\" 2>/dev/null | grep -v \"^.[nc]\" | cut -c4-"
+    };
+}
+
+/// **`Server Setup` R1 item 5's reading of what the package system holds of a
+/// driver**, unelevated, where the check failed and no restart is owed. Added
+/// 2026-11-03, out of the Sesterce live pass. Prints *a driver stands* where a
+/// driver package is installed, and otherwise the names of the kernel half left
+/// behind, which may be none. Read by
+/// [`crate::readings::WhatTheDriverPackagesSay`].
+pub const THE_DRIVER_PACKAGES_READING: CommandString = CommandString::constant(concat!(
+    "sh -c 'if dpkg-query -W -f \"\\${db:Status-Abbrev}\\n\" \"nvidia-driver-[0-9]*\" \"nvidia-headless-no-dkms-[0-9]*\" 2>/dev/null | grep -q \"^.i\"; \
+     then echo \"a driver stands\"; else ",
+    the_kernel_half_left_behind!(),
+    "; fi'"
+));
+
+/// **The text of the finishing act, once.** The branches and the flavour come
+/// from the package names, because `nvidia-smi` and the loaded module may both
+/// have gone. `$b` holds only three-digit words, by the `sed` that makes it.
+macro_rules! the_ubuntu_driver_swaps_finish {
+    () => {
+        concat!(
+            "sh -c 'b=\"$(",
+            the_kernel_half_left_behind!(),
+            " | sed -n \"s/^nvidia-[a-z-]*-\\([0-9][0-9][0-9]\\).*$/\\1/p\" | sort -u)\" && \
+             [ -n \"$b\" ] || exit 3; \
+             if ",
+            the_kernel_half_left_behind!(),
+            " | grep -q -e \"-open$\"; then d=nvidia-driver-580-server-open; else d=nvidia-driver-580-server; fi && \
+             f=\"\" && \
+             if dpkg-query -W -f \"\\${db:Status-Abbrev}\\n\" \"nvidia-fabricmanager*\" 2>/dev/null | grep -q \"^.i\"; \
+             then f=\"nvidia-fabricmanager-580 libnvidia-nscq-580\"; fi && ",
+            the_swaps_trials_removal_and_install!(),
+            "'"
+        )
+    };
+}
+
+/// **`Server Setup` R1 item 5: a removal that stopped part-way, finished.** Added
+/// 2026-11-03, out of the Sesterce live pass, where the swap's removal stopped on
+/// a file two packages claim, and *Set up again* then took the install route over
+/// a machine it could not mend.
+///
+/// **It is the swap with its first two readings replaced**, so a machine that no
+/// longer answers `nvidia-smi` can be finished: the branches and the flavour are
+/// read from the kernel half left behind, and the fabric manager as the swap
+/// reads it. **Observed**, by hand, on that half-removed machine: the swap's own
+/// removal with the overwrite option ended at exit 0, the install at exit 0, and
+/// after a restart the driver answered 580.178.04.
+///
+/// **Where it fails, the step ends in its words and no restart goes out**:
+/// [`crate::acts::HowTheDriverStepWent::what_went_wrong`], as for the swap.
+pub const THE_UBUNTU_DRIVER_SWAPS_FINISH: AnElevatedStep = AnElevatedStep {
+    what_it_does: "finish removing a driver a removal left part-way and install Ubuntu's own newer server driver",
+    // **Y1's class for this act.** R1 item 5's driver route.
+    what_it_does_to_the_machine: WhatAnActDoesToTheMachine::ADriverAct,
+    plain: CommandString::constant(the_ubuntu_driver_swaps_finish!()),
+    elevated: CommandString::constant(concat!("sudo -n ", the_ubuntu_driver_swaps_finish!())),
+    elevated_reading_the_password_from_standard_input: CommandString::constant(concat!(
+        "sudo -S ",
+        the_ubuntu_driver_swaps_finish!()
+    )),
+};
 
 /// **R1 item 5's swap, performed as one elevated act.** Added 2026-10-11.
 ///
@@ -650,7 +741,8 @@ macro_rules! the_ubuntu_driver_swap {
 /// 4. **The package lists are refreshed**, inside this act rather than by
 ///    [`issue`]'s own refresh, because that one waits 120 seconds for the
 ///    package lock and this act waits 900 (point 7).
-/// 5. **A trial run of the whole install comes before anything is removed**:
+/// 5. **A trial run of the whole install, and from 2026-11-03 of the removal,
+///    comes before anything is removed**:
 ///    apt-get(8), apt 2.8.3, `https://manpages.ubuntu.com/manpages/noble/en/man8/apt-get.8.html`,
 ///    read 2026-10-11: `-s` *"No action; perform a simulation of events that
 ///    would occur based on the current system state but do not actually
@@ -658,17 +750,29 @@ macro_rules! the_ubuntu_driver_swap {
 ///    decimal 100 on error"*. **So a machine whose running kernel has no
 ///    headers in the archive, or where a package is missing, keeps its old
 ///    driver untouched.** **Assumption, labelled**: the headers package is
-///    `linux-headers-` followed by the running kernel's release.
+///    `linux-headers-` followed by the running kernel's release. **The removal's
+///    trial catches what apt's resolver refuses and cannot catch dpkg's refusal
+///    of a file**: the same page, *"Simulated runs print out a series of lines,
+///    each representing a dpkg operation"*, so dpkg never meets the file. Read
+///    2026-11-03. **Assumption, labelled**: `apt` takes `-s`; where it does not,
+///    the trial fails and nothing is removed.
 /// 6. **The old branch is removed by Ubuntu's own command**, `apt --purge
 ///    remove '*nvidia*${DRIVER_BRANCH}*'` (Ubuntu Server, *NVIDIA drivers
 ///    installation*, *Uninstalling the NVIDIA drivers*, the address above,
-///    read 2026-10-11), with `-y` and the lock wait. **Assumption, labelled**:
-///    `apt` takes apt-get's `-y` and `-o` options.
+///    read 2026-10-11), with `-y` and the lock wait. **`apt` taking `-y` and
+///    two `-o` was an assumption and is observed**, the Sesterce pass's hand
+///    repair of 2026-11-02. **From 2026-11-03 it carries
+///    `-o Dpkg::Options::=--force-overwrite`, as point 7 does**: on an image
+///    with NVIDIA's own archive, apt pulled that archive's `libnvidia-cfg1` in
+///    during the removal, dpkg refused a file `libnvidia-cfg1-570` also claims,
+///    and the act stopped with the driver half gone (`Server Setup` R1 item 5,
+///    *The removal on an image that carries NVIDIA's own package archive*).
 /// 7. **The new driver goes on**: `nvidia-driver-580-server-open` or
 ///    `nvidia-driver-580-server`, the flavour read in point 2, with the
 ///    running kernel's headers for DKMS (both depend on
 ///    `nvidia-dkms-580-server…`) and the fabric manager where point 3 set it.
-///    **Ubuntu's own archive, at a version above every bar**:
+///    **Ubuntu's own archive, at a version that meets every bar** (5.3's row,
+///    `Rendering` L23a, is 580):
 ///    `580.178.04-0ubuntu0.22.04.1` and `580.178.04-0ubuntu0.24.04.1`
 ///    (packages.ubuntu.com, read 2026-10-11, for both flavours). Both depend on
 ///    `nvidia-utils-580-server` (the check's `nvidia-smi`) and
@@ -1045,7 +1149,7 @@ pub fn the_root_step_on_a_container(
 /// **E7's enumeration, as the code performs it.** Every elevated command this
 /// module issues is here, so a reader sees the whole set at once and a test can
 /// hold each of them to the rule.
-pub const THE_ELEVATED_STEPS: [AnElevatedStep; 22] = [
+pub const THE_ELEVATED_STEPS: [AnElevatedStep; 23] = [
     THE_CREATION_OF_THE_ROOT,
     THE_CREATION_OF_THE_PACKAGE_AREAS_LOCATION,
     THE_HAND_OVER_OF_THE_ROOT,
@@ -1057,6 +1161,7 @@ pub const THE_ELEVATED_STEPS: [AnElevatedStep; 22] = [
     THE_UBUNTU_DRIVER_SUPPORT_BINARIES_INSTALL,
     THE_UBUNTU_OPTIX_LIBRARY_INSTALL,
     THE_UBUNTU_DRIVER_SWAP,
+    THE_UBUNTU_DRIVER_SWAPS_FINISH,
     THE_DEBIAN_DRIVER_INSTALL,
     THE_LIST_UPDATE,
     THE_COMPONENTS_WRITE,
@@ -1664,7 +1769,9 @@ mod tests {
         // (`Rendering` L23's ruling) — a driver act like the four before it.
         // **Twenty-three from 2026-10-11**, when R1 item 5 gained the swap up
         // to the OptiX bar — a driver act.
-        assert_eq!(all.len(), 23, "an elevated act was added or removed");
+        // **Twenty-four from 2026-11-03**, when R1 item 5 gained the finishing
+        // of a removal that stopped part-way — a driver act.
+        assert_eq!(all.len(), 24, "an elevated act was added or removed");
 
         let changes: Vec<&str> = all
             .iter()
@@ -1681,6 +1788,7 @@ mod tests {
                 "install the driver support binaries the driver check is run from",
                 "install the OptiX library where the driver left it out",
                 "replace a driver below the OptiX bar with Ubuntu's own newer server driver",
+                "finish removing a driver a removal left part-way and install Ubuntu's own newer server driver",
                 "install the package Debian's own detection tool named",
                 "update the package lists",
                 "put the rewritten sources file at its fixed destination",
@@ -1742,7 +1850,7 @@ mod tests {
                 assert!(text.starts_with(prefix));
                 for substitution in text.match_indices("$(") {
                     let rest = &text[substitution.0..];
-                    let the_swaps_own = step == &THE_UBUNTU_DRIVER_SWAP
+                    let the_swaps_own = (step == &THE_UBUNTU_DRIVER_SWAP || step == &THE_UBUNTU_DRIVER_SWAPS_FINISH)
                         && the_swaps_readings.iter().any(|reading| rest.starts_with(reading));
                     assert!(
                         rest.starts_with("$(id -u)")
@@ -1771,6 +1879,9 @@ mod tests {
             vec![
                 "install the driver support binaries the driver check is run from",
                 "install the OptiX library where the driver left it out",
+                // **Widened on purpose on 2026-11-03**: R1 item 5's finishing of
+                // a stopped removal, named at E7's fifth-carriage bullet.
+                "finish removing a driver a removal left part-way and install Ubuntu's own newer server driver",
             ],
         );
 
@@ -1982,7 +2093,9 @@ mod tests {
         );
         stand_in(
             "apt",
-            "echo \"apt $*\" >> \"$HERE/log\"\nexit \"$(cat \"$HERE/removal\")\"",
+            "echo \"apt $*\" >> \"$HERE/log\"\n\
+             case \" $* \" in *\" -s \"*) exit \"$(cat \"$HERE/removal_trial\")\" ;; esac\n\
+             exit \"$(cat \"$HERE/removal\")\"",
         );
         stand_in("uname", "echo 6.14.0-37-generic");
         // **The loaded module's version file is the system's own path**, so it
@@ -1997,6 +2110,7 @@ mod tests {
             module: &'a str,
             standing: &'a str,
             trial: i32,
+            removal_trial: i32,
             removal: i32,
         }
         let the_swap_on = |m: Machine| -> (Option<i32>, Vec<String>) {
@@ -2005,6 +2119,7 @@ mod tests {
                 ("module", m.module.to_string()),
                 ("standing", m.standing.to_string()),
                 ("trial", m.trial.to_string()),
+                ("removal_trial", m.removal_trial.to_string()),
                 ("removal", m.removal.to_string()),
                 ("log", String::new()),
             ] {
@@ -2042,6 +2157,7 @@ mod tests {
             module: open,
             standing: "",
             trial: 0,
+            removal_trial: 0,
             removal: 0,
         });
         assert_eq!(status, Some(0));
@@ -2050,7 +2166,12 @@ mod tests {
             vec![
                 format!("apt-get {lock} update"),
                 format!("apt-get {lock} -s install nvidia-driver-580-server-open linux-headers-6.14.0-37-generic"),
-                format!("apt {lock} --purge remove -y *nvidia*550*"),
+                // **`Server Setup` R1 item 5's removal, as written 2026-11-03**:
+                // tried as well, and carrying the install's own option. The
+                // Sesterce pass's image stopped here half done on a file two
+                // packages claim.
+                format!("apt {lock} -s --purge remove -y *nvidia*550*"),
+                format!("apt {lock} -o Dpkg::Options::=--force-overwrite --purge remove -y *nvidia*550*"),
                 format!(
                     "apt-get {lock} -o Dpkg::Options::=--force-overwrite install -y --no-install-recommends \
                      nvidia-driver-580-server-open linux-headers-6.14.0-37-generic"
@@ -2058,17 +2179,32 @@ mod tests {
             ]
         );
 
+        // **A removal apt's resolver refuses leaves the old driver standing**:
+        // tried, and nothing touched.
+        let (status, log) = the_swap_on(Machine {
+            version: "550.163.01\n",
+            module: open,
+            standing: "",
+            trial: 0,
+            removal_trial: 100,
+            removal: 0,
+        });
+        assert_eq!(status, Some(100));
+        assert_eq!(log.len(), 3, "refreshed and both tried, and nothing else: {log:?}");
+        assert!(log.iter().all(|line| !line.contains("install -y") && !line.contains("force-overwrite")), "{log:?}");
+
         // **The proprietary flavour is kept where it is the one loaded.**
         let (status, log) = the_swap_on(Machine {
             version: "570.86.10\n",
             module: proprietary,
             standing: "",
             trial: 0,
+            removal_trial: 0,
             removal: 0,
         });
         assert_eq!(status, Some(0));
-        assert_eq!(log[2], format!("apt {lock} --purge remove -y *nvidia*570*"));
-        assert!(log[3].ends_with(" nvidia-driver-580-server linux-headers-6.14.0-37-generic"));
+        assert_eq!(log[3], format!("apt {lock} -o Dpkg::Options::=--force-overwrite --purge remove -y *nvidia*570*"));
+        assert!(log[4].ends_with(" nvidia-driver-580-server linux-headers-6.14.0-37-generic"));
 
         // **A fabric manager stands, and the archive has the new one: it is
         // tried, and goes on with the driver.**
@@ -2077,11 +2213,12 @@ mod tests {
             module: open,
             standing: "ii nvidia-fabricmanager-550\n",
             trial: 0,
+            removal_trial: 0,
             removal: 0,
         });
         assert_eq!(status, Some(0));
         assert!(log[1].ends_with(" nvidia-fabricmanager-580 libnvidia-nscq-580"), "{log:?}");
-        assert!(log[3].ends_with(" nvidia-fabricmanager-580 libnvidia-nscq-580"), "{log:?}");
+        assert!(log[4].ends_with(" nvidia-fabricmanager-580 libnvidia-nscq-580"), "{log:?}");
 
         // **A fabric manager stands, and the archive has no new one for this
         // release: the trial fails and nothing is removed.**
@@ -2090,6 +2227,7 @@ mod tests {
             module: open,
             standing: "ii nvidia-fabricmanager-550\n",
             trial: 100,
+            removal_trial: 0,
             removal: 0,
         });
         assert_eq!(status, Some(100));
@@ -2103,6 +2241,7 @@ mod tests {
             module: open,
             standing: "rc nvidia-fabricmanager-550\n",
             trial: 0,
+            removal_trial: 0,
             removal: 0,
         });
         assert!(!log[1].contains("fabricmanager"), "{log:?}");
@@ -2114,6 +2253,7 @@ mod tests {
             module: open,
             standing: "",
             trial: 100,
+            removal_trial: 0,
             removal: 0,
         });
         assert_eq!(status, Some(100));
@@ -2125,10 +2265,11 @@ mod tests {
             module: open,
             standing: "",
             trial: 0,
+            removal_trial: 0,
             removal: 100,
         });
         assert_eq!(status, Some(100));
-        assert_eq!(log.len(), 3);
+        assert_eq!(log.len(), 4);
 
         // **A version that is not a three-digit branch, or no flavour read,
         // touches nothing at all** — not even the lists.
@@ -2138,11 +2279,142 @@ mod tests {
                 module,
                 standing: "",
                 trial: 0,
+                removal_trial: 0,
                 removal: 0,
             });
             assert_ne!(status, Some(0), "{version:?} {module:?}");
             assert!(log.is_empty(), "{version:?} {module:?}: {log:?}");
         }
+
+        let _ = std::fs::remove_dir_all(&here);
+    }
+
+    /// **`Server Setup` R1 item 5: the reading and the finishing act, run by a
+    /// real shell over stand-ins for the package tools**, on the packages the
+    /// Sesterce pass's machine was left with.
+    #[test]
+    #[cfg(unix)]
+    fn a_stopped_removal_is_read_from_the_packages_and_finished_with_no_driver_to_ask() {
+        use std::os::unix::fs::PermissionsExt;
+        let here = std::env::temp_dir().join(format!(
+            "smoozy-driver-finish-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&here).expect("a folder for the stand-ins");
+        let stand_in = |name: &str, body: &str| {
+            let path = here.join(name);
+            std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("a stand-in");
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+                .expect("the stand-in made runnable");
+        };
+        // **`dpkg-query` answers only for the patterns it was given**, each a
+        // shell pattern over the machine's list, printing what `-f` asked for.
+        stand_in(
+            "dpkg-query",
+            "f=\"$3\"; shift 3; for p in \"$@\"; do while read -r s n; do case \"$n\" in $p) \
+             case \"$f\" in *Package*) printf \"%-3s%s\\n\" \"$s\" \"$n\" ;; *) printf \"%-3s\\n\" \"$s\" ;; esac ;; esac; \
+             done < \"$HERE/packages\"; done",
+        );
+        stand_in(
+            "apt-get",
+            "echo \"apt-get $*\" >> \"$HERE/log\"\ncase \" $* \" in *\" -s \"*) exit \"$(cat \"$HERE/trial\")\" ;; esac\nexit 0",
+        );
+        stand_in("apt", "echo \"apt $*\" >> \"$HERE/log\"\ncase \" $* \" in *\" -s \"*) exit 0 ;; esac\nexit \"$(cat \"$HERE/removal\")\"");
+        stand_in("uname", "echo 6.8.0-90-generic");
+        // **No `nvidia-smi` on this path at all**: the fault's own state.
+        let run = |command: &str, packages: &str, trial: i32, removal: i32| -> (Option<i32>, String, Vec<String>) {
+            std::fs::write(here.join("packages"), packages).expect("the packages");
+            std::fs::write(here.join("trial"), trial.to_string()).expect("the trial");
+            std::fs::write(here.join("removal"), removal.to_string()).expect("the removal");
+            std::fs::write(here.join("log"), "").expect("the log");
+            let inside = command
+                .strip_prefix("sh -c '")
+                .and_then(|rest| rest.strip_suffix('\''))
+                .expect("one shell line in single quotes");
+            let ran = std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg(inside)
+                .env("PATH", format!("{}:/usr/bin:/bin", here.display()))
+                .env("HERE", &here)
+                .output()
+                .expect("the shell ran");
+            let log = std::fs::read_to_string(here.join("log")).unwrap_or_default();
+            (
+                ran.status.code(),
+                String::from_utf8_lossy(&ran.stdout).into_owned(),
+                log.lines().map(str::to_string).collect(),
+            )
+        };
+        let reading = THE_DRIVER_PACKAGES_READING.as_str();
+        let finish = THE_UBUNTU_DRIVER_SWAPS_FINISH.plain.as_str();
+        let says = |output: &str| crate::readings::what_the_driver_packages_say(output);
+        use crate::readings::WhatTheDriverPackagesSay as Say;
+
+        // **What the pass's machine held after the removal stopped**, from its
+        // Server output and the account: the driver package gone, the kernel
+        // half and the fabric manager standing.
+        let the_pass = "ii nvidia-dkms-570-open\nii nvidia-kernel-source-570-open\nii nvidia-kernel-common-570\n\
+                        ii nvidia-fabricmanager-570\nii libnvidia-cfg1-570\nrc libnvidia-compute-570\n";
+        let (status, output, _) = run(reading, the_pass, 0, 0);
+        assert_eq!(status, Some(0));
+        assert_eq!(says(&output), Say::AKernelHalfIsLeftBehind, "{output:?}");
+        let lock = "-o DPkg::Lock::Timeout=900";
+        let (status, _, log) = run(finish, the_pass, 0, 0);
+        assert_eq!(status, Some(0));
+        assert_eq!(
+            log,
+            vec![
+                format!("apt-get {lock} update"),
+                format!("apt-get {lock} -s install nvidia-driver-580-server-open linux-headers-6.8.0-90-generic nvidia-fabricmanager-580 libnvidia-nscq-580"),
+                format!("apt {lock} -s --purge remove -y *nvidia*570*"),
+                format!("apt {lock} -o Dpkg::Options::=--force-overwrite --purge remove -y *nvidia*570*"),
+                format!("apt-get {lock} -o Dpkg::Options::=--force-overwrite install -y --no-install-recommends nvidia-driver-580-server-open linux-headers-6.8.0-90-generic nvidia-fabricmanager-580 libnvidia-nscq-580"),
+            ]
+        );
+
+        // **The proprietary flavour, read from the names.**
+        let (_, _, log) = run(finish, "ii nvidia-dkms-550\n", 0, 0);
+        assert!(log[1].contains(" nvidia-driver-580-server linux-headers"), "{log:?}");
+
+        // **An install that failed after a whole removal reads the same way**:
+        // the 580 kernel half left half-configured, and no driver package
+        // installed, is finished under its own branch.
+        let half = "iF nvidia-dkms-580-server-open\niU nvidia-driver-580-server-open\n";
+        let (_, output, _) = run(reading, half, 0, 0);
+        assert_eq!(says(&output), Say::AKernelHalfIsLeftBehind, "{output:?}");
+        let (_, _, log) = run(finish, half, 0, 0);
+        assert!(log[2].ends_with("*nvidia*580*"), "{log:?}");
+
+        // **A trial or a removal that fails ends the act there, and no install
+        // goes out.**
+        let (status, _, log) = run(finish, the_pass, 100, 0);
+        assert_eq!(status, Some(100));
+        assert_eq!(log.len(), 2, "{log:?}");
+        let (status, _, log) = run(finish, the_pass, 0, 100);
+        assert_eq!(status, Some(100));
+        assert!(log.iter().all(|line| !line.contains("install -y")), "{log:?}");
+
+        // **Nothing left behind: the act touches nothing, not even the lists.**
+        let (status, _, log) = run(finish, "rc nvidia-dkms-570-open\nii libnvidia-cfg1\n", 0, 0);
+        assert_eq!(status, Some(3));
+        assert!(log.is_empty(), "{log:?}");
+
+        // **A driver package standing is the other answer**, on either route's
+        // name, and a kernel half beside it does not change it.
+        for stands in [
+            "ii nvidia-driver-570-open\nii nvidia-dkms-570-open\n",
+            "ii nvidia-headless-no-dkms-595-server-open\n",
+        ] {
+            let (_, output, _) = run(reading, stands, 0, 0);
+            assert_eq!(says(&output), Say::ADriverPackageStands, "{stands}: {output:?}");
+        }
+        // **A package whose name starts the same and carries no branch is no
+        // driver**, which is why the patterns name a digit.
+        let (_, output, _) = run(reading, "ii nvidia-driver-assistant\nii libnvidia-container1\n", 0, 0);
+        assert_eq!(says(&output), Say::NoDriverPackage, "{output:?}");
+        let (_, output, _) = run(reading, "", 0, 0);
+        assert_eq!(says(&output), Say::NoDriverPackage, "{output:?}");
 
         let _ = std::fs::remove_dir_all(&here);
     }
@@ -2639,6 +2911,7 @@ mod tests {
             THE_UBUNTU_DRIVER_SUPPORT_BINARIES_INSTALL,
             THE_UBUNTU_OPTIX_LIBRARY_INSTALL,
             THE_UBUNTU_DRIVER_SWAP,
+            THE_UBUNTU_DRIVER_SWAPS_FINISH,
         ];
         for step in THE_ELEVATED_STEPS.iter().chain([&THE_ELEVATED_SEARCH]) {
             let plain = step.plain.as_str();
@@ -2648,7 +2921,7 @@ mod tests {
             // the rule without anybody deciding it should.
             let an_apt_install = plain.contains("apt-get ") && plain.contains(" install");
             let refreshed = THE_INSTALLS_THE_LISTS_ARE_REFRESHED_BEFORE.contains(step);
-            if step == &THE_UBUNTU_DRIVER_SWAP {
+            if step == &THE_UBUNTU_DRIVER_SWAP || step == &THE_UBUNTU_DRIVER_SWAPS_FINISH {
                 let refresh = plain.find("apt-get -o DPkg::Lock::Timeout=900 update").expect("its own refresh");
                 assert!(refresh < plain.find(" -s install").expect("its trial"), "refreshed before the trial");
             }

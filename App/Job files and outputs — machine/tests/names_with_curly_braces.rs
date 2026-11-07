@@ -162,6 +162,7 @@ fn over_what_blender_wrote_frame_one_is_there_and_each_layer_has_its_own_copy() 
     assert_eq!(
         composed.picks.the_main_output,
         Some(ADestinationTheBeautyReached {
+            the_effect: None,
             node: ArtistsText::of(b"File Output a".to_vec()),
             output: Some(ArtistsText::of(b"Image".to_vec())),
         }),

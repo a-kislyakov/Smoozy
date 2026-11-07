@@ -662,13 +662,34 @@ mod tests {
     /// `is_on_its_way` and `a_row_is_on_its_way`; the desktop reads its sends
     /// per file into the panel's rows and the foot, and the upload act leaves
     /// out every row on its way at the press, inside the send pre-flight.
+    ///
+    /// **168 from 2026-11-02**, when the 5.3 integration's piece 4 gave the plan
+    /// **G9a**, a geometry-nodes bake folder read as the render reads it.
+    ///
+    /// **170 from later that day**, the live pass on real production files:
+    /// **G6c**, a packed library's own location is no reference, and **G6d**, a
+    /// library's location as the file writes it.
+    ///
+    /// **172 from 2026-11-03**, why a real shot's picture differed: **M4b**, a set
+    /// row's new location keeps the file's name, and **M8b**, the folder a render
+    /// opens its file from.
+    ///
+    /// **Seven more from 2026-11-03**, a big shot's check and send: **G6e**, **G11b**,
+    /// **G17a**, **F1b**, **A9b**, **A9c** and **A9d**.
+    ///
+    /// **180 the same day**: **G6f**, a library linked by a full path.
+    ///
+    /// **182 the same day**, kept readings: **G17b** and **F1c**.
+    ///
+    /// **186 the same day**, a job pressed during a send: **A9e**, **G14a**, **Q5a**
+    /// and **M14a**.
     #[test]
-    fn the_plan_defines_one_hundred_and_sixty_seven_distinct_clauses() {
+    fn the_plan_defines_one_hundred_and_eighty_six_distinct_clauses() {
         let plan =
             fs::read_to_string(the_architecture_folder().join(format!("{THIS_PLANS_NAME}.md")))
                 .expect("the plan is readable");
         let defined: HashSet<String> = the_clauses_defined_by(&plan).into_iter().collect();
-        assert_eq!(defined.len(), 167, "{:?}", {
+        assert_eq!(defined.len(), 186, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

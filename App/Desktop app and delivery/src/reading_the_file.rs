@@ -141,6 +141,17 @@ pub trait TheMachineAFileIsReadOn: TheMachineAReadingIsAskedOf {
     fn the_four_values_of(&mut self, the_blend: &str)
         -> impl Future<Output = FourValuesNow> + Send;
 
+    /// **`Dependency Upload & Remap` Q5 route 1's gathering: the four values of
+    /// many files in one ask**, by the machine's own program (`Server protocol
+    /// and transfers` §1.1). **A machine with no such ask keeps the one-at-a-time
+    /// reading above**, as an older package does. Built 2026-11-04.
+    fn the_four_values_of_many(
+        &mut self,
+        _paths: &[Vec<u8>],
+    ) -> impl Future<Output = smoozy_dependencies::acting::machine::WhatTheAskOfManyCameTo> + Send {
+        async { smoozy_dependencies::acting::machine::WhatTheAskOfManyCameTo::TheProgramDoesNotAnswerIt }
+    }
+
     /// **The names standing in one folder on the machine**, read once on the
     /// file session — which `Dependency Upload & Remap` Q5's read-through asks
     /// first, so a file not there costs no worker. `Some` of nothing where the
@@ -228,6 +239,13 @@ impl<C: AHeldConnection> TheMachineAReadingIsAskedOf for ThisServersMachine<'_, 
 impl<C: AHeldConnection> TheMachineAFileIsReadOn for ThisServersMachine<'_, C> {
     async fn the_four_values_of(&mut self, the_blend: &str) -> FourValuesNow {
         crate::submitting::the_four_values_of(self.sessions, self.server, the_blend).await
+    }
+
+    async fn the_four_values_of_many(
+        &mut self,
+        paths: &[Vec<u8>],
+    ) -> smoozy_dependencies::acting::machine::WhatTheAskOfManyCameTo {
+        smoozy_dependencies::acting::machine::the_four_values_of_many(self, paths).await
     }
 
     async fn the_names_in(&mut self, folder: &[u8]) -> Option<Vec<Vec<u8>>> {
@@ -699,6 +717,8 @@ pub struct TheFilesReadingOn<M> {
     pub learnt: Arc<Mutex<WhatTheReadLearnt>>,
     pub bound: Duration,
     pub pace: Duration,
+    /// `Render Settings` Q4: saved library pairs, composed as at submission.
+    pub library_pairs: Vec<smoozy_dependencies::remap::Pair>,
 }
 
 impl<M> TheFilesReadingOn<M> {
@@ -708,6 +728,7 @@ impl<M> TheFilesReadingOn<M> {
             learnt: Arc::default(),
             bound: THE_BOUND_ON_ONE_READING,
             pace: BETWEEN_TWO_ASKS_OF_ONE_READING,
+            library_pairs: Vec::new(),
         }
     }
 }
@@ -720,7 +741,11 @@ impl<M: TheMachineAFileIsReadOn + Send> DrivesOneFileInspection for TheFilesRead
         let Ok(operation) = Identity::issue(IdentityKind::Operation) else {
             return the_machine_could_not_be_reached();
         };
-        let request = the_files_reading_asked(&operation, &of);
+        let mut request = the_files_reading_asked(&operation, &of);
+        if !self.library_pairs.is_empty() {
+            request.fields = request.fields.and(asked::THE_READINGS_LIBRARY_PAIRS_FIELD,
+                serde_json::to_vec(&self.library_pairs).expect("library pairs serialize"));
+        }
         let the_file = (of.server.as_text(), of.the_blends_path.to_string());
         if let Ok(mut ran_no_blender) = the_reads_that_ran_no_blender().lock() {
             ran_no_blender.remove(&the_file);
@@ -937,6 +962,19 @@ pub async fn the_file_is_read<M>(
 where
     M: TheMachineAFileIsReadOn + Send,
 {
+    the_file_is_read_with_library_pairs(machine,held,server,file,Vec::new()).await
+}
+
+/// `Render Settings` Q4: the production reading carries submission's library pairs.
+pub async fn the_file_is_read_with_library_pairs<M>(
+    machine: M,
+    held: &Mutex<WhatTheRunHolds>,
+    server: &str,
+    file: &str,
+    library_pairs: Vec<smoozy_dependencies::remap::Pair>,
+) -> WhatTheReadCameTo
+where M: TheMachineAFileIsReadOn + Send,
+{
     let key = FileKey {
         server: crate::surface::render_settings::the_servers_identity(server),
         path: file.to_string(),
@@ -961,6 +999,7 @@ where
         };
     }
     let mut reads = TheFilesReadingOn::over(machine);
+    reads.library_pairs = library_pairs;
     let started_under = match reads.machine.the_four_values_of(file).await {
         FourValuesNow::Answered(values) => values,
         FourValuesNow::TheChannelCannotAnswer => {
@@ -1065,6 +1104,7 @@ mod tests {
     fn a_printed_document(settings: &SettingsHalf, frames: usize) -> Vec<u8> {
         let layer = || ArtistsText::of(b"ViewLayer".to_vec());
         let gating = GatingConditions {
+            the_effects_on_for_render: None,
             compositing_switch: true,
             a_compositing_tree_is_present: false,
             a_live_final_output_node: false,
@@ -1138,6 +1178,7 @@ mod tests {
                 eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
             },
             announced_add_on_case: None,
+            the_folders_at_the_machines_top: None,
         }
     }
 
@@ -1331,6 +1372,43 @@ mod tests {
             )
             .await
         })
+    }
+
+    // `Render Settings` Q4: library pairs survive the request and the reading
+    // offers the switch before any job. An optional real desk stream proves
+    // the landing against the linked-object fixture as well as the stand-in.
+    #[test]
+    fn a_linked_simulations_reading_carries_the_pairs_and_offers_the_switch() {
+        let file=&a_file_of_its_own("linked-simulations-page");
+        let ordinary=if let Ok(path)=std::env::var("SMOOZY_DESK_PAGE_READING") {
+            std::fs::read(path).unwrap()
+        } else {
+            let mut settings=a_settings_half();
+            settings.scenes[0].prepare_simulations=Some(true);
+            framed(&a_printed_document(&settings,1))
+        };
+        let machine=AStandIn::answering(vec![ended(&ordinary,b"",Some("0"))],streams(ordinary,Vec::new()));
+        let asked=Arc::clone(&machine.asked);
+        let held=a_run_with_a_pick(file);
+        let pair=smoozy_dependencies::remap::compose_pair(
+            smoozy_dependencies::check::Kind::Library,"filepath",
+            &smoozy_dependencies::bytes::RecordedLocation::as_the_reading_carried_it(b"//lib/rig.blend"),
+            smoozy_dependencies::remap::NewLocation::AFixedCopy(
+                smoozy_dependencies::bytes::MachineLocation::composed(b"/machine/fixed/rig.blend".to_vec()))).unwrap();
+        let came=block_on(the_file_is_read_with_library_pairs(machine,&held,&a_server(),file,vec![pair.clone()]));
+        let WhatTheReadCameTo::ThePreLoad {went,..}=came else {panic!("{came:?}")};
+        assert!(went.the_files_half_was_replaced(),"{went:?}");
+        let sent=asked.lock().unwrap();
+        let bytes=sent[0].fields.value(asked::THE_READINGS_LIBRARY_PAIRS_FIELD).expect("library pairs travel with the reading");
+        assert_eq!(serde_json::from_slice::<Vec<smoozy_dependencies::remap::Pair>>(bytes).unwrap(),vec![pair]);
+        let mut run=held.lock().unwrap();
+        let panel=crate::surface::render_settings::the_panel(&run,&a_server(),file);
+        assert_eq!(panel.simulation_rows.len(),1);
+        assert!(panel.simulation_rows[0].on);
+        let scene=panel.simulation_rows[0].scene.clone();
+        assert!(crate::surface::render_settings::the_answer_is_taken(&mut run,&a_server(),file,
+            WhichSetting::PrepareSimulations,&format!("off:{scene}")).is_none());
+        assert!(!crate::surface::render_settings::the_panel(&run,&a_server(),file).simulation_rows[0].on);
     }
 
     /// **Read the file, as a person meets it: the press asks the machine, and

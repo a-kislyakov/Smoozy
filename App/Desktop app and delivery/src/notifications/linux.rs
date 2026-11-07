@@ -51,6 +51,7 @@ use zbus::Connection;
 use crate::presentation::the_presentation_key::ThePresentationKey;
 use super::{APost, TheMachinery, ThePlatform, WhatIsMissing};
 use crate::notifications::permission::WhatTheSystemSays;
+use crate::notifications::picture;
 use crate::typography::Prose;
 
 const THE_SERVICE: &str = "org.freedesktop.Notifications";
@@ -177,9 +178,10 @@ impl ThePlatform for TheLinux {
     /// presentation key, because the protocol replaces on the number and
     /// nothing else.
     ///
-    /// **T16's Linux picture is not sent** — see
-    /// [`crate::notifications::picture::THE_LINUX_ROUTE_IS_OWED`], which names
-    /// what closing it would cost and why item 13 makes it unobservable.
+    /// **T16's Linux picture goes by its file address in the `image-path`
+    /// hint** (corrected 2026-11-01), and **T5's `desktop-entry` hint names
+    /// `Smoozy.desktop`**. A server may ignore either, and nothing detects it
+    /// (§22 item 13).
     fn post(&self, post: &APost) {
         let key = post.key.as_text();
         let replaces = the_servers_own_numbers()
@@ -195,7 +197,11 @@ impl ThePlatform for TheLinux {
         // though most servers never draw it (X5).
         let open = Prose::new("Open");
         let actions: Vec<&str> = vec!["default", open.as_str()];
-        let hints: HashMap<&str, Value> = HashMap::new();
+        let mut hints: HashMap<&str, Value> =
+            HashMap::from([("desktop-entry", Value::from(super::THE_LINUX_DESKTOP_ENTRY))]);
+        if let Some(path) = picture::as_path(&post.picture) {
+            hints.extend([("image-path", Value::from(picture::a_file_address(path)))]);
+        }
         let headline = post.headline();
         let second_line = post.the_second_line();
 
@@ -342,8 +348,13 @@ async fn the_server_is_listened_to() {
                     continue;
                 };
                 let key = the_key_for(number);
+                // **Off this worker before it goes** (T28's correction of
+                // 2026-11-01). A click reads the record under the
+                // application's lock, and a post made under that lock waits
+                // on this one worker for its answer — so going here would
+                // leave each waiting on the other, and Smoozy stopped.
                 if let (Some(key), Some(go)) = (key, WHAT_A_CLICK_DOES.get()) {
-                    go(key);
+                    drop(bus.runtime.spawn_blocking(move || go(key)));
                 }
             }
             // **F-5: the entry leaves the register when the notification

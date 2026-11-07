@@ -96,3 +96,20 @@
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Applied the wave 7b privacy fixes.
 
 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — three quotes of screen words brought to the new wording: G20a's note at :246 (*Not used by any scene*), M16a (*Retry*), V9a (*Uploaded before as a dependency. Its paths still point to your computer.*). No clause's meaning changed. No auditor has seen it. Appended by the build runner.
+
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 4, holding `Audits/Build/Blender 5.3/Brief — piece 4, EEVEE's time limit and templates in a bake folder.md`, outside any round: G8 corrected to six import nodes up to 5.2 and seven in 5.3, and the sound route in 5.2 and 5.3; G9's *only* corrected; G9a added, a geometry-nodes bake folder read as the render reads it from 5.3, with a statement for what cannot be worked out; M7 and V3a follow; Sources §9. No auditor has seen it.
+
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — §12 items 28 and 29, 5.3's cautions. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — F28: a folder-shaped row's figures. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the real files found.md`, outside any round — G6c, G6d, F28's bullet, `Sources` §10. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a big shot's check and send.md`, outside any round — G6e, G11b, G17a, F1b, A9b, A9c, A9d. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a big shot's check and send.md` with the runner's item 8, outside any round — G6f. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — kept readings in the check.md`, outside any round — G17, G17b, F1c, G14's cost, K11. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job pressed during a send, and the check beside it.md`, outside any round — A9d's last sentence, A9e, G14a, Q5a, M14a, `Sources` §12. No auditor has seen it.
+2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job's reading sees its libraries, and failing before a render.md`, outside any round — M8b's reach. No auditor has seen it.
+2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — the check's count, and one question for many files.md`, outside any round — Q5 route 1's built reach, Q5a's digest, count and stop, §12 item 19. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex) — Recorded the page presses and preview ruling.
+
+2026-11-06 — GPT-6.1 (Codex) — Cloth withdrawal and linked simulations on the settings page, within the runner's brief.
+2026-11-06 — GPT-6.1 (Codex) — Planned grouped publication and folder confirmation reads, and current-file reading status.

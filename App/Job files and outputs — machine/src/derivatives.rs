@@ -122,7 +122,7 @@ use crate::main_output::{
     ATargetSize, WhatTheMainOutputIs, WhatTheRungsAreToldAboutTheJob, WhatTheWalkFound,
     WhereThePictureCameFrom, WhichRouteMakesTheCopy, PNG, THE_BEAUTY_PASSES_NAME,
 };
-use crate::reading::{ArtistsText, DestinationKind, TheOutputsHalf, TheVersionInHand};
+use crate::reading::{ArtistsText, Destination, DestinationKind, TheOutputsHalf, TheVersionInHand};
 
 /// **Where the names of loading, scaling, sizing and saving a picture come
 /// from**: the Blender research's *Images* question 8 — *can Blender be made
@@ -147,6 +147,12 @@ pub const THE_SMALL_COPY_QUESTION: &str = "the Blender research's Images questio
 pub const THE_MULTI_LAYER_LOOKUP: &str = "Audits/Build/Step 10c/A picture for a multi-layer \
      OpenEXR job — what landed.md, section 1; Preparation/Architecture/Sources/Job files and \
      outputs.sources.md, entry 52a";
+
+/// **Where B26 step 4's naming of the PNG's compression comes from**: a desk
+/// lookup. Label: **observed in a test** (2026-11-02).
+pub const THE_PNG_COMPRESSION_LOOKUP: &str =
+    "`Job files and outputs` Sources entry 85: `specmod().attribute(\"compression\", \"zip\")`, \
+     run in 4.5.12, 5.0.1, 5.1.2, 5.2.3, 5.3.0 Beta and 5.4.0 Alpha";
 
 /// **Where every name of B28's checkerboard comes from**: a desk lookup on
 /// 4.5.12, 5.0.1, 5.1.2, 5.2.2 and 5.3.0 Beta (bundled library 3.0.6.1 to
@@ -231,6 +237,10 @@ pub struct ADerivativeToMake {
     /// route. Absent for a single-picture file, which Blender's own image
     /// handling loads whole.
     pub the_picture_inside: Option<Vec<u8>>,
+    /// **B19a's last paragraph, from 5.3: the picture tried first**, for a job's
+    /// main copy where the compositor runs. Where the file holds no picture by
+    /// this name, the copy is made of `the_picture_inside`.
+    pub the_composited_picture: Option<Vec<u8>>,
 }
 
 /// **Why a frame has nothing made for it**, stated rather than left as an
@@ -339,6 +349,31 @@ fn the_first_layer_that_feeds_it_and_renders<'a>(
         .or(the_view_layers_at_this_frame.first())
 }
 
+/// **B19a's last paragraph: the compositor's result inside a 5.3 multi-layer
+/// file** (*Images 5*), found by name. The view layers' own `Combined` holds the
+/// picture from before the compositor.
+pub const THE_COMPOSITED_PICTURES_NAME: &[u8] = b"Composite.Combined";
+
+/// **Whether a frame's main copy tries [`THE_COMPOSITED_PICTURES_NAME`] first**:
+/// from 5.3, on the multi-layer route, where the compositor runs at this frame
+/// and its result has a Group Output to reach. A tree with no Group Output still
+/// runs for its File Output nodes, and its result is no grade of the render.
+/// **No claim is made about earlier versions**, never looked at for this part.
+pub fn the_composited_picture_at(
+    frame: i64,
+    reading: &TheOutputsHalf,
+    the_picture_inside: Option<&ArtistsText>,
+) -> Option<ArtistsText> {
+    the_picture_inside?;
+    if !reading.taken_by.holds_a_stack_of_effects() {
+        return None;
+    }
+    let gating = reading.per_frame.iter().find(|at| at.frame == frame).map_or(&reading.gating, |at| &at.gating);
+    (gating.a_live_final_output_node
+        && gating.the_compositor_runs(reading.taken_by, reading.a_live_file_output_node_is_in_the_jobs_scene()))
+    .then(|| ArtistsText::of(THE_COMPOSITED_PICTURES_NAME.to_vec()))
+}
+
 /// **B19: the beauty's name inside a multi-layer file**, `<view layer>.Combined`
 /// — the stem of the channel names the script looks for
 /// ([`THE_MULTI_LAYER_LOOKUP`]).
@@ -400,10 +435,14 @@ pub fn the_present_files_at(
     the_main_output: WhatTheMainOutputIs,
     size_of: &dyn Fn(&[u8]) -> Option<u64>,
 ) -> Vec<APresentFileAndItsDestination> {
-    let reached = |node: &ArtistsText, output: Option<&ArtistsText>| match &reading.the_beauty_walk {
-        WhatTheWalkFound::Reached { destinations, .. } => destinations
-            .iter()
-            .any(|one| &one.node == node && one.output.as_ref() == output),
+    // **From 5.3 by the node's effect as well** (R4 item 2, B4), since two
+    // effects' groups can hold nodes of one name.
+    let reached = |destination: &Destination, node: &ArtistsText, output: Option<&ArtistsText>| match &reading.the_beauty_walk {
+        WhatTheWalkFound::Reached { destinations, .. } => destinations.iter().any(|one| {
+            &one.node == node
+                && one.output.as_ref() == output
+                && one.the_effect.as_ref() == destination.the_effect()
+        }),
         _ => false,
     };
     let at_this_frame: Vec<&AnEntry> = inventory
@@ -422,11 +461,11 @@ pub fn the_present_files_at(
                         }
                         DestinationKind::AnOutputOfAFileOutputNode { node, output, .. } => {
                             the_main_output == WhatTheMainOutputIs::ADestinationInsideAFileOutputNode
-                                && reached(node, Some(output))
+                                && reached(destination, node, Some(output))
                         }
                         DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile { node, .. } => {
                             the_main_output == WhatTheMainOutputIs::ADestinationInsideAFileOutputNode
-                                && reached(node, None)
+                                && reached(destination, node, None)
                         }
                         DestinationKind::AnAddedWritePlace(_) => false,
                     }
@@ -465,7 +504,7 @@ pub fn the_present_files_at(
                 WhereThePictureCameFrom::TheOutputPath,
             ),
             DestinationKind::AnOutputOfAFileOutputNode { node, output, .. } => (
-                if reached(node, Some(output)) {
+                if reached(destination, node, Some(output)) {
                     beauty()
                 } else {
                     Some(output.clone())
@@ -473,7 +512,7 @@ pub fn the_present_files_at(
                 WhereThePictureCameFrom::AFileOutputNode(node.clone()),
             ),
             DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile { node, .. } => (
-                if reached(node, None) { beauty() } else { None },
+                if reached(destination, node, None) { beauty() } else { None },
                 WhereThePictureCameFrom::AFileOutputNode(node.clone()),
             ),
             DestinationKind::AnAddedWritePlace(_) => continue,
@@ -759,6 +798,8 @@ pub struct WhatOneFrameIsMadeOf {
     /// **B19: the picture's name inside a multi-layer source**; absent for a
     /// single-picture one.
     pub the_picture_inside: Option<ArtistsText>,
+    /// **B19a's last paragraph**: the name tried first, where there is one.
+    pub the_composited_picture: Option<ArtistsText>,
     pub record: ADerivativesRecord,
     /// **The frame's other View Layers' copies**, in the frame's set's order,
     /// made after the main one: inside the main copy's multi-layer file
@@ -861,10 +902,12 @@ pub fn what_one_frame_is_made_of(
             &the_view_layers_at_this_frame,
         )
     };
+    let the_composited_picture = the_composited_picture_at(frame, reading, the_picture_inside.as_ref());
     Ok(WhatOneFrameIsMadeOf {
         the_source,
         treatment,
         the_picture_inside,
+        the_composited_picture,
         record,
         the_other_layers,
     })
@@ -895,6 +938,7 @@ pub fn the_derivatives_script(to_make: &ADerivativeToMake) -> String {
     let data = serde_json::json!({
         "source": to_make.source,
         "picture": to_make.the_picture_inside,
+        "the_composited_picture": to_make.the_composited_picture,
         "staged_at": to_make.staged_at,
         "view_transform": to_make.treatment.the_view_transform(),
         "format": String::from_utf8_lossy(PNG),
@@ -923,7 +967,9 @@ pub fn the_derivatives_script(to_make: &ADerivativeToMake) -> String {
 /// read it. The picture is found by its channel names in every part (B19a);
 /// scaled in the file's own linear space, as Blender's own route scales before
 /// its save; then given the view transform; then written as an eight-bit PNG,
-/// the format named because the staging path's ending is Smoozy's own.
+/// the format named because the staging path's ending is Smoozy's own, **and its
+/// compression named** ([`THE_PNG_COMPRESSION_LOOKUP`]), because the library
+/// carries the source's over and a file saved with none gives an uncompressed PNG.
 const THE_MULTI_LAYER_BODY: &str = r#"
 import OpenImageIO
 scene = bpy.context.scene
@@ -931,17 +977,24 @@ source = os.fsdecode(bytes(DATA["source"]))
 picture = bytes(DATA["picture"]).decode("utf-8", "replace")
 config = os.path.join(bpy.utils.system_resource("DATAFILES", path="colormanagement"), "config.ocio")
 the_linear_space = OpenImageIO.ColorConfig(config).getColorSpaceNameByRole("scene_linear")
-wanted = [picture + "." + letter for letter in ("R", "G", "B")]
+def the_picture_named(picture):
+    wanted = [picture + "." + letter for letter in ("R", "G", "B")]
+    for part in range(OpenImageIO.ImageBuf(source).nsubimages):
+        buf = OpenImageIO.ImageBuf(source, part, 0)
+        names = list(buf.spec().channelnames)
+        if all(name in names for name in wanted):
+            order = [names.index(name) for name in wanted]
+            if picture + ".A" in names:
+                order.append(names.index(picture + ".A"))
+            return OpenImageIO.ImageBufAlgo.channels(buf, tuple(order))
+    return None
+
+
 found = None
-for part in range(OpenImageIO.ImageBuf(source).nsubimages):
-    buf = OpenImageIO.ImageBuf(source, part, 0)
-    names = list(buf.spec().channelnames)
-    if all(name in names for name in wanted):
-        order = [names.index(name) for name in wanted]
-        if picture + ".A" in names:
-            order.append(names.index(picture + ".A"))
-        found = OpenImageIO.ImageBufAlgo.channels(buf, tuple(order))
-        break
+if DATA["the_composited_picture"] is not None:
+    found = the_picture_named(bytes(DATA["the_composited_picture"]).decode("utf-8", "replace"))
+if found is None:
+    found = the_picture_named(picture)
 width, height = (found.spec().width, found.spec().height) if found is not None else (0, 0)
 sys.stdout.write(DATA["size_opens"] + "%d %d" % (width, height) + DATA["size_closes"] + "\n")
 sys.stdout.flush()
@@ -962,6 +1015,7 @@ if shown.has_error:
     sys.stderr.write(shown.geterror() + "\n")
     sys.exit(1)
 flat = laid_over_the_checkerboard(shown)
+flat.specmod().attribute("compression", "zip")
 if not flat.write(DATA["staged_at"], OpenImageIO.TypeUInt8, "png"):
     sys.stderr.write(flat.geterror() + "\n")
     sys.exit(1)
@@ -1118,6 +1172,7 @@ mod tests {
         );
         reading.the_beauty_walk = WhatTheWalkFound::Reached {
             destinations: vec![crate::main_output::ADestinationTheBeautyReached {
+                the_effect: None,
                 node: ArtistsText::of(b"Beauty".to_vec()),
                 output: Some(ArtistsText::of(b"b_".to_vec())),
             }],
@@ -1233,6 +1288,7 @@ mod tests {
         assert!(!it_writes_multi_layer_files(&DestinationKind::TheRegularOutputPath, b"OPEN_EXR"));
         assert!(it_writes_multi_layer_files(
             &DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile {
+                the_effect: None,
                 node: text(b"File Output"),
                 the_nodes_base_file_name: None,
                 replaced: None,
@@ -1248,6 +1304,7 @@ mod tests {
     #[test]
     fn the_script_carries_its_data_and_the_size_is_read_from_between_the_marks() {
         let script = the_derivatives_script(&ADerivativeToMake {
+            the_composited_picture: None,
             source: vec![b'/', 0xff, b'.', b'e'],
             staged_at: "/r/job/staging-preview-1.png".to_string(),
             treatment: TheTreatment::TheJobsOwnViewTransform(b"AgX".to_vec()),
@@ -1272,6 +1329,7 @@ mod tests {
         // **A multi-layer source takes the bundled library**, told the
         // picture's name as bytes, and never Blender's own loading.
         let multi = the_derivatives_script(&ADerivativeToMake {
+            the_composited_picture: None,
             source: b"/j/out/0001.exr".to_vec(),
             staged_at: "/r/job/staging-preview-1.png".to_string(),
             treatment: TheTreatment::TheJobsOwnViewTransform(b"AgX".to_vec()),
@@ -1343,12 +1401,14 @@ mod tests {
     #[test]
     fn tenth_notes_7_both_routes_lay_a_transparent_copy_over_the_checkerboard() {
         let single = the_derivatives_script(&ADerivativeToMake {
+            the_composited_picture: None,
             source: b"/j/out/f_0001.png".to_vec(),
             staged_at: "/r/job/staging-preview-1.png".to_string(),
             treatment: TheTreatment::ItAlreadyCarriesItsTreatment,
             the_picture_inside: None,
         });
         let multi = the_derivatives_script(&ADerivativeToMake {
+            the_composited_picture: None,
             source: b"/j/out/f_0001.exr".to_vec(),
             staged_at: "/r/job/staging-preview-1.png".to_string(),
             treatment: TheTreatment::TheJobsOwnViewTransform(b"AgX".to_vec()),
@@ -1744,6 +1804,7 @@ mod tests {
         // first node alone; the others' pictures are named after their output.
         reading.the_beauty_walk = WhatTheWalkFound::Reached {
             destinations: vec![crate::main_output::ADestinationTheBeautyReached {
+                the_effect: None,
                 node: ArtistsText::of(nodes[0].0.as_bytes().to_vec()),
                 output: Some(ArtistsText::of(b"Image".to_vec())),
             }],
@@ -2005,6 +2066,7 @@ mod tests {
             &[("Box", "/home/a/box", &["Box"]), ("Mattress", "/home/a/mattress", &["Mattress"])],
         );
         reading.destinations[2].kind = DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile {
+            the_effect: None,
             node: ArtistsText::of(b"Mattress".to_vec()),
             the_nodes_base_file_name: None,
             replaced: None,
@@ -2018,5 +2080,68 @@ mod tests {
         let made = the_frame(1, &reading, &inventory);
         assert_eq!(named(&made.record), Some(b"Box".to_vec()));
         assert!(made.the_other_layers.is_empty());
+    }
+
+    /// **B19a's last paragraph.** From 5.3, on the multi-layer route, where the
+    /// compositor runs and has a Group Output: the composited picture is tried
+    /// first. Not before 5.3, not with every effect off, not on the single-picture
+    /// route, and not for a tree with no Group Output.
+    #[test]
+    fn the_main_copy_tries_the_composited_picture_only_where_the_plan_says() {
+        let inside = ArtistsText::of(b"ViewLayer.Combined".to_vec());
+        let reading_on = |major: u16, minor: u16, live: bool, present: bool| {
+            let mut reading = crate::inventory::tests::a_reading(Vec::new(), Vec::new(), TheVersionInHand::of(major, minor));
+            reading.gating.compositing_switch = true;
+            reading.gating.a_compositing_tree_is_present = present;
+            reading.gating.a_live_final_output_node = live;
+            reading.per_frame = Vec::new();
+            reading
+        };
+        let asked = |reading: &TheOutputsHalf, inside: Option<&ArtistsText>| the_composited_picture_at(1, reading, inside);
+        let on = reading_on(5, 3, true, true);
+        assert_eq!(asked(&on, Some(&inside)).unwrap().as_bytes(), THE_COMPOSITED_PICTURES_NAME);
+        assert_eq!(asked(&reading_on(5, 4, true, true), Some(&inside)).unwrap().as_bytes(), THE_COMPOSITED_PICTURES_NAME);
+        assert_eq!(asked(&reading_on(5, 2, true, true), Some(&inside)), None, "no claim about earlier versions");
+        assert_eq!(asked(&reading_on(5, 3, true, false), Some(&inside)), None, "every effect off");
+        assert_eq!(asked(&reading_on(5, 3, false, true), Some(&inside)), None, "no Group Output");
+        assert_eq!(asked(&on, None), None, "the single-picture route");
+    }
+
+    /// **The script looks for it first and falls back by name**, and carries no
+    /// such name where none is handed in.
+    #[test]
+    fn b26_the_multi_layer_route_names_the_pngs_compression_and_the_other_does_not() {
+        let a_copy = |picture: Option<&[u8]>| {
+            the_derivatives_script(&ADerivativeToMake {
+                source: b"/j/f_0001.exr".to_vec(),
+                staged_at: "/r/staging-preview-1.png".to_string(),
+                treatment: TheTreatment::TheJobsOwnViewTransform(b"AgX".to_vec()),
+                the_picture_inside: picture.map(<[u8]>::to_vec),
+                the_composited_picture: None,
+            })
+        };
+        let named = "flat.specmod().attribute(\"compression\", \"zip\")";
+        let multi = a_copy(Some(b"ViewLayer.Combined"));
+        assert!(at(&multi, "flat = laid_over_the_checkerboard(shown)") < at(&multi, named));
+        assert!(at(&multi, named) < at(&multi, "flat.write(DATA[\"staged_at\"]"));
+        assert!(!a_copy(None).contains(named), "Blender's own route writes its own PNG");
+    }
+
+    #[test]
+    fn the_multi_layer_script_tries_the_composited_picture_then_the_layers_own() {
+        let make = |composited: Option<Vec<u8>>| {
+            the_derivatives_script(&ADerivativeToMake {
+                source: b"/job/f_0001.exr".to_vec(),
+                staged_at: "/rec/copy.png".to_string(),
+                treatment: TheTreatment::TheJobsOwnViewTransform(b"Standard".to_vec()),
+                the_picture_inside: Some(b"ViewLayer.Combined".to_vec()),
+                the_composited_picture: composited,
+            })
+        };
+        let with = make(Some(THE_COMPOSITED_PICTURES_NAME.to_vec()));
+        let without = make(None);
+        assert!(with.contains("if found is None:\n    found = the_picture_named(picture)"));
+        assert!(with.contains(r#"the_composited_picture\":[67,"#), "{with}");
+        assert!(without.contains(r#"the_composited_picture\":null"#));
     }
 }

@@ -352,7 +352,7 @@ mod tests {
         for item in THE_CLOSED_ENTRIES_ARE_BUILT_AS_CLOSED {
             assert!(numbered.contains(&item), "item {item} is not in §9");
         }
-        assert_eq!(numbered.len(), 28, "§9 has twenty-eight entries");
+        assert_eq!(numbered.len(), 29, "§9 has twenty-nine entries");
     }
 
     /// **Every act names a module this crate really has**, read off the

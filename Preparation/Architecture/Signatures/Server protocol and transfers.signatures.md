@@ -119,3 +119,7 @@
 2026-10-27 — Gemini 4 Argon High (Antigravity) — Added wave 6's dated note to B8a retiring the seller half while keeping the historical quote and the releases repository in place.
 
 - 2026-10-30 — Claude Opus 5.5 (Claude Code subagent), the plan writer holding `Audits/Build/Step 10c/Brief — the twenty-third notes, note 2, plan and drawing pass.md`, outside any round — §1.1: one new framed request, *a folder's size is counted on the machine*, answered by the entry point, a pure reading under C6, in the declared request set from the package that first carries it (the Creator's twenty-third note 2). No auditor has seen it.
+- 2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — the check's count, and one question for many files.md`, outside any round — §1.1, the four-value request's built shape. No auditor has seen it.
+
+2026-11-06 — GPT-6.1 (Codex) — Cloth withdrawal and linked simulations on the settings page, within the runner's brief.
+2026-11-06 — GPT-6.1 (Codex) — Planned grouped publication and folder confirmation reads, and current-file reading status.

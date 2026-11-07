@@ -72,10 +72,17 @@
 //! job — the high-water and the floor, `crate::updating::verifying`'s — and is
 //! never compared with the running build, which carries none.
 //!
-//! **What this build can find.** It carries no recovery key
-//! (`crate::updating::trust`), so no update file verifies, and none is
-//! published yet; **every check this build makes is *could not be reached***,
-//! which is right. The tests stand a signed file at the seam.
+//! **E10b: a build that carries no recovery key never checks either.**
+//! No update file could verify against it, so every check it made would end
+//! as *could not be reached* and About would show a failure that did not
+//! happen — the released 0.2.0's control said exactly that. **Such a build is
+//! held where a test copy is** ([`why_a_copy_never_checks`]): no sequence, the
+//! press reaches no network, and About reads
+//! [`TheReading::ThisBuildCannotUpdate`] from the start, known from the build
+//! itself. The rule is the carried set's own
+//! ([`TheCarriedSet::carries_a_recovery_key`]), the same one the release reads
+//! to decide whether to write the update file. The tests stand a signed file
+//! at the seam, against a carried set they name.
 //!
 //! **No network in tests.** The fetch is the seam [`ReadsTheUpdateFile`]; the
 //! real one is [`OverHttps`] and nothing under test reaches it.
@@ -552,6 +559,30 @@ pub fn this_copy_never_checks() -> bool {
     option_env!("SMOOZY_TEST_COPY").is_some() || crate::platform::locations::this_copy_is_a_throwaway_one()
 }
 
+/// **Why a copy never checks** — E10a's test copy, or E10b's build that
+/// carries no recovery key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhyItNeverChecks {
+    /// A throwaway test copy (E10a).
+    ATestCopy,
+    /// **A build that carries no recovery key** (E10b): no update file could
+    /// verify against it, so it asks for none.
+    ItCarriesNoUpdateKey,
+}
+
+/// **Whether, and why, a copy never checks.** A test copy is named first, so
+/// its own words stand; otherwise a build that carries no recovery key never
+/// checks. Nothing here reaches a network.
+pub fn why_a_copy_never_checks(a_test_copy: bool, carried: &TheCarriedSet) -> Option<WhyItNeverChecks> {
+    if a_test_copy {
+        Some(WhyItNeverChecks::ATestCopy)
+    } else if !carried.carries_a_recovery_key() {
+        Some(WhyItNeverChecks::ItCarriesNoUpdateKey)
+    } else {
+        None
+    }
+}
+
 /// **What About reads about the check** — Design's five readings, the held
 /// form of the third, and a copy that never checks.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -571,6 +602,10 @@ pub enum TheReading {
     CouldNotInstall,
     /// **This copy never checks** (E10a).
     ThisCopyNeverChecks,
+    /// **This build carries no recovery key, so it never checks** (E10b):
+    /// About says automatic updates aren't available in this version, and
+    /// never that the update service could not be reached.
+    ThisBuildCannotUpdate,
 }
 
 /// **What the user's press did** (Z26, Z27).
@@ -709,6 +744,19 @@ pub struct TheUpdateCheck {
 impl TheUpdateCheck {
     /// One check, never started for a copy that never checks.
     pub fn new(this_copy_never_checks: bool, the_interval: Duration) -> Arc<TheUpdateCheck> {
+        TheUpdateCheck::never_checking_where(
+            this_copy_never_checks.then_some(WhyItNeverChecks::ATestCopy),
+            the_interval,
+        )
+    }
+
+    /// **One check, never started where there is a reason it never checks** —
+    /// and About's first reading is that reason's.
+    pub fn never_checking_where(
+        why: Option<WhyItNeverChecks>,
+        the_interval: Duration,
+    ) -> Arc<TheUpdateCheck> {
+        let this_copy_never_checks = why.is_some();
         Arc::new(TheUpdateCheck {
             held: Mutex::new(TheChecksState {
                 the_start_check_was_taken: false,
@@ -716,10 +764,12 @@ impl TheUpdateCheck {
                 the_user_asked: false,
                 the_last_completed_ended: None,
                 the_last_automatic_ended: None,
-                the_reading: if this_copy_never_checks {
-                    TheReading::ThisCopyNeverChecks
-                } else {
-                    TheReading::NoneYet
+                the_reading: match why {
+                    Some(WhyItNeverChecks::ATestCopy) => TheReading::ThisCopyNeverChecks,
+                    Some(WhyItNeverChecks::ItCarriesNoUpdateKey) => {
+                        TheReading::ThisBuildCannotUpdate
+                    }
+                    None => TheReading::NoneYet,
                 },
                 the_readings_number: 0,
                 the_run_ended: false,
@@ -737,9 +787,13 @@ impl TheUpdateCheck {
         })
     }
 
-    /// **This copy's**: [`this_copy_never_checks`] and [`THE_INTERVAL`].
+    /// **This copy's**: [`this_copy_never_checks`], what this build carries
+    /// (E10b), and [`THE_INTERVAL`].
     pub fn for_this_copy() -> Arc<TheUpdateCheck> {
-        TheUpdateCheck::new(this_copy_never_checks(), THE_INTERVAL)
+        TheUpdateCheck::never_checking_where(
+            why_a_copy_never_checks(this_copy_never_checks(), &TheCarriedSet::this_build()),
+            THE_INTERVAL,
+        )
     }
 
     fn state(&self) -> MutexGuard<'_, TheChecksState> {
@@ -1486,8 +1540,9 @@ mod tests {
             run("0.1.9", None, false),
             TheCheckEnded::Completed(WhatTheCheckFound::NothingNewer)
         );
-        // **This build carries no recovery key**, so the same well-signed file
-        // is refused, and a refusal is not an answer.
+        // **This build carries none of the test file's keys** — it carries the
+        // Creator's — so the same well-signed file is refused, and a refusal
+        // is not an answer.
         assert_eq!(run("0.1.9", Some(THE_MAC_ROW), true), TheCheckEnded::CouldNotBeReached);
         // Damaged bytes, and nothing at all.
         let (file, _) = AFileAtTheSeam::serving(Some(b"not an update file".to_vec()));
@@ -1754,6 +1809,64 @@ mod tests {
         );
         check.the_run_ends();
         running.join().unwrap();
+    }
+
+    /// **E10b: a build checks exactly when it carries an update key.** A
+    /// build with none — the released 0.2.0's case, where the control said
+    /// *Could not reach the update service.* about a file no copy of it could
+    /// ever believe — never checks, and its reading is known from the build
+    /// before anything is asked. **From 2026-11-01 this build carries the
+    /// Creator's two master keys** (`crate::updating::trust`), so this copy
+    /// checks again, and its reading is never *this build cannot update*.
+    #[test]
+    fn a_build_checks_exactly_when_it_carries_an_update_key() {
+        assert!(TheCarriedSet::this_build().carries_a_recovery_key());
+        let check = TheUpdateCheck::for_this_copy();
+        assert_ne!(check.the_reading().0, TheReading::ThisBuildCannotUpdate);
+        if !this_copy_never_checks() {
+            assert!(!check.never_checks(), "a build carrying update keys never checks");
+        }
+
+        // **The rule, from the carried set alone.** A test copy keeps its own
+        // reason; a build with keys checks; a build with none does not.
+        let a_build_with_no_key = TheCarriedSet {
+            recovery_keys: Vec::new(),
+            statement: None,
+            greatest_release_sequence_published: 0,
+        };
+        assert_eq!(why_a_copy_never_checks(false, &TheCarriedSet::this_build()), None);
+        assert_eq!(why_a_copy_never_checks(false, &a_build_with_both_recovery_keys()), None);
+        assert_eq!(
+            why_a_copy_never_checks(false, &a_build_with_no_key),
+            Some(WhyItNeverChecks::ItCarriesNoUpdateKey)
+        );
+        assert_eq!(
+            why_a_copy_never_checks(true, &TheCarriedSet::this_build()),
+            Some(WhyItNeverChecks::ATestCopy)
+        );
+        assert_eq!(
+            why_a_copy_never_checks(true, &a_build_with_no_key),
+            Some(WhyItNeverChecks::ATestCopy)
+        );
+
+        // **No check at the start, none at the interval, the press reaches
+        // nothing, and About reads the build's own reason throughout.**
+        let check = TheUpdateCheck::never_checking_where(
+            Some(WhyItNeverChecks::ItCarriesNoUpdateKey),
+            Duration::from_millis(20),
+        );
+        assert_eq!(check.the_reading().0, TheReading::ThisBuildCannotUpdate);
+        assert_eq!(check.the_user_asks(), ThePress::ThisCopyNeverChecks);
+        assert_eq!(check.the_reading().0, TheReading::ThisBuildCannotUpdate);
+        assert!(!check.the_user_installs_anyway());
+        let mut told = 0;
+        check.the_sequence_runs(
+            &mut || panic!("a build with no update key made a check"),
+            &mut |_, _, _| told += 1,
+            &|| false,
+        );
+        assert_eq!(told, 0);
+        assert_eq!(check.the_reading().0, TheReading::ThisBuildCannotUpdate);
     }
 
     /// **E10a: a test copy never checks** — no check at the start, none at

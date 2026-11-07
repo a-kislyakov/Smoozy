@@ -537,9 +537,16 @@ pub fn what_stands_at(
 ///
 /// That is what lets P6's third bullet say the reservation cannot be met at
 /// fetch time, and it runs beside S28's start sweep rather than inside it.
+///
+/// **R6a: only a record in the download direction can hold what R6 orders
+/// against.** An upload's mark names a file on the machine, and an *interrupted*
+/// upload keeps it for its carry-on. Read of every direction, three uploads cut
+/// at publication refused every auto-download of a real server for the rest of
+/// the run, with nothing said.
 pub fn transfers_may_be_admitted(records: &[TransferRecord]) -> bool {
     records
         .iter()
+        .filter(|record| record.direction == smoozy_server_protocol::transfers::Direction::Down)
         .all(|record| record.publication_pending.is_none())
 }
 
@@ -995,6 +1002,37 @@ pub(crate) mod tests {
             },
         );
         assert!(!transfers_may_be_admitted(std::slice::from_ref(&record)));
+    }
+
+    /// **R6a.** What a real pass's record held: an upload cut at publication,
+    /// *interrupted*, its mark kept for the carry-on, and every auto-download
+    /// of that server refused after it.
+    #[test]
+    fn an_uploads_publication_never_holds_a_download_back() {
+        let mut record = TransferRecord::arranged(
+            an_identity(IdentityKind::Transfer),
+            smoozy_server_protocol::transfers::Direction::Up,
+            an_identity(IdentityKind::LocalServer),
+            None,
+            "/Users/a/shot/assets/fx/tendril.blend".to_string(),
+            "/smoozy/assets/files/Users/a/shot/assets/fx/tendril.blend".to_string(),
+            "/smoozy/assets/files/Users/a/shot/assets/fx/.smoozy-staging",
+            1024,
+            an_identity(IdentityKind::Run),
+        );
+        record.ending = Some(smoozy_server_protocol::transfers::Ending::Interrupted);
+        record.publication_pending = Some(
+            smoozy_server_protocol::transfers::publication::PublicationPreState {
+                intent: smoozy_server_protocol::transfers::publication::Intent::CreateIntended,
+                staging_path: record.staging_path.as_text(),
+                final_path: "/smoozy/assets/files/Users/a/shot/assets/fx/tendril.blend".to_string(),
+                staged_identity:
+                    smoozy_server_protocol::transfers::StableFileIdentity::TheSupplierCouldNotAnswer,
+                staged_byte_length: 1024,
+                staged_digest: smoozy_server_protocol::transfers::integrity::Digest::of(b"x"),
+            },
+        );
+        assert!(transfers_may_be_admitted(std::slice::from_ref(&record)));
     }
 
     #[test]

@@ -64,6 +64,9 @@ pub struct SceneEntry {
 /// because a file value never has a store entry to be composed from.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Payload {
+    /// `Render Settings` Y1c: old jobs play; off survives every attempt.
+    #[serde(default = "simulations_on")]
+    pub prepare_simulations: bool,
     pub version_pick: VersionPick,
     pub scene: Option<SceneEntry>,
     /// F1's parsed triple, or the tidied ascending integer list.
@@ -104,6 +107,8 @@ pub struct Payload {
     pub the_check_writes_into: Option<String>,
 }
 
+fn simulations_on() -> bool { true }
+
 /// What the composition is given, at submission.
 pub struct Composition<'a> {
     /// B4: always present, always a concrete pair.
@@ -130,6 +135,7 @@ pub struct Composition<'a> {
 /// contract** (`Rendering` L10) — never in the payload and never at run time.
 pub fn compose(given: Composition<'_>) -> Payload {
     Payload {
+        prepare_simulations: given.answers.prepare_simulations.unwrap_or(true),
         version_pick: VersionPick::of(given.version_pick),
         scene: given.scene.map(|scene| SceneEntry {
             name: scene.name.clone(),
@@ -454,6 +460,18 @@ mod tests {
         })
     }
 
+    // `Render Settings` Y1c: an old job stays on; a saved off choice survives.
+    #[test]
+    fn simulation_choice_reads_old_jobs_on_and_keeps_off() {
+        let mut carried = an_untouched_page(None, None).as_carried();
+        carried.0.as_object_mut().unwrap().remove("prepare_simulations");
+        let old = Payload::read_back(&carried).unwrap();
+        assert!(old.prepare_simulations);
+        carried.0["prepare_simulations"] = serde_json::json!(false);
+        let off = Payload::read_back(&carried).unwrap();
+        assert_eq!(off.as_carried().0.get("prepare_simulations"), Some(&serde_json::json!(false)));
+    }
+
     #[test]
     fn an_untouched_page_composes_the_version_pick_and_nothing_else() {
         let payload = an_untouched_page(None, None);
@@ -490,6 +508,7 @@ mod tests {
         let reading = a_recorded_reading();
         let scene = kitchen();
         let mut answers = SceneEntries {
+            prepare_simulations: None,
             frame_range: Some(parse_the_frame_field("1-5").unwrap()),
             frame_range_text: Some("1-5".into()),
             sample_count: Some(128),
@@ -504,6 +523,7 @@ mod tests {
                 on: true,
             }],
             simplify: SimplifyEntries::default(),
+            what_a_loaded_range_stands_on: None,
         };
         answers.simplify.use_simplify = Some(true);
         let payload = compose(Composition {

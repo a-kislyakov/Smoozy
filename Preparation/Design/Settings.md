@@ -32,7 +32,7 @@
 
 ## Search folders
 
-**A numbered list the user orders, with what the order does and does not decide said underneath.** The [Dependency Upload & Remap spec](../Specs/Dependency%20Upload%20&%20Remap.md) is exact about this and the honesty is the point: the first folder with a match is used, so the order decides **which folder** a file comes from, never which file inside it. A user who thinks ordering fixes duplicates will be wrong at the worst moment.
+**A numbered list the user orders, with what the order does and does not decide said underneath.** The [Dependency Upload & Remap spec](../Specs/Dependency%20Upload%20&%20Remap.md) is exact about this and the honesty is the point: the first folder with a match is used, so the order decides **which folder** a file comes from, never which file inside it. A user who thinks ordering fixes duplicates will be wrong at the worst moment. **The line reads:** *Drag a row, or use the arrows. The first folder with a match is used. If one folder has two matches, one is used and named.* *Words changed 2026-11-06 (was *… The first folder with a match is used, so the order decides **which folder** a file comes from, never which file inside it. …*): the last words read before the release; the middle clause said again what the sentence before it says. No auditor has seen it.*
 
 **A folder Smoozy could not search stays on the list, marked, and the rest are searched anyway.** Removing it silently would lose the user's own choice; failing the whole search would break the whole-app rule that Smoozy does the part it can and says what it could not.
 

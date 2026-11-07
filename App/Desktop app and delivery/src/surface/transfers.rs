@@ -276,6 +276,7 @@ pub(crate) mod words {
     pub const FILE: &str = "file";
     pub const FOR: &str = "For";
     pub const DID_NOT_FINISH: &str = "— did not finish";
+    pub const NOT_STARTED: &str = "— Not started";
     /// **A folder download before Smoozy knows what is in it** —
     /// `Design/Transfers`' paragraph of 2026-10-01. Step 10c's twelfth-pass
     /// fix piece 3.
@@ -335,6 +336,8 @@ pub(crate) mod words {
     // `§ Waiting for the connection to come back`.
     pub const RECONNECTING: &str = "Reconnecting…";
     pub const WAITING_FOR_CONNECTION: &str = "Waiting for connection…";
+    /// `Design/Transfers § An auto-download is not a request` and `Download` E2b.
+    pub const NOT_DOWNLOADING: &str = "Download stalled. Use Download all on the job.";
     pub const TRYING_AGAIN_IN: &str = "retrying in";
     pub const TRYING_AGAIN_NOW: &str = "retrying now";
 
@@ -658,6 +661,8 @@ pub enum TheDestinationTrouble {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WhereTheRequestStands {
+    /// `Design/Transfers`: a disconnected request whose walk never began.
+    NotStarted,
     /// Something is still to happen.
     Running,
     /// Nothing is left to stop, at this moment.
@@ -756,6 +761,9 @@ pub struct ARequestKnown {
     /// neither a whole nor a file has been read, its download has not started:
     /// it waits its turn behind another. After 0.1.8, the checks' leftovers.
     pub the_whole_was_read: bool,
+    /// **For an auto-download: `Download` E2b, a connection stands and nothing
+    /// has moved for a minute.**
+    pub nothing_is_moving: bool,
     pub stands: WhereTheRequestStands,
     pub files: Vec<AFileKnown>,
 }
@@ -1048,7 +1056,9 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
     let left_over = matches!(request.stands, WhereTheRequestStands::LeftOver { .. });
     // **Step 10c's transfer wave piece 5: a request nothing is moving any
     // more**, drawn as finished is except that it says it did not finish.
-    let ended = request.stands == WhereTheRequestStands::Ended;
+    let not_started = request.stands == WhereTheRequestStands::NotStarted;
+    let ended = request.stands == WhereTheRequestStands::Ended || not_started;
+    let ended_words = if not_started { words::NOT_STARTED } else { words::DID_NOT_FINISH };
     // **An auto-download that brought every file of its whole home** — its job
     // has ended and its arrangement is done, so it is finished, though it
     // still stands *running* while switched on. `Design/Transfers`: *Finished
@@ -1102,7 +1112,7 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
             )
             .and(folder.clone());
             if left_over || ended {
-                said.then(words::DID_NOT_FINISH)
+                said.then(ended_words)
             } else {
                 said
             }
@@ -1115,7 +1125,7 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
         (WhatItIsOf::ABuild { file }, _) => {
             let said = Words::plain("").and(file.clone());
             if left_over || ended {
-                said.then(words::DID_NOT_FINISH)
+                said.then(ended_words)
             } else {
                 said
             }
@@ -1152,7 +1162,7 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
     let count = if finished && request.kind != TheKind::AutoDownload {
         Words::plain(words::DONE)
     } else if matches!(request.of, WhatItIsOf::AFolderBeingCounted { .. }) {
-        Words::plain(if ended { words::DID_NOT_FINISH } else { words::COUNTING_FILES })
+        Words::plain(if ended { ended_words } else { words::COUNTING_FILES })
     } else if waiting_its_turn {
         Words::plain("")
     } else {
@@ -1194,6 +1204,11 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
             },
             None => ALine::plain("amber2", Words::plain(words::WAITING_FOR_CONNECTION)),
         });
+    }
+
+    // **`Download` E2b: a download that is not moving is never silent.**
+    if request.nothing_is_moving && !terminal {
+        lines.push(ALine::plain("amber2", Words::plain(words::NOT_DOWNLOADING)));
     }
 
     // `§ When a download meets trouble` — `Download` D2's words, the remedy
@@ -1645,14 +1660,15 @@ fn a_shapes_control(is: &str, label: &str, act: &str) -> AShapesControl {
     }
 }
 
-/// A byte count as the drawing writes one, in the same decimal units the shared
-/// underway shape uses.
+/// A byte count as the drawing writes one. **Divided by 1024, as the check's own
+/// figures and Files' are**, so one upload does not read *851 MB* on its button and
+/// *892.8 MB* here (the second Sesterce pass).
 fn a_size(bytes: u64) -> String {
     const STEPS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut left = bytes as f64;
     let mut at = 0;
-    while left >= 1000.0 && at < STEPS.len() - 1 {
-        left /= 1000.0;
+    while left >= 1024.0 && at < STEPS.len() - 1 {
+        left /= 1024.0;
         at += 1;
     }
     if at == 0 {
@@ -2973,6 +2989,7 @@ fn the_counts_are_told(requests: &mut Vec<ARequestKnown>, servers: &[AServerKnow
             the_job_ended_short: false,
             the_arrangement_is_done: false,
             the_whole_was_read: false,
+            nothing_is_moving: false,
             stands: WhereTheRequestStands::Running,
             files: Vec::new(),
         });
@@ -3151,12 +3168,14 @@ pub(crate) fn what_this_run_is_moving(
 ) {
     for request in requests.iter_mut() {
         if !matches!(request.kind, TheKind::Upload | TheKind::Download | TheKind::Dependencies)
-            || request.stands != WhereTheRequestStands::Running
+            || !matches!(request.stands, WhereTheRequestStands::Running | WhereTheRequestStands::NotStarted)
         {
             continue;
         }
         let Some(moving) = under_way.get(&request.id) else {
-            request.stands = WhereTheRequestStands::Ended;
+            if request.stands != WhereTheRequestStands::NotStarted {
+                request.stands = WhereTheRequestStands::Ended;
+            }
             continue;
         };
         // **Its server's period has ended, and the request with it** (`File
@@ -3167,6 +3186,7 @@ pub(crate) fn what_this_run_is_moving(
             request.stands = WhereTheRequestStands::Ended;
             continue;
         }
+        request.stands = WhereTheRequestStands::Running;
         request.waits_for_the_connection = moving.waits_for_the_connection;
         if let Some((done, whole)) = request.bytes {
             let in_flight: u64 = moving.moving.iter().map(|file| file.report.bytes_staged).sum();
@@ -3432,6 +3452,7 @@ fn an_upload_request_known(
         the_job_ended_short: false,
         the_arrangement_is_done: false,
         the_whole_was_read: false,
+        nothing_is_moving: false,
         // **A refused or failed file means it did not finish** — the one rule
         // a manual download keeps too ([`where_a_request_stands`]). Step 10c's
         // thirteenth-pass fix piece 3b.
@@ -3448,10 +3469,19 @@ fn an_upload_request_known(
         // lent nothing. The download's own sentence (`Design/Transfers § A
         // file that failed`, 2026-10-01): what the user asked for and did not
         // get never reads *done*. Step 10c's check-before-0.1.7 fix piece 1.
-        stands: where_a_request_stands(
-            request.every_unit_has_ended,
-            !request.failed_landings.is_empty() || request.stopped_at_the_question,
-        ),
+        // `Design/Transfers`, 2026-11-04: a disconnected request whose walk
+        // never began reads Not started; Stop at its question keeps did not
+        // finish. The run’s register keeps an open question under way.
+        stands: if request.stopped_at_the_question {
+            WhereTheRequestStands::Ended
+        } else if request.nothing_is_decided {
+            WhereTheRequestStands::NotStarted
+        } else {
+            where_a_request_stands(
+                request.every_unit_has_ended,
+                !request.failed_landings.is_empty(),
+            )
+        },
         files,
     }
 }
@@ -3491,11 +3521,42 @@ pub fn the_requests_the_sends_hold(servers: &[AServerKnown]) -> Vec<ARequestKnow
         Ok(sends) => sends.clone(),
         Err(poisoned) => poisoned.into_inner().clone(),
     };
+    let counting = crate::the_found_files_sent::the_sends_being_counted();
     sends
         .into_iter()
         .filter(|send| servers.iter().any(|server| server.row == send.server))
         .map(a_dependency_send_known)
+        .chain(
+            counting
+                .into_iter()
+                .filter(|send| servers.iter().any(|server| server.row == send.server))
+                .map(a_dependency_send_being_counted),
+        )
         .collect()
+}
+
+/// **`Dependency Upload & Remap` A9c: a press still counting what goes**, named
+/// after the `.blend` as its send will be, with the *Stop* every running
+/// request has, and nothing to count yet.
+fn a_dependency_send_being_counted(send: crate::the_found_files_sent::ASendBeingCounted) -> ARequestKnown {
+    let mut known = a_dependency_send_known(crate::the_found_files_sent::ASend {
+        request: send.request,
+        server: send.server,
+        file: send.file.clone(),
+        files: Vec::new(),
+    });
+    known.of = WhatItIsOf::AFolderBeingCounted {
+        named: send.file.trim_end_matches('/').rsplit('/').next().unwrap_or(&send.file).to_string(),
+    };
+    known.bytes = None;
+    known.stands = WhereTheRequestStands::Running;
+    // **It has a start, the press**, where a row with none reads *Start time not
+    // recorded*. It sorts as the newest until its send is entered.
+    known.start = Some(crate::record::transfer_records::TransferStart {
+        started_at_utc: send.started_at_millis,
+        start_order: i64::MAX,
+    });
+    known
 }
 
 fn a_dependency_send_known(send: crate::the_found_files_sent::ASend) -> ARequestKnown {
@@ -3553,6 +3614,7 @@ fn a_dependency_send_known(send: crate::the_found_files_sent::ASend) -> ARequest
         the_job_ended_short: false,
         the_arrangement_is_done: false,
         the_whole_was_read: false,
+        nothing_is_moving: false,
         // **A refused or failed file means it did not finish** —
         // step 10c's thirteenth-pass fix piece 3b.
         stands: where_a_request_stands(
@@ -3704,6 +3766,7 @@ fn an_arrangement_known(
         the_job_ended_short,
         the_arrangement_is_done,
         the_whole_was_read: false,
+        nothing_is_moving: false,
         // **`Download` R11: switching it off ends the arranging of new fetches
         // and removes nothing**, so an arrangement that is off has nothing left
         // to stop.
@@ -3796,6 +3859,7 @@ fn a_manual_request_known(
         the_job_ended_short: false,
         the_arrangement_is_done: false,
         the_whole_was_read: false,
+        nothing_is_moving: false,
         // **What the user asked for and did not get never reads *done***:
         // a file that failed, a request stopped at `Download` M6's question,
         // or something on the server it could not read (M4) — `Design/Transfers
@@ -3871,6 +3935,11 @@ pub async fn the_transfers_screen<R: tauri::Runtime>(
     if let Some(periods) = app.try_state::<Arc<crate::servers::a_period::ThePeriodsThisRun>>() {
         let holds = periods.the_machines_work();
         the_wholes_this_run_has_read(&mut known.requests, &|job| holds.the_whole_of(job));
+        for request in known.requests.iter_mut() {
+            if let (TheKind::AutoDownload, WhatItIsOf::AJob { job, .. }) = (request.kind, &request.of) {
+                request.nothing_is_moving = holds.the_download_is_not_moving(job);
+            }
+        }
         // **A request waiting for its connection carries the line its
         // server's own row carries** — step 10c's transfer wave piece 6.
         the_repairs_the_servers_read(&mut known.requests, &|server| {
@@ -6067,6 +6136,19 @@ fn the_files_come_down<R: tauri::Runtime>(
 
 #[cfg(test)]
 mod tests {
+    /// **A press still counting has a start, the press**: the second Sesterce pass
+    /// read *Start time not recorded* on it.
+    #[test]
+    fn a_send_being_counted_says_when_it_started() {
+        let known = a_dependency_send_being_counted(crate::the_found_files_sent::ASendBeingCounted {
+            request: Identity::issue(IdentityKind::Operation).expect("randomness"),
+            server: "a server".to_string(),
+            file: "/root/scene.blend".to_string(),
+            started_at_millis: 1_792_500_000_123,
+        });
+        assert_eq!(known.start.map(|start| start.started_at_utc), Some(1_792_500_000_123));
+    }
+
     use super::*;
     use crate::downloading::AFileMoving;
     use std::path::Path;
@@ -7049,7 +7131,7 @@ mod tests {
             held.what_the_note_carried.ending = Some(smoozy_queue_history::acting::note::TheEndingOnTheNote {
                 outcome: smoozy_queue_history::acting::note::TheOutcomeAsWritten::Finished,
                 exit_status: None, the_attempt_whose_capture_record_holds_the_words: 1,
-                the_reason_the_machine_recorded: None, the_device_line_as_observed: None,
+                the_reason_the_machine_recorded: None, no_render_began: false, the_device_line_as_observed: None,
             });
             job = held.job.clone();
             crate::record::job_records::JobRecords::over(c).write_the_provisional_record(&held).unwrap();
@@ -7205,7 +7287,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         held.what_the_note_carried.ending = Some(smoozy_queue_history::acting::note::TheEndingOnTheNote {
             outcome: smoozy_queue_history::acting::note::TheOutcomeAsWritten::Finished,
             exit_status: None, the_attempt_whose_capture_record_holds_the_words: 1,
-            the_reason_the_machine_recorded: None, the_device_line_as_observed: None,
+            the_reason_the_machine_recorded: None, no_render_began: false, the_device_line_as_observed: None,
         });
         let job = held.job.clone();
         crate::record::job_records::JobRecords::over(c).write_the_provisional_record(&held).unwrap();
@@ -7354,6 +7436,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
             the_job_ended_short: false,
             the_arrangement_is_done: false,
             the_whole_was_read: false,
+            nothing_is_moving: false,
             stands: WhereTheRequestStands::Running,
             files: Vec::new(),
         }
@@ -7942,6 +8025,19 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         assert!(!the_screen_from(&known(vec![failed]), None).requests[0].collapsed, "a failed file keeps its row");
     }
 
+    /// **`Download` E2b: a download that is not moving is never silent.** Until
+    /// this *downloading 0 / 2* stood for 38 minutes with nothing said.
+    #[test]
+    fn a_download_that_is_not_moving_says_so() {
+        let mut row = a_request(TheKind::AutoDownload, WhatItIsOf::AJob { name: "shot".into(), job: "j".into() });
+        let said = |row: &ARequestKnown| {
+            serde_json::to_string(&the_screen_from(&known(vec![row.clone()]), None).requests[0].lines).expect("it writes")
+        };
+        assert!(!said(&row).contains("stalled"));
+        row.nothing_is_moving = true;
+        assert!(said(&row).contains("Download stalled."), "{}", said(&row));
+    }
+
     /// **`Download` N6: an auto-download reads against the job's whole once a
     /// pass in this run has read it, and against the reckoning's length until
     /// then** — never below the files already counted, and a request that is
@@ -8010,6 +8106,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
                 exit_status: None,
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
             store.write_the_provisional_record(&job).expect("written");
@@ -8135,7 +8232,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let drawn = a_file_drawn(&request, &verifying);
         let note = drawn.note.expect("a line");
         assert_eq!(note.tone, "amber");
-        assert_eq!(note.words.values(), vec!["3.9\u{a0}GB"]);
+        assert_eq!(note.words.values(), vec!["3.6\u{a0}GB"]);
     }
 
     /// **No transfer's permission refusal carries the admin-access offer, in
@@ -8316,8 +8413,9 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
     /// kept for an upload as the download keeps it. **Stopped at `File
     /// Browser` U4's question** reads *— did not finish · 0 / 1*. **Nothing
     /// decided** is not ended by its units: it reads as under way while this
-    /// run holds it before its answer, and ended — *— did not finish* — once
-    /// it does not. Step 10c's check-before-0.1.7 fix piece 1: on the
+    /// run holds it before its answer, and *— Not started* for a disconnected
+    /// request whose walk never began (`Design/Transfers`, 2026-11-04).
+    /// Step 10c's check-before-0.1.7 fix piece 1: on the
     /// Hyperstack check, a file dragged in over a connection that was gone
     /// read *UPLOAD 0 files into /home/ubuntu · done* at once.
     #[test]
@@ -8349,7 +8447,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
             an_upload_request_known("row", &still_asking),
         ];
         assert_eq!(requests[0].stands, WhereTheRequestStands::Ended);
-        assert_eq!(requests[1].stands, WhereTheRequestStands::Running);
+        assert_eq!(requests[1].stands, WhereTheRequestStands::NotStarted);
         // **What this run holds**: only the request whose question is open.
         let mut under_way = HashMap::new();
         under_way.insert(
@@ -8369,11 +8467,11 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
                 .find(|one| one.id.as_str() == id)
                 .expect("the request is drawn")
         };
-        for ended in [drawn(&stopped), drawn(&lent_nothing)] {
+        for (ended, words) in [(drawn(&stopped), "— did not finish"), (drawn(&lent_nothing), "— Not started")] {
             assert_eq!(ended.tag_class, "up");
             assert_eq!(the_count(&ended.count), "0 / 1");
             assert!(
-                every_word(&ended.name).ends_with(words::DID_NOT_FINISH),
+                every_word(&ended.name).ends_with(words),
                 "{}",
                 every_word(&ended.name)
             );
@@ -8381,7 +8479,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let asking = drawn(&still_asking);
         assert_ne!(the_count(&asking.count), words::DONE);
         assert!(
-            !every_word(&asking.name).ends_with(words::DID_NOT_FINISH),
+            !every_word(&asking.name).ends_with("— Not started"),
             "a request whose question is open read as ended"
         );
     }

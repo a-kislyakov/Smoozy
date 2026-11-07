@@ -7,7 +7,7 @@
 //! with no single symptom (*Settings 13*, *Images 9*).
 //!
 //! **Markers used in this file that belong to another document, each with the
-//! document it belongs to.** `Rendering` L19, K15a. `Queue & History` R14.
+//! document it belongs to.** `Rendering` L19, L21, K15a. `Queue & History` R14.
 //! `Server Setup` A5.
 
 use serde::{Deserialize, Serialize};
@@ -127,6 +127,22 @@ pub fn what_the_page_shows(scene: &SceneReading, reading: &RecordedReading) -> W
     }
 }
 
+/// **`Rendering` L21's bullet of 2026-11-02: whether the job will use Cycles** —
+/// the user's pick (E1), else the file's own for the job's scene as the reading
+/// in force gives it (E4). A third engine is not Cycles, and nor is a file's
+/// engine the reading's own Cycles identifier does not match, which is what a
+/// build registering none gives.
+pub fn the_job_will_use_cycles(
+    the_users_pick: Option<OfferedEngine>,
+    scene: &SceneReading,
+    reading: &RecordedReading,
+) -> bool {
+    match the_users_pick {
+        Some(pick) => pick == OfferedEngine::Cycles,
+        None => what_the_page_shows(scene, reading) == WhatThePageShows::Offered(OfferedEngine::Cycles),
+    }
+}
+
 /// **E5: the recorded reading supplies the engine, and nothing else about
 /// add-ons is in the file to be read.** The one announcement is a field of the
 /// reading ([`crate::reading::AnnouncedAddOnCase`]) and is handed to `Server
@@ -164,6 +180,28 @@ mod tests {
             anchor_the_engine(OfferedEngine::Eevee, &reading),
             Ok(ExactName::as_the_reading_produced_it("BLENDER_EEVEE_NEXT"))
         );
+    }
+
+    /// **`Rendering` L21's bullet of 2026-11-02: the pick decides, else the
+    /// file's own by the reading's identifiers.**
+    #[test]
+    fn a_job_will_use_cycles_by_the_pick_else_by_the_files_own() {
+        let reading = a_recorded_reading();
+        let mut scene = a_scene("Kitchen");
+        for (pick, the_files_own, cycles) in [
+            (Some(OfferedEngine::Cycles), "BLENDER_EEVEE_NEXT", true),
+            (Some(OfferedEngine::Eevee), "CYCLES", false),
+            (None, "CYCLES", true),
+            (None, "BLENDER_EEVEE_NEXT", false),
+            (None, "BLENDER_WORKBENCH", false),
+        ] {
+            scene.engine_as_read = ExactName::as_the_reading_produced_it(the_files_own);
+            assert_eq!(the_job_will_use_cycles(pick, &scene, &reading), cycles, "{pick:?} {the_files_own}");
+        }
+        let mut no_cycles = a_recorded_reading();
+        no_cycles.settings.offered_engine_identifiers.cycles = None;
+        scene.engine_as_read = ExactName::as_the_reading_produced_it("CYCLES");
+        assert!(!the_job_will_use_cycles(None, &scene, &no_cycles), "a build registering none");
     }
 
     #[test]

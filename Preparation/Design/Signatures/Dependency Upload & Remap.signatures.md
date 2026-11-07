@@ -36,3 +36,14 @@
 2026-10-28 — Claude Opus 5.5 (Zed), the plan and design pass for the Creator's twentieth notes, holding `Audits/Build/Step 10c/Brief — the twentieth notes, the plan and design pass (Zed, Opus).md`, outside any round — § Above the rows: the summary has room around it, three gaps judged together in the drawing (note 6). No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the desk builder of step 13's second words sweep, outside any round — the check's top line now reads *Original location unknown. Searched in your search folders; matches apply to this server only.* Meaning unchanged. Each carries its inline note. No auditor has seen it.
+
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 4, holding `Audits/Build/Blender 5.3/Brief — piece 4, EEVEE's time limit and templates in a bake folder.md`, outside any round: one more statement in the block above the rows, under Rule 10, for `Dependency Upload & Remap` G9a. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the real files found.md`, outside any round — Adding a search folder moves the rows it finds. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a big shot's check and send.md`, outside any round — One real file is one row; a press shows at once; rows landing after an add. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a big shot's check and send.md` with the runner's item 8, outside any round — A linked `.blend` recorded by a full path says so. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — kept readings in the check.md`, outside any round — *Reading the file…* stands at least 0.7 seconds where a reading was kept. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job pressed during a send, and the check beside it.md`, outside any round — A failed row's two reasons; a part-sent row's count. No auditor has seen it.
+2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — the check's count, and one question for many files.md`, outside any round — the walk's count and *Stop*, the summary's unread linked files, a stopped setup's sentence, and their three drawn states. No auditor has seen it.
+2026-11-06 — GPT-6.1 (Codex) — Planned grouped publication and folder confirmation reads, and current-file reading status.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the bake folder statement and the absolute-path note. The last words read before the release. No auditor has seen it.

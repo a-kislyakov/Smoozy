@@ -235,6 +235,8 @@ fn a_failure(job: &str, label: &str, cause: TheCause, ordinary: ACollectionOutco
         complaints,
         cause,
         disk_free_at_the_ending: None,
+        no_render_began: false,
+        the_reason_the_machine_recorded: None,
     }
 }
 
@@ -322,7 +324,7 @@ fn the_watch(client: &TheClient, run: &mut TheRun, started: Instant) {
         .collect();
     let mut group_messages = 0;
     for n in 0..3 {
-        members[n].ending = Some(AMembersEnding::Finished { frames: 40 });
+        members[n].ending = Some(AMembersEnding::Finished { frames: 40, files: None });
         members[n].ended = Some(now - Duration::from_secs(1800 - n as u64 * 900));
         if let Some(text) = what_the_group_says(SERVER, "Desk test group", &members) {
             messages.send(text);

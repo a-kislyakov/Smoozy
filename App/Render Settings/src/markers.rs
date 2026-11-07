@@ -650,13 +650,22 @@ mod tests {
     /// check is written as a picture*, a payload entry set on a first-frame
     /// check's first job alone. Built by the same work: `Render Settings —
     /// machine`'s payload and the desktop's submission.
+    ///
+    /// **106 from 2026-11-02**, when the first 5.3 live pass added **D6a** — *the
+    /// line about the driver*. Built in the desktop's Render Settings page, over
+    /// `Servers`' own judgement.
+    ///
+    /// **107 from 2026-11-03**, when the second 5.3 live pass added **Y15b** — *a
+    /// loaded range belongs to the one job it was loaded for*. Built in this
+    /// module's store and the desktop's route from a history entry.
+    /// **109 from 2026-11-06**, with Q2b and Y1c: the simulation choice and its range.
     #[test]
     fn the_plan_defines_one_hundred_and_four_distinct_clauses() {
         let plan =
             fs::read_to_string(the_architecture_folder().join(format!("{THIS_PLANS_NAME}.md")))
                 .expect("the plan is readable");
         let defined: HashSet<String> = the_clauses_defined_by(&plan).into_iter().collect();
-        assert_eq!(defined.len(), 105, "{:?}", {
+        assert_eq!(defined.len(), 109, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

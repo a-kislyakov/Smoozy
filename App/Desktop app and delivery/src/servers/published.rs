@@ -446,6 +446,77 @@ pub fn a_folders_size_can_be_counted_on(server: &str) -> Option<bool> {
         .and_then(|held| held.get(server).copied())
 }
 
+/// **`Server Setup` G2a: the Telegram role's reading, per server** — run-held,
+/// nothing durable, and gone with the connection. `asked` numbers the readings
+/// so only the newest lands: one asked before a telling must not stand over one
+/// asked after it. `failed` is what the dedicated entry point last failed with.
+#[derive(Default)]
+struct TheTelegramRoleHeld {
+    asked: u64,
+    enabled: Option<bool>,
+    failed: Option<String>,
+}
+
+fn the_telegram_roles() -> &'static Mutex<HashMap<String, TheTelegramRoleHeld>> {
+    static HELD: std::sync::OnceLock<Mutex<HashMap<String, TheTelegramRoleHeld>>> = std::sync::OnceLock::new();
+    HELD.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// **A reading of the role is asked for.** What comes back names this number.
+pub fn a_reading_of_the_telegram_role_begins(server: &str) -> u64 {
+    let Ok(mut held) = the_telegram_roles().lock() else {
+        return 0;
+    };
+    let role = held.entry(server.to_string()).or_default();
+    role.asked += 1;
+    role.asked
+}
+
+/// **A reading came back**: `Some` of whether the role is enabled, or nothing
+/// where it could not be read. **Kept only where no later one was asked, and
+/// where the connection it was asked on still stands.** Answers whether it moved.
+pub fn a_reading_of_the_telegram_role_came_back(server: &str, asked: u64, enabled: Option<bool>) -> bool {
+    let Ok(mut held) = the_telegram_roles().lock() else {
+        return false;
+    };
+    let Some(role) = held.get_mut(server).filter(|role| role.asked == asked) else {
+        return false;
+    };
+    let moved = role.enabled != enabled;
+    role.enabled = enabled;
+    moved
+}
+
+/// **Whether this server's Telegram role is enabled**, or nothing where it has
+/// not been read, or could not be, on this connection.
+pub fn the_telegram_role_on(server: &str) -> Option<bool> {
+    the_telegram_roles().lock().ok()?.get(server)?.enabled
+}
+
+/// **What the dedicated entry point failed with**, until the next press.
+pub fn the_telegram_install_failed_with(server: &str, said: Option<String>) {
+    if let Ok(mut held) = the_telegram_roles().lock() {
+        held.entry(server.to_string()).or_default().failed = said;
+    }
+}
+
+/// [`the_telegram_install_failed_with`]'s sentence, where one stands.
+pub fn what_the_telegram_install_failed_with(server: &str) -> Option<String> {
+    the_telegram_roles().lock().ok()?.get(server)?.failed.clone()
+}
+
+/// **The connection ended**: nothing read over it stands, and a reading still on
+/// its way does not land.
+pub fn the_telegram_role_goes_with_the_connection(server: &str) {
+    if let Ok(mut held) = the_telegram_roles().lock() {
+        if let Some(role) = held.get_mut(server) {
+            role.asked += 1;
+            role.enabled = None;
+            role.failed = None;
+        }
+    }
+}
+
 /// **Whether this server's program takes the change**, or nothing where its
 /// release has not been read in this run.
 pub fn a_live_jobs_reporting_can_be_changed_on(server: &str) -> Option<ALiveJobsReportingCanBeChanged> {
@@ -1005,6 +1076,7 @@ impl<R: LendsWhatTheRunHolds> WhatServersPublishes for &WhatTheDesktopPublishes<
             return;
         };
         let subject = DurableSubject::ServerRow(identity.clone());
+        let the_server_row = identity.clone();
         let about = Subject::Durable(identity);
         let queue = &self.queue;
         let posted = queue.write_then_post(
@@ -1037,6 +1109,7 @@ impl<R: LendsWhatTheRunHolds> WhatServersPublishes for &WhatTheDesktopPublishes<
                         lent.said_once,
                         &self.notifications,
                         &condition,
+                        &the_server_row,
                         Verbatim::new(named),
                     );
                     raised = Ok(condition);
@@ -1207,6 +1280,26 @@ mod tests {
     /// **`Telegram` V1c's release rule**: at or above the first release that
     /// brings the request, or a desk-built program; older, or no program,
     /// takes nothing. The twenty-first notes, note 7.
+    #[test]
+    fn the_telegram_roles_newest_reading_lands_and_goes_with_the_connection() {
+        let server = "server-g2a-reading";
+        assert_eq!(the_telegram_role_on(server), None, "nothing read claims nothing");
+        let older = a_reading_of_the_telegram_role_begins(server);
+        let newer = a_reading_of_the_telegram_role_begins(server);
+        assert!(a_reading_of_the_telegram_role_came_back(server, newer, Some(true)));
+        assert!(!a_reading_of_the_telegram_role_came_back(server, older, Some(false)), "an older reading landed");
+        assert_eq!(the_telegram_role_on(server), Some(true));
+        assert!(!a_reading_of_the_telegram_role_came_back(server, newer, Some(true)), "it did not move");
+
+        let on_its_way = a_reading_of_the_telegram_role_begins(server);
+        the_telegram_install_failed_with(server, Some("It failed.".to_string()));
+        the_telegram_role_goes_with_the_connection(server);
+        assert_eq!(the_telegram_role_on(server), None);
+        assert_eq!(what_the_telegram_install_failed_with(server), None);
+        assert!(!a_reading_of_the_telegram_role_came_back(server, on_its_way, Some(false)));
+        assert_eq!(the_telegram_role_on(server), None, "a reading from the old connection landed");
+    }
+
     #[test]
     fn twenty_first_7_only_a_program_of_the_release_that_brings_it_takes_a_change() {
         use smoozy_server_protocol::requests::THE_FIRST_RELEASE_THAT_CHANGES_A_LIVE_JOBS_REPORTING as FIRST;

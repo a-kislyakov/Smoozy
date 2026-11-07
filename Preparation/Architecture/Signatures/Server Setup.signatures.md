@@ -126,3 +126,16 @@
 2026-10-30 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 10c/Brief — the twenty-third notes, note 3, server output cleared.md`, outside any round — Y7a: the words are kept until the next act the user asks for on that server; a run taken up again adds to them; acts in one line keep adding to one record, each under its own steps; the driver swap keeps its own words apart. In memory only, by the build runner's ruling. The Creator's twenty-third notes, note 3. No auditor has seen it.
 
 2026-10-31 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 10c/Brief — the twenty-fourth notes, note 1, no Set up again while a setup runs.md`, outside any round — Y9a item 6: the ready action is no longer one of the running card's own acts; from another place during a run it still joins the line. The Creator's twenty-fourth notes, note 1. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 11/Brief — the OptiX check and two Render Settings faults.md`, outside any round — R1 item 5: a driver without the OptiX library is told by `Servers` H11b; still nothing installed on a driver that answers.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 2, outside any round — R1 item 5 notes the swap meets L23a's new top row. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — §13 items 30 to 33, 5.3's cautions. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — B12b's words; B2, what is counted as unread. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the small fault after the first 5.3 live pass, outside any round — R1c, only a Cycles job is held. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), a builder on the runner's ruling after the first 5.3 live pass, outside any round — R1c follows `Rendering` L21. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — the driver swap on an image with NVIDIA's archive.md`, outside any round — R1 item 5's removal and half-removed driver; R1b, the swap's run not begun on a machine it cannot act on; E7's fifth carriage; §11's cleanup. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding the same brief and the runner's rulings on its further faults, outside any round — B10's staging folder; §11's sweep at a run's start; R1b's stopped run with no state. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job pressed during a send, and the check beside it.md`, outside any round — B2's retry. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — G2a. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code), the 5.3 integration's build runner — §13 item 30 settled from the live passes.
+
+2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.

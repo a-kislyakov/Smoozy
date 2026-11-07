@@ -1177,6 +1177,8 @@ mod on_a_desk_with_a_socket_pair {
         let name = |text: &str| ExactName::as_the_reading_produced_it(text);
         SettingsHalf {
             scenes: vec![SceneReading {
+                prepare_simulations: None,
+            motion_blur: None,
                 name: name("Scene"),
                 frame_start: 1,
                 frame_end: 250,
@@ -1197,6 +1199,7 @@ mod on_a_desk_with_a_socket_pair {
                     minimum: 0,
                 },
                 time_limit: 0.0,
+                eevee_time_limit: None,
                 layer_samples_rule: LayerSamplesRule::Use,
                 saved_with: "4.5.3".to_string(),
                 view_layers: vec![ViewLayerReading {
@@ -1219,6 +1222,7 @@ mod on_a_desk_with_a_socket_pair {
                 eevee: Some(name("BLENDER_EEVEE")),
             },
             announced_add_on_case: None,
+            the_folders_at_the_machines_top: None,
         }
     }
 
@@ -1968,6 +1972,86 @@ mod on_a_desk_with_a_socket_pair {
         }
     }
 
+    /// **`Server Setup` R1c's bullet of 2026-11-02: only a Cycles job is held,
+    /// by the engine the job will use** — the user's pick, else the file's own
+    /// as the reading gives it. EEVEE and a third engine go plain, **though a
+    /// cards job's line names `OPTIX` under either** (`Rendering` L21). **Where
+    /// the engine is not known, the device alone decides, as it did**: the
+    /// user's own *GPU* on an unread file is held, and a file's own device
+    /// unread is not. The first 5.3 live pass, item 15.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn only_a_cycles_job_goes_held_for_the_driver() {
+        use smoozy_desktop::servers::the_driver_swap::TheDriverAtSubmission;
+        use smoozy_render_settings::device::DeviceChoice;
+        use smoozy_render_settings::engine::{EngineEntry, OfferedEngine};
+        use smoozy_render_settings::names::ExactName;
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+
+        let pick = |pick| Some(EngineEntry { pick, identifier: None });
+        type Case = (&'static str, Option<DeviceChoice>, Option<EngineEntry>, Option<&'static str>, bool);
+        // The name, the device answered, the engine picked, the file's own
+        // engine as a reading gives it (no reading where none), and the hold.
+        let cases: Vec<Case> = vec![
+            ("r1c-eevee-picked", Some(DeviceChoice::TheCards), pick(OfferedEngine::Eevee), None, false),
+            ("r1c-cycles-picked", Some(DeviceChoice::TheCards), pick(OfferedEngine::Cycles), None, true),
+            ("r1c-the-files-eevee", None, None, Some("BLENDER_EEVEE"), false),
+            ("r1c-the-files-cycles", None, None, Some("CYCLES"), true),
+            ("r1c-the-files-third", None, None, Some("BLENDER_WORKBENCH"), false),
+            ("r1c-eevee-over-cycles", None, pick(OfferedEngine::Eevee), Some("CYCLES"), false),
+            ("r1c-cycles-over-eevee", None, pick(OfferedEngine::Cycles), Some("BLENDER_EEVEE"), true),
+            ("r1c-unknown-gpu-answered", Some(DeviceChoice::TheCards), None, None, true),
+            ("r1c-unknown-all-unread", None, None, None, false),
+        ];
+        for (name, device, engine, the_files_engine, it_is_held) in cases {
+            let stage = the_stage(program.clone(), name, 1, TheSupervisor::TakesTheJob);
+            let point = APointLending::over(&stage.machine).await;
+            let (mut reading, read_payload) = a_file_read_on_the_page();
+            let mut payload = match the_files_engine {
+                Some(_) => read_payload,
+                None => a_payload("40-43"),
+            };
+            payload.device = device;
+            payload.engine = engine;
+            let mut given = what_the_page_hands_over(&stage, vec![payload], false);
+            if let Some(the_files_engine) = the_files_engine {
+                // **The scene says the cards** (the reading's own device).
+                reading.settings.scenes[0].engine_as_read = ExactName::as_the_reading_produced_it(the_files_engine);
+                given.the_reading_in_force = Some(reading);
+            }
+            // **4.5.3's bar is 535** (`Rendering` L23a), and the driver reads
+            // 530 on a machine of its own kernel, as the test above has it.
+            given.the_driver_at_submission = TheDriverAtSubmission {
+                the_driver_on_this_connection: Some(smoozy_servers::hardware::TheDriversOwnAnswer {
+                    version: smoozy_servers::hardware::DriverVersion::parse("530.30.02").expect("530"),
+                    cuda_version: None,
+                    where_k1_placed_the_machine: smoozy_servers::hardware::WhereK1PlacesIt::ItsOwnKernel,
+                }),
+                a_missed_swap_stands: false,
+                a_swap_is_owed: true,
+                the_program_is_this_applications_own: true,
+            };
+            let came_to = the_act(&stage, &point, given).await;
+            let log = stage.machine.what_happened();
+            assert_eq!(
+                came_to,
+                WhatTheActCameTo::TheseJobs(vec![WhatBecameOfOneJob::ItIsInTheLine]),
+                "{name}: {log:#?}"
+            );
+            let asked: Vec<&String> = log
+                .iter()
+                .filter(|line| line.starts_with("the stand-in supervisor was asked for the job record"))
+                .collect();
+            assert_eq!(asked.len(), 1, "{name}: {log:#?}");
+            let expected = if it_is_held {
+                format!("held behind None, for Some({:?});", smoozy_rendering::submission::THE_DRIVER)
+            } else {
+                "held behind None, for None;".to_string()
+            };
+            assert!(asked[0].contains(&expected), "{name}: {}", asked[0]);
+        }
+    }
+
     /// **`Rendering` S18a: where the first-frame check meets the driver, the
     /// first job is held for the driver and the second keeps the check's hold,
     /// behind the first** — no job carries two. Held-job piece A, 2026-10-12.
@@ -2042,7 +2126,9 @@ mod on_a_desk_with_a_socket_pair {
 
         let stage = the_stage(program, "first-frame", 1, TheSupervisor::TakesTheJob);
         let point = APointLending::over(&stage.machine).await;
-        let given = what_the_page_hands_over(&stage, vec![a_payload("40-43")], true);
+        let mut payload = a_payload("40-43");
+        payload.prepare_simulations = false;
+        let given = what_the_page_hands_over(&stage, vec![payload], true);
         let came_to = the_act(&stage, &point, given).await;
         let log = stage.machine.what_happened();
         assert_eq!(
@@ -2099,6 +2185,9 @@ mod on_a_desk_with_a_socket_pair {
         let mut jobs = the_jobs_on_the_machine(&stage.layout);
         jobs.sort_by_key(|(name, _)| !name.starts_with(&first));
         assert_eq!(jobs.len(), 2, "both jobs reached the machine");
+        for (_, manifest) in &jobs {
+            assert!(!smoozy_render_settings::payload::Payload::read_back(&manifest.settings_payload).unwrap().prepare_simulations);
+        }
         assert_eq!(jobs[0].1.frame_range, FrameRange::TheUsersParsedIntegers(vec![40]));
         assert_eq!(
             jobs[1].1.frame_range,
@@ -3650,6 +3739,7 @@ mod on_a_desk_with_a_socket_pair {
                 exit_status: Some(0),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             }),
             attempts: 1,

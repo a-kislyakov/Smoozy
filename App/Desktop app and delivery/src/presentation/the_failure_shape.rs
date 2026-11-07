@@ -46,10 +46,10 @@
 //! ## The sentence is composed before the point and drawn after it
 //!
 //! [`TheFailureShape::what_did_not_happen`] is a plain `String` — **the
-//! composed sentence, before X7's two substitutions.** [`Drawn`] puts it
+//! composed sentence, before X7's substitutions.** [`Drawn`] puts it
 //! through [`Prose::new`] on the way to the screen, and
 //! [`super::the_two_hooks`] captures the plain one for the diary. M32 is
-//! explicit that the diary holds the words *"before X7's two substitutions"*
+//! explicit that the diary holds the words *"before X7's substitutions"*
 //! because *"the typography point is on the path to the screen and on no other
 //! path, and the diary is not a screen"*. **The two orders are deliberate and
 //! the types are what stops them being collapsed**: there is no `Prose` in this

@@ -152,3 +152,19 @@
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Applied the wave 7b privacy fixes.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code), the plan pass for Want 1 of the twenty-sixth notes, outside any round — Added E7a (the Windows certificate through SignPath Foundation, what it binds the release to, and what it changes in the update route), a pointer at the D7b correction, E8a's narrowing by Microsoft's Trusted Root Program sentence, a Section 23 update, and the E7a sources. No auditor has seen it.
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — a build with no update keys says so.md`, outside any round — Added E10b: a build that carries no recovery key never checks, and About says why. No auditor has seen it.
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — the Windows shortcut after a by-hand upgrade.md`, outside any round — E3: one dated sentence, a shortcut naming a different Smoozy program is pointed at the running one at an ordinary start whose record opened. No auditor has seen it.
+
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — a Linux rollback with an unreadable record says so.md`, outside any round — the D6b line under Z11: a record unreadable for the phase shows a box with *Quit* alone, never the ordinary launch (the old sentence struck, dated). No auditor has seen it.
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — the Mac watch's three findings.md`, outside any round — T16a, T29 and E10a: dated sentences from the Mac watch (the held copy made read-only before it is attached; where a click goes, read from the record; a test copy whose starting file is the program). No auditor has seen it.
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — Windows and Linux notifications read for the Mac's faults.md`, outside any round — T5, T16, T17a, T28, item 13 and item 71: dated sentences and corrections from reading Windows and Linux for the Mac watch's faults (the Linux picture by its file address, the desktop-entry hint, a Windows toast with no component server is a popup alone, the tag's length). No auditor has seen it.
+2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job's reading sees its libraries, and failing before a render.md`, outside any round — M13b's note. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex), outside any round — M32a carries setup’s lost reason through the existing failure capture, before placement too. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — X2's third substitution and M32's wording. The last words read before the release. No auditor has seen it.

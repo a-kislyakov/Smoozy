@@ -229,7 +229,14 @@ impl ThePlatform for TheMac {
         // in-memory supply, and the fetched derivative is already a file and
         // already PNG or JPEG, so the format holds by construction. The size
         // was checked against the 10 MB ceiling before this was composed.
-        if let Some(path) = picture::as_path(&post.picture) {
+        //
+        // **T16a: the system moves a file it can write to**, so the held copy
+        // is made read-only first and is attached only where that held — the
+        // record's copy is never the system's to take. The Mac watch of
+        // 2026-11-01.
+        if let Some(path) = picture::as_path(&post.picture)
+            .filter(|path| picture::the_file_is_left_for_the_system_to_copy(path))
+        {
             let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
             if let Ok(attachment) = unsafe {
                 UNNotificationAttachment::attachmentWithIdentifier_URL_options_error(
@@ -401,6 +408,19 @@ mod tests {
     /// This is the line that fails if somebody composes a separate identifier
     /// for the operating system, which would make replace-by-identity and
     /// take-down disagree in a way nothing else could see.
+    #[test]
+    fn the_held_copy_is_made_read_only_before_it_is_attached() {
+        let source = include_str!("macos.rs");
+        let (body, _tests) = source.split_once("#[cfg(test)]").expect("this file has tests");
+        let read_only = body
+            .find(".filter(|path| picture::the_file_is_left_for_the_system_to_copy(path))")
+            .expect("T16a: the held copy is made read-only before it is attached");
+        let attached = body
+            .find("attachmentWithIdentifier_URL_options_error")
+            .expect("the attachment is made");
+        assert!(read_only < attached, "T16a: read-only first, then attached");
+    }
+
     #[test]
     fn the_request_identifier_is_the_presentation_key() {
         let source = include_str!("macos.rs");

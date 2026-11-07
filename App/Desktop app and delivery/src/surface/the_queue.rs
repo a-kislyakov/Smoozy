@@ -312,6 +312,9 @@ const THE_SERVER_IS_GONE_AND_ITS_FILES_WITH_IT: &str =
 const STARTED_LEAD: &str = "started";
 const AGO_WORD: &str = "ago";
 const RENDERING_NOW: &str = "Rendering now";
+const SIMULATING: &str = "Simulating:";
+const SIMULATION_FRAME: &str = "frame";
+const SIMULATION_OF: &str = "of";
 const WHOLE_JOB: &str = "Whole job";
 const VIEW_LAYER_WORD: &str = "View Layer";
 const OF_WORD: &str = "of";
@@ -373,6 +376,9 @@ const WAITING_FOR_FIRST_FRAME_APPROVAL: &str = "Needs your answer — first fram
 /// sentence, around the job's own Blender as a value.
 const THE_JOBS_BLENDER_LEAD: &str = "Blender";
 const NEEDS_A_NEWER_NVIDIA_DRIVER_FOR_OPTIX: &str = "needs a newer NVIDIA driver for OptiX.";
+/// **The same from 5.3**, where the card cannot be used at all under Cycles
+/// (`Rendering` L23a's bullet of 2026-11-02).
+const NEEDS_A_NEWER_NVIDIA_DRIVER_FOR_CYCLES_GPU: &str = "needs a newer NVIDIA driver for Cycles GPU rendering.";
 /// **What happens next, and the restart**, which the user would otherwise not
 /// expect.
 const SMOOZY_WILL_UPDATE_THE_DRIVER: &str =
@@ -517,7 +523,6 @@ const PREVIEW_CLOSE: &str = "Close";
 const PREVIEW_NO_LONGER_AVAILABLE: &str = "This preview is no longer available.";
 const FIRST_FRAME_CHECK: &str = "First-frame check · Frame";
 const REVIEW_FRAME: &str = "Review frame";
-const CHOOSE_THE_RANGE: &str = "and choose whether to render frames";
 
 // ── A first-frame check and its job — the nineteenth notes, note 7 ─────────
 //
@@ -542,12 +547,16 @@ const PART_AT_FRAME: &str = "frame";
 const FRAMES_LEAD: &str = "Frames";
 const START_ONLY_AFTER_YOU_REVIEW: &str =
     "start only after you review this frame. Stopping the check removes them.";
-/// **While it waits**, the question in the box beside the picture: *Frame 1 is
+/// **While it waits**, the question in the box beside the picture: *Frame 1
+/// downloaded. Render frames 1–240?* — *downloaded* only where it was
+/// (`Download` R4), *rendered* otherwise. The phone's own question since
+/// 2026-11-06 (the last words read before the release; it read *Frame 1 is
 /// rendered and downloaded. Review it and choose whether to render frames
-/// 1–240.* — *and downloaded* only where it was (`Download` R4).
-const IS_RENDERED_AND_DOWNLOADED_REVIEW_IT: &str = "is rendered and downloaded.";
-const IS_RENDERED_REVIEW_IT: &str = "is rendered.";
-const REVIEW_IT_AND_CHOOSE: &str = "Review it and choose whether to render frames";
+/// 1–240.*).
+const IS_RENDERED_AND_DOWNLOADED_REVIEW_IT: &str = "downloaded.";
+const IS_RENDERED_REVIEW_IT: &str = "rendered.";
+const REVIEW_IT_AND_CHOOSE: &str = "Render frames";
+const THE_QUESTION_MARK: &str = "?";
 /// **Once the full range renders**: *Rendered in 2m. You chose **Render
 /// all**.* — the duration in History's own form ([`crate::surface::the_history`]).
 const RENDERED_IN: &str = "Rendered in";
@@ -1286,6 +1295,8 @@ pub enum TheStopOrCancel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TheProgress {
+    /// `Queue & History` R6a: a simulation line has no render bars.
+    pub simulating: bool,
     /// *Rendering now* — the frame, the view layer, the printed figures, and
     /// Blender's own estimate at the end of the same line (R9, R10, R15).
     pub now: Vec<APart>,
@@ -1334,6 +1345,14 @@ pub(crate) fn the_progress_from(
         as_a_percentage, the_second_as_a_percentage, the_two_bars_from_what_the_machine_carries,
     };
     let held = figures.readings.value();
+    if let Some((frame, to)) = held.simulation {
+        return Some(TheProgress {
+            simulating: true,
+            now: vec![APart::said(SIMULATION_FRAME, frame.to_string(), SIMULATION_OF), APart::value(to.to_string())],
+            now_at: None,
+            whole: None,
+        });
+    }
     let mut now = Vec::new();
     if let Some(frame) = held.frame_in_hand {
         now.push(APart::said(FRAME_HEADING, frame.to_string(), ""));
@@ -1370,6 +1389,7 @@ pub(crate) fn the_progress_from(
     }
     let (first, second) = the_two_bars_from_what_the_machine_carries(grammar, figures);
     let progress = TheProgress {
+        simulating: false,
         now,
         now_at: as_a_percentage(&first),
         whole: second.as_ref().and_then(the_second_as_a_percentage),
@@ -1566,6 +1586,9 @@ pub enum WhereTheTelegramControlStands {
     /// Connected, and this run has not yet read the server's release:
     /// unavailable, with nothing guessed.
     NotYetKnown,
+    /// **`Server Setup` G2a: the server is read as not having the role**, so
+    /// the job will not report: unavailable, with one grey line saying so.
+    TelegramIsNotInstalled,
 }
 
 /// **The choice a page identifier names, carrying `minutes` where it is the
@@ -2590,8 +2613,7 @@ pub fn what_is_held(
                     }
                 }
                 // **A pair's question names the full range it asks about** —
-                // *Frame 1001 is rendered and downloaded. Review it and choose
-                // whether to render frames 1001–1240.*, the frames as typed
+                // *Frame 1001 downloaded. Render frames 1001–1240?*, the frames as typed
                 // (`Queue & History` P5b). The nineteenth notes, note 7.
                 if let Some(saved) = the_pair.as_ref().filter(|saved| saved.check == check.the_first_job) {
                     pair.said = the_question_of_a_pair(
@@ -2675,6 +2697,8 @@ pub(crate) fn the_telegram_group_on(
         .and_then(|text| smoozy_render_settings::reporting::ReportingChoice::from_the_manifests_form(&text));
     let stands = if stale {
         WhereTheTelegramControlStands::NotConnected
+    } else if crate::servers::published::the_telegram_role_on(server) == Some(false) {
+        WhereTheTelegramControlStands::TelegramIsNotInstalled
     } else {
         match a_live_jobs_reporting_can_be_changed_on(server) {
             Some(ALiveJobsReportingCanBeChanged::Yes) => WhereTheTelegramControlStands::Offered,
@@ -2708,6 +2732,7 @@ pub(crate) fn the_telegram_group_is_said(mut event: Event, group: Option<&TheTel
                 WhereTheTelegramControlStands::NotConnected => "not-connected",
                 WhereTheTelegramControlStands::TheServersSmoozyIsOlder => "older",
                 WhereTheTelegramControlStands::NotYetKnown => "not-yet-known",
+                WhereTheTelegramControlStands::TelegramIsNotInstalled => "not-installed",
             })),
         );
     for (at, (value, said)) in REPORTING_CHOICES.iter().enumerate() {
@@ -2739,6 +2764,12 @@ pub(crate) fn the_telegram_group_is_said(mut event: Event, group: Option<&TheTel
         event = event.saying(
             "telegramOlder",
             Said::Prose(Prose::new(UPDATE_SMOOZY_ON_THIS_SERVER_TO_CHANGE_THIS)),
+        );
+    }
+    if group.stands == WhereTheTelegramControlStands::TelegramIsNotInstalled {
+        event = event.saying(
+            "telegramNotInstalled",
+            Said::Prose(Prose::new(crate::surface::set_up::words::TELEGRAM_NOT_INSTALLED)),
         );
     }
     event
@@ -2828,13 +2859,28 @@ pub fn the_job_is_held_for_the_driver(the_jobs_blender: &str) -> TheJobIsHeld {
         said: vec![APart::said(
             THE_JOBS_BLENDER_LEAD,
             the_blenders_line(the_jobs_blender),
-            NEEDS_A_NEWER_NVIDIA_DRIVER_FOR_OPTIX,
+            if the_blender_cannot_use_the_card_below_its_bar(the_jobs_blender) {
+                NEEDS_A_NEWER_NVIDIA_DRIVER_FOR_CYCLES_GPU
+            } else {
+                NEEDS_A_NEWER_NVIDIA_DRIVER_FOR_OPTIX
+            },
         )],
         second: SMOOZY_WILL_UPDATE_THE_DRIVER,
         first_answer: Vec::new(),
         second_answer: "",
         note: THIS_ONLY_HAPPENS_WHILE_CONNECTED,
     }
+}
+
+/// **Whether this Blender's row in `Rendering` L23a's table stops Cycles on the
+/// card, not OptiX alone** (that table's bullet of 2026-11-02): what the words
+/// about its driver follow. **A version that does not read keeps the OptiX
+/// words**, which were never false of it. One question, asked of the table.
+pub(crate) fn the_blender_cannot_use_the_card_below_its_bar(version: &str) -> bool {
+    use smoozy_servers::hardware::{the_optix_bar_row, WhatTheBarStops};
+    smoozy_server_setup::blender::Version::parse(version.split_whitespace().next().unwrap_or_default())
+        .and_then(|read| the_optix_bar_row((read.major, read.minor, read.patch)))
+        .is_some_and(|row| row.below_it == WhatTheBarStops::CyclesOnTheCard)
 }
 
 /// **A Blender named by its line** — *5.2* for 5.2.1, *5.1* for 5.1.0 — the
@@ -3254,22 +3300,21 @@ fn the_check_in_the_queue(
     the_check
 }
 
-/// **The question in a pair's box** — *Frame 1001 is rendered and downloaded.
-/// Review it and choose whether to render frames 1001–1240.*, *and
-/// downloaded* only where it was (`Download` R4) — and, where the check did
-/// not finish, no word that it rendered: *Review frame 1001 and choose
-/// whether to render frames 1001–1240.*
+/// **The question in a pair's box** — *Frame 1001 downloaded. Render frames
+/// 1001–1240?*, *downloaded* only where it was (`Download` R4) — and, where
+/// the check did not finish, no word that it rendered: *Review frame 1001.
+/// Render frames 1001–1240?*
 fn the_question_of_a_pair(pair: &ThePair, the_check_finished: bool, downloaded: bool) -> Vec<APart> {
     if !the_check_finished {
         return vec![
-            APart::said(REVIEW_FRAME, pair.first_frame.to_string(), CHOOSE_THE_RANGE),
-            APart::said("", pair.the_frames.clone(), "."),
+            APart::said(REVIEW_FRAME, pair.first_frame.to_string(), "."),
+            APart::said(REVIEW_IT_AND_CHOOSE, pair.the_frames.clone(), THE_QUESTION_MARK),
         ];
     }
     let rendered = if downloaded { IS_RENDERED_AND_DOWNLOADED_REVIEW_IT } else { IS_RENDERED_REVIEW_IT };
     vec![
         APart::said(THE_FIRST_FRAME_LEAD, pair.first_frame.to_string(), rendered),
-        APart::said(REVIEW_IT_AND_CHOOSE, pair.the_frames.clone(), "."),
+        APart::said(REVIEW_IT_AND_CHOOSE, pair.the_frames.clone(), THE_QUESTION_MARK),
     ]
 }
 
@@ -5302,7 +5347,7 @@ pub(crate) fn a_part_is_said(
 /// **Whether a part's words follow its value with no space between**: where
 /// a value stands before them and they open on punctuation.
 pub(crate) fn the_trail_clings(part: &APart) -> bool {
-    !part.value.is_empty() && part.trail.starts_with([',', '.', ';', ':'])
+    !part.value.is_empty() && part.trail.starts_with([',', '.', ';', ':', '?'])
 }
 
 /// **Whether a part's words follow its value with a non-breaking space**:
@@ -5975,7 +6020,7 @@ pub(crate) fn the_entry_is_said(event: Event, entry: Option<&TheJobEntry>) -> Ev
 
     if let Some(progress) = &entry.progress {
         event = event
-            .saying("renderingNow", Said::Prose(Prose::new(RENDERING_NOW)))
+            .saying("renderingNow", Said::Prose(Prose::new(if progress.simulating { SIMULATING } else { RENDERING_NOW })))
             .saying("wholeJob", Said::Prose(Prose::new(WHOLE_JOB)))
             .saying(
                 "progNowCount",
@@ -6918,6 +6963,18 @@ pub(crate) mod tests {
             );
             assert_eq!(the_box.second, SMOOZY_WILL_UPDATE_THE_DRIVER);
             assert_eq!(the_box.note, THIS_ONLY_HAPPENS_WHILE_CONNECTED);
+            // **From 5.3 the box says what stops there** (`Rendering` L23a's
+            // bullet of 2026-11-02), and a later Blender reads the same row.
+            for (version, line) in [("5.3.0", "5.3"), ("5.4.0", "5.4")] {
+                assert_eq!(
+                    the_job_is_held_for_the_driver(version).said,
+                    vec![APart::said(THE_JOBS_BLENDER_LEAD, line, "needs a newer NVIDIA driver for Cycles GPU rendering.")]
+                );
+            }
+            assert_eq!(
+                the_job_is_held_for_the_driver("5.2.3").said,
+                vec![APart::said(THE_JOBS_BLENDER_LEAD, "5.2", "needs a newer NVIDIA driver for OptiX.")]
+            );
             assert!(the_box.first_answer.is_empty() && the_box.second_answer.is_empty(), "no answers");
 
             let text = format!("{:?}", the_queue_says(&screen));
@@ -8075,6 +8132,7 @@ console.log(JSON.stringify(drawn));
             exit_status: None,
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         store.the_fill_in(job, &note).expect("the fill-in is written");
@@ -8241,6 +8299,22 @@ console.log(JSON.stringify(drawn));
         assert_eq!(stale.stands, WhereTheTelegramControlStands::NotConnected);
         let unread = the_telegram_group_on(connection, &job, &server, &QueueState::Waiting, false, None).unwrap();
         assert_eq!(unread.stands, WhereTheTelegramControlStands::NotYetKnown, "nothing guessed");
+        // **`Server Setup` G2a: read as absent, the job does not read as if it
+        // will report; read as present, or not read, as it stood.**
+        let asked = crate::servers::published::a_reading_of_the_telegram_role_begins(&server);
+        crate::servers::published::a_reading_of_the_telegram_role_came_back(&server, asked, Some(false));
+        let absent = the_telegram_group_on(connection, &job, &server, &QueueState::Waiting, false, None).unwrap();
+        assert_eq!(absent.stands, WhereTheTelegramControlStands::TelegramIsNotInstalled);
+        let said_absent = said(&the_entry_is_said(
+            the_queue_says(&a_queue()),
+            Some(&TheJobEntry { telegram: Some(absent), ..TheJobEntry::default() }),
+        ));
+        assert!(said_absent.contains("\"not-installed\"") && said_absent.contains("\"telegramNotInstalled\""), "{said_absent}");
+        assert!(said_absent.contains("reporting not"), "{said_absent}");
+        assert!(!said_absent.contains("telegramOlder"), "{said_absent}");
+        let stale_absent = the_telegram_group_on(connection, &job, &server, &QueueState::Waiting, true, None).unwrap();
+        assert_eq!(stale_absent.stands, WhereTheTelegramControlStands::NotConnected);
+        crate::servers::published::a_reading_of_the_telegram_role_came_back(&server, asked, None);
         crate::servers::published::the_servers_release_is_read(&server, Some(1812));
         let older = the_telegram_group_on(connection, &job, &server, &QueueState::Waiting, false, None).unwrap();
         assert_eq!(older.stands, WhereTheTelegramControlStands::TheServersSmoozyIsOlder);
@@ -8299,7 +8373,7 @@ console.log(JSON.stringify(drawn));
         assert!(page.contains("face.disabled = !offered;"));
         assert!(page.contains("anActIsAskedFor(face, \"what-it-reports\", { job, from: choice.value })"));
         assert!(page.contains("from: \"minutes:\" + field.value"));
-        assert!(page.contains("if (said.telegramOlder) {"));
+        assert!(page.contains("if (said.telegramOlder || said.telegramNotInstalled) {"));
         assert_eq!(TheActOnAJob::WhatItReports.name(), "what-it-reports");
         let _ = std::fs::remove_dir_all(&path);
     }
@@ -9967,6 +10041,7 @@ console.log(JSON.stringify(drawn));
             exit_status: None,
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         store.the_fill_in(&job.job, &note).expect("the fill-in is written");
@@ -10124,6 +10199,7 @@ console.log(JSON.stringify(drawn));
             exit_status: None,
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         store.the_fill_in(&job.job, &note).expect("the fill-in is written");
@@ -11053,10 +11129,50 @@ console.log(JSON.stringify({{ disabled: waiting.disabled === true, why: why(wait
         );
     }
 
+    #[test]
+    fn film_page_a_chosen_frame_survives_the_move_to_history() {
+        let lines = a_page_run("film-frame", &["the-queue.js", "the-history.js", "the-value-drawn.js"], &[], r#"
+await import("./the-queue.js"); await import("./the-history.js");
+const tell = (kind, said) => { for (const handler of globalThis.told.get(kind) || []) handler({said}); };
+const make = (job, frames) => {
+ const said = {theHeading:"Queue",lineCount:"1",line0Server:"s1",line0Name:"Server",rowCount:"1",row0Job:job,row0Line:"0",row0Name:"Shot",
+ entryJob:job,entryName:"Shot",previewPicture:job,frameHeading:"Frame preview",frameWord:"Frame",previousFrame:"Previous frame",nextFrame:"Next frame",
+ previewHeldCount:String(frames.length), previewFrame:String(frames.at(-1)),showLatest:"Show latest",showLast:"Show last"};
+ frames.forEach((frame,i) => {said["previewHeldFrame"+i]=String(frame);said["previewHeldLayerCount"+i]="2";said["previewHeldMain"+i]="0";
+ for(let k=0;k<2;k++){said["previewHeld"+i+"Layer"+k]=["Beauty","FX"][k];said["previewHeld"+i+"Place"+k]=String(k);}});
+ return said;
+};
+const queue = anElement("div"), history = anElement("div");
+globalThis.theRoot.appendChild(queue); globalThis.theRoot.appendChild(history);
+globalThis.screens.get("queueview").itIsDrawn(queue); globalThis.screens.get("historyview").itIsDrawn(history);
+tell("queue:the-queue", make("shot",[342,344,346,348]));
+queue.querySelector("aside.qdside").querySelectorAll("button.sb")[0].click(); // 346
+queue.querySelector("button.pkb").click();
+queue.querySelector("span.ddl").children[1].click(); // FX
+const final = make("shot",[342,344,346,348,430]);
+Object.assign(final,{theHeading:"History",hrowCount:"1",hrow0Job:"shot",hrow0Name:"Shot",hrowChosen:"shot"});
+tell("queue:the-queue",{theHeading:"Queue",lineCount:"0",rowCount:"0"});
+tell("history:the-history",final);
+const side = () => history.querySelector("aside.qdside");
+console.log(JSON.stringify({frame:side().querySelector("input").value,layer:side().querySelector("button.pkb").textContent}));
+side().querySelectorAll("button.sb")[1].click();
+console.log(JSON.stringify({frame:side().querySelector("input").value}));
+tell("queue:the-queue",make("following",[346,348]));
+const following=make("following",[346,348,430]);
+Object.assign(following,{theHeading:"History",hrowCount:"1",hrow0Job:"following",hrow0Name:"Shot",hrowChosen:"following"});
+tell("history:the-history",following);
+console.log(JSON.stringify({frame:side().querySelector("input").value}));
+"#).unwrap();
+        assert_eq!(lines[0], serde_json::json!({"frame":"346","layer":"FX"}));
+        assert_eq!(lines[1], serde_json::json!({"frame":"348"}));
+        assert_eq!(lines[2], serde_json::json!({"frame":"430"}));
+    }
+
     /// **Runs a page harness built on the boxes harness's own stand-ins**:
     /// `pages` copied from `web/`, `real` copied over the stand-in of the same
     /// name, and `body` after the stand-in document. Answers each line the
     /// harness printed, as JSON, or nothing where no Node is installed.
+
     fn a_page_run(name: &str, pages: &[&str], real: &[&str], body: &str) -> Option<Vec<serde_json::Value>> {
         let folder = std::env::temp_dir().join(format!("smoozy-queue-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&folder);
@@ -13837,6 +13953,7 @@ console.log(JSON.stringify({
                 exit_status: None,
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
             record.what_the_note_carried.last_frame_figure = figure;
@@ -14329,6 +14446,7 @@ console.log(JSON.stringify({ inTheBox: Boolean(inBox), afterTheControl: inBox ? 
                     exit_status: None,
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 });
             };
@@ -14467,7 +14585,7 @@ console.log(JSON.stringify({ inTheBox: Boolean(inBox), afterTheControl: inBox ? 
                 entry.held[0].said,
                 vec![
                     APart::said(THE_FIRST_FRAME_LEAD, "1", IS_RENDERED_REVIEW_IT),
-                    APart::said(REVIEW_IT_AND_CHOOSE, the_frames(), "."),
+                    APart::said(REVIEW_IT_AND_CHOOSE, the_frames(), THE_QUESTION_MARK),
                 ]
             );
             assert_eq!(entry.held[0].first_answer, the_first_frame_is_held("1", 240, false).first_answer);
@@ -14521,7 +14639,7 @@ console.log(JSON.stringify({ inTheBox: Boolean(inBox), afterTheControl: inBox ? 
             assert_eq!((row.the_pair[0].state.lead, row.the_pair[0].dot), (ENDED_FAILED, ""));
             assert_eq!(
                 screen.entry.unwrap().held[0].said,
-                vec![APart::said(REVIEW_FRAME, "1", CHOOSE_THE_RANGE), APart::said("", the_frames(), ".")],
+                vec![APart::said(REVIEW_FRAME, "1", "."), APart::said(REVIEW_IT_AND_CHOOSE, the_frames(), THE_QUESTION_MARK)],
                 "no word that frame 1 rendered"
             );
         }
@@ -14606,5 +14724,27 @@ console.log(JSON.stringify({ inTheBox: Boolean(inBox), afterTheControl: inBox ? 
             assert!(screen.lines[0].rows[0].the_pair.is_empty());
             assert!(screen.entry.unwrap().the_check.is_none());
         }
+    }
+}
+
+
+#[cfg(test)]
+mod wait_count_tests {
+    use super::*;
+    #[test]
+    fn wait_count_draws_scene_numbers_without_render_bars() {
+        use smoozy_queue_history::readings::{AWorkersReport, LiveReadings};
+        let report = AWorkersReport {
+            attempt: 1,
+            readings: smoozy_state::observed::Reading::taken(
+                LiveReadings { simulation: Some((-2, 430)), ..Default::default() },
+                std::time::SystemTime::UNIX_EPOCH, smoozy_state::observed::Clock::ThisComputer),
+            newest_frame_saved: None, the_plan_total: Some(100), the_units_finished: Some(0),
+        };
+        let progress = the_progress_from(&report, smoozy_queue_history::bars::WhichGrammar::FivePointZeroAndLater, None).unwrap();
+        assert!(progress.simulating);
+        assert_eq!(progress.now, vec![APart::said("frame", "-2", "of"), APart::value("430")]);
+        assert_eq!(progress.now_at, None);
+        assert_eq!(progress.whole, None);
     }
 }

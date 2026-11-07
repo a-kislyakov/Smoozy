@@ -143,9 +143,24 @@ pub struct HardwareReading {
     /// this reading and replaced whole with it (H4). **Absent where the driver
     /// did not answer or gave no version** — never a reason the rest fails.
     pub the_driver: Option<TheDriversOwnAnswer>,
+    /// **H11b's OptiX-library bullet: the machine's loader did not find the
+    /// OptiX library**, asked only where the driver answered, by `Rendering`
+    /// L24b's own lookup. Added 2026-11-02, the Creator's ruling that setup
+    /// checks for it. **Only *not found* sets it**: a library found, a lookup
+    /// that gave no answer, and a driver that did not answer all leave it
+    /// false. Part of this reading and replaced whole with it (H4).
+    pub the_optix_library_is_missing: bool,
 }
 
 impl HardwareReading {
+    /// **H11b's OptiX-library part, added to a reading taken by
+    /// [`HardwareReading::taken`].** A reading made any other way carries
+    /// none.
+    pub fn with_the_optix_library_missing(mut self, missing: bool) -> HardwareReading {
+        self.the_optix_library_is_missing = missing;
+        self
+    }
+
     /// **H11b's part, added to a reading taken by [`HardwareReading::taken`].**
     /// A reading made any other way — the machine program's own — carries none.
     pub fn with_the_driver(mut self, the_driver: Option<TheDriversOwnAnswer>) -> HardwareReading {
@@ -176,6 +191,7 @@ impl HardwareReading {
             the_desktops_own_moment: Reading::taken((), received_here_at, Clock::ThisComputer),
             read_under,
             the_driver: None,
+            the_optix_library_is_missing: false,
         }
     }
 
@@ -762,8 +778,23 @@ pub fn a_blender_is_asked_for_the_hardware_reading() -> bool {
 /// this crate cannot take that type, because that crate takes this one.
 pub type BlenderNumbers = (u32, u32, u32);
 
+/// **What a driver below a row of `Rendering` L23a's table cannot do**, which
+/// is what the user's words follow. Added 2026-11-02, the first 5.3 live pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhatTheBarStops {
+    /// OptiX alone. The record does not say the card is unusable: CUDA still
+    /// rendered on these versions as far as it shows.
+    Optix,
+    /// **Cycles on the card, by either route.** Below 5.3's row both
+    /// `--cycles-device OPTIX` and `--cycles-device CUDA` end at status 1 with
+    /// nothing written. Observed on driver 575.64.03, RTX 3080 Ti, 5.3.0 Beta
+    /// `fd2b7d57ef87`; EEVEE and the processor rendered on that machine.
+    CyclesOnTheCard,
+}
+
 /// One row of `Rendering` **L23a**'s table: from this Blender version on, the
-/// NVIDIA driver must be at least this for OptiX.
+/// NVIDIA driver must be at least this for OptiX, and below it this is what
+/// stops.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OptixBarRow {
     /// The earliest Blender version the row belongs to.
@@ -771,34 +802,50 @@ pub struct OptixBarRow {
     /// Blender's own stated OptiX driver minimum (Linux), as the driver's
     /// version numbers.
     pub driver_minimum: &'static [u32],
+    /// What a driver below this row cannot do (L23a's bullet of 2026-11-02).
+    pub below_it: WhatTheBarStops,
 }
 
 /// **`Rendering` L23a: Blender's own stated OptiX driver minimum per Blender
-/// version, and this table is it.** All three rows are **documented** —
-/// `Preparation/Architecture/Sources/Rendering.sources.md`, every page read
-/// 2026-10-11. **The bar is what Blender's own pages state, never what happened
-/// to work on a machine** — 570 rendered on 5.2.2 in a test, and is below 5.2.1's
-/// stated 575.
+/// version, and this table is it.** All four rows are **documented** —
+/// `Preparation/Architecture/Sources/Rendering.sources.md`, the first three
+/// from pages read 2026-10-11 and 5.3's read from the research on 2026-11-02.
+/// **The bar is what Blender's own pages state, never what happened to work on a
+/// machine** — 570 rendered on 5.2.2 in a test, and is below 5.2.1's stated 575.
+///
+/// **5.3 states two figures, and the row is the one that disables a card**: its
+/// Cycles file says 580, for OptiX and CUDA alike, and marks a card below it
+/// disabled; its manual says 575 (*The machine 2*, the 5.3.0 Beta; the build
+/// runner's ruling of 2026-11-02, L23a). **Smoozy's own swap installs 580.178.04**
+/// (`Server Setup`'s `THE_UBUNTU_DRIVER_SWAP`), which meets it.
 ///
 /// **This is the only copy.** The desktop reads it through `smoozy-servers`,
 /// which re-exports this file, and the machine program reads it from this
 /// crate. **A new Blender's bar is one more row here.**
 ///
 /// Rows run oldest first, and a Blender's bar is the last row it has reached —
-/// so *4.5 to 5.1* is the first row up to 5.2.0, and *5.2.1 and later* is the
+/// so *4.5 to 5.1* is the first row up to 5.2.0, and *5.3.0 and later* is the
 /// last row onward.
-pub const THE_OPTIX_DRIVER_BAR: [OptixBarRow; 3] = [
+pub const THE_OPTIX_DRIVER_BAR: [OptixBarRow; 4] = [
     OptixBarRow {
         from_blender: (4, 5, 0),
         driver_minimum: &[535],
+        below_it: WhatTheBarStops::Optix,
     },
     OptixBarRow {
         from_blender: (5, 2, 0),
         driver_minimum: &[570],
+        below_it: WhatTheBarStops::Optix,
     },
     OptixBarRow {
         from_blender: (5, 2, 1),
         driver_minimum: &[575],
+        below_it: WhatTheBarStops::Optix,
+    },
+    OptixBarRow {
+        from_blender: (5, 3, 0),
+        driver_minimum: &[580],
+        below_it: WhatTheBarStops::CyclesOnTheCard,
     },
 ];
 
@@ -917,6 +964,9 @@ pub struct TheDriverStatement {
     /// the driver is below more than one bar, it is the earliest such bar's,
     /// because *and later* then covers every Blender the driver falls short of.
     pub from_blender: BlenderNumbers,
+    /// **What that row stops**, which the words follow (`Rendering` L23a's
+    /// bullet of 2026-11-02).
+    pub below_it: WhatTheBarStops,
 }
 
 /// **H11b: *"It is said only where Smoozy cannot change the driver."***
@@ -969,6 +1019,7 @@ pub fn what_the_bar_says(
                 the_drivers_version: the_driver.version.as_the_driver_wrote_it().to_string(),
                 cuda_version: the_driver.cuda_version.clone(),
                 from_blender: row.from_blender,
+                below_it: row.below_it,
             })
         }
         _ => None,
@@ -985,6 +1036,26 @@ pub fn what_the_bar_says(
         the_statement,
         blenders_below_their_bar,
     }
+}
+
+/// **`Render Settings` D6a: whether a Cycles job on the card cannot render on
+/// this driver and nothing will change that**, from 5.3. The picked Blender's
+/// row stops Cycles on the card, the driver is below that row, and `Servers`
+/// H11b's statement stands for this server.
+///
+/// **On a machine Smoozy can update it is `false`, because it is not true**: the
+/// job is held and the driver replaced (`Server Setup` R1c). **It stops nothing**
+/// (H11b): a value to be shown, never a refusal.
+pub fn a_cycles_job_cannot_use_the_card(
+    the_driver: &TheDriversOwnAnswer,
+    blender: BlenderNumbers,
+    setup_could_not_update_it: bool,
+) -> bool {
+    the_optix_bar_row(blender).is_some_and(|row| {
+        row.below_it == WhatTheBarStops::CyclesOnTheCard
+            && the_driver.version.is_below(row.driver_minimum)
+            && the_statement_is_said_on(the_driver.where_k1_placed_the_machine, setup_could_not_update_it)
+    })
 }
 
 #[cfg(test)]
@@ -1407,17 +1478,19 @@ mod tests {
             .to_vec()
     }
 
-    /// **L23a's three rows and its last-row rule**, one version at each edge.
+    /// **L23a's four rows and its last-row rule**, one version at each edge.
     #[test]
     fn each_blender_version_is_read_against_its_own_row_of_the_bar() {
         assert_eq!(the_bar_for((4, 5, 0)), vec![535], "4.5: the first row");
         assert_eq!(the_bar_for((5, 1, 2)), vec![535], "5.1: still the first row");
         assert_eq!(the_bar_for((5, 2, 0)), vec![570], "5.2.0: its own row");
-        assert_eq!(the_bar_for((5, 2, 1)), vec![575], "5.2.1: the last row");
-        assert_eq!(the_bar_for((5, 2, 2)), vec![575], "5.2.2: and later");
+        assert_eq!(the_bar_for((5, 2, 1)), vec![575], "5.2.1: its own row");
+        assert_eq!(the_bar_for((5, 2, 2)), vec![575], "5.2.2: still that row");
+        assert_eq!(the_bar_for((5, 3, 0)), vec![580], "5.3.0: the last row");
+        assert_eq!(the_bar_for((5, 4, 0)), vec![580], "5.4 reads the same row");
         assert_eq!(
             the_bar_for((6, 1, 0)),
-            vec![575],
+            vec![580],
             "a version past the last row is read against the last row"
         );
         assert_eq!(the_optix_bar_row((4, 4, 0)), None, "no row below 4.5 is made up");
@@ -1464,16 +1537,55 @@ mod tests {
                 the_drivers_version: "550.163.01".into(),
                 cuda_version: Some("12.4".into()),
                 from_blender: (5, 2, 0),
+                below_it: WhatTheBarStops::Optix,
             })
         );
         assert_eq!(said.blenders_below_their_bar, vec![(5, 2, 2)]);
+    }
+
+    /// **`Rendering` L23a's bullet of 2026-11-02: below 5.3's row the statement
+    /// says what that row stops**, and the row reaches a later Blender too. The
+    /// figures are the first live pass's.
+    #[test]
+    fn five_point_three_s_row_stops_cycles_on_the_card_and_the_older_rows_stop_optix() {
+        let said = what_the_bar_says(&a_driver("575.64.03", WhereK1PlacesIt::AContainer), &[(5, 2, 3), (5, 3, 0)], false);
+        let statement = said.the_statement.expect("said on a container");
+        assert_eq!(statement.from_blender, (5, 3, 0));
+        assert_eq!(statement.below_it, WhatTheBarStops::CyclesOnTheCard);
+        assert_eq!(said.blenders_below_their_bar, vec![(5, 3, 0)], "5.2.3's bar is 575, which it meets");
+        for (blender, stops) in [
+            ((4, 5, 0), WhatTheBarStops::Optix),
+            ((5, 2, 3), WhatTheBarStops::Optix),
+            ((5, 3, 0), WhatTheBarStops::CyclesOnTheCard),
+            ((5, 4, 0), WhatTheBarStops::CyclesOnTheCard),
+        ] {
+            assert_eq!(the_optix_bar_row(blender).map(|row| row.below_it), Some(stops), "{blender:?}");
+        }
+    }
+
+    /// **`Render Settings` D6a's judgement**: below 5.3's row on a machine whose
+    /// driver cannot be changed, and nowhere else.
+    #[test]
+    fn a_cycles_job_cannot_use_the_card_only_from_five_point_three_where_the_driver_cannot_change() {
+        use WhereK1PlacesIt::{AContainer, ItsOwnKernel, NowhereItPlaces};
+        let on = |version, placed| a_driver(version, placed);
+        assert!(a_cycles_job_cannot_use_the_card(&on("575.64.03", AContainer), (5, 3, 0), false));
+        assert!(a_cycles_job_cannot_use_the_card(&on("575.64.03", AContainer), (5, 4, 0), false), "a later Blender reads the last row");
+        assert!(a_cycles_job_cannot_use_the_card(&on("550.163.01", AContainer), (5, 3, 0), false), "further below is still below");
+        assert!(a_cycles_job_cannot_use_the_card(&on("575.64.03", ItsOwnKernel), (5, 3, 0), true), "a swap that missed");
+        assert!(!a_cycles_job_cannot_use_the_card(&on("575.64.03", ItsOwnKernel), (5, 3, 0), false), "the job is held and the driver replaced");
+        assert!(!a_cycles_job_cannot_use_the_card(&on("575.64.03", NowhereItPlaces), (5, 3, 0), false));
+        assert!(!a_cycles_job_cannot_use_the_card(&on("580.00", AContainer), (5, 3, 0), false), "at the row");
+        assert!(!a_cycles_job_cannot_use_the_card(&on("595.84", AContainer), (5, 3, 0), false));
+        assert!(!a_cycles_job_cannot_use_the_card(&on("550.163.01", AContainer), (5, 2, 3), false), "below 5.3 the bar concerns OptiX");
+        assert!(!a_cycles_job_cannot_use_the_card(&on("525.147.05", AContainer), (4, 5, 0), false));
     }
 
     /// **At the bar, nothing is said and no Blender is below it.**
     #[test]
     fn a_container_at_the_bar_is_told_nothing() {
         let said = what_the_bar_says(
-            &a_driver("575.00", WhereK1PlacesIt::AContainer),
+            &a_driver("580.00", WhereK1PlacesIt::AContainer),
             &ON_THE_SERVER,
             false,
         );
@@ -1505,6 +1617,30 @@ mod tests {
         );
         assert_eq!(said.the_statement.map(|s| s.from_blender), Some((4, 5, 0)));
         assert_eq!(said.blenders_below_their_bar, ON_THE_SERVER.to_vec());
+    }
+
+    /// **5.3's row reaches every reader through the one table** (L23a, added
+    /// 2026-11-02). A driver on 575 to 579 meets 5.2's bar and misses 5.3's: on a
+    /// container the statement names 5.3, and only a 5.3 build is marked. **Smoozy's
+    /// own swap, 580.178.04, meets the row**, and a driver at it is told nothing.
+    #[test]
+    fn a_driver_between_575_and_580_misses_only_the_5_3_row_and_the_swaps_own_meets_it() {
+        let on_the_server: [BlenderNumbers; 3] = [(5, 2, 2), (5, 3, 0), (5, 4, 0)];
+        let said = what_the_bar_says(
+            &a_driver("575.57.08", WhereK1PlacesIt::AContainer),
+            &on_the_server,
+            false,
+        );
+        assert_eq!(said.the_statement.map(|s| s.from_blender), Some((5, 3, 0)));
+        assert_eq!(said.blenders_below_their_bar, vec![(5, 3, 0), (5, 4, 0)]);
+
+        let said = what_the_bar_says(
+            &a_driver("580.178.04", WhereK1PlacesIt::AContainer),
+            &on_the_server,
+            false,
+        );
+        assert_eq!(said.the_statement, None);
+        assert!(said.blenders_below_their_bar.is_empty());
     }
 
     /// **H11b's second case, joined 2026-10-11 (`Server Setup` R1 item 5): a

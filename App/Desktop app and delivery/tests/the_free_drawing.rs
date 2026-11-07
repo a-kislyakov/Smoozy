@@ -47,6 +47,14 @@ fn the_free_drawing_walks_and_about_keeps_its_offline_texts() {
         let read = dump.split("<pre id=\"free-drawing-result\" hidden=\"\">").nth(1).and_then(|s| s.split("</pre>").next()).expect("the browser answered");
         let read: serde_json::Value = serde_json::from_str(read).unwrap();
         assert_eq!(read["faults"], serde_json::json!([]), "at {width}");
+        // 343 from 2026-11-02: the first 5.3 live pass added `res-drvold`
+        // (`Render Settings` D6a).
+        // 342 from 2026-11-02: a driver with no OptiX library added
+        // `su-nooptix` (`Servers` H11b's OptiX-library bullet).
+        // 341 from 2026-11-01: a Linux rollback whose record cannot be read
+        // added `upd-rollback-unread` (the D6b line under Z11).
+        // 340 from 2026-11-01: a build with no update keys added
+        // `about-no-updates` (Architecture E10b).
         // 339 from 2026-10-31: the Telegram discussion added `tg-slash`,
         // `tg-reporting`, `tg-reportingset` and `tg-live`.
         // 335 from 2026-10-31: the twenty-fourth notes, note 2, added
@@ -64,7 +72,12 @@ fn the_free_drawing_walks_and_about_keeps_its_offline_texts() {
         // (`su-queue`) and the video wants two (`tg-video`, `tg-videobig`).
         // 307 from 2026-10-27: the drawing gained `res-oneframe` (the
         // Creator's nineteenth notes, note 8). It was 306 until then.
-        assert_eq!(read["count"], 339);
+        // 346 from 2026-11-04: the check's `chk-walk`, `chk-unchecked` and
+        // `chk-unsetup`.
+        // 347 from 2026-11-04: `q-simulation` draws the scene’s simulation
+        // frame before rendering (`Queue & History` R6a).
+        // 351 from 2026-11-06: four simulation choice/range states.
+        assert_eq!(read["count"], 351);
         assert_eq!(read["licence"], std::fs::read_to_string(here.join("../../COPYING")).unwrap());
         assert!(read["noticesLength"].as_u64().unwrap() > 1_000_000, "complete notices, not a sample");
     }

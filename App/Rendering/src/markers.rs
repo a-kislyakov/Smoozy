@@ -736,6 +736,11 @@ pub(crate) mod tests {
     /// a first-frame check of a job whose only output is a video written as a
     /// still picture. Built by the same work: `Rendering — machine`'s
     /// material and its acting half.
+    ///
+    /// **121 and 120 from 2026-11-02**, when the 5.3 integration's piece 2 added
+    /// **K14b** — a render ending at 0 having written none of what the job owed
+    /// is failed. Built by the same piece: `Rendering — machine`'s `endings` and
+    /// the machine program's ending step.
     #[test]
     fn the_plan_defines_one_hundred_and_fifteen_distinct_clauses() {
         let plan =
@@ -743,8 +748,8 @@ pub(crate) mod tests {
                 .expect("the plan is readable");
         let opening_lines = the_clauses_defined_by(&plan);
         let defined: HashSet<String> = opening_lines.iter().cloned().collect();
-        assert_eq!(opening_lines.len(), 120);
-        assert_eq!(defined.len(), 119, "{:?}", {
+        assert_eq!(opening_lines.len(), 121);
+        assert_eq!(defined.len(), 120, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

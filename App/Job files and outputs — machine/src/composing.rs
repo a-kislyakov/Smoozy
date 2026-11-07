@@ -318,6 +318,11 @@ fn it_is_the_one_the_beauty_reached(
     destination: &Destination,
     reached: &ADestinationTheBeautyReached,
 ) -> bool {
+    // **From 5.3 by its effect as well** (R4 item 2, B4), since two effects'
+    // groups can hold nodes of one name.
+    if destination.the_effect() != reached.the_effect.as_ref() {
+        return false;
+    }
     match &destination.kind {
         DestinationKind::AnOutputOfAFileOutputNode { node, output, .. } => {
             node.as_bytes() == reached.node.as_bytes()

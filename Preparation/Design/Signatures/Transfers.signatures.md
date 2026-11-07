@@ -44,3 +44,10 @@
 - 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the twenty-sixth notes, note 4, outside any round — a first-frame check and its full range read as one auto-download row. No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the desk builder of step 13's second words sweep, outside any round — the one-line rule now ends *other transfers do not* (was *uploads and downloads do not*); the screen reads *Auto-downloads resume on the next connection. Other transfers do not.* Meaning unchanged. Each carries its inline note. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a big shot's check and send.md`, outside any round — An auto-download that is not moving says so. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex) — narrowed Not started to the disconnected request and kept the question’s existing words. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the stalled download line. The last words read before the release. No auditor has seen it.

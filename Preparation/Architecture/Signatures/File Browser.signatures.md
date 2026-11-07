@@ -74,3 +74,4 @@
 
 - 2026-10-30 — Claude Opus 5.5 (Claude Code subagent), the plan writer holding `Audits/Build/Step 10c/Brief — the twenty-third notes, note 2, plan and drawing pass.md`, outside any round — new §1.7, L24 to L28: a folder's size counted on request by the machine program, links not followed, unreadable folders give a lower bound, the figure held beside the listing and dropped on the next reading, the act not offered on an older package (the Creator's twenty-third note 2). No auditor has seen it.
 - 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the twenty-fourth notes, note 2, plan and drawing pass.md`, outside any round — new §1.8, L29: a picture read whole into memory for the viewer (the seventeenth notes, note 11). No auditor has seen it.
+- 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — L8 names 5.3. No auditor has seen it.

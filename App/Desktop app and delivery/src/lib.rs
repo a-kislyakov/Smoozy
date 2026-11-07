@@ -71,6 +71,9 @@ pub mod menus;
 // `Server protocol and transfers` T5, §4's look and search, the decisions saved
 // and §7.3's standing written. Built at step 10c's dependency wave piece 5.
 pub mod checking_a_file;
+// **`Dependency Upload & Remap` G17b: the check's readings, kept in the run's
+// memory**, so a round costs only what is new.
+pub mod kept_readings;
 // **The found files sent up** — `Dependency Upload & Remap` §5's uploads, K7's
 // placement records and V13's marks at publication. Built at step 10c's
 // dependency wave piece 6.

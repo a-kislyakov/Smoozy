@@ -203,6 +203,12 @@ impl AFinishedVideoFile {
     }
 }
 
+/// **`Telegram` E1a's two counts, as written and owed**, from the statement the
+/// ending carried, read the same across a restart because the note holds it.
+fn the_files_of(note: &TheNote) -> Option<(u64, u64)> {
+    note.the_files_counted().map(|counted| (counted.written, counted.owed))
+}
+
 impl AVideoAtTheEnding {
     /// **The finished video's words** — `Telegram` M10, said as a finished
     /// job of pictures says its count and time (*Finished. 240 frames in 6
@@ -1907,6 +1913,7 @@ impl TheJournalReader {
             started,
             ended,
             group: None,
+            files: the_files_of(note),
         };
         match the_finishing_message(&finished) {
             Some(text) => self.send_text_about(text, &record.job),
@@ -1949,6 +1956,8 @@ impl TheJournalReader {
                 .as_ref()
                 .and_then(|free| free.the_reading())
                 .map(|read| read.available_bytes),
+            no_render_began: ending.is_some_and(|ending| ending.no_render_began),
+            the_reason_the_machine_recorded: ending.and_then(|ending| ending.the_reason_the_machine_recorded.clone()),
         };
         // **`Telegram` C1b: an ending carries no Stop**; the words and *try it
         // again* stay.
@@ -2023,7 +2032,7 @@ impl TheJournalReader {
                 let ending = note.as_ref().and_then(|note| note.ending.as_ref()).map(|ending| match ending.outcome {
                     TheOutcomeAsWritten::Finished => {
                         let there = note.as_ref().map_or(0, |note| self.records.the_frames_at_the_ending(one, note).0);
-                        AMembersEnding::Finished { frames: there }
+                        AMembersEnding::Finished { frames: there, files: note.as_ref().and_then(the_files_of) }
                     }
                     TheOutcomeAsWritten::Failed | TheOutcomeAsWritten::NoStatusWasReaped => AMembersEnding::Failed,
                     TheOutcomeAsWritten::GivenUp => AMembersEnding::GivenUp,
@@ -3718,6 +3727,7 @@ mod tests {
             marker_passed: None,
             something_followed_the_marker: None,
             device_line: None,
+            no_render_began: false,
         });
         assert_eq!(the_cause_of(Some(&one)), TheCause::TheMachinesOwn);
         assert_eq!(what_the_stream_came_to(Some(&one), AStream::TheOrdinaryOutput), ACollectionOutcome::Collected);

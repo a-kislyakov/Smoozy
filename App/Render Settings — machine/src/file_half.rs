@@ -359,6 +359,8 @@ pub mod testing {
 
     pub fn a_scene(name: &str) -> SceneReading {
         SceneReading {
+            prepare_simulations: None,
+            motion_blur: None,
             name: ExactName::as_the_reading_produced_it(name),
             frame_start: 1,
             frame_end: 10,
@@ -379,6 +381,7 @@ pub mod testing {
                 minimum: 0,
             },
             time_limit: 0.0,
+            eevee_time_limit: None,
             layer_samples_rule: LayerSamplesRule::Use,
             saved_with: "4.5.12".to_string(),
             view_layers: vec![a_layer("ViewLayer", true), a_layer("Detail", false)],
@@ -400,6 +403,7 @@ pub mod testing {
                 eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE_NEXT")),
             },
             announced_add_on_case: None,
+            the_folders_at_the_machines_top: None,
         }
     }
 

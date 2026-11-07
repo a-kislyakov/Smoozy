@@ -89,6 +89,14 @@ use crate::typography::{Prose, Verbatim};
 /// centre answers to.
 pub const THE_APPLICATION_IDENTIFIER: &str = "com.smoozy.desktop";
 
+/// **The desktop entry the Linux posts name** — T5's dated sentence of
+/// 2026-11-01. The specification asks the `desktop-entry` hint to be *"the same
+/// as the prefix used for the application's .desktop file"*, and the Debian
+/// package's file is `Smoozy.desktop`, the shell's packager naming it after
+/// `tauri.conf.json`'s `productName` — which
+/// [`tests::the_linux_desktop_entry_is_the_packages_own`] reads.
+pub const THE_LINUX_DESKTOP_ENTRY: &str = "Smoozy";
+
 use activation::WhatEachPostIsAbout;
 use kinds::{Kind, WhatToPost};
 use permission::WhatTheSystemSays;
@@ -336,6 +344,15 @@ impl TheNotificationService {
     /// prompt above; not attempting costs the reaching and nothing else, which
     /// T22 already prices — every kind leaves its own durable in-app record.
     pub fn post(&self, post: APost) {
+        let goes_to = post.key.the_subject().clone();
+        self.post_going_to(post, &goes_to);
+    }
+
+    /// **[`TheNotificationService::post`], with a click going to `goes_to`**
+    /// rather than to the key's own subject — T29's *"the server row for the
+    /// connection kind"*, whose key is its condition identity. Added
+    /// 2026-11-01, the Mac watch's first finding.
+    pub fn post_going_to(&self, post: APost, goes_to: &smoozy_state::identities::Identity) {
         if !self.the_user_has_this_kind_attempted(post.kind) {
             return;
         }
@@ -346,7 +363,7 @@ impl TheNotificationService {
             return;
         }
         if let Ok(mut held) = self.held.lock() {
-            held.register.a_post_was_attempted(&post.key);
+            held.register.a_post_was_attempted(&post.key, goes_to);
         }
         self.platform.post(&post);
     }
@@ -453,10 +470,15 @@ impl TheNotificationService {
         queue: &crate::events::TheOneQueue,
         the_post_identity: &str,
     ) {
-        let Ok(held) = self.held.lock() else {
-            return;
-        };
-        activation::a_notification_was_clicked(app, queue, &held.register, the_post_identity);
+        // **The register is read and let go before the record is reached**, so
+        // a click never holds this service's lock while it waits on the
+        // record's.
+        let travels = self
+            .held
+            .lock()
+            .ok()
+            .and_then(|held| held.register.what_this_post_is_about(the_post_identity).cloned());
+        activation::a_notification_was_clicked(app, queue, travels);
     }
 
     /// What this computer says about permission, for a caller that wants to
@@ -536,8 +558,85 @@ pub fn the_activation_route_is_open(on_click: Box<dyn Fn(String) + Send + Sync>)
 /// **It answers nothing** (T23), and nothing anywhere depends on it having
 /// worked: the read is what decides whether a post is attempted, and it is taken
 /// afresh at every post.
-pub fn the_machinery_is_made_at_first_start() {
-    per_system::the_machinery_is_made();
+///
+/// **On Windows it also keeps the shortcut on the program that is running**
+/// (E3's sentence of 2026-11-01): see [`what_the_start_does_with_the_shortcut`],
+/// which decides, and is the same on every system so it is tested at the desk.
+pub fn the_machinery_is_made_at_first_start(mode: crate::start::LaunchMode, the_record_opened: bool) {
+    #[cfg(target_os = "windows")]
+    per_system::the_machinery_is_made(mode, the_record_opened);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (mode, the_record_opened);
+        per_system::the_machinery_is_made();
+    }
+}
+
+/// **What a start finds where T3's Start-menu shortcut lives.** Windows reads
+/// it; the decision below is every system's, so the desk tests it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TheShortcutFound {
+    /// No shortcut of Smoozy's name.
+    NotThere,
+    /// A shortcut naming this program file.
+    Names(std::path::PathBuf),
+    /// A shortcut of Smoozy's name whose target could not be read.
+    Unreadable,
+}
+
+/// **What a start does with the shortcut.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhatTheStartDoesWithTheShortcut {
+    /// E3: made where none was there.
+    MakesIt,
+    /// Rewritten whole to name the running program (Z15a's rewrite).
+    PointsItHere,
+    /// Nothing is written.
+    LeavesIt,
+}
+
+/// **E3's sentence of 2026-11-01, on the build runner's ruling: the shortcut
+/// follows the program that is running.** A user who upgrades by hand runs the
+/// new program while the shortcut still names the old one, which then refuses
+/// the record the new one moved forward. So at the start:
+///
+/// - **None there: made**, as E3 always said, at any start.
+/// - **An update launch never moves it** — Z15a's probe and the build a
+///   rollback starts both carry the update-launch argument, and during an
+///   update the shortcut is publication's and the helper's alone. This is how
+///   the rollback is kept: the build rolled back *from* only ever runs as the
+///   probe, and the previous build's own start then removes its folder
+///   (Z21a), so it has no ordinary launch left to take the shortcut back.
+/// - **A start whose record did not open never moves it** — a copy older than
+///   the record refuses it (`RecordIsNewerThanTheBinary`), and it must not take
+///   the Start menu from the build that moved the record forward.
+/// - **Otherwise, a shortcut naming another program, or one whose target cannot
+///   be read, is pointed here**; one naming this program is left alone.
+pub fn what_the_start_does_with_the_shortcut(
+    found: &TheShortcutFound,
+    this_program: &std::path::Path,
+    mode: crate::start::LaunchMode,
+    the_record_opened: bool,
+) -> WhatTheStartDoesWithTheShortcut {
+    use WhatTheStartDoesWithTheShortcut::*;
+    match found {
+        TheShortcutFound::NotThere => MakesIt,
+        _ if mode != crate::start::LaunchMode::Ordinary || !the_record_opened => LeavesIt,
+        TheShortcutFound::Names(target) if the_same_program(target, this_program) => LeavesIt,
+        TheShortcutFound::Names(_) | TheShortcutFound::Unreadable => PointsItHere,
+    }
+}
+
+/// **Whether two paths name one program file** — by the filesystem's own
+/// identity first (F15a, the platform file adapter's), then by the canonical
+/// path where an identity cannot be read. A target that no longer exists names
+/// no program, so it is never this one.
+pub fn the_same_program(one: &std::path::Path, other: &std::path::Path) -> bool {
+    use crate::platform::files::{canonical, file_identity};
+    match (file_identity(one), file_identity(other)) {
+        (Some(a), Some(b)) => a == b,
+        _ => matches!((canonical(one), canonical(other)), (Some(a), Some(b)) if a == b),
+    }
 }
 
 /// **Z15a: T3's Start-menu shortcut, its target rewritten** — the one act the
@@ -1103,5 +1202,198 @@ mod tests {
              is what corrupted the heap in run 34690208297**: a pointer given away here is \
              freed by the component system's allocator and then again by Rust"
         );
+    }
+
+    // ── Windows and Linux read for the Mac watch's faults, 2026-11-01 ──
+
+    /// **A Linux click is handed off the bus's one worker before it goes.**
+    ///
+    /// Since the Mac watch's first fix, a click reads the record under the
+    /// application's lock (`activation::a_notification_was_clicked`). The
+    /// connection kind is posted, and taken down, while that lock is held, and
+    /// on Linux a post waits on the bus for its answer — which only the bus's
+    /// one worker reads. **A click going on that worker would wait for the
+    /// lock while the post holding it waits for the worker**, and Smoozy would
+    /// stop. Read off the source, because the desk cannot build Linux.
+    #[test]
+    fn a_linux_click_goes_off_the_buses_one_worker() {
+        let linux: String = include_str!("linux.rs")
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let start = linux.find("\"ActionInvoked\" =>").expect("the click arm");
+        let end = linux[start..].find("\"NotificationClosed\" =>").expect("the closing arm") + start;
+        let arm = &linux[start..end];
+        assert!(
+            arm.contains("bus.runtime.spawn_blocking(move || go(key))"),
+            "a Linux click is gone to on the bus's one worker, which a post made under the \
+             record's lock is waiting on"
+        );
+        assert!(!arm.contains("go(key);"), "a Linux click still goes on the bus's worker");
+    }
+
+    /// **The desktop entry Smoozy names on Linux is the one its package
+    /// installs.** The shell's packager writes `<productName>.desktop`, and the
+    /// specification asks the hint to be *"the same as the prefix used for the
+    /// application's .desktop file"*.
+    #[test]
+    fn the_linux_desktop_entry_is_the_packages_own() {
+        let configuration = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tauri.conf.json"),
+        )
+        .expect("the shell configuration is readable");
+        assert!(
+            configuration.contains(&format!("\"productName\": \"{THE_LINUX_DESKTOP_ENTRY}\"")),
+            "the Linux package's desktop file is named after productName, and the hint no longer \
+             matches it"
+        );
+        let linux = include_str!("linux.rs");
+        assert!(linux.contains("(\"desktop-entry\", Value::from(super::THE_LINUX_DESKTOP_ENTRY))"));
+        assert!(linux.contains("(\"image-path\", Value::from(picture::a_file_address(path)))"));
+    }
+
+    /// **Every key fits a Windows tag.** Microsoft: *"The tag can be maximum 16
+    /// characters long. However, the Creators Update (15063) extends this limit
+    /// to 64 characters."* §22 item 71.
+    #[test]
+    fn every_key_fits_a_windows_tag() {
+        let one = |kind| Identity::issue(kind).expect("the desk has randomness");
+        for key in [
+            ThePresentationKey::ACondition(one(IdentityKind::Condition)),
+            ThePresentationKey::AJobsEnding(one(IdentityKind::Job)),
+            ThePresentationKey::AGroupsFinishing(one(IdentityKind::Group)),
+            ThePresentationKey::AMachineIdle(one(IdentityKind::LocalServer)),
+        ] {
+            assert!(key.as_text().chars().count() <= 64, "{} is too long for a Windows tag", key.as_text());
+        }
+    }
+
+    // ── E3's sentence of 2026-11-01: the shortcut follows the running program ──
+
+    /// **The decision, every branch.** None there: made, at any start. A
+    /// shortcut naming another program, or one that cannot be read: pointed
+    /// here at an ordinary start whose record opened, and left alone at an
+    /// update launch or where the record did not open. One naming this program:
+    /// left alone.
+    #[test]
+    fn a_start_points_a_shortcut_naming_another_program_here_and_only_then() {
+        use crate::start::LaunchMode::{Ordinary, Update};
+        use WhatTheStartDoesWithTheShortcut::*;
+        let folder = crate::scratch_folders::a_folder(format!("smoozy-shortcut-decision-{}", std::process::id()));
+        let this = folder.join("0.2.1").join("smoozy-desktop.exe");
+        let other = folder.join("0.2.0").join("smoozy-desktop.exe");
+        for (program, bytes) in [(&this, "new"), (&other, "old")] {
+            std::fs::create_dir_all(program.parent().unwrap()).unwrap();
+            std::fs::write(program, bytes).unwrap();
+        }
+        let names = |program: &std::path::Path| TheShortcutFound::Names(program.to_path_buf());
+        let decide = |found: &TheShortcutFound, mode, opened| what_the_start_does_with_the_shortcut(found, &this, mode, opened);
+
+        for (mode, opened) in [(Ordinary, true), (Ordinary, false), (Update, true), (Update, false)] {
+            assert_eq!(decide(&TheShortcutFound::NotThere, mode, opened), MakesIt, "E3's making changed");
+            assert_eq!(decide(&names(&this), mode, opened), LeavesIt, "a shortcut already here was rewritten");
+        }
+        assert_eq!(
+            decide(&names(&other), Ordinary, true),
+            PointsItHere,
+            "a by-hand upgrade leaves the Start menu on the old program, which refuses the record"
+        );
+        assert_eq!(decide(&TheShortcutFound::Unreadable, Ordinary, true), PointsItHere);
+        assert_eq!(
+            decide(&names(&folder.join("gone").join("smoozy-desktop.exe")), Ordinary, true),
+            PointsItHere,
+            "a shortcut naming a program that is gone was left"
+        );
+        for found in [names(&other), TheShortcutFound::Unreadable] {
+            assert_eq!(
+                decide(&found, Update, true),
+                LeavesIt,
+                "an update launch moved the shortcut: during an update it is publication's and the helper's"
+            );
+            assert_eq!(
+                decide(&found, Ordinary, false),
+                LeavesIt,
+                "a copy whose record did not open took the shortcut from the build that moved the record"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    /// **One program file is told from another by the filesystem, not by the
+    /// text**: the same file by another spelling is the same program, a copy of
+    /// it is not, and a path that is gone is never this program.
+    #[test]
+    fn one_program_is_told_from_another_by_the_file_and_not_the_text() {
+        let folder = crate::scratch_folders::a_folder(format!("smoozy-same-program-{}", std::process::id()));
+        let program = folder.join("0.2.1").join("smoozy-desktop.exe");
+        std::fs::create_dir_all(program.parent().unwrap()).unwrap();
+        std::fs::write(&program, "the program").unwrap();
+        let copy = folder.join("smoozy-desktop.exe");
+        std::fs::copy(&program, &copy).unwrap();
+
+        assert!(the_same_program(&program, &program));
+        assert!(the_same_program(&folder.join("0.2.1").join("..").join("0.2.1").join("smoozy-desktop.exe"), &program));
+        #[cfg(unix)]
+        {
+            let link = folder.join("a link");
+            std::os::unix::fs::symlink(&program, &link).unwrap();
+            assert!(the_same_program(&link, &program), "a link to this program was taken for another");
+        }
+        assert!(!the_same_program(&copy, &program), "a copy with the same bytes was taken for this program");
+        assert!(!the_same_program(&folder.join("gone.exe"), &program));
+        assert!(!the_same_program(&program, &folder.join("gone.exe")));
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    /// **Read off the sources, because the desk cannot run Windows**: the
+    /// Windows start reads the shortcut, asks the decision above and acts on
+    /// it — making where none was, rewriting through Z15a's own rewrite, never
+    /// returning early because a shortcut exists; and the start passes its
+    /// launch mode and whether the record opened, taken before the start
+    /// report is handed over and after Z21a's record is met.
+    #[test]
+    fn the_windows_start_asks_the_decision_and_main_hands_it_the_mode_and_the_record() {
+        let windows: String = include_str!("windows.rs")
+            .lines()
+            .filter(|line| !line.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let start = windows
+            .find("pub(super) fn the_machinery_is_made(")
+            .expect("the Windows start's making");
+        let end = windows[start..].find("impl ThePlatform for TheWindows").expect("the end of the making") + start;
+        let making = &windows[start..end];
+        assert!(
+            making.contains("the_machinery_is_made_in(&folder, &us, mode, the_record_opened)"),
+            "the Windows start no longer hands the mode and the record to its act"
+        );
+        assert!(
+            making.contains("super::what_the_start_does_with_the_shortcut(&found, us, mode, the_record_opened)"),
+            "the Windows start decides the shortcut by itself rather than by the desk-tested decision"
+        );
+        assert!(making.contains("let found = the_shortcut_found(&shortcut);"));
+        assert!(making.contains("MakesIt => {\n            let _ = make_the_shortcut(&shortcut, us);"));
+        assert!(
+            making.contains("PointsItHere => {\n            let _ = the_shortcut_in_this_folder_points_at(folder, us);"),
+            "the start's rewrite is not Z15a's whole-and-renamed rewrite"
+        );
+        assert!(making.contains("LeavesIt => {}"));
+        assert!(
+            !making.contains("if shortcut.exists() {\n        return;"),
+            "the Windows start still returns as soon as a shortcut exists, so the Start menu \
+             keeps opening the old program after a by-hand upgrade"
+        );
+        assert!(making.contains("link.GetPath(&mut target, std::ptr::null_mut(), 0)"));
+        assert!(making.contains("file.Load(PCWSTR(name.as_ptr()), STGM_READ)"));
+
+        let main = include_str!("../main.rs");
+        let met = main.find("let owed = start::the_probe_record_is_met(").expect("Z21a's record met");
+        let opened = main.find("let the_record_opened = started.record.is_some();").expect("the record's opening kept");
+        let handed = main.find("app.manage(std::sync::Mutex::new(started));").expect("the start report handed over");
+        let made = main
+            .find("notifications::the_machinery_is_made_at_first_start(mode, the_record_opened);")
+            .expect("the start no longer hands the shortcut its mode and the record");
+        assert!(met < opened && opened < handed && handed < made, "the order at the start moved");
     }
 }

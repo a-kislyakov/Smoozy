@@ -1096,32 +1096,40 @@ pub fn the_remap_is_composed(
     let Some(installation) = given.installation.clone() else {
         return Ok(TheRemapComposed::default());
     };
-    let machine = MachineKey::of(given.server.local_server.clone(), installation);
-    let root = MachineLocation::composed(given.the_blend.as_bytes().to_vec());
     let mut read = None;
     record.with_the_record(&mut |connection| {
-        let holding = crate::record::dependency_records::WhatFilesSays::read(connection, &machine)
-            .the_holding_file_a_check_keys(&root);
-        let keeper = TheDependencyRecord::over(connection);
-        read = Some(
-            keeper
-                .the_answers_of(&holding)
-                .and_then(|answers| Ok((holding, answers, keeper.the_fixings_on(&machine)?))),
-        );
+        read = Some(the_remap_for_file(connection, &given.server.local_server,
+            installation.clone(), &given.layout, &given.the_blend));
     });
-    let Some(Ok((holding, answers, fixings))) = read else {
-        return Err(TheRecordWouldNotAnswer);
-    };
+    read.unwrap_or(Err(TheRecordWouldNotAnswer))
+}
+
+/// `Render Settings` Q4 and `Dependency Upload & Remap` M4: one saved-answer
+/// lookup and pair composition for submission and Read the file.
+pub fn the_remap_for_file(
+    connection: &rusqlite::Connection,
+    server: &Identity,
+    installation: Identity,
+    layout: &TheLayout,
+    blend: &str,
+) -> Result<TheRemapComposed, TheRecordWouldNotAnswer> {
+    let machine = MachineKey::of(server.clone(), installation);
+    let root = MachineLocation::composed(blend.as_bytes().to_vec());
+    let holding = crate::record::dependency_records::WhatFilesSays::read(connection, &machine)
+        .the_holding_file_a_check_keys(&root);
+    let keeper = TheDependencyRecord::over(connection);
+    let answers = keeper.the_answers_of(&holding).map_err(|_| TheRecordWouldNotAnswer)?;
+    let fixings = keeper.the_fixings_on(&machine).map_err(|_| TheRecordWouldNotAnswer)?;
 
     let (to_compose, without_a_kind) = smoozy_dependencies::remap::the_answers_to_compose(answers);
     let pairs = smoozy_dependencies::remap::compose_the_pairs(
-        &given.layout,
+        layout,
         &holding,
         &to_compose,
         &fixings,
     );
     let copies = smoozy_dependencies::acting::placing::compose_the_copies_owed(
-        &given.layout,
+        layout,
         &holding,
         &to_compose,
     );
@@ -1784,11 +1792,13 @@ fn the_act_runs<C: AHeldConnection>(
                 (first.clone(), in_the_line)
             });
             // **`Server Setup` R1c, judged for this job as it is composed**:
-            // its resolved device, the card make the manifest carries, and the
-            // version its pick answered, against the readings taken at the
-            // press. Held-job piece A, 2026-10-12.
+            // its resolved device, the engine it will use, the card make the
+            // manifest carries, and the version its pick answered, against the
+            // readings taken at the press. Held-job piece A, 2026-10-12; the
+            // engine since `Server Setup` R1c's bullet of 2026-11-02.
             let held_for_the_driver = given.the_driver_at_submission.holds_this_job(
                 the_device_ask(&given, &payload).the_choice(),
+                the_engine_at_submission(&given, &payload),
                 &given.the_card_make,
                 smoozy_server_setup::blender::Version::parse(&payload.the_manifests_blender().version),
             );
@@ -2443,23 +2453,44 @@ fn the_record_at_submission(
 /// record and for `Server Setup` R1c alike**, so the device a job is held for
 /// is the one its entry says it asked for.
 fn the_device_ask(given: &WhatThePageHandsOver, payload: &Payload) -> TheDeviceAsk {
-    // The job's scene as the reading standing on the page holds it, found by
-    // the name's own bytes.
-    let the_jobs_scene_as_read = given.the_reading_in_force.as_ref().and_then(|reading| {
-        let named = payload.scene.as_ref()?;
-        reading
-            .settings
-            .scenes
-            .iter()
-            .find(|scene| scene.name.as_bytes() == named.name.as_bytes())
-    });
-    match (payload.device, the_jobs_scene_as_read) {
+    match (payload.device, the_jobs_scene_as_read(given, payload)) {
         (Some(choice), _) => TheDeviceAsk::TheUsersOwn(choice),
         (None, Some(scene)) => TheDeviceAsk::TheFilesOwnAsTheReadingInForceGaveIt(
             smoozy_render_settings::device::the_resolved_choice(None, scene),
         ),
         (None, None) => TheDeviceAsk::TheFilesOwnUnread,
     }
+}
+
+/// **The job's scene as the reading standing on the page holds it**, found by
+/// the name's own bytes.
+fn the_jobs_scene_as_read<'a>(
+    given: &'a WhatThePageHandsOver,
+    payload: &Payload,
+) -> Option<&'a smoozy_render_settings::reading::SceneReading> {
+    let named = payload.scene.as_ref()?;
+    given
+        .the_reading_in_force
+        .as_ref()?
+        .settings
+        .scenes
+        .iter()
+        .find(|scene| scene.name.as_bytes() == named.name.as_bytes())
+}
+
+/// **`Server Setup` R1c's bullet of 2026-11-02: the engine this job will use**,
+/// from the same reading [`the_device_ask`] reads for its device.
+fn the_engine_at_submission(
+    given: &WhatThePageHandsOver,
+    payload: &Payload,
+) -> crate::servers::the_driver_swap::TheEngineAtSubmission {
+    crate::servers::the_driver_swap::TheEngineAtSubmission::of(
+        payload.engine.as_ref().map(|entry| entry.pick),
+        given
+            .the_reading_in_force
+            .as_ref()
+            .and_then(|reading| Some((the_jobs_scene_as_read(given, payload)?, reading))),
+    )
 }
 
 /// **`Queue & History`'s record seam, through the application's own record**

@@ -3816,6 +3816,8 @@ exit 0;
                 overrides_the_scenes_count: false,
             };
             SceneReading {
+                prepare_simulations: None,
+            motion_blur: None,
                 name: ExactName::as_the_reading_produced_it(name),
                 frame_start: 1,
                 frame_end: 24,
@@ -3829,6 +3831,7 @@ exit 0;
                 device: DeviceSetting::TheCards,
                 early_stop: EarlyStop { adaptive_sampling_is_on: true, threshold: 0.01, minimum: 0 },
                 time_limit: 0.0,
+                eevee_time_limit: None,
                 layer_samples_rule: LayerSamplesRule::Use,
                 saved_with: "5.2.2".to_string(),
                 view_layers: vec![layer("ViewLayer")],
@@ -3860,9 +3863,11 @@ exit 0;
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_folders_at_the_machines_top: None,
             };
             let layer = || ArtistsText::of(b"ViewLayer".to_vec());
             let gating = GatingConditions {
+                the_effects_on_for_render: None,
                 compositing_switch: true,
                 a_compositing_tree_is_present: false,
                 a_live_final_output_node: false,
@@ -4399,6 +4404,9 @@ exit 0;
                     other => other,
                 };
                 let before = desk.point.lent();
+                // **The cut is on a reading, so nothing is kept to spare one**
+                // (`Dependency Upload & Remap` G17b), as for a file changed since.
+                desk.held.lock().unwrap().the_kept_readings = Default::default();
                 desk.the_worker_cuts(cut);
                 let came_to = desk.a_check().await;
                 let took = desk.took(Instant::now());

@@ -164,10 +164,11 @@
 //! # Three decisions taken here, each recorded rather than assumed
 //!
 //! **The import nodes are matched by the prefix of their type name and not by a
-//! list of six.** G8 says *"six kinds of import node, the same six in every
-//! version, plus the sound route in 5.2 alone"*, and **the reference read above
-//! carries no sound import node at all**. A fixed list of six would silently
-//! miss a seventh; the prefix reaches whatever a version actually holds, and
+//! list.** G8 says *"six kinds of import node in 4.5 to 5.2 and seven in 5.3, the
+//! seventh being Import SPZ, plus the sound route in 5.2 and 5.3"*, and **the
+//! reference read above carries no sound import node at all**. A fixed list
+//! would silently miss the next one, as a list of six missed Import SPZ; the
+//! prefix reaches whatever a version actually holds, and
 //! what it reaches is **observed from the file** rather than inferred from a
 //! version number. It errs wide in the direction G22 already errs in for a
 //! set — a kind found and sent costs bandwidth, a kind missed renders wrong.
@@ -428,7 +429,8 @@ def carried_inside_the_file(datablock):
     return False
 
 def records_nothing(recorded):
-    return recorded is None or recorded == ""
+    # **G6e**: `<builtin>` is how a font records Blender's own: no file.
+    return recorded is None or recorded == "" or recorded == "<builtin>"
 
 def the_default_cache_folder(cache):
     # **G6, added 2026-10-02**: where a point cache keeps its cache on disk,
@@ -580,9 +582,17 @@ def every_tree():
             if tree is not None:
                 frontier.append((tree, owner.name))
     for scene in bpy.data.scenes:
-        tree = getattr(scene, "compositing_node_group", None)
-        if tree is not None:
-            frontier.append((tree, scene.name))
+        # From 5.3 every effect's group, and the older one-group name is never
+        # read: it answers only the active effect's, and warns.
+        # `Job files and outputs` R4 item 1. Before 5.3 a scene has no such stack.
+        effects = getattr(scene, "compositor_effects", None)
+        if effects is None:
+            trees = [getattr(scene, "compositing_node_group", None)]
+        else:
+            trees = [effect.node_group for effect in effects]
+        for tree in trees:
+            if tree is not None:
+                frontier.append((tree, scene.name))
     for obj in bpy.data.objects:
         for modifier in getattr(obj, "modifiers", ()):
             tree = getattr(modifier, "node_group", None)
@@ -698,6 +708,15 @@ mapped = bpy.data.file_path_map(include_libraries=True)
 already = set()
 for one in references:
     already.add(tuple(one["recorded"]))
+# **G6c: a packed library's own location is no reference, whichever data-block
+# the map names it under.** The map hands back a linked data-block's library as
+# its path where it has no file of its own, so a text block in a packed library
+# came through as a *Text* row naming the library. Only that location: a linked
+# picture's own outside file still comes through, since packing a linked library
+# does not carry that library's own outside files (*Node setups 2*).
+for library in bpy.data.libraries:
+    if carried_inside_the_file(library) and not records_nothing(library.filepath):
+        already.add(tuple(as_bytes(smoozy_a_path_as_the_file_has_it(library.filepath))))
 for datablock, paths in mapped.items():
     # **The kind is the owner's own type and is never guessed**, because the map
     # hands back a path with no word about which setting it came off. A modifier's
@@ -748,6 +767,85 @@ for datablock, paths in mapped.items():
             "scenes": scenes_reaching(datablock),
             "source": stored_source(kind, datablock),
         })
+
+# ------------------------------------------- G6d, a library as the file writes it
+#
+# As a file loads, Blender writes a library's relative location again against the
+# folder the file sits in, stopping at the root (observed, `Sources` §10), so it
+# is the file's bytes that say what the file holds. Only for the row and the first
+# look: the key stays what this Blender read, since the remap meets that text.
+# **Everything here is a figure to show**, so a file this cannot walk says what
+# Blender read, as before: the bundled reader absent, or a block that will not
+# read. The block heads are read off the two forms the file's own opening names
+# (`App/File Browser/src/blend_version.rs`), observed at the desk in six versions.
+def smoozy_the_libraries_as_the_file_writes_them():
+    import re, struct
+    found = []
+    try:
+        with open(bpy.data.filepath, "rb") as raw:
+            compressed = raw.read(4) == b"\x28\xb5\x2f\xfd"
+            raw.seek(0)
+            source = raw
+            if compressed:
+                import zstandard
+                source = zstandard.ZstdDecompressor().stream_reader(raw, read_across_frames=True)
+            def take(count):
+                out = bytearray()
+                while len(out) < count:
+                    piece = source.read(min(count - len(out), 1 << 20))
+                    if not piece:
+                        break
+                    out += piece
+                return bytes(out)
+            opening = take(12)
+            if opening[:7] != b"BLENDER":
+                return found
+            if opening[7:9].isdigit():
+                take(int(opening[7:9]) - 12)
+                head, code_at, length_at = "<4siQqq", 0, 3
+            else:
+                order = "<" if opening[8:9] == b"v" else ">"
+                pointer = "Q" if opening[7:8] == b"-" else "I"
+                head, code_at, length_at = order + "4si" + pointer + "ii", 0, 1
+            size = struct.calcsize(head)
+            while True:
+                block = take(size)
+                if len(block) < size:
+                    return found
+                fields = struct.unpack(head, block)
+                code, length = fields[code_at], fields[length_at]
+                if code == b"ENDB" or length < 0:
+                    return found
+                if code[:2] == b"LI" and code[2:] == b"\0\0":
+                    text = re.search(rb"(?:^|\0)(//[^\0]+)\0", take(length))
+                    if text:
+                        found.append(os.fsdecode(text.group(1)).replace("\\", "/"))
+                elif compressed:
+                    while length > 0:
+                        piece = take(min(length, 1 << 20))
+                        if not piece:
+                            return found
+                        length -= len(piece)
+                else:
+                    source.seek(length, 1)
+    except Exception:
+        return []
+
+def smoozy_where_it_resolves(location):
+    return os.path.normpath(bpy.path.abspath(location))
+
+the_relative_libraries = [
+    one for one in references
+    if one["kind"] == "Library" and bytes(one["recorded"]).startswith(b"//")
+]
+if the_relative_libraries and bpy.data.filepath:
+    the_files_own = smoozy_the_libraries_as_the_file_writes_them()
+    for one in the_relative_libraries:
+        recorded = os.fsdecode(bytes(one["recorded"]))
+        for own in the_files_own:
+            if own != recorded and smoozy_where_it_resolves(own) == smoozy_where_it_resolves(recorded):
+                one["the_files_own_text"] = as_bytes(own)
+                break
 
 # ------------------------------------- G27a's presence test, on this Blender
 #
@@ -868,6 +966,29 @@ mod tests {
         assert!(!rule.contains("os.path.exists("), "{rule}");
     }
 
+    /// **G6c: a packed library's own location is taken before the map is
+    /// walked**, so no data-block brings it back as a row, and **only that
+    /// location**: a linked picture's own outside file still comes through.
+    /// Run for real in `a_packed_librarys_text_block_is_no_row_at_the_desk`.
+    #[test]
+    fn a_packed_librarys_own_location_is_taken_before_the_map_is_walked() {
+        let text = the_check_readings_script();
+        let taken = text
+            .find("for library in bpy.data.libraries:\n    if carried_inside_the_file(library) and not records_nothing(library.filepath):")
+            .expect("the libraries are asked");
+        assert!(taken < text.find("for datablock, paths in mapped.items():").expect("the map's walk"));
+        assert!(!text.contains("getattr(datablock, \"library\""), "no data-block is carried for its library");
+    }
+
+    /// **G6d: only for a library's row, and never over the key.**
+    #[test]
+    fn a_librarys_own_text_sits_beside_its_recorded_location() {
+        let text = the_check_readings_script();
+        assert!(text.contains("one[\"the_files_own_text\"] = as_bytes(own)"));
+        let at = text.find("def smoozy_the_libraries_as_the_file_writes_them():").expect("the reader");
+        assert!(at < text.find("document = {").expect("the document"));
+    }
+
     /// **G27a: the reading answers presence on its own Blender, for libraries
     /// alone, and carries the answer under the name the reader takes it by**
     /// — and names no file, no application and no version of its own.
@@ -985,5 +1106,22 @@ mod tests {
         let raw = [b'/', 0xff, 0xfe, b'.', b'b', b'l', b'e', b'n', b'd'];
         let words = the_words_of_the_check_reading(&raw, b"/l.py", b"/s.py");
         assert!(words.iter().any(|word| word.as_slice() == raw));
+    }
+
+    /// **`Job files and outputs` R4 item 1: the check reaches every effect's
+    /// group from 5.3, and asks for the older name only where a scene has no
+    /// stack.** Run for real at the desk (`packed_linked_data_at_the_desk.rs`).
+    #[test]
+    fn the_check_reaches_every_effect_and_reads_the_older_name_only_before_the_stack() {
+        for script in [
+            the_check_readings_script(),
+            crate::material::THE_HEAD.to_string(),
+            crate::reading_script::THE_WALK_OVER_THE_NESTED_MARKS.to_string(),
+        ] {
+            let stack = script.find("effects = getattr(scene, \"compositor_effects\", None)").expect("the stack is asked for");
+            let older = script.find("trees = [getattr(scene, \"compositing_node_group\", None)]").expect("the older name is kept");
+            assert!(stack < older);
+            assert!(script.contains("trees = [effect.node_group for effect in effects]"));
+        }
     }
 }

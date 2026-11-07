@@ -1955,6 +1955,9 @@ pub struct TheArrangementsThisConnectionDrives {
     /// run after every pass. Added 2026-09-29, step 10c's transfer wave piece
     /// 4.
     wholes: HashMap<String, crate::servers::the_machines_work::TheJobsWhole>,
+    /// **`Download` E2b: since when each job's download has stood still**, on
+    /// this connection.
+    standing_still: smoozy_download::watch::TheDownloadsStandingStill,
 }
 
 impl TheArrangementsThisConnectionDrives {
@@ -1973,6 +1976,9 @@ impl TheArrangementsThisConnectionDrives {
     ) {
         for (job, whole) in &self.wholes {
             run.a_jobs_whole_was_read(job, *whole);
+        }
+        for job in self.per_job.keys() {
+            run.a_jobs_download_was_read(job, self.standing_still.it_is_said_now(job));
         }
     }
 }
@@ -2135,6 +2141,9 @@ pub async fn one_pass_over_this_servers_arrangements<C: AHeldConnection>(
 
     let mut longest = the_pause_before_the_next_walk(std::time::Duration::ZERO, walking.max(1));
     let mut walked: Vec<WhatOneArrangementWalkedWith> = Vec::with_capacity(held.len());
+    // **`Download` E2b: an ended job with no folder in hand stands still too**,
+    // though this pass cannot walk it.
+    let mut ended_with_no_folder: Vec<String> = Vec::new();
     for ((mut arrangement, says), window_is_open) in held.into_iter().zip(windows) {
         let key = arrangement.job.as_text();
         let generation = says.start_order;
@@ -2180,6 +2189,9 @@ pub async fn one_pass_over_this_servers_arrangements<C: AHeldConnection>(
             .as_ref()
             .and_then(|read| read.job_output_folder.clone())
         else {
+            if says.ending.is_some() {
+                ended_with_no_folder.push(key);
+            }
             continue;
         };
 
@@ -2482,12 +2494,37 @@ pub async fn one_pass_over_this_servers_arrangements<C: AHeldConnection>(
     if they_owe(&owing) {
         crate::servers::the_driver_swap::the_automatic_downloads_owe(&this_server, true);
     }
+    let owed_before: Vec<usize> = owing.iter().map(|one| one.queue.owed()).collect();
     let left = crate::downloading::the_owed_fetches_come_down(
         &mut owing, sessions, the_run, record, run, longest,
     )
     .await
     .what_is_left_of_the_pause;
     crate::servers::the_driver_swap::the_automatic_downloads_owe(&this_server, they_owe(&owing));
+    // **`Download` E2b: what this pass saw, for the row in Transfers.** With no
+    // connection standing `Download` E2a's reading is the one that holds, so no
+    // clock runs.
+    let what_it_saw: Vec<(String, bool)> = owing
+        .iter()
+        .zip(owed_before)
+        .map(|(one, before)| {
+            (
+                one.arrangement.job.as_text(),
+                smoozy_download::watch::it_stood_still_this_pass(
+                    before,
+                    one.queue.owed(),
+                    one.running.the_ending_is_in_hand() && !one.running.the_ending_walk_has_completed(),
+                ),
+            )
+        })
+        .chain(ended_with_no_folder.into_iter().map(|job| (job, true)))
+        .collect();
+    drop(owing);
+    for (job, it_stood_still) in what_it_saw {
+        holds
+            .standing_still
+            .a_pass_saw_now(&job, it_stood_still && a_connection_to_the_server_stands);
+    }
     left
 }
 
@@ -4417,6 +4454,7 @@ mod tests {
         fn what_the_reading_prints(frames: &[i64]) -> ThePrintedReading {
             let layer = || ArtistsText::of(b"ViewLayer".to_vec());
             let gating = GatingConditions {
+                the_effects_on_for_render: None,
                 compositing_switch: true,
                 a_compositing_tree_is_present: false,
                 a_live_final_output_node: false,
@@ -4598,6 +4636,7 @@ mod tests {
                     exit_status: Some(0),
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 });
             }

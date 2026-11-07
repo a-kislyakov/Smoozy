@@ -112,6 +112,10 @@ const THE_SET_UP_ANSWER = "set-up:the-answer";
 // `THE_CONNECTION_IS_LENT` in `src/surface/render_settings.rs`: the primary
 // connection can serve requests now, after the earlier Connected reading.
 const THE_CONNECTION_IS_LENT = "render-settings:the-connection-is-lent";
+// `THE_TELEGRAM_ROLE_WAS_READ` in the same file (`Server Setup` G2a).
+const THE_TELEGRAM_ROLE_WAS_READ = "render-settings:the-telegram-role-was-read";
+// `INSTALL_TELEGRAM` in `src/surface/set_up.rs`: the card's own action.
+const INSTALL_TELEGRAM = "install-telegram";
 
 
 // `THE_SECTION` in `src/surface/telegram.rs`: Telegram's section, posted
@@ -133,6 +137,9 @@ const panels = new Map();
 /// **`file` is the row's exact bytes**, which is what the application keys on.
 export async function theSettingsAreOpenedOn(server, file, savedWith) {
   const held = thePanelFor(server);
+  // **`Render Settings` Y15b: another file's page is the old one left.**
+  const left = held.file;
+  if (left && Array.from(left).join(",") !== Array.from(file).join(",")) thePageIsLeft(server, left);
   held.file = file;
   // **A different file is a fresh page**, so no line it drew is still holding
   // its space (see `theHeaderIsDrawn`), and no confirmation of a submission
@@ -157,8 +164,18 @@ export async function theSettingsAreOpenedOn(server, file, savedWith) {
   shell.core.invoke("the_version_list_is_asked_for", { server, file }).catch(() => {});
 }
 
+/// **`Render Settings` Y15b: a loaded range belongs to the one job**, and it goes
+/// when its page is left. A collapse to the strip does not come here.
+function thePageIsLeft(server, file) {
+  shell.core.invoke("the_page_was_left", { server, file }).catch(() => {});
+}
+
 aPanelIsRegistered({
   panel: RENDER_SETTINGS,
+  itLetsGoOfItsFile(server) {
+    const held = panels.get(server);
+    if (held && held.file) thePageIsLeft(server, held.file);
+  },
   itIsDrawn(parts, server) {
     const held = thePanelFor(server);
     held.head = parts.head;
@@ -254,7 +271,7 @@ document.addEventListener(
     thePressEnded();
     if (press.button !== 0 || !press.target || !press.target.closest) return;
     const control = press.target.closest('button,[role="button"]');
-    if (!control) return;
+    if (!control || control.disabled || control.getAttribute("aria-disabled") === "true") return;
     const onThisPage = Array.from(panels.values()).some(
       (held) =>
         (held.head && held.head.contains(control)) ||
@@ -309,6 +326,8 @@ whenTold(THE_SET_UP_ANSWER, async (delivery) => {
     file: held.file,
   }).catch(() => {});
 });
+
+whenTold(THE_TELEGRAM_ROLE_WAS_READ, (delivery) => theSettingsAreAskedFor((delivery.said || {}).server));
 
 whenTold(THE_CONNECTION_IS_LENT, async (delivery) => {
   const server = (delivery.said || {}).server;
@@ -516,7 +535,19 @@ function theHeaderIsDrawn(server, said, head) {
     state.appendChild(setUp);
     state.appendChild(document.createTextNode(" · "));
   } else if (said.read_at.length) {
-    theSentence(state, said.read_at);
+    // **The reading's moment arrives as seconds**, the value the application
+    // marks as `read_at_moment`, and is written here the way the band's
+    // moment is (2026-11-02: the line read *read at ·* with no time).
+    const moment = said.read_at_moment;
+    theSentence(
+      state,
+      moment
+        ? said.read_at.map((part) => ({
+            ...part,
+            values: (part.values || []).map((value) => (value === moment ? theMomentReads(moment) : value)),
+          }))
+        : said.read_at
+    );
     state.appendChild(document.createTextNode(" · "));
   }
   // **The read and *Reset all* stay where they are in all three of the
@@ -947,6 +978,16 @@ function theMiddleColumn(server, said) {
 
   group.appendChild(theEngine(server, said));
   if (said.renders_on) group.appendChild(theRendersOn(server, said));
+  // **`Render Settings` D6a: one line under the pair, where a Cycles job on the
+  // GPU cannot render on this server's driver.** The page's own warning style,
+  // as the line under the samples box. It stops nothing.
+  if (said.renders_on && said.renders_on.the_driver_line.length) {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.dataset.box = "device-driver";
+    theSentence(hint, said.renders_on.the_driver_line);
+    group.appendChild(hint);
+  }
   column.appendChild(group);
   return column;
 }
@@ -1601,8 +1642,34 @@ function theFoot(server, said) {
   second.appendChild(anAnswerLine("submit"));
   foot.appendChild(second);
 
+  // Design/Render Settings, Prepare simulations; `Render Settings` Q2b, `Render Settings` Y1c.
+  for (const row of said.simulation_rows || []) {
+    const line = document.createElement("div");
+    line.className = "so";
+    line.dataset.box = "simulation-row";
+    if (row.name) {
+      const scene = document.createElement("span");
+      scene.textContent = row.name;
+      line.appendChild(scene);
+    }
+    line.appendChild(aSwitch(row.label, row.on, () => anAnswerIsGiven(
+      server, said, "prepare-simulations", (row.on ? "off:" : "on:") + row.scene
+    ), "prepare-simulations"));
+    const range = document.createElement("span");
+    range.textContent = row.range;
+    line.appendChild(range);
+    second.appendChild(line);
+  }
+
   // ── Line 3: the notes, refusals and work under way ──
   const third = [];
+  if (said.the_telegram_install_failed) {
+    const failed = document.createElement("p");
+    failed.className = "alertnote";
+    failed.dataset.box = "telegram-install-failed";
+    failed.textContent = said.the_telegram_install_failed;
+    third.push(failed);
+  }
   if (said.the_first_frame_is_answered_in_queue) {
     const note = document.createElement("p");
     note.className = "bar-note";
@@ -1638,8 +1705,8 @@ function theFoot(server, said) {
   }
   // **While the check's uploads for this file on this server run, one line
   // sits under Render** — *Uploading dependencies: 4 of 12 files.* — a link
-  // that opens the check on the rows already there. **Render stays
-  // available**: submitting starts no transfer. The Creator's note 6 on 0.1.8;
+  // that opens the check on the rows already there, and **it says what holds
+  // Render** (`Dependency Upload & Remap` A9e). The Creator's note 6 on 0.1.8;
   // on the third line since their tenth notes, note 8.
   // **Minutes Smoozy will not take are said on the third line**, in the
   // refusal colour, starting at the line's left (the drawing's `res-tgbad`,
@@ -1652,7 +1719,9 @@ function theFoot(server, said) {
   if (said.the_dependencies_uploading) {
     const line = document.createElement("p");
     line.className = "adwarn sfdep";
-    const link = aLink("", () => theCheckIsShown(server), "dependencies-uploading");
+    const link = aLink("", () =>
+      said.the_dependency_link_starts_a_check ? theCheckIsOpened(server) : theCheckIsShown(server),
+      "dependencies-uploading");
     theSentence(link, said.the_dependencies_uploading);
     line.appendChild(link);
     third.push(line);
@@ -1689,6 +1758,33 @@ function theTelegramLine(server, said) {
   named.className = "hintl";
   named.textContent = said.telegram;
   telegram.appendChild(named);
+  // **`Server Setup` G2a: where the server has no role, the line says so in
+  // place of the choices, with the action there**, in the control's own width.
+  if (said.the_telegram_is_not_installed) {
+    const here = document.createElement("span");
+    here.className = "sftg w-tg";
+    here.dataset.box = "telegram-not-installed";
+    const words = document.createElement("span");
+    words.className = "hintl";
+    words.textContent = said.the_telegram_is_not_installed;
+    here.appendChild(words);
+    if (said.install_telegram) {
+      const install = aLink(
+        said.install_telegram,
+        async () => {
+          await shell.core
+            .invoke("a_set_up_act_that_needs_a_connection", { act: INSTALL_TELEGRAM, server })
+            .catch(() => {});
+          theSettingsAreAskedFor(server);
+        },
+        "install-telegram"
+      );
+      install.title = said.install_telegram_says;
+      here.appendChild(install);
+    }
+    telegram.appendChild(here);
+    return telegram;
+  }
   const rows = said.the_reporting_choices.map((choice) => ({
     value: choice.value,
     said: choice.said,

@@ -41,3 +41,12 @@
 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — the act quoted at :164 and :286 as *Carry on from where this stopped* now reads *Resume*, each with the inline note. No other sentence changed. No auditor has seen it. Appended by the build runner.
 
 2026-10-29 — Claude Opus 5.5 (Zed), the twenty-first notes' design pass, part B, holding `Audits/Build/Step 10c/Brief — the twenty-first notes, the design pass, part B (Zed, Opus).md`, outside any round — *The first-frame check*: one folder for the check and its range, the check's files starting `check_` (note 6; the mark a recommendation). No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), a builder on the runner's ruling after the first 5.3 live pass, outside any round — only a Cycles job names a technology. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job pressed during a send, and the check beside it.md`, outside any round — Render waits during the check's send. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — a loaded range belongs to one job. No auditor has seen it.
+
+2026-11-06 — GPT-6.1 Sol high (Codex) — Wrote the simulation promise, choice and range before building.
+
+2026-11-06 — GPT-6.1 (Codex) — Cloth withdrawal and linked simulations on the settings page, within the runner's brief.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the Prepare simulations line's off words. The last words read before the release. No auditor has seen it.

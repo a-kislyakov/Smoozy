@@ -135,7 +135,13 @@ pub fn the_run_of(
     if resolved.iter().any(|folder| folder.anchor == Anchor::ItsOwnTree) {
         return TheRun::ItIsAnotherComputers;
     }
-    let run = the_shared_run(&resolved);
+    let mut run = the_shared_run(&resolved);
+    // **P7b: the job's folder is made by name, and Blender would read a brace
+    // in it for an expression**, so the run stops before any folder holding
+    // one. That folder is carried to Blender under the job's folder as P7 says.
+    if let Some(at) = run.iter().position(|name| name.iter().any(|byte| *byte == b'{' || *byte == b'}')) {
+        run.truncate(at);
+    }
     if run.is_empty() {
         return TheRun::ItIsAnotherComputers;
     }
@@ -265,16 +271,22 @@ pub fn the_folder_is_chosen_and_made(
 
 /// **The same choice, asked with nothing made** — what Render Settings says
 /// before submitting (`Design/Render Settings § What it will write`). Every
-/// folder is taken to stand and every make to land, so **only what is known
-/// before submitting rules a place out**: another computer's paths, Smoozy's
-/// own areas and the temporary ones, a relative fallback folder, and the
-/// budget where `fits` measures one. A Mac's `/Users/…` that a Linux machine
-/// lacks, and a refused make, are found at render start and said on the entry.
+/// make is taken to land, so **only what is known before submitting rules a
+/// place out**: another computer's paths, Smoozy's own areas and the temporary
+/// ones, a relative fallback folder, the budget where `fits` measures one, and
+/// **`the_machines_top`, the folders the reading found directly under the
+/// machine's root** (`Job files and outputs` P21's note of 2026-11-02), which is
+/// P20's first stat answered by the machine. **A folder below the top is taken
+/// to stand**, since one missing there is simply made. A refused make, and a
+/// folder made or removed at the top since the read, are found at render start
+/// and said on the entry. **With no list, every folder is taken to stand**, and
+/// the caller knows it cannot claim what that gave.
 pub fn where_it_would_sit(
     from: &WhatTheChoiceIsMadeFrom<'_>,
+    the_machines_top: Option<&[String]>,
     fits: &mut dyn FnMut(&str) -> bool,
 ) -> WhereTheJobOutputFolderSits {
-    the_folder_is_chosen_and_made(from, fits, &mut NothingIsMadeAtTheDesk)
+    the_folder_is_chosen_and_made(from, fits, &mut NothingIsMadeAtTheDesk { the_machines_top })
         .unwrap_or_else(|TheJobAreaRefusedTheFolder| unreachable!("nothing is refused at the desk"))
 }
 
@@ -291,11 +303,17 @@ pub fn the_job_output_folder_in_force(
 }
 
 /// The answers [`where_it_would_sit`] asks with.
-struct NothingIsMadeAtTheDesk;
+struct NothingIsMadeAtTheDesk<'a> {
+    the_machines_top: Option<&'a [String]>,
+}
 
-impl MakesFolders for NothingIsMadeAtTheDesk {
-    fn what_stands_at(&mut self, _path: &str) -> WhatStands {
-        WhatStands::AFolder
+impl MakesFolders for NothingIsMadeAtTheDesk<'_> {
+    fn what_stands_at(&mut self, path: &str) -> WhatStands {
+        let at_the_top = path.strip_prefix('/').filter(|name| !name.contains('/'));
+        match (self.the_machines_top, at_the_top) {
+            (Some(top), Some(name)) if !top.iter().any(|one| one == name) => WhatStands::Nothing,
+            _ => WhatStands::AFolder,
+        }
     }
     fn make_one_folder(&mut self, _path: &str) -> Result<(), ()> {
         Ok(())
@@ -500,6 +518,58 @@ mod tests {
 
     const THE_JOB_AREA: &str = "/ephemeral/smoozy/jobs";
 
+    /// **P7b: a node's folder opening with an expression is no other computer's**
+    /// (P19 case 1), which is what sent such a job to the fallback; and the job's
+    /// folder is made by name, so its run stops before a folder holding a brace.
+    #[test]
+    fn p7b_an_expression_sends_no_job_to_the_fallback_and_makes_no_folder_with_a_brace() {
+        use crate::reading::{ArtistsText, Destination, DestinationKind, RecordedLocation, WhereItComesFrom, WhichScene};
+        let read = |kind: DestinationKind, origin: WhereItComesFrom, at: &str| {
+            let mut one = Destination {
+                kind,
+                recorded_location: Some(RecordedLocation::of(at.as_bytes().to_vec())),
+                format: None,
+                origin,
+                scene: WhichScene::TheJobsOwnScene,
+                the_view_layers_that_feed_it: Vec::new(),
+                the_location_with_its_folder_replaced: None,
+            };
+            one.put_in_the_replaced_text(Some(b"job"), TheVersionInHand::of(5, 2));
+            one
+        };
+        let regular = |at: &str| read(DestinationKind::TheRegularOutputPath, WhereItComesFrom::TheScenesOutputPath, at);
+        let a_node = |at: &str| {
+            let name = ArtistsText::of(b"A".to_vec());
+            read(
+                DestinationKind::AnOutputOfAFileOutputNode {
+                    node: name.clone(),
+                    output: ArtistsText::of(b"Image".to_vec()),
+                    the_nodes_base_file_name: None,
+                    replaced: None,
+                    the_effect: None,
+                },
+                WhereItComesFrom::AFileOutputNodeNamed(name),
+                at,
+            )
+        };
+        let version = TheVersionInHand::of(5, 2);
+        let the_blends = b"/home/ubuntu/rendering";
+        let run = |at: &str| TheRun::It(at.split('/').filter(|one| !one.is_empty()).map(|one| one.as_bytes().to_vec()).collect());
+        assert_eq!(
+            the_run_of(&[regular("//render/f_"), a_node("{project_root}/out")], the_blends, version),
+            run("/home/ubuntu/rendering/render")
+        );
+        assert_eq!(
+            the_run_of(&[regular("//{scene_name}/a/f_"), a_node("//{scene_name}/a/b")], the_blends, version),
+            run("/home/ubuntu/rendering")
+        );
+        // **A path that truly is another computer's still is.**
+        assert_eq!(
+            the_run_of(&[regular("//render/f_"), a_node("C:/out")], the_blends, version),
+            TheRun::ItIsAnotherComputers
+        );
+    }
+
     /// **P18a: a first-frame check and its range job share one folder.** The
     /// check's manifest carries the range job's name, so the check, rendering
     /// first, makes the folder; the range job then finds it standing and takes
@@ -550,6 +620,7 @@ mod tests {
         let a_node = |node: &str, output: &str, at: &str| {
             a_destination(
                 DestinationKind::AnOutputOfAFileOutputNode {
+                    the_effect: None,
                     node: ArtistsText::of(node.as_bytes().to_vec()),
                     output: ArtistsText::of(output.as_bytes().to_vec()),
                     the_nodes_base_file_name: None,
@@ -700,12 +771,41 @@ mod tests {
         assert_eq!(refused, Err(TheJobAreaRefusedTheFolder));
     }
 
+    /// **`Job files and outputs` P21's note of 2026-11-02: the page and the
+    /// machine ask one question and give one answer.** The live pass on real
+    /// production files: `/shared/studio/…` on a machine with no `/shared`. Each
+    /// run, the machine's own choice and the page's with the machine's top in
+    /// hand. A folder missing below the top is simply made, as P20 has it.
+    #[test]
+    fn the_page_and_the_machine_give_one_answer_about_a_folder_at_the_top() {
+        let layout = a_layout();
+        let the_top = ["home".to_string(), "root".to_string(), "ephemeral".to_string()];
+        for run in ["/shared/studio/weeklies/hjalti", "/Users/hjalti/Render", "/home/ubuntu/Render", "/home/gone/deep/Render", "/root/x"] {
+            let the_run = a_run(run);
+            let from = WhatTheChoiceIsMadeFrom { the_run: &the_run, layout: &layout, the_job_output_folders_name: NAME, the_servers_fallback_folder: None };
+            let mut machine = AMachine::with(&["/home", "/home/ubuntu", "/root", "/ephemeral", "/ephemeral/smoozy", THE_JOB_AREA]);
+            let chose = the_folder_is_chosen_and_made(&from, &mut |_| true, &mut machine).expect("a place");
+            let says = where_it_would_sit(&from, Some(&the_top), &mut |_| true);
+            assert_eq!(says, chose, "{run}");
+        }
+        let the_run = a_run("/shared/studio/weeklies/hjalti");
+        let from = WhatTheChoiceIsMadeFrom { the_run: &the_run, layout: &layout, the_job_output_folders_name: NAME, the_servers_fallback_folder: None };
+        let says = where_it_would_sit(&from, Some(&the_top), &mut |_| true);
+        assert!(matches!(
+            says.where_it_is,
+            WhereItIs::TheFallback { why: Some(WhyTheFilesOwnPlaceWasNotUsed::ItIsAnotherComputers), .. }
+        ));
+        // **With no list every folder is taken to stand**: the page then claims nothing.
+        assert_eq!(where_it_would_sit(&from, None, &mut |_| true).where_it_is, WhereItIs::WhereTheFilePoints);
+    }
+
     #[test]
     fn what_the_page_says_is_the_same_choice_with_nothing_made() {
         let layout = a_layout();
         let ask = |run: &TheRun, fallback: Option<&str>| {
             where_it_would_sit(
                 &WhatTheChoiceIsMadeFrom { the_run: run, layout: &layout, the_job_output_folders_name: NAME, the_servers_fallback_folder: fallback },
+                None,
                 &mut |_| true,
             )
         };

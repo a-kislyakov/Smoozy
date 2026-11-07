@@ -1,10 +1,12 @@
 //! The device, the technology, and the ask — L21, L21a, L22, L23, L24, L24a,
 //! L25 (§1.8, Rows 8 and 9).
 //!
-//! **L21.** Where the job is set to use the cards, the launch names the card
-//! technology in the device argument, after the bare double dash; where the
-//! file asks for the processor, no technology is named and nothing overrides
-//! the file. The launch option forces a technology, takes every card of that
+//! **L21.** Where a Cycles job is set to use the cards, the launch names the
+//! card technology in the device argument, after the bare double dash; where
+//! the file asks for the processor, or the job's engine is not Cycles, no
+//! technology is named and nothing overrides the file. The engine is asked at
+//! [`crate::composition::compose_the_attempt`], which holds it. The launch
+//! option forces a technology, takes every card of that
 //! kind whatever the machine's saved preferences said, and writes nothing
 //! back (*The machine 5*, *Settings 9*). It *"names a technology and has no
 //! way of naming one card out of several"* — every-card is the whole

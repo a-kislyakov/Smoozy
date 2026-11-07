@@ -89,3 +89,15 @@
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the same builder, on the Creator's word after the first picture, outside any round — *What the job reports to Telegram*: under the download switch rather than *Downloading*; the switch reads *Download frames as they render* with no heading, the narrowing stays under it on or off, and side by side the switch is level with the *Telegram* heading, two lines each (the twenty-fifth notes, note 1). No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the desk builder of step 13's second words sweep, outside any round — the quoted screen words now read *Cancel* (was *Cancel it*), *Needs your answer — first frame* (was *Waiting for first-frame approval*), and in the clear boxes *These servers and downloaded files are not changed.* (was *Nothing is changed on these servers.*); *Clear all history*'s box no longer says that nothing in Smoozy shows those jobs were submitted. Meaning unchanged. Each carries its inline note. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 2, outside any round — *All frames rendered.* stands on *Finished* alone (`Rendering` K14b). No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 5, outside any round — *A clean finish*: the count's line in place of *All frames rendered.* where the count came up short. Not drawn as a state of its own: it is the same line in the same place. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — The held box and the seventh mark, from 5.3. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a big shot's check and send.md`, outside any round — No *Ran on* on a finished job that printed no device line. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — the *Telegram* group, not installed. No auditor has seen it.
+2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job's reading sees its libraries, and failing before a render.md`, outside any round — *Where no render began*. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex) — Recorded the page presses and preview ruling.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the first-frame pair's question and the delete box's one sentence. The last words read before the release. No auditor has seen it.

@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::names::{a_name_fits, a_path_fits, WhyThePathIsRefused};
 use crate::reading::{
-    AnAddedWritePlace, Destination, DestinationKind, TheVersionInHand, WhichBranch,
+    AnAddedWritePlace, Destination, DestinationKind, TheVersionInHand, WhichBranch, WhichScene,
 };
 
 /// The one separator every path below is split and joined on.
@@ -214,6 +214,12 @@ pub fn it_holds_a_name_front(kind: &DestinationKind, version: TheVersionInHand) 
         DestinationKind::AnOutputOfAFileOutputNode { .. }
         | DestinationKind::AnAddedWritePlace(_) => false,
     }
+}
+
+/// **Whether a written folder opens with a place**: the blend-file shorthand or
+/// a separator. Without one P4 calls it another computer's.
+pub fn it_opens_with_a_place(written: &[u8]) -> bool {
+    written.starts_with(THE_BLEND_FILE_SHORTHAND) || written.starts_with(&[SEPARATOR])
 }
 
 /// **The front of the file name a destination's recorded location holds**,
@@ -638,7 +644,8 @@ pub fn compose_the_map(
     version: TheVersionInHand,
 ) -> TheMap {
     // **P6's set: the render's own output destinations, resolved.** An added
-    // write place offers it nothing, value or none (D20, 2026-10-04).
+    // write place offers it nothing, value or none (D20, 2026-10-04), and nor
+    // does a folder P7b takes out of the run.
     let folders: Vec<Option<ResolvedFolder>> = destinations
         .iter()
         .map(|to_map| {
@@ -652,10 +659,10 @@ pub fn compose_the_map(
     let the_resolved_ones: Vec<ResolvedFolder> = folders.iter().flatten().cloned().collect();
     let shared_run = the_shared_run(&the_resolved_ones);
 
-    let mut pairs = Vec::with_capacity(destinations.len());
+    let mut new_folders: Vec<Vec<u8>> = Vec::with_capacity(destinations.len());
     let mut places_named_so_far: Vec<AnAddedWritePlace> = Vec::new();
     for (to_map, folder) in destinations.iter().zip(folders.iter()) {
-        let new_folder = match (to_map.destination.as_an_added_write_place(), folder) {
+        new_folders.push(match (to_map.destination.as_an_added_write_place(), folder) {
             // **P7a, widened 2026-10-04: an added place's folder is named for
             // its setting, whether or not a location was recorded for it.** A
             // place with more than one destination — one per distinct recorded
@@ -667,11 +674,23 @@ pub fn compose_the_map(
                 a_named_folder_under(job_output_folder, place, before + 1)
             }
             (None, Some(folder)) => the_new_folder(job_output_folder, folder, &shared_run),
-            // A destination the reading found and did not say where, which R4
-            // item 2 does not produce: it lands at the job output folder itself
-            // rather than being invented a name.
-            (None, None) => job_output_folder.as_bytes().to_vec(),
-        };
+            // **P7b: a folder that opens with no place keeps the whole of what
+            // it says under the job's folder.**
+            (None, None) => match the_folder_with_no_place_in_the_run(to_map.destination, version) {
+                Some(written) => {
+                    the_new_folder(job_output_folder, &ResolvedFolder { anchor: Anchor::ItsOwnTree, segments: without_the_steps(whole_names(written)) }, &[])
+                }
+                // A destination the reading found and did not say where, which
+                // R4 item 2 does not produce: it lands at the job output folder
+                // itself rather than being invented a name.
+                None => job_output_folder.as_bytes().to_vec(),
+            },
+        });
+    }
+    keep_the_folders_that_held_an_expression_apart(destinations, &mut new_folders, version);
+
+    let mut pairs = Vec::with_capacity(destinations.len());
+    for (to_map, new_folder) in destinations.iter().zip(new_folders) {
         let outcome = match why_it_is_not_mappable(to_map, &new_folder, version) {
             Some(why) => HowItMapped::NotMappable(why),
             None => HowItMapped::UnderTheJobsFolder {
@@ -710,6 +729,116 @@ pub fn the_renders_own_folders_resolved(
         .collect()
 }
 
+/// **The folder one of the render's own destinations is written as**, split from
+/// the front of the name where its location holds one.
+fn the_folder_written(destination: &Destination, version: TheVersionInHand) -> Option<&[u8]> {
+    let location = destination.the_location_blender_writes_into()?;
+    Some(if it_holds_a_name_front(&destination.kind, version) {
+        split_the_regular_output_path(location).0
+    } else {
+        location
+    })
+}
+
+/// **The folder as the file records it**, split the same way.
+fn the_folder_recorded(destination: &Destination, version: TheVersionInHand) -> Option<&[u8]> {
+    let location = destination.recorded_location.as_ref()?.as_bytes();
+    Some(if it_holds_a_name_front(&destination.kind, version) {
+        split_the_regular_output_path(location).0
+    } else {
+        location
+    })
+}
+
+fn it_holds_a_brace(text: &[u8]) -> bool {
+    text.iter().any(|byte| *byte == b'{' || *byte == b'}')
+}
+
+/// **P7b: the folder of a destination that takes no part in the shared run**: it
+/// held an expression and, read, opens with no place. So it is no folder of
+/// another computer (P4), which is what it read as until 2026-11-02: that took
+/// away the shared run, pushed every other folder down the whole of its path,
+/// and sent the job to the fallback as *another computer's*.
+fn the_folder_with_no_place_in_the_run(destination: &Destination, version: TheVersionInHand) -> Option<&[u8]> {
+    if !destination.is_one_the_render_asked_for() {
+        return None;
+    }
+    let recorded = the_folder_recorded(destination, version)?;
+    let written = the_folder_written(destination, version)?;
+    (it_holds_a_brace(recorded) && !it_opens_with_a_place(written)).then_some(written)
+}
+
+/// **P7b: a folder that held an expression never lands on another destination's
+/// folder**, since naming it may have made it the same text. Each takes the
+/// number that keeps it apart, as P7a's second place does. **Two with the same
+/// recorded text are one folder, as P17 keeps them**, unless that text names the
+/// node or the scene, which differs between them where Blender works it out.
+fn keep_the_folders_that_held_an_expression_apart(
+    destinations: &[ADestinationToMap<'_>],
+    new_folders: &mut [Vec<u8>],
+    version: TheVersionInHand,
+) {
+    let it_is_kept_apart = |destination: &Destination| {
+        let (Some(recorded), Some(written)) =
+            (the_folder_recorded(destination, version), the_folder_written(destination, version))
+        else {
+            return false;
+        };
+        destination.is_one_the_render_asked_for()
+            && it_holds_a_brace(recorded)
+            && (!it_opens_with_a_place(written)
+                || crate::reading::a_folder_with_its_expressions_named(recorded) == written)
+    };
+    let mut taken: Vec<Vec<u8>> = destinations
+        .iter()
+        .zip(new_folders.iter())
+        .filter(|(to_map, _)| !it_is_kept_apart(to_map.destination))
+        .map(|(_, folder)| folder.clone())
+        .collect();
+    let mut seen: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+    for (to_map, folder) in destinations.iter().zip(new_folders.iter_mut()) {
+        if !it_is_kept_apart(to_map.destination) {
+            continue;
+        }
+        let key = the_key_of_a_folder_kept_apart(to_map.destination, version);
+        if let Some((_, given)) = seen.iter().find(|(one, _)| *one == key) {
+            *folder = given.clone();
+            continue;
+        }
+        let mut candidate = folder.clone();
+        let mut number = 2;
+        while taken.contains(&candidate) {
+            candidate = [folder.as_slice(), format!("-{number}").as_bytes()].concat();
+            number += 1;
+        }
+        *folder = candidate.clone();
+        taken.push(candidate.clone());
+        seen.push((key, candidate));
+    }
+}
+
+/// What makes two such folders one place.
+fn the_key_of_a_folder_kept_apart(destination: &Destination, version: TheVersionInHand) -> Vec<u8> {
+    let recorded = the_folder_recorded(destination, version).unwrap_or_default();
+    let holds = |what: &[u8]| recorded.windows(what.len()).any(|window| window == what);
+    let mut key = recorded.to_vec();
+    if holds(b"{node_name}") {
+        key.push(0);
+        if let DestinationKind::AnOutputOfAFileOutputNode { node, .. }
+        | DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile { node, .. } = &destination.kind
+        {
+            key.extend_from_slice(node.as_bytes());
+        }
+    }
+    if holds(b"{scene_name}") {
+        key.push(0);
+        if let WhichScene::ReachedThroughASequencerStrip { scene, .. } = &destination.scene {
+            key.extend_from_slice(scene.as_bytes());
+        }
+    }
+    key
+}
+
 /// The folder one of the render's own destinations writes into, resolved — or
 /// nothing, where there is no recorded folder to resolve.
 ///
@@ -717,25 +846,24 @@ pub fn the_renders_own_folders_resolved(
 /// the regular output path, and since 2026-10-04 4.5's gathering node —
 /// [`it_holds_a_name_front`]); every other destination's recorded location is
 /// a folder already. **An added write place is never asked**: it takes
-/// [`a_named_folder_under`], value or none (P7a).
+/// [`a_named_folder_under`], value or none (P7a). **Nor is a folder of P7b's**
+/// ([`the_folder_with_no_place_in_the_run`]).
 ///
 /// **A node's folder is read with its curly-brace expressions put in** where
 /// the reading replaced them all, so the folder the redirect maps and hands
 /// Blender holds no expression (`Job files and outputs` I2's *A node's folder
-/// is read the same way*, added 2026-10-18); an unresolved one is mapped as
-/// recorded.
+/// is read the same way*, added 2026-10-18); one left unresolved, which from
+/// 2026-11-02 is one Blender works out in a place the rule can measure (P7b),
+/// is mapped as recorded.
 fn the_folder_of(
     destination: &Destination,
     the_folder_the_blend_sits_in: &[u8],
     version: TheVersionInHand,
 ) -> Option<ResolvedFolder> {
-    let location = destination.the_location_blender_writes_into()?;
-    let written: &[u8] = if it_holds_a_name_front(&destination.kind, version) {
-        split_the_regular_output_path(location).0
-    } else {
-        location
-    };
-    Some(resolve_a_folder(written, the_folder_the_blend_sits_in))
+    if the_folder_with_no_place_in_the_run(destination, version).is_some() {
+        return None;
+    }
+    Some(resolve_a_folder(the_folder_written(destination, version)?, the_folder_the_blend_sits_in))
 }
 
 /// **P7a's named folder**: the job output folder joined to the name for the
@@ -881,6 +1009,7 @@ mod tests {
     fn a_node_output(node: &str, output: &str, at: &str) -> Destination {
         a_destination(
             DestinationKind::AnOutputOfAFileOutputNode {
+                the_effect: None,
                 node: ArtistsText::of(node.as_bytes().to_vec()),
                 output: ArtistsText::of(output.as_bytes().to_vec()),
                 the_nodes_base_file_name: None,
@@ -1112,6 +1241,115 @@ mod tests {
         assert_eq!(
             map.the_folders_of(JOB_FOLDER, |_| true),
             vec![b"pointcache".to_vec(), b"pointcache-2".to_vec()]
+        );
+    }
+
+    /// **A node destination whose folder the reading has read**, from 5.0.
+    fn a_node_read(node: &str, at: &str) -> Destination {
+        let mut one = a_node_output(node, "Image", at);
+        one.put_in_the_replaced_text(Some(b"job"), TheVersionInHand::of(5, 2));
+        one
+    }
+
+    fn a_regular_output_read(at: &str) -> Destination {
+        let mut one = Destination {
+            kind: DestinationKind::TheRegularOutputPath,
+            recorded_location: Some(crate::reading::RecordedLocation::of(at.as_bytes().to_vec())),
+            format: None,
+            origin: WhereItComesFrom::TheScenesOutputPath,
+            scene: WhichScene::TheJobsOwnScene,
+            the_view_layers_that_feed_it: Vec::new(),
+            the_location_with_its_folder_replaced: None,
+        };
+        one.put_in_the_replaced_text(Some(b"job"), TheVersionInHand::of(5, 2));
+        one
+    }
+
+    fn the_folders(map: &TheMap) -> Vec<String> {
+        map.pairs
+            .iter()
+            .map(|pair| match &pair.outcome {
+                HowItMapped::UnderTheJobsFolder { new_folder, .. } => String::from_utf8_lossy(new_folder).into_owned(),
+                HowItMapped::NotMappable(_) => "not mappable".to_string(),
+            })
+            .collect()
+    }
+
+    /// **P7b: why the regular output went deep.** A folder opening with an
+    /// expression read as another computer's own tree, so no run was shared and
+    /// the regular output kept the whole of its path under the job's folder. It
+    /// now takes no part in the run, and the regular output is where it would be.
+    #[test]
+    fn p7b_a_folder_opening_with_an_expression_takes_no_part_in_the_run() {
+        let version = TheVersionInHand::of(5, 2);
+        let destinations = [a_regular_output_read("//render/f_"), a_node_read("A", "{project_root}/out")];
+        let map = compose_the_map(&to_map(&destinations), b"/home/ubuntu/rendering", JOB_FOLDER, version);
+        assert_eq!(the_folders(&map), [JOB_FOLDER.to_string(), format!("{JOB_FOLDER}/project_root/out")]);
+        // And a folder written from the file's own place stays in the run.
+        let destinations = [a_regular_output_read("//render/f_"), a_node_read("A", "//renders/{project_root}/out")];
+        let map = compose_the_map(&to_map(&destinations), b"/home/ubuntu/rendering", JOB_FOLDER, version);
+        assert_eq!(
+            the_folders(&map),
+            [format!("{JOB_FOLDER}/render"), format!("{JOB_FOLDER}/renders/project_root/out")]
+        );
+        // `{blend_name}` is replaced by its value, and opens with no place either.
+        let destinations = [a_regular_output_read("//render/f_"), a_node_read("A", "{blend_name}/out")];
+        let map = compose_the_map(&to_map(&destinations), b"/home/ubuntu/rendering", JOB_FOLDER, version);
+        assert_eq!(the_folders(&map), [JOB_FOLDER.to_string(), format!("{JOB_FOLDER}/job/out")]);
+        // A step in a named folder climbs nowhere (P5).
+        let destinations = [a_regular_output_read("//render/f_"), a_node_read("A", "{project_root}/../../out")];
+        let map = compose_the_map(&to_map(&destinations), b"/home/ubuntu/rendering", JOB_FOLDER, version);
+        assert_eq!(the_folders(&map)[1], format!("{JOB_FOLDER}/out"));
+    }
+
+    /// **P7b and P16: a folder that held an expression does not land on another
+    /// destination's**, and P17 keeps one recorded text one folder, unless it
+    /// names the node.
+    #[test]
+    fn p7b_folders_that_held_expressions_keep_apart_and_one_text_stays_one_folder() {
+        let version = TheVersionInHand::of(5, 2);
+        let destinations = [
+            a_regular_output_read("//render/f_"),
+            a_node_read("A", "{project_root}/out"),
+            a_node_read("B", "{project_root}/out"),
+            a_node_read("C", "{unknown}/out"),
+            a_node_read("D", "//render/project_root/out"),
+            a_node_read("E", "{node_name}/out"),
+            a_node_read("F", "{node_name}/out"),
+        ];
+        let map = compose_the_map(&to_map(&destinations), b"/home/ubuntu/rendering", JOB_FOLDER, version);
+        assert_eq!(
+            the_folders(&map),
+            [
+                JOB_FOLDER.to_string(),
+                format!("{JOB_FOLDER}/project_root/out-2"),
+                format!("{JOB_FOLDER}/project_root/out-2"),
+                format!("{JOB_FOLDER}/unknown/out"),
+                format!("{JOB_FOLDER}/project_root/out"),
+                format!("{JOB_FOLDER}/node_name/out"),
+                format!("{JOB_FOLDER}/node_name/out-2"),
+            ]
+        );
+    }
+
+    /// **P7b leaves alone what works.** A node's folder with no brace, and one
+    /// Blender works out from the file's own place, map exactly as they did.
+    #[test]
+    fn p7b_changes_nothing_for_a_folder_blender_works_out_or_one_with_no_expression() {
+        let version = TheVersionInHand::of(5, 2);
+        let destinations = [
+            a_regular_output_read("//render/f_"),
+            a_node_read("A", "//{scene_name}/out"),
+            a_node_read("B", "//plain"),
+        ];
+        let map = compose_the_map(&to_map(&destinations), b"/home/ubuntu/rendering", JOB_FOLDER, version);
+        assert_eq!(
+            the_folders(&map),
+            [
+                format!("{JOB_FOLDER}/render"),
+                format!("{JOB_FOLDER}/{{scene_name}}/out"),
+                format!("{JOB_FOLDER}/plain"),
+            ]
         );
     }
 

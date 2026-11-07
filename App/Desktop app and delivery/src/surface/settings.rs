@@ -212,10 +212,10 @@ pub(crate) mod words {
     pub const ADD_A_FOLDER: &str = "Add a folder…";
     pub const ADD_A_SEARCH_FOLDER: &str = "Add a search folder";
     pub const DRAG_OR_USE_THE_ARROWS: &str = "Drag a row, or use the arrows.";
-    pub const THE_FIRST_FOLDER_HOLDING_A_MATCH: &str =
-        "The first folder with a match is used, so the order decides";
-    pub const WHICH_FOLDER: &str = "which folder";
-    pub const IS_TAKEN_FROM: &str = "a file comes from, never which file inside it.";
+    /// *Changed 2026-11-06, the last words read before the release*: it went
+    /// on *, so the order decides* **which folder** *a file comes from, never
+    /// which file inside it.*, which said again what this says.
+    pub const THE_FIRST_FOLDER_HOLDING_A_MATCH: &str = "The first folder with a match is used.";
     pub const WHERE_ONE_FOLDER_HOLDS_TWO: &str =
         "If one folder has two matches, one is used and named.";
     pub const MOVE_UP: &str = "Move up";
@@ -723,8 +723,6 @@ pub fn the_search_folders_say(says: &WhatTheListSays) -> Event {
         ("addAFolder", words::ADD_A_FOLDER),
         ("dragOrUseTheArrows", words::DRAG_OR_USE_THE_ARROWS),
         ("theFirstFolderHoldingAMatch", words::THE_FIRST_FOLDER_HOLDING_A_MATCH),
-        ("whichFolder", words::WHICH_FOLDER),
-        ("isTakenFrom", words::IS_TAKEN_FROM),
         ("whereOneFolderHoldsTwo", words::WHERE_ONE_FOLDER_HOLDS_TWO),
         ("moveUp", words::MOVE_UP),
         ("moveDown", words::MOVE_DOWN),

@@ -321,7 +321,7 @@ mod words {
     // settings group's and piece 8's**; the bar's markup is drawn in this
     // screen's body, so the shape is here and the raising is that piece's.
     pub const FIND_LEAD: &str = "Submitting";
-    pub const FIND_REST: &str = "again. Its server was removed and its old folder does not exist here — find its .blend on this server.";
+    pub const FIND_REST: &str = "again. Its server was removed — find its .blend on this server.";
 
     // ── The toolbar ─────────────────────────────────────────────────────────
 
@@ -5380,7 +5380,32 @@ struct TheNeighboursOfThisMachine<R: Runtime> {
     layout: Option<smoozy_job_files::layout::TheLayout>,
 }
 
+impl<R: Runtime> TheNeighboursOfThisMachine<R> {
+    /// **`Dependency Upload & Remap` G17b: what the check's run knows of files going
+    /// up here.** No installation is no check's machine to tell.
+    fn the_check_is_told(&self, tell: impl FnOnce(&mut crate::kept_readings::TheFilesGoingUp, &smoozy_dependencies::record::MachineKey)) {
+        let Some(installation) = self.installation.clone() else {
+            return;
+        };
+        let machine = smoozy_dependencies::record::MachineKey {
+            server_row: self.server_row.clone(),
+            installation,
+        };
+        if let Ok(mut held) = crate::surface::the_dependency_check::the_run_holds().lock() {
+            tell(&mut held.the_files_going_up, &machine);
+        }
+    }
+}
+
 impl<R: Runtime> WhenAFileIsPublished for TheNeighboursOfThisMachine<R> {
+    fn a_file_begins_going_up(&self) {
+        self.the_check_is_told(|going_up, machine| going_up.one_begins(machine));
+    }
+
+    fn a_file_stopped_going_up(&self) {
+        self.the_check_is_told(|going_up, machine| going_up.one_ends(machine));
+    }
+
     fn a_file_was_published(&self, landing_path: &[u8], outcome: &UnitOutcome) {
         // **No installation, or no recorded root, and nothing can stand**: a
         // check standing is keyed to both (`Dependency Upload & Remap` V10).
@@ -9964,7 +9989,7 @@ console.log(JSON.stringify(out));
             let AnActsAnswer::Said { said: words } = what_the_row_says(&came, b"x", TheRefusedAct::Renaming, false) else {
                 panic!("{came:?} was not said on the line");
             };
-            assert_eq!(plainly(words), said);
+            assert_eq!(plainly(words), crate::typography::Prose::new(said).as_str().replace('\u{a0}', " "));
         }
     }
 
@@ -11965,7 +11990,10 @@ console.log(JSON.stringify(out));
         ) else {
             panic!("a delete not attempted was called done");
         };
-        assert_eq!(said.said().replace('\u{a0}', " "), words::NOTHING_DELETED_THE_RECORD);
+        assert_eq!(
+            said.said().replace('\u{a0}', " "),
+            crate::typography::Prose::new(words::NOTHING_DELETED_THE_RECORD).as_str().replace('\u{a0}', " ")
+        );
     }
 
     /// **`File Browser` M15 on the screen: Paste carries its count on the
@@ -13121,7 +13149,7 @@ mod a_picture_looked_at {
         // words, and nothing is read whatever its size.
         let exr = a_row(folder, &an_entry("studio_backplate.exr", Kind::File, 96_000_000), None);
         let Some(APicture::NotShown { said }) = exr.picture else { panic!("an OpenEXR says why") };
-        assert_eq!(said.said().replace('\u{a0}', " "), "Can't preview files.");
+        assert_eq!(said.said().replace('\u{a0}', " "), "Can\u{2019}t preview files.", "one apostrophe, the typography point's");
         assert_eq!(said.values(), vec!["OpenEXR"]);
         // **A file over 100 MB is not read**, on its listed size.
         let big = a_row(folder, &an_entry("studio_matte_16bit.png", Kind::File, 214_000_000), None);
@@ -13280,7 +13308,7 @@ mod a_picture_looked_at {
             },
             "exr": {
                 "title": "studio_backplate.exr", "meta": "96 MB", "picture": false,
-                "say": "Can't preview OpenEXR files.", "previous": false, "next": false,
+                "say": "Can\u{2019}t preview OpenEXR files.", "previous": false, "next": false,
                 "chosen": "studio_backplate.exr", "asked": [{ "command": "the_picture_is_let_go" }],
             },
             "big": {

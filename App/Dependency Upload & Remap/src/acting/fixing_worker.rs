@@ -234,7 +234,10 @@ pub fn what_the_report_said(pairs: &[Pair], stream: &[u8]) -> Option<WhyItCouldN
     let not_applied = said
         .per_pair
         .iter()
-        .filter(|(_, line)| line.as_ref().is_some_and(|one| !one.applied))
+        // **M14a: a text block's pair that reached nothing does not count.** A
+        // file's own start script can make the block, which the reading runs and
+        // the fixing does not.
+        .filter(|(pair, line)| pair.kind != crate::check::Kind::Text && line.as_ref().is_some_and(|one| !one.applied))
         .count();
     if not_applied == 0 && said.every_pair_was_reported() {
         return None;
@@ -263,6 +266,40 @@ mod tests {
             )),
         )
         .expect("the pair composes")
+    }
+
+    /// **M14a: a text block's pair that reached nothing does not fail the fixing**:
+    /// a file's own start script can make the block, which the reading runs and the
+    /// fixing does not. Every other kind still does, and so does a text pair the
+    /// report never mentioned.
+    #[test]
+    fn a_text_blocks_pair_that_reached_nothing_does_not_fail_the_fixing() {
+        let text = compose_pair(
+            Kind::Text,
+            "filepath",
+            &RecordedLocation::as_the_reading_carried_it(b"//../here.settings.json"),
+            NewLocation::AMirror(MachineLocation::composed(b"/root/assets/files/here.settings.json".to_vec())),
+        )
+        .expect("the pair composes");
+        let a_line = |pair: &Pair, applied: bool| {
+            let mut line = serde_json::to_string(&serde_json::json!({
+                "kind": pair.kind, "setting": pair.setting, "match_text": pair.match_text,
+                "applied": applied, "data_blocks": if applied { 1 } else { 0 },
+                "assignment_alone": "Established", "reloaded": false, "values_found": [],
+            }))
+            .expect("it writes");
+            line.insert_str(0, "SMOOZY-REMAP-PAIR ");
+            line.push('\n');
+            line
+        };
+        let picture = a_pair();
+        let pairs = vec![text.clone(), picture.clone()];
+        let stream = format!("{}{}", a_line(&text, false), a_line(&picture, true));
+        assert_eq!(what_the_report_said(&pairs, stream.as_bytes()), None);
+        let stream = format!("{}{}", a_line(&text, true), a_line(&picture, false));
+        assert!(what_the_report_said(&pairs, stream.as_bytes()).is_some(), "a picture still fails it");
+        let stream = a_line(&picture, true);
+        assert!(what_the_report_said(&pairs, stream.as_bytes()).is_some(), "never mentioned still fails it");
     }
 
     /// **The fixing's own report decides whether the copy publishes.**

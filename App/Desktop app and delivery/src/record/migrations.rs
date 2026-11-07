@@ -277,6 +277,18 @@ pub const ALL: &[Migration] = &[
         produces: 57,
         what_it_runs: WhatItRuns::TheseStatements(schema::VERSION_57),
     },
+    Migration {
+        produces: 58,
+        what_it_runs: WhatItRuns::TheseStatements(schema::VERSION_58),
+    },
+    Migration {
+        produces: 59,
+        what_it_runs: WhatItRuns::TheseStatements(schema::VERSION_59),
+    },
+    Migration {
+        produces: 60,
+        what_it_runs: WhatItRuns::TheseStatements(schema::VERSION_60),
+    },
 ];
 
 /// Free-and-open-source migration. The fixed subject also covers a crash
@@ -1229,8 +1241,18 @@ mod tests {
                 // and one more from version 55's reporting choice, while
                 // every pre-existing value stays identical.
                 for row in &mut now {
-                    assert!(row[row.len()-10..].iter().all(|value| *value == rusqlite::types::Value::Null));
-                    row.truncate(row.len()-10);
+                    assert_eq!(row.pop(), Some(rusqlite::types::Value::Integer(0)), "version 60: no old job says no render began");
+                    // Version 59 appends `Queue & History` E3's two counts, absent too.
+                    assert!(row[row.len()-12..].iter().all(|value| *value == rusqlite::types::Value::Null));
+                    row.truncate(row.len()-12);
+                }
+            }
+            if *table == "server_row" {
+                // Version 58 appends the missing OptiX library, nought on
+                // every row before it (`Servers` H11b, 2026-11-02).
+                for row in &mut now {
+                    assert_eq!(row.last(), Some(&rusqlite::types::Value::Integer(0)));
+                    row.pop();
                 }
             }
             assert_eq!(&now, was, "{table}'s existing fields did not come across as they were");
@@ -1347,7 +1369,13 @@ mod tests {
         nothing_protected_was_lost(record.connection(), &before)
             .expect("nothing protected was lost bringing 48 forward to 49");
         let c = record.connection();
-        assert_eq!(every_row_of(c, "server_row"), servers_before, "a server row was rewritten");
+        // **Version 58 appends the missing OptiX library**, nought on every row
+        // before it (`Servers` H11b, 2026-11-02); every earlier value stands.
+        let mut servers_now = every_row_of(c, "server_row");
+        for row in &mut servers_now {
+            assert_eq!(row.pop(), Some(rusqlite::types::Value::Integer(0)));
+        }
+        assert_eq!(servers_now, servers_before, "a server row was rewritten");
         assert_eq!(every_row_of(c, "server_package_trust"), trust_before, "the server-package trust record was rewritten");
         assert_eq!(
             crate::record::server_package_trust::read(c).unwrap(),
@@ -1415,6 +1443,9 @@ mod tests {
         let c = record.connection();
         let mut now = every_row_of(c, "job_record");
         for row in &mut now {
+            assert_eq!(row.pop(), Some(rusqlite::types::Value::Integer(0)), "version 60: no old job says no render began");
+            // **Version 59's two counts come after it**, also absent.
+            assert_eq!(row.split_off(row.len() - 2), [rusqlite::types::Value::Null, rusqlite::types::Value::Null]);
             assert_eq!(row.last(), Some(&rusqlite::types::Value::Null), "an old job arrived with a reporting choice");
             row.pop();
         }
@@ -1506,6 +1537,60 @@ mod tests {
         assert!(!stores.the_ending_walk_is_written_down(&job).unwrap(), "a new start inherited the old walk");
     }
 
+    /// **Version 59 (`Queue & History` E3, 2026-11-02): a version-58 job record
+    /// comes across and holds no count**, so its line stands as it did.
+    #[test]
+    fn version_59_adds_the_two_counts_empty() {
+        let path = scratch("version-59");
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            for migration in ALL.iter().filter(|one| one.produces <= 58) {
+                run_one(&connection, migration).unwrap();
+            }
+            assert_eq!(schema::version_in(&connection).unwrap(), 58);
+        }
+        let record = LocalRecord::open_at(&path).expect("the version-58 record opens");
+        assert_eq!(record.schema_version().unwrap(), BINARY_KNOWS);
+        record
+            .connection()
+            .prepare("SELECT note_files_written, note_files_owed FROM job_record")
+            .expect("the columns stand");
+    }
+
+    /// **Version 58 (`Servers` H11b's OptiX-library bullet, 2026-11-02): a
+    /// version-57 server row comes across whole and reads as no library
+    /// missing**, which is how every earlier reading read.
+    #[test]
+    fn version_58_carries_a_version_57_server_row_forward_with_no_library_missing() {
+        let path = scratch("version-58");
+        let server = smoozy_state::identities::Identity::issue(smoozy_state::identities::IdentityKind::LocalServer).unwrap();
+        let rows_before = {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            for migration in ALL.iter().filter(|one| one.produces <= 57) {
+                run_one(&connection, migration).unwrap();
+            }
+            assert_eq!(schema::version_in(&connection).unwrap(), 57);
+            connection
+                .execute(
+                    "INSERT INTO server_row (
+                         identifier, host, port, username, key_identifier, key_fingerprint,
+                         remembered_setup, hardware_driver_version
+                     ) VALUES (?1, 'h', 22, 'root', 'k', 'f', 0, '580.178.04')",
+                    [server.as_text()],
+                )
+                .unwrap();
+            every_row_of(&connection, "server_row")
+        };
+        let record = LocalRecord::open_at(&path).expect("the version-57 record opens");
+        assert_eq!(record.schema_version().unwrap(), BINARY_KNOWS);
+        let mut now = every_row_of(record.connection(), "server_row");
+        for row in &mut now {
+            assert_eq!(row.last(), Some(&rusqlite::types::Value::Integer(0)), "an old row arrived missing a library");
+            row.pop();
+        }
+        assert_eq!(now, rows_before, "the row did not come across as it was");
+    }
+
     #[test]
     fn version_51_carries_a_version_50_record_forward_with_no_typed_frames() {
         use crate::record::job_records::JobRecords;
@@ -1537,7 +1622,10 @@ mod tests {
         let c = record.connection();
         let mut now = every_row_of(c, "job_record");
         for row in &mut now {
-            // **Version 55's reporting choice comes after it**, also absent.
+            assert_eq!(row.pop(), Some(rusqlite::types::Value::Integer(0)), "version 60: no old job says no render began");
+            // **Version 59's two counts and version 55's reporting choice come
+            // after it**, all absent.
+            assert_eq!(row.split_off(row.len() - 2), [rusqlite::types::Value::Null, rusqlite::types::Value::Null]);
             assert_eq!(row.last(), Some(&rusqlite::types::Value::Null), "an old job arrived with a reporting choice");
             row.pop();
             assert_eq!(row.last(), Some(&rusqlite::types::Value::Null), "an old job arrived with typed text");

@@ -218,7 +218,7 @@ pub fn a_renders_words_are_posted(
         None => Subject::TheRun,
     };
 
-    // **The composed sentence, before X7's two substitutions.** The shape puts
+    // **The composed sentence, before X7's substitutions.** The shape puts
     // it through the typography point on the way to the screen and
     // `src/presentation/the_two_hooks.rs` captures the plain one for the diary.
     let sentence = THE_RENDER_DID_NOT_FINISH.to_string();

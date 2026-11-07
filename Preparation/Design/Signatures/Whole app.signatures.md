@@ -93,3 +93,13 @@
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 10c/Brief — the twenty-fifth notes, note 1, the Queue pane's alignment.md`, outside any round — under *Smoozy draws its own dropdowns*, one sentence holding the Queue entry's Telegram list to the upward rule, with the Creator's words (the twenty-fifth notes, note 1). No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the desk builder of step 13's second words sweep, outside any round — § Updating, the Linux boxes: the password sentence is *Your system asks for your computer password to install.* and *… to reinstall.* (was *Your system will ask for your computer password when you install; Smoozy never sees it.*). Meaning unchanged. Each carries its inline note. No auditor has seen it.
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — a build with no update keys says so.md`, outside any round — § Checking for updates: the reading for a version that cannot update itself, *Automatic updates aren't available in this version.* (Creator-stated, the twenty-sixth notes). No auditor has seen it.
+
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — a Linux rollback with an unreadable record says so.md`, outside any round — § Updating: the rollback box where the saved data cannot be read (*Smoozy could not start*, the update sentence where one was under way, *Smoozy could not read its saved data.*, Quit alone). No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — the note on a loaded range. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex) — Recorded the page presses and preview ruling.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — § Typography's apostrophe, *Restarts to install.* and the unreadable-record box. The last words read before the release. No auditor has seen it.

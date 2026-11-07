@@ -31,7 +31,7 @@ use crate::names::{self, WhyThePathIsRefused};
 /// program may take, because the machine reads the manifest those paths are
 /// composed into. **What stays here is every act**: the placement, the
 /// attempt record's write, and their test machine. Split at step 10c piece 3.
-pub use smoozy_job_files_machine::publication::AJobsPaths;
+pub use smoozy_job_files_machine::publication::{the_setup_runs_staging_folder, AJobsPaths};
 pub(crate) use smoozy_job_files_machine::publication::THE_STAGING_PREFIX;
 
 /// Which step of the placement was being taken.

@@ -707,7 +707,13 @@ mod tests {
         // notes' design pass, ruling 4 (note 5). It was owed to piece 2 of
         // that work and named on [`OWED_TO_A_LATER_PIECE`] until 2026-10-25,
         // when piece 2b built it in the machine half's `driving.rs`.
-        assert_eq!(the_clauses_this_plan_defines().len(), 109);
+        //
+        // **110 from 2026-11-03**, when §7 gained G2a — the role's reading for
+        // Render Settings and Queue, from the second 5.3 live pass. Built in the
+        // desktop, over Y6b's reading, so this page files nothing for it.
+        // **111 from 2026-11-04**: Y7e keeps a failed setup’s own reason
+        // in the desktop’s output panel and diary, even before placement.
+        assert_eq!(the_clauses_this_plan_defines().len(), 111);
     }
 
     /// **The one clause of this plan written in a different shape, held visible.**

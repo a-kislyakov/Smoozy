@@ -302,6 +302,12 @@ impl TheWorkersOwnSteps for TheDesksMachine {
         Err(format!("nothing is copied at this desk: {}", String::from_utf8_lossy(from)))
     }
     fn write_the_placed_copies(&mut self, _placed: &ThePlacedCopies) {}
+    fn make_the_opening_folder(
+        &mut self,
+        folder: &smoozy_dependencies_machine::opening::TheOpeningFolder,
+    ) -> Result<(), String> {
+        crate::acting::opening::make_the_opening_folder(folder)
+    }
     fn record_the_render_process(
         &mut self,
         _pair: smoozy_runtime::execution_group::RecordedPair,

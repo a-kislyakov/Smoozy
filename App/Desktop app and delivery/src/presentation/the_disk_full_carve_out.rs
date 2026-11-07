@@ -77,6 +77,10 @@
 //! Rule 10 and `What Build inherits` item 5 are what decide it: where the
 //! drawing and an architecture answer disagree, the architecture wins.
 //!
+//! *(2026-11-06, the check after the last fix: the drawing's History `disk`
+//! state now says [`THE_DIAGNOSIS`] word for word, so the two no longer
+//! disagree. The three reasons above are why it says those words.)*
+//!
 //! ## Markers of other documents
 //!
 //! **Markers used in this file that belong to another document are written out

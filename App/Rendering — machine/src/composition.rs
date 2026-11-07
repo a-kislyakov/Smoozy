@@ -25,11 +25,12 @@
 //!
 //! **Markers used in this file that belong to another document, each with
 //! the document it belongs to.** `Job files and outputs` D10, M1, M2, M8.
-//! `Dependency Upload & Remap` M10, M11. `Render Settings` D1, E1.
+//! `Dependency Upload & Remap` M10, M11. `Render Settings` D1, E1, E4.
 
 use smoozy_dependencies_machine::remap::RemapMaterial;
 use smoozy_job_files_machine::manifest::SubmissionManifest;
 use smoozy_render_settings_machine::device::{the_resolved_choice, DeviceChoice};
+use smoozy_render_settings_machine::engine::the_job_will_use_cycles;
 use smoozy_render_settings_machine::file_half::RecordedReading;
 use smoozy_render_settings_machine::payload::Payload;
 use smoozy_render_settings_machine::reading::SceneReading;
@@ -160,12 +161,23 @@ pub fn compose_the_attempt(
             },
         )?;
 
-    // L21: the technology is named exactly where the job is set to use the
-    // cards — the resolved choice, which is the user's own entry or the
-    // scene's read value (`Render Settings` D1). Where the file asks for
-    // the processor nothing is named and nothing overrides the file.
-    let technology_named = match the_resolved_choice(inputs.payload.device, inputs.the_jobs_scene) {
-        DeviceChoice::TheCards => Some(
+    // L21: the technology is named exactly where a Cycles job is set to use
+    // the cards — the resolved choice, which is the user's own entry or the
+    // scene's read value (`Render Settings` D1). Where the file asks for the
+    // processor nothing is named and nothing overrides the file. **And under any
+    // other engine nothing is named, L21's bullet of 2026-11-02**: the engine
+    // is the user's pick or the file's own by the reading in force
+    // (`Render Settings` E1, E4), and both are in hand here, so it is never
+    // unknown.
+    let a_cycles_job_on_the_cards = the_resolved_choice(inputs.payload.device, inputs.the_jobs_scene)
+        == DeviceChoice::TheCards
+        && the_job_will_use_cycles(
+            inputs.payload.engine.as_ref().map(|entry| entry.pick),
+            inputs.the_jobs_scene,
+            inputs.reading_in_force,
+        );
+    let technology_named = if a_cycles_job_on_the_cards {
+        Some(
             // **L23's make comes off the manifest** (`Job files and outputs` M1b),
             // because the hardware reading is `Servers`' and is taken on the
             // desktop — the machine cannot take one. **This
@@ -175,8 +187,9 @@ pub fn compose_the_attempt(
             // render.**
             the_technology_the_manifest_names(&inputs.manifest.card_make)
                 .map_err(CannotComposeTheAttempt::NoTechnologyToName)?,
-        ),
-        DeviceChoice::TheProcessor => None,
+        )
+    } else {
+        None
     };
 
     let frames = ExplicitFrameList::from_the_reckonings_integers(inputs.the_reckonings_list)
@@ -194,7 +207,7 @@ pub fn compose_the_attempt(
         // **L10b**, where `Job files and outputs` R4 item 8 says yes, over the
         // reckoning's own list.
         the_stepping: material::TheStepping::for_the_list(
-            inputs.the_scene_holds_a_simulation_not_baked,
+            inputs.payload.prepare_simulations && inputs.the_scene_holds_a_simulation_not_baked,
             inputs.the_reckonings_list,
         ),
         // **L10c**, where `Job files and outputs` R4c's reading switched.
@@ -372,6 +385,129 @@ pub(crate) mod tests {
         assert_eq!(words[words.len() - 1], "OPTIX");
         assert_eq!(composed.frames.in_the_asked_order(), &[1, 2, 3]);
         assert!(composed.material.contains_no_failure_handling());
+    }
+
+    /// **One job composed under the engine named**: the user's pick, the file's
+    /// own as the reading gives it, and the make, with the scene saying the cards
+    /// (`Rendering` L21's bullet of 2026-11-02).
+    fn compose_under(
+        version: &str,
+        pick: Option<smoozy_render_settings_machine::engine::OfferedEngine>,
+        the_files_own: &str,
+        card_make: TheCardMakeAtSubmission,
+        reading: &RecordedReading,
+    ) -> Result<TheComposedAttempt, CannotComposeTheAttempt> {
+        use smoozy_render_settings_machine::engine::{the_readings_identifier_for, EngineEntry};
+        use smoozy_render_settings_machine::names::ExactName;
+        let job = a_job();
+        let manifest = a_manifest_with_make(&job, version, "Kitchen", card_make);
+        let remap = a_remap(&job, false);
+        let mut payload = an_untouched_payload();
+        payload.engine = pick.map(|pick| EngineEntry { pick, identifier: None });
+        let mut scene = a_scene("Kitchen");
+        scene.engine_as_read = ExactName::as_the_reading_produced_it(the_files_own);
+        compose_the_attempt(AttemptInputs {
+            job: &job,
+            manifest: &manifest,
+            payload: &payload,
+            remap: &remap,
+            redirect_pairs: &[],
+            regular_output_path: b"/ephemeral/smoozy/jobs/j1/frame_####",
+            reading_in_force: reading,
+            the_jobs_scene: &scene,
+            anchored_engine: pick
+                .and_then(|pick| the_readings_identifier_for(pick, reading))
+                .map(|identifier| identifier.as_text().to_string()),
+            the_reckonings_list: &[1],
+            launch_material_path: "/ephemeral/smoozy/job-records/j1/material.py".to_string(),
+            load_time_script_path: "/ephemeral/smoozy/job-records/j1/load-time.py".to_string(),
+            the_scene_holds_a_simulation_not_baked: false,
+            the_check_is_written_as_a_picture: false,
+            a_destination_is_video_shaped: false,
+        })
+    }
+
+    /// **`Rendering` L21's bullet of 2026-11-02: under any engine but Cycles no
+    /// technology is named, in every version**, whether the engine is the user's
+    /// pick or the file's own, and whatever the scene's Cycles device says. **No
+    /// device argument and no bare double dash on the line**, and L23's lookup is
+    /// not asked, so a machine with no card to name refuses nothing.
+    #[test]
+    fn an_eevee_job_on_the_cards_names_no_technology_in_any_version() {
+        use smoozy_render_settings_machine::engine::OfferedEngine;
+        use smoozy_render_settings_machine::names::ExactName;
+        for (version, eevee) in [
+            ("4.5.12", "BLENDER_EEVEE_NEXT"),
+            ("5.0.1", "BLENDER_EEVEE"),
+            ("5.1.2", "BLENDER_EEVEE"),
+            ("5.2.3", "BLENDER_EEVEE"),
+            ("5.3.0", "BLENDER_EEVEE"),
+            ("5.4.0", "BLENDER_EEVEE"),
+        ] {
+            let mut reading = a_reading();
+            reading.settings.offered_engine_identifiers.eevee =
+                Some(ExactName::as_the_reading_produced_it(eevee));
+            for (what, pick, the_files_own, make) in [
+                ("the user's pick over a Cycles file", Some(OfferedEngine::Eevee), "CYCLES", a_make("NVIDIA")),
+                ("the file's own", None, eevee, a_make("NVIDIA")),
+                ("the file's own on a machine with no card", None, eevee, TheCardMakeAtSubmission::NoCard),
+                ("the file's own on a make with no row", None, eevee, a_make("Matrox")),
+                ("a third engine the file names", None, "BLENDER_WORKBENCH", a_make("NVIDIA")),
+            ] {
+                let composed = compose_under(version, pick, the_files_own, make, &reading)
+                    .unwrap_or_else(|why| panic!("{version}, {what}: {}", why.in_words()));
+                assert_eq!(composed.technology_named, None, "{version}, {what}");
+                let words = composed.line.as_words().unwrap();
+                assert_eq!(composed.line.the_window().2, None, "{version}, {what}: {words:?}");
+                assert!(
+                    !composed.line.placed().iter().any(|placed| matches!(placed, crate::line::Argument::Device { .. })),
+                    "{version}, {what}: {words:?}"
+                );
+                assert!(!words.iter().any(|word| word == "OPTIX" || word == "--"), "{version}, {what}: {words:?}");
+            }
+        }
+    }
+
+    /// **A build that registers no Cycles identifier cannot resolve a job to
+    /// Cycles**: what the reading gives counts as a third engine
+    /// (`Render Settings` E4), as the page shows it.
+    #[test]
+    fn a_files_engine_the_readings_cycles_identifier_does_not_match_names_no_technology() {
+        let mut reading = a_reading();
+        reading.settings.offered_engine_identifiers.cycles = None;
+        let composed = compose_under(
+            &version_text(a_blender().version),
+            None,
+            "CYCLES",
+            a_make("NVIDIA"),
+            &reading,
+        )
+        .unwrap();
+        assert_eq!(composed.technology_named, None);
+    }
+
+    /// **L21's other side: a Cycles job is as it was, in every version**, its
+    /// line ending in the bare double dash, the argument and the technology,
+    /// whether Cycles is the user's pick over an EEVEE file or the file's own.
+    #[test]
+    fn a_cycles_job_on_the_cards_ends_its_line_as_it_always_did() {
+        use smoozy_render_settings_machine::engine::OfferedEngine;
+        for version in ["4.5.12", "5.0.1", "5.1.2", "5.2.3", "5.3.0", "5.4.0"] {
+            for (pick, the_files_own) in [
+                (Some(OfferedEngine::Cycles), "BLENDER_EEVEE"),
+                (None, "CYCLES"),
+            ] {
+                let composed =
+                    compose_under(version, pick, the_files_own, a_make("NVIDIA"), &a_reading()).unwrap();
+                assert_eq!(composed.technology_named, Some(Technology::Optix), "{version}");
+                let words = composed.line.as_words().unwrap();
+                let Some(crate::line::Argument::Device { version: spelled_for, .. }) = composed.line.placed().last() else {
+                    panic!("{version}: {words:?}");
+                };
+                let the_argument = crate::spellings::DEVICE_ARGUMENT.for_version(*spelled_for).text().unwrap();
+                assert_eq!(words[words.len() - 3..], ["--", the_argument, "OPTIX"], "{version}");
+            }
+        }
     }
 
     /// **L23's last paragraph**: a cards job on a machine with no card to

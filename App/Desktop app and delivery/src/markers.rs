@@ -170,7 +170,9 @@ mod tests {
     /// Keys' existing default name; the result is 171 - 5 + 1 = 167.
     /// 167 to 168 on 2026-10-27: the free-software drawing’s browser check
     /// adds `tests/the_free_drawing.rs`; all source and test files are counted.
-    const THE_FILE_COUNT: usize = 168;
+    /// 168 to 169 on 2026-11-03: `src/kept_readings.rs`, `Dependency Upload &
+    /// Remap` G17b.
+    const THE_FILE_COUNT: usize = 169;
 
     /// Whether a word has a clause marker's shape.
     ///
@@ -832,7 +834,13 @@ mod tests {
         // the Windows signing plan pass gave this plan **E7a** (the
         // certificate is SignPath Foundation's). **Owed** to step 11, once
         // SignPath accepts the project.
-        assert_eq!(ours.len(), 410);
+        // **Moved from 410 to 411 on 2026-11-01**, by the update-keys builder,
+        // after the twenty-sixth notes gave this plan **E10b** (a build that
+        // carries no recovery key never checks, and About says why). Built in
+        // the same piece, `crate::updating::checking`.
+        // **412 from 2026-11-04**: M32a keeps a setup failure’s reason in
+        // the diary before an installation exists.
+        assert_eq!(ours.len(), 412);
     }
 
     /// **A document's name governs the marker immediately after it and no

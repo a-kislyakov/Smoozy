@@ -31,7 +31,9 @@ pub enum DeviceChoice {
 /// **D1: the payload's device entry is the user's choice where one exists,
 /// and no entry where the file's own stands** (J4). What `Rendering` L21
 /// reads is the resolved choice: the user's entry, or the reading's scene
-/// value where none.
+/// value where none. **And the engine, since 2026-11-02**
+/// ([`crate::engine::the_job_will_use_cycles`]): only a Cycles job names a
+/// technology.
 pub fn the_resolved_choice(
     the_users_entry: Option<DeviceChoice>,
     scene: &SceneReading,
@@ -42,8 +44,8 @@ pub fn the_resolved_choice(
     })
 }
 
-/// **D2: the cards side is `Rendering` L21's, cited whole** — the launch
-/// names the technology in the device argument after the bare double dash,
+/// **D2: the cards side is `Rendering` L21's, cited whole** — for a Cycles job
+/// the launch names the technology in the device argument after the bare double dash,
 /// looked up from the card make by that document's table; the argument beats
 /// the file and the preferences in both directions, and the loud refusals are
 /// Rows 8 and 9's ground. **Nothing here composes the argument.**

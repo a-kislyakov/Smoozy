@@ -52,6 +52,7 @@ pub mod cleanup;
 pub mod fixing_script;
 pub mod landing;
 pub mod material;
+pub mod opening;
 pub mod placed_copies;
 pub mod reading_script;
 pub mod remap;

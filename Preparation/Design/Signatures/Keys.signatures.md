@@ -35,3 +35,7 @@
 2026-10-28 — Claude Opus 5.5 (Zed), the loose ends after the words sweep, 2026-10-28, outside any round — § On a computer without the SSH tools: the quoted line loses *Your keys are not at fault.*, and the settled paragraph loses its mention of it. No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the desk builder of step 13's second words sweep, outside any round — Remove's hover now reads *Removes the key from Smoozy. Its files are not deleted.*, and the sentence introducing both hovers no longer says each gives where the key sits. Meaning of the act unchanged. Each carries its inline note. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the SSH-tools line, the passphrase line and the remove box. The last words read before the release. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the five after the check.md`, outside any round — the SSH-tools line no longer asks the user to install, and its settled judgement speaks of *without them*. The check after the last fix. No auditor has seen it.

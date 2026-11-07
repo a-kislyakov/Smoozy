@@ -433,6 +433,11 @@ impl TheArrangementsRun {
         }
     }
 
+    /// **E2b's second half: the job's ending has arrived.**
+    pub fn the_ending_is_in_hand(&self) -> bool {
+        self.the_ending.is_some()
+    }
+
     /// **The last complete walk**, so a caller arranging a fetch can take the
     /// file's size from the reading that made it fetchable.
     ///

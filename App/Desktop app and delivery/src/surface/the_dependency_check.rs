@@ -58,7 +58,7 @@
 //! - `Design/Whole app § Panels over a server` and `§ The failure shape` —
 //!   piece 5's frame and the one shape, obeyed and not re-decided.
 //!
-//! **The eighteen mockup states this piece draws** are [`THE_STATES_THIS_PIECE_DRAWS`],
+//! **The mockup states this piece draws** are [`THE_STATES_THIS_PIECE_DRAWS`],
 //! read out of `Preparation/Design/Mockup/Smoozy.html`'s own state list by a
 //! test below. The account is `Audits/Build/Step 10a/Piece 9 — what landed.md`.
 //!
@@ -165,7 +165,10 @@ pub const AN_ACT_ON_THIS_PANEL: &str = "the-dependency-check:an-act";
 /// *Uploading* and the foot counts only the rest. **Built 2026-10-25 by that
 /// work's piece 3**, which reads this run's sends per file into the rows and
 /// the foot, `Dependency Upload & Remap` A9a.)*
-pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 18] = [
+pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 21] = [
+    "chk-walk",
+    "chk-unchecked",
+    "chk-unsetup",
     "chk-clean",
     "chk-sel",
     "chk-cut",
@@ -207,12 +210,18 @@ mod words {
     /// that section's closing paragraph, the Creator's note 8 on the test
     /// copy.
     pub const READING_THE_FILE: &str = "Reading the file…";
+    /// **While the walk over a reading's files runs**, in place of either line
+    /// above, with *Stop* beside it — that section, 2026-11-04.
+    pub const CHECKING_FILES_ON_THE_SERVER: &str = "Checking files on the server:";
 
     // The statements above the rows. `§ What this document left open, and how
     // it was answered`, first bullet, whose words Design settled.
     pub const IS_HERE_BUT_SOMETHING_IS_GONE: &str =
         "is here, but data linked from it is missing.";
     pub const BLENDER_DOES_NOT_SAY_WHICH: &str = "Blender does not say which.";
+    // `Dependency Upload & Remap` G9a.
+    pub const CANNOT_WORK_OUT_THE_BAKE_FOLDER: &str = "Can't resolve the bake folder";
+    pub const BLENDER_MAY_HAVE_PACKED_IT: &str = "It may be packed in the .blend.";
     pub const UPLOADED_AS_A_DEPENDENCY_BEFORE: &str =
         "Uploaded before as a dependency.";
     pub const ITS_LOCATIONS_STILL_POINT_HOME: &str =
@@ -282,6 +291,11 @@ mod words {
         "Pick another Blender in Render settings, then check again.";
     pub const COULD_NOT_REACH_THE_SERVER: &str = "Could not reach the server.";
     pub const THE_READ_DID_NOT_FINISH: &str = "Reading the file did not finish.";
+    /// **`§ When the file could not be read at all`, 2026-11-04: the server took
+    /// no reading and this server's setup stands stopped.**
+    pub const SETUP_STOPPED: &str = "Setup stopped.";
+    pub const FINISH_SETUP_THEN_CHECK_AGAIN: &str = "Finish setup, then check again.";
+    pub const SET_UP_AGAIN: &str = "Set up again";
     pub const THE_CHECK_WAS_STOPPED: &str = "Check stopped.";
     pub const BLENDER: &str = "Blender";
     pub const SERVER: &str = "Server";
@@ -336,7 +350,8 @@ mod words {
     pub const READY_TO_UPLOAD: &str = "Ready to upload";
     // 2. A failure's own reason, in red.
     pub const UPLOAD_FAILED_NO_PERMISSION: &str = "Upload failed: permission denied";
-    pub const COULD_NOT_UPDATE_ITS_FILE_PATHS: &str = "Uploaded; remap failed";
+    pub const COULD_NOT_UPDATE_ITS_FILE_PATHS: &str = "Uploaded; remap failed: a path did not update";
+    pub const COULD_NOT_OPEN_IT_TO_REMAP: &str = "Uploaded; remap failed: Blender could not open it";
     pub const UPLOAD_FAILED_THE_PATH_IS_TOO_LONG: &str = "Upload failed: path too long for the server";
     pub const UPLOAD_FAILED: &str = "Upload failed";
     /// Transfers' own sentence for the same file, not a second one.
@@ -381,6 +396,9 @@ mod words {
     // *Uploading 4 of 12* while the check's uploads run (the Creator's note 6
     // on 0.1.8).
     pub const NOTHING_IS_MISSING: &str = "Nothing is missing.";
+    /// **A row to upload is a linked file nobody has read**, so what lies below
+    /// it is not known — `§ Above the rows`, 2026-11-04.
+    pub const LINKED_FILES_NOT_CHECKED_YET: &str = "Linked files not checked yet.";
     pub const FAILED_FIGURE: &str = "failed";
     pub const MISSING_FIGURE: &str = "missing";
     pub const NOT_VERIFIED_FIGURE: &str = "not verified";
@@ -389,6 +407,14 @@ mod words {
     pub const ALREADY_ON_THE_SERVER_FIGURE: &str = "already on the server";
     pub const FOUND_SO_FAR_AT_THE_END: &str = "found so far.";
     pub const UPLOADING: &str = "Uploading";
+    // `§ Along the bottom`: a press that sent nothing says why, once.
+    // `§ A row`, `Dependency Upload & Remap` G6f.
+    pub const LINKED_BY_FULL_PATH: &str =
+        "Absolute path. Scripts may not reach it, so the render may differ. Make the path relative.";
+    pub const NOTHING_TO_UPLOAD: &str = "Nothing to upload.";
+    pub const FILE_IS_ALREADY_THERE: &str = "file is already on the server.";
+    pub const FILES_ARE_ALREADY_THERE: &str = "files are already on the server.";
+    pub const THEY_ARE_ALREADY_UPLOADING: &str = "These files are already uploading.";
 
     // `§ Along the bottom` — only the button.
     pub const UPLOAD: &str = "Upload";
@@ -501,10 +527,120 @@ pub struct WhatTheRunHolds {
     /// [`the_file_is_about_to_be_read`] when a check is asked for, and by
     /// `crate::checking_a_file` when its sitting starts; taken off there
     /// when the root's reading lands and on every way out. **It stands over
-    /// whatever the run held before**, since a fresh sitting re-reads and
+    /// whatever the run held before**, since a fresh sitting rebuilds and
     /// never carries (`Dependency Upload & Remap` G17). The Creator's note 8
     /// on the test copy.
     pub files_being_read: BTreeSet<String>,
+    /// **`Dependency Upload & Remap` G17a: how many search folders have been
+    /// added to each check's sitting**, which a reading compares when its rows
+    /// are about to land.
+    pub the_adds_taken: BTreeMap<String, u32>,
+    /// **`Dependency Upload & Remap` G17b: the readings this run keeps**, in
+    /// memory alone.
+    pub the_kept_readings: crate::kept_readings::TheKeptReadings,
+    /// **`Dependency Upload & Remap` G17b: files going up to each machine**, which
+    /// decides whether a reading may be kept.
+    pub the_files_going_up: crate::kept_readings::TheFilesGoingUp,
+    /// **`Dependency Upload & Remap` A9c: what a press that sent nothing said**,
+    /// said once and let go of at the next act.
+    pub what_a_send_said: BTreeMap<String, WhatASendSaid>,
+    /// **`Dependency Upload & Remap` G14a: the checks a send ended during**, which
+    /// go round once more when their walk ends.
+    pub a_round_is_owed: BTreeSet<String>,
+    /// **`Dependency Upload & Remap` A9e: the presses of the upload control whose
+    /// send has not ended and whose check after it has not begun**, by check.
+    pub the_sends_in_hand: BTreeMap<String, u32>,
+    /// **`Dependency Upload & Remap` A9e's (b): the linked `.blend`s landed on each
+    /// check, and how many of them a sitting has answered.**
+    pub the_libraries_landed: BTreeMap<String, TheLibrariesLanded>,
+}
+
+/// **`Dependency Upload & Remap` A9e's (b).**
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TheLibrariesLanded {
+    pub landed: u64,
+    pub answered: u64,
+}
+
+/// **`Dependency Upload & Remap` A9e: why *Render* makes no job now.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhyRenderIsHeld {
+    /// A send of this file's check is counted, running or waiting.
+    ASendIsGoing,
+    /// A linked `.blend` landed, and the check that fixes it is running.
+    ItsCheckIsRunning,
+    /// A linked `.blend` landed, and no check is running or coming.
+    CheckFirst,
+}
+
+/// **`Dependency Upload & Remap` A9e: whether this file's check holds *Render* on
+/// this server**, read at the page's drawing and again at the press. **The send is
+/// read before what it leaves behind**, and a library's landing is counted before
+/// its file reads ended, so a press never finds a gap between the two.
+pub fn what_holds_render(
+    held: &Mutex<WhatTheRunHolds>,
+    server: &str,
+    file: &str,
+) -> Option<WhyRenderIsHeld> {
+    let key = keyed(server, file);
+    let a_send_goes = crate::the_found_files_sent::a_send_is_going(server, file);
+    let held = held.lock().ok()?;
+    if a_send_goes || held.the_sends_in_hand.contains_key(&key) {
+        return Some(WhyRenderIsHeld::ASendIsGoing);
+    }
+    let libraries = held.the_libraries_landed.get(&key)?;
+    (libraries.landed > libraries.answered).then(|| {
+        if held.checks_running.contains_key(&key) || held.files_being_read.contains(&key) {
+            WhyRenderIsHeld::ItsCheckIsRunning
+        } else {
+            WhyRenderIsHeld::CheckFirst
+        }
+    })
+}
+
+/// **`Dependency Upload & Remap` A9e's (b): a linked `.blend` of this check was
+/// published.**
+pub fn a_library_landed(held: &Mutex<WhatTheRunHolds>, key: &str) {
+    if let Ok(mut held) = held.lock() {
+        held.the_libraries_landed.entry(key.to_string()).or_default().landed += 1;
+    }
+}
+
+/// **`Dependency Upload & Remap` A9e's (a): a press of the upload control, held
+/// until its send has ended and the check after it has begun**, however the press
+/// ends.
+struct TheSendInHand(String);
+
+impl TheSendInHand {
+    fn of(key: &str) -> TheSendInHand {
+        if let Ok(mut held) = the_run_holds().lock() {
+            *held.the_sends_in_hand.entry(key.to_string()).or_default() += 1;
+        }
+        TheSendInHand(key.to_string())
+    }
+}
+
+impl Drop for TheSendInHand {
+    fn drop(&mut self) {
+        if let Ok(mut held) = the_run_holds().lock() {
+            if let Some(count) = held.the_sends_in_hand.get_mut(&self.0) {
+                *count -= 1;
+                if *count == 0 {
+                    held.the_sends_in_hand.remove(&self.0);
+                }
+            }
+        }
+    }
+}
+
+/// **`Dependency Upload & Remap` A9c: why a press of the upload control sent
+/// nothing.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhatASendSaid {
+    /// Every file was found on the server already.
+    TheyAreAlreadyOnTheServer(usize),
+    /// Every file is on its way already.
+    TheyAreAlreadyUploading,
 }
 
 /// **A check of this file is about to read it**, so the panel says so from
@@ -524,6 +660,10 @@ pub fn the_file_is_about_to_be_read(held: &mut WhatTheRunHolds, key: &str) -> bo
 pub struct AnEnding {
     pub ending: Ending,
     pub read_with: Option<BlenderIdentity>,
+    /// **The server took no reading and this server's setup stands stopped**, read
+    /// off the machine as the ending landed — `§ When the file could not be read
+    /// at all`, 2026-11-04.
+    pub the_setup_stands_stopped: bool,
 }
 
 /// **One check sitting over one file on one server.**
@@ -532,14 +672,19 @@ pub struct ASitting {
     pub read_with: BlenderIdentity,
     /// How many linked `.blend` files the loop has read so far.
     pub linked_files_read: usize,
-    /// `Dependency Upload & Remap` G14: a linked file whose own tree is still
-    /// being read.
+    /// `Dependency Upload & Remap` G15: the actual machine path of the linked
+    /// file being read, cleared before searching its returned rows.
     pub still_reading_below: Option<RecordedLocation>,
+    /// **`Dependency Upload & Remap` Q5a: how far the walk over a reading's files
+    /// has got** — done, of whole — while it runs.
+    pub the_walk: Option<(usize, usize)>,
     /// `Dependency Upload & Remap` V10's three endings, or nothing while the
     /// sitting runs.
     pub completion: Option<Completion>,
     /// `Dependency Upload & Remap` G6a.
     pub linked_items: Vec<LinkedItemStatement>,
+    /// `Dependency Upload & Remap` G9a.
+    pub the_bake_folders_not_worked_out: Vec<smoozy_dependencies::check::TheBakeFolderNotWorkedOut>,
     /// `Dependency Upload & Remap` V9a.
     pub sent_up_as_a_dependency_before: bool,
     pub the_search: Option<TheSearchInHand>,
@@ -655,14 +800,114 @@ pub struct ACheckedRow {
     pub wanted: Vec<Outstanding>,
     /// `Dependency Upload & Remap` F10's capitals-only proposal.
     pub proposal: Option<StoredLocation>,
-    /// `Dependency Upload & Remap` G23: how many files a set row stands for.
+    /// `Dependency Upload & Remap` G23: how many files a set row stands for, and
+    /// `Dependency Upload & Remap` F28's line of 2026-11-02: how many a
+    /// folder-shaped row sends.
     pub members: Option<usize>,
     pub size: Option<u64>,
     pub why_it_did_not_go_up: Option<WhyItDidNotGoUp>,
     pub its_failure_was_cleared: bool,
+    /// **`Dependency Upload & Remap` Q5a: the files and bytes of a set or folder row
+    /// Q5 found already up**, which the send will not take.
+    pub the_part_already_up: Option<(usize, u64)>,
+}
+
+/// **`Dependency Upload & Remap` G11b: the rows standing for one real file, in
+/// the same state when the check ran, the first of each at its head.** In the
+/// order the rows first name them.
+pub fn the_real_files(rows: &[ACheckedRow]) -> Vec<Vec<usize>> {
+    let mut places: std::collections::HashMap<Vec<u8>, Vec<(RowState, usize)>> =
+        std::collections::HashMap::new();
+    let mut files: Vec<Vec<usize>> = Vec::new();
+    for (at, one) in rows.iter().enumerate() {
+        let of_this_file = places.entry(one.the_real_file()).or_default();
+        match of_this_file.iter().find(|(state, _)| *state == one.state_when_the_check_ran) {
+            Some((_, place)) => files[*place].push(at),
+            None => {
+                of_this_file.push((one.state_when_the_check_ran, files.len()));
+                files.push(vec![at]);
+            }
+        }
+    }
+    files
+}
+
+/// **Every figure counts a real file once** (`Dependency Upload & Remap` G11b):
+/// the rows matching, the first of each real file.
+pub fn one_row_per_real_file(rows: &[ACheckedRow], wanted: impl Fn(&ACheckedRow) -> bool) -> Vec<usize> {
+    let mut seen = std::collections::HashSet::new();
+    rows.iter()
+        .enumerate()
+        .filter(|(_, one)| wanted(one) && seen.insert(one.the_real_file()))
+        .map(|(at, _)| at)
+        .collect()
+}
+
+/// `Dependency Upload & Remap` G11b and `Dependency Upload & Remap` V12:
+/// the warning uses the panel's file count in each state.
+/// Confirmation still checks every reference and its holding file.
+pub(crate) fn the_warning_counts(
+    rows: &[ACheckedRow],
+    mut counts: smoozy_dependencies::standing::Counts,
+) -> smoozy_dependencies::standing::Counts {
+    let count = |state| one_row_per_real_file(rows, |one| one.state == state).len();
+    counts.not_found = count(RowState::NotFound);
+    counts.could_not_be_sent = 0;
+    counts.could_not_be_fixed = 0;
+    // The panel has one failed group for both kinds of failure.
+    for at in one_row_per_real_file(rows, |one| is_a_failure(one.state)) {
+        match rows[at].state {
+            RowState::CouldNotBeSent => counts.could_not_be_sent += 1,
+            RowState::CouldNotBeFixed => counts.could_not_be_fixed += 1,
+            _ => unreachable!(),
+        }
+    }
+    counts.found_but_not_sent = count(RowState::FoundOnYourComputer);
+    counts
 }
 
 impl ACheckedRow {
+    /// **`Dependency Upload & Remap` Q5a: the files and bytes a send of this row
+    /// will take.**
+    pub fn what_a_send_would_take(&self) -> (usize, u64) {
+        let (files, bytes) = self.the_part_already_up.unwrap_or((0, 0));
+        (
+            self.members.unwrap_or(1).saturating_sub(files),
+            self.size.unwrap_or(0).saturating_sub(bytes),
+        )
+    }
+
+    /// **`Dependency Upload & Remap` G11b: what makes two rows one real file** —
+    /// the location found, a set's with its pattern; with nothing found, the
+    /// whole location the render reads, and where that cannot be worked out, the
+    /// holding file's own text of it.
+    pub fn the_real_file(&self) -> Vec<u8> {
+        let resolved = self.the_answer().and_then(|answer| answer.resolution.as_ref());
+        if let Some(resolution) = resolved {
+            let mut file = b"found ".to_vec();
+            file.extend_from_slice(resolution.to.location().as_bytes());
+            if matches!(resolution.to, ResolvedTo::AFolderForASetRow(_)) {
+                file.push(0);
+                if let Some(pattern) = self.wanted.first().and_then(|wanted| wanted.the_sets_pattern()) {
+                    file.extend_from_slice(pattern);
+                }
+            }
+            return file;
+        }
+        let source = crate::checking_a_file::the_source_folder(&self.holding);
+        let whole = self.wanted.first().and_then(|wanted| {
+            smoozy_dependencies::shift::the_full_old_location(&wanted.the_location_read, source.as_deref())
+        });
+        match whole {
+            Some(whole) => {
+                let mut file = b"asked ".to_vec();
+                file.extend_from_slice(&whole);
+                file
+            }
+            None => format!("{:?} {:?}", self.holding, self.row.ordering_key()).into_bytes(),
+        }
+    }
+
     /// **The answer the row shows** — its ordering key's (`Dependency Upload &
     /// Remap` G11a), which is the reference the column draws.
     pub fn the_answer(&self) -> Option<&LocatedAnswer> {
@@ -731,6 +976,8 @@ pub struct TheCheck {
     pub the_statements: Vec<AStatement>,
     pub the_once: Option<TheFailure>,
     pub the_ending: Option<TheFailure>,
+    /// ***Stop* beside the walk's count**, the one line it is drawn on.
+    pub the_walks_stop: Option<Prose>,
     pub nothing_was_read: Option<Prose>,
     /// **The one button under *File not read* where no check of the file
     /// is held** — *Check dependencies*, the drawing's `.btn` in `.cnone`
@@ -1035,7 +1282,8 @@ pub fn the_dependency_check_panel<R: tauri::Runtime>(
     // Transfers shows which are going (`Dependency Upload & Remap` A9a, the
     // Creator's eighteenth notes, note 6).
     let on_its_way = crate::the_found_files_sent::the_files_on_their_way_to(&server);
-    let known = WhatElseIsKnown { the_list_in_settings, uploading, on_its_way };
+    let a_send_is_being_counted = crate::the_found_files_sent::a_send_is_being_counted(&server, &file);
+    let known = WhatElseIsKnown { the_list_in_settings, uploading, on_its_way, a_send_is_being_counted };
     match the_run_holds().lock() {
         Ok(held) => the_panel_knowing(&held, &server, &file, the_servers_name.as_deref(), &known),
         // **L8a rather than an emptied panel.**
@@ -1137,7 +1385,7 @@ fn the_check_is_begun<R: tauri::Runtime>(
     // **No live connection: `Render Settings` Q8's first ending, and nothing
     // asked** — handed to the diary once, the way every ending is.
     let Some(point) = point else {
-        the_ending_lands(app, server, file, Ending::TheMachineCouldNotBeReached, None, name.as_deref());
+        the_ending_lands(app, server, file, Ending::TheMachineCouldNotBeReached, None, false, name.as_deref());
         return None;
     };
     let Some(row) = row else {
@@ -1274,7 +1522,7 @@ fn the_check_is_begun<R: tauri::Runtime>(
                 return;
             }
             Err(NoBlenderToReadWith::TheServerCouldNotBeAsked) => {
-                the_ending_lands(&app, &server, &file, Ending::TheMachineCouldNotBeReached, None, name.as_deref());
+                the_ending_lands(&app, &server, &file, Ending::TheMachineCouldNotBeReached, None, false, name.as_deref());
                 no_longer_read();
                 the_queue_is_told(&queue, an_act_said(&server, &file, None));
                 return;
@@ -1315,7 +1563,15 @@ fn the_check_is_begun<R: tauri::Runtime>(
                 crate::checking_a_file::TheCheckCameTo::ItGaveNothing(Ending::TheMachineCouldNotBeReached)
             }
         };
-        let said = the_sitting_came_to(&app, &server, &file, came_to, &with, name.as_deref());
+        // **`§ When the file could not be read at all`, 2026-11-04: where the server
+        // took no reading, the Set up tab's own reading says whether this server's
+        // setup stands stopped.** A Blender that ran says nothing about a setup.
+        let the_setup_stands_stopped = matches!(
+            came_to,
+            crate::checking_a_file::TheCheckCameTo::ItGaveNothing(Ending::NotAReadingAndNoneOfTheThreeEndingsFits)
+        ) && crate::setting_up::the_setup_on(&app, &point, &server)
+            .is_some_and(|read| crate::surface::set_up::a_stopped_setup_stands(&read));
+        let said = the_sitting_came_to(&app, &server, &file, came_to, &with, name.as_deref(), the_setup_stands_stopped);
         the_queue_is_told(&queue, an_act_said(&server, &file, said));
     });
     None
@@ -1421,12 +1677,13 @@ fn the_sitting_came_to<R: tauri::Runtime>(
     came_to: crate::checking_a_file::TheCheckCameTo,
     with: &BlenderIdentity,
     name: Option<&str>,
+    the_setup_stands_stopped: bool,
 ) -> Option<Prose> {
     use crate::checking_a_file::TheCheckCameTo;
     match came_to {
         TheCheckCameTo::TheSittingStands(_) | TheCheckCameTo::ItJoinedTheOneRunning => None,
         TheCheckCameTo::ItGaveNothing(ending) => {
-            the_ending_lands(app, server, file, ending, Some(with.clone()), name);
+            the_ending_lands(app, server, file, ending, Some(with.clone()), the_setup_stands_stopped, name);
             None
         }
         TheCheckCameTo::TheRecordRefusedAWrite => Some(Prose::new(words::THE_CHANGE_WAS_NOT_SAVED)),
@@ -1442,6 +1699,7 @@ fn the_ending_lands<R: tauri::Runtime>(
     file: &str,
     ending: Ending,
     read_with: Option<BlenderIdentity>,
+    the_setup_stands_stopped: bool,
     name: Option<&str>,
 ) {
     use tauri::Manager;
@@ -1450,12 +1708,13 @@ fn the_ending_lands<R: tauri::Runtime>(
     let Ok(mut held) = the_run_holds().lock() else {
         return;
     };
-    let _ = the_check_gave_nothing(
+    let _ = an_ending_is_held(
         &mut held,
         server,
         file,
         ending,
         read_with,
+        the_setup_stands_stopped,
         &crate::surface::render_settings::TheDiaryInHand {
             diary: started.as_ref().and_then(|started| started.diary.as_ref()),
             run: started.as_ref().and_then(|started| started.run.as_ref()),
@@ -1668,6 +1927,8 @@ fn a_send_is_asked_for<R: tauri::Runtime>(
         replacing: act == TheAct::Replace,
     };
     let app = app.clone();
+    // **`Dependency Upload & Remap` A9e: from the press, *Render* is held.**
+    let in_hand = (act != TheAct::Confirm).then(|| TheSendInHand::of(&key));
     tauri::async_runtime::spawn(async move {
         if act == TheAct::Confirm {
             if let Some(at) = asked.rows.first() {
@@ -1680,6 +1941,9 @@ fn a_send_is_asked_for<R: tauri::Runtime>(
             // arrived runs the check again**, the same act as *Check again* —
             // see [`the_check_runs_again_after`] for when.
             the_check_runs_again_after(&came_to, || {
+                // **`Dependency Upload & Remap` G14a: a check running goes round
+                // once more**, and the press below joins it.
+                crate::checking_a_file::a_send_ended(the_run_holds(), &keyed(&asked.of.server, &asked.of.file));
                 let bytes = asked.of.root.as_bytes().to_vec();
                 if let Some(said) = the_check_is_begun(&app, &asked.of.server, &asked.of.file, &bytes) {
                     if let Some(queue) = app.try_state::<Arc<TheOneQueue>>() {
@@ -1688,6 +1952,7 @@ fn a_send_is_asked_for<R: tauri::Runtime>(
                 }
             });
         }
+        drop(in_hand);
         door.a_transfer_moved();
     });
     None
@@ -1753,6 +2018,28 @@ async fn one_picked<R: tauri::Runtime>(
         .map(|one| one.as_the_user_gave_it().as_os_str().as_encoded_bytes().to_vec())
 }
 
+/// **`Dependency Upload & Remap` F1c: *Locate…* and *Choose a folder…*, off the
+/// drawing thread, with no lock held while they look at the disk.**
+async fn a_decision_looks_at_the_disk<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    server: &str,
+    file: &str,
+    decision: crate::checking_a_file::ADecision,
+    row: Option<usize>,
+) -> Option<Prose> {
+    use crate::checking_a_file::{a_decision_that_looks_is_taken, TheUsersOwnComputer, WhatADecisionCameTo};
+    let (app, key) = (app.clone(), keyed(server, file));
+    tauri::async_runtime::spawn_blocking(move || {
+        match a_decision_that_looks_is_taken(the_run_holds(), &key, &decision, row, &TheApplicationsRecord { app }, &TheUsersOwnComputer) {
+            WhatADecisionCameTo::Taken | WhatADecisionCameTo::NothingToTake => None,
+            WhatADecisionCameTo::NotSaved => Some(Prose::new(words::THE_CHANGE_WAS_NOT_SAVED)),
+        }
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
 /// **What each act does.** The acts that stay in the run's memory are
 /// [`the_act_is_taken`]'s; every decision about the user's own computer is
 /// saved through `crate::checking_a_file`; checking again starts a sitting.
@@ -1790,7 +2077,34 @@ async fn the_act_is_answered<R: tauri::Runtime>(
         TheAct::Accept => ADecision::Accept,
         TheAct::UseIt => ADecision::UseIt,
         TheAct::UndoTheShift => ADecision::UndoTheShift,
-        TheAct::AddASearchFolder => ADecision::AddTheChosenSearchFolder,
+        // **`Dependency Upload & Remap` F1b: off the drawing thread, and no lock
+        // held while it searches.**
+        TheAct::AddASearchFolder => {
+            let (app, server, file) = (app.clone(), server.to_string(), file.to_string());
+            return tauri::async_runtime::spawn_blocking(move || {
+                use crate::checking_a_file::{the_chosen_folder_is_added, TheUsersOwnComputer, WhatADecisionCameTo};
+                use tauri::Manager;
+                let door = TheApplicationsRecord { app: app.clone() };
+                let told = || {
+                    if let Some(queue) = app.try_state::<Arc<TheOneQueue>>() {
+                        the_queue_is_told(&queue, an_act_said(&server, &file, None));
+                    }
+                };
+                match the_chosen_folder_is_added(
+                    the_run_holds(),
+                    &keyed(&server, &file),
+                    &door,
+                    &TheUsersOwnComputer,
+                    &told,
+                ) {
+                    WhatADecisionCameTo::Taken | WhatADecisionCameTo::NothingToTake => None,
+                    WhatADecisionCameTo::NotSaved => Some(Prose::new(words::THE_CHANGE_WAS_NOT_SAVED)),
+                }
+            })
+            .await
+            .ok()
+            .flatten();
+        }
         // **`Dependency Upload & Remap` F28 and `Dependency Upload & Remap` G23: a set row, or a
         // folder-shaped one, is pointed at a folder**; everything else at a
         // file.
@@ -1809,10 +2123,12 @@ async fn the_act_is_answered<R: tauri::Runtime>(
                 },
                 Err(_) => return Some(Prose::new(words::THE_RECORD_WOULD_NOT_READ)),
             };
-            ADecision::Locate(one_picked(app, what, words::LOCATE).await?)
+            let path = one_picked(app, what, words::LOCATE).await?;
+            return a_decision_looks_at_the_disk(app, server, file, ADecision::Locate(path), row).await;
         }
         TheAct::ChooseAFolder => {
-            ADecision::ChooseAFolder(one_picked(app, WhatMayBeChosen::Folders, words::CHOOSE_A_FOLDER).await?)
+            let folder = one_picked(app, WhatMayBeChosen::Folders, words::CHOOSE_A_FOLDER).await?;
+            return a_decision_looks_at_the_disk(app, server, file, ADecision::ChooseAFolder(folder), row).await;
         }
         // **The folder is held until Add**, and the box shows it.
         TheAct::ChooseASearchFolder => {
@@ -1858,12 +2174,30 @@ pub fn the_check_gave_nothing(
     read_with: Option<BlenderIdentity>,
     the_diary: &crate::surface::render_settings::TheDiaryInHand<'_>,
 ) -> crate::presentation::the_two_hooks::TheDiaryWasHanded {
+    an_ending_is_held(held, server, file, ending, read_with, false, the_diary)
+}
+
+/// **The same, knowing whether this server's setup stands stopped** —
+/// [`AnEnding::the_setup_stands_stopped`], whose sentence the diary is handed.
+fn an_ending_is_held(
+    held: &mut WhatTheRunHolds,
+    server: &str,
+    file: &str,
+    ending: Ending,
+    read_with: Option<BlenderIdentity>,
+    the_setup_stands_stopped: bool,
+    the_diary: &crate::surface::render_settings::TheDiaryInHand<'_>,
+) -> crate::presentation::the_two_hooks::TheDiaryWasHanded {
     use crate::presentation::the_two_hooks::{
         the_diary_is_handed_a_sentence_with_no_record, APresentationWithNoRecord, TheDiaryWasHanded,
         WhoseSentenceItIs,
     };
-    let sentence = the_endings_sentence(&ending);
-    held.endings.insert(keyed(server, file), AnEnding { ending, read_with });
+    let sentence = if the_setup_stands_stopped {
+        Some(words::SETUP_STOPPED)
+    } else {
+        the_endings_sentence(&ending)
+    };
+    held.endings.insert(keyed(server, file), AnEnding { ending, read_with, the_setup_stands_stopped });
     let Some(sentence) = sentence else {
         return TheDiaryWasHanded::Nothing {
             reported: "a reading is not an ending".to_string(),
@@ -2206,6 +2540,9 @@ pub struct WhatElseIsKnown {
     /// A row any of whose files is among them says *Uploading* and the foot
     /// leaves it out. Empty where nothing is going.
     pub on_its_way: Vec<MachineLocation>,
+    /// **`Dependency Upload & Remap` A9c: a press of this check's upload control
+    /// is still counting what goes.**
+    pub a_send_is_being_counted: bool,
 }
 
 /// **The whole panel, composed from what the run holds and from nothing else.**
@@ -2242,6 +2579,7 @@ pub fn the_panel_knowing(
         the_statements: Vec::new(),
         the_once: None,
         the_ending: None,
+        the_walks_stop: None,
         nothing_was_read: None,
         the_check_to_start: None,
         the_tools: None,
@@ -2286,10 +2624,16 @@ pub fn the_panel_knowing(
     // linked file`, its closing paragraph. An empty table there is the empty
     // list `Dependency Upload & Remap` G3 forbids. **It stands over whatever
     // the run held before** — an earlier sitting's rows or an earlier ending —
-    // because the fresh sitting re-reads and carries none of it (`Dependency
+    // because the fresh sitting rebuilds and carries none of it (`Dependency
     // Upload & Remap` G17). The Creator's note 8 on the test copy.
     if held.files_being_read.contains(&key) {
         check.still_reading = Some(Words::plain(words::READING_THE_FILE));
+        // **`Dependency Upload & Remap` Q5a's walk over the file's own rows counts in its place**, with
+        // *Stop* beside it (`§ While it is still reading below a linked file`).
+        if let Some(walk) = held.sittings.get(&key).and_then(|sitting| sitting.the_walk) {
+            check.still_reading = Some(the_walks_line(walk));
+            check.the_walks_stop = Some(Prose::new(words::STOP));
+        }
         return check;
     }
 
@@ -2300,7 +2644,11 @@ pub fn the_panel_knowing(
             check.the_reading_line =
                 vec![Words::with(words::READ_WITH_BLENDER, version_text(read_with.version))];
         }
-        check.the_ending = the_ending(&ending.ending, the_servers_name, ending.read_with.as_ref());
+        check.the_ending = if ending.the_setup_stands_stopped {
+            Some(the_ending_of_a_stopped_setup())
+        } else {
+            the_ending(&ending.ending, the_servers_name, ending.read_with.as_ref())
+        };
         check.nothing_was_read = Some(Prose::new(words::NOTHING_WAS_READ));
         return check;
     }
@@ -2347,6 +2695,11 @@ pub fn the_panel_knowing(
             Words::with(words::STILL_READING_BELOW, the_last_part(library.as_bytes()))
                 .then(words::CANNOT_SAY_HOW_FAR)
         });
+        // **`Dependency Upload & Remap` Q5a's walk counts in its place**, with *Stop* beside it.
+        if let Some(walk) = sitting.the_walk {
+            check.still_reading = Some(the_walks_line(walk));
+            check.the_walks_stop = Some(Prose::new(words::STOP));
+        }
     }
 
     check.the_statements = the_statements(sitting, dropped, known.the_list_in_settings.as_deref());
@@ -2364,7 +2717,10 @@ pub fn the_panel_knowing(
     check.the_selection = the_selection_bar(sitting, &chosen);
     check.the_shift = sitting.the_shift.as_ref().map(|shift| the_shift(sitting, shift));
     check.the_table = Some(the_table(sitting, &chosen, dropped, &known.on_its_way));
-    check.the_foot = the_foot(sitting, dropped, so_far, &known.on_its_way);
+    check.the_foot = the_foot(sitting, dropped, so_far, &known.on_its_way, known.a_send_is_being_counted);
+    if let Some(said) = held.what_a_send_said.get(&key) {
+        check.the_statements.push(what_the_send_said(*said));
+    }
     check.the_overwrite = held
         .overwrites
         .get(&key)
@@ -2416,6 +2772,43 @@ fn the_endings_sentence(ending: &Ending) -> Option<&'static str> {
             Some(words::THE_READ_DID_NOT_FINISH)
         }
         Ending::SmoozyStoppedIt => Some(words::THE_CHECK_WAS_STOPPED),
+    }
+}
+
+/// ***Checking files on the server: 120 of 480***, the walk's own count.
+fn the_walks_line((done, whole): (usize, usize)) -> Words {
+    Words::plain(words::CHECKING_FILES_ON_THE_SERVER)
+        .and(done.to_string())
+        .then(words::OF)
+        .and(whole.to_string())
+}
+
+/// **`§ When the file could not be read at all`, 2026-11-04.** No read ran, so
+/// none of the four endings is true. *Set up again* is the page's: it opens the
+/// Set up tab and asks for the ready action there, as that tab's own does.
+fn the_ending_of_a_stopped_setup() -> TheFailure {
+    TheFailure {
+        which: Verbatim::new("setup-stopped"),
+        sentence: Prose::new(words::SETUP_STOPPED),
+        the_second_sentence: Some(Prose::new(words::FINISH_SETUP_THEN_CHECK_AGAIN)),
+        values: Vec::new(),
+        controls: vec![
+            AShapesControl {
+                is: Verbatim::new("retry"),
+                label: Prose::new(words::SET_UP_AGAIN),
+                act: Verbatim::new("set-up-again"),
+            },
+            AShapesControl {
+                is: Verbatim::new("retry"),
+                label: Prose::new(words::CHECK_AGAIN),
+                act: Verbatim::new("check-again"),
+            },
+            AShapesControl {
+                is: Verbatim::new("cross"),
+                label: Prose::new(crate::presentation::the_failure_shape::CLEAR_THIS),
+                act: Verbatim::new("clear-the-ending"),
+            },
+        ],
     }
 }
 
@@ -2519,6 +2912,19 @@ fn the_statements(sitting: &ASitting, dropped: bool, the_list_in_settings: Optio
                 .and(the_last_part(linked.library.as_bytes()))
                 .then(words::IS_HERE_BUT_SOMETHING_IS_GONE)
                 .then(words::BLENDER_DOES_NOT_SAY_WHICH),
+            false,
+        ));
+    }
+    // `Dependency Upload & Remap` G9a: never *Missing*, since no folder is
+    // predicted.
+    for bake in &sitting.the_bake_folders_not_worked_out {
+        out.push(a_statement(
+            "a-bake-folder-not-worked-out",
+            Words::plain(words::CANNOT_WORK_OUT_THE_BAKE_FOLDER)
+                .and(lossy(bake.recorded.as_bytes()))
+                .then(words::FULL_STOP)
+                .joined()
+                .then(words::BLENDER_MAY_HAVE_PACKED_IT),
             false,
         ));
     }
@@ -2659,9 +3065,31 @@ fn the_folder_added(added: &TheFolderAdded) -> AStatement {
     }
 }
 
+/// **`Dependency Upload & Remap` A9c: a press that sent nothing says why, once.**
+fn what_the_send_said(said: WhatASendSaid) -> AStatement {
+    let said = match said {
+        WhatASendSaid::TheyAreAlreadyOnTheServer(files) => Words::plain(words::NOTHING_TO_UPLOAD)
+            .and(files.to_string())
+            .then(if files == 1 { words::FILE_IS_ALREADY_THERE } else { words::FILES_ARE_ALREADY_THERE }),
+        WhatASendSaid::TheyAreAlreadyUploading => {
+            Words::plain(words::NOTHING_TO_UPLOAD).then(words::THEY_ARE_ALREADY_UPLOADING)
+        }
+    };
+    AStatement {
+        which: Verbatim::new("a-send-sent-nothing"),
+        said,
+        its_first_sentence_is_bold: true,
+        its_last_sentence_is_bold: false,
+        the_full_paths: Vec::new(),
+        its_folders_open_with: None,
+        control: None,
+    }
+}
+
 /// **What *Add* said is let go of at the user's next act on this panel**, so
 /// it is said once — every act but the add itself, which says it anew.
 pub fn the_added_statement_is_let_go(held: &mut WhatTheRunHolds, server: &str, file: &str, act: TheAct) {
+    held.what_a_send_said.remove(&keyed(server, file));
     // **Opening a searched folder is not an act on the check**: it leaves the
     // panel as it was.
     if act == TheAct::AddASearchFolder || act == TheAct::OpenASearchedFolder {
@@ -2772,11 +3200,7 @@ fn the_selection_bar(sitting: &ASitting, chosen: &BTreeSet<usize>) -> Option<The
 }
 
 fn the_shift(sitting: &ASitting, shift: &TheShiftInHand) -> TheShift {
-    let resolved = sitting
-        .rows
-        .iter()
-        .filter(|one| the_qualifiers(one).contains(&Qualifier::FromAShift))
-        .count();
+    let resolved = one_row_per_real_file(&sitting.rows, |one| the_qualifiers(one).contains(&Qualifier::FromAShift)).len();
     TheShift {
         said: Words::plain(words::EVERYTHING_RECORDED_UNDER)
             .and(lossy(&shift.old_root))
@@ -2813,7 +3237,8 @@ fn the_qualifiers(one: &ACheckedRow) -> Vec<Qualifier> {
 /// the file records** — `Dependency Upload & Remap` G11a's comparison, the
 /// module's own.
 fn the_rows_in_their_groups(sitting: &ASitting) -> Vec<Vec<usize>> {
-    let mut order: Vec<usize> = (0..sitting.rows.len()).collect();
+    // **`Dependency Upload & Remap` G11b: one real file, one row.**
+    let mut order: Vec<usize> = the_real_files(&sitting.rows).into_iter().map(|file| file[0]).collect();
     order.sort_by(|one, other| {
         let (a, b) = (&sitting.rows[*one], &sitting.rows[*other]);
         (b.kind == Kind::Library)
@@ -2846,6 +3271,10 @@ fn the_table(
     on_its_way: &[MachineLocation],
 ) -> TheTable {
     let layout = sitting.of.as_ref().and_then(|of| of.layout.as_ref());
+    let real_files: std::collections::HashMap<usize, Vec<usize>> = the_real_files(&sitting.rows)
+        .into_iter()
+        .map(|file| (file[0], file))
+        .collect();
     let groups = the_rows_in_their_groups(sitting)
         .into_iter()
         .enumerate()
@@ -2874,6 +3303,12 @@ fn the_table(
                         a_row(
                             *at,
                             &sitting.rows[*at],
+                            &real_files
+                                .get(at)
+                                .into_iter()
+                                .flatten()
+                                .map(|one| &sitting.rows[*one])
+                                .collect::<Vec<_>>(),
                             choosable && chosen.contains(at),
                             choosable,
                             dropped,
@@ -3041,8 +3476,9 @@ fn a_note(said: Words, colour: &str, hover: Option<&[u8]>) -> ANote {
 /// **A failure's own reason** — `§ A row`'s second note, in red.
 fn the_reason(why: Option<WhyItDidNotGoUp>) -> &'static str {
     match why {
-        Some(WhyItDidNotGoUp::SmoozyCouldNotOpenItToRemapItsPaths)
-        | Some(WhyItDidNotGoUp::SmoozyCouldNotRemapItsPaths) => words::COULD_NOT_UPDATE_ITS_FILE_PATHS,
+        // **`Dependency Upload & Remap` M14a: a failed row says which.**
+        Some(WhyItDidNotGoUp::SmoozyCouldNotOpenItToRemapItsPaths) => words::COULD_NOT_OPEN_IT_TO_REMAP,
+        Some(WhyItDidNotGoUp::SmoozyCouldNotRemapItsPaths) => words::COULD_NOT_UPDATE_ITS_FILE_PATHS,
         Some(WhyItDidNotGoUp::ThePathIsTooLong) => words::UPLOAD_FAILED_THE_PATH_IS_TOO_LONG,
         Some(WhyItDidNotGoUp::ItCouldNotBeReadHere) => words::COULD_NOT_READ_ON_YOUR_COMPUTER,
         Some(WhyItDidNotGoUp::TheUploadFailed) => words::UPLOAD_FAILED,
@@ -3059,6 +3495,7 @@ fn the_reason(why: Option<WhyItDidNotGoUp>) -> &'static str {
 fn a_row(
     at: usize,
     one: &ACheckedRow,
+    of_this_file: &[&ACheckedRow],
     chosen: bool,
     choosable: bool,
     dropped: bool,
@@ -3067,6 +3504,17 @@ fn a_row(
 ) -> ARow {
     let recorded = one.row.ordering_key().as_bytes();
     let resolution = one.the_answer().and_then(|answer| answer.resolution.as_ref());
+    // **`Dependency Upload & Remap` G6d: *The file says* reads as the file does.**
+    // Blender writes a library's relative location again as the file loads, so
+    // for a library the file's own text is what was first looked for.
+    let the_file_says = if one.kind == Kind::Library {
+        one.wanted
+            .iter()
+            .find(|wanted| wanted.reference.as_bytes() == recorded)
+            .map_or(recorded, |wanted| wanted.the_location_read.as_bytes())
+    } else {
+        recorded
+    };
 
     // **One location: the folder on this computer it uploads from** — a
     // file's folder, or the folder itself where the row is a folder or a set;
@@ -3084,7 +3532,7 @@ fn a_row(
             };
             Words::plain("").and(lossy(folder))
         }
-        None => Words::plain(words::THE_FILE_SAYS).and(lossy(the_recorded_folder(recorded))),
+        None => Words::plain(words::THE_FILE_SAYS).and(lossy(the_recorded_folder(the_file_says))),
     };
 
     // **The notes, every one that applies, in `§ A row`'s fixed order.**
@@ -3142,7 +3590,7 @@ fn a_row(
                     .then(words::FULL_STOP)
                     .joined()
                     .then(words::THE_FILE_SAYS)
-                    .and(lossy(the_recorded_folder(recorded))),
+                    .and(lossy(the_recorded_folder(the_file_says))),
                 "",
                 Some(from_folder),
             ));
@@ -3193,9 +3641,12 @@ fn a_row(
     }
     // 4. **What the row stands for** — `§ When more than one reference points
     // at one thing`, and a missing linked `.blend`.
-    if one.row.more_than_one_reference_led_to_it() {
+    // **Counted over every row of this real file** (`Dependency Upload & Remap`
+    // G11b): what the row keeps of who wants it.
+    let references: usize = of_this_file.iter().map(|row| row.row.references.len()).sum();
+    if references > 1 {
         notes.push(a_note(
-            Words::with(words::THE_FILE_POINTS_TO_THIS, one.row.references.len().to_string()).then(words::TIMES),
+            Words::with(words::THE_FILE_POINTS_TO_THIS, references.to_string()).then(words::TIMES),
             "",
             None,
         ));
@@ -3203,12 +3654,26 @@ fn a_row(
     if one.state == RowState::NotFound && one.kind == Kind::Library {
         notes.push(a_note(Words::plain(words::IT_MAY_ADD_MORE_ROWS), "", None));
     }
+    // **`Dependency Upload & Remap` G6f: a library linked by a full path says so**,
+    // read off the file's own text of it (`Dependency Upload & Remap` G6d). Nothing
+    // is blocked.
+    if one.kind == Kind::Library
+        && of_this_file
+            .iter()
+            .flat_map(|row| row.wanted.iter())
+            .any(|wanted| !wanted.the_location_read.as_bytes().starts_with(b"//"))
+    {
+        notes.push(a_note(Words::plain(words::LINKED_BY_FULL_PATH), "", None));
+    }
     // 5. **The spec's one exception to saying nothing about scenes**: only
     // where the reading finished for every reference the row stands for
     // (`Dependency Upload & Remap` G20a's *established*, which the sitting
     // carries per row) and reached no scene — and only where the walk starts
     // from something it could reach a scene from. It acts on nothing.
-    if matches!(&one.scenes, Attribution::Established(scenes) if scenes.is_empty())
+    if !of_this_file.is_empty()
+        && of_this_file
+            .iter()
+            .all(|row| matches!(&row.scenes, Attribution::Established(scenes) if scenes.is_empty()))
         && the_walk_starts_where_a_scene_can_be_reached(one.kind)
     {
         notes.push(a_note(Words::plain(words::NO_SCENE_USES_IT), "", None));
@@ -3238,11 +3703,18 @@ fn a_row(
 
     ARow {
         at: Verbatim::new(at.to_string()),
-        name: Verbatim::new(lossy(the_name_in(recorded))),
+        // `Dependency Upload & Remap` G9a: the folder the render reads, while
+        // *The file says* keeps the recorded bytes.
+        name: Verbatim::new(lossy(the_name_in(
+            one.wanted
+                .iter()
+                .find(|wanted| wanted.reference.as_bytes() == recorded)
+                .map_or(recorded, |wanted| wanted.the_location_read.as_bytes()),
+        ))),
         a_linked_blend: one.kind == Kind::Library,
         kind: the_kind(one.kind, one.members),
         location,
-        the_file_says: Verbatim::new(lossy(recorded)),
+        the_file_says: Verbatim::new(lossy(the_file_says)),
         notes,
         size: one.size.map(|bytes| Verbatim::new(the_size(bytes))),
         action,
@@ -3263,8 +3735,8 @@ fn a_row(
 /// rest ([`the_foot`]).
 fn the_upload(sitting: &ASitting) -> (usize, u64) {
     let sent = crate::the_found_files_sent::the_rows_the_upload_sends(&sitting.rows);
-    let files = sent.iter().map(|at| sitting.rows[*at].members.unwrap_or(1)).sum();
-    let size = sent.iter().filter_map(|at| sitting.rows[*at].size).sum();
+    let files = sent.iter().map(|at| sitting.rows[*at].what_a_send_would_take().0).sum();
+    let size = sent.iter().map(|at| sitting.rows[*at].what_a_send_would_take().1).sum();
     (files, size)
 }
 
@@ -3278,14 +3750,31 @@ fn the_upload(sitting: &ASitting) -> (usize, u64) {
 /// paragraph of 2026-10-24, `Dependency Upload & Remap` A9a). The press
 /// decides again from what is going at that moment.
 /// The drawing's `chk-onserver` also has no button when every file is there.
-fn the_foot(sitting: &ASitting, dropped: bool, so_far: bool, on_its_way: &[MachineLocation]) -> Option<TheFoot> {
+fn the_foot(
+    sitting: &ASitting,
+    dropped: bool,
+    so_far: bool,
+    on_its_way: &[MachineLocation],
+    being_counted: bool,
+) -> Option<TheFoot> {
+    // **`Dependency Upload & Remap` A9c: a press shows at once.**
+    if being_counted {
+        return Some(TheFoot {
+            upload: Words::plain(crate::surface::transfers::words::COUNTING_FILES),
+            upload_is_unavailable: true,
+        });
+    }
     let layout = sitting.of.as_ref().and_then(|of| of.layout.as_ref());
-    let left = crate::the_found_files_sent::the_rows_left_to_upload(&sitting.rows, layout, on_its_way);
+    // **`Dependency Upload & Remap` Q5a: never a file the send will not take.**
+    let left: Vec<usize> = crate::the_found_files_sent::the_rows_left_to_upload(&sitting.rows, layout, on_its_way)
+        .into_iter()
+        .filter(|at| sitting.rows[*at].what_a_send_would_take().0 > 0)
+        .collect();
     if left.is_empty() {
         return None;
     }
-    let files: usize = left.iter().map(|at| sitting.rows[*at].members.unwrap_or(1)).sum();
-    let size: u64 = left.iter().filter_map(|at| sitting.rows[*at].size).sum();
+    let files: usize = left.iter().map(|at| sitting.rows[*at].what_a_send_would_take().0).sum();
+    let size: u64 = left.iter().map(|at| sitting.rows[*at].what_a_send_would_take().1).sum();
     let upload = if so_far {
         Words::with(words::UPLOAD_THE, files.to_string()).then(words::FOUND_SO_FAR)
     } else {
@@ -3361,16 +3850,15 @@ impl AStretch {
 /// Nothing is said where nothing would be: a check still reading that has
 /// found nothing yet.
 fn the_summary_of(sitting: &ASitting, so_far: bool) -> Vec<AStretch> {
-    let count = |wanted: &dyn Fn(RowState) -> bool| sitting.rows.iter().filter(|one| wanted(one.state)).count();
+    // **`Dependency Upload & Remap` G11b: each real file once, in every figure.**
+    let count = |wanted: &dyn Fn(RowState) -> bool| one_row_per_real_file(&sitting.rows, |one| wanted(one.state)).len();
     let failed = count(&is_a_failure);
     let missing = count(&|state| state == RowState::NotFound);
     let not_verified = count(&|state| state == RowState::SentBeforeNotConfirmed);
     let (files, size) = the_upload(sitting);
-    let on_the_server: u64 = sitting
-        .rows
-        .iter()
-        .filter(|one| one.state == RowState::AlreadyOnTheMachine)
-        .filter_map(|one| one.size)
+    let on_the_server: u64 = one_row_per_real_file(&sitting.rows, |one| one.state == RowState::AlreadyOnTheMachine)
+        .into_iter()
+        .filter_map(|at| sitting.rows[at].size)
         .sum();
 
     let mut figures: Vec<Vec<AStretch>> = Vec::new();
@@ -3401,7 +3889,13 @@ fn the_summary_of(sitting: &ASitting, so_far: bool) -> Vec<AStretch> {
         )]);
     }
 
-    let nothing_is_open = failed == 0 && missing == 0 && not_verified == 0 && !so_far;
+    // **`§ Above the rows`, 2026-11-04: a linked file going up has not been read**,
+    // because one not yet on the server cannot be, so what lies below it is not
+    // known and *Nothing is missing* would be false about the file. *, found so
+    // far* already says it while the check is reading.
+    let linked_files_not_checked = !so_far
+        && sitting.rows.iter().any(|one| one.kind == Kind::Library && one.state == RowState::FoundOnYourComputer);
+    let nothing_is_open = failed == 0 && missing == 0 && not_verified == 0 && !so_far && !linked_files_not_checked;
     let mut out = Vec::new();
     if nothing_is_open {
         out.push(AStretch::words(words::NOTHING_IS_MISSING));
@@ -3419,6 +3913,9 @@ fn the_summary_of(sitting: &ASitting, so_far: bool) -> Vec<AStretch> {
         out.push(AStretch::joined_words(words::COMMA, words::FOUND_SO_FAR_AT_THE_END));
     } else if any {
         out.push(AStretch::joined_words(words::FULL_STOP, ""));
+    }
+    if linked_files_not_checked {
+        out.push(AStretch::words(words::LINKED_FILES_NOT_CHECKED_YET));
     }
     out
 }
@@ -3571,6 +4068,7 @@ mod tests {
             members: None,
             size: Some(1024 * 1024),
             why_it_did_not_go_up: None,
+            the_part_already_up: None,
             its_failure_was_cleared: false,
         }
     }
@@ -3598,8 +4096,10 @@ mod tests {
             read_with: a_blender(),
             linked_files_read: 2,
             still_reading_below: None,
+            the_walk: None,
             completion: Some(Completion::Completed),
             linked_items: Vec::new(),
+            the_bake_folders_not_worked_out: Vec::new(),
             sent_up_as_a_dependency_before: false,
             the_search: None,
             the_shift: None,
@@ -3755,7 +4255,7 @@ mod tests {
             SERVER,
             FILE,
             None,
-            &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Users/alex/Work".to_vec()]), uploading: None, on_its_way: Vec::new() },
+            &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Users/alex/Work".to_vec()]), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false },
         );
         assert_eq!(panel.nothing_was_read, Some(Prose::new(words::NOTHING_WAS_READ)));
         assert!(panel.the_statements.is_empty(), "a folders line where nothing was searched");
@@ -3793,7 +4293,7 @@ mod tests {
         assert!(panel.the_check_to_start.is_none(), "Check dependencies over a check that ran");
         assert_eq!(the_folders_line_of(&panel).control.as_ref().map(|c| c.act.as_str()), Some("check-again"));
         let mut ended = WhatTheRunHolds::default();
-        ended.endings.insert(keyed(SERVER, FILE), AnEnding { ending: Ending::TheMachineCouldNotBeReached, read_with: None });
+        ended.endings.insert(keyed(SERVER, FILE), AnEnding { ending: Ending::TheMachineCouldNotBeReached, read_with: None, the_setup_stands_stopped: false });
         let panel = the_panel(&ended, SERVER, FILE, None);
         assert!(panel.the_check_to_start.is_none(), "Check dependencies beside an ending");
         assert!(panel.the_ending.expect("the ending").controls.iter().any(|c| c.act.as_str() == "check-again"));
@@ -3823,7 +4323,7 @@ mod tests {
                 SERVER,
                 FILE,
                 None,
-                &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Users/alex/Work".to_vec()]), uploading: None, on_its_way: Vec::new() },
+                &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Users/alex/Work".to_vec()]), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false },
             );
             assert_eq!(panel.still_reading, Some(Words::plain(words::READING_THE_FILE)));
             assert!(panel.the_reading_line.is_empty(), "a reading line before anything was read");
@@ -3840,7 +4340,7 @@ mod tests {
         reading(&held);
         // An earlier sitting's rows, an earlier ending and an overwrite asked.
         let mut held = a_run(a_sitting(vec![a_row(b"//a/missing.png", Kind::Image, RowState::NotFound)]));
-        held.endings.insert(key.clone(), AnEnding { ending: Ending::TheMachineCouldNotBeReached, read_with: None });
+        held.endings.insert(key.clone(), AnEnding { ending: Ending::TheMachineCouldNotBeReached, read_with: None, the_setup_stands_stopped: false });
         held.files_being_read.insert(key.clone());
         reading(&held);
         // **The mark off: the rows**, as before.
@@ -3898,7 +4398,7 @@ mod tests {
             SERVER,
             FILE,
             None,
-            &WhatElseIsKnown { the_list_in_settings: Some(list), uploading: None, on_its_way: Vec::new() },
+            &WhatElseIsKnown { the_list_in_settings: Some(list), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false },
         );
         let shown: Vec<&str> = panel.the_folder_box.the_folders.iter().map(Verbatim::as_str).collect();
         assert_eq!(shown, vec!["/Volumes/Archive/2023", "/Users/alex/Work", "/Users/alex/Old"]);
@@ -3983,7 +4483,7 @@ mod tests {
         ),
         (
             "a-server.js",
-            "export const THE_DEPENDENCY_CHECK = 'chk'; export const FILES = 'files'; export const panels = []; \
+            "export const THE_DEPENDENCY_CHECK = 'chk'; export const FILES = 'files'; export const SET_UP = 'setupview'; export const panels = []; \
              export function aPanelIsRegistered(panel) { panels.push(panel); } \
              export function thePanelIsOpenedOver(server, panel) { (globalThis.opened ||= []).push([server, panel]); } \
              export function theStripReads() {} export function theCurrentTabIs() {} \
@@ -4476,7 +4976,9 @@ console.log(JSON.stringify({
         assert_eq!(notes_of("gone.png"), vec![note("File no longer found", "bad", false)]);
         assert_eq!(notes_of("later.png"), vec![note("Ignored", "idle", false)]);
         assert_eq!(notes_of("back.png"), vec![note("Missing", "bad", false)]);
-        assert_eq!(notes_of("cleared.png"), vec![note("Uploaded; remap failed", "bad", false)]);
+        assert_eq!(notes_of("cleared.png"), vec![note("Uploaded; remap failed: a path did not update", "bad", false)]);
+        // **`Dependency Upload & Remap` M14a: a failed row says which of two.**
+        assert_eq!(the_reason(Some(WhyItDidNotGoUp::SmoozyCouldNotOpenItToRemapItsPaths)), "Uploaded; remap failed: Blender could not open it");
         // **The search folder named by its last part carries its path on
         // hover.**
         let x = every_row(&table).into_iter().find(|row| row.name.as_str() == "x.png").expect("the row");
@@ -4718,6 +5220,7 @@ console.log(JSON.stringify({
                             mirror_of(&layout, &StoredLocation::as_the_system_returned_it(source)).expect("fits")
                         })
                         .collect(),
+                    a_send_is_being_counted: false,
                 },
             )
         };
@@ -4778,6 +5281,28 @@ console.log(JSON.stringify({
 
     /// A sitting with every group in it — the drawing's kitchen file, read
     /// to its end or still reading.
+
+    #[test]
+    fn film_page_the_warning_counts_the_same_real_files_as_the_panel() {
+        let mut rows = vec![
+            a_row(b"/textures/missing.png", Kind::Image, RowState::NotFound),
+            a_row(b"/textures/missing.png", Kind::Image, RowState::NotFound),
+            a_row(b"/textures/unsent.png", Kind::Image, RowState::FoundOnYourComputer),
+            a_row(b"/textures/unsent.png", Kind::Image, RowState::FoundOnYourComputer),
+            a_row(b"/textures/failed.png", Kind::Image, RowState::CouldNotBeSent),
+            a_row(b"/textures/failed.png", Kind::Image, RowState::CouldNotBeFixed),
+            a_row(b"/textures/ignored.png", Kind::Image, RowState::SetAside),
+        ];
+        rows[1].holding = HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(b"/project/library.blend"));
+        let counts = the_warning_counts(&rows, Default::default());
+        assert_eq!(counts.not_found, 1);
+        assert_eq!(counts.found_but_not_sent, 1);
+        assert_eq!(counts.could_not_be_sent, 1);
+        assert_eq!(counts.could_not_be_fixed, 0);
+        let panel = the_panel(&a_run(a_sitting(rows)), SERVER, FILE, None);
+        assert!(the_summary_reads(&panel).contains("1 failed · 1 missing"));
+    }
+
     fn the_kitchen(completion: Option<Completion>) -> ASitting {
         let mut rows = vec![
             a_row(b"//lib/rig.blend", Kind::Library, RowState::CouldNotBeFixed),
@@ -4892,7 +5417,7 @@ console.log(JSON.stringify({
             assert_eq!(the_strip_reads(&panel), the_summary_reads(&panel));
         }
         let held = a_run(the_kitchen(None));
-        let sending = the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: None, uploading: Some((4, 12)), on_its_way: Vec::new() });
+        let sending = the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: None, uploading: Some((4, 12)), on_its_way: Vec::new(), a_send_is_being_counted: false });
         assert_eq!(the_strip_reads(&sending), "Uploading 4 of 12");
     }
 
@@ -4989,6 +5514,135 @@ console.log(JSON.stringify({
         let foot = panel.the_foot.expect("a foot");
         assert!(foot.upload_is_unavailable);
         assert_eq!(reads(&foot.upload), "Upload the 1 found so far");
+    }
+
+    /// **`§ While it is still reading below a linked file`, 2026-11-04: the walk's
+    /// count takes the place of both lines, with *Stop* beside it, the search's own
+    /// act**, and a dropped connection is counting nothing.
+    #[test]
+    fn the_walk_counts_in_place_of_either_line_with_stop_beside_it() {
+        let reads_line = |panel: &TheCheck| reads(panel.still_reading.as_ref().expect("a line"));
+        // Below a linked file.
+        let mut sitting = a_sitting(vec![a_row(b"//a/found.png", Kind::Image, RowState::FoundOnYourComputer)]);
+        sitting.completion = None;
+        sitting.still_reading_below = Some(RecordedLocation::as_the_reading_carried_it(b"//lib/props.blend"));
+        let mut held = a_run(sitting);
+        let before = the_panel(&held, SERVER, FILE, None);
+        assert!(reads_line(&before).contains(words::STILL_READING_BELOW));
+        assert!(before.the_walks_stop.is_none());
+        held.sittings.get_mut(&keyed(SERVER, FILE)).expect("it").the_walk = Some((120, 480));
+        let walking = the_panel(&held, SERVER, FILE, None);
+        assert_eq!(reads_line(&walking), "Checking files on the server: 120 of 480");
+        assert_eq!(walking.the_walks_stop, Some(Prose::new(words::STOP)));
+        assert!(walking.the_table.is_some(), "the rows on screen are true and stay usable");
+
+        // On the file itself: no table, no tools, no foot, as under the line it replaced.
+        held.files_being_read.insert(keyed(SERVER, FILE));
+        let the_root = the_panel(&held, SERVER, FILE, None);
+        assert_eq!(reads_line(&the_root), "Checking files on the server: 120 of 480");
+        assert_eq!(the_root.the_walks_stop, Some(Prose::new(words::STOP)));
+        assert!(the_root.the_table.is_none() && the_root.the_tools.is_none() && the_root.the_foot.is_none());
+        held.files_being_read.clear();
+
+        // A dropped connection is counting nothing.
+        let standing = held.sittings.get_mut(&keyed(SERVER, FILE)).expect("it");
+        standing.completion = Some(Completion::TheConnectionDropped);
+        let dropped = the_panel(&held, SERVER, FILE, None);
+        assert!(dropped.still_reading.is_none() && dropped.the_walks_stop.is_none());
+
+        // Design's words, the drawing's state, and the page's one act.
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains("*Checking files on the server: 120 of 480*"));
+        assert!(the_mockup().contains("<option value=\"chk-walk\">"));
+        assert!(the_mockup().contains("Checking files on the server: 120 of 480"));
+        let page = include_str!("../../web/the-dependency-check.js");
+        assert!(page.contains("said.the_walks_stop, \"stop-the-search\""));
+    }
+
+    /// **`§ Above the rows`, 2026-11-04: a row to upload that is a linked file nobody
+    /// has read: the summary says so and never *Nothing is missing*** — the film's
+    /// *Nothing is missing. 5 files to upload*, with 500 more in the next round.
+    #[test]
+    fn a_linked_file_going_up_unread_is_said_and_nothing_is_missing_is_not() {
+        let mut library = a_row(b"//lib/fx.blend", Kind::Library, RowState::FoundOnYourComputer);
+        library.size = Some(1024 * 1024);
+        let panel = the_panel(&a_run(a_sitting(vec![library.clone()])), SERVER, FILE, None);
+        assert_eq!(the_summary_reads(&panel), "1 file to upload, 1.0 MB. Linked files not checked yet.");
+        assert_eq!(the_strip_reads(&panel), "1 file to upload, 1.0 MB. Linked files not checked yet.");
+
+        // A picture going up has nothing below it.
+        let picture = a_row(b"//a/wood.png", Kind::Image, RowState::FoundOnYourComputer);
+        let panel = the_panel(&a_run(a_sitting(vec![picture])), SERVER, FILE, None);
+        assert_eq!(the_summary_reads(&panel), "Nothing is missing. 1 file to upload, 1.0 MB.");
+
+        // A linked file already on the server has been read.
+        let read = a_row(b"//lib/fx.blend", Kind::Library, RowState::AlreadyOnTheMachine);
+        let panel = the_panel(&a_run(a_sitting(vec![read])), SERVER, FILE, None);
+        assert!(the_summary_reads(&panel).starts_with("Nothing is missing."));
+
+        // *, found so far* already says it while the check reads.
+        let mut reading = a_sitting(vec![library]);
+        reading.completion = None;
+        let panel = the_panel(&a_run(reading), SERVER, FILE, None);
+        assert!(the_summary_reads(&panel).ends_with(", found so far."));
+
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains("*5 files to upload, 136 MB. Linked files not checked yet.*"));
+        assert!(the_mockup().contains("<option value=\"chk-unchecked\">"));
+    }
+
+    /// **`§ When the file could not be read at all`, 2026-11-04, a stand-in at the
+    /// desk: where the server took no reading and this server's setup stands
+    /// stopped, the panel says so, with *Set up again***, and the diary is handed
+    /// the same sentence. **The same ending on a setup that stands finished keeps
+    /// the read's words.**
+    #[test]
+    fn a_stopped_setup_says_so_where_the_check_could_not_read() {
+        let the_diary = crate::surface::render_settings::TheDiaryInHand { diary: None, run: None, the_servers_name: "" };
+        let mut held = WhatTheRunHolds::default();
+        let _ = an_ending_is_held(
+            &mut held,
+            SERVER,
+            FILE,
+            Ending::NotAReadingAndNoneOfTheThreeEndingsFits,
+            None,
+            true,
+            &the_diary,
+        );
+        let panel = the_panel(&held, SERVER, FILE, None);
+        let failure = panel.the_ending.expect("the ending");
+        assert_eq!(failure.sentence, Prose::new("Setup stopped."));
+        assert_eq!(failure.the_second_sentence, Some(Prose::new("Finish setup, then check again.")));
+        assert_eq!(
+            failure.controls.iter().map(|one| one.act.as_str().to_string()).collect::<Vec<_>>(),
+            ["set-up-again", "check-again", "clear-the-ending"]
+        );
+        assert_eq!(failure.controls[0].label, Prose::new("Set up again"));
+        assert!(panel.the_table.is_none() && panel.nothing_was_read.is_some());
+
+        let mut held = WhatTheRunHolds::default();
+        let _ = the_check_gave_nothing(
+            &mut held,
+            SERVER,
+            FILE,
+            Ending::NotAReadingAndNoneOfTheThreeEndingsFits,
+            None,
+            &the_diary,
+        );
+        let failure = the_panel(&held, SERVER, FILE, None).the_ending.expect("the ending");
+        assert_eq!(failure.sentence, Prose::new(words::THE_READ_DID_NOT_FINISH));
+
+        // The landing asks the Set up tab's own rule, the press starts on that
+        // tab, and Design and the drawing say the same.
+        let working = include_str!("the_dependency_check.rs");
+        assert!(working.contains("crate::surface::set_up::a_stopped_setup_stands(&read)"));
+        let page = include_str!("../../web/the-dependency-check.js");
+        assert!(page.contains("act === \"set-up-again\""));
+        assert!(page.contains("a_set_up_act_that_needs_a_connection"));
+        assert!(page.contains(&format!("act: \"{}\"", crate::surface::set_up::THE_READY_ACTION)));
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains("*Setup stopped.* and *Finish setup, then check again.*"));
+        assert!(the_mockup().contains("<option value=\"chk-unsetup\">"));
     }
 
     /// **Several refused for one reason are said once, above their rows**, and
@@ -5338,7 +5992,7 @@ console.log(JSON.stringify(out));
         assert_eq!(
             got["standing"],
             serde_json::json!({
-                "note": ["note bad", "Uploaded; remap failed", 0],
+                "note": ["note bad", "Uploaded; remap failed: a path did not update", 0],
                 "acts": [
                     ["BUTTON", "a", "", "Retry"],
                     ["BUTTON", "more", "", "\u{22ef}"],
@@ -5648,7 +6302,7 @@ console.log(JSON.stringify(out));
         sitting.the_list_it_searched = vec![b"/Users/alex/Work".to_vec()];
         let held = a_run(sitting);
         let said = |list: Option<Vec<Vec<u8>>>| {
-            let panel = the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: list, uploading: None, on_its_way: Vec::new() });
+            let panel = the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: list, uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false });
             the_folders_line_of(&panel).clone()
         };
         let unchanged = said(Some(vec![b"/Users/alex/Work".to_vec()]));
@@ -5671,7 +6325,7 @@ console.log(JSON.stringify(out));
             SERVER,
             FILE,
             None,
-            &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Volumes/Assets".to_vec()]), uploading: None, on_its_way: Vec::new() },
+            &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Volumes/Assets".to_vec()]), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false },
         );
         assert_eq!(the_folders_line_of(&panel).said.said().replace('\u{a0}', " "), words::YOUR_SEARCH_FOLDERS_CHANGED);
         // The words are Design's own.
@@ -5759,6 +6413,7 @@ console.log(JSON.stringify(out));
                 the_list_in_settings: Some(folders.iter().map(|one| one.to_vec()).collect()),
                 uploading: None,
                 on_its_way: Vec::new(),
+                a_send_is_being_counted: false,
             },
         );
         let mut nothing_chosen = before_panel.clone();
@@ -5942,7 +6597,7 @@ console.log(JSON.stringify(out));
     fn the_strip_reads_uploading_while_the_checks_files_go() {
         let held = a_run(a_sitting(vec![a_row(b"//a/missing.png", Kind::Image, RowState::NotFound)]));
         let reading = |uploading| {
-            the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: None, uploading, on_its_way: Vec::new() })
+            the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: None, uploading, on_its_way: Vec::new(), a_send_is_being_counted: false })
                 .the_strip_reading
         };
         let sending = reading(Some((4, 12)));
@@ -6137,7 +6792,7 @@ console.log(JSON.stringify({ asked, after: panels[0].theFileItIsOn("S") }));
     const THE_CHECKS_STAND_INS: [(&str, &str); 10] = [
         (
             "a-server.js",
-            "export const THE_DEPENDENCY_CHECK = 'chk'; export const FILES = 'files'; export const panels = []; \
+            "export const THE_DEPENDENCY_CHECK = 'chk'; export const FILES = 'files'; export const SET_UP = 'setupview'; export const panels = []; \
              export function aPanelIsRegistered(panel) { panels.push(panel); } \
              export function thePanelIsOpenedOver() {} export function theStripReads() {} \
              export function theCurrentTabIs(tab) { (globalThis.calls ||= []).push(['tab', tab]); } \

@@ -3077,6 +3077,7 @@ body.resizing { cursor: col-resize; user-select: none; }
         </optgroup>
         <optgroup label="Queue &amp; history">
           <option value="q" selected>Queue</option>
+          <option value="q-simulation">A job simulating before rendering</option>
           <option value="q-marks">A job with marks on it</option>
           <option value="q-fallback">A job whose folder fell back</option>
           <option value="q-fallchosen">A job whose server&#8217;s fallback folder couldn&#8217;t be used</option>
@@ -3207,6 +3208,7 @@ body.resizing { cursor: col-resize; user-select: none; }
           <option value="upd">A new version, on Linux</option>
           <option value="upd-rollback">A new version that could not start, on Linux</option>
           <option value="upd-rollback-fail">&#8230;and the reinstall failed</option>
+          <option value="upd-rollback-unread">&#8230;and Smoozy could not read its saved data</option>
           <option value="about">About</option>
           <option value="about-licence">About: the licence</option>
           <option value="about-notices">About: third-party licences</option>
@@ -3217,6 +3219,7 @@ body.resizing { cursor: col-resize; user-select: none; }
           <option value="about-held">…and it waits while jobs are running</option>
           <option value="about-fail">…and it could not be reached</option>
           <option value="about-install-fail">…and installation failed</option>
+          <option value="about-no-updates">About in a version that cannot update itself</option>
           <option value="rail-ask">The rail: a job in the queue needs your answer</option>
           <option value="rail-asknarrow">…in a rail of icons</option>
           <option value="rail-noask">The rail with no job needing an answer</option>
@@ -3260,10 +3263,15 @@ body.resizing { cursor: col-resize; user-select: none; }
           <option value="res-lost">…after the connection ended</option>
           <option value="res-smp">Samples left at the file’s value</option>
           <option value="res-range">A frame range typed over the file’s</option>
+          <option value="res-simulation">Prepare simulations: on</option>
+          <option value="res-simulation-off">Prepare simulations: off</option>
+          <option value="res-simulation-early">Prepare simulations: earlier requested frame</option>
+          <option value="res-simulation-many">Prepare simulations: several scenes</option>
           <option value="res-oneframe">…typed as a single frame</option>
           <option value="res-eng">An engine picked rather than the file’s</option>
           <option value="res-gpuseen">The GPU tag from an earlier connection</option>
           <option value="res-gpunocount">…where the cards could not be counted</option>
+          <option value="res-drvold">…GPU on a 5.3 server whose driver is too old</option>
           <option value="res-multi">More than one scene ticked</option>
           <option value="res-nofolder">Nowhere for the frames to go</option>
           <option value="res-sent">A job just submitted</option>
@@ -3327,6 +3335,7 @@ body.resizing { cursor: col-resize; user-select: none; }
           <option value="su-nothing">A setup that had nothing to do</option>
           <option value="su-optixoff">A Blender the server&#8217;s driver is too old for</option>
           <option value="su-drvold">&#8230;on a server whose driver Smoozy can&#8217;t update</option>
+          <option value="su-nooptix">A server whose driver has no OptiX library</option>
           <option value="su-tg">Telegram on a server already set up</option>
           <option value="su-tgnew">…on a machine never prepared at all</option>
           <option value="su-going">A setup already running</option>
@@ -3356,16 +3365,19 @@ body.resizing { cursor: col-resize; user-select: none; }
           <option value="browse">Browsing files</option>
           <option value="chk-none">A file no check has run on</option>
           <option value="chk-clean">A check with nothing missing</option>
+          <option value="chk-unchecked">A check with linked files not checked yet</option>
           <option value="chk-nosearch">…and nothing it had to search for</option>
           <option value="chk-onserver">…every file already on the server</option>
           <option value="chk-sel">A check with several rows selected</option>
           <option value="chk-sending">A check with a file already uploading</option>
           <option value="chk-reading">A check reading the file itself</option>
+          <option value="chk-walk">A check counting files on the server</option>
           <option value="chk-cut">A check the connection dropped part-way</option>
           <option value="chk-unread">…this Blender could not open the file</option>
           <option value="chk-unsrv">…the server could not be reached</option>
           <option value="chk-unpart">…the read ran and did not finish</option>
           <option value="chk-unstop">…the read was stopped</option>
+          <option value="chk-unsetup">…this server's setup stopped</option>
           <option value="chk-many">Several files refused for one reason</option>
           <option value="chk-wasdep">…on a file that went up as a dependency</option>
           <option value="chk-over">Writing over a different file</option>
@@ -3729,7 +3741,7 @@ Fra:1 Mem:9.84G | Time:01:12.44 | Scene, Interior | Path Tracing Sample 96/2048<
 
       <!-- A new version found. On Mac and Windows Smoozy installs it itself,
            so the line says when it will be in place and asks nothing. -->
-      <p class="msub" data-ab="new" hidden><b>Smoozy 2.5.0 is ready.</b> Smoozy will restart to install&nbsp;it.</p>
+      <p class="msub" data-ab="new" hidden><b>Smoozy 2.5.0 is ready.</b> Restarts to&nbsp;install.</p>
 
       <!-- On Linux the same finding reads differently, because a new version
            arrives as a package and installing one needs the computer
@@ -3752,6 +3764,10 @@ Fra:1 Mem:9.84G | Time:01:12.44 | Scene, Interior | Path Tracing Sample 96/2048<
       <p class="ax-bad" data-ab="fail" hidden><span class="fdot"></span><b>Could not reach the update&nbsp;service.</b></p>
       <!-- Found, but installation failed (step 11 D5b, 2026-10-25). -->
       <p class="ax-bad" data-ab="install-fail" hidden><span class="fdot"></span><b>Update installation&nbsp;failed.</b></p>
+      <!-- A version that carries no update keys never checks, so it says so
+           plainly, in place of the five readings. Not the failure shape:
+           nothing failed (Desktop app and delivery E10b, 2026-11-01). -->
+      <p class="msub" data-ab="no-updates" hidden>Automatic updates aren't available in this&nbsp;version.</p>
       <div class="mact">
         <span class="grow"></span>
         <button type="button" class="btn quiet" data-close>Close</button>
@@ -3775,7 +3791,7 @@ Fra:1 Mem:9.84G | Time:01:12.44 | Scene, Interior | Path Tracing Sample 96/2048<
   <div class="modal top" id="updbox" hidden>
     <div class="mbox">
       <h3>Smoozy 2.5.0 is ready to install</h3>
-      <p class="msub">Your system will ask for your computer password when you install; Smoozy never sees&nbsp;it.</p>
+      <p class="msub">Your system asks for your computer password to&nbsp;install.</p>
       <p class="msub">Not now keeps this version until the next&nbsp;release.</p>
       <div class="mact">
         <button type="button" class="btn quiet" data-close>Not now</button>
@@ -3800,12 +3816,31 @@ Fra:1 Mem:9.84G | Time:01:12.44 | Scene, Interior | Path Tracing Sample 96/2048<
   <div class="modal top" id="rollbox" hidden>
     <div class="mbox">
       <h3>Smoozy 2.5.0 could not&nbsp;start</h3>
-      <p class="msub">Your system will ask for your computer password when you reinstall; Smoozy never sees&nbsp;it.</p>
+      <p class="msub">Your system asks for your computer password to&nbsp;reinstall.</p>
       <p class="msub">Reinstall the previous version to open&nbsp;Smoozy.</p>
       <p class="ax-bad" data-rb="fail" hidden><span class="fdot"></span><b>Reinstall&nbsp;failed.</b></p>
       <div class="mact">
         <button type="button" class="btn quiet" data-close>Quit</button>
         <button type="button" class="btn">Reinstall</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ THE SAME START, WHERE SMOOZY CANNOT READ ITS SAVED DATA. Added
+          2026-11-01, step 11's Linux-rollback piece. Without the saved data
+          there is no version to name and nothing to reinstall from, so the box
+          says what happened and offers Quit alone. The update sentence is
+          shown where an update was under way. The ordinary window is never
+          shown instead, at this start or the next, until the data can be read
+          (Desktop app and delivery, the D6b line under Z11; Rules 8, 9 and
+          10). ══ -->
+  <div class="modal top" id="rollunread" hidden>
+    <div class="mbox">
+      <h3>Smoozy could not&nbsp;start</h3>
+      <p class="msub">Update not&nbsp;finished.</p>
+      <p class="ax-bad"><span class="fdot"></span><b>Could not read saved&nbsp;data.</b></p>
+      <div class="mact">
+        <button type="button" class="btn" data-close>Quit</button>
       </div>
     </div>
   </div>
@@ -4263,7 +4298,7 @@ Fra:1 Mem:9.84G | Time:01:12.44 | Scene, Interior | Path Tracing Sample 96/2048<
           <div class="tg-msg tg-warn">
             <span class="tg-who" data-sq="&#x1F7E5;">RunPod 4090</span>
             <div class="tg-job"><i>Kitchen &#8212; final</i></div>
-            <div><span class="fdot"></span>Failed at frame 148 of 240. Blender ended with status&nbsp;1.</div>
+            <div><span class="fdot"></span>Failed at frame 148 of 240. Blender exited with code&nbsp;1.</div>
             <div style="margin-top:4px">147&#160;frames on the&nbsp;server.</div>
             <div class="tg-btns">
               <button type="button" class="tg-b">Send Output log</button>
@@ -4849,7 +4884,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                 verdict, no verdict having been read; New key reads
                 unavailable, with this line as the reason. The same statement,
                 word for word, sits on the server list. ══ -->
-        <div class="ky-notool" data-ky="notool" hidden><b>SSH tools are not installed on this computer.</b> No key can be created or checked until they&nbsp;are.</div>
+        <div class="ky-notool" data-ky="notool" hidden><b>SSH tools not installed.</b> Keys can&#8217;t be created or checked without&nbsp;them.</div>
 
         <div class="ky-list">
 
@@ -4899,7 +4934,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
           <div class="ky-row ky-gone" data-ky="nopub" hidden>
             <span class="ky-main">
               <span class="ky-where mono">/Volumes/Work/keys/coreweave_ed25519</span>
-              <span class="ky-why"><span class="fdot"></span>This key has a passphrase and no public key file beside it. It cannot be checked until that file is beside it.</span>
+              <span class="ky-why"><span class="fdot"></span>Passphrase set and no .pub file beside it. Can&#8217;t be checked without one.</span>
               <span class="ky-ways">
                 <button type="button" class="mini">Choose its new location…</button>
                 <button type="button" class="mini">Choose a replacement…</button>
@@ -5217,7 +5252,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
             <h3>Delete this key?</h3>
             <p class="msub">These servers use it and will each need a new&nbsp;key.</p>
             <p class="mlist"><span class="badge sm b1"></span>RunPod 4090<span class="badge sm b7"></span>Overnight box</p>
-            <p class="msub">Only Smoozy&#8217;s servers are listed. Other apps and computers may also use this&nbsp;key.</p>
+            <p class="msub">Other apps and computers may also use this&nbsp;key.</p>
             <p class="msub">The private and public key files are deleted from <span class="mono">~/.ssh/</span>.</p>
             <div class="mact">
               <button type="button" class="btn quiet" data-close="keydel">Cancel</button>
@@ -5236,7 +5271,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
             <h3>Remove this key?</h3>
             <p class="msub">One server uses it and will need a new&nbsp;key.</p>
             <p class="mlist"><span class="badge sm b3"></span>Hetzner box</p>
-            <p class="msub">Only Smoozy&#8217;s servers are listed. Other apps and computers may also use this&nbsp;key.</p>
+            <p class="msub">Other apps and computers may also use this&nbsp;key.</p>
             <div class="mact">
               <button type="button" class="btn quiet" data-close="keyrm">Cancel</button>
               <button type="button" class="btn" data-close="keyrm">Remove</button>
@@ -5309,7 +5344,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
               </div>
 
               <div class="stgrow"><button type="button" class="mini">Add a folder…</button></div>
-              <p class="hintl">Drag a row, or use the arrows. The first folder with a match is used, so the order decides <b>which folder</b> a file comes from, never which file inside it. If one folder has two matches, one is used and&nbsp;named.</p>
+              <p class="hintl">Drag a row, or use the arrows. The first folder with a match is used. If one folder has two matches, one is used and&nbsp;named.</p>
             </section>
 
             <!-- ── Warnings and notifications ── -->
@@ -5729,7 +5764,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
 
                 <div class="qmrows">
                   <button type="button" class="qrow stale">
-                    <span class="qgrip" title="Drag to reorder">&#8942;&#8942;</span><span class="qn">Turntable &#8212; final<span class="qs" title="Was rendering frame 88 at 11:04. Current status unknown.">Was rendering frame 88 at 11:04. Smoozy does not know what it is doing now.</span></span>
+                    <span class="qgrip" title="Drag to reorder">&#8942;&#8942;</span><span class="qn">Turntable &#8212; final<span class="qs" title="Was rendering frame 88 at 11:04. Current status unknown.">Was rendering frame 88 at 11:04. Current status unknown.</span></span>
                     <span class="qst">Not updating</span>
                     <span class="qbars"></span>
                   </button>
@@ -5818,6 +5853,16 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                   </div>
                   <button type="button" class="mini" data-go="log" data-ffu="after">Blender output</button>
                 </div>
+                <div class="statusline" data-ff="sim" hidden>
+                  <span class="sdot busy"></span>
+                  <span class="stx"><b>Rendering</b> — started 2&#160;minutes ago</span>
+                </div>
+                <div class="grp" data-ff="sim" hidden>
+                  <div class="prog"><div class="pline">
+                    <span class="pl">Simulating:</span>
+                    <span class="pv mono">frame 120 of 430</span>
+                  </div></div>
+                </div>
                 <div class="statusline" data-ff="run">
                   <span class="sdot busy"></span>
                   <span class="stx"><b>Rendering</b> — started 2&#160;hours 41&#160;minutes ago</span>
@@ -5863,7 +5908,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                   <div class="ffq">
                     <p class="ffw1">First-frame check &#183; Frame 1</p>
                     <!-- Changed 2026-10-23; formerly: Frame 1 is rendered and downloaded. The full range has not started. -->
-                    <p>Frame 1 is rendered and downloaded. Review it and choose whether to render frames 1–240.</p>
+                    <p>Frame 1 downloaded. Render frames 1–240?</p>
                     <div class="row">
                       <button type="button" class="btn quiet">Render all &#8212; 240&#160;frames</button>
                       <button type="button" class="mini">Cancel</button>
@@ -6517,7 +6562,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                         this reading came from the free-space figure. ══ -->
                 <div class="grp qfail" data-hv="disk" hidden>
                   <p><span class="fdot"></span><b>The render did not finish.</b></p>
-                  <p class="qf2"><b>The disk on RunPod 4090 is full.</b> Free space on the server, then render it again.</p>
+                  <p class="qf2"><b>The output folder was full when the render ended; free space and&nbsp;resubmit.</b></p>
                   <div class="log nolines"><button type="button" data-go="log-part">Blender output</button></div>
                   <div class="rp-ask"><button type="button" data-go="rp">Report a problem&#8230;</button></div>
                 </div>
@@ -6913,12 +6958,12 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                  and one word doing two jobs is the vagueness Rule 9 is about.
                  The cancel box says settings for the same reason. -->
             <p class="msub">This entry and its settings are deleted permanently, so it cannot be submitted again.</p>
-            <p class="msub" id="hdelframes">The 60&#160;frames on the server are untouched.</p>
+            <p class="msub" id="hdelframes">60&#160;frames on the server and <b>48&#160;downloaded frames</b> are not&#160;changed.</p>
             <!-- The spec names both untouched things and this box named one. The
                  frames on the user's own disk are the ones they actually have,
                  so it is the half that matters most to somebody pressing Delete.
                  Where nothing was downloaded there is no line at all. -->
-            <p class="msub" id="hdeldl">The <b>48&#160;frames</b> already downloaded to your computer are untouched too.</p>
+            <p class="msub" id="hdeldl" hidden>Downloaded frames are not&#160;changed.</p>
             <div class="mrow">
               <span class="grow"></span>
               <button type="button" class="btn quiet" data-close="hdelmodal">Keep the entry</button>
@@ -6938,7 +6983,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
         <!-- The Keys screen's statement, word for word: the rows' key marks
              rest on the same readings, so the cause is said here too — once,
              never per row. -->
-        <div class="sv-notool" id="svnotool" hidden><b>SSH tools are not installed on this computer.</b> No key can be created or checked until they&nbsp;are.</div>
+        <div class="sv-notool" id="svnotool" hidden><b>SSH tools not installed.</b> Keys can&#8217;t be created or checked without&nbsp;them.</div>
 
         <div class="svlist" id="svlist">
           <div class="svrow" tabindex="0" role="button">
@@ -7894,6 +7939,31 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                 <div class="stgrow"><button type="button" class="mini" data-go="su-run">Set up again</button></div>
               </div>
 
+              <!-- A server whose NVIDIA driver came without its OptiX library.
+                   Said from the first connection on every kind, in the driver's
+                   number and the CUDA version, naming no provider and offering
+                   no control; nothing is installed for it (Servers H11b, the
+                   OptiX-library bullet). So a setup ends Ready to render with the
+                   amber line beside it, never alone. The Creator's ruling that
+                   setup checks for it, 2026-11-02. -->
+              <div class="sucard" id="sunooptix" hidden>
+                <div class="sustat">
+                  <span class="sdot" style="background:var(--busy-fill)"></span>
+                  <span class="stx"><b>Ready to render</b></span>
+                  <span class="grow"></span>
+                  <span class="sunote">set up today at 10:12</span>
+                </div>
+                <ul class="sudid">
+                  <li>Check what is installed <span class="stm stm-ok">done</span></li>
+                  <li>Check system libraries <span class="stm stm-ok">done</span></li>
+                  <li>Install Telegram reporting <span class="stm stm-ok">done</span></li>
+                </ul>
+                <p class="sunote">NVIDIA driver <b>580.178.04</b> &#183; CUDA <b>13.0</b></p>
+                <p class="sunote amber">This server&#8217;s NVIDIA driver, 580.178.04 (CUDA 13.0), has no OptiX library. Cycles GPU jobs can&#8217;t render here.</p>
+                <p class="sunote">Nothing rendered yet. GPU rendering not confirmed.</p>
+                <div class="stgrow"><button type="button" class="mini" data-go="su-run">Set up again</button></div>
+              </div>
+
               <!-- The state every server begins in. Two readings and they are one:
                    no setup record at all, or a machine that failed the identity
                    check. Nothing was done to it, so there is no list of what was
@@ -7931,7 +8001,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
               <div class="sucard" id="suconnectfail" hidden>
                 <div class="sustat">
                   <span class="sdot" style="background:var(--bad)"></span>
-                  <span class="stx"><b>Smoozy could not connect to this server.</b></span>
+                  <span class="stx"><b>Could not connect to this server.</b></span>
                 </div>
                 <div class="stgrow"><button type="button" class="btn" data-go="su-connect">Connect and set up</button></div>
               </div>
@@ -7956,7 +8026,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                   <li>Check the driver works <span class="stm stm-ok">done</span></li>
                 </ul>
                 <ul class="sudid">
-                  <li class="sumiss">Telegram reporting not installed <button type="button" class="mini">Install it</button> <span class="stm">no restart</span></li>
+                  <li class="sumiss">Telegram reporting not installed <button type="button" class="mini">Install</button> <span class="stm">no restart</span></li>
                 </ul>
                 <p class="sunote">NVIDIA driver <b>595.91.07</b> &#183; CUDA <b>13.2</b></p>
                 <p class="sunote">Last job rendered on <b>NVIDIA GeForce RTX 4090 &#183; OptiX</b></p>
@@ -8226,7 +8296,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                      never alone at the top right (Design/Server Setup, A long
                      step; the Creator's eighteenth notes, note 4, 2026-10-24). -->
                 <div class="suout"><button type="button" class="mini" data-go="su-outlog">Server output</button></div>
-                <p class="sunote">Server checked just now. Set up again is safe. <b>Abandon setup</b> ends the setup unfinished. Neither removes what is&nbsp;installed.</p>
+                <p class="sunote">Server checked just now. Set up again resumes where it stopped. <b>Abandon setup</b> ends it and keeps what is&nbsp;installed.</p>
                 <div class="stgrow">
                   <button type="button" class="btn quiet" data-go="su-notset">Abandon setup</button>
                   <button type="button" class="btn" data-go="su-run">Set up again</button>
@@ -8262,7 +8332,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                      never alone at the top right (Design/Server Setup, A long
                      step; the Creator's eighteenth notes, note 4, 2026-10-24). -->
                 <div class="suout"><button type="button" class="mini" data-go="su-outlog">Server output</button></div>
-                <p class="sunote">Server checked just now. Set up again is safe. <b>Abandon setup</b> ends the setup unfinished. Neither removes what is&#160;installed.</p>
+                <p class="sunote">Server checked just now. Set up again resumes where it stopped. <b>Abandon setup</b> ends it and keeps what is&#160;installed.</p>
                 <div class="stgrow">
                   <button type="button" class="btn quiet" data-go="su-notset">Abandon setup</button>
                   <button type="button" class="btn" data-go="su-run">Set up again</button>
@@ -8307,7 +8377,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                   <li class="skip">Run the final check <span class="stm">not started</span></li>
                 </ol>
                 <div class="suout"><button type="button" class="mini" data-go="su-steptenlog">Server output</button></div>
-                <p class="sunote">Server checked just now. Set up again is safe. <b>Abandon setup</b> ends the setup unfinished. Neither removes what is&#160;installed.</p>
+                <p class="sunote">Server checked just now. Set up again resumes where it stopped. <b>Abandon setup</b> ends it and keeps what is&#160;installed.</p>
                 <div class="stgrow">
                   <button type="button" class="btn quiet" data-go="su-notset">Abandon setup</button>
                   <button type="button" class="btn" data-go="su-run">Set up again</button>
@@ -8337,7 +8407,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                   <span class="bua"><button type="button" class="mini">Remove</button></span>
                 </div>
                 <div class="burow">
-                  <span class="buv mono">5.3.0a<span class="bwarn" data-optixoff hidden>driver too old for OptiX</span></span>
+                  <span class="buv mono">5.3.0a<span class="bwarn" data-optixoff hidden>driver too old for Cycles GPU</span></span>
                   <button type="button" class="bup mono golink" data-go="browse">/opt/blender/5.3-alpha</button>
                   <span class="bua"><button type="button" class="mini">Remove</button></span>
                 </div>
@@ -8495,7 +8565,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
             <p class="msub">It can be picked for a job, but never&nbsp;automatically.</p>
             <div class="mrow">
               <span class="grow"></span>
-              <button type="button" class="btn quiet" data-close="bulow">Don&#8217;t install it</button>
+              <button type="button" class="btn quiet" data-close="bulow">Don&#8217;t install</button>
               <button type="button" class="btn">Install anyway</button>
             </div>
           </div>
@@ -8529,9 +8599,9 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                  own — a refusal in the file browser must not open a dialog
                  about another screen's step. -->
             <p class="msub" data-el="su">Installing the GPU driver was refused: permission denied.</p>
-            <p class="msub" data-el="fbdel" hidden>Deleting <span class="mono">sim_cache</span> was refused. The login Smoozy connected with is not permitted to do it.</p>
-            <p class="msub" data-el="fbread" hidden>Reading <span class="mono">renderfarm_shared</span> was refused. The login Smoozy connected with is not permitted to do it.</p>
-            <p class="msub" data-el="fbnew" hidden>Making a folder in <span class="mono">kitchen/</span> was refused. The login Smoozy connected with is not permitted to do it.</p>
+            <p class="msub" data-el="fbdel" hidden>Deleting <span class="mono">sim_cache</span> was refused: permission denied.</p>
+            <p class="msub" data-el="fbread" hidden>Reading <span class="mono">renderfarm_shared</span> was refused: permission denied.</p>
+            <p class="msub" data-el="fbnew" hidden>Making a folder in <span class="mono">kitchen/</span> was refused: permission denied.</p>
             <!-- A Mac may ask the user whether Smoozy may still read what it
                  remembered, on any of three occasions: after the user updates
                  their system, after Smoozy updates itself, or if Smoozy has
@@ -8595,7 +8665,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                 files for them is not something this app does. ══ -->
         <div class="stale-bar find" id="findbar" hidden>
           <span class="mk"></span>
-          <span>Submitting <b>Kitchen &#8212; final v3</b> again. Its server was removed and its old folder does not exist here &#8212; find its <b>.blend</b> on this&nbsp;server.</span>
+          <span>Submitting <b>Kitchen &#8212; final v3</b> again. Its server was removed &#8212; find its <b>.blend</b> on this&nbsp;server.</span>
           <span class="grow"></span>
           <button type="button" class="mini">Cancel</button>
         </div>
@@ -9229,10 +9299,10 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                  file still counts, so 148 is the last frame Smoozy cannot
                  rule out as finished, not a checked fact. The limit rides on
                  the band in the spec's own words, not hidden. -->
-            <p><b>Resuming Kitchen &#8212; final v3.</b> Settings from 8 Aug. Frame 148 is the last on the server, so the range starts at&nbsp;149. A partly written frame counts as finished and may be&nbsp;skipped.</p>
+            <p><b>Resuming Kitchen &#8212; final v3</b> from frame 149, after the last frame on the server. Settings from 8 Aug. A partly written frame may be&nbsp;skipped.</p>
           </div>
           <div class="agnband" data-ag="carryno" hidden>
-            <p><b>Resuming Kitchen &#8212; final v3.</b> Settings from 8 Aug. Could not read the server&#8217;s output, so the range starts at the frame recorded when the job ended:&nbsp;149.</p>
+            <p><b>Resuming Kitchen &#8212; final v3</b> from frame 149, the frame recorded when the job ended. Settings from 8 Aug. Could not read the server&#8217;s&nbsp;output.</p>
           </div>
 
 
@@ -9465,8 +9535,9 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                   <span class="k">Renders on</span>
                   <span class="rads">
                     <span class="rad on" data-ron="unread" hidden><i></i><em class="dashv">the file&#8217;s &#8212; not read yet</em></span>
-                    <span class="rad"><i></i>GPU</span>
+                    <span class="rad" id="rongpu"><i></i>GPU</span>
                     <span class="rad on" data-ron="file"><i></i><em>CPU</em><span class="tag">2&#160;GPUs unused</span></span>
+                    <span class="rad" data-ron="drvold" hidden><i></i>CPU</span>
                     <!-- The tag's other faces, from the architecture's table.
                          A reading taken on a connection that is not live now
                          says what was last seen and when, never the present
@@ -9480,6 +9551,10 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                     <span class="rad" data-ron="unread" hidden><i></i>CPU</span>
                   </span>
                 </div>
+                <!-- Cycles on GPU, from 5.3, on a server whose driver is below
+                     that Blender's row and cannot be updated: Render Settings
+                     D6a, Rendering L23a. It stops nothing. Added 2026-11-02. -->
+                <p class="hint" id="rondrvold" hidden>This server&#8217;s NVIDIA driver, 575.64.03, is too old for Cycles GPU rendering in Blender 5.3.</p>
                 
               </div>
 
@@ -9675,6 +9750,8 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
               <button type="button" class="mini" data-unread hidden>Download folder &#8212; ~/Renders/kitchen &#9662;</button>
             </div>
             <div class="so sfl2">
+              <span data-simulation-row hidden><span data-simulation-scene hidden>Interior · </span><span class="swline"><button type="button" class="sws on" id="simulationsw" aria-label="Prepare simulations" aria-pressed="true"><i></i></button><span>Prepare simulations</span></span> <span data-simulation-range>Plays frames 101–125 before rendering, on every attempt.</span></span>
+              <span data-simulation-second hidden>Exterior · <span class="swline"><button type="button" class="sws on" id="simulationsecondsw" aria-label="Prepare simulations for Exterior" aria-pressed="true"><i></i></button><span>Prepare simulations</span></span> <span data-simulation-second-range>Plays frames 1–125 before rendering, on every attempt.</span></span>
               <!-- The same words the band above uses, because it is the same
                    act: two wordings read as two different things, and the
                    band's rule about not offering both rests on them being one. -->
@@ -9967,7 +10044,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                    "nothing is missing" for the seconds every check takes
                    (Design/Dependency Upload & Remap; the Creator's note 8 on
                    the test copy, 2026-10-03). -->
-              <p class="sub"><span data-ck="readwith">Read with Blender 5.1.0<span data-ck="read"> · 12 linked files · <span class="ckdot"></span>Reading files linked from <span class="mono">props.blend</span>&nbsp;&#8212; progress&nbsp;unknown</span></span><span data-ck="pipe" hidden>Read with Blender 5.2.2</span><span data-e18="chk-onserver" hidden>Read with Blender 5.2.3</span><span data-ck="rootread" hidden><span class="ckdot"></span>Reading the file&#8230;</span></p>
+              <p class="sub"><span data-ck="readwith">Read with Blender 5.1.0<span data-ck="read"> · 12 linked files · <span class="ckdot"></span>Reading files linked from <span class="mono">props.blend</span>&nbsp;&#8212; progress&nbsp;unknown</span></span><span data-ck="pipe" hidden>Read with Blender 5.2.2</span><span data-e18="chk-onserver" hidden>Read with Blender 5.2.3</span><span data-ck="rootread" hidden><span class="ckdot"></span>Reading the file&#8230;</span><span data-e18="chk-walk" hidden><span class="ckdot"></span>Checking files on the server: 120 of 480 &#183; <button type="button" class="lnkb">Stop</button></span></p>
             </div>
             <span class="grow"></span>
             <button type="button" class="collapse" data-collapse="chk" title="Collapse" aria-label="Collapse"><svg aria-hidden="true"><use href="#i-collapse"></use></svg></button>
@@ -9994,6 +10071,10 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
             <p class="csum" data-ck="pipe" hidden>Nothing is missing. <b>2</b> files to upload, <b>90&#160;MB</b>.</p>
             <!-- chk-onserver: the Creator's screenshot for their twentieth notes,
                  note 6 — one file, already on the server, nothing searched. -->
+            <!-- chk-unchecked: a linked file going up has not been read, so what
+                 lies below it is not known (Design/Dependency Upload & Remap,
+                 Above the rows, 2026-11-04). -->
+            <p class="csum" data-e18="chk-unchecked" hidden><b>5</b> files to upload, <b>136&#160;MB</b>. Linked files not checked yet.</p>
             <p class="csum" data-e18="chk-onserver" hidden>Nothing is missing. <span class="ok"><b>195&#160;KB</b> already on the server</span>.</p>
             <!-- Add closes the box, and the panel says once what it did. -->
             <p data-ck="added" hidden>&#8226; <b>Added <span title="/Volumes/Archive/2023">2023</span>.</b> 4&#160;found, 3&#160;still missing.</p>
@@ -10105,6 +10186,10 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
           <div class="noread rdfail" data-ck="unpart" hidden style="margin:0 18px 12px">
             <p><span class="fdot"></span><b>Reading the file did not finish.</b></p>
             <div class="rdrow"><button type="button" class="mini">Check again</button><button type="button" class="mini" data-go="log">Blender output</button><button type="button" class="fx" title="Dismiss" aria-label="Dismiss">×</button></div>
+          </div>
+          <div class="noread rdfail" data-ck="unsetup" hidden style="margin:0 18px 12px">
+            <p><span class="fdot"></span><b>Setup stopped.</b> Finish setup, then check again.</p>
+            <div class="rdrow"><button type="button" class="mini">Set up again</button><button type="button" class="mini">Check again</button><button type="button" class="fx" title="Dismiss" aria-label="Dismiss">×</button></div>
           </div>
           <div class="noread rdfail" data-ck="unstop" hidden style="margin:0 18px 12px">
             <p><span class="fdot"></span><b>Check stopped.</b></p>
@@ -10631,6 +10716,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     connectfail: document.getElementById('suconnectfail'),
     optixoff: document.getElementById('suoptixoff'),
     drvold: document.getElementById('sudrvold'),
+    nooptix: document.getElementById('sunooptix'),
     notbegun: document.getElementById('sunotbegun')
   };
   var tabs = document.querySelectorAll('.mhead .tab');
@@ -10741,7 +10827,8 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     document.querySelectorAll('#setwrap [data-ron]').forEach(function (el) {
       el.hidden = (el.dataset.ron !== (unread ? 'unread'
                  : (v === 'res-gpuseen') ? 'seen'
-                 : (v === 'res-gpunocount') ? 'nocount' : 'file'));
+                 : (v === 'res-gpunocount') ? 'nocount'
+                 : (v === 'res-drvold') ? 'drvold' : 'file'));
     });
     document.querySelectorAll('#setwrap [data-unread]').forEach(function (el) { el.hidden = !unread; });
     // The frame count is worked out from the range, and there is no range to
@@ -10906,9 +10993,11 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
   };
   var wholeApp = { 'note': 'notestack', 'upd': 'updbox', 'about': 'aboutbox',
                    'upd-rollback': 'rollbox', 'upd-rollback-fail': 'rollbox',
+                   'upd-rollback-unread': 'rollunread',
                    'about-check': 'aboutbox', 'about-new': 'aboutbox',
                    'about-new-linux': 'aboutbox', 'about-fail': 'aboutbox',
                    'about-held': 'aboutbox', 'about-install-fail': 'aboutbox',
+                   'about-no-updates': 'aboutbox',
                    'about-licence': 'aboutbox', 'about-notices': 'aboutbox', 'about-source-fail': 'aboutbox' };
   // The password prompt has three shapes: the ordinary one with its three
   // choices; one on a computer with nowhere to keep a password, where the
@@ -10948,7 +11037,8 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
            : (v === 'about-new-linux') ? 'new-linux'
            : (v === 'about-held')      ? 'held'
            : (v === 'about-fail')      ? 'fail'
-           : (v === 'about-install-fail') ? 'install-fail' : 'idle';
+           : (v === 'about-install-fail') ? 'install-fail'
+           : (v === 'about-no-updates') ? 'no-updates' : 'idle';
     document.querySelectorAll('#aboutbox [data-ab]').forEach(function (el) {
       el.hidden = (el.dataset.ab !== ab);
     });
@@ -11123,21 +11213,19 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
       else r.removeAttribute('aria-current');
     });
     var f = document.getElementById('hdelframes');
-    if (f) f.textContent = (which === 'fail') ? 'The 60\u00a0frames on the server are untouched.'
+    // One sentence names both halves (2026-11-06, the last words read before
+    // the release). A job that rendered nothing downloaded nothing, and naming
+    // an untouched nothing is worse than saying nothing.
+    var both = function (n) { return n + '\u00a0frames on the server and <b>48\u00a0downloaded frames</b> are not\u00a0changed.'; };
+    if (f) f.innerHTML = (which === 'fail') ? both(60)
       : (which === 'nofr') ? 'Nothing was rendered.'
-      : (which === 'ok') ? 'The 240\u00a0frames on the server are untouched.'
-      : (which === 'stop') ? 'The 88\u00a0frames on the server are untouched.'
-      : (which === 'gave') ? 'The 132\u00a0frames on the server are untouched.'
+      : (which === 'ok') ? both(240)
+      : (which === 'stop') ? both(88)
+      : (which === 'gave') ? both(132)
       : 'What it rendered is on a server that is no longer available.';
-    // The second untouched thing. A job that rendered nothing downloaded
-    // nothing, and naming an untouched nothing is worse than saying nothing.
+    // The downloaded half stands alone only where the server is gone.
     var d = document.getElementById('hdeldl');
-    if (d) {
-      d.hidden = (which === 'nofr');
-      d.innerHTML = (which === 'unk')
-        ? 'Anything already downloaded to your computer is untouched.'
-        : 'The <b>48\u00a0frames</b> already downloaded to your computer are untouched too.';
-    }
+    if (d) d.hidden = (which !== 'unk');
   }
 
   // ══ The preview's frames and View Layers (the Creator's seventh notes,
@@ -11290,7 +11378,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     'pane-key':['Connect','dead','Key missing. Choose a new key to reconnect.',true],
     'pane-restart':['Restarting','trying','Waiting for the server to restart.',true],
     'pane-failed':['Connect','','Could not connect to this server.',false],
-    'pane-notool':['Connect','dead','SSH tools are not installed on this computer.',true],
+    'pane-notool':['Connect','dead','SSH tools not installed.',true],
     'pane-keyed':['Connected','live','Key missing. Choose a new key to reconnect.',false]
   };
   var exampleText=[];
@@ -11642,12 +11730,12 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     });
     // The first-frame check's held entry swaps for the rendering one, and so
     // does a waiting job's entry whose file was not read (Kitchen — clay's).
-    var ff = (v === 'q-first') ? 'held' : (v === 'q-wait') ? 'wait' : (v === 'q-driver') ? 'drv' : 'run';
+    var ff = (v === 'q-simulation') ? 'sim' : (v === 'q-first') ? 'held' : (v === 'q-wait') ? 'wait' : (v === 'q-driver') ? 'drv' : 'run';
     document.querySelectorAll('#queueview [data-ff]').forEach(function (el) {
       el.hidden = el.dataset.ff.split(' ').indexOf(ff) === -1;
     });
     document.querySelectorAll('#queueview .qrow[data-qr]').forEach(function (r) {
-      if (r.dataset.qr.split(' ').indexOf(ff) !== -1) r.setAttribute('aria-current', 'true');
+      if (r.dataset.qr.split(' ').indexOf(ff === 'sim' ? 'run' : ff) !== -1) r.setAttribute('aria-current', 'true');
       else r.removeAttribute('aria-current');
     });
     setPreview(v);
@@ -11739,7 +11827,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     // A read that gave nothing has four endings, not one, and each says
     // something different. All four show no rows rather than an empty list.
     var CKUN = { 'chk-unread': 'unread', 'chk-unsrv': 'unsrv',
-                 'chk-unpart': 'unpart', 'chk-unstop': 'unstop' };
+                 'chk-unpart': 'unpart', 'chk-unstop': 'unstop', 'chk-unsetup': 'unsetup' };
     var ckWhich = CKUN[v] || '';
     var ckUnread = !!ckWhich;
     // The file itself still being read: the header line says so and nothing
@@ -11907,6 +11995,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     suCards.connectfail.hidden = (v !== 'su-connectfail');
     suCards.optixoff.hidden = (v !== 'su-optixoff');
     suCards.drvold.hidden   = (v !== 'su-drvold');
+    suCards.nooptix.hidden  = (v !== 'su-nooptix');
     suCards.notbegun.hidden = (v !== 'su-notbegun');
     // The Blender table's OptiX tag: on a driver below a Blender's OptiX bar,
     // each such row says so (Server Setup B12b; 2026-10-11).
@@ -11918,7 +12007,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     suCards.ok.hidden      = (v === 'su-no-blender' || v === 'su-cpu' || v === 'su-quiet' || v === 'su-none'
                               || v === 'su-nothing' || v === 'su-notset' || v === 'su-tg'
                               || v === 'su-tgnew' || v === 'su-going' || v === 'su-connect'
-                              || v === 'su-connectfail' || v === 'su-optixoff' || v === 'su-drvold'
+                              || v === 'su-connectfail' || v === 'su-optixoff' || v === 'su-drvold' || v === 'su-nooptix'
                               || v === 'su-notbegun'
                               || v === 'su-run' || v === 'su-out' || v === 'su-outlog' || v === 'su-fetch' || v === 'su-words' || v === 'su-wordslog' || v === 'su-queue' || v === 'su-fail' || v === 'su-step');
     if (tabs.length) {
@@ -11930,7 +12019,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     // came from. Where the job's own server is gone the file is pointed at
     // afresh instead, which is the file browser rather than this panel.
     document.querySelectorAll('[data-ag]').forEach(function (el) {
-      el.hidden = (el.dataset.ag !== ((v === 'res-again' || v === 'res-simpon') ? 'again' : v === 'res-nosrv' ? 'nosrv'
+      el.hidden = (el.dataset.ag !== ((v === 'res-again' || v.indexOf('res-simulation') === 0 || v === 'res-simpon') ? 'again' : v === 'res-nosrv' ? 'nosrv'
                                     : v === 'res-carry' ? 'carry' : v === 'res-carryno' ? 'carryno' : ''));
     });
     // Simplify belongs to the re-submission of a failed job, and both of those
@@ -11973,6 +12062,20 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     // ways on. Greyed, it reads off to the eye and to a screen reader; the
     // setting is kept unseen and comes back when the range grows, on only if
     // it was on (the twentieth notes, note 3, 2026-10-28).
+    // Design/Render Settings, Prepare simulations, Creator-stated 2026-11-06.
+    var simulationShown = v.indexOf('res-simulation') === 0;
+    document.querySelector('[data-simulation-row]').hidden = !simulationShown;
+    document.querySelector('[data-simulation-second]').hidden = v !== 'res-simulation-many';
+    document.querySelector('[data-simulation-scene]').hidden = v !== 'res-simulation-many';
+    var simSecond = document.getElementById('simulationsecondsw');
+    simSecond.classList.add('on'); simSecond.setAttribute('aria-pressed', 'true');
+    document.querySelector('[data-simulation-second-range]').textContent = 'Plays frames 1–125 before rendering, on every attempt.';
+    simSecond.onclick = function () { var on = simSecond.classList.contains('on'); simSecond.setAttribute('aria-pressed', String(on)); document.querySelector('[data-simulation-second-range]').textContent = on ? 'Plays frames 1–125 before rendering, on every attempt.' : 'Unbaked simulations may render frozen or not match playback.'; };
+    var sim = document.getElementById('simulationsw');
+    var simOff = v === 'res-simulation-off';
+    sim.classList.toggle('on', !simOff); sim.setAttribute('aria-pressed', String(!simOff));
+    document.querySelector('[data-simulation-range]').textContent = simOff ? 'Unbaked simulations may render frozen or not match playback.' : 'Plays frames ' + (v === 'res-simulation-early' ? '91' : '101') + '–125 before rendering, on every attempt.';
+    sim.onclick = function () { var on = sim.classList.contains('on'); sim.setAttribute('aria-pressed', String(on)); document.querySelector('[data-simulation-range]').textContent = on ? 'Plays frames ' + (v === 'res-simulation-early' ? '91' : '101') + '–125 before rendering, on every attempt.' : 'Unbaked simulations may render frozen or not match playback.'; };
     var oneFrame = (v === 'res-oneframe');
     document.querySelectorAll('#setwrap [data-onef]').forEach(function (el) { el.hidden = asked || oneFrame; });
     var fsw = document.getElementById('firstsw');
@@ -12001,6 +12104,10 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     if (ecl) ecl.hidden = !engOvr;
     var ron = document.getElementById('ronset');
     if (ron) ron.hidden = (engOvr || v === 'bl-addon');
+    var rondrv = document.getElementById('rondrvold');
+    if (rondrv) rondrv.hidden = (v !== 'res-drvold');
+    var rongpu = document.getElementById('rongpu');
+    if (rongpu) rongpu.classList.toggle('on', v === 'res-drvold');
     // ══ The two statements the read found, as lines under what the job writes.
     //    Neither asks the user to do anything, so neither is on the band.
     var ow = (v === 'ow-comp' || v === 'ow-comp2') ? 'comp' : (v === 'ow-vid') ? 'vid'
@@ -12066,7 +12173,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     //    scene go entirely, there being nothing to grey — the same split the
     //    unread page makes. Only the frame range stays live, and its count
     //    reads for the whole set.
-    var multi = (v === 'res-multi');
+    var multi = (v === 'res-multi' || v === 'res-simulation-many');
     document.querySelectorAll('#setwrap [data-ms]').forEach(function (el) {
       el.hidden = multi ? (el.dataset.ms !== 'on') : (el.dataset.ms !== 'off');
     });
@@ -12156,7 +12263,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
         || v === 'bl-old' || v === 'bl-none' || v === 'bl-marks'
         || v === 'bl-below' || v === 'bl-mism' || v === 'bl-addon'
         || v === 'res-smp' || v === 'res-range' || v === 'res-oneframe' || v === 'res-eng'
-        || v === 'res-gpuseen' || v === 'res-gpunocount'
+        || v === 'res-gpuseen' || v === 'res-gpunocount' || v === 'res-drvold'
         || v === 'res-simpon'
         || v === 'dep-never' || v === 'dep-unfound' || v === 'dep-ver' || v === 'dep-first' || v === 'dep-sending'
         || v === 'ow-comp' || v === 'ow-comp2' || v === 'ow-vid' || v === 'ow-vidfr'
@@ -12209,7 +12316,10 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                   'h-removedfold': 'h', 'h-clearremoved': 'h-unk', 'res-againlist': 'res-again', 'tg-done': 'tg',
                                     // The twentieth notes, 2026-10-28: the foot with download on, the
                                     // job set to Telegram Off, and the Creator's check screenshot.
-                                    'res-footdl': 'res-foot', 'res-tgoff': 'res-foot', 'chk-onserver': 'chk-nosearch' };
+                                    'res-footdl': 'res-foot', 'res-tgoff': 'res-foot', 'chk-onserver': 'chk-nosearch',
+                                    // 2026-11-04: the check's count on the file itself, and a
+                                    // finished check with linked files not read.
+                                    'chk-walk': 'chk-reading', 'chk-unchecked': 'chk-clean' };
   var e18Typed = document.querySelector('#setwrap [data-fr="typed"]');
   var e18TypedText = [e18Typed.querySelector('.fld').textContent, e18Typed.querySelector('.after').textContent];
   function setEighteenth(v) {
@@ -12230,6 +12340,15 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
     var oneTyped = (v === 'res-oneframe');
     e18Typed.querySelector('.fld').textContent = againList ? '1-60,121-300' : oneTyped ? '48' : e18TypedText[0];
     e18Typed.querySelector('.after').textContent = againList ? '240\u00a0frames' : oneTyped ? '1\u00a0frame' : e18TypedText[1];
+    if (v.indexOf('res-simulation') === 0) {
+      var early = v === 'res-simulation-early';
+      document.querySelectorAll('#setwrap [data-fr]').forEach(function (el) { el.hidden = el.dataset.fr !== 'typed'; });
+      e18Typed.querySelector('.fld').textContent = early ? '91,121-125' : '121-125';
+      e18Typed.querySelector('.after').textContent = (early ? '6' : v === 'res-simulation-many' ? '15' : '5') + '\u00a0frames';
+      document.querySelector('#setwrap [data-rendc]').textContent = 'Render ' + (early ? '6' : v === 'res-simulation-many' ? '15' : '5') + '\u00a0frames';
+      document.querySelectorAll('#setwrap .lit[data-ms="off"]').forEach(function (el) { el.hidden = true; });
+    }
+
     // The twentieth notes, 2026-10-28. res-footdl: res-foot with download on,
     // at the same width, so the two can be laid over each other (note 2).
     if (v === 'res-footdl') setAutoDownload(true, v);
@@ -12243,6 +12362,12 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
       tsw.classList.add('on'); tsw.setAttribute('aria-pressed', 'true');
     }
     // chk-onserver: the Creator's screenshot for note 6, drawn on chk-nosearch.
+    if (v === 'chk-walk') {
+      document.querySelectorAll('#chkwrap [data-ck="rootread"]').forEach(function (el) { el.hidden = true; });
+    }
+    if (v === 'chk-unchecked') {
+      document.querySelectorAll('#chkwrap p[data-ck="pipe"]').forEach(function (el) { el.hidden = true; });
+    }
     if (v === 'chk-onserver') {
       document.querySelectorAll('#chkwrap [data-ck="pipe"]').forEach(function (el) { el.hidden = true; });
       document.getElementById('ckname').textContent = 'suzanne.blend';

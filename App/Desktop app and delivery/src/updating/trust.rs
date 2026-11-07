@@ -47,8 +47,9 @@
 //! whose statement will not verify, or does not carry the number the record
 //! claims, is discarded whole — [`what_the_record_is_worth`].
 //!
-//! **No recovery key is carried yet**, and [`THE_RECOVERY_KEYS_THIS_BUILD_CARRIES`]
-//! says why and what the day they are made changes.
+//! **The Creator's two recovery keys are carried from 2026-11-01**, with the
+//! statement naming the first everyday key, and
+//! [`THE_RECOVERY_KEYS_THIS_BUILD_CARRIES`] says where their secret halves are.
 //!
 //! **How a clause marker is written in this crate, and it is a rule rather than
 //! a habit.** A marker with no document beside it means a clause of this
@@ -86,26 +87,53 @@ pub struct ACarriedRecoveryKey {
 pub const THE_RECOVERY_PROOF_MESSAGE: &[u8] =
     b"a Smoozy desktop-update recovery key, proved once when it was made";
 
-/// **The recovery keys this build carries — none.**
+/// **The recovery keys this build carries — the Creator's two master keys,
+/// from 2026-11-01.**
 ///
 /// **E19 asks for two, from the first build that can update itself, and both
-/// are the Creator's.** A pair is made from the operating system's own
-/// randomness; the secret halves go where the Creator keeps them, in two
-/// different places, one of them offline; and only then are the two public
-/// halves and their proofs written here. **Until that day this list is empty
-/// on purpose**: a recovery key made by anybody in this project and written
-/// here would be a trust set anybody reading the repository could forge, and
-/// that is the one way this module could go badly wrong.
+/// are the Creator's.** The pairs were made once, on 2026-11-01, on the
+/// Creator's Mac, from the operating system's own randomness
+/// (`Audits/Build/Step 11/Making the update keys — what was done.md`). **The
+/// secret halves are the Creator's alone**: master key 1 in their password
+/// manager, master key 2 in a separate secret note kept apart from it. They are
+/// on no build machine, in no keychain, in no hosting and never in this
+/// repository; the folder they were handed over in was deleted by the Creator
+/// the same day. **What is here is the two public halves and the proof each
+/// secret half made once**, which give nothing away.
 ///
-/// **The test `this_build_carries_no_recovery_key_until_the_creator_holds_them`
-/// fails the day anything is put here** — the precedent of 2026-09-06, when
-/// the server package's root was kept absent the same way
-/// (`Audits/Build/Step 8a/Decisions record.md`). **On the day the Creator's two
-/// keys are written here, that one test is deleted and nothing else**: the
-/// tests beside it already require exactly two, distinct, each with a proof
-/// that verifies, none of them a key any written-down seed in this workspace
-/// makes, and none of them the server package's root.
-pub const THE_RECOVERY_KEYS_THIS_BUILD_CARRIES: &[ACarriedRecoveryKey] = &[];
+/// **The tests below hold what must be true of them**: exactly two, distinct,
+/// each with a proof that verifies, none of them a key any written-down seed
+/// in this workspace makes, and neither the server package's root. The
+/// precedent is 2026-09-06's, when the server package's root was carried the
+/// same way (`Audits/Build/Step 8a/Decisions record.md`).
+pub const THE_RECOVERY_KEYS_THIS_BUILD_CARRIES: &[ACarriedRecoveryKey] = &[
+    ACarriedRecoveryKey {
+        identifier: "master-1",
+        public_key: [
+            0x3f, 0x17, 0xb5, 0x96, 0xfe, 0x57, 0x0a, 0x52, 0xfa, 0x23, 0xf8, 0x54, 0x87, 0x48, 0x6c, 0xd4,
+            0xc0, 0x82, 0xda, 0x96, 0xed, 0x70, 0xa8, 0x71, 0x58, 0xe0, 0xe6, 0x23, 0x18, 0x47, 0x87, 0x39,
+        ],
+        proof: [
+            0x0d, 0xa8, 0xa7, 0xb3, 0xd0, 0xf8, 0x51, 0x05, 0xc4, 0x2c, 0x60, 0xd0, 0x68, 0x3d, 0x84, 0x23,
+            0xdf, 0x43, 0xb4, 0x50, 0xd5, 0xdf, 0x64, 0xc5, 0x4f, 0x36, 0xe3, 0xff, 0x88, 0xb7, 0xc2, 0x89,
+            0x8d, 0x9b, 0xd9, 0x2b, 0xbb, 0xc6, 0xc8, 0x47, 0xfc, 0x09, 0xcd, 0x25, 0xc0, 0x0f, 0x0a, 0x9a,
+            0x70, 0x16, 0x83, 0x66, 0xca, 0x32, 0x64, 0x4f, 0x69, 0x29, 0x55, 0xed, 0x8a, 0xfa, 0xf0, 0x00,
+        ],
+    },
+    ACarriedRecoveryKey {
+        identifier: "master-2",
+        public_key: [
+            0xe1, 0xb0, 0x81, 0xe5, 0xb9, 0xad, 0x38, 0x19, 0x18, 0x63, 0x59, 0xe9, 0x3c, 0x05, 0xd4, 0xaf,
+            0x9b, 0xd7, 0x70, 0x52, 0x61, 0x65, 0xa9, 0xd2, 0xcb, 0xb3, 0xaa, 0x83, 0x91, 0x2a, 0x43, 0xc5,
+        ],
+        proof: [
+            0xae, 0x13, 0x36, 0xdb, 0x6c, 0x37, 0xbf, 0xd6, 0xe5, 0x47, 0x58, 0xce, 0x8e, 0x29, 0x43, 0x58,
+            0x92, 0xa4, 0xe0, 0xd7, 0x7e, 0xb3, 0x85, 0x06, 0x2b, 0x20, 0x13, 0xd8, 0x6d, 0x4a, 0x58, 0x8e,
+            0xfa, 0x57, 0x94, 0x6f, 0x1d, 0xf2, 0x86, 0x4a, 0x02, 0x26, 0x39, 0x03, 0xef, 0xd1, 0x5e, 0x5d,
+            0xac, 0xf7, 0x6c, 0x05, 0xe1, 0x78, 0x02, 0xd6, 0xc4, 0x15, 0x7d, 0xe7, 0xeb, 0xf5, 0xce, 0x0f,
+        ],
+    },
+];
 
 /// **A trust statement a build carries, as the bytes that were signed.**
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,15 +142,36 @@ pub struct ACarriedStatement {
     pub its_recovery_signature: SignatureBytes,
 }
 
-/// **The online key set this build carries — none, because no online key
-/// exists.**
+/// **The online key set this build carries — one everyday key, `everyday-1`,
+/// from 2026-11-01.**
 ///
 /// E19's *"the current accepted online signing-key set"* is carried as the
 /// recovery-signed statement that names it, so a build's own set is checked
 /// the same way as a fetched one and a record always has a statement to keep.
-/// **It is written by the release that makes the first online key** (step
-/// 11's release piece), after the recovery keys above.
-pub const THE_STATEMENT_THIS_BUILD_CARRIES: Option<ACarriedStatement> = None;
+/// **This is the first statement**: trust sequence 1, a transition, one online
+/// key (`everyday-1`, in force from release sequence 0), nothing revoked —
+/// signed by master key 1 under [`THE_STATEMENT_SIGNING_CONTEXT`] on the day
+/// the keys were made. The everyday key's secret half is in the Creator's
+/// password manager and in the Mac's login keychain, where a release reads it
+/// (`App/Release/src/secret.rs`).
+pub const THE_STATEMENT_THIS_BUILD_CARRIES: Option<ACarriedStatement> = Some(ACarriedStatement {
+    bytes: &[
+        0x00, 0x00, 0x00, 0x27, 0x73, 0x6d, 0x6f, 0x6f, 0x7a, 0x79, 0x2d, 0x64, 0x65, 0x73, 0x6b, 0x74,
+        0x6f, 0x70, 0x2d, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x2d, 0x74, 0x72, 0x75, 0x73, 0x74, 0x2d,
+        0x73, 0x74, 0x61, 0x74, 0x65, 0x6d, 0x65, 0x6e, 0x74, 0x2d, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0a, 0x65,
+        0x76, 0x65, 0x72, 0x79, 0x64, 0x61, 0x79, 0x2d, 0x31, 0xd2, 0xc1, 0xba, 0xb9, 0xdf, 0x7a, 0x35,
+        0x37, 0x93, 0xac, 0x7a, 0x70, 0x98, 0xd5, 0x10, 0xd3, 0x21, 0x67, 0x1c, 0xd9, 0xdf, 0x70, 0x8a,
+        0x39, 0xda, 0x59, 0x0f, 0x49, 0x97, 0x64, 0xd3, 0x9e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ],
+    its_recovery_signature: [
+        0x40, 0xf8, 0xc7, 0x45, 0xbf, 0x3e, 0x90, 0xeb, 0xc9, 0x02, 0xae, 0x69, 0xf2, 0xdb, 0x9e, 0x20,
+        0x19, 0x10, 0xbc, 0x86, 0x3e, 0xa5, 0xc5, 0xae, 0x61, 0x7f, 0x9d, 0x4a, 0x35, 0xff, 0x48, 0x00,
+        0xa7, 0x3d, 0x53, 0x71, 0x86, 0x48, 0x59, 0x3e, 0x73, 0x34, 0x95, 0xdc, 0x19, 0xe6, 0x67, 0x4c,
+        0x8b, 0xb7, 0x6b, 0xc0, 0x65, 0x4f, 0x0d, 0x7f, 0x07, 0x1b, 0x1d, 0xcc, 0xcb, 0xc7, 0xb2, 0x03,
+    ],
+});
 
 /// **The greatest update release sequence published when this build was made
 /// — zero, because none has been.**
@@ -171,6 +220,15 @@ impl TheCarriedSet {
             greatest_release_sequence_published:
                 THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE,
         }
+    }
+
+    /// **Whether a build carrying this set can believe any update file at
+    /// all** — E10b's one rule, and the release's (`App/Release`): with no
+    /// recovery key carried, no file verifies, so the build never checks and
+    /// the release writes no file. **One home for the rule**, so the two
+    /// cannot come to disagree.
+    pub fn carries_a_recovery_key(&self) -> bool {
+        !self.recovery_keys.is_empty()
     }
 }
 
@@ -1117,29 +1175,6 @@ pub(crate) mod tests {
 
     // ---------------------------------------- what this build carries
 
-    /// **The 2026-09-06 precedent, for the update trust set: no recovery key
-    /// and no statement is carried until the Creator holds the keys.** This
-    /// test fails the day anything is written into either constant. **On the
-    /// day the Creator's two keys are written there, this test is deleted and
-    /// the ones below it are what holds** — they already ask for exactly two,
-    /// each proved, none made from a written-down seed and neither the server
-    /// package's root.
-    #[test]
-    fn this_build_carries_no_recovery_key_until_the_creator_holds_them() {
-        assert!(
-            THE_RECOVERY_KEYS_THIS_BUILD_CARRIES.is_empty(),
-            "a recovery key is written into this build before the Creator holds it"
-        );
-        assert!(
-            THE_STATEMENT_THIS_BUILD_CARRIES.is_none(),
-            "a trust statement is written into this build before any recovery key is"
-        );
-        assert_eq!(
-            THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE,
-            0
-        );
-    }
-
     /// Every thirty-two-byte literal written down in this workspace's Rust
     /// source — every seed a key in this repository could have been made from.
     /// The same reading `smoozy_server_protocol::release::trust`'s guard makes,
@@ -1242,6 +1277,134 @@ pub(crate) mod tests {
         let build = TheCarriedSet::this_build();
         if let Some((bytes, signature)) = &build.statement {
             assert!(verified_against_the_carried_keys(&build, bytes, signature).is_some());
+        }
+    }
+
+    /// **From 2026-11-01 this build carries the Creator's keys, and exactly
+    /// these.** Two master keys under the names `master-1` and `master-2`;
+    /// the statement verifies under them, signed by master key 1; it is the
+    /// first statement (trust sequence 1, a transition, nothing revoked); and
+    /// it puts one everyday key in force, `everyday-1`, from release sequence
+    /// 0, so the next release can sign with it.
+    #[test]
+    fn this_build_carries_the_creators_two_master_keys_and_the_first_statement() {
+        assert_eq!(THE_RECOVERY_KEYS_THIS_BUILD_CARRIES.len(), 2);
+        assert_eq!(
+            THE_RECOVERY_KEYS_THIS_BUILD_CARRIES
+                .iter()
+                .map(|key| key.identifier)
+                .collect::<Vec<_>>(),
+            vec!["master-1", "master-2"]
+        );
+        let build = TheCarriedSet::this_build();
+        assert!(build.carries_a_recovery_key());
+        let (bytes, signature) = build.statement.clone().expect("a statement is carried");
+        let statement = verified_against_the_carried_keys(&build, &bytes, &signature)
+            .expect("the carried statement verifies under the carried keys");
+        assert_eq!(
+            the_recovery_key_that_signed(&build.recovery_keys, &[], &bytes, &signature)
+                .map(|key| key.identifier.as_str()),
+            Some("master-1")
+        );
+        assert_eq!(
+            (statement.trust_sequence, statement.which),
+            (1, WhichStatement::Transition)
+        );
+        assert!(statement.revoked_online_keys.is_empty());
+        assert!(statement.revoked_recovery_keys.is_empty());
+        assert_eq!(statement.online_keys.len(), 1);
+        assert_eq!(statement.online_keys[0].identifier, "everyday-1");
+        assert_eq!(statement.online_keys[0].first_release_sequence, 0);
+        // The everyday key is no master key and not the server package's root.
+        let everyday = statement.online_keys[0].public_key;
+        assert!(build.recovery_keys.iter().all(|key| key.public_key != everyday));
+        assert_ne!(
+            Some(everyday),
+            smoozy_server_protocol::release::trust::THE_RELEASE_ROOT_THIS_BUILD_CARRIES
+        );
+        // And the chain starts from it on a copy that remembers nothing.
+        let start = TheTrustInForce::at_the_start(&build, None);
+        assert_eq!(start.trust_sequence(), 1);
+        assert!(start
+            .statement
+            .as_ref()
+            .and_then(|(it, _, _)| it.the_key_that_may_sign("everyday-1", 1))
+            .is_some());
+    }
+
+    /// **The context the everyday key's test line was signed under, the day
+    /// the keys were made.** Nothing in Smoozy verifies a document under it.
+    const THE_EVERYDAY_TEST_LINE_CONTEXT: &[u8] =
+        b"smoozy.update-key-ceremony.everyday-test-line.1\0";
+
+    /// The everyday key's public test line.
+    const THE_EVERYDAY_TEST_LINE: &[u8] =
+        b"the Smoozy update everyday key, proved once when it was made";
+
+    /// The signature the everyday key's secret half made over that line, once.
+    const THE_EVERYDAY_TEST_LINE_SIGNATURE: SignatureBytes = [
+        0x77, 0x61, 0x27, 0xd3, 0x42, 0xec, 0xd8, 0xb9, 0x3e, 0xba, 0xf4, 0xc9, 0xf9, 0xf6, 0x3d,
+        0x71, 0x33, 0x0b, 0xd9, 0x1a, 0x30, 0x33, 0x7f, 0xee, 0x35, 0x27, 0xeb, 0xd2, 0x44, 0x01,
+        0x03, 0xe9, 0xc4, 0xc6, 0xb4, 0x13, 0x6e, 0x63, 0x46, 0xd6, 0x79, 0x47, 0xba, 0xd8, 0x08,
+        0x1c, 0x36, 0x42, 0xbd, 0x9e, 0xcb, 0x4f, 0x91, 0x2f, 0x19, 0xa5, 0xc8, 0x57, 0x60, 0xa8,
+        0xa2, 0x06, 0x1c, 0x05,
+    ];
+
+    /// **Every test line made the day the keys were made verifies, each under
+    /// its own key and no other** — each master key's proof, and the everyday
+    /// key's line under the public key the carried statement names. So a
+    /// mistyped public half, here or in the statement, fails here. **The
+    /// everyday line's context is none of the documents' contexts**, so the
+    /// line is inert.
+    #[test]
+    fn the_test_lines_made_with_the_keys_verify_each_under_its_own_key() {
+        use super::super::{
+            THE_MANIFEST_SIGNING_CONTEXT, THE_RECOVERY_PROOF_CONTEXT,
+        };
+        let [one, two] = THE_RECOVERY_KEYS_THIS_BUILD_CARRIES else {
+            panic!("two master keys are carried");
+        };
+        for (key, other) in [(one, two), (two, one)] {
+            assert!(a_signature_verifies(
+                &key.public_key,
+                THE_RECOVERY_PROOF_CONTEXT,
+                THE_RECOVERY_PROOF_MESSAGE,
+                &key.proof
+            ));
+            assert!(!a_signature_verifies(
+                &other.public_key,
+                THE_RECOVERY_PROOF_CONTEXT,
+                THE_RECOVERY_PROOF_MESSAGE,
+                &key.proof
+            ));
+        }
+        let build = TheCarriedSet::this_build();
+        let (bytes, _) = build.statement.expect("a statement is carried");
+        let statement = TrustStatement::read(&bytes).expect("the statement reads");
+        let everyday = statement.online_keys[0].public_key;
+        assert!(a_signature_verifies(
+            &everyday,
+            THE_EVERYDAY_TEST_LINE_CONTEXT,
+            THE_EVERYDAY_TEST_LINE,
+            &THE_EVERYDAY_TEST_LINE_SIGNATURE
+        ));
+        for key in [one, two] {
+            assert!(!a_signature_verifies(
+                &key.public_key,
+                THE_EVERYDAY_TEST_LINE_CONTEXT,
+                THE_EVERYDAY_TEST_LINE,
+                &THE_EVERYDAY_TEST_LINE_SIGNATURE
+            ));
+        }
+        for context in [
+            THE_STATEMENT_SIGNING_CONTEXT,
+            THE_MANIFEST_SIGNING_CONTEXT,
+            THE_RECOVERY_PROOF_CONTEXT,
+            smoozy_server_protocol::release::THE_KEY_SET_SIGNING_CONTEXT,
+            smoozy_server_protocol::release::THE_MANIFEST_SIGNING_CONTEXT,
+            smoozy_server_protocol::release::trust::THE_ROOT_PROOF_CONTEXT,
+        ] {
+            assert_ne!(context, THE_EVERYDAY_TEST_LINE_CONTEXT);
         }
     }
 }

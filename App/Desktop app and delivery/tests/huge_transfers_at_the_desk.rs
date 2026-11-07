@@ -6463,7 +6463,8 @@ mod on_a_desk_with_a_socket_pair {
     /// counted the units with a disposition — none — and called none of them
     /// unfinished. **Here the line is cut and the lending with it**, the upload
     /// is asked for anyway, and the row must read what was asked for and did
-    /// not go: *1 file into … — did not finish · 0 / 1*.
+    /// not go: *1 file into … — Not started · 0 / 1* (`Design/Transfers`,
+    /// the build runner’s ruling of 2026-11-04). Its walk never began.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn an_upload_whose_walk_is_lent_nothing_does_not_read_done() {
         use smoozy_desktop::uploading::WhyTheUploadDidNotStart;
@@ -6509,7 +6510,7 @@ mod on_a_desk_with_a_socket_pair {
         assert_eq!(rows.len(), 1, "the request written down is on the screen");
         let (name, count) = (as_read(&rows[0].name), as_read(&rows[0].count));
         println!("LENT NOTHING: the row reads {name:?} · {count:?}");
-        assert!(name.ends_with("— did not finish"), "the row reads {name:?} · {count:?}");
+        assert!(name.ends_with("— Not started"), "the row reads {name:?} · {count:?}");
         assert_ne!(count, "done", "the row reads {name:?} · {count:?}");
         assert!(count.contains("0") && count.contains("1"), "the row reads {name:?} · {count:?}");
     }

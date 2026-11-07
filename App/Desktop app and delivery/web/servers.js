@@ -87,6 +87,10 @@ const THE_WORK_MOVED = "servers:the-work-moved";
 // in `src/surface/servers.rs`, `Keys` U10a. It carries the ask it answers.
 const A_DIALOG_KEYS_VERDICT = "servers:a-dialog-keys-verdict";
 
+// **The discovery pass wrote a row behind the list's draw** —
+// `A_DIALOG_KEYS_LIST_GREW`, `Keys` U10a. It carries the ask it answers.
+const A_DIALOG_KEYS_LIST_GREW = "servers:a-dialog-keys-list-grew";
+
 // **What `Servers` publishes, declared beside the service that posts it** —
 // `WHAT_IS_OBSERVED`, `THE_CONNECTION_CONDITION` and
 // `THE_CHANGED_IDENTITY_WARNING` in `src/servers/published.rs`. The two sides
@@ -536,6 +540,7 @@ document.addEventListener(
     thePressEnded();
     if (press.button !== 0 || !press.target || !press.target.closest) return;
     const held = press.target.closest('button,[role="button"],.svrow');
+    if (held && (held.disabled || held.getAttribute("aria-disabled") === "true")) return;
     if (held && ((host && host.contains(held)) || (openMenu && openMenu.contains(held)) || Array.from(connectionPlaces.keys()).some((place) => place.contains(held)))) thePressHeld = { released: false };
   },
   true,
@@ -1580,6 +1585,9 @@ function aKeyControl(frm, said, held, context) {
     const mine = String(theLastKeyAsk);
     ask = mine;
     theKeyListIsTold = theVerdictIsTold;
+    theKeyListGrew = (told) => {
+      if (told.ask === ask) theListIsAskedFor();
+    };
     shell.core
       .invoke("the_keys_a_dialog_offers")
       .then((answer) => {
@@ -1697,6 +1705,7 @@ let theOpenKeyList = null;
 // **The key list the verdicts are for**, the last one asked for, and the count
 // each ask is told apart by.
 let theKeyListIsTold = null;
+let theKeyListGrew = null;
 let theLastKeyAsk = 0;
 
 document.addEventListener(
@@ -1709,6 +1718,10 @@ document.addEventListener(
 
 whenTold(A_DIALOG_KEYS_VERDICT, (delivery) => {
   if (theKeyListIsTold) theKeyListIsTold(delivery.said);
+});
+
+whenTold(A_DIALOG_KEYS_LIST_GREW, (delivery) => {
+  if (theKeyListGrew) theKeyListGrew(delivery.said);
 });
 
 /// **The pair, taken from the key row again** — `Keys` U12: a key that went

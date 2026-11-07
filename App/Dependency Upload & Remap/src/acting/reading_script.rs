@@ -319,16 +319,21 @@ mod tests {
     /// discipline [`crate::markers`] uses for the file count: a ceiling cannot
     /// fail on a catch somebody added, and a catch added quietly is the whole
     /// fault this pair of tests exists for.
+    ///
+    /// **A third from 2026-11-02, G6d's**, around the walk of the file's own
+    /// bytes: it ends in no list, so a row says what Blender read, as before.
+    /// It is a figure to show and no part of what the render needs.
     #[test]
-    fn the_script_carries_exactly_the_two_catches_that_name_their_absence() {
+    fn the_script_carries_exactly_the_three_catches_that_name_their_absence() {
         let tries = the_script()
             .lines()
             .filter(|line| line.trim_start().starts_with("try:"))
             .count();
         assert_eq!(
-            tries, 2,
+            tries, 3,
             "a catch was added or removed without this count moving with it"
         );
+        assert!(the_script().contains("    except Exception:\n        return []\n"));
         // Both end in G20a's named absence, and the script says the words.
         assert_eq!(the_script().matches("NotEstablished").count(), 2);
     }

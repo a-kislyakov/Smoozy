@@ -1127,10 +1127,7 @@ function theTakingAwayBox() {
   servers.className = "mlist";
   const limit = document.createElement("p");
   limit.className = "msub";
-  const limitFirst = document.createElement("span");
   const limitSecond = document.createElement("span");
-  limit.appendChild(limitFirst);
-  limit.appendChild(document.createTextNode(" "));
   limit.appendChild(limitSecond);
   const unread = document.createElement("p");
   unread.className = "msub";
@@ -1176,7 +1173,6 @@ function theTakingAwayBox() {
     said,
     servers,
     limit,
-    limitFirst,
     limitSecond,
     unread,
     filesLead,
@@ -1277,8 +1273,9 @@ function whatTakingAwayCostsIsDrawn(said) {
     theValueIsDrawnInto(named, called || "");
     box.servers.appendChild(named);
   }
-  box.limit.hidden = !said.thatCoversWhatSmoozyKnows;
-  box.limitFirst.textContent = said.thatCoversWhatSmoozyKnows || "";
+  // **One sentence since 2026-11-06** (the last words read before the release):
+  // *Only Smoozy's servers are listed.* went, and the list says it.
+  box.limit.hidden = !said.otherToolsAndComputers;
   box.limitSecond.textContent = said.otherToolsAndComputers || "";
   box.unread.textContent = said.couldNotCheckTheSavedServers || "";
   box.unread.hidden = !said.couldNotCheckTheSavedServers;

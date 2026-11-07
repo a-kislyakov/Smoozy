@@ -158,9 +158,10 @@ mod tests {
     /// and not one event arrives.
     ///
     /// **The check is in the direction the drift runs.** A kind named on the
-    /// page must be one the application declares; the other way round has a
-    /// legitimate absence, `notifications:a-going` being declared and listened
-    /// for by nobody because no screen exists to go to.
+    /// page must be one the application declares; the other way round can have
+    /// a legitimate absence. *(This named `notifications:a-going` as one, until
+    /// 2026-11-01, when `web/a-notification-clicked.js` began listening for it
+    /// — the Mac watch's first finding.)*
     #[test]
     fn every_event_kind_the_page_names_is_one_the_application_declares() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));

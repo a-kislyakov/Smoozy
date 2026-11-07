@@ -567,8 +567,12 @@ function theReadingIsDrawn(said) {
   theBox.fail.dataset.ab = reading;
   theBox.fail.hidden = !failed;
 
-  const never = reading === "never";
-  theBox.never.textContent = never ? said.neverChecks || "" : "";
+  // **A copy that never checks**: a test copy, or a build that carries no
+  // update key (E10b). One plain line either way, since nothing failed.
+  const never = reading === "never" || reading === "no-updates";
+  const neverWords = reading === "never" ? said.neverChecks : said.noUpdates;
+  theBox.never.textContent = never ? neverWords || "" : "";
+  if (never) theBox.never.dataset.ab = reading;
   theBox.never.hidden = !never;
 }
 
@@ -708,6 +712,9 @@ whenTold("menus:linux-update", (delivery) => {
 // the underway shape while the system asks and the reinstall runs; the box is
 // drawn again, with the failure line, if it did not finish. *Quit* always
 // answers. Escape closes nothing: there is nothing behind the box to go back to.
+// **Where the saved data could not be read** (2026-11-01) the same box comes
+// with no version, the failure line, and *Quit* alone: nothing is told to
+// reinstall from.
 let theRollbackBox = null;
 whenTold("menus:linux-rollback", (delivery) => {
   const said = delivery.said;
@@ -722,11 +729,15 @@ whenTold("menus:linux-rollback", (delivery) => {
   const heading = document.createElement("h3");
   heading.id = "linux-rollback-heading";
   box.setAttribute("aria-labelledby", heading.id);
-  const version = aSpan(said.version);
-  version.className = "selectable";
-  heading.append(aSpan(said.beforeVersion), document.createTextNode(" "), version, document.createTextNode(" "), aSpan(said.afterVersion));
+  heading.append(aSpan(said.beforeVersion), document.createTextNode(" "));
+  if (said.version) {
+    const version = aSpan(said.version);
+    version.className = "selectable";
+    heading.append(version, document.createTextNode(" "));
+  }
+  heading.append(aSpan(said.afterVersion));
   box.appendChild(heading);
-  for (const words of [said.password, said.until]) {
+  for (const words of [said.password, said.unfinished, said.until]) {
     if (!words) continue;
     const line = document.createElement("p");
     line.className = "msub";
@@ -755,7 +766,7 @@ whenTold("menus:linux-rollback", (delivery) => {
   reinstall.type = "button";
   reinstall.className = "btn";
   reinstall.textContent = said.reinstall || "";
-  const answer = (action) => shell.core.invoke("the_held_update_is_installed_anyway", { linux: { version: said.version, action } });
+  const answer = (action) => shell.core.invoke("the_held_update_is_installed_anyway", { linux: { version: said.version || "", action } });
   quit.addEventListener("click", () => answer("quit"));
   let underway = false;
   reinstall.addEventListener("click", () => {
@@ -768,15 +779,20 @@ whenTold("menus:linux-rollback", (delivery) => {
     if (press.key === "Escape" && !press.defaultPrevented) press.preventDefault();
     if (press.key === "Tab") {
       press.preventDefault();
-      (press.target === quit ? reinstall : quit).focus();
+      (press.target === quit && said.reinstall ? reinstall : quit).focus();
     }
   });
-  actions.append(quit, reinstall);
+  if (said.reinstall) {
+    actions.append(quit, reinstall);
+  } else {
+    quit.className = "btn";
+    actions.append(quit);
+  }
   box.appendChild(actions);
   root.appendChild(box);
   (document.querySelector(".app") || document.body).appendChild(root);
   theRollbackBox = root;
-  reinstall.focus();
+  (said.reinstall ? reinstall : quit).focus();
 });
 
 // **This module starts itself, so that the shared entry takes one added line

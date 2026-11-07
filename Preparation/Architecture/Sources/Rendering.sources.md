@@ -88,6 +88,8 @@ Every entry in this part is **shape 1**. The document fixes the lookup at *What 
 
 **Not covered, and the document records it as honesty:** no per-card form of the argument is established either way — [U4](#u4-a-per-card-form-of-the-device-argument-l21). *Settings 9* also records that what a file's *GPU Compute* means on AMD or Intel hardware is untried in every version, no machine this project has had carrying one.
 
+**Only a Cycles job names it (L21's bullet of 2026-11-02). Label: the decision is Smoozy's.** Observed in a test, 2026-11-02, on the Creator's Mac: `an_eevee_job_saved_on_gpu_renders_with_no_technology_named`, on 5.2.3 `e13b728c6880` and the 5.3.0 Beta `5d8151335b6b`, and that EEVEE file by hand with the argument on its line. **Not covered:** a card, a driver, Linux. The account is `Audits/Build/Blender 5.3/What the first live pass found — what landed.md`, its last section.
+
 ## B10. What each way of ending a render leaves at the frame's own file (K4 — Rows 16 and 17)
 
 **Owned by:** *Frames 13*, cited through `Job files and outputs` 10.7, which the document takes whole rather than re-deciding. Label: **observed in a test**; *Frames 13* records that **all four versions answer *not in the sources*** and that hand tests settled it.
@@ -606,11 +608,15 @@ Each differed from its source by a lowered capital or by stripped emphasis at a 
 
 ## C17. Blender's stated OptiX driver minimum per version — **added 2026-10-11 (L23a, Section 9 item 3)**
 
-**The fact.** Blender states an OptiX driver minimum per version: 535 for 4.5 to 5.1, 570 for 5.2.0, 575 for 5.2.1 and later. **Label: documented.** Every page below was read on 2026-10-11, by the check recorded at `Audits/Build/Step 10c/The OptiX driver claims, checked against Blender's own pages.md`.
+**The fact.** Blender states an OptiX driver minimum per version: 535 for 4.5 to 5.1, 570 for 5.2.0, 575 for 5.2.1, and two figures for 5.3, of which L23a's row takes 580. **Label: documented.** Every page below was read on 2026-10-11, by the check recorded at `Audits/Build/Step 10c/The OptiX driver claims, checked against Blender's own pages.md`.
 
 - **4.5 to 5.1, 535.** `https://developer.blender.org/docs/release_notes/4.5/cycles/`: *"The minimum driver version required for OptiX has increased to 535."* The manual for 4.5, 5.0 and 5.1 (`https://docs.blender.org/manual/en/<version>/render/cycles/gpu_rendering.html`): *"at least 535"*.
 - **5.2.0, 570.** The manual's fix of 2026-08-17, commit `ec379305f1` in `projects.blender.org/blender/blender-manual`: *"It was already wrong, previously was 570."* The build settings, `build_files/config/pipeline_config.yaml` at tag v5.2.0 (2026-07-13), name CUDA 12.8.0.
 - **5.2.1 and later, 575.** `https://developer.blender.org/docs/release_notes/5.2/cycles/`: *"The minimum driver version for OptiX is now 575."* `https://docs.blender.org/manual/en/5.2/render/cycles/gpu_rendering.html`, and the `/latest/` and `/dev/` pages: *"a driver version of at least 575"*. Commit `b13ba36f4649497f` (2026-08-16), *"Use CUDA 12.9.1 instead of 12.8.0"*: *"The minimum driver version requirement (mainly for OptiX OSL) is raised from 570 to 575."*; on the 5.2 branch it is `4d16b97d19`, and the build settings name CUDA 12.9.1 at tags v5.2.1 (2026-08-24) and v5.2.2 (2026-09-14).
+
+- **5.3.0, 580, added 2026-11-02. Label: documented, read from the research and not from the pages themselves.** `Preparation/Blender Research/Comparison/The machine.md`, question 2 (*The machine 2*): *NVIDIA driver for OptiX (manual)* reads 575 in 5.3, *NVIDIA driver for OptiX (Cycles' own file)* reads 580, *NVIDIA driver for CUDA (Cycles' own file)* reads 580, and 5.3's preferences code marks a card below it *"(Disabled)"* and leaves it out of the active count. **What it does not cover:** what a render does on such a card, which that question calls untested; no NVIDIA card has run 5.3; the figures are the 5.3.0 Beta's, and the release re-read (`Preparation/Groundwork/Open Threads.md`) may move them. Taking the higher figure is Smoozy's decision, recorded at L23a.
+
+- **5.3.0, what the row stops, added 2026-11-02. Label: observed in a test**, during the Build stage, not the Blender research. On a rented Linux container, driver 575.64.03 (CUDA 12.9), RTX 3080 Ti, 5.3.0 Beta `fd2b7d57ef87`, through Smoozy and by hand with both `--cycles-device CUDA` and `--cycles-device OPTIX`: `CUDA driver version 580 or above is required.`, then `Found no Cycles device of the specified type`, exit 1, nothing written. EEVEE and the processor rendered on that machine. **Source:** `Audits/Build/Blender 5.3/The live pass — Vast — what happened.md`, item 15. **Not covered:** a driver from 576 to 579, another card, a finished 5.3.
 
 **The project's copy is older than the live page.** `Blender Sources/manual_5.2/render/cycles/gpu_rendering.txt` line 33 reads *"a driver version of at least 535"*; the manual changed it on 2026-08-17.
 
@@ -638,3 +644,35 @@ A factory scene set to Cycles on the processor, 64 by 48 at 100 per cent, MPEG-4
 **Label: observed in a test**, 2026-10-27, during the Build stage, in a cloud container on Linux with no window — **not the Blender research.** Blender 4.5.15 LTS (`5afeabba6097`) and 5.2.3 LTS (`e13b728c6880`), the Blender Foundation's own builds of Blender as a Python module, from the Python package index, because the session could not reach `download.blender.org`. **Source:** `Audits/Build/Step 10c/The video wants — what landed.md`, *The Blender test*, which carries both scripts and their output.
 
 **Not covered.** 5.0, 5.1, 5.3 and 5.4. The command-line render Smoozy uses: the test rendered from Python, so that a value the material sets reaches a command-line render rests on *What can be set from outside*. One video container and codec, and one other for transparency.
+
+**The command-line route, added 2026-11-02, the 5.3 integration's piece 6.** A scene whose only output is H.264 in MPEG-4, marked as a first-frame check, frame 1, through the render worker's real driver, launched with a frame list: it ended at 0, wrote one file, `v_0001.png`, or `check_v_0001.png` writing into its range job's folder, and the marker read `{"written_as_a_picture": "PNG"}`. The same in 5.2.3 (`e13b728c6880`), the 5.3.0 Beta (`5d8151335b6b`) and the 5.4.0 Alpha (`3f4216e1bad1`). **Label: observed in a test**, at the desk, on one Mac, on the processor, with no window. **Not the Blender research.** **Source:** `Audits/Build/Blender 5.3/Piece 1, the desk readings — what landed.md`, reading 6. **Still not covered:** 5.0 and 5.1 on any route; that route on Linux or a card.
+
+## C20. The 5.3.0 Beta, read at the desk beside 5.2.3 and the 5.4.0 Alpha — **added 2026-11-02 (L8, L8a, L10, L24a, L26)**
+
+**The fact.** Every launch argument, switch and property name C16 read off the 5.3.0 Alpha reads the same in the 5.3.0 Beta: no name used differs. The labels in `App/Rendering — machine/src/spellings.rs` still cite the alpha (`THE_5_3_LOOKUP`), with a comment beside it saying the beta agrees.
+
+**What was run.** `/Applications/Blender 5.3b.app`, which answered ***5.3.0 Beta***, build hash **`5d8151335b6b`**, built 2026-10-16. It was run beside `/Applications/Blender.app`, which answered *5.2.3 LTS*, hash `e13b728c6880`, and `/Applications/Blender 5.4a.app`, *5.4.0 Alpha*, hash `3f4216e1bad1`. All were run with no window, from factory settings, one at a time, and nothing of the Creator's was opened, written or saved. The alpha of C16 is no longer on the Mac, so it was not run beside them. Five things were run:
+- **The help text.** The same as 5.2.3's apart from the version line and the one added argument C16 names (`--debug-gpu-backend-no-fallback`); the same as 5.4's apart from the version line.
+- **The whole property lists of every structure each Blender registers**, Cycles' own settings included: 4,025 in 5.2.3, 4,121 in 5.3, 4,123 in 5.4. 5.3 to 5.4 is what C18 records.
+- **The 23 scene paths** the composition assigns, reads back or names: all the same across the three, in kind, values, default and limits.
+- **Every word in the fifteen source files that compose or carry Blender's names** that is a name in any list, 546 in all, compared on every structure holding it. None is gone from a structure Smoozy reaches. `CompositorNodeOutputFile.use_file_extension`'s listed default moves from off to on while a fresh node reads on in all three.
+- **The composed line's shape** on the factory scene, frames 1 and 3, on the processor, and **a script that raises** with `--python-exit-code 63`. In 5.3 and 5.2.3 alike the first ended at 0 and wrote both frames, with the device line, the frame announcements and the save announcements on standard output in the same shape; the second ended at 63 and wrote no frame.
+
+**New in 5.3 and 5.4 alike, absent from 5.2.3, and used by nothing yet:** `Scene.compositor_effects`, a collection of `SceneCompositorEffect`, each with `node_group` and `enable_for_render` (off is `False`); `SceneEEVEE.time_limit` (off is `0.0`).
+
+**Label: observed in a test**, at the desk, 2026-11-02, during the Build stage, on one Mac (macOS on Apple silicon), from the command line with no window. **Not the Blender research.** **Source:** `Audits/Build/Blender 5.3/Piece 1, the desk readings — what landed.md`, readings 1 and 3.
+
+**Not covered.** Linux, where Smoozy renders. A card. A real scene. Blender 5.3.0 as released: this reading is of build `5d8151335b6b` alone.
+
+
+## C21 — Simulation promise narrowed, 2026-11-06
+
+Observed in controlled tests: `Audits/Build/Blender 5.3/Every simulation — how it works, for the Creator.md`, with its stage 3, stage 4 and real-file accounts. Small scenes and real files chiefly on Blender 5.2.3 and 5.3 Beta, one Mac. These copied Smoozy's preparation and render route, not complete server jobs. They support the limits stated beside the promise; no claim covers every file, Linux, graphics cards or Blender 5.3 final.
+
+## C22. Cloth preservation and the shutter tail
+
+Observed in controlled desk tests: `Audits/Build/Blender 5.3/Why cloth stands still — what the desk test found.md`, 2026-11-04, and `Every simulation — stage 4.md`, motion-blur section. Small scenes on the Mac; no Linux proof. Operator, refusal and folder order are from the cloth account. Shutter meanings are also documented in Blender’s RenderSettings reference, read 2026-11-06: https://docs.blender.org/api/5.2/bpy.types.RenderSettings.html (START, CENTER, END; shutter length in frames). The new desk checks and limits are recorded in `Audits/Build/Blender 5.3/Simulations, cloth and motion blur — what landed.md`.
+
+## C23 — Cloth withdrawal and shutter retained, 2026-11-06
+
+Observed on real Linux jobs and hand controls, Blender 5.2.3 and 5.3.0 RC: `Audits/Build/Blender 5.3/The Linux check of simulations and the film's faults — what happened.md`, sections 2 and 4. Scene-start-1 Flag did not retain skipped-frame status after playing; early-start Flag with blur differed at the first frame under preservation. START 2.25 shutter tail matched the control byte for byte. These observations do not explain Blender's cause or cover every cloth.

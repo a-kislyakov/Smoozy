@@ -73,8 +73,8 @@
 //! had it, so what it reports is unchanged.
 //!
 //! **Markers used in this file that belong to another document, each with the
-//! document it belongs to.** `Job files and outputs` C9, R1, R2, R3, R4a, R7, R18.
-//! `Render Settings` Q7.
+//! document it belongs to.** `Job files and outputs` C9, R1, R1a, R2, R3, R4a, R7, R18.
+//! `Render Settings` Q7. `Dependency Upload & Remap` M8b.
 
 use std::io::Read;
 use std::process::{Command, Stdio};
@@ -96,7 +96,10 @@ pub struct TheReadingToTake<'a> {
     /// **The Blender the manifest names, by path** — a version alone cannot
     /// identify a build (`Server Setup` B13).
     pub the_blender_build_path: &'a str,
-    /// The `.blend` to read, as it sits on the machine.
+    /// **The `.blend` to read: through the folder the render opens it from, where
+    /// `Dependency Upload & Remap` M8b makes one, and otherwise as it sits on the
+    /// machine** (`Job files and outputs` R1a). Read away from its libraries, a file
+    /// shows nothing that sits on a linked object.
     pub the_blend_path_on_the_machine: &'a str,
     /// **R2: the reading is taken by the version that will render**, and the
     /// script is composed for that version and refuses to run in another.

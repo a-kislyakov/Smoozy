@@ -83,7 +83,7 @@ use std::io::Read;
 use serde::Serialize;
 use smoozy_dependencies_machine::remap::RemapMaterial;
 use smoozy_job_files_machine::mapping::FurtherValueIs;
-use smoozy_job_files_machine::reading_script::THE_CHECKS_MARK_IN_BLENDER;
+use smoozy_job_files_machine::reading_script::{THE_CHECKS_MARK_IN_BLENDER, THE_SIMULATION_SHUTTER};
 use smoozy_job_files_machine::reading::{
     AnAddedWritePlace, Destination, TheVersionInHand, WhichScene,
 };
@@ -186,7 +186,14 @@ enum AnInstruction {
         /// here on 5.0, 5.1 and 5.2 and ended before the render with nothing
         /// written. No pass had reached it: every job before then ended
         /// earlier.
-        tree: String,
+        ///
+        /// **Absent from 5.3** (`Job files and outputs` D8a), which reads
+        /// `the_effect` and never that older name.
+        tree: Option<String>,
+        /// **`Job files and outputs` D8a, from 5.3: the node's effect**, and
+        /// the two names it is reached by, off that crate's own table. Absent
+        /// before 5.3.
+        the_effect: Option<TheEffectOfARedirect>,
         /// The file output node the setting hangs off, by its own name.
         /// **Looked up in the collection by key** — never reached by asking
         /// for an attribute called `nodes["…"]`, which is what a walk over a
@@ -195,6 +202,10 @@ enum AnInstruction {
         /// The folder's own property, per version, as `Job files and
         /// outputs` D8 resolved it. Nothing here composes it.
         property: String,
+        /// **`Job files and outputs` D8b: the folder the reading read on this
+        /// node**, because a name is unique only within one tree, so the name
+        /// alone cannot tell a node at the top from one in a group.
+        the_folder_read: Vec<u8>,
         /// The folder, as bytes, already carrying that document's trailing
         /// separator where `Job files and outputs` D8 requires one.
         folder: Vec<u8>,
@@ -372,12 +383,19 @@ pub fn the_materials_text(
                     the_instruction_of_each_place.push((*place, instructions.len()));
                 }
                 instructions.push(match holder {
-                    TheRedirectsHolder::AFileOutputNode { node, property } => {
+                    TheRedirectsHolder::AFileOutputNode { node, property, effect } => {
                         AnInstruction::Redirect {
                             scene: the_destinations_own_scene(&assignment.destination),
-                            tree: the_scenes_compositing_tree(the_manifests_version).to_string(),
+                            tree: the_scenes_compositing_tree(the_manifests_version).map(str::to_string),
+                            the_effect: effect.map(|effect| the_effect_of_a_redirect(effect, the_manifests_version)),
                             node: node.to_vec(),
                             property: property.to_string(),
+                            the_folder_read: assignment
+                                .destination
+                                .recorded_location
+                                .as_ref()
+                                .map(|read| read.as_bytes().to_vec())
+                                .unwrap_or_default(),
                             folder: assignment.folder.clone(),
                             further_values,
                         }
@@ -504,7 +522,7 @@ pub fn the_materials_text(
     debug_assert!(!rendered.contains("'''"));
 
     let mut text = format!(
-        "{THE_HEAD}{THE_SHARED_WALK}{THE_REST_OF_THE_HEAD}{THE_CHECKS_MARK_IN_BLENDER}\nSMOOZY = json.loads(r'''{rendered}''')\n"
+        "{THE_HEAD}{THE_SHARED_WALK}{THE_REST_OF_THE_HEAD}{THE_CHECKS_MARK_IN_BLENDER}{THE_SIMULATION_SHUTTER}\nSMOOZY = json.loads(r'''{rendered}''')\n"
     );
     match where_the_remap_fragment_goes {
         Some(at) => {
@@ -528,12 +546,32 @@ pub fn the_materials_text(
 /// **The scene's compositing tree, by the name the manifest's version gives
 /// it** — `Job files and outputs — machine`'s own pair, cited there to the
 /// property-name lookup of 2026-09-20, and never spelled in this crate.
-fn the_scenes_compositing_tree(version: Version) -> &'static str {
+fn the_scenes_compositing_tree(version: Version) -> Option<&'static str> {
     smoozy_job_files_machine::reading_script::THE_SCENES_COMPOSITING_TREE
         .for_version(TheVersionInHand::of(version.major as u16, version.minor as u16))
-        .ok()
-        .flatten()
-        .expect("both sides of the boundary are cited, so every version has a name")
+        .expect("every side of the boundary is cited")
+}
+
+/// **`Job files and outputs` D8a: a redirect's node, reached through its effect.**
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+struct TheEffectOfARedirect {
+    /// The effect's name as the file holds it (`Job files and outputs` R4a).
+    name: Vec<u8>,
+    the_stack: &'static str,
+    its_group: &'static str,
+}
+
+/// **What the text needs to reach a node through its effect**, every name off
+/// that crate's own table.
+fn the_effect_of_a_redirect(effect: &[u8], version: Version) -> TheEffectOfARedirect {
+    use smoozy_job_files_machine::reading_script::{AN_EFFECTS_GROUP, THE_SCENES_EFFECTS};
+    let in_hand = TheVersionInHand::of(version.major as u16, version.minor as u16);
+    let cited = "a node names an effect only where the version holds a stack, and those names are cited";
+    TheEffectOfARedirect {
+        name: effect.to_vec(),
+        the_stack: THE_SCENES_EFFECTS.for_version(in_hand).expect(cited).expect(cited),
+        its_group: AN_EFFECTS_GROUP.for_version(in_hand).expect(cited).expect(cited),
+    }
 }
 
 /// **The scene a redirect assignment's destination belongs to, where it is
@@ -630,7 +668,7 @@ def smoozy_carriers(scene, carried_by):
         # 2026-10-02): switching its disk cache on ended Blender with exit 139
         # in 4.5.12 and 5.2.2, so it is not walked to here at all.
         #
-        # **Only a cache whose disk cache the file already has on is set**
+        # **Only a cache whose disk cache the file already has on is set by this redirect**
         # (the same clause). A cache the file keeps in memory writes nothing
         # to disk, so it is not a place the job writes, and it is left exactly
         # as the file has it — turning its disk cache on dropped a cloth's
@@ -797,6 +835,38 @@ def smoozy_sever(scene, layer_name, by_the_walk):
 
 /// The part that carries the instructions out.
 const THE_BODY: &str = r#"
+# **`Job files and outputs` D8b**: every node of this name in the tree and the
+# groups nested in it, in every version, and of those the ones whose folder is
+# still the text the reading read, or already this instruction's own. Where
+# none is, the first of that name, as the name alone always answered. A name is
+# unique only within one tree.
+def smoozy_the_nodes_under(top, instruction):
+    name = os.fsdecode(bytes(instruction["node"]))
+    wanted = (bytes(instruction["the_folder_read"]), bytes(instruction["folder"]))
+    seen = set()
+    named = []
+    frontier = [top]
+    while frontier:
+        tree = frontier.pop(0)
+        if tree.as_pointer() in seen:
+            continue
+        seen.add(tree.as_pointer())
+        found = tree.nodes.get(name)
+        if found is not None:
+            named.append(found)
+        for one in tree.nodes:
+            inner = getattr(one, "node_tree", None)
+            if inner is not None:
+                frontier.append(inner)
+    if not named:
+        raise KeyError("smoozy: no such node: " + name)
+    holding = [
+        one for one in named
+        if os.fsencode(getattr(one, instruction["property"], "\0")) in wanted
+    ]
+    return holding or named[:1]
+
+
 def smoozy_carry_out(document, first, last):
     scene = smoozy_scene(document)
     for instruction in document["instructions"][first:last]:
@@ -819,19 +889,15 @@ def smoozy_carry_out(document, first, last):
             if record is None or not getattr(record, "finished", False):
                 raise RuntimeError("smoozy: the settings Smoozy makes as the file opens were not made")
         elif what == "Step":
-            # **L10b, the Creator's decision A**: where the reading in force
-            # says the job's scene holds a simulation that is not baked, the
-            # scene is stepped frame by frame from its start — or the list's
-            # lowest frame where that is earlier — to the list's highest, after
-            # every pair and before the read-back. The render instruction is
-            # still the command line's (L1): this renders nothing. Observed at
-            # the desk in all four versions: the command-line render then reads
-            # what the stepping computed, where unstepped an unbaked
-            # simulation zone is frame 1's picture on every frame.
+            # `Rendering` L10b: finish the saved shutter, then keep only
+            # unbaked skipped cloth (`Job files and outputs` D21b-i).
             start = min(scene.frame_start, instruction["lowest"])
-            for frame in range(start, instruction["highest"] + 1):
+            highest = instruction["highest"] + smoozy_simulation_tail(scene)
+            for frame in range(start, highest + 1):
+                print("SMOOZY-SIMULATION " + json.dumps({"frame": frame, "to": highest}), flush=True)
                 scene.frame_set(frame)
-            smoozy_say({"stepped": instruction["highest"] - start + 1, "from": start, "to": instruction["highest"]})
+            print("SMOOZY-SIMULATION " + json.dumps({"finished": True}), flush=True)
+            smoozy_say({"stepped": highest - start + 1, "from": start, "to": highest})
         elif what == "WriteAsAPicture":
             # **L10c, the nineteenth notes, notes 3 and 9**: a first-frame
             # check of a job whose only output is a video, which the reading
@@ -874,18 +940,25 @@ def smoozy_carry_out(document, first, last):
             on = scene
             if instruction["scene"] is not None:
                 on = bpy.data.scenes[os.fsdecode(bytes(instruction["scene"]))]
-            # **The tree by the name this version gives it**: `node_tree` in
-            # 4.5, `compositing_node_group` from 5.0, where a scene carries no
-            # `node_tree` at all.
-            tree = getattr(on, instruction["tree"])
-            node = tree.nodes[os.fsdecode(bytes(instruction["node"]))]
-            setattr(node, instruction["property"], os.fsdecode(bytes(instruction["folder"])))
-            # **`Job files and outputs` P10: the further values are applied
-            # with the folder and on the same object.** The folder alone is
-            # that document's own observed silent no-op.
-            for further in instruction["further_values"]:
-                holder, name = smoozy_off(node, further["setting"])
-                setattr(holder, name, further["value"])
+            if instruction["the_effect"] is not None:
+                # **`Job files and outputs` D8a, from 5.3: through the node's
+                # own effect**, whichever is active.
+                the_effect = instruction["the_effect"]
+                effect = getattr(on, the_effect["the_stack"])[os.fsdecode(bytes(the_effect["name"]))]
+                top = getattr(effect, the_effect["its_group"])
+            else:
+                # **The tree by the name this version gives it**: `node_tree` in
+                # 4.5, `compositing_node_group` from 5.0, where a scene carries no
+                # `node_tree` at all.
+                top = getattr(on, instruction["tree"])
+            for node in smoozy_the_nodes_under(top, instruction):
+                setattr(node, instruction["property"], os.fsdecode(bytes(instruction["folder"])))
+                # **`Job files and outputs` P10: the further values are applied
+                # with the folder and on the same object.** The folder alone is
+                # that document's own observed silent no-op.
+                for further in instruction["further_values"]:
+                    holder, name = smoozy_off(node, further["setting"])
+                    setattr(holder, name, further["value"])
             smoozy_say({
                 "redirect": instruction["property"],
                 "node": instruction["node"],
@@ -1152,6 +1225,21 @@ mod tests {
         assert!(!from_five.contains("on.node_tree"));
     }
 
+    /// **`Job files and outputs` D8a: from 5.3 a node is reached through its
+    /// effect**, the older name goes unasked for, and the effect's odd name
+    /// crosses as bytes.
+    #[test]
+    fn from_five_three_a_redirect_goes_through_the_effect() {
+        let instruction = the_effect_of_a_redirect("Sec\"ond/é".as_bytes(), Version { major: 5, minor: 3, patch: 0 });
+        let written = serde_json::to_string(&instruction).expect("it writes out");
+        assert!(written.contains(r#""the_stack":"compositor_effects""#));
+        assert!(written.contains(r#""its_group":"node_group""#));
+        assert_eq!(instruction.name, "Sec\"ond/é".as_bytes());
+        assert_eq!(the_scenes_compositing_tree(Version { major: 5, minor: 3, patch: 0 }), None);
+        assert_eq!(the_scenes_compositing_tree(Version { major: 5, minor: 4, patch: 0 }), None);
+        assert_eq!(the_scenes_compositing_tree(Version { major: 5, minor: 2, patch: 3 }), Some("compositing_node_group"));
+    }
+
     /// **The four added write places reach the text as settings on what
     /// carries them**, each by its cited name, and only the point cache's
     /// folder is made first (`Job files and outputs` D21b-i).
@@ -1233,13 +1321,13 @@ mod tests {
     /// **`Job files and outputs` D21b-i, corrected 2026-10-02: the point
     /// cache's values are set only where the file already writes the cache to
     /// disk, never on a rigid-body world, and the disk-cache switch is never
-    /// written.** At the desk, in 4.5.12 and 5.2.2, writing the switch deleted
+    /// written by the redirect.** At the desk, in 4.5.12 and 5.2.2, writing the switch deleted
     /// a baked cloth's 48 files beside the `.blend`, turning it on for a cache
     /// kept in memory dropped a cloth's in-file bake and wrote 150 files beside
     /// the `.blend`, and turning it on for a rigid-body world ended Blender
     /// with exit 139.
     #[test]
-    fn the_point_cache_is_set_only_where_the_file_writes_it_to_disk_and_its_switch_is_never_written() {
+    fn the_point_cache_redirect_sets_only_existing_disk_caches_and_never_writes_the_switch() {
         use crate::material::tests::a_redirect_assignment;
         use crate::material::{compose, MaterialInputs};
         use crate::versions::TheFourVersions;
@@ -1276,10 +1364,11 @@ mod tests {
             ..THE_SHARED_WALK.find("def smoozy_the_folder_for").unwrap()];
         assert!(text.contains(walk));
         assert!(!walk.contains("rigidbody_world"), "a rigid-body world is walked to");
-        // **The switch is read, to leave memory caches alone, and never written.**
+        // **`Job files and outputs` D21b-i: no path switches disk caching on.**
         assert!(text.contains("if each.point_cache.use_disk_cache]"));
         assert!(!text.contains(r#""setting":"point_cache.use_disk_cache""#));
-        assert!(!text.contains("use_disk_cache ="));
+        assert!(!THE_SHARED_WALK.contains("use_disk_cache ="));
+        assert!(!THE_REST_OF_THE_HEAD.contains("cache.use_disk_cache = True"));
         // **`Job files and outputs` D21b-i's order: *external* on, the folder, the name.**
         assert!(text.contains(
             r#""switched_on_before_the_folder":[{"setting":"point_cache.use_external","value":true}]"#
@@ -1586,7 +1675,7 @@ mod tests {
         let branch = &THE_BODY[THE_BODY.find(r#"elif what == "Step":"#).unwrap()
             ..THE_BODY.find(r#"elif what == "Redirect":"#).unwrap()];
         assert!(branch.contains(r#"start = min(scene.frame_start, instruction["lowest"])"#));
-        assert!(branch.contains(r#"for frame in range(start, instruction["highest"] + 1):"#));
+        assert!(branch.contains(r#"for frame in range(start, highest + 1):"#));
         assert!(branch.contains("scene.frame_set(frame)"));
         assert!(branch.contains(r#"smoozy_say({"stepped": "#));
         for never in ["render.render(", "bpy.ops.render", "write_still"] {
@@ -1704,5 +1793,151 @@ mod tests {
         assert!(branch.contains(
             r#"smoozy_the_check_is_marked(scene, instruction["names"], instruction["mark"], False)"#
         ));
+    }
+}
+
+
+#[cfg(test)]
+mod wait_count_tests {
+    use super::*;
+    // `Rendering` L10b and `Job files and outputs` D21b-i, small real scenes.
+    #[test]
+    #[ignore = "desk Blender, serial processes, each limited to 90 seconds"]
+    fn cloth_and_shutter_at_the_desk() {
+        let root = std::env::var_os("SMOOZY_DESK_OUT").map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("smoozy-cloth-and-shutter"));
+        std::fs::create_dir_all(&root).unwrap();
+        let material = root.join("material.py");
+        std::fs::write(&material, format!("{THE_HEAD}{THE_SHARED_WALK}{THE_REST_OF_THE_HEAD}{THE_SIMULATION_SHUTTER}{THE_BODY}")).unwrap();
+        let desk_version = std::env::var("SMOOZY_DESK_VERSION").unwrap_or_else(|_| "5.3".into());
+        let (major, minor) = desk_version.split_once('.').unwrap();
+        let reading = smoozy_job_files_machine::reading_script::the_pre_load_reading_script(
+            &smoozy_job_files_machine::reading::TheInvocation {
+                the_blender_build_path: String::new(),
+                the_blend_path_on_the_machine: smoozy_job_files_machine::reading::RecordedLocation::of(b"/tmp/scene.blend".to_vec()),
+                the_version_it_will_render_by: smoozy_job_files_machine::reading::TheVersionInHand::of(major.parse().unwrap(),minor.parse().unwrap()),
+                the_frames_the_job_covers: vec![30],
+                the_check_is_written_as_a_picture: false,
+                the_check_is_marked: false,
+            }).unwrap();
+        std::fs::write(root.join("reading.py"), reading).unwrap();
+        let script = root.join("desk.py");
+        std::fs::write(&script, include_str!("cloth_and_shutter_at_the_desk.py")).unwrap();
+        let blender = std::env::var("SMOOZY_DESK_BLENDER")
+            .unwrap_or_else(|_| "/Applications/Blender 5.3b.app/Contents/MacOS/Blender".into());
+        let out = std::process::Command::new("python3").arg(script)
+            .arg("--blender").arg(blender).arg("--out").arg(&root)
+            .arg("--material").arg(material).output().unwrap();
+        assert!(out.status.success(), "{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    }
+
+    // `Rendering` L10b; `Job files and outputs` D21b-i: the worker's whole driver.
+    #[test]
+    #[ignore = "run after cloth_and_shutter_at_the_desk; existing driver time limits"]
+    fn the_real_cloth_jobs_keep_the_unpreserved_route() {
+        let root = std::env::var_os("SMOOZY_DESK_OUT").map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::env::temp_dir().join("smoozy-cloth-and-shutter"));
+        let blender = std::env::var("SMOOZY_DESK_BLENDER")
+            .unwrap_or_else(|_| "/Applications/Blender 5.3b.app/Contents/MacOS/Blender".into());
+        let payload = crate::material::tests::an_untouched_payload();
+        for kind in ["early", "linked", "override"] {
+            let job_root = root.join(format!("worker-{kind}"));
+            if kind != "early" {
+                std::fs::create_dir_all(job_root.join("rendering")).unwrap();
+                std::fs::copy(root.join(kind).join("library.blend"),job_root.join("rendering/library.blend")).unwrap();
+            }
+            let got = crate::acting::the_5_3_readings_at_the_desk::one_job_with_pairs(
+                std::path::Path::new(&blender), &root.join(kind).join("scene.blend"),
+                &job_root, &payload, vec![60,61,62], Vec::new());
+            assert_eq!(got.the_renders_status, Some(0), "{kind}: {:?}: {}", got.not_launched, got.the_renders_errors);
+            assert!(got.holds().is_empty(), "{kind}: {:?}: {}", got.not_launched, got.the_renders_errors);
+            let pictures: Vec<_> = got.in_the_jobs_folder.iter().filter(|name| name.ends_with(".bmp")).collect();
+            assert_eq!(pictures.len(), 3, "{kind}: {:?}: {}", got.not_launched, got.the_renders_errors);
+            for (frame, picture) in [60,61,62].iter().zip(pictures) {
+                let expected = std::fs::read(root.join(kind).join("old").join(format!("f_{frame:04}.bmp"))).unwrap();
+                let actual = std::fs::read(job_root.join("job").join(picture)).unwrap();
+                let pixels = |raw: &[u8]| raw[u32::from_le_bytes(raw[10..14].try_into().unwrap()) as usize..].to_vec();
+                assert!(pixels(&actual)==pixels(&expected), "{kind} frame {frame}: pixels differ");
+            }
+            if kind != "early" {
+                assert_eq!(got.in_the_jobs_folder.iter().filter(|name| name.ends_with(".bphys")).count(),0, "{kind}: {:?}: {}", got.not_launched, got.the_renders_errors);
+            }
+        }
+    }
+
+    // `Rendering` L10b: the failed Linux adoption check withdrew cloth keeping.
+    #[test]
+    fn playing_does_not_bake_cloth_or_switch_on_its_disk_cache() {
+        let check = r#"
+from types import SimpleNamespace as NS
+class Refused:
+    def __getattr__(self,name): raise AssertionError('cloth preservation was called: '+name)
+scene=NS(frame_start=1,render=NS(use_motion_blur=False,motion_blur_position='CENTER',motion_blur_shutter=0.5))
+scene.frame_set=lambda frame: None
+bpy=Refused()
+smoozy_say=lambda value: None
+smoozy_scene=lambda document:scene
+smoozy_carry_out({'instructions':[{'do':'Step','lowest':3,'highest':5}]},0,1)
+"#;
+        let out=std::process::Command::new("python3").arg("-c")
+            .arg(format!("import os,json\n{THE_SHARED_WALK}{THE_REST_OF_THE_HEAD}{THE_SIMULATION_SHUTTER}{THE_BODY}\n{check}"))
+            .output().unwrap();
+        assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
+    }
+
+    #[test]
+    fn the_saved_shutter_sets_the_last_played_frame_and_progress() {
+        let say = &THE_HEAD[THE_HEAD.find("SMOOZY_MARKER_HEAD =").unwrap()
+            ..THE_HEAD.find("def smoozy_scene").unwrap()];
+        let check = r#"
+from types import SimpleNamespace as NS
+lines = []
+def print(text, **options): lines.append(text)
+scene = NS(frame_start=1, render=NS(use_motion_blur=True, motion_blur_position='START', motion_blur_shutter=2.25))
+scene.seen = []
+scene.frame_set = lambda frame: scene.seen.append(frame)
+smoozy_scene = lambda document: scene
+for on, position, length, tail in [(True,'START',2.25,3), (True,'CENTER',2.25,2), (True,'END',2.25,0), (False,'START',2.25,0), (True,'CENTER',0,0), (True,'START',0.5,1)]:
+    scene.render.use_motion_blur = on
+    scene.render.motion_blur_position = position
+    scene.render.motion_blur_shutter = length
+    scene.seen.clear()
+    lines.clear()
+    smoozy_carry_out({'instructions':[{'do':'Step','lowest':3,'highest':5}]},0,1)
+    assert scene.seen == list(range(1,6+tail)), (position, scene.seen, tail)
+    progress = [json.loads(line.split(' ',1)[1]) for line in lines if line.startswith('SMOOZY-SIMULATION ')]
+    assert all(line['to'] == 5+tail for line in progress if 'frame' in line), progress
+"#;
+        let output = std::process::Command::new("python3").arg("-c")
+            .arg(format!("import json\n{say}\n{THE_SIMULATION_SHUTTER}\n{THE_BODY}\n{check}"))
+            .output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    #[test]
+    fn wait_count_is_flushed_before_each_frame_without_changing_the_range() {
+        let say = &THE_HEAD[THE_HEAD.find("SMOOZY_MARKER_HEAD =").unwrap()
+            ..THE_HEAD.find("def smoozy_scene").unwrap()];
+        let check = r#"
+lines = []
+def print(text, **options):
+    lines.append((text, options.get('flush', False)))
+class Scene:
+    frame_start = -2
+    render = type("Render", (), {"use_motion_blur": False, "motion_blur_position": "CENTER", "motion_blur_shutter": 0.5})()
+    seen = []
+    def frame_set(self, frame):
+        assert lines[-1] == ('SMOOZY-SIMULATION ' + json.dumps({'frame': frame, 'to': 1}), True), lines
+        self.seen.append(frame)
+scene = Scene()
+smoozy_scene = lambda document: scene
+smoozy_carry_out({'instructions': [{'do': 'Step', 'lowest': -1, 'highest': 1}]}, 0, 1)
+assert scene.seen == [-2, -1, 0, 1], scene.seen
+assert ('SMOOZY-SIMULATION ' + json.dumps({'finished': True}), True) in lines, lines
+"#;
+        let out = std::process::Command::new("python3").arg("-c")
+            .arg(format!("import json\n{say}\n{THE_SIMULATION_SHUTTER}\n{THE_BODY}\n{check}"))
+            .output().expect("Python runs the material with a stand-in scene; no Blender");
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     }
 }

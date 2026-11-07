@@ -40,3 +40,5 @@
 - 2026-10-17 — Claude Opus 5.5, the build runner, outside any round — *The frame range*, the video rule corrected: a step is kept, only a gapped list is refused (second controlled test). No auditor has seen it.
 
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Applied the wave 7b privacy fixes.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — The line about the driver, from 5.3. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — the pointer on a loaded range. No auditor has seen it.

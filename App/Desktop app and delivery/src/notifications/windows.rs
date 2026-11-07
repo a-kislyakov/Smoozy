@@ -54,7 +54,7 @@ use windows::UI::Notifications::{
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoTaskMemAlloc, CoTaskMemFree, CoUninitialize, IPersistFile,
-    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED,
+    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, STGM_READ,
 };
 use windows::Win32::System::Variant::VT_LPWSTR;
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
@@ -111,18 +111,83 @@ pub(super) fn the_activation_route_is_open(on_click: Box<dyn Fn(String) + Send +
 /// created something in the user's Start menu. **E3 puts the making of that file
 /// at first successful start**, and that is where this is called from; the read
 /// beside it now answers honestly on all three systems.
-pub(super) fn the_machinery_is_made() {
+///
+/// **From 2026-11-01 it also keeps the shortcut on the running program** (E3's
+/// dated sentence, the build runner's ruling): a shortcut naming a different
+/// Smoozy program is rewritten to name this one, the same shortcut with the
+/// same name and application identifier. What decides is
+/// [`super::what_the_start_does_with_the_shortcut`], every system's code.
+pub(super) fn the_machinery_is_made(mode: crate::start::LaunchMode, the_record_opened: bool) {
     let Some(folder) = the_users_own_programs_folder() else {
         return;
     };
-    let shortcut = folder.join(THE_SHORTCUTS_NAME);
-    if shortcut.exists() {
-        return;
-    }
     let Ok(us) = std::env::current_exe() else {
         return;
     };
-    let _ = make_the_shortcut(&shortcut, &us);
+    the_machinery_is_made_in(&folder, &us, mode, the_record_opened);
+}
+
+/// The same act in any folder, so the hosted Windows test can do it in a
+/// throwaway one rather than the user's Start menu.
+fn the_machinery_is_made_in(
+    folder: &std::path::Path,
+    us: &std::path::Path,
+    mode: crate::start::LaunchMode,
+    the_record_opened: bool,
+) {
+    use super::WhatTheStartDoesWithTheShortcut::*;
+    let shortcut = folder.join(THE_SHORTCUTS_NAME);
+    let found = the_shortcut_found(&shortcut);
+    match super::what_the_start_does_with_the_shortcut(&found, us, mode, the_record_opened) {
+        MakesIt => {
+            let _ = make_the_shortcut(&shortcut, us);
+        }
+        PointsItHere => {
+            let _ = the_shortcut_in_this_folder_points_at(folder, us);
+        }
+        LeavesIt => {}
+    }
+}
+
+/// **What is at the shortcut's place**: nothing, a shortcut naming a program,
+/// or one whose target could not be read.
+fn the_shortcut_found(shortcut: &std::path::Path) -> super::TheShortcutFound {
+    if !shortcut.exists() {
+        return super::TheShortcutFound::NotThere;
+    }
+    match the_shortcuts_target(shortcut) {
+        Some(target) => super::TheShortcutFound::Names(target),
+        None => super::TheShortcutFound::Unreadable,
+    }
+}
+
+/// **The program a shortcut names**, read by loading it into a shell link and
+/// asking for its path — `IPersistFile::Load`, then `IShellLinkW::GetPath`
+/// with no find data and no flags. An empty path is no target.
+fn the_shortcuts_target(shortcut: &std::path::Path) -> Option<std::path::PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    // Safety: as `make_the_shortcut`: the component system is started for this
+    // call and undone on the way out, and every buffer is owned for its length.
+    unsafe {
+        let started = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let outcome = (|| -> Option<std::path::PathBuf> {
+            let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).ok()?;
+            let file: IPersistFile = link.cast().ok()?;
+            let name: Vec<u16> = wide(&shortcut.to_string_lossy());
+            file.Load(PCWSTR(name.as_ptr()), STGM_READ).ok()?;
+            let mut target = vec![0u16; 32_768];
+            link.GetPath(&mut target, std::ptr::null_mut(), 0).ok()?;
+            let length = target.iter().position(|&unit| unit == 0).unwrap_or(target.len());
+            if length == 0 {
+                return None;
+            }
+            Some(std::path::PathBuf::from(std::ffi::OsString::from_wide(&target[..length])))
+        })();
+        if started.is_ok() {
+            CoUninitialize();
+        }
+        outcome
+    }
 }
 
 impl ThePlatform for TheWindows {
@@ -551,6 +616,47 @@ mod tests {
         let rewritten = std::fs::read(folder.join(THE_SHORTCUTS_NAME)).expect("the shortcut is still there");
         assert_ne!(made, rewritten, "the rewritten shortcut is the old one");
         assert!(!folder.join(THE_SHORTCUT_BEING_WRITTEN).exists());
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    /// **E3's sentence of 2026-11-01 on a real Windows: a start points a
+    /// shortcut naming another program at the running one**, in a throwaway
+    /// folder and never the user's Start menu. The target is read back each
+    /// time. An update launch and a start whose record did not open leave it
+    /// on the old program; an ordinary start points it here; a second ordinary
+    /// start finds it here and writes nothing. **Runs on the hosted Windows job
+    /// only.**
+    #[test]
+    fn a_start_points_a_shortcut_naming_another_program_here_in_a_throwaway_folder() {
+        use crate::start::LaunchMode;
+        let folder = crate::scratch_folders::a_folder(format!("smoozy-shortcut-follows-{}", std::process::id()));
+        let old = folder.join("0.2.0").join("smoozy-desktop.exe");
+        let new = folder.join("0.2.1").join("smoozy-desktop.exe");
+        for (program, bytes) in [(&old, "old"), (&new, "new")] {
+            std::fs::create_dir_all(program.parent().unwrap()).unwrap();
+            std::fs::write(program, bytes).unwrap();
+        }
+        let shortcut = folder.join(THE_SHORTCUTS_NAME);
+        let names = |program: &std::path::Path| {
+            let target = the_shortcuts_target(&shortcut).expect("the shortcut's target reads back");
+            super::super::the_same_program(&target, program)
+        };
+
+        the_shortcut_in_this_folder_points_at(&folder, &old).expect("the shortcut is made");
+        assert!(names(&old), "the made shortcut does not name the old program");
+
+        the_machinery_is_made_in(&folder, &new, LaunchMode::Update, true);
+        assert!(names(&old), "an update launch moved the shortcut");
+        the_machinery_is_made_in(&folder, &new, LaunchMode::Ordinary, false);
+        assert!(names(&old), "a start whose record did not open moved the shortcut");
+
+        the_machinery_is_made_in(&folder, &new, LaunchMode::Ordinary, true);
+        assert!(names(&new), "an ordinary start left the shortcut on another program");
+        assert!(!folder.join(THE_SHORTCUT_BEING_WRITTEN).exists());
+
+        let pointed = std::fs::read(&shortcut).unwrap();
+        the_machinery_is_made_in(&folder, &new, LaunchMode::Ordinary, true);
+        assert_eq!(std::fs::read(&shortcut).unwrap(), pointed, "a shortcut already here was rewritten");
         let _ = std::fs::remove_dir_all(&folder);
     }
 

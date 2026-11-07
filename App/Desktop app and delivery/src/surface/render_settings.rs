@@ -143,7 +143,7 @@ use tauri::{Manager, State};
 
 use smoozy_dependencies::standing::{Counts, WhatTheRecordSays};
 use smoozy_job_files::holds::the_six_things;
-use smoozy_job_files::inventory::{compose_the_inventory, WhatTheInventoryIs};
+use smoozy_job_files::inventory::{compose_the_inventory, it_writes_what_the_reading_cannot_name, WhatTheInventoryIs};
 use smoozy_job_files::layout::{Area, TheLayout};
 use smoozy_job_files::mapping::{compose_the_map, ADestinationToMap, TheMap};
 use smoozy_job_files::reading::{
@@ -194,6 +194,8 @@ pub const AN_ACT_ON_THIS_PAGE: &str = "render-settings:an-act";
 /// Requests can be served on this connection. The open panel asks for its
 /// list even while collapsed; the earlier Connected reading is too soon.
 pub const THE_CONNECTION_IS_LENT: &str = "render-settings:the-connection-is-lent";
+/// **`Server Setup` G2a: the Telegram role was read**, for the page to ask again.
+pub const THE_TELEGRAM_ROLE_WAS_READ: &str = "render-settings:the-telegram-role-was-read";
 
 /// **How many of an answer's leading parts say what went out**, rather than
 /// what was refused — `Design values`: `--alert` is *"Refused or blocked"*
@@ -229,7 +231,7 @@ pub const THE_LIST_CAME_BACK: &str = "version-list";
 /// both directions. **The count is the array's own and is written nowhere
 /// else**: a number in a name or in a sentence is the one fault this stage
 /// keeps meeting.
-pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 55] = [
+pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 60] = [
     // **`res-oneframe`: every job the Render control would send has one
     // frame**, so *Render one frame first* is greyed and cannot be pressed but
     // keeps its setting, and the dependency band leaves its first-frame way
@@ -237,6 +239,10 @@ pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 55] = [
     // (`Design/Render Settings § Submitting`); held by
     // `the_first_frame_switch_is_greyed_where_every_job_has_one_frame`.
     "res-oneframe",
+    "res-simulation",
+    "res-simulation-off",
+    "res-simulation-early",
+    "res-simulation-many",
     // **`res-againlist`: the page opened by *Submit again* with the frames as
     // the entry holds them, typed.** Drawn 2026-10-24 by the eighteenth notes'
     // design pass, ruling 6 (note 8). **Not built yet**: it is owed to that
@@ -271,6 +277,7 @@ pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 55] = [
     "res-eng",
     "res-gpuseen",
     "res-gpunocount",
+    "res-drvold",
     "res-multi",
     // **`§ Submitting`: the switch on and no folder anybody can name.** Drawn
     // 2026-09-20, and the one state on this page that had never been drawn at
@@ -471,6 +478,9 @@ pub(crate) mod words {
     pub const SCENE: &str = "Scene";
     pub const ALL_SCENES: &str = "All scenes";
     pub const JOBS_ONE_EACH: &str = "jobs, one each";
+    /// **The *All scenes* tag where the file has one scene**: *1 job*. Added
+    /// 2026-11-02 — the showcase pictures read *1 jobs, one each*.
+    pub const ONE_JOB: &str = "job";
     pub const FRAMES: &str = "Frames";
     pub const THE_FILES_RANGE: &str = "— the file’s";
     pub const ONE_RANGE_FOR_ALL: &str = "— one range for all";
@@ -530,6 +540,11 @@ pub(crate) mod words {
     pub const CPU: &str = "CPU";
     pub const GPUS_UNUSED: &str = "GPUs unused";
     pub const GPU_UNUSED: &str = "GPU unused";
+    /// **`Render Settings` D6a**, `Design/Render Settings § What the render runs
+    /// on`: *This server’s NVIDIA driver, 575.64.03, is too old for Cycles GPU
+    /// rendering in Blender 5.3.*
+    pub const THIS_SERVERS_NVIDIA_DRIVER: &str = "This server’s NVIDIA driver,";
+    pub const IS_TOO_OLD_FOR_CYCLES_GPU_IN: &str = "is too old for Cycles GPU rendering in Blender";
     pub const LAST_SEEN: &str = "last seen";
 
     // `§ Warnings` — the refusal line's second half is J12's, per setting.
@@ -674,6 +689,14 @@ pub(crate) mod words {
     // `§ Submitting`: the check's uploads, counted above Render. The
     // Creator's note 6 on 0.1.8.
     pub const UPLOADING_DEPENDENCIES: &str = "Uploading dependencies:";
+    // `Dependency Upload & Remap` A9e, `§ Submitting`.
+    pub const WAITING_FOR_UPLOAD: &str = "Waiting for upload";
+    pub const WAITING_FOR_CHECK: &str = "Waiting for check";
+    pub const CHECK_DEPENDENCIES_FIRST: &str = "Check dependencies first";
+    pub const CHECK_DEPENDENCIES_FIRST_STOP: &str = "Check dependencies first.";
+    pub const CHECKING_DEPENDENCIES: &str = "Checking dependencies…";
+    pub const DEPENDENCIES_ARE_UPLOADING: &str = "Dependencies are uploading.";
+    pub const DEPENDENCIES_ARE_BEING_CHECKED: &str = "Dependencies are being checked.";
     pub const FILES_FULL_STOP: &str = "files.";
     pub const FILE_FULL_STOP: &str = "file.";
     pub const RENDER_ONE_FRAME_FIRST: &str = "Render one frame first";
@@ -715,6 +738,9 @@ pub(crate) mod words {
     pub const PICTURES_ONLY: &str = "Pictures only";
     pub const OFF: &str = "Off";
     pub const ANSWER_IN_QUEUE: &str = "Answer the first frame in Queue.";
+    /// **`Server Setup` G2a: the Telegram line where the server has no role.**
+    pub const NOT_INSTALLED: &str = "Not installed";
+    pub const INSTALLING: &str = "Installing…";
     pub const ONLY_WHAT_NEEDS_YOU: &str = "Alerts only";
     /// **`§ Submitting`, *A fourth choice, per job only*** (2026-10-19): the
     /// row in the list, the closed control once it is picked, the word after
@@ -748,15 +774,24 @@ pub(crate) mod words {
     pub const NO_SERVER_CONNECTED_LEAD: &str = "No server is connected.";
     pub const NO_SERVER_CONNECTED_REST: &str = "Connect a server to submit.";
     pub const CARRYING_ON_LEAD: &str = "Resuming";
-    pub const CARRYING_ON_CHECKED: &str =
-        "is the last on the server, so the range starts at";
-    pub const CARRYING_ON_SHORT_FILE: &str = "A partly written frame counts as finished and may be skipped.";
-    pub const CARRYING_ON_FRAME: &str = "Frame";
-    pub const CARRYING_ON_UNREAD: &str = concat!(
-        "Could not read the server’s output, so the range starts at ",
-        the_recorded_figure!(),
-        ":"
-    );
+    /// *Resuming Kitchen — final v3 from frame 149, after the last frame on
+    /// the server. Settings from 8 Aug. A partly written frame may be skipped.*
+    /// Changed 2026-11-06, the last words read before the release (it was
+    /// four sentences: *Resuming Kitchen — final v3. Settings from 8 Aug.
+    /// Frame 148 is the last on the server, so the range starts at 149. A
+    /// partly written frame counts as finished and may be skipped.*).
+    pub const CARRYING_ON_FROM_FRAME: &str = "from frame";
+    pub const CARRYING_ON_CHECKED: &str = ", after the last frame on the server.";
+    pub const CARRYING_ON_SHORT_FILE: &str = "A partly written frame may be skipped.";
+    /// *Resuming Kitchen — final v3 from frame 149, the frame recorded when
+    /// the job ended. Settings from 8 Aug. Could not read the server's
+    /// output.* — the checked band's shape, still saying where the figure came
+    /// from (`Design/Queue & History`). Changed 2026-11-06, the check after
+    /// the last fix (it read *Resuming Kitchen — final v3. Settings from 8
+    /// Aug. Could not read the server's output, so the range starts at the
+    /// frame recorded when the job ended: 149.*).
+    pub const CARRYING_ON_UNREAD: &str = concat!(", ", the_recorded_figure!(), ".");
+    pub const CARRYING_ON_COULD_NOT_READ: &str = "Could not read the server’s output.";
     pub const THESE_ARE_THE_SETTINGS_IT_USED_ON: &str = "Settings from";
     pub const USED_ON: &str = "used on";
     /// Punctuation rather than a word, so that a part ending a sentence can
@@ -1068,6 +1103,10 @@ pub struct WhatTheRecordHolds {
     /// though read beside it. `None` where nothing of the check is going. The
     /// Creator's note 6 on 0.1.8.
     pub the_checks_uploads: Option<(usize, usize)>,
+    /// **`Dependency Upload & Remap` A9e: why *Render* makes no job now**, read
+    /// from the check's own memory (`crate::surface::the_dependency_check::what_holds_render`).
+    /// Not the record's, though read beside it. `None` where nothing holds it.
+    pub the_hold_on_render: Option<crate::surface::the_dependency_check::WhyRenderIsHeld>,
     /// **The server's layout as its row records it** (`Job files and outputs`
     /// L1 and `Job files and outputs` L4a), read beside the record for one
     /// server — what [`where_the_jobs_folder_sits`] reads. **`None` where no placement is
@@ -1075,11 +1114,19 @@ pub struct WhatTheRecordHolds {
     /// the job's folder will sit, because Submit refuses that server anyway.
     /// The Creator's second notes, piece 2 (note 18).
     pub the_layout: Option<TheLayout>,
+    /// **`Server Setup` G2a: what is held of the Telegram role on this server.**
+    pub the_telegram_role: TheTelegramRoleHere,
+    /// **`Server Setup` G2a: what the dedicated entry point last failed with.**
+    pub the_telegram_install_failed: Option<String>,
     /// **The server row's chosen fallback folder** (`Servers` D3, `Job files
     /// and outputs` P23), read with the layout from the same row — what the
     /// line above *Output files* names where the job's folder falls back, and
     /// what Submit carries. The Creator's second notes, piece 4.
     pub the_servers_fallback_folder: Option<String>,
+    /// **`Servers` H11b's second case, read from the row**: the last setup that
+    /// checked the driver left it below the bar. What [`the_driver_line`] asks
+    /// beside the reading (`Render Settings` D6a).
+    pub a_missed_swap_stands: bool,
 }
 
 /// **What the dependency band reads: the check standing the local record
@@ -1256,6 +1303,7 @@ impl WhatTheRecordHolds {
             // **Read with the layout, from the row**, by the caller that knows
             // which server (`the_layout` below is read the same way).
             the_servers_fallback_folder: None,
+            a_missed_swap_stands: false,
             the_reporting_default: telegram.as_ref().and_then(|t| t.the_reporting_default.clone()),
             the_default_minutes: telegram.as_ref().and_then(|t| t.the_default_minutes),
             telegram_is_on: telegram.as_ref().is_some_and(|t| t.switched_on),
@@ -1271,9 +1319,13 @@ impl WhatTheRecordHolds {
             // **Read from what Transfers lists, for one file** — see the
             // command. Nothing is claimed here.
             the_checks_uploads: None,
+            the_hold_on_render: None,
             // **Read beside the record, for one server** — see
             // `the_record_now`. Nothing is claimed here.
             the_layout: None,
+            // **Read beside the record, for one server** — see the command.
+            the_telegram_role: TheTelegramRoleHere::NotKnown,
+            the_telegram_install_failed: None,
         }
     }
 
@@ -1380,6 +1432,9 @@ pub enum WhereItCameFrom {
         when: String,
         the_range_now_starts_at: i64,
     },
+    /// **`Render Settings` Y15b: the job went, or the page was left**, and the
+    /// band has gone, on a page whose Simplify offer `Rendering` A1b still draws.
+    TheBandHasGone,
 }
 
 /// **Where a page opened from a history entry came from, and what that
@@ -1422,6 +1477,45 @@ impl ThePageCameFrom {
 /// route in `crate::a_new_job_from_an_old_one`, at the open or at the pick.
 pub(crate) fn the_page_came_from(held: &mut WhatTheRunHolds, server: &str, file: &str, came_from: ThePageCameFrom) {
     held.where_it_came_from.insert(keyed(server, file), came_from);
+}
+
+/// **`Render Settings` Y15b: a loaded range belongs to the one job.** The job
+/// went, or the page was left: the range reads what stood before the load, a
+/// range typed since stays, and the band goes with it, so a *Resume*'s
+/// `Queue & History` N15 mark does not reach the next job. **The record of a
+/// page whose Simplify offer is drawn stays**, with no band: its entries stand,
+/// and `Rendering` A1c forbids composing them unshown.
+pub(crate) fn the_loaded_range_goes(held: &mut WhatTheRunHolds, server: &str, file: &str) {
+    held.store.a_loaded_range_goes(&FileKey {
+        server: an_identity(server),
+        path: file.to_string(),
+    });
+    let mark = keyed(server, file);
+    match held.where_it_came_from.get_mut(&mark) {
+        Some(came_from) if came_from.the_simplify_offer_is_drawn => came_from.band = WhereItCameFrom::TheBandHasGone,
+        Some(_) => {
+            held.where_it_came_from.remove(&mark);
+        }
+        None => {}
+    }
+}
+
+/// **`Render Settings` Y15b's second way: the page was left** — opened on another
+/// file, or let go when the check moved to another file. A collapse to its strip
+/// does not come here.
+#[tauri::command]
+pub fn the_page_was_left(server: String, file: Vec<u8>) {
+    let file = the_path_as_it_is_keyed(&file);
+    if let Ok(mut held) = the_run_holds().lock() {
+        the_loaded_range_goes(&mut held, &server, &file);
+    }
+}
+
+/// **`Render Settings` Y15b's first way: a job of the act is in the machine's
+/// line.** A part-sent act counts; a job whose fate is not known does not.
+fn a_job_of_the_act_is_in_the_line(came_to: &crate::submitting::WhatTheActCameTo) -> bool {
+    use crate::submitting::{WhatBecameOfOneJob as Became, WhatTheActCameTo as CameTo};
+    matches!(came_to, CameTo::TheseJobs(jobs) if jobs.contains(&Became::ItIsInTheLine))
 }
 
 /// The one of these there is.
@@ -1684,6 +1778,9 @@ pub struct TheDevice {
     pub hand_back_to: Option<Words>,
     /// **Greyed with nothing on, where several scenes are ticked** — `§ Scenes`.
     pub greyed: bool,
+    /// **`Render Settings` D6a: the line under the pair**, empty where it is not
+    /// owed. It stops nothing.
+    pub the_driver_line: ASentence,
 }
 
 /// `§ What it will write` — the destination list and the total.
@@ -1835,6 +1932,11 @@ pub struct TheRenderSettings {
     pub the_search_marks: Vec<Words>,
     pub the_mismatch: Option<TheMismatch>,
     pub read_at: ASentence,
+    /// **The moment in *read at*, in seconds**, which the page writes in its
+    /// own time style wherever the line carries it as a value — the band's
+    /// way. Absent where no reading stands. Added 2026-11-02: the line read
+    /// *read at ·* with no time.
+    pub read_at_moment: Option<String>,
     pub read_the_file: Prose,
     pub read_again: Prose,
     pub reading_the_file: Prose,
@@ -1934,12 +2036,15 @@ pub struct TheRenderSettings {
     /// **`§ Submitting`: while the dependency check's uploads for this file on
     /// this server are running or waiting, one line directly above Render** —
     /// *Uploading dependencies: 4 of 12 files.* — a link that opens the check.
-    /// **Render stays available**: submitting starts no transfer
-    /// (`Specs/Rendering`), so the line says what is happening and holds
-    /// nothing. Absent where nothing of the check is going. The Creator's note
-    /// 6 on 0.1.8: *"there should be some indication of that where the user
-    /// would start the render job."*
+    /// **From 2026-11-03 it stands for the whole of `Dependency Upload & Remap`
+    /// A9e's hold**, *Counting files…* and *Checking dependencies…* among its
+    /// words, and Render is held with it. Absent where nothing holds Render.
+    /// The Creator's note 6 on 0.1.8: *"there should be some indication of that
+    /// where the user would start the render job."*
     pub the_dependencies_uploading: Option<ASentence>,
+    /// The footer link starts a check only when Render asks for one first.
+    pub the_dependency_link_starts_a_check: bool,
+    pub simulation_rows: Vec<TheSimulationRow>,
     pub render_one_frame_first: Prose,
     pub the_first_frame_is_asked_for: bool,
     pub the_first_frame_is_answered_in_queue: Option<Prose>,
@@ -1957,6 +2062,18 @@ pub struct TheRenderSettings {
     /// is not there at all."*** The line is drawn only where the record says
     /// Telegram is on.
     pub the_telegram_line_is_drawn: bool,
+    /// **`Server Setup` G2a: what the line reads in place of the choices**, where
+    /// the server is read as not having the role, or is being given it, and
+    /// nothing where that cannot be told. The job then does not read as if it
+    /// will report.
+    pub the_telegram_is_not_installed: Option<Prose>,
+    /// *Install*, the card's own action.
+    pub install_telegram: Option<Prose>,
+    /// What *Install* says on hover: `Design/Server Setup § Adding Telegram
+    /// to a server already set up`'s one thing that matters.
+    pub install_telegram_says: Prose,
+    /// What the action last failed with, on the foot's third line.
+    pub the_telegram_install_failed: Option<Prose>,
     pub the_reporting_choices: Vec<AChoice>,
     pub the_reporting_choice: Verbatim,
     /// **What the closed control says** — the row picked, or *A picture
@@ -2018,6 +2135,8 @@ pub fn the_render_settings_panel<R: tauri::Runtime>(
     // **The check's uploads of this file, as Transfers lists them** — the
     // Creator's note 6 on 0.1.8. Read before the run's lock, like the rest.
     record.the_checks_uploads = crate::surface::transfers::the_checks_uploads_on(&app, &server, &file);
+    // **`Dependency Upload & Remap` A9e.**
+    record.the_hold_on_render = crate::surface::the_dependency_check::what_holds_render(crate::surface::the_dependency_check::the_run_holds(), &server, &file);
     // **D5's reading, taken with the page rather than remembered** — the
     // server row's own, in the state the row is drawn in. Read before the run's
     // lock is taken, like everything else this command reads.
@@ -2026,6 +2145,10 @@ pub fn the_render_settings_panel<R: tauri::Runtime>(
         .try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>()
         .and_then(|periods| periods.the_sessions_of(&server))
         .is_some_and(|point| point.a_connection_is_live());
+    // **`Server Setup` G2a: what is held, and nothing asked of the machine**, so
+    // the page waits on nothing.
+    record.the_telegram_role = the_telegram_role_here(&server, a_connection_is_live);
+    record.the_telegram_install_failed = crate::servers::published::what_the_telegram_install_failed_with(&server);
     let held = the_run_holds().lock();
     match held {
         Ok(mut held) => {
@@ -2047,6 +2170,44 @@ pub fn the_render_settings_panel<R: tauri::Runtime>(
             panel
         }
     }
+}
+
+/// **`Server Setup` G2a, as the page reads it.** Not connected, or not read,
+/// is nothing known, and nothing is said.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TheTelegramRoleHere {
+    #[default]
+    NotKnown,
+    Installed,
+    NotInstalled,
+    /// The dedicated entry point is running or waiting its turn.
+    Installing,
+}
+
+fn the_telegram_role_here(server: &str, a_connection_is_live: bool) -> TheTelegramRoleHere {
+    if !a_connection_is_live {
+        return TheTelegramRoleHere::NotKnown;
+    }
+    if crate::setting_up::the_telegram_placement_is_asked_for_on(server) {
+        return TheTelegramRoleHere::Installing;
+    }
+    match crate::servers::published::the_telegram_role_on(server) {
+        Some(true) => TheTelegramRoleHere::Installed,
+        Some(false) => TheTelegramRoleHere::NotInstalled,
+        None => TheTelegramRoleHere::NotKnown,
+    }
+}
+
+/// **The role was read: the page asks again**, whichever file it is on.
+pub fn the_telegram_role_was_read<R: tauri::Runtime>(app: &tauri::AppHandle<R>, server: &str) {
+    let Some(queue) = app.try_state::<std::sync::Arc<TheOneQueue>>() else {
+        return;
+    };
+    the_queue_is_told(
+        &queue,
+        Event::about(Subject::TheRun, THE_TELEGRAM_ROLE_WAS_READ)
+            .saying("server", Said::Value(Verbatim::new(server.to_string()))),
+    );
 }
 
 /// [`WhatTheRecordHolds`], read with the application's lock held only for the
@@ -2079,6 +2240,7 @@ fn the_record_now(started: &State<'_, Mutex<Started>>, server: &str) -> WhatTheR
             record.the_layout = row
                 .as_ref()
                 .and_then(crate::servers::installation::the_layout_recorded_for);
+            record.a_missed_swap_stands = row.as_ref().is_some_and(|row| row.the_driver_missed_the_optix_bar);
             record.the_servers_fallback_folder = row.and_then(|row| row.chosen_fallback_folder);
             record
         }
@@ -2099,6 +2261,7 @@ pub enum WhichSetting {
     VersionPick,
     JobName,
     DownloadAsTheyRender,
+    PrepareSimulations,
     TheFirstFrameCheck,
     WhatItReports,
     /// **The minutes between pictures**, for *A picture every few minutes*
@@ -2524,28 +2687,31 @@ pub fn the_file_is_read<R: tauri::Runtime>(
         the_queue_is_told(&queue, an_act_said(&server, &file, "read", said));
         return;
     };
-    // **The package area is the one the server row records** (`Job files and
-    // outputs` L4a), read with the application's lock held for the read alone.
-    let package_area = started
-        .lock()
-        .ok()
-        .and_then(|started| {
-            started
-                .record
-                .as_ref()
-                .and_then(|record| crate::record::server_rows::all(record.connection()).ok())
-        })
-        .and_then(|rows| rows.into_iter().find(|row| row.local_server_identifier == server))
-        .and_then(|row| match crate::servers::installation::where_the_package_area_is(&row) {
-            crate::servers::installation::WhereThePackageAreaIs::At(area) => Some(area),
-            _ => None,
-        });
-    let Some(package_area) = package_area else {
-        the_queue_is_told(
-            &queue,
-            an_act_said(&server, &file, "read", vec![plainly(words::NOT_SET_UP_ON_THIS_SERVER)]),
-        );
-        return;
+    // `Render Settings` Q4: the same saved library pairs and layout as Submit.
+    // Refuse a record failure rather than quietly read a file without its links.
+    let prepared = (|| {
+        let record_failed = words::THE_RECORD_WOULD_NOT_READ;
+        let not_set_up = words::NOT_SET_UP_ON_THIS_SERVER;
+        let started = started.lock().map_err(|_| record_failed)?;
+        let connection = started.record.as_ref().ok_or(record_failed)?.connection();
+        let row = crate::record::server_rows::all(connection).map_err(|_| record_failed)?
+            .into_iter().find(|row| row.local_server_identifier == server).ok_or(not_set_up)?;
+        let layout = crate::servers::installation::the_layout_recorded_for(&row).ok_or(not_set_up)?;
+        let local = Identity::read_back(IdentityKind::LocalServer, &server).ok_or(record_failed)?;
+        let installation = row.last_confirmed_installation_identity.as_deref()
+            .and_then(|text| Identity::read_back(IdentityKind::Installation, text)).ok_or(not_set_up)?;
+        let remap = crate::submitting::the_remap_for_file(connection, &local, installation, &layout, &file)
+            .map_err(|_| record_failed)?;
+        let pairs = remap.pairs.into_iter()
+            .filter(|pair| pair.kind == smoozy_dependencies::check::Kind::Library).collect();
+        Ok::<_, &'static str>((layout.area(smoozy_job_files::layout::Area::Package), pairs))
+    })();
+    let (package_area, library_pairs) = match prepared {
+        Ok(prepared) => prepared,
+        Err(why) => {
+            the_queue_is_told(&queue, an_act_said(&server, &file, "read", vec![plainly(why)]));
+            return;
+        }
     };
     match the_run_holds().lock() {
         Ok(mut held) => {
@@ -2564,7 +2730,7 @@ pub fn the_file_is_read<R: tauri::Runtime>(
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
         let came_to = match runtime {
-            Ok(runtime) => runtime.block_on(crate::reading_the_file::the_file_is_read(
+            Ok(runtime) => runtime.block_on(crate::reading_the_file::the_file_is_read_with_library_pairs(
                 crate::reading_the_file::ThisServersMachine {
                     sessions: &point,
                     package_area: &package_area,
@@ -2573,6 +2739,7 @@ pub fn the_file_is_read<R: tauri::Runtime>(
                 the_run_holds(),
                 &server,
                 &file,
+                library_pairs,
             )),
             Err(_) => crate::reading_the_file::WhatTheReadCameTo::ThePreLoad {
                 went: smoozy_render_settings::acting::pre_load::HowThePreLoadWent::NoReading(
@@ -2880,6 +3047,9 @@ pub fn a_job_is_submitted<R: tauri::Runtime>(
         .unwrap_or_default();
     let mut record = the_record_now(&started, &server);
     record.the_check = the_check_is_read_now(&started, &server, &file);
+    // **`Dependency Upload & Remap` A9e: read again at the press**, so a press from
+    // a page drawn before a send began makes no job.
+    record.the_hold_on_render = crate::surface::the_dependency_check::what_holds_render(crate::surface::the_dependency_check::the_run_holds(), &server, &file);
     let point = app
         .try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>()
         .and_then(|periods| periods.the_sessions_of(&server))
@@ -2971,6 +3141,9 @@ pub fn a_job_is_submitted<R: tauri::Runtime>(
         };
         if let Ok(mut held) = the_run_holds().lock() {
             held.submitting_now.remove(&keyed(&server, &file));
+            if a_job_of_the_act_is_in_the_line(&came_to) {
+                the_loaded_range_goes(&mut held, &server, &file);
+            }
         }
         // **The *Submitting…* row has gone, or waits for the machine's own**:
         // the queue is drawn again now the act has ended (piece Z7).
@@ -3320,6 +3493,8 @@ pub fn the_blender_run_ended_for(held: &mut WhatTheRunHolds, server: &str) {
 /// The connected period also takes the file's reading with it (J10).
 pub fn the_period_ended_for(held: &mut WhatTheRunHolds, server: &str) {
     the_blender_run_ended_for(held, server);
+    // **`Server Setup` G2a: held for the connection.**
+    crate::servers::published::the_telegram_role_goes_with_the_connection(server);
     // **`Render Settings` J10's first event: the connected period ends, and
     // the file's half goes with it, for every file of that server at once.**
     // Added at step 10c's dependency wave piece 3, when a reading could first
@@ -3343,6 +3518,10 @@ pub fn the_act_as_the_page_composed_it(
 ) -> Result<crate::submitting::WhatThePageHandsOver, ASentence> {
     use crate::servers::installation::{the_layout_recorded_for, where_the_package_area_is, WhereThePackageAreaIs};
     let not_submitted = |why: &'static str| vec![plainly(words::NOT_SUBMITTED), plainly(why)];
+    // **`Dependency Upload & Remap` A9e: no job, and none composed later.**
+    if let Some(hold) = record.the_hold_on_render {
+        return Err(not_submitted(the_holds_words(hold).2));
+    }
 
     let key = FileKey {
         server: an_identity(server),
@@ -3721,6 +3900,7 @@ fn the_box_of(which: WhichSetting) -> &'static str {
         WhichSetting::VersionPick => "version",
         WhichSetting::JobName => "job-name",
         WhichSetting::DownloadAsTheyRender => "download",
+        WhichSetting::PrepareSimulations => "prepare-simulations",
         WhichSetting::TheFirstFrameCheck => "first-frame",
         WhichSetting::WhatItReports => "reports",
         WhichSetting::TelegramMinutes => "telegram-minutes",
@@ -3845,6 +4025,17 @@ pub fn the_answer_is_taken(
                 .entry(keyed(server, file))
                 .or_default()
                 .download_as_it_renders = text == "on";
+            None
+        }
+        // `Render Settings` Q2b, `Render Settings` Y1c: a row names its own scene, even on a group page.
+        WhichSetting::PrepareSimulations => {
+            if let Some((on, name)) = text.strip_prefix("on:").map(|name| (true, name)).or_else(|| text.strip_prefix("off:").map(|name| (false, name))) {
+                let eligible = held.readings.standing(&key).is_some_and(|read| read.settings.scenes.iter()
+                    .any(|scene| scene.name.as_text() == name && scene.prepare_simulations == Some(true)));
+                if eligible {
+                    held.store.answer(Where::AScene { file: key, scene: ExactName::as_the_reading_produced_it(&name) }, Answer::PrepareSimulations(on));
+                }
+            }
             None
         }
         WhichSetting::TheFirstFrameCheck => {
@@ -3995,6 +4186,7 @@ pub fn the_value_is_handed_back(
         }
         WhichSetting::JobName
         | WhichSetting::DownloadAsTheyRender
+        | WhichSetting::PrepareSimulations
         | WhichSetting::TheFirstFrameCheck
         | WhichSetting::WhatItReports
         | WhichSetting::TelegramMinutes => return None,
@@ -4406,6 +4598,26 @@ fn what_the_refusal_says(refusal: &Refusal) -> ASentence {
 // Composing the panel
 // ════════════════════════════════════════════════════════════════════════════
 
+/// **`Dependency Upload & Remap` A9e's words: the control's, the line's where it
+/// has no count, and the answer to a press** (`Design/Render Settings §
+/// Submitting`).
+fn the_holds_words(hold: crate::surface::the_dependency_check::WhyRenderIsHeld) -> (&'static str, &'static str, &'static str) {
+    use crate::surface::the_dependency_check::WhyRenderIsHeld;
+    match hold {
+        WhyRenderIsHeld::ASendIsGoing => (
+            words::WAITING_FOR_UPLOAD,
+            crate::surface::transfers::words::COUNTING_FILES,
+            words::DEPENDENCIES_ARE_UPLOADING,
+        ),
+        WhyRenderIsHeld::ItsCheckIsRunning => {
+            (words::WAITING_FOR_CHECK, words::CHECKING_DEPENDENCIES, words::DEPENDENCIES_ARE_BEING_CHECKED)
+        }
+        WhyRenderIsHeld::CheckFirst => {
+            (words::CHECK_DEPENDENCIES_FIRST, words::CHECK_DEPENDENCIES, words::CHECK_DEPENDENCIES_FIRST_STOP)
+        }
+    }
+}
+
 /// ***Uploading dependencies: 4 of 12 files.*** — the two figures values,
 /// the words around them the sentence's.
 fn the_dependencies_uploading(done: usize, whole: usize) -> ASentence {
@@ -4416,6 +4628,34 @@ fn the_dependencies_uploading(done: usize, whole: usize) -> ASentence {
             if whole == 1 { words::FILE_FULL_STOP } else { words::FILES_FULL_STOP },
         ),
     ]
+}
+
+/// **The *All scenes* tag: *3 jobs, one each*, and *1 job* where the file
+/// has one scene** — the drawing's words for three, and the singular with
+/// nothing after it for one (`Design/Render Settings` § the scenes: *its tag
+/// says how many*). Added 2026-11-02.
+fn the_all_scenes_tag(how_many: usize) -> Words {
+    if how_many == 1 {
+        with_values("", vec!["1".to_string()], Some(words::ONE_JOB))
+    } else {
+        with_values("", vec![how_many.to_string()], Some(words::JOBS_ONE_EACH))
+    }
+}
+
+/// **The header's *read at 09:20***, the reading's own stored moment as a
+/// value the page writes in its own time style (`Render Settings` Q18: *"the moment the header
+/// states"*), and **nothing at all where no reading stands or its moment
+/// cannot be written** — never *read at* alone. Added 2026-11-02.
+fn the_read_at_line(stored_at: Option<std::time::SystemTime>) -> ASentence {
+    match the_read_at_moment(stored_at) {
+        Some(moment) => vec![with_values(words::READ_AT, vec![moment], None)],
+        None => Vec::new(),
+    }
+}
+
+/// The same moment, as the value the page looks for in the line.
+fn the_read_at_moment(stored_at: Option<std::time::SystemTime>) -> Option<String> {
+    stored_at.map(the_moment).filter(|moment| !moment.is_empty())
 }
 
 fn plainly(said: &str) -> Words {
@@ -4541,6 +4781,44 @@ fn what_the_reporting_control_reads(the_choice: &str) -> &'static str {
         .map_or(words::EVERYTHING, |(_, said)| *said)
 }
 
+/// Design/Render Settings, Prepare simulations; `Render Settings` Q2b, `Render Settings` Y1c.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TheSimulationRow {
+    pub scene: String,
+    pub name: Option<Verbatim>,
+    pub label: Prose,
+    pub on: bool,
+    pub range: Prose,
+}
+
+fn the_simulation_rows(held: &WhatTheRunHolds, key: &FileKey, ticked: &[ExactName], scene: Option<&ExactName>) -> Vec<TheSimulationRow> {
+    let Some(reading) = held.readings.standing(key) else { return Vec::new(); };
+    reading.settings.scenes.iter().filter(|one| {
+        one.prepare_simulations == Some(true) && if ticked.is_empty() {
+            scene == Some(&one.name)
+        } else { ticked.contains(&one.name) }
+    }).filter_map(|one| {
+        let answers = held.store.the_answers_composition_reads(key, Some(&one.name));
+        let on = answers.prepare_simulations.unwrap_or(true);
+        let form = answers.frame_range.unwrap_or(frames::FrameForm::Triple { first: one.frame_start, last: one.frame_end, step: one.frame_step });
+        let list = form.explicit_list();
+        let range = if !on {
+            "Unbaked simulations may render frozen or not match playback.".to_string()
+        } else if let (Some(low), Some(high)) = (list.iter().min(), list.iter().max()) {
+            let start = one.frame_start.min(*low);
+            let last_played = |last| one.motion_blur.as_ref().map_or(last, |blur| blur.last_played_frame(last));
+            let high = last_played(*high);
+            let check = held.submission.get(&keyed(&key.server.as_text(), &key.path))
+                .is_some_and(|choice| choice.the_first_frame_check) && list.len() > 1;
+            if check {
+                let first = list[0];
+                format!("Plays frames {}–{} for the check and {}–{} for the job, on every attempt.", one.frame_start.min(first), last_played(first), start, high)
+            } else { format!("Plays frames {}–{} before rendering, on every attempt.", start, high) }
+        } else { return None; };
+        Some(TheSimulationRow { scene: one.name.as_text().to_string(), name: (ticked.len() > 1).then(|| Verbatim::new(one.name.as_text())), label: Prose::new("Prepare simulations"), on, range: Prose::new(range) })
+    }).collect()
+}
+
 /// **The panel, with the reporting default Settings stored.**
 pub fn the_panel_starting_from(
     held: &WhatTheRunHolds,
@@ -4642,11 +4920,7 @@ pub fn the_panel_starting_from(
     let all_scenes = standing.map(|reading| ABox {
         name: Verbatim::new(words::ALL_SCENES),
         ticked: !scenes.is_empty() && scenes.iter().all(|one| one.ticked),
-        tag: Some(with_values(
-            "",
-            vec![reading.settings.scenes.len().to_string()],
-            Some(words::JOBS_ONE_EACH),
-        )),
+        tag: Some(the_all_scenes_tag(reading.settings.scenes.len())),
     });
 
     let the_range = the_range_field(&answers, scene, several);
@@ -4687,7 +4961,15 @@ pub fn the_panel_starting_from(
     );
     let (resolution_field, size, size_not_known) = the_resolution(&answers, scene, several);
     let engine = the_engine(&answers, standing, scene);
-    let renders_on = the_renders_on(&answers, scene, held.hardware.get(server), several, engine_in_force);
+    let renders_on = the_renders_on(
+        &answers,
+        scene,
+        held.hardware.get(server),
+        several,
+        engine_in_force,
+        picked.as_ref(),
+        record.a_missed_swap_stands,
+    );
 
     // ── The right column ────────────────────────────────────────────────────
     // **Only beside the reading it came with**: a reading dropped (J10, Q12)
@@ -4702,15 +4984,31 @@ pub fn the_panel_starting_from(
     // nothing made) — and the page's map is composed there, so the collision
     // warning names the path the files will really land at. The Creator's
     // second notes, piece 4.
+    // **`Job files and outputs` P21's note of 2026-11-02: the first question of
+    // `Job files and outputs` P20, asked of what the reading found at the
+    // machine's top.**
+    let the_machines_top = standing.and_then(|reading| reading.settings.the_folders_at_the_machines_top.as_deref());
     let sits = outputs.zip(record.the_layout.as_ref()).map(|(outputs, layout)| {
-        where_the_jobs_folder_sits(layout, outputs, &ground, record.the_servers_fallback_folder.as_deref())
+        where_the_jobs_folder_sits(
+            layout,
+            outputs,
+            &ground,
+            record.the_servers_fallback_folder.as_deref(),
+            the_machines_top,
+        )
     });
     if let Some(sits) = &sits {
         ground.the_jobs_folder = Some(sits.the_pages_job_folder());
     }
     let (what_it_will_write, the_output_warnings, the_output_lines) =
         the_output_group(outputs, scene, &ticked, several, &ground);
-    let (the_folder_line, the_second_folder_line) = match sits.as_ref().filter(|_| what_it_will_write.is_some()) {
+    // **A reading with no list cannot say the folder is there**, so no *In …*
+    // line is drawn (`Design/Render Settings § What it will write`).
+    let it_can_be_claimed = |sits: &&WhereTheJobsFolderSits| {
+        the_machines_top.is_some() || !matches!(sits, WhereTheJobsFolderSits::In(_))
+    };
+    let the_line_to_draw = sits.as_ref().filter(|_| what_it_will_write.is_some()).filter(it_can_be_claimed);
+    let (the_folder_line, the_second_folder_line) = match the_line_to_draw {
         Some(sits) => (Some(the_folder_line(sits)), the_second_folder_line(sits)),
         None => (None, None),
     };
@@ -4786,9 +5084,8 @@ pub fn the_panel_starting_from(
             && matches!(held.version_searches.get(server), Some(TheSearchStands::Searching)),
         the_search_marks: the_search_marks(list),
         the_mismatch: the_mismatch(saved_with, picked.as_ref()),
-        read_at: standing
-            .map(|_| vec![plainly(words::READ_AT)])
-            .unwrap_or_default(),
+        read_at: the_read_at_line(standing.map(|reading| reading.stored_at.taken_at())),
+        read_at_moment: the_read_at_moment(standing.map(|reading| reading.stored_at.taken_at())),
         read_the_file: Prose::new(words::READ_THE_FILE),
         read_again: Prose::new(words::READ_AGAIN),
         reading_the_file: Prose::new(words::READING_THE_FILE),
@@ -4885,18 +5182,37 @@ pub fn the_panel_starting_from(
         the_format_list_is_not_offered: (submission.download_as_it_renders && standing.is_none())
             .then(|| Prose::new(words::FORMATS_COME_FROM_THE_FILE)),
         the_frames_have_nowhere_to_go,
+        the_dependency_link_starts_a_check: record.the_checks_uploads.is_none()
+            && record.the_hold_on_render == Some(crate::surface::the_dependency_check::WhyRenderIsHeld::CheckFirst),
         the_dependencies_uploading: record
             .the_checks_uploads
-            .map(|(done, whole)| the_dependencies_uploading(done, whole)),
+            .map(|(done, whole)| the_dependencies_uploading(done, whole))
+            .or_else(|| record.the_hold_on_render.map(|hold| vec![plainly(the_holds_words(hold).1)])),
+        simulation_rows: the_simulation_rows(held, &key, &ticked, scene_name.as_ref()),
         render_one_frame_first: Prose::new(words::RENDER_ONE_FRAME_FIRST),
         the_first_frame_is_asked_for: submission.the_first_frame_check && !every_job_has_one_frame,
+        // **`Server Setup` G2a: with no role there, no phone can answer it either.**
         the_first_frame_is_answered_in_queue: (record.telegram_is_on
-            && the_reporting_choice == "nothing"
+            && (the_reporting_choice == "nothing"
+                || matches!(record.the_telegram_role, TheTelegramRoleHere::NotInstalled | TheTelegramRoleHere::Installing))
             && submission.the_first_frame_check && !every_job_has_one_frame)
             .then(|| Prose::new(words::ANSWER_IN_QUEUE)),
         the_first_frame_switch_is_greyed: every_job_has_one_frame,
         telegram: Prose::new(words::TELEGRAM),
         the_telegram_line_is_drawn: record.telegram_is_on,
+        the_telegram_is_not_installed: record.telegram_is_on.then_some(record.the_telegram_role).and_then(|role| match role {
+            TheTelegramRoleHere::NotInstalled => Some(Prose::new(words::NOT_INSTALLED)),
+            TheTelegramRoleHere::Installing => Some(Prose::new(words::INSTALLING)),
+            _ => None,
+        }),
+        install_telegram: (record.telegram_is_on && record.the_telegram_role == TheTelegramRoleHere::NotInstalled)
+            .then(|| Prose::new(crate::surface::set_up::words::INSTALL_IT)),
+        install_telegram_says: Prose::new(crate::surface::set_up::words::THE_SERVER_IS_NOT_RESTARTED),
+        the_telegram_install_failed: record
+            .the_telegram_install_failed
+            .as_deref()
+            .filter(|_| record.telegram_is_on)
+            .map(Prose::new),
         the_reporting_choices: REPORTING_CHOICES
             .iter()
             .map(|(value, said)| AChoice {
@@ -4910,10 +5226,15 @@ pub fn the_panel_starting_from(
             .then(|| Verbatim::new(the_minutes_in_force(&submission, record).to_string())),
         minutes: Prose::new(words::MINUTES),
         minutes_between_pictures: Prose::new(words::MINUTES_BETWEEN_PICTURES),
-        the_render_control,
+        // **`Dependency Upload & Remap` A9e: held, and it says why.**
+        the_render_control: match record.the_hold_on_render {
+            Some(hold) => vec![plainly(the_holds_words(hold).0)],
+            None => the_render_control,
+        },
         // **One act at a time from one page**: while a submission runs, the
         // control is not offered again (step 10c piece 6).
         submitting_is_offered: resolution.submitting_is_offered()
+            && record.the_hold_on_render.is_none()
             && !held.submitting_now.get(&mark).copied().unwrap_or(false),
         the_submission_is_underway: held.submitting_now.get(&mark).copied().unwrap_or(false),
         the_machines_words_subject: Verbatim::new(
@@ -5181,6 +5502,7 @@ fn the_where_it_came_from(came_from: Option<&WhereItCameFrom>) -> (ASentence, bo
         return (Vec::new(), false);
     };
     match came_from {
+        WhereItCameFrom::TheBandHasGone => (Vec::new(), false),
         WhereItCameFrom::SubmittingAgain { the_jobs_name, when } => (
             vec![
                 plainly(words::SUBMITTING_AGAIN_LEAD),
@@ -5216,31 +5538,25 @@ fn the_where_it_came_from(came_from: Option<&WhereItCameFrom>) -> (ASentence, bo
         WhereItCameFrom::CarryingOn {
             the_jobs_name,
             when,
-            the_last_frame_written,
+            the_last_frame_written: _,
             the_range_now_starts_at,
         } => (
             vec![
                 part(
                     words::CARRYING_ON_LEAD,
                     vec![the_jobs_name.clone()],
-                    Some(words::THE_FULL_STOP),
-                    true,
-                ),
-                part(
-                    words::THESE_ARE_THE_SETTINGS_IT_USED_ON,
-                    vec![when.clone()],
-                    Some(words::THE_FULL_STOP),
-                    true,
-                ),
-                part(
-                    words::CARRYING_ON_FRAME,
-                    vec![the_last_frame_written.to_string()],
-                    Some(words::CARRYING_ON_CHECKED),
+                    Some(words::CARRYING_ON_FROM_FRAME),
                     false,
                 ),
                 part(
                     "",
                     vec![the_range_now_starts_at.to_string()],
+                    Some(words::CARRYING_ON_CHECKED),
+                    true,
+                ),
+                part(
+                    words::THESE_ARE_THE_SETTINGS_IT_USED_ON,
+                    vec![when.clone()],
                     Some(words::THE_FULL_STOP),
                     true,
                 ),
@@ -5257,7 +5573,13 @@ fn the_where_it_came_from(came_from: Option<&WhereItCameFrom>) -> (ASentence, bo
                 part(
                     words::CARRYING_ON_LEAD,
                     vec![the_jobs_name.clone()],
-                    Some(words::THE_FULL_STOP),
+                    Some(words::CARRYING_ON_FROM_FRAME),
+                    false,
+                ),
+                part(
+                    "",
+                    vec![the_range_now_starts_at.to_string()],
+                    Some(words::CARRYING_ON_UNREAD),
                     true,
                 ),
                 part(
@@ -5266,12 +5588,7 @@ fn the_where_it_came_from(came_from: Option<&WhereItCameFrom>) -> (ASentence, bo
                     Some(words::THE_FULL_STOP),
                     true,
                 ),
-                part(
-                    words::CARRYING_ON_UNREAD,
-                    vec![the_range_now_starts_at.to_string()],
-                    Some(words::THE_FULL_STOP),
-                    true,
-                ),
+                plainly(words::CARRYING_ON_COULD_NOT_READ),
             ],
             false,
         ),
@@ -5614,7 +5931,15 @@ fn the_samples_lines(
         _ => true,
     };
     let the_early_stop_is_on = under_cycles && scene.early_stop.adaptive_sampling_is_on;
-    let the_time_limit_is_set = under_cycles && scene.time_limit > 0.0;
+    // **The limit that speaks for this engine**: Cycles' in every version, and
+    // from 5.3 EEVEE's own (`Render Settings` Q2 item 1, §13 item 32). Each is
+    // spent on each frame and each is what a typed count sets aside (C1 item 3).
+    let the_time_limit_in_force = match engine_in_force {
+        Some(OfferedEngine::Cycles) => scene.time_limit,
+        Some(OfferedEngine::Eevee) => scene.eevee_time_limit.unwrap_or(0.0),
+        _ => 0.0,
+    };
+    let the_time_limit_is_set = the_time_limit_in_force > 0.0;
     // **Composed afresh from the layers still in the job** — a layer a pin took
     // out is not in it, and neither is a layer the file itself keeps off at
     // every frame of the range in force, which is what makes the spec's three
@@ -5662,7 +5987,7 @@ fn the_samples_lines(
             set_aside.push(SetAside::TheThreshold(the_threshold(scene.early_stop.threshold)));
         }
         if the_time_limit_is_set {
-            set_aside.push(SetAside::TheTimeLimit(the_time_limit(scene.time_limit)));
+            set_aside.push(SetAside::TheTimeLimit(the_time_limit(the_time_limit_in_force)));
         }
         if the_layers_still_override {
             set_aside.push(SetAside::TheLayersOwnCounts(overriding));
@@ -5739,7 +6064,7 @@ fn the_samples_lines(
                 } else {
                     words::AND_AFTER_A_TIME_LIMIT_OF
                 },
-                vec![the_time_limit(scene.time_limit)],
+                vec![the_time_limit(the_time_limit_in_force)],
                 Some(words::ON_EACH_FRAME),
                 false,
             ));
@@ -5951,6 +6276,8 @@ fn the_renders_on(
     hardware: Option<&HeldHardware>,
     several: bool,
     engine_in_force: Option<OfferedEngine>,
+    picked: Option<&BlenderIdentity>,
+    a_missed_swap_stands: bool,
 ) -> Option<TheDevice> {
     // **Under EEVEE the pair is not shown at all**: EEVEE only renders on the
     // cards, so there is nothing to choose, and a greyed pair would invite the
@@ -5976,6 +6303,7 @@ fn the_renders_on(
             the_moment: None,
             hand_back_to: None,
             greyed: true,
+            the_driver_line: Vec::new(),
         });
     }
     // **`Render Settings` J1's three faces, and the user's comes first whether
@@ -6010,7 +6338,53 @@ fn the_renders_on(
         the_moment: the_moment.map(Verbatim::new),
         hand_back_to: the_device_hand_back(answers, scene),
         greyed: false,
+        the_driver_line: the_driver_line(resolved, engine_in_force, hardware, picked, a_missed_swap_stands),
     })
+}
+
+/// **`Render Settings` D6a, composed: the line under the pair**, empty where it
+/// is not owed. The job is Cycles on the cards, the reading is this connection's
+/// own (never the present tense off a *last seen* one, `Servers` H2), and the
+/// judgement is `Servers`' own ([`smoozy_servers::hardware::a_cycles_job_cannot_use_the_card`]).
+/// **It stops nothing.** The picked Blender is named by its line, as the mismatch
+/// line names it.
+fn the_driver_line(
+    resolved: Option<DeviceChoice>,
+    engine_in_force: Option<OfferedEngine>,
+    hardware: Option<&HeldHardware>,
+    picked: Option<&BlenderIdentity>,
+    a_missed_swap_stands: bool,
+) -> ASentence {
+    if resolved != Some(DeviceChoice::TheCards) || engine_in_force != Some(OfferedEngine::Cycles) {
+        return Vec::new();
+    }
+    let (Some(HeldHardware::Held { state: smoozy_render_settings::readings::HeldState::Live, reading }), Some(picked)) =
+        (hardware, picked)
+    else {
+        return Vec::new();
+    };
+    let Some(the_driver) = reading.the_driver.as_ref() else {
+        return Vec::new();
+    };
+    let blender = (picked.version.major, picked.version.minor, picked.version.patch);
+    if !smoozy_servers::hardware::a_cycles_job_cannot_use_the_card(the_driver, blender, a_missed_swap_stands) {
+        return Vec::new();
+    }
+    let line = version::ReleaseLine::of(picked.version);
+    vec![
+        part(
+            words::THIS_SERVERS_NVIDIA_DRIVER,
+            vec![the_driver.version.as_the_driver_wrote_it().to_string()],
+            Some(words::THE_COMMA),
+            true,
+        ),
+        part(
+            words::IS_TOO_OLD_FOR_CYCLES_GPU_IN,
+            vec![format!("{}.{}", line.major, line.minor)],
+            Some(words::THE_FULL_STOP),
+            true,
+        ),
+    ]
 }
 
 /// **D5 and D6's tag, and the page never composes the judgement.** The warning
@@ -6212,6 +6586,12 @@ fn the_writes(
                 .iter()
                 .enumerate()
                 .filter(|(_, destination)| destination.is_one_the_render_asked_for())
+                // **`Design/Render Settings § What it will write`: a
+                // destination that counts nothing is not listed.** The live
+                // pass on real production files read nine rows of *tmp/ 0 PNG*.
+                .filter(|(at, destination)| {
+                    it.the_figure_for(*at) > 0 || it_writes_what_the_reading_cannot_name(outputs, destination)
+                })
                 .map(|(at, destination)| {
                     let (place, the_top) = match where_under_the_jobs_folder(map, job_folder, destination) {
                         WhereUnderTheJobsFolder::TheTop => {
@@ -7355,6 +7735,7 @@ pub fn where_the_jobs_folder_sits(
     outputs: &TheOutputsHalf,
     ground: &TheGroundOfTheCount,
     the_servers_fallback_folder: Option<&str>,
+    the_machines_top: Option<&[String]>,
 ) -> WhereTheJobsFolderSits {
     use smoozy_job_files::where_the_folder_sits::{the_run_of, where_it_would_sit, WhatTheChoiceIsMadeFrom, WhereItIs};
     let run = the_run_of(&outputs.destinations, &ground.the_folder_the_blend_sits_in, outputs.taken_by);
@@ -7365,6 +7746,7 @@ pub fn where_the_jobs_folder_sits(
             the_job_output_folders_name: A_FOLDER_FOR_THIS_JOB,
             the_servers_fallback_folder,
         },
+        the_machines_top,
         &mut |_| true,
     );
     let place = sits.the_folder_it_sits_in().to_string();
@@ -7718,6 +8100,43 @@ fn the_render_control(count: &ASentence, ticked: usize, a_reading_stands: bool) 
 
 #[cfg(test)]
 pub(crate) mod tests {
+    /// **The *All scenes* tag counts in the singular for one scene**: the
+    /// showcase pictures read *1 jobs, one each* (2026-11-02). The drawing's
+    /// own three stays *3 jobs, one each*.
+    #[test]
+    fn the_all_scenes_tag_reads_1_job_for_one_scene() {
+        let one = super::the_all_scenes_tag(1);
+        assert_eq!(one.values, vec![super::Verbatim::new("1")]);
+        assert_eq!(one.rest, Some(super::Prose::new("job")));
+        let three = super::the_all_scenes_tag(3);
+        assert_eq!(three.values, vec![super::Verbatim::new("3")]);
+        assert_eq!(three.rest, Some(super::Prose::new("jobs, one each")));
+    }
+
+    /// **The header's *read at* carries the reading's own moment as a value**,
+    /// and is nothing at all where there is none — the showcase pictures read
+    /// *read at · Read again* with no time (2026-11-02). The drawing:
+    /// *read at 09:20 · Read again · Reset all to file values*.
+    #[test]
+    fn read_at_carries_the_readings_moment_or_is_not_drawn() {
+        let at = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_762_000_000);
+        let line = super::the_read_at_line(Some(at));
+        assert_eq!(line.len(), 1);
+        assert_eq!(line[0].lead, super::Prose::new("read at"));
+        assert_eq!(line[0].values, vec![super::Verbatim::new("1762000000")]);
+        assert_eq!(super::the_read_at_moment(Some(at)).as_deref(), Some("1762000000"));
+        assert!(super::the_read_at_line(None).is_empty());
+        assert_eq!(super::the_read_at_moment(None), None);
+    }
+
+    /// **The page writes the moment the way it writes the band's**, through
+    /// the one function every screen uses.
+    #[test]
+    fn the_page_writes_the_read_at_moment_in_its_own_time_style() {
+        let page = include_str!("../../web/render-settings.js");
+        assert!(page.contains("said.read_at_moment"), "the page never reads the moment");
+    }
+
     use super::*;
     use smoozy_render_settings::reading::{
         DeviceSetting, EarlyStop, OfferedEngineIdentifiers, PerEngineCounts, SettingsHalf,
@@ -7919,6 +8338,8 @@ console.log(JSON.stringify({
 
     pub(crate) fn a_scene(name: &str) -> SceneReading {
         SceneReading {
+            prepare_simulations: None,
+            motion_blur: None,
             name: ExactName::as_the_reading_produced_it(name),
             frame_start: 1,
             frame_end: 240,
@@ -7939,6 +8360,7 @@ console.log(JSON.stringify({
                 minimum: 0,
             },
             time_limit: 30.0,
+            eevee_time_limit: None,
             layer_samples_rule: LayerSamplesRule::Use,
             saved_with: "4.5.3".to_string(),
             view_layers: vec![a_layer("Interior", true, false), a_layer("FX", true, true)],
@@ -7955,6 +8377,104 @@ console.log(JSON.stringify({
     /// A run holding one reading of one file, which is what most of the 35
     /// states are drawn against.
     pub(crate) fn a_run_with_a_reading() -> WhatTheRunHolds {
+        a_run_with_a_reading_and_the_machines_top(Some(
+            ["ephemeral", "home", "mnt", "root"].map(str::to_string).to_vec(),
+        ))
+    }
+
+    // `Render Settings` Q2b, `Render Settings` Y1c; `Rendering` L10b. No Blender is started.
+    #[test]
+    fn simulation_rows_follow_each_jobs_range_and_saved_choice() {
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let key = FileKey { server: an_identity(&server), path: file.into() };
+        let mut held = a_run_with_a_reading();
+        assert!(the_simulation_rows(&held, &key, &[], Some(&ExactName::as_the_reading_produced_it("Interior"))).is_empty());
+        let mut read = held.readings.standing(&key).unwrap().clone();
+        read.settings.scenes[0].frame_start = 101;
+        read.settings.scenes[0].frame_end = 161;
+        read.settings.scenes[0].prepare_simulations = Some(true);
+        read.settings.scenes[1].prepare_simulations = Some(false);
+        let pick = read.taken_by.clone();
+        held.readings.a_reading_landed(key.clone(), &smoozy_render_settings::file_half::StartedUnder {
+            version_pick: pick.clone(), file_identity: read.file_identity.clone()
+        }, read.settings, Some(&pick), &read.file_identity, std::time::SystemTime::now());
+        let interior = ExactName::as_the_reading_produced_it("Interior");
+        let exterior = ExactName::as_the_reading_produced_it("Exterior");
+        held.store.tick_a_scene(key.clone(), NamedAnswer { name: interior.clone(), provenance: Provenance::ARecordedReading(held.readings.standing(&key).unwrap().identity()) });
+        let rows = |held: &WhatTheRunHolds| the_simulation_rows(held, &key, &[interior.clone()], Some(&interior));
+        assert!(rows(&held)[0].on);
+        assert_eq!(rows(&held)[0].range.as_str().replace('\u{a0}', " "), "Plays frames 101–161 before rendering, on every attempt.");
+        held.store.answer(Where::AScene { file: key.clone(), scene: interior.clone() }, Answer::FrameRange(frames::parse_the_frame_field("121-125").unwrap()));
+        assert!(rows(&held)[0].range.as_str().contains("101–125"));
+        held.submission.entry(keyed(&server, file)).or_default().the_first_frame_check = true;
+        assert_eq!(rows(&held)[0].range.as_str().replace('\u{a0}', " "), "Plays frames 101–121 for the check and 101–125 for the job, on every attempt.");
+        held.submission.entry(keyed(&server, file)).or_default().the_first_frame_check = false;
+        held.store.answer(Where::AScene { file: key.clone(), scene: interior.clone() }, Answer::FrameRange(frames::parse_the_frame_field("-3,121,125").unwrap()));
+        assert!(rows(&held)[0].range.as_str().contains("-3–125"));
+        assert!(the_answer_is_taken(&mut held, &server, file, WhichSetting::PrepareSimulations, "off:Interior").is_none());
+        assert!(!rows(&held)[0].on);
+        assert_eq!(rows(&held)[0].range.as_str().replace('\u{a0}', " "), "Unbaked simulations may render frozen or not match playback.");
+        assert!(!the_jobs_the_page_composes(&held, file)[0].prepare_simulations);
+        assert!(the_simulation_rows(&held, &key, &[exterior.clone()], Some(&exterior)).is_empty());
+        let mut read = held.readings.standing(&key).unwrap().clone();
+        read.settings.scenes[1].prepare_simulations = Some(true);
+        let pick = read.taken_by.clone();
+        held.readings.a_reading_landed(key.clone(), &smoozy_render_settings::file_half::StartedUnder {
+            version_pick: pick.clone(), file_identity: read.file_identity.clone()
+        }, read.settings, Some(&pick), &read.file_identity, std::time::SystemTime::now());
+        held.store.tick_a_scene(key.clone(), NamedAnswer { name: exterior.clone(), provenance: Provenance::ARecordedReading(held.readings.standing(&key).unwrap().identity()) });
+        held.store.answer_the_group_range(key.clone(), frames::parse_the_frame_field("111,131").unwrap()).unwrap();
+        let group = the_simulation_rows(&held, &key, &[interior.clone(), exterior], Some(&interior));
+        assert_eq!(group.len(), 2);
+        assert!(!group[0].on);
+        assert!(group[1].on);
+        assert!(group[1].range.as_str().contains("1–131"));
+        held.store.answer(Where::AScene { file: key.clone(), scene: interior.clone() }, Answer::PrepareSimulations(true));
+        assert!(the_simulation_rows(&held, &key, &[interior.clone()], Some(&interior))[0].range.as_str().contains("101–131"));
+        held.store.answer(Where::AScene { file: key.clone(), scene: interior.clone() }, Answer::PrepareSimulations(false));
+        held.store.hand_everything_back(key.clone(), PageInHand::AGroup);
+        assert_eq!(held.store.the_answers_composition_reads(&key, Some(&interior)).prepare_simulations, None);
+        held.store.answer(Where::AScene { file: key.clone(), scene: interior.clone() }, Answer::PrepareSimulations(false));
+        held.readings.the_period_ended(&key.server);
+        assert!(rows(&held).is_empty());
+        assert_eq!(held.store.the_answers_composition_reads(&key, Some(&interior)).prepare_simulations, Some(false));
+    }
+
+    // `Render Settings` Q2b and `Rendering` L10b: each job has its own shutter tail.
+    #[test]
+    fn simulation_rows_include_the_saved_shutter_for_the_check_and_job() {
+        use smoozy_render_settings::reading::{MotionBlur, ShutterPosition};
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let key = FileKey { server: an_identity(&server), path: file.into() };
+        let mut held = a_run_with_a_reading();
+        let interior = ExactName::as_the_reading_produced_it("Interior");
+        for (enabled, position, shutter, tail) in [
+            (true, ShutterPosition::Start, 2.25, 3),
+            (true, ShutterPosition::Center, 2.25, 2),
+            (true, ShutterPosition::End, 2.25, 0),
+            (false, ShutterPosition::Start, 2.25, 0),
+        ] {
+            let mut read = held.readings.standing(&key).unwrap().clone();
+            read.settings.scenes[0].prepare_simulations = Some(true);
+            read.settings.scenes[0].frame_start = 101;
+            read.settings.scenes[0].motion_blur = Some(MotionBlur { enabled, position, shutter });
+            let pick = read.taken_by.clone();
+            held.readings.a_reading_landed(key.clone(), &smoozy_render_settings::file_half::StartedUnder {
+                version_pick: pick.clone(), file_identity: read.file_identity.clone()
+            }, read.settings, Some(&pick), &read.file_identity, std::time::SystemTime::now());
+            held.store.answer(Where::AScene { file: key.clone(), scene: interior.clone() }, Answer::FrameRange(frames::parse_the_frame_field("121,125").unwrap()));
+            held.submission.entry(keyed(&server, file)).or_default().the_first_frame_check = true;
+            let rows = the_simulation_rows(&held, &key, &[], Some(&interior));
+            assert_eq!(rows[0].range.as_str().replace('\u{a0}', " "),
+                format!("Plays frames 101–{} for the check and 101–{} for the job, on every attempt.", 121+tail,125+tail));
+        }
+    }
+
+    /// The same, with what the reading found at the machine's top
+    /// (`Render Settings` Q2 item 7).
+    pub(crate) fn a_run_with_a_reading_and_the_machines_top(the_machines_top: Option<Vec<String>>) -> WhatTheRunHolds {
         let mut held = WhatTheRunHolds::default();
         let key = FileKey {
             server: an_identity(&a_server()),
@@ -7977,6 +8497,7 @@ console.log(JSON.stringify({
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_folders_at_the_machines_top: the_machines_top,
             },
             Some(&picked),
             &four_values(),
@@ -8039,10 +8560,9 @@ console.log(JSON.stringify({
 
     /// **`§ Submitting`: while the check's uploads for this file on this server
     /// run, one line above Render says how far they have got — *Uploading
-    /// dependencies: 3 of 5 files.* — and Render stays offered.** Absent where
-    /// nothing is going. The two figures are values, never inside the words.
+    /// dependencies: 3 of 5 files.*** Absent where nothing is going. The two figures are values, never inside the words.
     #[test]
-    fn the_uploading_line_shows_while_the_checks_files_go_and_render_stays_offered() {
+    fn the_uploading_line_shows_while_the_checks_files_go() {
         let file = "/root/uploads/kitchen.blend";
         let held = WhatTheRunHolds::default();
         let none = the_panel_starting_from(&held, &a_server(), file, &WhatTheRecordHolds::default());
@@ -8057,7 +8577,8 @@ console.log(JSON.stringify({
         let values: Vec<&str> = line.iter().flat_map(|part| part.values.iter().map(Verbatim::as_str)).collect();
         assert_eq!(values, vec!["3", "5"]);
         assert!(!line.iter().any(|part| part.lead.as_str().contains('3') || part.lead.as_str().contains('5')));
-        // **Render is not held by it**: submitting starts no transfer.
+        // **The count alone holds nothing**: the hold is `Dependency Upload &
+        // Remap` A9e's own reading, tested beside this.
         assert_eq!(panel.submitting_is_offered, none.submitting_is_offered);
         assert_eq!(panel.the_render_control, none.the_render_control);
         let one = WhatTheRecordHolds {
@@ -8069,6 +8590,45 @@ console.log(JSON.stringify({
         // The words are Design's own.
         let design = include_str!("../../../../Preparation/Design/Render Settings.md");
         assert!(design.contains("*Uploading dependencies: 4 of 12 files.*"));
+    }
+
+    /// **`Dependency Upload & Remap` A9e: while a send of this file's check runs,
+    /// and until the check has answered for a library that landed, Render is held
+    /// and says why**, the line beneath it says what is happening, and a press that
+    /// arrives anyway makes no job.
+    #[test]
+    fn render_is_held_and_says_why_and_a_press_makes_no_job() {
+        use crate::surface::the_dependency_check::WhyRenderIsHeld;
+        let (held, file) = a_run_that_read_and_can_submit(vec![a_scene("Scene")]);
+        let the_page = |record: &WhatTheRecordHolds| the_panel_starting_from(&held, &a_server(), file, record);
+        let free = the_page(&WhatTheRecordHolds::default());
+        assert!(free.submitting_is_offered);
+        assert!(free.the_dependencies_uploading.is_none());
+        for (hold, uploads, the_control, the_line, the_refusal) in [
+            (WhyRenderIsHeld::ASendIsGoing, Some((4, 12)), "Waiting for upload", "Uploading dependencies: 4 of 12 files.", "Not submitted. Dependencies are uploading."),
+            (WhyRenderIsHeld::ASendIsGoing, None, "Waiting for upload", "Counting files…", "Not submitted. Dependencies are uploading."),
+            (WhyRenderIsHeld::ItsCheckIsRunning, None, "Waiting for check", "Checking dependencies…", "Not submitted. Dependencies are being checked."),
+            (WhyRenderIsHeld::CheckFirst, None, "Check dependencies first", "Check dependencies…", "Not submitted. Check dependencies first."),
+        ] {
+            let record = WhatTheRecordHolds { the_hold_on_render: Some(hold), the_checks_uploads: uploads, ..WhatTheRecordHolds::default() };
+            let page = the_page(&record);
+            assert!(!page.submitting_is_offered, "{hold:?}");
+            assert_eq!(page.the_dependency_link_starts_a_check, hold == WhyRenderIsHeld::CheckFirst);
+            assert_eq!(the_uploading_words_of(&page.the_render_control), the_control);
+            assert_eq!(the_uploading_words_of(page.the_dependencies_uploading.as_ref().expect("the line")), the_line);
+            let Err(refused) = the_act_as_the_page_composed_it(&held, &a_server(), file, &record, &a_row_on(&a_server(), true), a_run()) else {
+                panic!("no job");
+            };
+            assert_eq!(the_uploading_words_of(&refused), the_refusal);
+        }
+        assert!(the_act_as_the_page_composed_it(&held, &a_server(), file, &WhatTheRecordHolds::default(), &a_row_on(&a_server(), true), a_run()).is_ok());
+        // **The command reads it at the drawing and at the press.**
+        let working = include_str!("render_settings.rs");
+        let read_there = "record.the_hold_on_render = crate::surface::the_dependency_check::what_holds_render(crate::surface::the_dependency_check::the_run_holds(), &server, &file);";
+        for command in ["pub fn the_render_settings_panel<", "pub fn a_job_is_submitted<"] {
+            let body = working.split(command).nth(1).expect("the command").split("\n}\n").next().expect("its body");
+            assert!(body.contains(read_there), "{command}");
+        }
     }
 
     /// **What the line counts is this file's check on this server, running or
@@ -9034,8 +9594,8 @@ console.log(JSON.stringify(out));
         assert_eq!(
             code.matches("theCheckIsOpened(server)").count()
                 - code.matches("function theCheckIsOpened(server)").count(),
-            1,
-            "a way other than the band's own control reaches the check"
+            2,
+            "only the warning band and the Check dependencies first link start a check"
         );
     }
 
@@ -9080,6 +9640,7 @@ console.log(JSON.stringify(out));
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_folders_at_the_machines_top: None,
             },
             Some(&picked),
             &four_values(),
@@ -9541,7 +10102,7 @@ console.log(JSON.stringify(out));
             .nth(1)
             .and_then(|rest| rest.split("\n}").next())
             .expect("the command");
-        assert!(command.contains("crate::reading_the_file::the_file_is_read("), "the press drives no read");
+        assert!(command.contains("crate::reading_the_file::the_file_is_read_with_library_pairs("), "the press drives no read");
         assert!(!command.contains("A_CONNECTION_IS_NOT_BUILT"), "the press says the read is not built");
         assert!(!command.contains("the_read_that_gave_nothing"), "an ending is recorded beside the one place it lands");
         assert!(!the_working_half().contains("crate::surface::files::A_CONNECTION_IS_NOT_BUILT;"));
@@ -9607,7 +10168,7 @@ console.log(JSON.stringify(out));
     /// fail on the day the lookup landed.
     #[test]
     fn the_samples_box_composes_now_that_the_five_spellings_are_read() {
-        let set = samples::the_imposition_set(OfferedEngine::Cycles, 512)
+        let set = samples::the_imposition_set(OfferedEngine::Cycles, 512, (5, 2))
             .expect("C10 carries every name C1 items 1 to 5 assign against");
         let names: Vec<&str> = set.iter().map(|pair| pair.property).collect();
         assert_eq!(
@@ -9874,6 +10435,240 @@ console.log(JSON.stringify(out));
     /// Draws the page with *Everything*, picks the fourth, draws it again
     /// picked, types 0, hands it the refusal, draws again, and opens the list
     /// at the window's foot.
+    /// **`Render Settings` Y15b, the page's half: opened on another file it says
+    /// the old one was left, opened on the same file it says nothing, and the
+    /// check moving to another file says so too.** Skipped where no Node is
+    /// installed. **Undone, nothing is ever said to have been left.**
+    #[test]
+    fn the_page_says_when_it_is_left_and_only_then() {
+        let folder = std::env::temp_dir().join(format!("smoozy-y15b-page-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        for (name, text) in THE_UPLOADING_LINES_STAND_INS {
+            fs::write(folder.join(name), text).expect("a stand-in");
+        }
+        fs::write(folder.join("harness.mjs"), THE_PAGE_LEFT_HARNESS).expect("the harness");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.mjs")).current_dir(&folder).output();
+        let _ = fs::remove_dir_all(&folder);
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the render settings page was not run");
+            return;
+        };
+        assert!(ran.status.success(), "the page code did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness prints one answer");
+        assert_eq!(
+            got,
+            serde_json::json!({
+                "first": [],
+                "theSameFile": [],
+                "anotherFile": [["S", [1, 2, 3]]],
+                "onAnotherServer": [],
+                "letGo": [["S", [4, 5]]],
+            })
+        );
+        // **And the real panels tell it, once, before they put it away.**
+        let panels = fs::read_to_string(web.join("a-server.js")).expect("the panels");
+        let lets_go = panels.split("function theOtherPanelLetsGoOfItsFile(").nth(1).expect("the rule");
+        let lets_go = lets_go.split("\n}\n").next().expect("its end");
+        assert!(lets_go.contains("told.itLetsGoOfItsFile(server)"));
+        // **A collapse is not leaving**: nothing on that road tells the page.
+        let collapse = panels.split("function theOpenPanelIsCollapsed(").nth(1).expect("the collapse");
+        let collapse = collapse.split("\n}\n").next().expect("its end");
+        assert!(!collapse.contains("itLetsGoOfItsFile"), "a collapse must not count as leaving");
+    }
+
+    const THE_PAGE_LEFT_HARNESS: &str = r#"import "./document.mjs";
+const left = [];
+globalThis.window = { addEventListener() {}, __TAURI__: { core: { invoke(command, args) {
+  if (command === "the_page_was_left") left.push([args.server, args.file]);
+  return Promise.resolve(null);
+} } } };
+const { panels } = await import("./a-server.js");
+const { theSettingsAreOpenedOn } = await import("./render-settings.js");
+const out = {};
+await theSettingsAreOpenedOn("S", [1, 2, 3], "");
+out.first = left.splice(0);
+await theSettingsAreOpenedOn("S", [1, 2, 3], "");
+out.theSameFile = left.splice(0);
+await theSettingsAreOpenedOn("S", [4, 5], "");
+out.anotherFile = left.splice(0);
+await theSettingsAreOpenedOn("T", [9], "");
+out.onAnotherServer = left.splice(0);
+panels[0].itLetsGoOfItsFile("S");
+out.letGo = left.splice(0);
+console.log(JSON.stringify(out));
+"#;
+
+    /// **`Server Setup` G2a, the page's half.** Read as absent, the line says so
+    /// in place of the choices and offers the action; while it runs it says
+    /// that; what it failed with is on the third line; read as present or not
+    /// read, or with Telegram off, the page is as it was. **Undone, *Everything*
+    /// is offered on a server that will not report, and this fails.**
+    #[test]
+    fn the_telegram_line_says_not_installed_and_offers_the_action_there() {
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let mut held = a_run_with_a_reading();
+        let a_record = |role| WhatTheRecordHolds {
+            telegram_is_on: true,
+            the_telegram_role: role,
+            ..WhatTheRecordHolds::default()
+        };
+        let page = |held: &WhatTheRunHolds, record: &WhatTheRecordHolds| the_panel_starting_from(held, &a_server(), file, record);
+
+        for role in [TheTelegramRoleHere::NotKnown, TheTelegramRoleHere::Installed] {
+            let panel = page(&held, &a_record(role));
+            assert_eq!(panel.the_telegram_is_not_installed, None, "{role:?}");
+            assert_eq!(panel.install_telegram, None, "{role:?}");
+            assert_eq!(panel.the_first_frame_is_answered_in_queue, None, "{role:?}");
+        }
+
+        let absent = page(&held, &a_record(TheTelegramRoleHere::NotInstalled));
+        assert_eq!(absent.the_telegram_is_not_installed, Some(Prose::new(words::NOT_INSTALLED)));
+        assert_eq!(absent.install_telegram, Some(Prose::new(crate::surface::set_up::words::INSTALL_IT)));
+        assert_eq!(absent.install_telegram_says, Prose::new(crate::surface::set_up::words::THE_SERVER_IS_NOT_RESTARTED));
+
+        let running = page(&held, &a_record(TheTelegramRoleHere::Installing));
+        assert_eq!(running.the_telegram_is_not_installed, Some(Prose::new(words::INSTALLING)));
+        assert_eq!(running.install_telegram, None, "no second press while it runs");
+
+        // **With Telegram off the line is not there, whatever was read.**
+        let off = page(&held, &WhatTheRecordHolds { the_telegram_role: TheTelegramRoleHere::NotInstalled, ..WhatTheRecordHolds::default() });
+        assert!(!off.the_telegram_line_is_drawn);
+        assert_eq!(off.the_telegram_is_not_installed, None);
+
+        let failed = page(&held, &WhatTheRecordHolds {
+            the_telegram_install_failed: Some("The server could not install Telegram reporting.".to_string()),
+            ..a_record(TheTelegramRoleHere::NotInstalled)
+        });
+        assert_eq!(failed.the_telegram_install_failed, Some(Prose::new("The server could not install Telegram reporting.")));
+
+        // **The first frame cannot be answered on a phone there either.**
+        let _ = what_the_answer_says(&mut held, &a_server(), file, WhichSetting::TheFirstFrameCheck, "on");
+        let absent = page(&held, &a_record(TheTelegramRoleHere::NotInstalled));
+        assert_eq!(absent.the_first_frame_is_answered_in_queue, Some(Prose::new(words::ANSWER_IN_QUEUE)));
+        assert_eq!(page(&held, &a_record(TheTelegramRoleHere::Installed)).the_first_frame_is_answered_in_queue, None);
+
+        // **Read off nothing but what is held**: the command takes no reading.
+        let source = include_str!("render_settings.rs");
+        let command = source.split("pub fn the_render_settings_panel<").nth(1).expect("the command");
+        let command = command.split("\n}\n").next().expect("its end");
+        assert!(command.contains("the_telegram_role_here(&server, a_connection_is_live)"));
+        assert!(!command.contains("the_cards_reading") && !command.contains("the_telegram_role_is_read"));
+        assert_eq!(the_telegram_role_here("server-not-connected-g2a", false), TheTelegramRoleHere::NotKnown);
+        assert_eq!(the_telegram_role_here("server-never-read-g2a", true), TheTelegramRoleHere::NotKnown);
+    }
+
+    /// **`Server Setup` G2a, drawn.** The line reads *Not installed* and *Install
+    /// it* where the choices stood, in the control's own width; pressing it asks
+    /// for the card's own act; and the choices come back where the role is read
+    /// as there. Skipped where no Node is installed.
+    #[test]
+    fn the_page_draws_not_installed_and_presses_the_cards_own_act() {
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let held = a_run_with_a_reading();
+        let a_record = |role| WhatTheRecordHolds {
+            telegram_is_on: true,
+            the_telegram_role: role,
+            ..WhatTheRecordHolds::default()
+        };
+        let absent = the_panel_starting_from(&held, &a_server(), file, &a_record(TheTelegramRoleHere::NotInstalled));
+        let running = the_panel_starting_from(&held, &a_server(), file, &WhatTheRecordHolds {
+            the_telegram_install_failed: None,
+            ..a_record(TheTelegramRoleHere::Installing)
+        });
+        let failed = the_panel_starting_from(&held, &a_server(), file, &WhatTheRecordHolds {
+            the_telegram_install_failed: Some("It failed.".to_string()),
+            ..a_record(TheTelegramRoleHere::NotInstalled)
+        });
+        let there = the_panel_starting_from(&held, &a_server(), file, &a_record(TheTelegramRoleHere::Installed));
+        let answers = serde_json::json!({ "absent": absent, "running": running, "failed": failed, "there": there });
+        let folder = std::env::temp_dir().join(format!("smoozy-g2a-page-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for (name, text) in THE_UPLOADING_LINES_STAND_INS {
+            fs::write(folder.join(name), text).expect("a stand-in");
+        }
+        fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::write(folder.join("the-click.mjs"), THE_CLICK_STAND_IN).expect("the click");
+        fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers");
+        fs::write(folder.join("harness.mjs"), THE_NOT_INSTALLED_HARNESS.replace("SERVER", &a_server())).expect("the harness");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.mjs")).current_dir(&folder).output();
+        let _ = fs::remove_dir_all(&folder);
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the render settings page was not run");
+            return;
+        };
+        assert!(ran.status.success(), "the page code did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness prints one answer");
+        assert_eq!(
+            got,
+            serde_json::json!({
+                "absent": { "reads": "Not installed", "width": "sftg w-tg", "choices": false, "install": "Install", "hover": "no restart" },
+                "pressed": [["install-telegram", a_server()]],
+                "askedAgain": true,
+                "running": { "reads": "Installing…", "choices": false, "install": false },
+                "failed": { "said": "It failed.", "className": "alertnote", "inTheThirdLine": true },
+                "there": { "line": false, "choices": true },
+                "told": true
+            })
+        );
+    }
+
+    const THE_NOT_INSTALLED_HARNESS: &str = r#"import { everyPiece } from "./document.mjs";
+import { fire } from "./the-click.mjs";
+import { readFileSync } from "node:fs";
+const answers = JSON.parse(readFileSync("./answers.json", "utf8"));
+const pressed = [];
+let current = "absent";
+let asks = 0;
+globalThis.window = { innerHeight: 800, addEventListener() {}, __TAURI__: { core: { invoke(command, asked) {
+  if (command === "the_render_settings_panel") { asks += 1; return Promise.resolve(answers[current]); }
+  if (command === "a_set_up_act_that_needs_a_connection") pressed.push([asked.act, asked.server]);
+  return Promise.resolve(null);
+} } } };
+const { panels } = await import("./a-server.js");
+const { theSettingsAreOpenedOn } = await import("./render-settings.js");
+const settle = async () => { for (let at = 0; at < 8; at += 1) await new Promise((go) => setImmediate(go)); };
+await theSettingsAreOpenedOn("SERVER", Array.from(Buffer.from(answers.absent.file)), "");
+const head = document.createElement("div");
+const body = document.createElement("div");
+panels[0].itIsDrawn({ head, body }, "SERVER");
+await settle();
+const all = () => [...everyPiece(head), ...everyPiece(body)];
+const box = (name) => all().find((one) => one.dataset.box === name);
+const read = (text) => String(text).replace(/\u00a0/g, " ");
+const again = async () => {
+  for (const handler of globalThis.told["render-settings:the-telegram-role-was-read"] || []) await handler({ said: { server: "SERVER" } });
+  await settle();
+};
+const out = {};
+const line = () => box("telegram-not-installed");
+out.absent = {
+  reads: read(line().children[0].textContent), width: [...line().names].sort().join(" "), choices: Boolean(box("reports")),
+  install: read(box("install-telegram").textContent), hover: read(box("install-telegram").title),
+};
+const before = asks;
+fire(box("install-telegram"), "click");
+await settle();
+out.pressed = pressed.splice(0);
+out.askedAgain = asks > before;
+current = "running";
+await again();
+out.running = { reads: read(line().children[0].textContent), choices: Boolean(box("reports")), install: Boolean(box("install-telegram")) };
+current = "failed";
+await again();
+const failed = box("telegram-install-failed");
+out.failed = { said: read(failed.textContent), className: failed.className, inTheThirdLine: Boolean(failed.parentNode && failed.parentNode.names.has("sfl3")) };
+current = "there";
+await again();
+out.there = { line: Boolean(line()), choices: Boolean(box("reports")) };
+out.told = true;
+console.log(JSON.stringify(out));
+"#;
+
     const THE_MINUTES_HARNESS: &str = r#"import { everyPiece } from "./document.mjs";
 import { fire } from "./the-click.mjs";
 import { readFileSync } from "node:fs";
@@ -11760,6 +12555,96 @@ check(on && !elements.pickfmt.hidden && elements.folder.hidden);
         );
     }
 
+
+    #[test]
+    fn film_page_disabled_controls_and_the_check_first_link() {
+        let mut panel = serde_json::to_value(the_panel(&a_run_with_a_reading(), &a_server(), "/ephemeral/smoozy/assets/kitchen_v14.blend")).unwrap();
+        panel["submitting_is_offered"] = false.into();
+        panel["the_dependencies_uploading"] = serde_json::json!([plainly(words::CHECK_DEPENDENCIES)]);
+        panel["the_dependency_link_starts_a_check"] = true.into();
+        let folder = std::env::temp_dir().join(format!("smoozy-film-presses-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        for (name, text) in THE_UPLOADING_LINES_STAND_INS { fs::write(folder.join(name), text).unwrap(); }
+        fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("web/render-settings.js"), folder.join("render-settings.js")).unwrap();
+        fs::write(folder.join("the-click.mjs"), THE_CLICK_STAND_IN).unwrap();
+        fs::write(folder.join("answers.json"), panel.to_string()).unwrap();
+        fs::write(folder.join("harness.mjs"), r#"
+import { everyPiece } from "./document.mjs";
+import { fire } from "./the-click.mjs";
+import { readFileSync } from "node:fs";
+import assert from "node:assert/strict";
+const answer = JSON.parse(readFileSync("./answers.json", "utf8"));
+const proto = Object.getPrototypeOf(document.createElement("div"));
+proto.closest = function (selector) {
+  for (let at = this; at; at = at.parentNode)
+    if (selector.split(",").some(one => one === "button" ? at.tagName === "BUTTON" : one === '[role="button"]' && at.getAttribute("role") === "button")) return at;
+  return null;
+};
+globalThis.window = { addEventListener() {}, __TAURI__: { core: { invoke(command) {
+  return Promise.resolve(command === "the_render_settings_panel" ? answer : null);
+} } } };
+const { panels } = await import("./a-server.js");
+const { theSettingsAreOpenedOn } = await import("./render-settings.js");
+await theSettingsAreOpenedOn("server", Array.from(Buffer.from(answer.file)), "");
+const head = document.createElement("div"), body = document.createElement("div");
+panels[0].itIsDrawn({head, body}, "server");
+const settle = async () => { for (let i = 0; i < 8; i++) await new Promise(setImmediate); };
+await settle();
+const find = box => everyPiece(body).find(one => one.dataset.box === box);
+const redraw = () => { for (const handler of globalThis.told["the-dependency-check:an-act"] || []) handler({said:{server:"server",file:answer.file}}); };
+const disabled = find("render");
+assert.equal(disabled.disabled, true);
+fire(disabled, "pointerdown"); fire(disabled, "pointerup"); // no click or movement
+redraw(); await settle();
+assert.notEqual(find("render"), disabled, "a disabled press held the drawing");
+const link = find("dependencies-uploading");
+fire(link, "pointerdown"); redraw(); await settle();
+assert.equal(find("dependencies-uploading"), link, "an enabled press was lost");
+fire(link, "pointerup"); fire(link, "click"); await settle();
+assert.equal(globalThis.checksStarted, 1, "Check dependencies started no check");
+assert.equal((globalThis.shown || []).length, 0);
+answer.the_dependency_link_starts_a_check = false;
+redraw(); await settle();
+find("dependencies-uploading").press(); await settle();
+assert.equal(globalThis.checksStarted, 1, "a running check started again");
+assert.equal(globalThis.shown.length, 1);
+"#).unwrap();
+        let ran = std::process::Command::new("node").arg(folder.join("harness.mjs")).current_dir(&folder).output().unwrap();
+        let _ = fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+    }
+
+    #[test]
+    fn film_page_disabled_server_controls_do_not_hold_drawing() {
+        let source = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("web/servers.js")).unwrap();
+        let hold = source.split("let thePressHeld = null;").nth(1).unwrap().split("// ── A row").next().unwrap();
+        let script = format!(r#"
+const assert = require("node:assert/strict");
+const listeners = {{}};
+const document = {{addEventListener(kind, handler) {{ (listeners[kind] ||= []).push(handler); }}}};
+const window = {{addEventListener() {{}}}};
+const host = {{contains() {{return true;}}}}, openMenu = null, connectionPlaces = new Map();
+let thePressHeld = null;
+{hold}
+(async () => {{
+ const control = {{disabled:true, getAttribute(){{return null;}}}};
+ const target = {{closest(){{return control;}}}};
+ for (const handler of listeners.pointerdown) handler({{button:0,target}});
+ for (const handler of listeners.pointerup) handler({{}});
+ let drew = false; theDrawingWaitsForThePress().then(() => drew = true);
+ await Promise.resolve(); assert.equal(drew, true, "disabled server control held drawing");
+ control.disabled = false;
+ for (const handler of listeners.pointerdown) handler({{button:0,target}});
+ drew = false; theDrawingWaitsForThePress().then(() => drew = true);
+ await Promise.resolve(); assert.equal(drew, false);
+ for (const handler of listeners.pointercancel) handler({{}});
+ await Promise.resolve(); assert.equal(drew, true);
+}})().catch(error => {{console.error(error); process.exitCode = 1;}});
+"#);
+        let ran = std::process::Command::new("node").args(["-e", &script]).output().unwrap();
+        assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+    }
+
     /// **What the click harness adds to the stand-in document**: listeners on
     /// the document that run first, as the capturing ones do; focus that moves
     /// with its own events; a field's chosen text; finding a box by its
@@ -12781,6 +13666,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_folders_at_the_machines_top: None,
             },
             version,
         )
@@ -12840,6 +13726,37 @@ document.getElementById("out").textContent = JSON.stringify(out);
         let panel = the_panel(&held, &a_server(), file);
         let said = the_words_of_a_line(&panel.the_samples_lines[0]);
         assert!(said.contains("<0.01>") && said.contains("<0.1s>"), "{said}");
+    }
+
+    /// **`Render Settings` §13 item 32: from 5.3 EEVEE's own time limit is named,
+    /// by Cycles' words, before and after a typed count.** Cycles' limit in the
+    /// same file is not EEVEE's to name, and a reading with no such value says
+    /// nothing, which is every version up to 5.2.
+    #[test]
+    fn an_eevee_render_from_five_three_is_told_about_its_own_time_limit() {
+        let eevee = |limit: Option<f64>| {
+            let mut scene = a_scene("Scene");
+            scene.engine_as_read = ExactName::as_the_reading_produced_it("BLENDER_EEVEE");
+            scene.view_layers = vec![a_layer("Interior", true, false)];
+            scene.eevee_time_limit = limit;
+            scene
+        };
+        let (mut held, file) = a_run_that_read(vec![eevee(Some(2.0))], a_version(5, 3, 0));
+        let panel = the_panel(&held, &a_server(), file);
+        let lines: Vec<String> = panel.the_samples_lines.iter().map(the_words_of_a_line).collect();
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].contains("2s"), "{lines:?}");
+        assert!(!lines[0].contains("30s"), "{lines:?}");
+        let _ = the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::SampleCount, "256");
+        let panel = the_panel(&held, &a_server(), file);
+        let lines: Vec<String> = panel.the_samples_lines.iter().map(the_words_of_a_line).collect();
+        assert!(lines.iter().any(|line| line.contains("2s")), "{lines:?}");
+
+        for limit in [None, Some(0.0)] {
+            let (held, file) = a_run_that_read(vec![eevee(limit)], a_version(5, 3, 0));
+            let panel = the_panel(&held, &a_server(), file);
+            assert!(panel.the_samples_lines.is_empty(), "{limit:?}");
+        }
     }
 
     /// **Fault 7 of the splash scenes, as a person meets it: an EEVEE file is
@@ -13736,6 +14653,24 @@ if (line.hidden) throw new Error("the refusal was not shown");
     /// check's two jobs of one scene are one submission.** A part-submission, a
     /// refusal, and a lock keep what they said before.
     #[test]
+    fn y15b_a_job_in_the_line_ends_a_loaded_range_and_one_of_unknown_fate_does_not() {
+        use crate::submitting::{WhatBecameOfOneJob as Became, WhatTheActCameTo as CameTo};
+        assert!(a_job_of_the_act_is_in_the_line(&CameTo::TheseJobs(vec![Became::ItIsInTheLine])));
+        assert!(a_job_of_the_act_is_in_the_line(&CameTo::TheseJobs(vec![Became::ItIsInTheLine, Became::NotKnown])));
+        assert!(!a_job_of_the_act_is_in_the_line(&CameTo::TheseJobs(vec![Became::NotKnown])));
+        assert!(!a_job_of_the_act_is_in_the_line(&CameTo::TheseJobs(vec![Became::TheServerDoesNotTakeJobs])));
+        assert!(!a_job_of_the_act_is_in_the_line(&CameTo::TheseJobs(Vec::new())));
+        assert!(!a_job_of_the_act_is_in_the_line(&CameTo::TheFirstFrameIsNotKnown { a_scene_can_be_ticked: true }));
+        // **The command does it, before the page is told to ask again.**
+        let source = include_str!("render_settings.rs");
+        let command = source.split("pub fn a_job_is_submitted<").nth(1).expect("the command");
+        let command = command.split("\n}\n").next().expect("its end");
+        let goes = command.find("the_loaded_range_goes(&mut held, &server, &file)").expect("the job's going ends it");
+        assert!(goes < command.find("the_queue_is_told(&queue, event)").expect("the page told"));
+        assert!(command[goes - 90..goes].contains("a_job_of_the_act_is_in_the_line(&came_to)"));
+    }
+
+    #[test]
     fn a_submission_that_went_is_the_confirmation_and_nothing_else_is() {
         use crate::submitting::{AJobAsSent, WhatBecameOfOneJob as Became, WhatTheActCameTo as CameTo};
         let job = Identity::issue(IdentityKind::Job).expect("randomness");
@@ -13917,6 +14852,7 @@ if (line.hidden) throw new Error("the refusal was not shown");
             ),
             read_under: None,
             the_driver: None,
+            the_optix_library_is_missing: false,
         };
         let answers = SceneEntries { device: Some(DeviceChoice::TheProcessor), ..SceneEntries::default() };
         let scene = a_scene("Interior");
@@ -13933,6 +14869,86 @@ if (line.hidden) throw new Error("the refusal was not shown");
             Some(&HeldHardware::Held { state: HeldState::Live, reading }),
         );
         assert_eq!(live, None, "a live reading names no moment");
+    }
+
+    /// **`Render Settings` D6a: a Cycles job on the GPU from 5.3 is told once,
+    /// where the driver will not change, and nobody else is.** The figures are
+    /// the first live pass's. **What it bites on**: the page said nothing and let
+    /// the job go to a machine where it could only fail.
+    #[test]
+    fn a_cycles_job_on_the_gpu_below_five_point_three_s_row_is_told_and_nothing_else_is() {
+        use smoozy_render_settings::readings::HeldState;
+        use smoozy_servers::hardware::{DriverVersion, Cards, HardwareReading, MachineMemory, TheDriversOwnAnswer, WhereK1PlacesIt};
+        use smoozy_state::observed::{Clock, Reading};
+        use std::time::{Duration, SystemTime};
+        let a_reading = |version: &str, placed: WhereK1PlacesIt| HardwareReading {
+            cards: Cards::TheCards(Vec::new()),
+            machine_memory: MachineMemory::TheAllocation(1 << 30),
+            free_space: None,
+            the_machines_own_moment: Reading::taken((), SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000), Clock::AMachine(smoozy_state::observed::MachineClock("box".to_string()))),
+            the_desktops_own_moment: Reading::taken((), SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_050), Clock::ThisComputer),
+            read_under: None,
+            the_driver: Some(TheDriversOwnAnswer {
+                version: DriverVersion::parse(version).expect("a version"),
+                cuda_version: Some("12.9".to_string()),
+                where_k1_placed_the_machine: placed,
+            }),
+            the_optix_library_is_missing: false,
+        };
+        let a_build = |major, minor, patch| BlenderIdentity {
+            path: "/opt/blender/blender".to_string(),
+            version: smoozy_server_setup::blender::Version { major, minor, patch },
+        };
+        let live = |reading| HeldHardware::Held { state: HeldState::Live, reading };
+        let line = |on: Option<DeviceChoice>, engine: Option<OfferedEngine>, hardware: Option<&HeldHardware>, picked: Option<&BlenderIdentity>, missed: bool| {
+            the_words_of_a_line(&the_driver_line(on, engine, hardware, picked, missed))
+        };
+        let cards = Some(DeviceChoice::TheCards);
+        let cycles = Some(OfferedEngine::Cycles);
+        let container = live(a_reading("575.64.03", WhereK1PlacesIt::AContainer));
+        let five_three = a_build(5, 3, 0);
+
+        let said = line(cards, cycles, Some(&container), Some(&five_three), false);
+        assert_eq!(
+            said,
+            "This server’s NVIDIA driver, <575.64.03>, is too old for Cycles GPU rendering in Blender <5.3>."
+        );
+        assert_eq!(
+            line(cards, cycles, Some(&container), Some(&a_build(5, 4, 0)), false),
+            "This server’s NVIDIA driver, <575.64.03>, is too old for Cycles GPU rendering in Blender <5.4>.",
+            "the picked Blender's own line"
+        );
+        // **A swap that missed the bar is told as a container is.**
+        let its_own = live(a_reading("575.64.03", WhereK1PlacesIt::ItsOwnKernel));
+        assert_eq!(line(cards, cycles, Some(&its_own), Some(&five_three), true), said);
+
+        // **Nobody else.**
+        for (what, told) in [
+            ("EEVEE", line(cards, Some(OfferedEngine::Eevee), Some(&container), Some(&five_three), false)),
+            ("the engine unread", line(cards, None, Some(&container), Some(&five_three), false)),
+            ("the CPU", line(Some(DeviceChoice::TheProcessor), cycles, Some(&container), Some(&five_three), false)),
+            ("the device unread", line(None, cycles, Some(&container), Some(&five_three), false)),
+            ("no reading", line(cards, cycles, None, Some(&five_three), false)),
+            ("no Blender picked", line(cards, cycles, Some(&container), None, false)),
+            ("a Blender below 5.3", line(cards, cycles, Some(&container), Some(&a_build(5, 2, 3)), false)),
+            ("a server Smoozy can update", line(cards, cycles, Some(&its_own), Some(&five_three), false)),
+            ("a driver at the row", line(cards, cycles, Some(&live(a_reading("580.00", WhereK1PlacesIt::AContainer))), Some(&five_three), false)),
+            ("a newer driver", line(cards, cycles, Some(&live(a_reading("595.84", WhereK1PlacesIt::AContainer))), Some(&five_three), false)),
+            (
+                "a reading last seen",
+                line(cards, cycles, Some(&HeldHardware::Held { state: HeldState::LastSeen, reading: a_reading("575.64.03", WhereK1PlacesIt::AContainer) }), Some(&five_three), false),
+            ),
+        ] {
+            assert_eq!(told, "", "{what}");
+        }
+        // **The page draws it under the pair, in the page's warning style, and
+        // writes none of its words.**
+        let page = the_pages_function("function theMiddleColumn(server, said) {");
+        assert!(page.contains("said.renders_on.the_driver_line"), "{page}");
+        assert!(the_page().contains(r#"hint.dataset.box = "device-driver";"#));
+        for word in [words::THIS_SERVERS_NVIDIA_DRIVER, words::IS_TOO_OLD_FOR_CYCLES_GPU_IN] {
+            assert!(!the_page().contains(word), "{word} is written on the page");
+        }
     }
 
     /// **The page, under Node: the confirmation, Simplify's three controls, and
@@ -13959,6 +14975,10 @@ if (line.hidden) throw new Error("the refusal was not shown");
         assert_eq!(the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::Simplify, "on"), None);
         assert_eq!(the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::SimplifyTextureLimit, "1024"), None);
         let mut panel = the_panel(&held, &a_server(), file);
+        panel.simulation_rows = vec![TheSimulationRow {
+            scene: "Interior".into(), name: None, label: Prose::new("Prepare simulations"), on: true,
+            range: Prose::new("Plays frames 101–125 before rendering, on every attempt.")
+        }];
         panel.renders_on = Some(TheDevice {
             label: Prose::new(words::RENDERS_ON),
             gpu: Prose::new(words::GPU),
@@ -13969,6 +14989,11 @@ if (line.hidden) throw new Error("the refusal was not shown");
             the_moment: Some(Verbatim::new("1700000050")),
             hand_back_to: None,
             greyed: false,
+            // **`Render Settings` D6a's line, as the page draws it.**
+            the_driver_line: vec![
+                part(words::THIS_SERVERS_NVIDIA_DRIVER, vec!["575.64.03".to_string()], Some(words::THE_COMMA), true),
+                part(words::IS_TOO_OLD_FOR_CYCLES_GPU_IN, vec!["5.3".to_string()], Some(words::THE_FULL_STOP), true),
+            ],
         });
         let went = serde_json::json!({
             "theBox": "submit", "partCount": "1", "lead0": words::SUBMITTED_TO, "value00": "Vast 4090",
@@ -14011,8 +15036,11 @@ if (line.hidden) throw new Error("the refusal was not shown");
                 "afterASecondSubmit": false,
                 "textureChoices": ["No Limit", "128", "256", "512", "1024", "2048", "4096", "8192"],
                 "textureShows": ["1024"],
-                "answered": [["simplify-subdivision", "3"], ["simplify-texture-limit", "2048"]],
-                "lastSeen": "1 GPU unused last seen at 1700000050"
+                "simulationLine": "Prepare simulationsPlays frames 101–125 before rendering, on every attempt.",
+                "answered": [["simplify-subdivision", "3"], ["simplify-texture-limit", "2048"], ["prepare-simulations", "off:Interior"]],
+                "lastSeen": "1 GPU unused last seen at 1700000050",
+                "driverLine": "This server’s NVIDIA driver, 575.64.03, is too old for Cycles GPU rendering in Blender 5.3.",
+                "driverLineIsAWarning": true
             })
         );
     }
@@ -14069,8 +15097,12 @@ out.textureChoices = textureRows.map((one) => one.textContent.replace(/\u00a0/g,
 out.textureShows = textureRows.filter((one) => one.names.has("hd")).map((one) => one.textContent);
 texture.press();
 textureRows.find((one) => one.textContent === "2048").press();
+out.simulationLine = words(find("simulation-row"));
+find("prepare-simulations").press();
 out.answered = invoked.filter(([command]) => command === "an_answer_was_given").map(([, args]) => [args.which, args.text]);
 out.lastSeen = words(everyPiece(find("device-the-processor")).find((one) => one.names.has("tag")));
+out.driverLine = words(find("device-driver"));
+out.driverLineIsAWarning = find("device-driver").names.has("hint");
 console.log(JSON.stringify(out));
 "#;
 
@@ -14681,6 +15713,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
         for layer in layers {
             destinations.push(Destination {
                 kind: DestinationKind::AnOutputOfAFileOutputNode {
+                    the_effect: None,
                     node: text("PNG"),
                     output: text(&format!("### - Hero - {layer}")),
                     the_nodes_base_file_name: None,
@@ -14697,6 +15730,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
         for layer in ["Box", "Mattress"] {
             destinations.push(Destination {
                 kind: DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile {
+                    the_effect: None,
                     node: text(&format!("EXR {layer}")),
                     the_nodes_base_file_name: Some(text(&format!("### - Hero - {layer}"))),
                     replaced: None,
@@ -14777,9 +15811,10 @@ document.getElementById("out").textContent = JSON.stringify(out);
         assert_eq!(
             rows,
             vec![
+                // **The two AO layers are pinned off on this ground**, so the two
+                // PNG outputs they alone feed count nothing and are not listed
+                // (`Design/Render Settings § What it will write`, 2026-11-02).
                 row("", true, "Video"),
-                row("PNG/", false, "PNG"),
-                row("PNG/", false, "PNG"),
                 row("PNG/", false, "PNG"),
                 row("PNG/", false, "PNG"),
                 row("EXR/", false, "Multilayer EXR"),
@@ -15419,7 +16454,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
             smoozy_job_files::layout::MachineRoot::chosen("/root/smoozy").expect("a root"),
             smoozy_job_files::layout::WhereThePackageAreaSits::UnderTheRoot,
         );
-        let sits = where_the_jobs_folder_sits(&layout, &the_creators_shape(), &the_creators_ground(true), None);
+        let sits = where_the_jobs_folder_sits(&layout, &the_creators_shape(), &the_creators_ground(true), None, None);
         assert_eq!(sits, WhereTheJobsFolderSits::In("/home/ubuntu/Render".to_string()));
         let line = the_folder_line(&sits);
         assert_eq!(line[0].values, vec![Verbatim::new("/home/ubuntu/Render")]);
@@ -15450,7 +16485,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
         ] {
             let plain = said.replace('’', "'");
             assert!(design.contains(&format!("*{plain}*")), "not the Design's words: {plain}");
-            let sits = where_the_jobs_folder_sits(&layout, &outputs, ground, None);
+            let sits = where_the_jobs_folder_sits(&layout, &outputs, ground, None, None);
             assert!(matches!(sits, WhereTheJobsFolderSits::FallsBack { to: WhereTheFallbackGoes::SmoozysFolder, .. }), "{sits:?}");
             assert!(as_read(&the_folder_line(&sits)).contains(&plain));
             assert_eq!(the_second_folder_line(&sits), None);
@@ -15481,6 +16516,73 @@ document.getElementById("out").textContent = JSON.stringify(out);
         assert!(group.contains("if (row.the_top) {"));
     }
 
+    /// **`Design/Render Settings § What it will write`, two rulings of
+    /// 2026-11-02, out of the live pass on real production files.** The line
+    /// never names a folder the machine lacks at its top, and says nothing of
+    /// a place it cannot know; and a destination that counts nothing is not
+    /// listed, while one whose name the reading cannot give stays.
+    #[test]
+    fn the_folder_line_is_true_of_the_machine_and_a_row_counting_nothing_is_not_listed() {
+        use smoozy_job_files::reading::{ArtistsText, RecordedLocation, WhichScene};
+        let layout = TheLayout::of(
+            smoozy_job_files::layout::MachineRoot::chosen("/root/smoozy").expect("a root"),
+            smoozy_job_files::layout::WhereThePackageAreaSits::UnderTheRoot,
+        );
+        let mut leftover = the_creators_shape();
+        for destination in &mut leftover.destinations {
+            if destination.is_one_the_render_asked_for() {
+                destination.recorded_location =
+                    Some(RecordedLocation::of(b"/shared/studio/weeklies/hjalti/x_".to_vec()));
+            }
+        }
+        let top = ["home".to_string(), "root".to_string()];
+        assert!(matches!(
+            where_the_jobs_folder_sits(&layout, &leftover, &the_creators_ground(true), None, Some(&top)),
+            WhereTheJobsFolderSits::FallsBack { to: WhereTheFallbackGoes::SmoozysFolder, .. }
+        ));
+        assert!(matches!(
+            where_the_jobs_folder_sits(&layout, &the_creators_shape(), &the_creators_ground(true), None, Some(&top)),
+            WhereTheJobsFolderSits::In(_)
+        ));
+
+        // **On the page: a reading from an older server program holds no list**,
+        // so no *In …* line, and a fallback it can tell is still said.
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let with = WhatTheRecordHolds { the_layout: Some(layout.clone()), ..WhatTheRecordHolds::default() };
+        let the_line = |top: Option<Vec<String>>, outputs: TheOutputsHalf| {
+            let mut held = a_run_with_a_reading_and_the_machines_top(top);
+            held.outputs.insert(keyed(&a_server(), file), vec![(b"Interior".to_vec(), outputs)]);
+            the_panel_starting_from(&held, &a_server(), file, &with).the_folder_line
+        };
+        let top = vec!["ephemeral".to_string(), "root".to_string()];
+        assert!(the_line(Some(top.clone()), the_creators_shape()).is_some());
+        assert!(the_line(None, the_creators_shape()).is_none());
+        let said = serde_json::to_string(&the_line(Some(top), leftover.clone()).expect("the line")).unwrap();
+        assert!(said.contains("another computer"), "{said}");
+        assert!(!said.contains("/shared"), "{said}");
+
+        // **The rows.** A strip scene's path, as a reading from an older server
+        // program holds it, owes nothing under a layer no frame renders.
+        let mut outputs = the_creators_shape();
+        let rows = |outputs: &TheOutputsHalf| {
+            let (writes, _, _) = the_output_group(Some(outputs), None, &[], false, &the_creators_ground(true));
+            writes.expect("the list").rows
+        };
+        let before = rows(&outputs).len();
+        let mut stray = outputs.destinations[0].clone();
+        stray.scene = WhichScene::ReachedThroughASequencerStrip {
+            scene: ArtistsText::of(b"Scene.036".to_vec()),
+            strip: ArtistsText::of(b"Scene.036".to_vec()),
+        };
+        stray.recorded_location = Some(RecordedLocation::of(b"/tmp/".to_vec()));
+        stray.the_view_layers_that_feed_it = vec![ArtistsText::of(b"A strip scene's layer".to_vec())];
+        stray.format = outputs.destinations[1].format.clone();
+        outputs.destinations.push(stray);
+        let listed = rows(&outputs);
+        assert_eq!(listed.len(), before, "{listed:#?}");
+        assert!(listed.iter().all(|row| row.how_many.as_str() != "0"), "{listed:#?}");
+    }
+
     /// **The chosen fallback folder on the page** (`Job files and
     /// outputs` P23, `Design/Render Settings § What it will write`): where a server has
     /// one set and nothing known before submitting rules it out, the sentence
@@ -15499,7 +16601,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
             the_folder_the_blend_sits_in: b"/root/smoozy/assets/set-1".to_vec(),
             ..the_creators_ground(true)
         };
-        let to_mnt = where_the_jobs_folder_sits(&layout, &the_creators_shape(), &in_smoozys_area, Some("/mnt/renders"));
+        let to_mnt = where_the_jobs_folder_sits(&layout, &the_creators_shape(), &in_smoozys_area, Some("/mnt/renders"), None);
         assert_eq!(
             to_mnt,
             WhereTheJobsFolderSits::FallsBack {
@@ -15514,7 +16616,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
         assert_eq!(the_second_folder_line(&to_mnt), None);
 
         for ruled_out in ["/tmp/renders", "/root/smoozy/mine", "renders"] {
-            let sits = where_the_jobs_folder_sits(&layout, &the_creators_shape(), &in_smoozys_area, Some(ruled_out));
+            let sits = where_the_jobs_folder_sits(&layout, &the_creators_shape(), &in_smoozys_area, Some(ruled_out), None);
             assert!(
                 matches!(sits, WhereTheJobsFolderSits::FallsBack { to: WhereTheFallbackGoes::SmoozysFolderBecauseTheServersCantBeUsed, .. }),
                 "{ruled_out}: {sits:?}"
@@ -15525,7 +16627,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
         let design = include_str!("../../../../Preparation/Design/Render Settings.md").replace('’', "'");
         assert!(design.contains(&format!("*{}*", words::THIS_SERVERS_FALLBACK_FOLDER_CANT_BE_USED.replace('’', "'"))));
 
-        let here = where_the_jobs_folder_sits(&layout, &the_creators_shape(), &the_creators_ground(true), Some("/mnt/renders"));
+        let here = where_the_jobs_folder_sits(&layout, &the_creators_shape(), &the_creators_ground(true), Some("/mnt/renders"), None);
         assert_eq!(here, WhereTheJobsFolderSits::In("/home/ubuntu/Render".to_string()));
 
         // **On the page**, from the row's own value — the file sits inside
@@ -15572,7 +16674,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
         let twin = outputs.destinations[first_png].clone();
         outputs.destinations.push(twin);
         let mut ground = the_creators_ground(false);
-        let sits = where_the_jobs_folder_sits(&layout, &outputs, &ground, None);
+        let sits = where_the_jobs_folder_sits(&layout, &outputs, &ground, None, None);
         ground.the_jobs_folder = Some(sits.the_pages_job_folder());
         let (_, warnings, _) = the_output_group(Some(&outputs), None, &[], false, &ground);
         let pairs: Vec<String> = warnings
@@ -15621,6 +16723,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
                         eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                     },
                     announced_add_on_case: None,
+                    the_folders_at_the_machines_top: None,
                 },
                 Some(&picked),
                 &four_values(),

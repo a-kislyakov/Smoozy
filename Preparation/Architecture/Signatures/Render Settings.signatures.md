@@ -83,3 +83,19 @@
 - 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — the box reading quoted at Q3, V-section and §13 item 7 is now *unknown until read*. C8's two quotes of the Design's compositor lines follow the Design's new words. No auditor has seen it. Appended by the build runner.
 
 2026-10-28 — Claude Opus 5.5 (Zed), the plan and design pass for the Creator's twentieth notes, holding `Audits/Build/Step 10c/Brief — the twentieth notes, the plan and design pass (Zed, Opus).md`, outside any round — Y16: the page offers a fifth reporting choice, `Nothing`, drawn as *Off*, handed over like the others (note 4). No auditor has seen it.
+
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 4, holding `Audits/Build/Blender 5.3/Brief — piece 4, EEVEE's time limit and templates in a bake folder.md`, outside any round: C1 item 3 gains EEVEE's own time limit from 5.3, composed per version; C3's *the time limit is Cycles' alone* corrected to *up to 5.2*; C10 gains the one name; §13 item 32 says the page's warning does not name it; Sources B32. C5's caution stands. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 5, outside any round — Q2 item 1, §13 item 32 closed. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — §13 item 33, 5.3's caution. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — D6a: the line about the driver, from 5.3. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), a builder on the runner's ruling after the first 5.3 live pass, outside any round — D1 and D2 follow `Rendering` L21. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the real files found.md`, outside any round — Q2 item 7. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — Y15b. No auditor has seen it.
+
+2026-11-06 — GPT-6.1 Sol high (Codex) — Wrote the simulation promise, choice and range before building.
+
+2026-11-06 — GPT-6.1 (Codex) — Conditional cloth preservation and shutter-based playing range, before code.
+
+2026-11-06 — GPT-6.1 (Codex) — Cloth withdrawal and linked simulations on the settings page, within the runner's brief.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the first-frame form of the playing line. The last words read before the release. No auditor has seen it.

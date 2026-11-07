@@ -35,3 +35,7 @@
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Applied the wave 7b privacy fixes.
 
 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — screen words quoted in four sentences changed: *Smoozy found no scene that uses it* → *Not used by any scene* (Checking a file), *Undo Smoozy's guess* → *Reject match* (What the user can change), the sent-up-as-a-dependency statement → *Uploaded before as a dependency. Its paths still point to your computer.*, *Try again* → *Retry* (Design-level detail). Each carries its inline note. No auditor has seen it. Appended by the build runner.
+
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — six import nodes up to 5.2 and seven in 5.3. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — kept readings in the check.md`, outside any round — the check reads the file unless it and its libraries are unchanged since this run read them. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job pressed during a send, and the check beside it.md`, outside any round — One more round after an upload that ends during a check. No auditor has seen it.

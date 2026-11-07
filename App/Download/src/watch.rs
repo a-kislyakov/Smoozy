@@ -338,8 +338,75 @@ pub fn what_is_active<'a>(
 /// rejects.
 pub const NOTHING_HERE_RESTS_ON_A_MEASUREMENT_OF_WHAT_A_RENDER_COST: bool = true;
 
+/// **E2b's figure: a minute of passes in which nothing ended.** So a single
+/// pass's refused listing or a busy seat says nothing.
+pub const THE_MINUTE_BEFORE_IT_IS_SAID: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// **E2b: what one pass makes of one arrangement** — units owed and none of them
+/// ended in this pass, or the job has ended and its ending walk has not completed.
+/// A unit that came back to *owed* did not move. A file in flight never reaches
+/// this: the pass waits for it, and its ending moves.
+pub fn it_stood_still_this_pass(owed_before: usize, owed_after: usize, ending_walk_is_owed: bool) -> bool {
+    (owed_after > 0 && owed_after >= owed_before) || ending_walk_is_owed
+}
+
+/// **E2b's clocks, one connection's and run-held** (R11): a job that moved has
+/// none, and a job that stood still keeps the moment it began to.
+#[derive(Debug, Default)]
+pub struct TheDownloadsStandingStill {
+    since: std::collections::HashMap<String, std::time::Instant>,
+}
+
+impl TheDownloadsStandingStill {
+    /// **What a pass saw of a job, at a moment.**
+    pub fn a_pass_saw(&mut self, job: &str, it_stood_still: bool, at: std::time::Instant) {
+        if it_stood_still {
+            self.since.entry(job.to_string()).or_insert(at);
+        } else {
+            self.since.remove(job);
+        }
+    }
+
+    /// **The same, now.**
+    pub fn a_pass_saw_now(&mut self, job: &str, it_stood_still: bool) {
+        self.a_pass_saw(job, it_stood_still, std::time::Instant::now());
+    }
+
+    /// **Whether the minute has passed for a job, at a moment.**
+    pub fn it_is_said(&self, job: &str, at: std::time::Instant) -> bool {
+        self.since
+            .get(job)
+            .is_some_and(|since| at.duration_since(*since) >= THE_MINUTE_BEFORE_IT_IS_SAID)
+    }
+
+    /// **The same, now.**
+    pub fn it_is_said_now(&self, job: &str) -> bool {
+        self.it_is_said(job, std::time::Instant::now())
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    /// **E2b.**
+    #[test]
+    fn a_download_says_so_only_after_a_minute_of_standing_still() {
+        use std::time::{Duration, Instant};
+        assert!(it_stood_still_this_pass(2, 2, false), "owed, and none ended");
+        assert!(!it_stood_still_this_pass(2, 1, false), "a unit ended");
+        assert!(!it_stood_still_this_pass(0, 0, false), "nothing is owed");
+        assert!(it_stood_still_this_pass(0, 0, true), "the ending walk is owed");
+        let mut clocks = TheDownloadsStandingStill::default();
+        let at = Instant::now();
+        clocks.a_pass_saw("j", true, at);
+        assert!(!clocks.it_is_said("j", at + Duration::from_secs(59)));
+        clocks.a_pass_saw("j", true, at + Duration::from_secs(59));
+        assert!(clocks.it_is_said("j", at + Duration::from_secs(60)));
+        clocks.a_pass_saw("j", false, at + Duration::from_secs(61));
+        assert!(!clocks.it_is_said("j", at + Duration::from_secs(62)), "it moved");
+        clocks.a_pass_saw("j", true, at + Duration::from_secs(63));
+        assert!(!clocks.it_is_said("j", at + Duration::from_secs(64)), "a fresh minute");
+    }
+
     use super::*;
 
     fn entry(path: &[u8], size: u64, modified: i64) -> AWalkEntry {

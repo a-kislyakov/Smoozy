@@ -172,7 +172,7 @@ fn main() {
     // carries the rule. A release build compiles none of it.
     #[cfg(debug_assertions)]
     if let Some(argument) = smoozy_desktop::platform::locations::throwaway::an_argument_that_names_no_folder(
-        std::env::args_os().skip(1),
+        smoozy_desktop::platform::locations::throwaway::this_launch_line(),
     ) {
         eprintln!(
             "{}",
@@ -189,7 +189,7 @@ fn main() {
     #[cfg(debug_assertions)]
     if let Some(refusal) =
         smoozy_desktop::platform::locations::throwaway::the_desk_programs_refusal(
-            std::env::args_os().skip(1),
+            smoozy_desktop::platform::locations::throwaway::this_launch_line(),
         )
     {
         eprintln!("{refusal}");
@@ -238,21 +238,19 @@ fn main() {
     // shows the rollback box and nothing else** (step 11's D6b, Rule 8: it used
     // to ask the system with nothing on screen, and end with nothing on screen
     // where the request was declined). The box is built in `setup` below.
+    // **A record that cannot be read for the phase shows its own box, with
+    // Quit alone** (2026-11-01): it used to end with nothing on screen.
     #[cfg(target_os = "linux")]
     let the_rollback_box = {
         use smoozy_desktop::updating::the_linux_package::{self as linux, TheLaunchMeets};
         match linux::what_this_launch_meets() {
-            Ok(TheLaunchMeets::Nothing) => None,
-            Ok(TheLaunchMeets::TheRollbackFinished) => std::process::exit(0),
-            Ok(TheLaunchMeets::TheBox(the_box)) => Some(Arc::new(the_box)),
-            Err(_) => {
-                eprintln!("Update installation failed.");
-                std::process::exit(1);
-            }
+            TheLaunchMeets::Nothing => None,
+            TheLaunchMeets::TheRollbackFinished => std::process::exit(0),
+            the_box => Some(the_box),
         }
     };
     #[cfg(not(target_os = "linux"))]
-    let the_rollback_box: Option<Arc<smoozy_desktop::updating::the_linux_package::TheRollbackBox>> =
+    let the_rollback_box: Option<smoozy_desktop::updating::the_linux_package::TheLaunchMeets> =
         None;
 
     tauri::Builder::default()
@@ -289,8 +287,7 @@ fn main() {
             if let Some(the_box) = the_rollback_box {
                 let queue = Arc::new(events::TheOneQueue::new());
                 app.manage(queue.clone());
-                the_box.is_posted_on(&queue, the_box.opens_failed);
-                app.manage(the_box);
+                the_box.is_posted_and_kept(app.handle(), &queue);
                 build_window(app)?;
                 if let Some(hold) = this_runs_hold.the_hold() {
                     let handle = app.handle().clone();
@@ -413,6 +410,11 @@ fn main() {
             // which is owed its token once the window is built (below).
             let owed = start::the_probe_record_is_met(&started, the_probes_token.clone());
 
+            // **Whether this start opened the record**, kept for E3's
+            // shortcut below before the start report is handed to the shell:
+            // a copy older than the record opens none and never takes the
+            // Start menu from the build that moved it forward.
+            let the_record_opened = started.record.is_some();
             app.manage(std::sync::Mutex::new(started));
 
             // **The update check, and P10's one standing timer** — Z23's check
@@ -471,7 +473,13 @@ fn main() {
             // **After the spine, because *successful start* is what E3 says**,
             // and before the window, because nothing about it can stop a window
             // opening.
-            notifications::the_machinery_is_made_at_first_start();
+            //
+            // **On Windows it also keeps that shortcut on the program running
+            // now** (E3's sentence of 2026-11-01): after Z21a's record is met
+            // above, an ordinary start whose record opened points a shortcut
+            // naming another Smoozy program here; an update launch never moves
+            // it, publication and the relaunch helper owning it then.
+            notifications::the_machinery_is_made_at_first_start(mode, the_record_opened);
 
             // **The Mac's own menu bar, filled** — `Desktop app and delivery`
             // K1 and K9, and **on macOS that is not optional**: the bar is

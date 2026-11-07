@@ -71,9 +71,11 @@ pub const THE_EARLIER_TRUST_STATEMENTS: &[ACarriedStatement] = &[];
 /// it would be believed by no copy anywhere. **The release then writes none, and
 /// says so**; it does not read the everyday key, which nothing could check yet.
 /// **From the day the master keys are carried, every release writes one**, and
-/// a missing everyday key stops the release.
+/// a missing everyday key stops the release. **The rule is the desktop's own**
+/// (`Desktop app and delivery` E10b), so a build that never checks and a
+/// release that writes no file are decided by the same line.
 pub fn this_build_can_be_updated(carried: &TheCarriedSet) -> bool {
-    !carried.recovery_keys.is_empty()
+    carried.carries_a_recovery_key()
 }
 
 /// **One row's artifact, as the release has read it.**
@@ -761,15 +763,19 @@ pub(crate) mod tests {
 
     // ------------------------------------------- what this build carries
 
-    /// **This build carries no master key, so the release writes no update
-    /// file** — the same fact the desktop's own absence test holds.
+    /// **From 2026-11-01 this build carries the Creator's two master keys, so
+    /// every release writes an update file**; a build carrying none writes
+    /// none.
     #[test]
     fn the_release_writes_an_update_file_exactly_when_the_build_carries_master_keys() {
-        assert_eq!(
-            this_build_can_be_updated(&TheCarriedSet::this_build()),
-            !THE_RECOVERY_KEYS_THIS_BUILD_CARRIES.is_empty()
-        );
+        assert_eq!(THE_RECOVERY_KEYS_THIS_BUILD_CARRIES.len(), 2);
+        assert!(this_build_can_be_updated(&TheCarriedSet::this_build()));
         assert!(this_build_can_be_updated(&a_build_carrying_the_keys()));
+        assert!(!this_build_can_be_updated(&TheCarriedSet {
+            recovery_keys: Vec::new(),
+            statement: None,
+            greatest_release_sequence_published: 0,
+        }));
     }
 
     /// **The earlier statements are below the build's own, in order, and

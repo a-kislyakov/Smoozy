@@ -58,3 +58,6 @@
 2026-10-27 — Claude Opus 5.5, step 13 words sweep, outside a round — W12 and residual 6 now carry Design's reworded screen sentences (*Could not check which servers use this key*; *This key has a passphrase and no public key file beside it.* *It cannot be checked until that file is beside it.*). Wording only. No auditor has seen this change. Appended by the build runner.
 
 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — line 323 now quotes Design's reworded Windows sentence, *Keys with a passphrase are not supported on Windows.* Wording only. No auditor has seen it. Appended by the build runner.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the real files found.md`, outside any round — U10a's bullet: a server dialog's list runs the discovery pass. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — residual 6's quotation of Design. The last words read before the release. No auditor has seen it.

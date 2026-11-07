@@ -437,6 +437,18 @@ mod on_a_desk_with_a_socket_pair {
                 }
                 return said;
             }
+            // **The driver's own version query, answered where the test put a
+            // driver on this machine** (`Server Setup` R1b's reading before a
+            // swap's run).
+            if command == "nvidia-smi --query-gpu=driver_version --format=csv,noheader"
+                && self.home.join("a-driver-answers").exists()
+            {
+                return CommandResult {
+                    output: b"570.195.03\n".to_vec(),
+                    complaint: Vec::new(),
+                    status: Some(0),
+                };
+            }
             CommandResult {
                 output: Vec::new(),
                 complaint: b"no such command here".to_vec(),
@@ -698,6 +710,56 @@ mod on_a_desk_with_a_socket_pair {
         run
     }
 
+    /// **`Server Setup` R1b, as written 2026-11-03, on the machine's own
+    /// program: a swap's run begins only where the driver gives its version and
+    /// no setup stands.** The Sesterce pass's card flipped for seven minutes over
+    /// exactly the two: a setup stopped part-way, and a driver its own removal
+    /// had taken.
+    #[tokio::test]
+    async fn a_swaps_run_does_not_begin_over_a_stopped_setup_or_with_no_driver() {
+        let Some(machine) = TheMachine::standing("swap-may-begin") else {
+            println!(
+                "SKIPPED: no OpenSSH sftp-server, or the machine's program is not built beside \
+                 this test (`cargo build -p smoozy-server`)."
+            );
+            return;
+        };
+        let (sessions, lending) = connected(&machine).await;
+        let area = machine.area.display().to_string();
+        let may_begin = || smoozy_desktop::setting_up::a_swap_may_begin(&sessions, &area, &[]);
+
+        assert!(!may_begin().await, "no driver gives a version here");
+        std::fs::write(machine.home.join("a-driver-answers"), b"").expect("a driver put on");
+        assert!(may_begin().await, "a driver answers and no setup stands");
+
+        // **A setup that changed the machine and stopped**: the state stands
+        // over a run whose ending is recorded, as the pass's did.
+        let mut fields = Fields::none()
+            .and(asked::THE_KIND_OF_SETUP_FIELD, asked::THE_READY_ACTION)
+            .and(asked::HOW_MANY_COMPOSED_BOUNDARIES_FIELD, "2");
+        for (at, boundary) in [asked::THE_BOUNDARY_STARTED, asked::THE_BOUNDARY_DONE].iter().enumerate() {
+            fields = fields.and(
+                &asked::the_field_of_item(asked::A_COMPOSED_BOUNDARY, at, asked::THE_BOUNDARY_FIELD),
+                *boundary,
+            );
+        }
+        let opening = a_request(asked::THE_SETUP_RUN_IS_OPENED_REQUEST, fields);
+        let run = opening.identity.clone();
+        machine.ask(&opening);
+        // **A run this copy drove, with no state set, stands to be carried on**
+        // (`Server Setup` S4 item 5), and another copy knows nothing of it.
+        assert!(
+            !smoozy_desktop::setting_up::a_swap_may_begin(&sessions, &area, std::slice::from_ref(&run)).await,
+            "a stopped run this copy drove would be replaced"
+        );
+        machine.ask(&a_request(
+            asked::THE_SETUP_IN_PROGRESS_IS_SET_REQUEST,
+            Fields::none().and(asked::THE_SETUP_RUN_FIELD, run.as_text()),
+        ));
+        assert!(!may_begin().await, "a setup stands, and carrying it on is the user's");
+        drop(lending);
+    }
+
     /// **A copy opened after the server was set up — so it drove no run there
     /// and no state stands — draws the setup's steps, never *No setup read
     /// from this server*** (`Server Setup` Y6a, `Server Setup` Y6b; `Open Threads`, *The Set
@@ -930,7 +992,7 @@ mod on_a_desk_with_a_socket_pair {
     }
 
     /// **`Server Setup` G2's dedicated entry point, run from the desk** — what
-    /// *Install it* runs.
+    /// *Install* runs.
     async fn install_it(
         sessions: &ThisServersSessions<AConnectionToIt>,
         ours: &OursHere,
@@ -952,7 +1014,7 @@ mod on_a_desk_with_a_socket_pair {
     /// own parts, in its order: the material composed from the record, placed
     /// through `Server Setup` G4's one vehicle with its answer handed to the
     /// told-record, then the role's state written on the ordinary path and
-    /// acknowledged. (*Install it*'s own run is tested on its own above, so it
+    /// acknowledged. (*Install*'s own run is tested on its own above, so it
     /// does not seed these tests.)
     async fn as_a_setup_with_telegram_on_leaves_it(
         sessions: &ThisServersSessions<AConnectionToIt>,
@@ -984,7 +1046,7 @@ mod on_a_desk_with_a_socket_pair {
     /// **A server set up with Telegram off, and Telegram on since: a
     /// connection owes it nothing** — it was never given Telegram, so the next
     /// connection does not bring it (the map's hole 14) — **and the card offers
-    /// *Install it***, Settings' switch being on (`Design/Server Setup § Adding
+    /// *Install***, Settings' switch being on (`Design/Server Setup § Adding
     /// Telegram to a server already set up`).
     #[tokio::test]
     async fn a_server_never_given_telegram_is_offered_install_it_and_a_connection_brings_nothing() {
@@ -1001,6 +1063,8 @@ mod on_a_desk_with_a_socket_pair {
             WhatTheTellingCameTo::NothingWasOwed
         );
         assert!(!machine.area.join("telegram-token").exists(), "nothing was placed");
+        // **`Server Setup` G2a: the page's reading, off the same machine.**
+        assert_eq!(smoozy_desktop::setting_up::the_telegram_roles_reading(&sessions, &area).await, Some(false));
         let read = the_card_as_read(&sessions, &area, None).await;
         drop(lending);
         assert_eq!(read.the_rest.as_ref().and_then(|rest| rest.the_role_is_enabled), Some(false));
@@ -1018,11 +1082,11 @@ mod on_a_desk_with_a_socket_pair {
             card["what_was_done"]
                 .as_array()
                 .is_some_and(|lines| lines.iter().any(|line| line["offer"]["act"] == "install-telegram")),
-            "the card offers Install it: {card:#}"
+            "the card offers Install: {card:#}"
         );
     }
 
-    /// **`Server Setup` G2: *Install it* on a server already set up places the
+    /// **`Server Setup` G2: *Install* on a server already set up places the
     /// material and sets the role on, and does nothing else** — and it is
     /// placed once: the next connection owes it nothing (`Telegram` L2). **And
     /// `Server Setup` Y6b: the Telegram placement replaces nothing of the ready
@@ -1069,7 +1133,7 @@ mod on_a_desk_with_a_socket_pair {
                 .as_array()
                 .is_some_and(|lines| lines.iter().any(|line| line["offer"]["act"] == "install-telegram"))
         };
-        assert!(offers(&card(read)), "the card offers Install it");
+        assert!(offers(&card(read)), "the card offers Install");
 
         let came_to = install_it(&sessions, &ours).await;
         assert!(

@@ -15,6 +15,10 @@
 //! an answer* ends the attempt and not the job. *Left stopped* and *given
 //! up* are not the kind's own endings.
 //!
+//! **K14b: a render that ends at 0 having written none of what the job owed
+//! is *failed*, in every version.** The count decides, never the printed
+//! words ([`the_outcome_against_the_count`]).
+//!
 //! **K14a: every *failed* ending carries one cause-side value beside the
 //! reason — *the machine's own*, *the file's own*, *undetermined*** — three
 //! values, `Telegram` Y4b's own three, written at the ending on the machine
@@ -38,6 +42,7 @@
 //! Y13, Y14. `Telegram` E1, Y4a, Y4b. `State, identity and recovery` §6.
 //! `Security and licence` §13.
 
+use smoozy_job_files_machine::reckoning::TheCompletenessStatement;
 use smoozy_queue_history_machine::ending::{CollectionOutcome, TheRenderKindsOwnEnding};
 
 /// **The occasions of K14's failed limb that end the attempt before the
@@ -220,8 +225,16 @@ impl BeforeTheRenderInstruction {
             BeforeTheRenderInstruction::TheAttemptRecordCouldNotBeWritten { why } => {
                 format!("could not save the attempt record: {why}")
             }
+            // **Shortened 2026-11-04** (`Design/Queue & History`): it read *the files
+            // uploaded for the geometry nodes bake folder (/ephemeral/…) could not be
+            // copied into the job's folder: this job's folder has no place for
+            // //caches/…*, and a user now reads it at once. **Where the copy found no
+            // place there is nothing further a user can use**, so nothing follows.
+            BeforeTheRenderInstruction::AnUploadedBakeCouldNotBeCopied { copy, why } if why.is_empty() => {
+                format!("could not copy {copy}")
+            }
             BeforeTheRenderInstruction::AnUploadedBakeCouldNotBeCopied { copy, why } => {
-                format!("{copy} could not be copied into the job's folder: {why}")
+                format!("could not copy {copy}: {why}")
             }
         }
     }
@@ -283,6 +296,12 @@ pub enum FailedReason {
     TheRecordedPairCouldNotBeWritten {
         why: String,
     },
+    /// **K14b: the render ended at 0 and the completeness statement found none
+    /// of what the job owed written.** *Reports 1*: 5.3 ends a scene with no
+    /// camera this way; *Reports 12* has others. **It carries nothing**: the
+    /// status is 0 by construction, and telling one such ending from another
+    /// would mean mining Blender's words (K14a).
+    NothingTheJobOwedWasWritten,
 }
 
 impl FailedReason {
@@ -295,17 +314,28 @@ impl FailedReason {
         match self {
             FailedReason::BeforeTheRenderInstruction(occasion) => occasion.in_words(),
             FailedReason::ANonZeroStatus { exit_status } => {
-                format!("Blender ended with status {exit_status}")
+                format!("Blender exited with code {exit_status}")
             }
             FailedReason::NoStatusWasReaped => {
-                "Blender ended without an exit status".to_string()
+                "Blender exited without an exit code".to_string()
+            }
+            // **Made only at an exit of 0, so it says *normally*, as K14b's
+            // reason does, and never *code 0* beside *Failed*.** *Changed
+            // 2026-11-06, the check after the last fix: it read *Blender
+            // exited with code 0 and never reported starting to render*.* A
+            // non-zero figure, which only a test makes, still says its code.
+            FailedReason::TheMarkerWasNeverObserved { exit_status: 0 } => {
+                "Blender exited normally but never reported starting to render".to_string()
             }
             FailedReason::TheMarkerWasNeverObserved { exit_status } => format!(
-                "Blender ended with status {exit_status} and never reported starting to render"
+                "Blender exited with code {exit_status} and never reported starting to render"
             ),
             FailedReason::TheRecordedPairCouldNotBeWritten { why } => format!(
                 "the render started but could not be recorded: {why}"
             ),
+            FailedReason::NothingTheJobOwedWasWritten => {
+                "Blender exited normally but wrote none of the job's files".to_string()
+            }
         }
     }
 }
@@ -314,8 +344,9 @@ impl FailedReason {
 /// up* are written by the stop path and by reconciliation and are not here.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordedOutcome {
-    /// Exit 0 and the marker observed. **Never a statement about the
-    /// outputs**: the completeness statement stands beside it.
+    /// Exit 0 and the marker observed, and not K14b's nothing written. **Never
+    /// a statement about the outputs**: the completeness statement stands
+    /// beside it.
     Finished,
     Failed {
         reason: FailedReason,
@@ -325,6 +356,21 @@ pub enum RecordedOutcome {
     /// ends the attempt and not the job, carries no completeness reading,
     /// and the release starts a fresh attempt like any other.
     HeldForAnAnswer,
+}
+
+impl RecordedOutcome {
+    /// **Whether the attempt ended before any render began**: K14's *before the
+    /// render instruction*, whether Blender was never launched or was launched and
+    /// stopped in the launch material. **The truth `Design/Queue & History`'s *Failed
+    /// before rendering.* rests on**, and it is the machine's own act rather than
+    /// anything read off a stream. *The marker was never observed* is not here, because
+    /// a marker not seen does not say none was printed.
+    pub fn no_render_began(&self) -> bool {
+        matches!(
+            self,
+            RecordedOutcome::Failed { reason: FailedReason::BeforeTheRenderInstruction(_), .. }
+        )
+    }
 }
 
 /// **K14 and K14a, performed.** The two inputs are what the attempt
@@ -384,6 +430,36 @@ pub fn classify(
             reason: FailedReason::ANonZeroStatus { exit_status },
             cause: Cause::Undetermined,
         },
+    }
+}
+
+/// **K14b, performed: the ending against the count.** [`classify`] reads what
+/// the worker reaped; this reads the completeness statement the same ending
+/// took (`Job files and outputs` C27; P1 step 9), so the walk comes before the
+/// outcome is final.
+///
+/// **It moves *finished* and nothing else**, and only where the statement stands
+/// and says the job wrote none of what it owed. **No statement is no count**
+/// (`Rented-server runtime` S13), so the exit status has classified alone. A
+/// partly written job stays *finished*, its count short beside it (`Queue &
+/// History` E3), and a job that owed nothing is not a failure.
+///
+/// **K14a's value is *undetermined***: the count cannot tell a scene with no
+/// camera from a single still on a full disk, so no cause is established and
+/// `Telegram` Y4a's button is withheld. **Nothing here looks for a camera**: that
+/// would be a safety net past Rule 8's line.
+pub fn the_outcome_against_the_count(
+    outcome: RecordedOutcome,
+    statement: Option<&TheCompletenessStatement>,
+) -> RecordedOutcome {
+    match (&outcome, statement) {
+        (RecordedOutcome::Finished, Some(statement)) if statement.none_of_what_was_owed_was_written() => {
+            RecordedOutcome::Failed {
+                reason: FailedReason::NothingTheJobOwedWasWritten,
+                cause: Cause::Undetermined,
+            }
+        }
+        _ => outcome,
     }
 }
 
@@ -582,6 +658,73 @@ mod tests {
         }
     }
 
+    fn a_statement(expected: usize, present: usize, at_zero_bytes: usize) -> TheCompletenessStatement {
+        TheCompletenessStatement {
+            expected,
+            present: vec![b"a file".to_vec(); present],
+            absent: vec![b"a file".to_vec(); expected - present - at_zero_bytes],
+            present_at_zero_bytes: vec![b"a file".to_vec(); at_zero_bytes],
+            what_the_added_write_places_produced: Vec::new(),
+        }
+    }
+
+    /// **K14b: nothing written of what was owed is *failed*, undetermined, and
+    /// maps to the render kind's own *failed*.**
+    #[test]
+    fn finished_with_none_of_what_was_owed_written_is_failed_and_undetermined() {
+        let the_failure = RecordedOutcome::Failed {
+            reason: FailedReason::NothingTheJobOwedWasWritten,
+            cause: Cause::Undetermined,
+        };
+        for statement in [a_statement(2, 0, 0), a_statement(2, 0, 2), a_statement(1, 0, 1)] {
+            assert_eq!(
+                the_outcome_against_the_count(RecordedOutcome::Finished, Some(&statement)),
+                the_failure,
+                "{statement:?}"
+            );
+        }
+        assert_eq!(
+            as_the_render_kinds_own_ending(&the_failure),
+            Some(TheRenderKindsOwnEnding::Failed)
+        );
+        assert_eq!(the_cause_on(&the_failure), Some(Cause::Undetermined));
+    }
+
+    /// **K14b's three places it does not fire, and every other outcome.**
+    #[test]
+    fn the_count_moves_only_a_finish_over_nothing_owed_and_written() {
+        for (statement, why) in [
+            (Some(a_statement(2, 1, 0)), "partly written"),
+            (Some(a_statement(2, 1, 1)), "partly written, the rest empty"),
+            (Some(a_statement(2, 2, 0)), "whole"),
+            (Some(a_statement(0, 0, 0)), "owed nothing"),
+            (None, "no statement, so no count"),
+        ] {
+            assert_eq!(
+                the_outcome_against_the_count(RecordedOutcome::Finished, statement.as_ref()),
+                RecordedOutcome::Finished,
+                "{why}"
+            );
+        }
+        let nothing_written = a_statement(2, 0, 0);
+        for outcome in [
+            RecordedOutcome::HeldForAnAnswer,
+            RecordedOutcome::Failed {
+                reason: FailedReason::ANonZeroStatus { exit_status: 1 },
+                cause: Cause::Undetermined,
+            },
+            RecordedOutcome::Failed {
+                reason: FailedReason::NoStatusWasReaped,
+                cause: Cause::TheMachinesOwn,
+            },
+        ] {
+            assert_eq!(
+                the_outcome_against_the_count(outcome.clone(), Some(&nothing_written)),
+                outcome
+            );
+        }
+    }
+
     #[test]
     fn finished_is_exit_zero_and_the_marker_observed_and_says_nothing_about_the_outputs() {
         let outcome = classify(
@@ -769,7 +912,7 @@ mod tests {
     fn an_uploaded_bake_that_could_not_be_copied_is_failed_and_undetermined() {
         let outcome = classify(
             Some(BeforeTheRenderInstruction::AnUploadedBakeCouldNotBeCopied {
-                copy: "the files uploaded for the bake output folder (/root/assets/files/a/bake)".to_string(),
+                copy: "the bake output folder //bake/".to_string(),
                 why: "No space left on device".to_string(),
             }),
             false,
@@ -779,11 +922,17 @@ mod tests {
         let RecordedOutcome::Failed { reason, .. } = &outcome else {
             panic!("{outcome:?}");
         };
+        assert_eq!(reason.in_words(), "could not copy the bake output folder //bake/: No space left on device");
         assert_eq!(
-            reason.in_words(),
-            "the files uploaded for the bake output folder (/root/assets/files/a/bake) could not be copied \
-             into the job's folder: No space left on device"
+            FailedReason::BeforeTheRenderInstruction(BeforeTheRenderInstruction::AnUploadedBakeCouldNotBeCopied {
+                copy: "the bake folder //caches/".to_string(),
+                why: String::new(),
+            })
+            .in_words(),
+            "could not copy the bake folder //caches/",
+            "the film's first job: no place, and nothing further a user can use"
         );
+        assert!(outcome.no_render_began());
     }
 
     /// **No refusal reaches a person as a type's name.** Fault 5 of step
@@ -834,7 +983,7 @@ mod tests {
                 why: "the disk is full".to_string(),
             },
             BeforeTheRenderInstruction::AnUploadedBakeCouldNotBeCopied {
-                copy: "the files uploaded for the bake output folder (/root/assets/files/a/bake)".to_string(),
+                copy: "the bake output folder //bake/".to_string(),
                 why: "No space left on device".to_string(),
             },
         ];
@@ -846,6 +995,7 @@ mod tests {
                 FailedReason::ANonZeroStatus { exit_status: 137 },
                 FailedReason::NoStatusWasReaped,
                 FailedReason::TheMarkerWasNeverObserved { exit_status: 0 },
+                FailedReason::NothingTheJobOwedWasWritten,
                 FailedReason::TheRecordedPairCouldNotBeWritten {
                     why: "the record would not take it".to_string(),
                 },
@@ -870,6 +1020,17 @@ mod tests {
                 .expect("a rendering")
                 .to_string();
             assert!(!said.contains(&the_name), "{reason:?} says its own name: {said}");
+        }
+        // **An exit at 0 never says *code 0* beside *Failed***: both of its
+        // reasons say *normally*. Added 2026-11-06, the check after the last
+        // fix.
+        for reason in [
+            FailedReason::TheMarkerWasNeverObserved { exit_status: 0 },
+            FailedReason::NothingTheJobOwedWasWritten,
+        ] {
+            let said = reason.in_words();
+            assert!(said.starts_with("Blender exited normally but "), "{reason:?} says {said}");
+            assert!(!said.contains("code 0"), "{reason:?} says {said}");
         }
         // **And each occasion's own words reach the reason unchanged**, so
         // there is one wording and not two.

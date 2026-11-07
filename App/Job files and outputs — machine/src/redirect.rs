@@ -503,6 +503,14 @@ pub fn compose_the_launch_material(
         };
         match &pair.destination.kind {
             DestinationKind::TheRegularOutputPath => {
+                // **D10a: the job's own scene's pair, and only that.** A map
+                // written before `Job files and outputs` R4 item 3's correction
+                // holds a pair for each strip scene, and the last one used to
+                // win here: the live pass on real production files, a good
+                // video ending *failed*.
+                if pair.destination.scene != crate::reading::WhichScene::TheJobsOwnScene {
+                    continue;
+                }
                 // **D10: the map decides the value, the argument delivers it.**
                 the_regular_output_path = Some(TheRegularOutputPathsArgument {
                     value: the_arguments_value(new_folder, &pair.destination),
@@ -821,6 +829,7 @@ mod tests {
     fn a_gathering_node(node: &str, at: &str, base: Option<&str>) -> Destination {
         let mut destination = a_destination(
             DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile {
+                the_effect: None,
                 node: text(node),
                 the_nodes_base_file_name: base.map(text),
                 replaced: None,
@@ -932,6 +941,40 @@ mod tests {
             material.the_regular_output_path.as_ref().unwrap().value,
             format!("{JOB_FOLDER}/f_####").into_bytes()
         );
+    }
+
+    /// **`Job files and outputs` D10a, out of the live pass on real production
+    /// files.** A map written before `Job files and outputs` R4 item 3's
+    /// correction holds a pair for a strip scene's regular output path, nine of
+    /// them on that file, and they came last: the job wrote into `tmp/` while
+    /// the count looked in the job's own scene's folder.
+    #[test]
+    fn a_strip_scenes_pair_gives_no_argument_whichever_order_the_map_holds_it_in() {
+        let own = a_destination(
+            DestinationKind::TheRegularOutputPath,
+            "/home/a/sync/board-v002.mp4",
+            WhereItComesFrom::TheScenesOutputPath,
+        );
+        let mut strips = a_destination(
+            DestinationKind::TheRegularOutputPath,
+            "/tmp/",
+            WhereItComesFrom::TheScenesOutputPath,
+        );
+        strips.scene = crate::reading::WhichScene::ReachedThroughASequencerStrip {
+            scene: crate::reading::ArtistsText::of(b"Scene.036".to_vec()),
+            strip: crate::reading::ArtistsText::of(b"Scene.036".to_vec()),
+        };
+        let version = TheVersionInHand::of(5, 3);
+        for destinations in [[own.clone(), strips.clone()], [strips.clone(), own.clone()]] {
+            let map = the_map_for(&destinations, version);
+            let material = compose_the_launch_material(&map, version, "job-7", nothing_carried());
+            let HowItMapped::UnderTheJobsFolder { new_folder, .. } = &map.the_pair_for(&own).expect("its pair").outcome else {
+                panic!("it maps");
+            };
+            let value = material.the_regular_output_path.as_ref().expect("the argument").value.clone();
+            assert_eq!(value, [new_folder.as_slice(), b"/board-v002.mp4"].concat());
+            assert!(material.assignments.is_empty(), "{:?}", material.assignments);
+        }
     }
 
     #[test]

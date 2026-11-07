@@ -738,8 +738,10 @@ export function thePanelIsOpenedOver(server, panel) {
 /// application's, keyed by server and file, and is found again when either
 /// panel is opened on the old file. A box still holding the focus is let go
 /// of first, so what it holds is handed in as any box's is when it loses the
-/// focus. The panel's own module is told nothing and stops nothing, so
-/// uploads the check started carry on in Transfers. **Where either file is not
+/// focus. The panel's own module stops nothing, so uploads the check started
+/// carry on in Transfers, and it is told only where it asks to be
+/// (`itLetsGoOfItsFile`: `Render Settings` Y15b, a range a history entry loaded,
+/// which is not something typed). **Where either file is not
 /// known** — a panel that keeps none, or one opened with none — nothing moves.
 function theOtherPanelLetsGoOfItsFile(server, panel) {
   const held = theServer(server);
@@ -752,6 +754,8 @@ function theOtherPanelLetsGoOfItsFile(server, panel) {
     const parts = held.drawn.get(other);
     const focused = document.activeElement;
     if (focused && parts.wrap.contains(focused) && typeof focused.blur === "function") focused.blur();
+    const told = panels.get(other);
+    if (told && told.itLetsGoOfItsFile) told.itLetsGoOfItsFile(server);
     thePanelIsPutAway(server, other);
   }
 }
@@ -922,7 +926,48 @@ function theCollapseControl(server) {
 
 // ── The strips ──────────────────────────────────────────────────────────────
 
+// Keep a strip's control until its click, including while a check updates it.
+let theStripPressHeld = null;
+const theStripsWaiting = new Set();
+function theStripPressEnded() {
+  if (!theStripPressHeld) return;
+  theStripPressHeld = null;
+  const waiting = Array.from(theStripsWaiting);
+  theStripsWaiting.clear();
+  // The release's click runs on the old control before its drawing is replaced.
+  Promise.resolve().then(() => waiting.forEach(theStripsAreDrawn));
+}
+document.addEventListener("pointerdown", (press) => {
+  theStripPressEnded();
+  if (press.button !== 0 || !press.target || !press.target.closest) return;
+  const control = press.target.closest('button,[role="button"]');
+  if (!control || control.disabled || control.getAttribute("aria-disabled") === "true") return;
+  for (const [server, held] of servers) {
+    if (held.strips && held.strips.contains(control)) {
+      theStripPressHeld = { server, released: false };
+      break;
+    }
+  }
+}, true);
+document.addEventListener("click", theStripPressEnded, true);
+document.addEventListener("pointercancel", theStripPressEnded, true);
+document.addEventListener("pointerup", () => {
+  if (theStripPressHeld) theStripPressHeld.released = true;
+}, true);
+for (const kind of ["pointermove", "keydown"]) {
+  document.addEventListener(kind, () => {
+    if (theStripPressHeld && theStripPressHeld.released) theStripPressEnded();
+  }, true);
+}
+if (typeof window.addEventListener === "function") {
+  window.addEventListener("blur", theStripPressEnded);
+}
+
 function theStripsAreDrawn(server) {
+  if (theStripPressHeld && theStripPressHeld.server === server) {
+    theStripsWaiting.add(server);
+    return;
+  }
   const held = theServer(server);
   if (!held.strips) {
     held.strips = document.createElement("div");

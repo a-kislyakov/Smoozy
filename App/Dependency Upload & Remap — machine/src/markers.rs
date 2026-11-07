@@ -37,7 +37,7 @@ mod tests {
     /// **Every file of this crate, counted exactly.** See
     /// [`every_file_of_this_crate`] for why the number is here rather than a
     /// floor.
-    const THE_FILE_COUNT: usize = 12;
+    const THE_FILE_COUNT: usize = 14;
 
     /// Whether a word has a clause marker's shape.
     ///

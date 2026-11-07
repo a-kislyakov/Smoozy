@@ -157,6 +157,7 @@
 Everything the document leans on here is owned by the Blender Research comparison at **_Reading a file 1_**, reached through [What a file can be asked before it renders](../../Blender%20Research/Across%20topics/What%20a%20file%20can%20be%20asked%20before%20it%20renders.md), and by [the spec's own sources file](../../Specs/Sources/File%20Browser.sources.md), which already cites it for the spec. The pieces the document names:
 
 - the two opening-text shapes, `BLENDER-v405REND` against `BLENDER17-01v0500REND` with the version digits moving — **observed**, the same in all four versions on both machines;
+- **5.3, added 2026-11-02, the 5.3 integration's piece 6:** `…v0503…`, and what a compressed save's first bytes show against a 5.2.2 control — **observed**, the 5.3.0 Beta on the Creator's Mac alone, the same question. `App/File Browser/src/blend_version.rs` was read against it and takes no version table;
 - **that a future header shape is a documented possibility rather than a guess** — [L8](../File%20Browser.md#13-the-blend-version-row-182)'s *5.0's release notes say outright that parsers have to be updated when the header changes* is *Reading a file 1*'s own reading of those release notes;
 - the from-5.0 compression, and that outside tools can undo it — **documented**, the same question;
 - that no version's documentation describes the file's inside;

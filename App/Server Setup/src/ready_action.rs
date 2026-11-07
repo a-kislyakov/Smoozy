@@ -102,6 +102,11 @@ pub struct WhatTheMachineNeeds {
     /// the driver step itself, and false everywhere else, so a run that would
     /// make no swap pays no reading for it.
     pub anything_is_live: bool,
+    /// **R1 item 5's reading of what the package system holds of a driver**,
+    /// added 2026-11-03. Taken by the driving at the driver step, where the
+    /// check failed and no restart is owed, and
+    /// [`crate::readings::WhatTheDriverPackagesSay::NotRead`] everywhere else.
+    pub the_driver_packages: crate::readings::WhatTheDriverPackagesSay,
 }
 
 /// **R1 item 5's bar, for the Blender a run installs**, as the version text the
@@ -184,7 +189,7 @@ pub fn the_driver_is_below_the_bar(
 ///
 /// **All four stand, or nothing is held:**
 ///
-/// - **its launch would name `OPTIX`** — a cards job on an NVIDIA machine
+/// - **its launch would name `OPTIX`** — a Cycles job on the cards on an NVIDIA machine
 ///   (`Rendering` L21, `Rendering` L23), read from the resolved device choice
 ///   the submission carries; a job whose device is not known at submission is
 ///   not held, and the caller passes false for it;
@@ -480,6 +485,13 @@ pub enum WhatTheDriverStepDoes {
     /// the family's route reached 535 there (§13 item 28), and a driver below
     /// the bar on that family is recorded as having missed it.
     TheSwapUpToTheBar,
+    /// **The check failed, and the package system holds a driver's kernel half
+    /// with no driver package on it: a removal stopped part-way, and it is
+    /// finished** ([`crate::elevated::THE_UBUNTU_DRIVER_SWAPS_FINISH`]), then
+    /// the check again. Added 2026-11-03, R1 item 5, out of the Sesterce live
+    /// pass, where the detection route read *done* over such a machine and
+    /// restarted it for no gain. **Ubuntu alone**, as the swap is.
+    TheStoppedRemovalIsFinished,
 }
 
 /// **R1 item 5, performed — and it is the one place the clause's order is
@@ -512,10 +524,14 @@ pub fn what_the_driver_step_does(needs: &WhatTheMachineNeeds) -> WhatTheDriverSt
         return WhatTheDriverStepDoes::NothingTheCheckAnswered;
     }
     if needs.a_driver_is_already_installed {
-        WhatTheDriverStepDoes::TheRestartBeforeAnyInstall
-    } else {
-        WhatTheDriverStepDoes::TheDistributionsOwnDetectionRoute
+        return WhatTheDriverStepDoes::TheRestartBeforeAnyInstall;
     }
+    if matches!(needs.family, DistributionFamily::Ubuntu)
+        && needs.the_driver_packages == crate::readings::WhatTheDriverPackagesSay::AKernelHalfIsLeftBehind
+    {
+        return WhatTheDriverStepDoes::TheStoppedRemovalIsFinished;
+    }
+    WhatTheDriverStepDoes::TheDistributionsOwnDetectionRoute
 }
 
 /// **R1 item 1: card presence, read from the bus scan and the driver's own
@@ -815,7 +831,42 @@ mod tests {
             the_drivers_version: None,
             the_optix_bar: None,
             anything_is_live: false,
+            the_driver_packages: crate::readings::WhatTheDriverPackagesSay::NotRead,
         }
+    }
+
+    /// **R1 item 5, as written 2026-11-03**: a kernel half with no driver
+    /// package is finished, on Ubuntu, and only where no restart is owed and
+    /// the driver does not answer. Everything else goes as it did.
+    #[test]
+    fn a_stopped_removal_is_finished_and_every_other_reading_goes_as_it_did() {
+        use crate::readings::WhatTheDriverPackagesSay as Say;
+        let on = |family, installed, says| WhatTheMachineNeeds {
+            family,
+            a_driver_is_already_installed: installed,
+            the_driver_packages: says,
+            ..a_bare_systemd_machine()
+        };
+        let does = |needs: WhatTheMachineNeeds| what_the_driver_step_does(&needs);
+        let ubuntu = DistributionFamily::Ubuntu;
+        assert_eq!(
+            does(on(ubuntu, false, Say::AKernelHalfIsLeftBehind)),
+            WhatTheDriverStepDoes::TheStoppedRemovalIsFinished
+        );
+        for says in [Say::ADriverPackageStands, Say::NoDriverPackage, Say::NotRead] {
+            assert_eq!(
+                does(on(ubuntu, false, says)),
+                WhatTheDriverStepDoes::TheDistributionsOwnDetectionRoute
+            );
+        }
+        assert_eq!(
+            does(on(ubuntu, true, Say::AKernelHalfIsLeftBehind)),
+            WhatTheDriverStepDoes::TheRestartBeforeAnyInstall
+        );
+        assert_eq!(
+            does(on(DistributionFamily::Debian, false, Say::AKernelHalfIsLeftBehind)),
+            WhatTheDriverStepDoes::TheDistributionsOwnDetectionRoute
+        );
     }
 
     #[test]

@@ -321,6 +321,10 @@ impl WhyTheButtonsStayed {
     }
 }
 
+/// **On a companion's Stop record: the message holds nothing but this button**
+/// (`Telegram` C1b's line of 2026-11-02).
+const THE_MESSAGE_SAYS_ONLY_THIS: &str = "the_message_says_only_its_stop";
+
 /// **Whether an edit taking buttons off is done.** A crash after the edit but
 /// before its durable mark replays the same markup, which Telegram answers
 /// *not modified*; a deleted message has no control left to remove.
@@ -386,13 +390,34 @@ impl TheJobMessages {
                 json!([if label == "Stop this job" { json!({"text": label, "callback_data": r.token, "style": "danger"}) } else { json!({"text": label, "callback_data": r.token}) }])
             }).collect();
             let conversation = self.conversation;
-            let result = send_and_wait(
-                &self.queue,
-                AClassOfSend::EndingsHoldsAndDrops,
-                Box::new(move |c: &TheClient| c.edit_message_reply_markup(conversation, message, json!({ "inline_keyboard": rows }))),
-            );
-            if !the_edit_is_done(&result) {
-                return Err(format!("Stop controls on message {message} could not be removed: {result:?}"));
+            // **`Telegram` C1b's line of 2026-11-02: a companion says nothing but
+            // its Stop, so it goes when its Stop goes.** Read from its durable
+            // record, so a restart deletes it too. **Where Telegram refuses, a
+            // message 48 hours old or more (B18), its button still goes below.**
+            let a_companion = kept.is_empty()
+                && removing
+                    .iter()
+                    .any(|r| r.source_message == Some(message) && r.payload[THE_MESSAGE_SAYS_ONLY_THIS] == json!(true));
+            let deleted = a_companion.then(|| {
+                send_and_wait(
+                    &self.queue,
+                    AClassOfSend::EndingsHoldsAndDrops,
+                    Box::new(move |c: &TheClient| c.delete_an_albums_companion(conversation, message)),
+                )
+            });
+            match &deleted {
+                None | Some(HowASendEnded::HandedBack(WhyTheCallFailed::Refused(_))) => {
+                    let result = send_and_wait(
+                        &self.queue,
+                        AClassOfSend::EndingsHoldsAndDrops,
+                        Box::new(move |c: &TheClient| c.edit_message_reply_markup(conversation, message, json!({ "inline_keyboard": rows }))),
+                    );
+                    if !the_edit_is_done(&result) {
+                        return Err(format!("Stop controls on message {message} could not be removed: {result:?}"));
+                    }
+                }
+                Some(HowASendEnded::Accepted(_)) => {}
+                Some(other) => return Err(format!("The companion {message} could not be deleted: {other:?}")),
             }
             for record in removing.iter().filter(|r| r.source_message == Some(message)) {
                 let mut marked = (*record).clone();
@@ -634,6 +659,28 @@ impl TheJobMessages {
         self.send_with_buttons_in(&composed, subject, class)
     }
 
+    /// **C1b's short companion, after an album, which cannot carry a button
+    /// itself**: the machine, the job and the frame, with *Stop this job*. **Its
+    /// Stop's durable record says it holds nothing else**, which is how the
+    /// removal knows to delete it (C1b's line of 2026-11-02). **A subject with
+    /// no job is never live, so nothing is sent**: there would be nothing to say.
+    pub fn send_a_companion(
+        &mut self,
+        text: AMarkedText,
+        subject: &TheSubject,
+        server: &(impl TheServersName + ?Sized),
+        label: &str,
+        class: AClassOfSend,
+    ) -> Result<(), WhyAMessageWasNotSent> {
+        if subject.job.is_none() {
+            return Ok(());
+        }
+        let mut stop = a_stop_to_offer(server, label, false);
+        stop.payload[THE_MESSAGE_SAYS_ONLY_THIS] = json!(true);
+        self.send_with_buttons_in(&AComposedMessage { text, buttons: vec![stop] }, subject, class)
+            .map(|_| ())
+    }
+
     /// **C1b at composition**: Stop where `live`, none where the job has
     /// ended, the message's other actions kept either way.
     pub fn send_about_while(
@@ -697,18 +744,9 @@ impl TheJobMessages {
         class: AClassOfSend,
     ) -> Result<(), WhyAMessageWasNotSent> {
         match ended {
-            HowASendEnded::Accepted(result) if result.is_array() => self
-                .send_about_in(
-                    &AComposedMessage {
-                        text: companion.into(),
-                        buttons: vec![],
-                    },
-                    subject,
-                    server,
-                    label,
-                    class,
-                )
-                .map(|_| ()),
+            HowASendEnded::Accepted(result) if result.is_array() => {
+                self.send_a_companion(companion.into(), subject, server, label, class)
+            }
             _ => match accepted_id(ended) {
                 Some(message) => self.attach_a_stop(message, subject, server, label, class),
                 None => Ok(()),
@@ -1842,6 +1880,8 @@ mod tests {
             complaints: ACollectionOutcome::CollectedAndTheStreamWasEmpty,
             cause,
             disk_free_at_the_ending: None,
+            no_render_began: false,
+            the_reason_the_machine_recorded: None,
         }
     }
 

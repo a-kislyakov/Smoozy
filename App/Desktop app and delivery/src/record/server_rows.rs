@@ -65,7 +65,7 @@ const EVERY_COLUMN: &str = "identifier, host, port, username, key_identifier, ke
      last_confirmed_installation_identity, event_cursor, machine_password_subject,
      chosen_fallback_folder,
      hardware_driver_version, hardware_driver_cuda_version, hardware_driver_placed,
-     driver_missed_the_optix_bar";
+     driver_missed_the_optix_bar, hardware_no_optix_library";
 
 /// Every server row, in the order they were added.
 ///
@@ -132,6 +132,7 @@ pub fn one(
                     hardware_driver_cuda_version: row.get(27)?,
                     hardware_driver_placed: row.get(28)?,
                     driver_missed_the_optix_bar: row.get::<_, i64>(29)? != 0,
+                    hardware_no_optix_library: row.get::<_, i64>(30)? != 0,
                 })
             },
         )
@@ -246,6 +247,7 @@ struct Flat {
     hardware_driver_cuda_version: Option<String>,
     hardware_driver_placed: Option<String>,
     driver_missed_the_optix_bar: bool,
+    hardware_no_optix_library: bool,
 }
 
 /// The row creation — the single durable write of an add.
@@ -254,7 +256,7 @@ pub fn add(connection: &rusqlite::Connection, row: &ServerRow) -> Result<(), Rec
         &format!(
             "INSERT INTO server_row ({EVERY_COLUMN}) VALUES
              (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
-              ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30)"
+              ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31)"
         ),
         rusqlite::params_from_iter(the_values(row).iter()),
     )?;
@@ -286,7 +288,8 @@ pub fn write(connection: &rusqlite::Connection, row: &ServerRow) -> Result<(), R
                 chosen_fallback_folder = ?26,
                 hardware_driver_version = ?27, hardware_driver_cuda_version = ?28,
                 hardware_driver_placed = ?29,
-                driver_missed_the_optix_bar = ?30
+                driver_missed_the_optix_bar = ?30,
+                hardware_no_optix_library = ?31
              WHERE identifier = ?1",
             rusqlite::params_from_iter(the_values(row).iter()),
         )?;
@@ -404,6 +407,9 @@ fn the_values(row: &ServerRow) -> Vec<Box<dyn rusqlite::ToSql>> {
         Box::new(the_driver.and_then(|driver| driver.cuda_version.clone())),
         Box::new(the_driver.map(|driver| placed_as_text(driver.where_k1_placed_the_machine))),
         Box::new(i64::from(row.the_driver_missed_the_optix_bar)),
+        // **`Servers` H11b's OptiX-library bullet, record version 58**: part of
+        // the reading, so a row with no reading writes nought.
+        Box::new(i64::from(reading.is_some_and(|reading| reading.the_optix_library_is_missing))),
     ]
 }
 
@@ -537,7 +543,8 @@ fn the_reading(
         moment(desktop_moment),
         flat.hardware_read_under.clone(),
     )
-    .with_the_driver(the_driver_of(flat))))
+    .with_the_driver(the_driver_of(flat))
+    .with_the_optix_library_missing(flat.hardware_no_optix_library)))
 }
 
 fn setup_options(
@@ -1150,6 +1157,41 @@ mod tests {
             .expect("read")
             .expect("the row");
         assert_eq!(back.remembered_hardware_reading.expect("the reading").the_driver, None);
+    }
+
+    /// **`Servers` H11b's OptiX-library bullet: the missing library is part of
+    /// the held reading**, so it comes back with it and goes with it — a later
+    /// reading whose loader found the library leaves no mark behind (H4).
+    /// Added 2026-11-02, record version 58.
+    #[test]
+    fn a_missing_optix_library_comes_back_with_the_reading_and_goes_with_it() {
+        let record = a_record("the-optix-library");
+        let mut row = a_row();
+        let with_the_driver = |row: &ServerRow| {
+            a_reading(&row.local_server_identifier).with_the_driver(Some(a_driver(
+                "580.178.04",
+                Some("13.0"),
+                WhereK1PlacesIt::AContainer,
+            )))
+        };
+        row.remembered_hardware_reading = Some(with_the_driver(&row).with_the_optix_library_missing(true));
+        add(record.connection(), &row).expect("added");
+        let missing = |record: &LocalRecord| {
+            one(record.connection(), &row.local_server_identifier)
+                .expect("read")
+                .expect("the row")
+                .remembered_hardware_reading
+                .expect("the reading")
+                .the_optix_library_is_missing
+        };
+        assert!(missing(&record), "the add carries it");
+        let mut again = row.clone();
+        again.remembered_hardware_reading = Some(with_the_driver(&row));
+        write(record.connection(), &again).expect("written");
+        assert!(!missing(&record), "a reading that found the library replaces it");
+        again.remembered_hardware_reading = Some(with_the_driver(&row).with_the_optix_library_missing(true));
+        write(record.connection(), &again).expect("written");
+        assert!(missing(&record), "a whole-row write carries it");
     }
 
     /// **A driver part that cannot say where the machine was placed is no

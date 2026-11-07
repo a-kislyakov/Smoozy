@@ -9,6 +9,9 @@ edition.workspace = true
 tauri-build.workspace = true
 
 [dependencies]
+# `Render Settings` Q4: serialize saved library pairs on Read the file.
+# Already pinned in the workspace and present in this crate’s dependency tree.
+serde_json.workspace = true
 # Always use the packaged page. A development context stores the builder's
 # configuration folder as a runtime string, beyond rustc's source-path remap.
 tauri = { workspace = true, features = ["custom-protocol"] }
@@ -135,8 +138,11 @@ windows-sys = { workspace = true, features = [
 # **The notification service's Windows third** — `Desktop app and delivery`
 # §13 and §19 E3. It is the crate the shell is already built on, so it is no
 # new package; the reasoning and the correction it carries are at the workspace
-# manifest.
-windows.workspace = true
+# manifest. **One switch added on this crate's own line, 2026-11-01** (E3's
+# shortcut following the running program): `IShellLinkW::GetPath`, which reads
+# the shortcut's target back, sits behind `Win32_Storage_FileSystem` for its
+# find-data argument. No package is added, so `App/Cargo.lock` does not move.
+windows = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # The folder-reveal service's Linux third — `Desktop app and delivery` K21's
@@ -174,12 +180,6 @@ futures-util.workspace = true
 # with no key beside it and nothing saying why. `src/menus.rs` parses each one
 # with the same library the shell uses.
 muda.workspace = true
-# **Tests only, added at step 10c's ninth-pass fix piece 1.** The stand-in
-# machine in `src/servers/a_period.rs`'s tests writes the recorded reading the
-# render worker writes, and it writes it the way the worker does. **No new
-# outside dependency**: it is the workspace's own pin, already in this crate's
-# tree beneath `smoozy-job-files`, so no version moves.
-serde_json.workspace = true
 # **Tests only, added at step 10c's twelfth-pass fix piece 6b.** The stand-in
 # machine in `tests/through_the_servers_own_point.rs` holds a `.blend` saved
 # compressed, as Blender 5 saves one by default, so the version tag is read

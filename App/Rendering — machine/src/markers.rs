@@ -38,8 +38,9 @@ pub(crate) mod tests {
     /// floor. **21 from 2026-10-02**, when simulation fix piece 4 added
     /// `src/load_time.rs` and `src/acting/load_time.rs` for L8b. **23 from
     /// 2026-10-17**, when owed piece 8 of step 10c added
-    /// `src/acting/simplify_at_the_desk.rs`.
-    const THE_FILE_COUNT: usize = 23;
+    /// `src/acting/simplify_at_the_desk.rs`. **27 from 2026-11-04**, when
+    /// `src/acting/a_reading_sees_its_libraries_at_the_desk.rs` was added.
+    const THE_FILE_COUNT: usize = 27;
 
     /// Whether a word has a clause marker's shape.
     ///

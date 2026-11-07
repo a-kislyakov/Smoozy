@@ -1021,6 +1021,7 @@ fn the_document_a_reading_prints(frames: std::ops::RangeInclusive<i64>) -> Strin
     // **No compositing tree at all**: the raw render lands at the regular
     // output path and no walk is needed (`Job files and outputs` B5).
     let gating = GatingConditions {
+        the_effects_on_for_render: None,
         compositing_switch: true,
         a_compositing_tree_is_present: false,
         a_live_final_output_node: false,
@@ -1032,6 +1033,8 @@ fn the_document_a_reading_prints(frames: std::ops::RangeInclusive<i64>) -> Strin
     let (first, last) = (*frames.start(), *frames.end());
     let count = u32::try_from(last - first + 1).unwrap_or(1);
     let scene = SceneReading {
+        prepare_simulations: None,
+            motion_blur: None,
         name: ExactName::as_the_reading_produced_it("Scene"),
         frame_start: first,
         frame_end: last,
@@ -1049,6 +1052,7 @@ fn the_document_a_reading_prints(frames: std::ops::RangeInclusive<i64>) -> Strin
             minimum: 0,
         },
         time_limit: 0.0,
+        eevee_time_limit: None,
         layer_samples_rule: LayerSamplesRule::Use,
         saved_with: "5.2.0".to_string(),
         view_layers: vec![ViewLayerReading {
@@ -1108,6 +1112,7 @@ fn the_document_a_reading_prints(frames: std::ops::RangeInclusive<i64>) -> Strin
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_folders_at_the_machines_top: None,
             })
             .expect("the settings half renders"),
         ),

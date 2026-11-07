@@ -2118,6 +2118,13 @@ mod on_a_desk_with_a_socket_pair {
             (THE_BUS_SCAN.to_string(), ended_cleanly("")),
             (THE_DRIVER_CHECK.to_string(), it_refused()),
             (THE_PER_CARD_QUERY.to_string(), it_refused()),
+            // **`Server Setup` R1 item 5's reading of 2026-11-03**: a driver
+            // package stands, so the route goes as it always did, and every
+            // test here that means otherwise says so.
+            (
+                smoozy_server_setup::elevated::THE_DRIVER_PACKAGES_READING.as_str().to_string(),
+                ended_cleanly("a driver stands\n"),
+            ),
             // **`Server Setup` R1 item 3's probe**, answered the way the
             // package system's own manual says it answers for a package the
             // database does not hold: *"1 The requested query failed either
@@ -3015,6 +3022,15 @@ mod on_a_desk_with_a_socket_pair {
                             THE_EXIT_THAT_MEANS_A_DRIVER_IS_INSTALLED_AND_NOT_LOADED,
                     ),
                 });
+            }
+            if asked == smoozy_server_setup::elevated::THE_DRIVER_PACKAGES_READING.as_str() {
+                // **`Server Setup` R1 item 5's reading, answered from what this
+                // machine holds.**
+                return Some(ended_cleanly(if self.driver_packages.is_empty() {
+                    ""
+                } else {
+                    "a driver stands\n"
+                }));
             }
             if asked.contains("modprobe") {
                 // **The running kernel's own module directory, and nothing
@@ -4318,6 +4334,108 @@ mod on_a_desk_with_a_socket_pair {
         assert_eq!(left.queue_readings, 2, "the live set is read before the swap and at the last guard");
     }
 
+    /// **What the Sesterce pass's machine answered after the swap's removal
+    /// stopped**: a card, no `nvidia-smi`, and the kernel half standing.
+    fn a_machine_a_removal_stopped_on() -> Vec<(String, CommandResult)> {
+        let mut script = the_driver_answers(
+            a_machine_with_a_card_and_no_driver(),
+            CommandResult {
+                output: Vec::new(),
+                complaint: b"bash: line 1: nvidia-smi: command not found\n".to_vec(),
+                status: Some(127),
+            },
+        );
+        let reading = smoozy_server_setup::elevated::THE_DRIVER_PACKAGES_READING.as_str().to_string();
+        script.retain(|(named, _)| *named != reading);
+        script.push((reading, ended_cleanly("nvidia-dkms-570-open\nnvidia-kernel-source-570-open\n")));
+        script
+    }
+
+    /// **`Server Setup` R1 item 5, as written 2026-11-03: *Set up again* on a
+    /// half-removed driver finishes the removal, installs, restarts and reaches
+    /// *done*** — through the whole run, with no detection route. Until then this
+    /// machine read *done* after *0 upgraded*, restarted, and failed its check.
+    #[test]
+    fn a_setup_on_a_half_removed_driver_finishes_the_removal_and_reaches_done() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        let scratch = Scratch::new("half-removed");
+        let finish = smoozy_server_setup::elevated::THE_UBUNTU_DRIVER_SWAPS_FINISH.elevated.as_str().to_string();
+        let mismatch = CommandResult {
+            output: b"Failed to initialize NVML: Driver/library version mismatch\n".to_vec(),
+            complaint: Vec::new(),
+            status: Some(18),
+        };
+        let left = the_restart_is_driven_in_full(
+            &scratch,
+            sftp_server,
+            AfterTheRestart::TheMachineAnswers,
+            a_machine_a_removal_stopped_on(),
+            TheRestartCommand::AnswersAndThenDrops,
+            None,
+            AndBeside {
+                came_back_also_says: vec![(THE_VERSION_QUERY.to_string(), ended_cleanly("580.178.04\n"))],
+                changes_the_script: Some(TheSlowCommand {
+                    command: finish.clone(),
+                    how_long: std::time::Duration::from_millis(1),
+                    after_it: the_driver_answers(Vec::new(), mismatch),
+                    the_user_stops_as_it_starts: None,
+                    the_machine_ends_the_run_as_it_starts: false,
+                    what_became_of_it: Arc::new(Mutex::new(Vec::new())),
+                }),
+                ..AndBeside::default()
+            },
+        );
+        let finished = left.asked.iter().position(|said| *said == finish);
+        let restart = left.asked.iter().position(|said| said.contains("systemctl reboot"));
+        assert!(finished.is_some() && finished < restart, "no finish before the restart: {:?}", left.asked);
+        assert!(
+            !left.asked.iter().any(|said| said.contains("ubuntu-drivers install")),
+            "the detection route went out over a stopped removal: {:?}",
+            left.asked
+        );
+        assert!(
+            matches!(left.came_to, WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }),
+            "{:?}",
+            left.came_to
+        );
+    }
+
+    /// **`Server Setup` R1 item 5, as written 2026-11-03: a finish that fails
+    /// ends the step in its words, and the machine is not restarted.**
+    #[test]
+    fn a_finish_that_fails_ends_the_step_and_restarts_nothing() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        let scratch = Scratch::new("half-removed-refused");
+        let finish = smoozy_server_setup::elevated::THE_UBUNTU_DRIVER_SWAPS_FINISH.elevated.as_str().to_string();
+        let mut script = a_machine_a_removal_stopped_on();
+        script.push((
+            finish.clone(),
+            CommandResult {
+                output: Vec::new(),
+                complaint: b"E: Unable to correct problems\n".to_vec(),
+                status: Some(100),
+            },
+        ));
+        let left = the_restart_is_driven_in_full(
+            &scratch,
+            sftp_server,
+            AfterTheRestart::TheMachineAnswers,
+            script,
+            TheRestartCommand::AnswersAndThenDrops,
+            None,
+            AndBeside::default(),
+        );
+        assert!(!left.asked.iter().any(|said| said.contains("systemctl reboot")), "{:?}", left.asked);
+        match &left.came_to {
+            WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::AStepFailed { said, .. }, .. } => {
+                assert!(said.contains("Unable to correct problems"), "{said}");
+            }
+            other => panic!("the step did not fail in its words: {other:?}"),
+        }
+    }
+
     /// **`Server Setup` R1b: where anything is waiting on the server, the swap
     /// is not made in this run, and it waits** — no swap, no restart, no
     /// machine-level state set for it, *driver placed* marked *nothing to do*,
@@ -5334,9 +5452,10 @@ mod on_a_desk_with_a_socket_pair {
             assert!(panel.set_up_again.is_some(), "retry stays available");
             assert!(panel.steps.iter().any(|step| step.the_failure.is_some()), "the failed step stays visible");
             let paragraph = panel.the_closing_paragraph.expect("the available action is explained");
-            assert_eq!(paragraph.the_controls_name, smoozy_desktop::typography::Prose::new(
-                if holds_the_machine { "Abandon setup" } else { "Set up again" }
-            ));
+            assert_eq!(
+                paragraph.the_controls_name,
+                holds_the_machine.then(|| smoozy_desktop::typography::Prose::new("Abandon setup"))
+            );
         }
     }
 

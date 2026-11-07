@@ -175,6 +175,9 @@ mod on_a_desk_with_a_socket_pair {
         /// requests as they are sent — the 38's piece 7, so a send that
         /// carries on can be told from one that starts over.
         bytes_written: std::sync::atomic::AtomicU64,
+        many_values: Mutex<Vec<usize>>,
+        single_values: AtomicUsize,
+        refuses_many_values: AtomicBool,
     }
 
     impl AMachine {
@@ -326,6 +329,7 @@ mod on_a_desk_with_a_socket_pair {
             // answered from the file the planted link names, in GNU `stat`'s
             // four fields.
             if let Some(link) = command.as_str().strip_prefix("stat -L -c '%s %i %Y %Z' ~/") {
+                self.single_values.fetch_add(1, Ordering::SeqCst);
                 use std::os::unix::fs::MetadataExt;
                 let Ok(found) = std::fs::metadata(self.home.join(link)) else {
                     return nothing;
@@ -350,6 +354,21 @@ mod on_a_desk_with_a_socket_pair {
                 return nothing;
             };
             let answered = Answered::to(&request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "0.1.0");
+            if request.name == asked::THE_FOUR_VALUES_OF_FILES_REQUEST
+                && !self.refuses_many_values.load(Ordering::SeqCst)
+            {
+                use std::os::unix::fs::MetadataExt;
+                let paths = asked::the_paths_read_back(request.fields.value(asked::THE_PATHS_READ_FIELD).expect("paths"));
+                self.many_values.lock().expect("asks").push(paths.len());
+                let answers: Vec<_> = paths.iter().map(|path| {
+                    match std::fs::metadata(std::ffi::OsStr::from_bytes(path)) {
+                        Ok(m) => asked::OnePathAnswered::Values { size: m.size(), inode: m.ino(), modification_time: m.mtime(), change_time: m.ctime() },
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => asked::OnePathAnswered::NothingThere,
+                        Err(e) => asked::OnePathAnswered::NotRead(e.to_string()),
+                    }
+                }).collect();
+                return CommandResult { output: write_result_frame(&answered.carrying(Fields::none().and(asked::THE_VALUES_READ_FIELD, asked::the_values_written(&answers)))), complaint: Vec::new(), status: Some(0) };
+            }
             // **The 38's piece 7: the contents reading**, digested here by the
             // desktop's own digest, which is the function the machine's own
             // program computes (`Server protocol and transfers` S23).
@@ -735,6 +754,9 @@ mod on_a_desk_with_a_socket_pair {
             stops_asked: Mutex::new(Vec::new()),
             fixings_fail: AtomicBool::new(false),
             bytes_written: std::sync::atomic::AtomicU64::new(0),
+            many_values: Mutex::new(Vec::new()),
+            single_values: AtomicUsize::new(0),
+            refuses_many_values: AtomicBool::new(false),
         });
         let record = TheRecord(Mutex::new(
             LocalRecord::open_at(&scratch.at.join("record.sqlite3")).expect("the record opens"),
@@ -1151,6 +1173,9 @@ mod on_a_desk_with_a_socket_pair {
             stops_asked: Mutex::new(Vec::new()),
             fixings_fail: AtomicBool::new(false),
             bytes_written: std::sync::atomic::AtomicU64::new(0),
+            many_values: Mutex::new(Vec::new()),
+            single_values: AtomicUsize::new(0),
+            refuses_many_values: AtomicBool::new(false),
         });
         let record = Arc::new(TheRecord(Mutex::new(
             LocalRecord::open_at(&scratch.at.join("record.sqlite3")).expect("the record opens"),
@@ -1900,9 +1925,21 @@ mod on_a_desk_with_a_socket_pair {
             rows.iter().all(|row| row.0 == RowState::FoundOnYourComputer),
             "{rows:#?}"
         );
+        // **`Dependency Upload & Remap` F28's line of 2026-11-02: each row counts
+        // and sizes what goes, and the count is the send's own** (the first 5.3
+        // live pass read *Upload 1 file (0 bytes)* for a bake folder of two).
+        let figures: Vec<(Option<usize>, Option<u64>)> = {
+            let held = desk.held.lock().expect("the run");
+            held.sittings[&keyed_as(&of)].rows.iter().map(|row| (row.members, row.size)).collect()
+        };
+        let cache_bytes: u64 = (0..3u64).map(|at| 40_000 + 313 * at).sum();
+        assert!(figures.contains(&(Some(3), Some(cache_bytes))), "{figures:?}");
+        assert!(figures.contains(&(Some(2), Some(12 + 9_000))), "{figures:?}");
+        let counted: usize = figures.iter().filter_map(|(files, _)| *files).sum();
 
         let sent = a_send_on(&desk, &of, None, false);
         println!("FOLDERS SENT: {sent:?}");
+        assert_eq!(sent.published, counted, "what the page counted is what went");
         let rows = the_rows_on(&desk, &of);
         assert!(
             rows.iter().all(|row| row.0 == RowState::AlreadyOnTheMachine),
@@ -1971,6 +2008,160 @@ mod on_a_desk_with_a_socket_pair {
         assert!(confirmed, "Confirm did nothing on a folder row");
         assert_eq!(the_rows_on(&desk, &of)[at].0, RowState::AlreadyOnTheMachine);
         std::fs::rename(&away, &cache).expect("the folder is put back");
+    }
+
+    /// `Dependency Upload & Remap` Q5 route 1 and Q7: exercise the complete send,
+    /// the placement identities, folder confirmation, and an older program.
+    /// Timings are local OpenSSH subsystem sessions, with no artificial latency.
+    #[test]
+    fn a_bake_folders_publications_and_confirm_are_gathered() {
+        for legacy in [false, true] {
+            let scratch = Scratch::new(if legacy {
+                "bake-many-legacy"
+            } else {
+                "bake-many"
+            });
+            let project = scratch.at.join("project");
+            let cache = project.join("bake");
+            std::fs::create_dir_all(&cache).unwrap();
+            let root = project.join("scene.blend");
+            std::fs::write(&root, b"blend").unwrap();
+            let files = if legacy { 9 } else { 320 };
+            for n in 0..files {
+                std::fs::write(
+                    cache.join(format!("{n:04}.blob")),
+                    vec![(n % 251) as u8; 1024 + n],
+                )
+                .unwrap();
+            }
+            let document = serde_json::json!({
+                "references": [{"kind": "GeometryNodeBakeFolder", "datablock": "Bake", "setting": "directory", "recorded": b"//bake/".to_vec(), "scenes": {"Established": ["Scene"]}, "source": null}],
+                "flat_list": [], "weak_references": [], "observed_stand_ins": []
+            });
+            let documents = BTreeMap::from([(bytes_of(&root), serde_json::to_vec(&document).unwrap())]);
+            let desk =
+                a_desk(&scratch, HowItReads::FromAScript(documents)).expect("OpenSSH's subsystem");
+            desk.machine
+                .refuses_many_values
+                .store(legacy, Ordering::SeqCst);
+            let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+            desk.machine.single_values.store(0, Ordering::SeqCst);
+            desk.machine.many_values.lock().unwrap().clear();
+            let start = std::time::Instant::now();
+            let sent = a_send_on(&desk, &of, None, false);
+            let elapsed = start.elapsed();
+            assert_eq!(
+                (sent.published, sent.failed, sent.did_not_finish),
+                (files, 0, 0)
+            );
+            let singles = desk.machine.single_values.load(Ordering::SeqCst);
+            let asks = desk.machine.many_values.lock().unwrap().clone();
+            println!(
+                "BAKE SEND legacy={legacy}: {files} files, {} bytes, {:.3} s, {:.1} files/s, {singles} single reads, groups {asks:?}",
+                (0..files).map(|n| 1024 + n).sum::<usize>(),
+                elapsed.as_secs_f64(),
+                files as f64 / elapsed.as_secs_f64()
+            );
+            // Every placement belongs to its own bytes and filesystem identity.
+            let placements = TheDependencyRecord::over(desk.record.0.lock().unwrap().connection())
+                .the_placements_on(&desk.machine_key)
+                .unwrap();
+            assert_eq!(placements.len(), files);
+            for placement in placements {
+                use std::os::unix::fs::MetadataExt;
+                let m = std::fs::metadata(std::ffi::OsStr::from_bytes(
+                    placement.mirrored_location.as_bytes(),
+                ))
+                .unwrap();
+                assert_eq!(placement.four_values_at_publication.size, m.size());
+                assert_eq!(
+                    placement.four_values_at_publication.inode,
+                    m.ino().to_string()
+                );
+                assert_eq!(
+                    std::fs::read(std::ffi::OsStr::from_bytes(
+                        placement.mirrored_location.as_bytes()
+                    ))
+                    .unwrap(),
+                    std::fs::read(std::ffi::OsStr::from_bytes(
+                        placement.source_location.as_bytes()
+                    ))
+                    .unwrap()
+                );
+            }
+            std::fs::rename(&cache, project.join("away")).unwrap();
+            let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+            let at = the_rows_on(&desk, &of)
+                .iter()
+                .position(|r| r.0 == RowState::SentBeforeNotConfirmed)
+                .unwrap();
+            desk.machine.single_values.store(0, Ordering::SeqCst);
+            desk.machine.many_values.lock().unwrap().clear();
+            let start = std::time::Instant::now();
+            assert!(a_runtime().block_on(async {
+                let point = APointLending::over(&desk.machine).await;
+                smoozy_desktop::the_found_files_sent::a_row_is_confirmed(
+                    &point.sessions,
+                    desk.record.as_ref(),
+                    &desk.held,
+                    &of,
+                    at,
+                )
+                .await
+            }));
+            assert_eq!(the_rows_on(&desk, &of)[at].0, RowState::AlreadyOnTheMachine);
+            let confirmed_singly = desk.machine.single_values.load(Ordering::SeqCst);
+            let confirm_asks = desk.machine.many_values.lock().unwrap().clone();
+            println!(
+                "BAKE CONFIRM legacy={legacy}: {:.3} s, {confirmed_singly} single reads, groups {confirm_asks:?}",
+                start.elapsed().as_secs_f64()
+            );
+            if legacy {
+                assert_eq!((singles, confirmed_singly), (files, files));
+            } else {
+                assert_eq!(singles, 0, "publication still reads each file alone");
+                assert!(
+                    asks.len() <= 12 && asks.iter().sum::<usize>() == files,
+                    "{asks:?}"
+                );
+                assert_eq!(confirmed_singly, 0, "Confirm still reads each file alone");
+                assert_eq!(confirm_asks, [files]);
+            }
+            // Q7 must still mark a missing member gone, rather than treating
+            // the request's absent/unreadable result as a successful identity.
+            let missing = the_mirror_of(&desk, &cache.join("0000.blob"));
+            std::fs::remove_file(&missing).unwrap();
+            desk.held
+                .lock()
+                .unwrap()
+                .sittings
+                .get_mut(&keyed_as(&of))
+                .unwrap()
+                .rows[at]
+                .state = RowState::SentBeforeNotConfirmed;
+            assert!(a_runtime().block_on(async {
+                let point = APointLending::over(&desk.machine).await;
+                smoozy_desktop::the_found_files_sent::a_row_is_confirmed(
+                    &point.sessions,
+                    desk.record.as_ref(),
+                    &desk.held,
+                    &of,
+                    at,
+                )
+                .await
+            }));
+            assert_eq!(the_rows_on(&desk, &of)[at].0, RowState::NotFound);
+            let placements = TheDependencyRecord::over(desk.record.0.lock().unwrap().connection())
+                .the_placements_on(&desk.machine_key)
+                .unwrap();
+            assert!(
+                placements
+                    .iter()
+                    .find(|p| p.mirrored_location.as_bytes() == bytes_of(&missing))
+                    .unwrap()
+                    .marked_gone
+            );
+        }
     }
 
     /// **A cache folder found and then moved away before it was ever sent
@@ -3175,7 +3366,7 @@ mod on_a_desk_with_a_socket_pair {
         assert!(rows.iter().any(|row| row.1 == "//tex/wood.png"), "the set was read below");
         let panel = the_panel(&desk.held.lock().expect("the run"), &of.server, &of.file, None);
         let drawn = format!("{:?}", panel.the_table.expect("a table"));
-        assert!(drawn.contains("remap\\u{a0}failed"), "{drawn}");
+        assert!(drawn.contains("remap failed"), "{drawn}");
         let standing = the_standing_on(&desk, &of);
         assert_eq!(standing.counts.could_not_be_fixed, 1);
         assert!(!standing.every_row_confirmed_or_set_aside);
@@ -3241,10 +3432,12 @@ mod on_a_desk_with_a_socket_pair {
             a_check_on(&desk, &root, a_5_2(), Vec::new());
         });
         assert_eq!(checks, 1, "an upload of pictures alone started no check");
+        // **`Dependency Upload & Remap` G17b: pictures landing change nothing the
+        // reading stood on**, so no Blender starts and every row is still rebuilt.
         assert_eq!(
             desk.machine.readings_taken.load(Ordering::SeqCst) - read_before,
-            1,
-            "the check read the file once"
+            0,
+            "the file is unchanged, so it was not read again"
         );
         let rows = the_rows_on(&desk, &of);
         println!("ROWS: {rows:#?}");
@@ -3327,6 +3520,517 @@ mod on_a_desk_with_a_socket_pair {
         assert_eq!(sent.published, 1);
         assert_eq!(std::fs::read(&stone).expect("the stone landed"), b"stone");
         the_sends_this_run().lock().expect("the register").retain(|one| one.request != request);
+    }
+
+    /// **A root and three libraries that all name one picture**: what a real
+    /// shot with libraries inside libraries is, small.
+    fn a_project_of_three_libraries_naming_one_picture(project: &Path) -> (PathBuf, BTreeMap<Vec<u8>, Vec<u8>>) {
+        std::fs::create_dir_all(project.join("tex")).expect("the project");
+        let root = project.join("scene.blend");
+        std::fs::write(&root, b"blend").expect("the root");
+        std::fs::write(project.join("tex/shared.png"), vec![7u8; 300_000]).expect("the picture");
+        let mut documents = BTreeMap::new();
+        let mut references = Vec::new();
+        for name in ["lib_a.blend", "lib_b.blend", "lib_c.blend"] {
+            std::fs::write(project.join(name), vec![1u8; 1000]).expect("a library");
+            references.push(serde_json::json!({"kind": "Library", "datablock": name, "setting": "filepath",
+                "recorded": format!("//{name}").into_bytes(), "scenes": {"Established": ["Scene"]}, "source": null}));
+            documents.insert(bytes_of(&project.join(name)), a_document_of(&["//tex/shared.png"]));
+        }
+        documents.insert(
+            bytes_of(&root),
+            serde_json::to_vec(&serde_json::json!({
+                "references": references,
+                "flat_list": [], "weak_references": [], "observed_stand_ins": []
+            }))
+            .expect("it writes"),
+        );
+        (root, documents)
+    }
+
+    /// **`Dependency Upload & Remap` G11b and `Dependency Upload & Remap` A9b, on the
+    /// shape the real shot had.**
+    /// Three rows in the sitting are one row on the panel; every figure counts the
+    /// picture once; the send carries it once, and all three rows follow it. Until
+    /// this the figures read three times what went, and four channels published
+    /// one file at once.
+    #[test]
+    fn three_libraries_naming_one_picture_are_one_row_and_it_goes_once() {
+        use smoozy_desktop::surface::the_dependency_check::{the_panel_knowing, WhatElseIsKnown};
+        use smoozy_desktop::the_found_files_sent::{the_rows_the_upload_sends, the_sends_this_run};
+
+        let scratch = Scratch::new("one-real-file");
+        let project = scratch.at.join("project");
+        let (root, documents) = a_project_of_three_libraries_naming_one_picture(&project);
+        let Some(desk) = a_desk(&scratch, HowItReads::FromAScript(documents)) else {
+            println!("SKIPPED: no OpenSSH sftp-server on this system. One real file is unproved here.");
+            return;
+        };
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        let key = keyed_as(&of);
+        let drawn = || {
+            let held = desk.held.lock().expect("the run");
+            serde_json::to_value(the_panel_knowing(&held, &of.server, &of.file, None, &WhatElseIsKnown::default()))
+                .expect("it serializes")
+        };
+        {
+            let held = desk.held.lock().expect("the run");
+            let rows = &held.sittings[&key].rows;
+            assert_eq!(rows.len(), 6, "the sitting keeps one row per holding file");
+            assert_eq!(the_rows_the_upload_sends(rows).len(), 4, "three libraries and one picture");
+        }
+        let panel = drawn();
+        let table = panel["the_table"]["groups"].as_array().expect("groups");
+        let rows: usize = table.iter().map(|group| group["rows"].as_array().expect("rows").len()).sum();
+        assert_eq!(rows, 4, "{panel:#}");
+        let the_text = panel.to_string();
+        assert!(the_text.contains("Referenced"), "what the row keeps of who wants it: {the_text}");
+        let the_foot = panel["the_foot"].to_string();
+        assert!(the_foot.contains("\"4\""), "Upload 4 files: {the_foot}");
+        // 300,000 + 3 × 1,000 bytes: never the picture three times, 882 KB.
+        assert!(the_foot.contains("296"), "the upload's size counts each real file once: {the_foot}");
+
+        let sent = a_send_on(&desk, &of, None, false);
+        println!("SENT: {sent:?}");
+        assert_eq!((sent.published, sent.did_not_finish, sent.failed), (4, 0, 0), "{sent:?}");
+        let request = sent.request.clone().expect("a request");
+        let register = the_sends_this_run().lock().expect("the register");
+        let send = register.iter().find(|one| one.request == request).expect("the send");
+        assert_eq!(send.files.len(), 4, "the transfer agrees with what lands");
+        let held = desk.held.lock().expect("the run");
+        assert!(
+            held.sittings[&key].rows.iter().all(|one| one.state == RowState::AlreadyOnTheMachine),
+            "every row follows its real file"
+        );
+        drop(held);
+        let panel = drawn();
+        let the_summary = panel["the_summary"].to_string();
+        assert!(the_summary.contains("296"), "already on the server, each file once: {the_summary}");
+    }
+
+    /// **`Dependency Upload & Remap` G17a.** A folder added while the walk runs:
+    /// the row standing at the add moves, **and so does the row the walk finds
+    /// after it**, with no *Check again*. Until this the second stayed *Missing*.
+    #[test]
+    fn a_folder_added_while_the_walk_runs_reaches_the_rows_found_after_it() {
+        use smoozy_desktop::checking_a_file::the_chosen_folder_is_added;
+
+        let scratch = Scratch::new("late-rows");
+        let project = scratch.at.join("project");
+        std::fs::create_dir_all(&project).expect("the project");
+        let elsewhere = scratch.at.join("elsewhere");
+        std::fs::create_dir_all(&elsewhere).expect("the folder");
+        std::fs::write(elsewhere.join("standing.png"), b"standing").expect("a picture");
+        std::fs::write(elsewhere.join("later.png"), b"later").expect("a picture");
+        let root = project.join("scene.blend");
+        std::fs::write(&root, b"blend").expect("the root");
+        let library = project.join("lib.blend");
+        std::fs::write(&library, b"library").expect("the library");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            bytes_of(&root),
+            serde_json::to_vec(&serde_json::json!({
+                "references": [
+                    {"kind": "Library", "datablock": "lib.blend", "setting": "filepath",
+                     "recorded": b"//lib.blend".to_vec(), "scenes": {"Established": ["Scene"]}, "source": null},
+                    {"kind": "Image", "datablock": "standing", "setting": "filepath",
+                     "recorded": b"//standing.png".to_vec(), "scenes": {"Established": ["Scene"]}, "source": "FILE"}
+                ],
+                "flat_list": [], "weak_references": [], "observed_stand_ins": []
+            }))
+            .expect("it writes"),
+        );
+        documents.insert(bytes_of(&library), a_document_of(&["//later.png"]));
+        let Some(desk) = a_desk(&scratch, HowItReads::FromAScript(documents)) else {
+            println!("SKIPPED: no OpenSSH sftp-server on this system. Late rows are unproved here.");
+            return;
+        };
+        {
+            let opened = desk.record.0.lock().expect("the record");
+            the_searched_folder_list::write(opened.connection(), &SearchedFolderList { folders: Vec::new() })
+                .expect("the list");
+        }
+        let sitting = TheSittingIsOf {
+            server: desk.machine_key.server_row.as_text(),
+            file: String::from_utf8(bytes_of(&root)).expect("text"),
+            root: MachineLocation::composed(bytes_of(&root)),
+            holding: HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(&bytes_of(&root))),
+            with: a_5_2(),
+            machine: desk.machine_key.clone(),
+            layout: Some(desk.layout.clone()),
+        };
+        let key = keyed_as(&sitting);
+        let added = std::sync::atomic::AtomicBool::new(false);
+        // **The moment the root's rows have landed and the library is still to be
+        // read**: the user presses *Add*.
+        let told = || {
+            let there = desk
+                .held
+                .lock()
+                .expect("the run")
+                .sittings
+                .get(&key)
+                .is_some_and(|standing| !standing.rows.is_empty());
+            if there && !added.swap(true, Ordering::SeqCst) {
+                desk.held.lock().expect("the run").sittings.get_mut(&key).expect("the sitting").the_chosen_search_folder =
+                    Some(bytes_of(&elsewhere));
+                the_chosen_folder_is_added(&desk.held, &key, desk.record.as_ref(), &TheUsersOwnComputer, &|| {});
+            }
+        };
+        a_runtime().block_on(async {
+            let point = APointLending::over(&desk.machine).await;
+            let mut on_the_machine = ThisServersMachine {
+                sessions: &point.sessions,
+                package_area: desk.package_area.to_str().expect("text"),
+                server: &sitting.server,
+            };
+            the_check_runs(&mut on_the_machine, desk.record.as_ref(), &TheUsersOwnComputer, &desk.held, &sitting, &told).await
+        });
+        assert!(added.load(Ordering::SeqCst), "the add ran");
+        let rows = the_rows_on(&desk, &sitting);
+        println!("ROWS: {rows:#?}");
+        let state_of = |recorded: &str| rows.iter().find(|row| row.1 == recorded).map(|row| row.0).expect("the row");
+        assert_eq!(state_of("//standing.png"), RowState::FoundOnYourComputer, "the row standing at the add");
+        assert_eq!(state_of("//later.png"), RowState::FoundOnYourComputer, "the row found after the add");
+    }
+
+    /// **`Dependency Upload & Remap` A9c.** The press stands in Transfers and in the
+    /// foot from its first moment, and where everything is already on the server
+    /// it goes, and the panel says why. Until this there was no row at all.
+    #[test]
+    fn a_press_shows_at_once_and_a_send_that_will_not_happen_says_why() {
+        use smoozy_desktop::surface::the_dependency_check::{the_panel_knowing, WhatASendSaid, WhatElseIsKnown};
+        use smoozy_desktop::the_found_files_sent::{
+            a_send_is_being_counted, the_found_files_go_up, the_rows_the_upload_sends, the_sends_being_counted, WhatIsSent,
+        };
+
+        let scratch = Scratch::new("a-press-shows");
+        let project = scratch.at.join("project");
+        std::fs::create_dir_all(project.join("tex")).expect("the project");
+        let root = project.join("scene.blend");
+        std::fs::write(&root, b"blend").expect("the root");
+        let wood: Vec<u8> = (0..300_000u32).map(|at| (at % 251) as u8).collect();
+        std::fs::write(project.join("tex/wood.png"), &wood).expect("a picture");
+        let mut documents = BTreeMap::new();
+        documents.insert(bytes_of(&root), a_document_of(&["//tex/wood.png"]));
+        let Some(desk) = a_desk(&scratch, HowItReads::FromAScript(documents)) else {
+            println!("SKIPPED: no OpenSSH sftp-server on this system. The press is unproved here.");
+            return;
+        };
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        let key = keyed_as(&of);
+        // **It reached the server after the check read it**, as a file sent by an
+        // earlier press has.
+        let mirror = the_mirror_of(&desk, &project.join("tex/wood.png"));
+        std::fs::create_dir_all(mirror.parent().expect("a folder")).expect("the folder");
+        std::fs::write(&mirror, &wood).expect("at its mirror");
+        let rows = {
+            let held = desk.held.lock().expect("the run");
+            the_rows_the_upload_sends(&held.sittings[&key].rows)
+        };
+        assert_eq!(rows.len(), 1, "it reads as found: the check came first");
+        let asked = WhatIsSent { of: of.clone(), run: desk.run.clone(), rows, replacing: false };
+        let door: Arc<dyn smoozy_desktop::uploading::TheRecordAnUploadWrites> = desk.record.clone();
+        let saw_it = std::sync::atomic::AtomicBool::new(false);
+        let sent = a_runtime().block_on(async {
+            let point = APointLending::over(&desk.machine).await;
+            let sending = the_found_files_go_up(&asked, &point.sessions, &desk.the_run, door, &desk.held);
+            // **Polled second**, so this reads what the send's first stretch left.
+            let watching = async {
+                if a_send_is_being_counted(&of.server, &of.file)
+                    && the_sends_being_counted().iter().any(|one| one.file == of.file)
+                {
+                    saw_it.store(true, Ordering::SeqCst);
+                }
+            };
+            let (sent, ()) = tokio::join!(sending, watching);
+            sent
+        });
+        assert!(saw_it.load(Ordering::SeqCst), "the press stood before the first file was read");
+        assert!(!a_send_is_being_counted(&of.server, &of.file), "and it goes when the press ends");
+        assert_eq!(sent.published, 0, "{sent:?}");
+        assert_eq!(sent.already_there, 1, "{sent:?}");
+        let held = desk.held.lock().expect("the run");
+        assert_eq!(held.what_a_send_said.get(&key), Some(&WhatASendSaid::TheyAreAlreadyOnTheServer(1)));
+        let panel = serde_json::to_value(the_panel_knowing(&held, &of.server, &of.file, None, &WhatElseIsKnown::default()))
+            .expect("it serializes")
+            .to_string();
+        assert!(panel.contains("a-send-sent-nothing"), "{panel}");
+    }
+
+    /// **`Dependency Upload & Remap` G6f.** A library recorded by a full path says so
+    /// on its row, and one recorded relative to the file does not. Nothing is
+    /// blocked: it still reads as found, and goes.
+    #[test]
+    fn a_library_linked_by_a_full_path_says_so_on_its_row() {
+        use smoozy_desktop::surface::the_dependency_check::{the_panel_knowing, WhatElseIsKnown};
+        use smoozy_desktop::the_found_files_sent::the_rows_the_upload_sends;
+
+        let scratch = Scratch::new("full-path");
+        let project = scratch.at.join("project");
+        std::fs::create_dir_all(&project).expect("the project");
+        let root = project.join("scene.blend");
+        std::fs::write(&root, b"blend").expect("the root");
+        let relative = project.join("near.blend");
+        std::fs::write(&relative, b"near").expect("a library");
+        let whole = project.join("far.blend");
+        std::fs::write(&whole, b"far").expect("a library");
+        let a_document_naming = |recorded: Vec<u8>| {
+            serde_json::to_vec(&serde_json::json!({
+                "references": [{"kind": "Library", "datablock": "lib", "setting": "filepath",
+                    "recorded": recorded, "scenes": {"Established": ["Scene"]}, "source": null}],
+                "flat_list": [], "weak_references": [], "observed_stand_ins": []
+            }))
+            .expect("it writes")
+        };
+        let mut documents = BTreeMap::new();
+        documents.insert(bytes_of(&relative), a_document_of(&[]));
+        documents.insert(bytes_of(&whole), a_document_of(&[]));
+        documents.insert(bytes_of(&root), a_document_naming(b"//near.blend".to_vec()));
+        let Some(desk) = a_desk(&scratch, HowItReads::FromAScript(documents.clone())) else {
+            println!("SKIPPED: no OpenSSH sftp-server on this system. The full path's line is unproved here.");
+            return;
+        };
+        let the_panel = |of: &TheSittingIsOf| {
+            let held = desk.held.lock().expect("the run");
+            serde_json::to_string(&the_panel_knowing(&held, &of.server, &of.file, None, &WhatElseIsKnown::default()))
+                .expect("it serializes")
+        };
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        assert!(!the_panel(&of).contains("relative"), "a relative library says nothing");
+        drop(desk);
+
+        documents.insert(bytes_of(&root), a_document_naming(bytes_of(&whole)));
+        let desk = a_desk(&scratch, HowItReads::FromAScript(documents)).expect("an sftp-server");
+        let the_panel = |of: &TheSittingIsOf| {
+            let held = desk.held.lock().expect("the run");
+            serde_json::to_string(&the_panel_knowing(&held, &of.server, &of.file, None, &WhatElseIsKnown::default()))
+                .expect("it serializes")
+        };
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        assert!(the_panel(&of).contains("relative"), "a full path says so: {}", the_panel(&of));
+        let held = desk.held.lock().expect("the run");
+        assert_eq!(the_rows_the_upload_sends(&held.sittings[&keyed_as(&of)].rows).len(), 1, "nothing is blocked");
+    }
+
+    /// **`Dependency Upload & Remap` A9d.** A check started during a send touches no
+    /// transfer: every file lands, and the new check's rows follow their files. The
+    /// pass read a press of *Check dependencies…* as cutting a send; its own record
+    /// says the cut was five rows of one file.
+    #[test]
+    fn a_check_started_during_a_send_leaves_the_send_alone() {
+        use smoozy_desktop::the_found_files_sent::{
+            the_found_files_go_up, the_rows_the_upload_sends, the_sends_this_run, HowItEnded, WhatIsSent,
+        };
+
+        let scratch = Scratch::new("a-check-during-a-send");
+        let project = scratch.at.join("project");
+        std::fs::create_dir_all(project.join("tex")).expect("the project");
+        let root = project.join("scene.blend");
+        std::fs::write(&root, b"blend").expect("the root");
+        std::fs::write(project.join("tex/a_small.png"), b"small").expect("a small picture");
+        let large: Vec<u8> = (0..(16 * 1024 * 1024usize)).map(|at| (at % 251) as u8).collect();
+        let mut recorded = vec!["//tex/a_small.png".to_string()];
+        for at in 0..5 {
+            let name = format!("tex/large_{at}.exr");
+            std::fs::write(project.join(&name), &large).expect("a large picture");
+            recorded.push(format!("//{name}"));
+        }
+        let recorded: Vec<&str> = recorded.iter().map(String::as_str).collect();
+        let mut documents = BTreeMap::new();
+        documents.insert(bytes_of(&root), a_document_of(&recorded));
+        let Some(desk) = a_desk(&scratch, HowItReads::FromAScript(documents)) else {
+            println!("SKIPPED: no OpenSSH sftp-server on this system. A check during a send is unproved here.");
+            return;
+        };
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        let key = keyed_as(&of);
+        let rows = {
+            let held = desk.held.lock().expect("the run");
+            the_rows_the_upload_sends(&held.sittings[&key].rows)
+        };
+        let asked = WhatIsSent { of: of.clone(), run: desk.run.clone(), rows, replacing: false };
+        let door: Arc<dyn smoozy_desktop::uploading::TheRecordAnUploadWrites> = desk.record.clone();
+        let sent = a_runtime().block_on(async {
+            let point = APointLending::over(&desk.machine).await;
+            let sending = the_found_files_go_up(&asked, &point.sessions, &desk.the_run, door, &desk.held);
+            let checking = async {
+                for _ in 0..20_000 {
+                    let arrived = the_sends_this_run().lock().expect("the register").iter().any(|one| {
+                        one.server == of.server
+                            && one.file == of.file
+                            && one.files.iter().any(|file| file.ended == Some(HowItEnded::Published))
+                    });
+                    if arrived {
+                        let mut on_the_machine = ThisServersMachine {
+                            sessions: &point.sessions,
+                            package_area: desk.package_area.to_str().expect("text"),
+                            server: &of.server,
+                        };
+                        the_check_runs(&mut on_the_machine, desk.record.as_ref(), &TheUsersOwnComputer, &desk.held, &of, &|| {}).await;
+                        return;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+                }
+                panic!("no file of the upload arrived");
+            };
+            let (sent, ()) = tokio::join!(sending, checking);
+            sent
+        });
+        println!("SENT: {sent:?}");
+        assert_eq!((sent.published, sent.did_not_finish, sent.failed), (6, 0, 0), "{sent:?}");
+        for at in 0..5 {
+            let mirror = the_mirror_of(&desk, &project.join(format!("tex/large_{at}.exr")));
+            assert_eq!(std::fs::metadata(&mirror).expect("it landed").len(), large.len() as u64);
+        }
+        let held = desk.held.lock().expect("the run");
+        assert!(
+            held.sittings[&key].rows.iter().all(|one| one.state == RowState::AlreadyOnTheMachine),
+            "the new check's rows followed their files"
+        );
+    }
+
+    /// **`Dependency Upload & Remap` A9e: a press during a send, on a file with a
+    /// relative library, makes no job without it; after the send and its answer,
+    /// the same press makes a job with its pairs.** The second Sesterce pass's
+    /// worst fault: *K lib7*'s `"pairs": []`, *Finished*, and no library in the
+    /// picture.
+    #[test]
+    fn a_press_during_a_send_makes_no_job_without_its_library() {
+        use smoozy_desktop::surface::the_dependency_check::what_holds_render;
+        use smoozy_desktop::the_found_files_sent::the_sends_this_run;
+
+        let scratch = Scratch::new("a-press-during-a-send");
+        let project = scratch.at.join("project");
+        std::fs::create_dir_all(project.join("lib")).expect("the project");
+        std::fs::create_dir_all(project.join("tex")).expect("the project");
+        let root = project.join("scene.blend");
+        std::fs::write(&root, b"blend").expect("the root");
+        let library = project.join("lib/props.blend");
+        std::fs::write(&library, b"library").expect("the library");
+        let large: Vec<u8> = (0..(16 * 1024 * 1024usize)).map(|at| (at % 251) as u8).collect();
+        let mut references = vec![serde_json::json!({"kind": "Library", "datablock": "props.blend", "setting": "filepath",
+            "recorded": b"//lib/props.blend".to_vec(), "scenes": {"Established": ["Scene"]}, "source": null})];
+        for at in 0..5 {
+            let name = format!("tex/large_{at}.exr");
+            std::fs::write(project.join(&name), &large).expect("a large picture");
+            references.push(serde_json::json!({"kind": "Image", "datablock": name, "setting": "filepath",
+                "recorded": format!("//{name}").into_bytes(), "scenes": {"Established": ["Scene"]}, "source": "FILE"}));
+        }
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            bytes_of(&root),
+            serde_json::to_vec(&serde_json::json!({
+                "references": references, "flat_list": [], "weak_references": [], "observed_stand_ins": []
+            }))
+            .expect("it writes"),
+        );
+        let Some(desk) = a_desk(&scratch, HowItReads::FromAScript(documents)) else {
+            println!("SKIPPED: no OpenSSH sftp-server on this system. A press during a send is unproved here.");
+            return;
+        };
+        it_came_up_through_files(&desk, &root);
+        let with = a_5_2();
+        let (_, of) = a_check_on(&desk, &root, with.clone(), Vec::new());
+        assert_eq!(what_holds_render(&desk.held, &of.server, &of.file), None, "nothing goes yet");
+
+        // **The press as the page's command takes it**: a hold makes no job.
+        let a_press = || match what_holds_render(&desk.held, &of.server, &of.file) {
+            Some(_) => None,
+            None => Some(a_submission_on(&desk, &of, &with)),
+        };
+        std::thread::scope(|scope| {
+            let sending = scope.spawn(|| a_send_on(&desk, &of, None, false));
+            let the_send_is_in_flight = || {
+                the_sends_this_run().lock().expect("the register").iter().any(|one| {
+                    one.server == of.server && one.file == of.file && one.files.iter().any(|file| file.ended.is_none())
+                })
+            };
+            let mut waited = 0;
+            while !the_send_is_in_flight() && waited < 20_000 {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+                waited += 1;
+            }
+            assert!(a_press().is_none(), "a press during the send makes no job");
+            let sent = sending.join().expect("the send ended");
+            assert_eq!((sent.published, sent.libraries_published), (6, 1), "{sent:?}");
+        });
+
+        // **The send has ended and no check has answered for the library.**
+        assert!(a_press().is_none(), "a library landed and nothing has fixed it");
+        let (_, _) = a_check_on(&desk, &root, with.clone(), Vec::new());
+        assert_eq!(what_holds_render(&desk.held, &of.server, &of.file), None, "the check answered");
+
+        let (_, materials, _) = a_press().expect("the same press makes a job now");
+        assert_eq!(materials.len(), 1, "one job");
+        let pairs = the_pairs_of(&materials[0]);
+        let the_librarys = pairs.iter().find(|pair| pair.0 == "Library").unwrap_or_else(|| panic!("{pairs:#?}"));
+        assert!(the_librarys.3.contains("/fixed/"), "it reads the fixed copy: {pairs:#?}");
+    }
+
+    /// **`Dependency Upload & Remap` Q5a: a set already up is on the server, and
+    /// the control names only what the send will take.** The second Sesterce pass:
+    /// *Upload the 23 found so far* sent 7, and *Upload the 16* sent nothing.
+    #[test]
+    fn the_upload_control_names_only_the_files_a_send_will_take() {
+        use smoozy_desktop::surface::the_dependency_check::the_panel;
+
+        let scratch = Scratch::new("the-controls-figures");
+        let project = scratch.at.join("project");
+        std::fs::create_dir_all(project.join("tex")).expect("the project");
+        let root = project.join("scene.blend");
+        std::fs::write(&root, b"blend").expect("the root");
+        for tile in ["1001", "1002", "1003"] {
+            std::fs::write(project.join(format!("tex/tile.{tile}.png")), vec![7u8; 1000]).expect("a tile");
+        }
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            bytes_of(&root),
+            serde_json::to_vec(&serde_json::json!({
+                "references": [{"kind": "Image", "datablock": "tile", "setting": "filepath",
+                    "recorded": b"//tex/tile.<UDIM>.png".to_vec(), "scenes": {"Established": ["Scene"]}, "source": "TILED"}],
+                "flat_list": [], "weak_references": [], "observed_stand_ins": []
+            }))
+            .expect("it writes"),
+        );
+        let Some(desk) = a_desk(&scratch, HowItReads::FromAScript(documents)) else {
+            println!("SKIPPED: no OpenSSH sftp-server on this system. The control's figures are unproved here.");
+            return;
+        };
+        let foot = |of: &TheSittingIsOf| {
+            let panel = the_panel(&desk.held.lock().expect("the run"), &of.server, &of.file, None);
+            panel.the_foot.map(|foot| {
+                let mut out = String::new();
+                for (at, piece) in foot.upload.pieces.iter().enumerate() {
+                    if at > 0 && !piece.joins {
+                        out.push(' ');
+                    }
+                    if let Some(said) = &piece.said {
+                        out.push_str(said.as_str());
+                    }
+                    if let Some(value) = &piece.value {
+                        out.push_str(value.as_str());
+                    }
+                }
+                out.replace('\u{a0}', " ")
+            })
+        };
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        assert_eq!(foot(&of).as_deref(), Some("Upload 3 files (2.9 KB)"));
+        let sent = a_send_on(&desk, &of, None, false);
+        assert_eq!(sent.published, 3, "{sent:?}");
+
+        // **All of it up: the check says so, and offers nothing.**
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        assert!(the_rows_on(&desk, &of).iter().all(|row| row.0 == RowState::AlreadyOnTheMachine), "{:#?}", the_rows_on(&desk, &of));
+        assert_eq!(foot(&of), None);
+
+        // **A new tile: the row stays and the control names the one.**
+        std::fs::write(project.join("tex/tile.1004.png"), vec![8u8; 500]).expect("a tile");
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        assert_eq!(foot(&of).as_deref(), Some("Upload 1 file (500 bytes)"));
+        let sent = a_send_on(&desk, &of, None, false);
+        assert_eq!(sent.published, 1, "{sent:?}");
     }
 
     /// **And an upload the user stopped starts none**, though a file of it
@@ -3455,6 +4159,8 @@ mod on_a_desk_with_a_socket_pair {
         let sent = a_send_on(&desk, &of, None, false);
         println!("SENT: {sent:?}");
         assert_eq!((sent.published, sent.libraries_published, sent.did_not_finish), (1, 1, 0));
+        // **`Dependency Upload & Remap` G17b: the check is told a file went up.**
+        assert_eq!(desk.held.lock().expect("the run").the_files_going_up.on(&of.machine), (1, 1));
         let read_before = desk.machine.readings_taken.load(Ordering::SeqCst);
         let mut checks = 0;
         the_check_runs_again_after(&sent, || {
@@ -3462,14 +4168,30 @@ mod on_a_desk_with_a_socket_pair {
             a_check_on(&desk, &root, a_5_2(), Vec::new());
         });
         assert_eq!(checks, 1);
+        // **`Dependency Upload & Remap` G17b: the library landed at its mirror**, a
+        // place the file's own reading does not look in, so the file stands and the
+        // library has its own reading there.
         assert_eq!(
             desk.machine.readings_taken.load(Ordering::SeqCst) - read_before,
-            2,
-            "the file and the library it put up, each its own reading"
+            1,
+            "the library it put up, its own reading; the file is unchanged"
         );
         let rows = the_rows_on(&desk, &of);
         println!("ROWS: {rows:#?}");
         assert!(rows.iter().any(|row| row.1 == "//tex/wood.png"), "the library was not read below");
+
+        // **By the four values the real read answers, through the real file session.**
+        let reads = |desk: &ADesk| {
+            let before = desk.machine.readings_taken.load(Ordering::SeqCst);
+            a_check_on(desk, &root, a_5_2(), Vec::new());
+            desk.machine.readings_taken.load(Ordering::SeqCst) - before
+        };
+        assert_eq!(reads(&desk), 0, "nothing changed");
+        let rows_kept = the_rows_on(&desk, &of);
+        assert_eq!(rows_kept, rows, "the rows are the same with nothing read");
+        std::fs::write(&root, b"blend, saved again").expect("the file changes");
+        assert_eq!(reads(&desk), 1, "the file changed");
+        assert_eq!(reads(&desk), 0, "and is kept again");
     }
 
     // ------------------------------- the 38's piece 7: item 37, carrying on
@@ -3807,6 +4529,165 @@ mod on_a_desk_with_a_socket_pair {
                 .collect::<Vec<_>>()
                 .join("\n"),
         }
+    }
+
+    /// **`Dependency Upload & Remap` G9a and G8, the whole way to the machine, on
+    /// each Blender at the desk with its own real reading.** A file whose one
+    /// bake folder is `//bakes/{blend_name}/`, a second `//bakes/{scene_name}/`,
+    /// and on 5.3 and 5.4 an Import SPZ node. **5.3 and 5.4:** the bake is found at
+    /// `bakes/t`, goes up, lands whole at that folder's mirror and is owed a copy
+    /// keyed by the recorded bytes; the second is said and is no row; the SPZ file
+    /// is found. **5.2:** the braces are folder names, and both go up as such.
+    #[test]
+    #[ignore = "needs the desk's Blenders"]
+    fn a_template_in_a_bake_folder_is_found_and_sent_at_the_desk() {
+        const MAKER: &str = r#"
+import bpy, os, sys
+out = sys.argv[sys.argv.index("--") + 1]
+scene = bpy.context.scene
+scene.name = "Scene"
+scene.frame_start, scene.frame_end = 1, 2
+
+def baked_on(name, folder):
+    bpy.ops.mesh.primitive_cube_add()
+    obj = bpy.context.active_object
+    obj.name = name
+    tree = bpy.data.node_groups.new(name, "GeometryNodeTree")
+    tree.interface.new_socket("Geometry", in_out="INPUT", socket_type="NodeSocketGeometry")
+    tree.interface.new_socket("Geometry", in_out="OUTPUT", socket_type="NodeSocketGeometry")
+    source = tree.nodes.new("NodeGroupInput")
+    end = tree.nodes.new("NodeGroupOutput")
+    keep = tree.nodes.new("GeometryNodeBake")
+    keep.bake_items.new("GEOMETRY", "Geometry")
+    tree.links.new(source.outputs[0], keep.inputs[0])
+    tree.links.new(keep.outputs[0], end.inputs[0])
+    modifier = obj.modifiers.new("GN", "NODES")
+    modifier.node_group = tree
+    modifier.bake_target = "DISK"
+    modifier.bake_directory = folder
+    bpy.ops.wm.save_as_mainfile(filepath=out)
+    bake = modifier.bakes[0]
+    bake.bake_mode = "ANIMATION"
+    print("BAKED", name, bpy.ops.object.geometry_node_bake_single(session_uid=obj.session_uid, modifier_name=modifier.name, bake_id=bake.bake_id), flush=True)
+    return tree
+
+baked_on("Named", "//bakes/{blend_name}/")
+tree = baked_on("Other", "//bakes/{scene_name}/")
+if bpy.app.version >= (5, 3, 0):
+    spz = tree.nodes.new("GeometryNodeImportSPZ")
+    spz.inputs["Path"].default_value = "//splat.spz"
+bpy.ops.wm.save_as_mainfile(filepath=out)
+"#;
+        let mut seen = Vec::new();
+        let mut faults = Vec::new();
+        for (path, major, minor, patch) in [
+            ("/Applications/Blender.app/Contents/MacOS/Blender", 5, 2, 3),
+            ("/Applications/Blender 5.3b.app/Contents/MacOS/Blender", 5, 3, 0),
+            ("/Applications/Blender 5.4a.app/Contents/MacOS/Blender", 5, 4, 0),
+        ] {
+            let with = a_blender(path, major, minor, patch);
+            let from_5_3 = (major, minor) >= (5, 3);
+            let scratch = Scratch::new(&format!("bake-template-{major}{minor}"));
+            let project = scratch.at.join("user/project");
+            std::fs::create_dir_all(&project).expect("the folder");
+            let source = project.join("t.blend");
+            let maker = scratch.at.join("maker.py");
+            std::fs::write(&maker, MAKER).expect("written");
+            let made = std::process::Command::new(path)
+                .args(["--factory-startup", "--background", "--python-exit-code", "63", "--python"])
+                .arg(&maker)
+                .arg("--")
+                .arg(&source)
+                .output()
+                .expect("it runs");
+            let said = String::from_utf8_lossy(&made.stdout).to_string();
+            assert_eq!(made.status.code(), Some(0), "{said}");
+            seen.push(format!(
+                "{major}.{minor}: {}",
+                said.lines().filter(|line| line.starts_with("BAKED") || line.contains("packed bake")).collect::<Vec<_>>().join(" | ")
+            ));
+            std::fs::write(project.join("splat.spz"), b"not really a splat").expect("written");
+
+            let desk = a_desk(&scratch, HowItReads::WithBlender).expect("an sftp-server");
+            let on_the_machine = scratch.at.join("home/root/work/t.blend");
+            std::fs::create_dir_all(on_the_machine.parent().expect("a folder")).expect("the folder");
+            std::fs::copy(&source, &on_the_machine).expect("the file is on the machine");
+            it_came_up_through_files_from(&desk, &source, &on_the_machine);
+
+            let (came_to, of) = a_check_of_the_machine_copy(&desk, &on_the_machine, &source, with.clone());
+            let rows = the_rows_on(&desk, &of);
+            let statements = {
+                let held = desk.held.lock().expect("the run");
+                held.sittings[&keyed_as(&of)].the_bake_folders_not_worked_out.clone()
+            };
+            seen.push(format!("  {came_to:?}; rows {rows:#?}; said {statements:?}"));
+
+            let the_row_of = |recorded: &str| rows.iter().find(|row| row.1 == recorded).cloned();
+            let named = the_row_of("//bakes/{blend_name}/");
+            let wanted = bytes_of(&project.join(if from_5_3 { "bakes/t" } else { "bakes/{blend_name}" }));
+            if named.as_ref().map(|row| row.0) != Some(RowState::FoundOnYourComputer)
+                || named.as_ref().and_then(|row| row.2.clone()).map(String::into_bytes) != Some(wanted)
+            {
+                faults.push(format!("{major}.{minor}: the named bake reads {named:?}"));
+            }
+            if from_5_3 {
+                if the_row_of("//bakes/{scene_name}/").is_some() || statements.len() != 1 {
+                    faults.push(format!("{major}.{minor}: the other bake: {rows:?} {statements:?}"));
+                }
+                if the_row_of("//splat.spz").map(|row| row.0) != Some(RowState::FoundOnYourComputer) {
+                    faults.push(format!("{major}.{minor}: the SPZ file: {rows:?}"));
+                }
+            } else if !statements.is_empty() {
+                faults.push(format!("{major}.{minor}: said {statements:?}"));
+            }
+
+            let sent = a_send_on(&desk, &of, None, false);
+            seen.push(format!("  sent: {sent:?}"));
+            let mirror = the_mirror_of(&desk, &project.join(if from_5_3 { "bakes/t" } else { "bakes/{blend_name}" }));
+            let landed = walk_of_files(&mirror);
+            seen.push(format!("  at the mirror {}: {landed:?}", mirror.display()));
+            if !landed.iter().any(|name| name.ends_with(".json")) || !landed.iter().any(|name| name.ends_with(".blob")) {
+                faults.push(format!("{major}.{minor}: the bake did not land whole: {landed:?}"));
+            }
+
+            let (came_to, materials, _) = a_submission_on(&desk, &of, &with);
+            seen.push(format!("  submitted: {came_to:?}"));
+            let owed: Vec<(String, String)> = materials
+                .iter()
+                .flat_map(|material| material.copies_owed.iter())
+                .map(|copy| {
+                    (
+                        String::from_utf8_lossy(copy.recorded.as_bytes()).to_string(),
+                        String::from_utf8_lossy(copy.from.as_bytes()).to_string(),
+                    )
+                })
+                .collect();
+            seen.push(format!("  copies owed: {owed:#?}"));
+            if !owed.iter().any(|(recorded, from)| {
+                recorded == "//bakes/{blend_name}/" && from.as_bytes() == bytes_of(&mirror).as_slice()
+            }) {
+                faults.push(format!("{major}.{minor}: no copy owed from the mirror: {owed:?}"));
+            }
+        }
+        println!("{}", seen.join("\n"));
+        assert!(faults.is_empty(), "{faults:#?}");
+    }
+
+    /// Every file under a folder, by its path below it.
+    fn walk_of_files(folder: &Path) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut waiting = vec![folder.to_path_buf()];
+        while let Some(at) = waiting.pop() {
+            for entry in std::fs::read_dir(&at).into_iter().flatten().flatten() {
+                if entry.path().is_dir() {
+                    waiting.push(entry.path());
+                } else {
+                    out.push(entry.path().strip_prefix(folder).expect("below it").display().to_string());
+                }
+            }
+        }
+        out.sort();
+        out
     }
 
     /// **The 38's piece 7, as a person meets item 7: a shot with a set linked

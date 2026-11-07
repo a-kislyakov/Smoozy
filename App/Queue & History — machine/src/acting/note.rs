@@ -143,6 +143,14 @@ pub struct TheEndingOnTheNote {
     /// entry is drawn, and never here. Absent where no line passed.
     #[serde(default)]
     pub the_device_line_as_observed: Option<String>,
+    /// **Whether the attempt ended before any render began** — `Rendering` K14's
+    /// *before the render instruction*, which the machine knows and the outcome
+    /// word does not say. It is what lets a failure say *Failed before rendering.*
+    /// (`Design/Queue & History`). **Absent reads as no**, on a note written before
+    /// 2026-11-04: such an entry keeps the words it always had. Nothing is mined
+    /// from a stream.
+    #[serde(default)]
+    pub no_render_began: bool,
 }
 
 /// The recorded outcomes, in the note's written form.
@@ -227,6 +235,23 @@ impl AnAttemptMark {
 pub enum TheStatementAtTheEnding {
     It(smoozy_job_files_machine::reckoning::TheCompletenessStatement),
     NoneWasTaken { why: String },
+}
+
+/// **`Job files and outputs` C27's two counts, as the desktop has them**:
+/// `Queue & History` E3's *3 of 4 files written.*, and `Telegram` E1a's. A file at
+/// zero bytes is not written, as `Job files and outputs` C27 keeps it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TheFilesCounted {
+    pub written: u64,
+    pub owed: u64,
+}
+
+impl TheFilesCounted {
+    /// **E3: only part of what was owed was written.** Nothing owed, and all of
+    /// it written, are not this.
+    pub fn it_came_up_short(self) -> bool {
+        self.written < self.owed
+    }
 }
 
 /// **`Rented-server runtime` V12's free-space reading, carried with the
@@ -430,6 +455,11 @@ pub struct TheNote {
     /// written — and on a note written before this field, which reads back as
     /// no statement recorded rather than as an empty one.
     pub the_completeness_statement: Option<TheStatementAtTheEnding>,
+    /// **E3's two counts, read off the note's answer** ([`TheNote::read_from_the_answer`]),
+    /// which carries the statement as four counts and not as its sets. Never
+    /// written to the note on the machine, which holds the statement itself;
+    /// read both ways by [`TheNote::the_files_counted`].
+    pub the_files_counted_on_the_answer: Option<TheFilesCounted>,
     /// **`Rented-server runtime` V12's reading, written in the same act as the
     /// ending**, or its stated absence. `None` until an ending is written, and
     /// on a note written before this field — which reads back as no reading
@@ -454,7 +484,20 @@ impl TheNote {
             given_up_where_it_was: None,
             last_frame_figure: None,
             the_completeness_statement: None,
+            the_files_counted_on_the_answer: None,
             the_free_space_at_the_ending: None,
+        }
+    }
+
+    /// **`Queue & History` E3's two counts, on whichever side reads the note**,
+    /// or nothing where the ending carried no statement.
+    pub fn the_files_counted(&self) -> Option<TheFilesCounted> {
+        match &self.the_completeness_statement {
+            Some(TheStatementAtTheEnding::It(statement)) => Some(TheFilesCounted {
+                written: statement.present.len() as u64,
+                owed: statement.expected as u64,
+            }),
+            _ => self.the_files_counted_on_the_answer,
         }
     }
 
@@ -540,6 +583,9 @@ impl TheNote {
                 .filter(|line| !line.is_empty())
             {
                 fields = fields.and(asked::THE_DEVICE_LINE_FIELD, line);
+            }
+            if ending.no_render_began {
+                fields = fields.and(asked::NO_RENDER_BEGAN_FIELD, asked::IT_IS_YES);
             }
         }
         for (at, mark) in self.re_run_marks.iter().enumerate() {
@@ -634,6 +680,7 @@ impl TheNote {
                     .text(asked::THE_REASON_THE_MACHINE_RECORDED_FIELD)
                     .filter(|reason| !reason.is_empty())
                     .map(str::to_string),
+                no_render_began: fields.text(asked::NO_RENDER_BEGAN_FIELD) == Some(asked::IT_IS_YES),
                 the_device_line_as_observed: fields
                     .text(asked::THE_DEVICE_LINE_FIELD)
                     .filter(|line| !line.is_empty())
@@ -659,6 +706,10 @@ impl TheNote {
         }
         note.given_up_where_it_was = a_number(asked::THE_FRAME_IT_WAS_GIVEN_UP_AT_FIELD);
         note.last_frame_figure = a_number(asked::THE_LAST_FRAME_FIELD);
+        let a_file_count = |name: &str| fields.text(name).and_then(|text| text.parse::<u64>().ok());
+        note.the_files_counted_on_the_answer = a_file_count(asked::THE_FILES_EXPECTED_FIELD)
+            .zip(a_file_count(asked::THE_FILES_PRESENT_FIELD))
+            .map(|(owed, written)| TheFilesCounted { written, owed });
         note.the_free_space_at_the_ending = TheFreeSpaceAtTheEnding::read_back(|name| fields.text(name));
         Some(note)
     }
@@ -880,6 +931,7 @@ impl TheNoteAsWritten {
             given_up_where_it_was: self.given_up_where_it_was,
             last_frame_figure: self.last_frame_figure,
             the_completeness_statement: self.the_completeness_statement,
+            the_files_counted_on_the_answer: None,
             the_free_space_at_the_ending: self
                 .the_free_space_at_the_ending
                 .map(TheFreeSpaceAsWritten::read_back),
@@ -1225,6 +1277,40 @@ pub const A_REFUSED_WRITE_LEAVES_THE_NULL_ENDING_STANDING: bool = true;
 
 #[cfg(test)]
 mod tests {
+    /// **`Queue & History` E3's two counts, from either side of the note.** The
+    /// machine reads the statement, which survives a restart in the note's
+    /// written form, and the desktop reads the answer's two fields. A statement
+    /// that was withheld gives no count, and nor does an answer with no fields.
+    #[test]
+    fn e3_the_files_counted_read_the_same_on_the_machine_and_off_the_answer() {
+        use smoozy_job_files_machine::reckoning::TheCompletenessStatement;
+        let mut note = TheNote::created_with_the_job_record("A label");
+        assert_eq!(note.the_files_counted(), None);
+        note.the_completeness_statement = Some(TheStatementAtTheEnding::NoneWasTaken { why: "no inventory".into() });
+        assert_eq!(note.the_files_counted(), None);
+        note.the_completeness_statement = Some(TheStatementAtTheEnding::It(TheCompletenessStatement {
+            expected: 4,
+            present: vec![b"a".to_vec(), b"b".to_vec(), b"c".to_vec()],
+            absent: Vec::new(),
+            present_at_zero_bytes: vec![b"d".to_vec()],
+            what_the_added_write_places_produced: Vec::new(),
+        }));
+        let counted = TheFilesCounted { written: 3, owed: 4 };
+        assert_eq!(note.the_files_counted(), Some(counted));
+        assert!(counted.it_came_up_short());
+        assert!(!TheFilesCounted { written: 4, owed: 4 }.it_came_up_short());
+        assert!(!TheFilesCounted { written: 0, owed: 0 }.it_came_up_short());
+
+        let fields = Fields::none()
+            .and(asked::ON_THIS_MACHINE_FIELD, asked::IT_IS_PRESENT)
+            .and(asked::THE_FILES_EXPECTED_FIELD, "4")
+            .and(asked::THE_FILES_PRESENT_FIELD, "3");
+        let read = TheNote::read_from_the_answer(&fields).expect("a note");
+        assert_eq!(read.the_files_counted(), Some(counted));
+        let none = Fields::none().and(asked::ON_THIS_MACHINE_FIELD, asked::IT_IS_PRESENT);
+        assert_eq!(TheNote::read_from_the_answer(&none).expect("a note").the_files_counted(), None);
+    }
+
     use super::*;
 
     #[cfg(unix)]
@@ -1330,6 +1416,7 @@ mod tests {
                     exit_status: Some(0),
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(160),
@@ -1472,6 +1559,7 @@ mod tests {
                     exit_status: None,
                     the_attempt_whose_capture_record_holds_the_words: 2,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(5),
@@ -1497,6 +1585,7 @@ mod tests {
                     exit_status: None,
                     the_attempt_whose_capture_record_holds_the_words: 2,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(5),
@@ -1538,6 +1627,7 @@ mod tests {
                     exit_status: None,
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(9),
@@ -1649,6 +1739,7 @@ mod tests {
             exit_status: Some(3),
             the_attempt_whose_capture_record_holds_the_words: 2,
             the_reason_the_machine_recorded: Some(reason.to_string()),
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         let answered = failed.as_the_answers_fields();
@@ -1671,6 +1762,7 @@ mod tests {
             exit_status: Some(0),
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: Some(line.to_string()),
         });
         let answered = finished.as_the_answers_fields();
@@ -1700,6 +1792,7 @@ mod tests {
             exit_status: None,
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: Some(String::new()),
+            no_render_began: false,
             the_device_line_as_observed: Some(String::new()),
         });
         let answered = empty.as_the_answers_fields();
@@ -1727,6 +1820,31 @@ mod tests {
             .and(asked::ON_THIS_MACHINE_FIELD, asked::IT_IS_PRESENT)
             .and(asked::THE_ENDING_FIELD, asked::IT_FAILED);
         assert_eq!(TheNote::read_from_the_answer(&no_pointer), None);
+    }
+
+    /// **The note's ending says no render began, and only where none did**
+    /// (`Queue & History` §10, the paragraph after N3). Absent reads as no, so a note
+    /// from an older machine program keeps the words it had.
+    #[test]
+    fn the_answer_carries_whether_a_render_began_and_absent_reads_as_it_did() {
+        let ended = |no_render_began| {
+            a_note_that_ended(TheEndingOnTheNote {
+                outcome: TheOutcomeAsWritten::Failed,
+                exit_status: None,
+                the_attempt_whose_capture_record_holds_the_words: 1,
+                the_reason_the_machine_recorded: Some("could not copy the bake folder //a/".to_string()),
+                no_render_began,
+                the_device_line_as_observed: None,
+            })
+        };
+        let none_began = ended(true);
+        let answered = none_began.as_the_answers_fields();
+        assert_eq!(answered.text(asked::NO_RENDER_BEGAN_FIELD), Some(asked::IT_IS_YES));
+        assert_eq!(TheNote::read_from_the_answer(&answered).expect("it reads").ending, none_began.ending);
+        let one_began = ended(false);
+        let answered = one_began.as_the_answers_fields();
+        assert_eq!(answered.text(asked::NO_RENDER_BEGAN_FIELD), None);
+        assert_eq!(TheNote::read_from_the_answer(&answered).expect("it reads").ending, one_began.ending);
     }
 
     /// **A note written before step 10c's fix piece 2 still reads back**, with
@@ -1764,6 +1882,7 @@ mod tests {
             exit_status: Some(1),
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: Some("the render ended with status 1".to_string()),
+            no_render_began: false,
             the_device_line_as_observed: Some("Device: CPU".to_string()),
         };
         notes
@@ -1812,6 +1931,7 @@ mod tests {
                     exit_status: Some(28),
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(1_700_000_001),

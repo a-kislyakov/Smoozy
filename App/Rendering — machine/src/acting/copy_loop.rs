@@ -354,6 +354,11 @@ impl ObservesEachLineAsItPasses for TheQueuesReaderAsATee {
                 // **`Queue & History` R3: the complaints stream is not parsed for progress.**
                 let _ = other;
             }
+            WhatTheLineWas::Simulation { frames } => {
+                // `Queue & History` R6a: report simulation without advancing
+                // any rendered-frame count or sample figure.
+                self.readings.simulation = frames;
+            }
             WhatTheLineWas::AProgressLine(read) => {
                 self.the_readings_take(&read);
                 // **`Queue & History` R6's last reading: the count of frames announced or
@@ -377,6 +382,7 @@ impl ObservesEachLineAsItPasses for TheQueuesReaderAsATee {
                     samples: None,
                     tiles: None,
                     estimate: None,
+                    the_line_says_finished: false,
                 };
                 self.the_readings_take(&announced);
                 self.frames_begun = self.frames_begun.saturating_add(1);
@@ -393,6 +399,7 @@ impl ObservesEachLineAsItPasses for TheQueuesReaderAsATee {
                     samples: None,
                     tiles: None,
                     estimate: None,
+                    the_line_says_finished: false,
                 });
             }
             WhatTheLineWas::AFrameWasSaved { .. } => {
@@ -1292,6 +1299,101 @@ mod tests {
     /// second layer's opening zero is that layer's first reading, never the
     /// stopped-short mark that filled the top bar for the whole layer.
     #[test]
+    fn a_frame_cut_short_in_5_3_ends_its_unit_on_finished_and_the_next_layer_starts_over() {
+        let two_layers = ["First", "Second"].map(|layer| smoozy_queue_history_machine::plan::Renderlet {
+            frame: 1,
+            view_layer: layer.to_string(),
+            planned_samples: 4_096,
+            tiles: 1,
+        });
+        let at = std::time::SystemTime::UNIX_EPOCH;
+        let mut reader = TheQueuesReaderAsATee::for_the_attempt(5, 1, &[1])
+            .carrying_the_plan(Some(two_layers.to_vec()));
+        for line in [
+            "00:00.406  render           | Rendering frame 1",
+            "00:00.407  render           | Start rendering: Scene, First",
+            "00:02.000  render           | Fra: 1 | Mem: 5M | Sample 160/4096",
+        ] {
+            reader.a_line_passed(Stream::Ordinary, line.as_bytes());
+        }
+        assert!(!reader.readings().stopped_short, "still sampling");
+        assert_eq!(
+            reader.the_report(at, Clock::ThisComputer).the_units_finished,
+            Some(160),
+            "the second bar's share is the count so far"
+        );
+        reader.a_line_passed(
+            Stream::Ordinary,
+            "00:02.500  render           | Fra: 1 | Mem: 5M | Finished".as_bytes(),
+        );
+        assert!(reader.readings().stopped_short, "`Queue & History` B3b: the unit has ended");
+        assert_eq!(
+            reader.readings().samples.map(|pair| (pair.seen, pair.of)),
+            Some((160, 4_096)),
+            "the figures stay as printed"
+        );
+        assert_eq!(reader.the_report(at, Clock::ThisComputer).the_units_finished, Some(4_096));
+        reader.a_line_passed(
+            Stream::Ordinary,
+            "00:02.600  render           | Start rendering: Scene, Second".as_bytes(),
+        );
+        assert!(!reader.readings().stopped_short, "the next unit starts over");
+        reader.a_line_passed(
+            Stream::Ordinary,
+            "00:03.000  render           | Fra: 1 | Mem: 5M | Sample 32/4096".as_bytes(),
+        );
+        assert_eq!(
+            reader.the_report(at, Clock::ThisComputer).the_units_finished,
+            Some(4_096 + 32),
+            "the first layer stays whole"
+        );
+    }
+
+    /// **`Queue & History` R12's line of 2026-11-02, through the worker's own
+    /// reader: `Finished` takes a tiled frame's share of the second bar to its
+    /// end, once per layer, and no further.** Both layers at 4 tiles and 4,096
+    /// samples are 32,768 units. **What it bites on**: at `3/4 tiles` the share
+    /// sat at three quarters of the layer through denoising and saving, the
+    /// live pass's *Whole job 75%*.
+    #[test]
+    fn a_tiled_frame_ends_its_unit_on_finished_and_the_second_bar_never_passes_the_frame() {
+        let two_layers = ["First", "Second"].map(|layer| smoozy_queue_history_machine::plan::Renderlet {
+            frame: 1,
+            view_layer: layer.to_string(),
+            planned_samples: 4_096,
+            tiles: 4,
+        });
+        let at = std::time::SystemTime::UNIX_EPOCH;
+        let mut reader = TheQueuesReaderAsATee::for_the_attempt(5, 1, &[1])
+            .carrying_the_plan(Some(two_layers.to_vec()));
+        for line in [
+            "00:00.406  render           | Rendering frame 1",
+            "00:00.407  render           | Start rendering: Scene, First",
+            "00:39.309  render           | Fra: 1 | Mem: 574M | Rendered 3/4 Tiles, Sample 48/4096",
+        ] {
+            reader.a_line_passed(Stream::Ordinary, line.as_bytes());
+        }
+        assert_eq!(
+            reader.the_report(at, Clock::ThisComputer).the_units_finished,
+            Some(3 * 4_096 + 48),
+            "three tiles and the tile in hand"
+        );
+        reader.a_line_passed(Stream::Ordinary, "00:39.430  render           | Fra: 1 | Mem: 574M | Finished".as_bytes());
+        assert!(reader.readings().stopped_short);
+        assert_eq!(reader.the_report(at, Clock::ThisComputer).the_units_finished, Some(4 * 4_096), "the layer is whole");
+        assert_eq!(reader.readings().tiles.map(|pair| (pair.done, pair.of)), Some((3, 4)), "the figures stay as printed");
+        reader.a_line_passed(Stream::Ordinary, "00:39.454  render           | Fra: 1 | Mem: 496M | Reading full buffer from disk".as_bytes());
+        assert_eq!(reader.the_report(at, Clock::ThisComputer).the_units_finished, Some(4 * 4_096), "denoising moves nothing");
+        reader.a_line_passed(Stream::Ordinary, "00:39.600  render           | Start rendering: Scene, Second".as_bytes());
+        assert!(!reader.readings().stopped_short, "the next unit starts over");
+        reader.a_line_passed(Stream::Ordinary, "00:40.000  render           | Fra: 1 | Mem: 574M | Rendered 0/4 Tiles, Sample 16/4096".as_bytes());
+        assert_eq!(reader.the_report(at, Clock::ThisComputer).the_units_finished, Some(4 * 4_096 + 16), "the first layer stays whole");
+        reader.a_line_passed(Stream::Ordinary, "00:50.000  render           | Fra: 1 | Mem: 574M | Rendered 3/4 Tiles, Sample 4096/4096".as_bytes());
+        reader.a_line_passed(Stream::Ordinary, "00:50.100  render           | Fra: 1 | Mem: 574M | Finished".as_bytes());
+        assert_eq!(reader.the_report(at, Clock::ThisComputer).the_units_finished, Some(8 * 4_096), "both whole, and never past the frame");
+    }
+
+    #[test]
     fn one_frame_of_two_layers_moves_the_second_bar_as_each_layer_renders() {
         let two_layers = |frame: i64| {
             ["First", "Second"].map(|layer| smoozy_queue_history_machine::plan::Renderlet {
@@ -1552,6 +1654,39 @@ mod tests {
     impl ObservesEachLineAsItPasses for ACountOfLines {
         fn a_line_passed(&mut self, _: Stream, _: &[u8]) {
             self.0 += 1;
+        }
+    }
+}
+
+
+#[cfg(test)]
+mod wait_count_tests {
+    use super::*;
+    #[test]
+    fn wait_count_reaches_the_report_without_counting_a_rendered_frame() {
+        for major in [4, 5] {
+            let mut reader = TheQueuesReaderAsATee::for_the_attempt(major, 1, &[-2, 1]);
+            reader.a_line_passed(Stream::Ordinary, b"SMOOZY-SIMULATION {\"frame\":-2,\"to\":1}");
+            assert_eq!(reader.readings().simulation, Some((-2, 1)));
+            assert_eq!(reader.readings().frame_in_hand, None);
+            assert_eq!(reader.readings().frames_completed, 0);
+            let report = reader.the_report(std::time::SystemTime::UNIX_EPOCH, Clock::ThisComputer);
+            let pairs = report.as_pairs();
+            let read = AWorkersReport::read_back(|key| pairs.iter().find(|(name, _)| *name == key).map(|(_, value)| value.as_str())).unwrap();
+            assert_eq!(read.readings.value().simulation, Some((-2, 1)));
+            for bad in [b"SMOOZY-SIMULATION {\"frame\":99,\"to\":1}".as_slice(), b"SMOOZY-SIMULATION broken"] {
+                reader.a_line_passed(Stream::Ordinary, bad);
+                assert_eq!(reader.readings().simulation, Some((-2, 1)));
+            }
+            reader.a_line_passed(Stream::Complaints, b"SMOOZY-SIMULATION {\"finished\":true}");
+            assert_eq!(reader.readings().simulation, Some((-2, 1)));
+            reader.a_line_passed(Stream::Ordinary, b"SMOOZY-SIMULATION {\"finished\":true}");
+            assert_eq!(reader.readings().simulation, None);
+            reader.a_line_passed(Stream::Ordinary, b"SMOOZY-SIMULATION {\"frame\":0,\"to\":1}");
+            let render = if major == 4 { "Fra:1 | Sample 1/16" } else { "00:01.000 render | Fra: 1 | Sample 1/16" };
+            reader.a_line_passed(Stream::Ordinary, render.as_bytes());
+            assert_eq!(reader.readings().simulation, None);
+            assert_eq!(reader.readings().frame_in_hand, Some(1));
         }
     }
 }

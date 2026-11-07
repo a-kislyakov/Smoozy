@@ -459,14 +459,86 @@ pub mod throwaway {
         }
     }
 
-    /// Where this copy was pointed. **Read once**, at the first ask, from the
-    /// application's own command line — the first argument being the program
-    /// itself is skipped.
+    /// Where this copy was pointed. **Read once**, at the first ask, from
+    /// [`this_launch_line`].
     pub fn the_folder_this_copy_was_pointed_at() -> Option<&'static Path> {
         static THE_FOLDER: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
         THE_FOLDER
-            .get_or_init(|| the_folder_named_on(std::env::args_os().skip(1)))
+            .get_or_init(|| the_folder_named_on(this_launch_line()))
             .as_deref()
+    }
+
+    // -----------------------------------------------------------------------
+    // A test copy's own launch words, built in
+    // -----------------------------------------------------------------------
+
+    /// **The folder a test copy was built for** — `App/Build a test copy.sh`
+    /// sets `SMOOZY_TEST_COPY_FOLDER` when it builds *Smoozy Test*. Absent in
+    /// every other build.
+    ///
+    /// *(Added 2026-11-01, the Mac watch's third finding.)* Until then the
+    /// bundle's starting file was a launcher script that handed the program
+    /// these words, and **macOS could not match the program that asked for
+    /// notifications to the bundle**, so a test copy could never show one. The
+    /// program is now the bundle's starting file, as in a release, and the
+    /// words it used to be handed are built into it instead — so it starts on
+    /// its own folder however it is opened, even straight from a shell, which
+    /// the launcher never covered.
+    pub const THE_FOLDER_A_TEST_COPY_WAS_BUILT_FOR: Option<&str> =
+        option_env!("SMOOZY_TEST_COPY_FOLDER");
+
+    /// **The desk program a test copy was built with, relative to the
+    /// program's own folder** — `SMOOZY_TEST_COPY_DESK_PROGRAM`, which the
+    /// script sets to the server program in the bundle's `Resources`.
+    pub const THE_DESK_PROGRAM_A_TEST_COPY_WAS_BUILT_WITH: Option<&str> =
+        option_env!("SMOOZY_TEST_COPY_DESK_PROGRAM");
+
+    /// **The launch line this copy honours: its own command line, then the
+    /// words it was built with where the line carries none of its own.**
+    ///
+    /// **A line that already says anything about a throwaway folder or a desk
+    /// program is left exactly as given**, so an agent's own
+    /// `--throwaway-copy=<folder>` wins and a misspelt one is still refused.
+    pub fn this_launch_line() -> Vec<OsString> {
+        the_launch_line_with(
+            std::env::args_os().skip(1),
+            THE_FOLDER_A_TEST_COPY_WAS_BUILT_FOR,
+            THE_DESK_PROGRAM_A_TEST_COPY_WAS_BUILT_WITH,
+            std::env::current_exe().ok().as_deref().and_then(Path::parent),
+        )
+    }
+
+    /// [`this_launch_line`], with what it reads handed in — so a test can
+    /// stand where a test copy stands.
+    pub fn the_launch_line_with(
+        given: impl IntoIterator<Item = OsString>,
+        built_for: Option<&str>,
+        desk_program_beside: Option<&str>,
+        the_programs_folder: Option<&Path>,
+    ) -> Vec<OsString> {
+        let mut line: Vec<OsString> = given.into_iter().collect();
+        let Some(folder) = built_for.filter(|folder| !folder.is_empty()) else {
+            return line;
+        };
+        let says = |start: &str| {
+            line.iter()
+                .any(|word| word.to_string_lossy().starts_with(start))
+        };
+        if says("--throwaway") || says("--desk") {
+            return line;
+        }
+        let mut pointed = OsString::from(format!("{THE_ARGUMENT}="));
+        pointed.push(folder);
+        line.push(pointed);
+        if let (Some(beside), Some(here)) = (
+            desk_program_beside.filter(|beside| !beside.is_empty()),
+            the_programs_folder,
+        ) {
+            let mut given = OsString::from(format!("{THE_DESK_PROGRAM_ARGUMENT}="));
+            given.push(here.join(beside));
+            line.push(given);
+        }
+        line
     }
 
     // -----------------------------------------------------------------------
@@ -576,7 +648,7 @@ pub mod throwaway {
         static THE_FILE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
         the_folder_this_copy_was_pointed_at()?;
         THE_FILE
-            .get_or_init(|| the_desk_program_named_on(std::env::args_os().skip(1)))
+            .get_or_init(|| the_desk_program_named_on(this_launch_line()))
             .as_deref()
     }
 }
@@ -1072,6 +1144,70 @@ mod tests {
                 "a release build called itself a throwaway copy"
             );
         }
+    }
+
+    /// **A test copy built with its own folder starts on it with nothing on
+    /// its command line** — the Mac watch's third finding, 2026-11-01. The
+    /// program is the bundle's starting file, so nothing hands it words; the
+    /// words it was built with stand in, and the desk program is the one beside
+    /// it. **A line that says anything of its own is left as it is.**
+    ///
+    /// **Every folder here is absolute in this system's own spelling**, as
+    /// [`an_absolute_folder`] says why. Until 2026-11-07 they were written as
+    /// Mac paths, and on Windows `/Users/...` has no drive, so it is not
+    /// absolute there and was made absolute against the working folder — hosted
+    /// run `42299470433` read `D:/Users/...`. The code was right; the test
+    /// asked a Mac question on Windows.
+    #[cfg(debug_assertions)]
+    #[test]
+    fn a_test_copy_starts_on_the_folder_it_was_built_for() {
+        use std::ffi::OsString;
+        let base = an_absolute_folder();
+        let folder_path = base.join("Smoozy Test");
+        let folder_text = folder_path.to_string_lossy().into_owned();
+        let folder = folder_text.as_str();
+        let here_path = base.join("Smoozy Test.app").join("Contents").join("MacOS");
+        let here = here_path.as_path();
+        let elsewhere = base.join("elsewhere");
+        let its_own_word = format!("--throwaway-copy={}", elsewhere.display());
+        let built = |given: &[&str]| {
+            throwaway::the_launch_line_with(
+                given.iter().map(OsString::from),
+                Some(folder),
+                Some("../Resources/smoozy-server"),
+                Some(here),
+            )
+        };
+
+        let line = built(&[]);
+        assert_eq!(
+            throwaway::the_folder_named_on(line.clone()),
+            Some(PathBuf::from(folder)),
+            "a test copy opened by a double-click would have opened the real record"
+        );
+        assert_eq!(
+            throwaway::the_desk_program_named_on(line.clone()),
+            Some(here.join("../Resources/smoozy-server"))
+        );
+        assert_eq!(throwaway::an_argument_that_names_no_folder(line), None);
+
+        // **An agent's own folder wins**, and a misspelt one is still refused.
+        let own = built(&[its_own_word.as_str()]);
+        assert_eq!(throwaway::the_folder_named_on(own.clone()), Some(elsewhere.clone()));
+        assert_eq!(throwaway::the_desk_program_named_on(own), None);
+        let misspelt = built(&["--throwaway_copy=/tmp/elsewhere"]);
+        assert!(throwaway::an_argument_that_names_no_folder(misspelt).is_some());
+
+        // **A build made for no folder adds nothing**, which is every build but
+        // a test copy's.
+        let plain = throwaway::the_launch_line_with(
+            Vec::<OsString>::new(),
+            None,
+            Some("../Resources/smoozy-server"),
+            Some(here),
+        );
+        assert!(plain.is_empty());
+        assert_eq!(throwaway::the_launch_line_with(Vec::<OsString>::new(), Some(""), None, Some(here)), Vec::<OsString>::new());
     }
 
     /// **`Server protocol and transfers` B10a's gate, asked in both builds.**

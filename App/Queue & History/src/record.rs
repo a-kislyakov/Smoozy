@@ -435,6 +435,11 @@ pub struct WhatTheNoteCarried {
     /// (`Desktop app and delivery` M15a), and on every record before the
     /// reading travelled. Added 2026-10-25, step 12's SC4 findings.
     pub the_free_space_at_the_ending: Option<TheFreeSpaceReadAtTheEnding>,
+    /// **E3's two counts, carried in the act that carries the ending.** Absent
+    /// where the ending carried no statement, and on every record before they
+    /// travelled, and then *All frames rendered.* stands as it did. Added
+    /// 2026-11-02, the 5.3 integration's piece 5.
+    pub the_files_counted: Option<smoozy_queue_history_machine::acting::note::TheFilesCounted>,
 }
 
 /// **The two standings `State, identity and recovery` V1 step 2, at that
@@ -727,6 +732,10 @@ impl LocalJobRecord {
         }
         if note.last_frame_figure.is_some() {
             self.what_the_note_carried.last_frame_figure = note.last_frame_figure;
+        }
+        // **E3's count rides the ending**, so a later note's own carries it.
+        if let Some(counted) = note.the_files_counted() {
+            self.what_the_note_carried.the_files_counted = Some(counted);
         }
         // **`Rented-server runtime` V12's reading is immutable with the
         // ending it rides** (`State, identity and recovery` §8.6): taken once,
@@ -1384,6 +1393,7 @@ pub(crate) mod tests {
                 exit_status: None,
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
             record.what_the_note_carried.last_frame_figure = figure;
@@ -1859,6 +1869,7 @@ pub(crate) mod tests {
             exit_status: Some(0),
             the_attempt_whose_capture_record_holds_the_words: 2,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         note.attempts = 2;

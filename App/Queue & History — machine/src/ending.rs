@@ -130,7 +130,10 @@ pub const A_DROPPED_CONNECTION_IS_NOT_AN_EVENT_ABOUT_A_JOB: bool = true;
 /// never converts exit 0 into *everything was written* and never converts a
 /// short count into a failure the render did not report. **One render prints
 /// `Sample 600/600`, then `Finished`, then `Cancelled`, exits 1 and leaves no
-/// file.** The two are shown as the two facts they are.
+/// file.** The two are shown as the two facts they are. **A count that found
+/// nothing at all of what the job owed is `Rendering` K14b's *failed*, decided on
+/// the machine at the ending (limited 2026-11-02)**: the entry maps from that
+/// outcome as from any other, so nothing here converts anything.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TwoFactsBesideEachOther {
     pub the_ending: Ending,
@@ -270,8 +273,11 @@ pub fn the_devices_on_the_entry(
 /// the cards can render on the processor and say nothing about it.
 pub const THE_ASK_IS_NOT_EVIDENCE_OF_WHAT_RAN: bool = true;
 
-/// **E13a: the three lines on record, in substance — their exact printed
-/// text is on record in no version** (§18 item 27, permanently unresolved).
+/// **E13a: the three lines on record, in substance, for 4.5 to 5.2 — their
+/// exact printed text is on record for none of them** (§18 item 27,
+/// permanently unresolved). 5.3's lines are quoted, from a beta, and do not fit
+/// these three; a reader for them is parked in Open Threads, on the build
+/// runner's ruling of 2026-11-02.
 /// **So this holds the substance as a kind and no text at all**: an absence
 /// a type can tell from a value, exactly as the five spellings in `Render
 /// Settings` are held. A line shape written from a plausible memory would be
@@ -296,21 +302,22 @@ impl ColourSubstitutionKind {
         ColourSubstitutionKind::TheCurrentValueMatchesNoEntryInTheList,
     ];
 
-    /// **The exact printed text of the three is on record in no version.**
-    /// Not a string that is empty — an absence the type states, and the one
-    /// thing this returns.
+    /// **No printed text of the three is held here, in any version.** Not a
+    /// string that is empty — an absence the type states, and the one thing
+    /// this returns.
     pub fn the_printed_text(self) -> ThePrintedText {
-        ThePrintedText::OnRecordInNoVersion
+        ThePrintedText::NotHeldHere
     }
 }
 
-/// The printed text of a colour-substitution line, which is on record in no
-/// version. **There is no other variant**, and that is the point: nothing
+/// The printed text of a colour-substitution line, which this crate does not
+/// hold: 4.5 to 5.2's is on record nowhere, and 5.3's, from a beta, is parked
+/// (E13a). **There is no other variant**, and that is the point: nothing
 /// composes a match from this, and the acting half's grammar cannot be
 /// written from memory through it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThePrintedText {
-    OnRecordInNoVersion,
+    NotHeldHere,
 }
 
 /// **E13a: the entry states two facts and infers none** — that the machine
@@ -525,10 +532,10 @@ mod tests {
     }
 
     #[test]
-    fn the_three_colour_lines_have_a_kind_each_and_a_text_on_record_in_no_version() {
+    fn the_three_colour_lines_have_a_kind_each_and_no_text_held_here() {
         assert_eq!(ColourSubstitutionKind::ALL_THREE.len(), 3);
         for kind in ColourSubstitutionKind::ALL_THREE {
-            assert_eq!(kind.the_printed_text(), ThePrintedText::OnRecordInNoVersion);
+            assert_eq!(kind.the_printed_text(), ThePrintedText::NotHeldHere);
         }
     }
 

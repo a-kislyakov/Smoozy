@@ -725,18 +725,31 @@ impl TheClient {
     }
 
     /// **`Telegram` B18 — delete the line one pin wrote, by that line's own
-    /// identity.** The one deletion in the machinery: the service message a
-    /// pin of Smoozy's own puts in the conversation, once the holder has
-    /// processed that pin. **Never a pinned message, and never anything else**:
-    /// the listener is the only caller, and it hands in the identity of a pin
-    /// update's own service message, never the identity of what was pinned.
-    /// Telegram's `deleteMessage` takes service messages, and refuses one sent
-    /// 48 hours or more before (`Sources` entry 87); a refusal is the caller's
-    /// to read.
+    /// identity.** The service message a pin of Smoozy's own puts in the
+    /// conversation, once the holder has processed that pin. **Never a pinned
+    /// message**: the listener is the only caller, and it hands in the identity
+    /// of a pin update's own service message, never the identity of what was
+    /// pinned. A refusal is the caller's to read.
     pub fn delete_a_pins_line(&self, chat_id: i64, line_id: i64) -> WhatTheServiceGaveBack {
+        self.delete_one_message(chat_id, line_id)
+    }
+
+    /// **`Telegram` C1b's line of 2026-11-02 and B18's second deletion: an
+    /// album's companion, once its job has ended**, by its own identity. The
+    /// bot's own message, never pinned, and with nothing left to say once its
+    /// one button has gone. [`crate::actions::TheJobMessages`] is the only
+    /// caller. A refusal is the caller's to read.
+    pub fn delete_an_albums_companion(&self, chat_id: i64, message_id: i64) -> WhatTheServiceGaveBack {
+        self.delete_one_message(chat_id, message_id)
+    }
+
+    /// **`deleteMessage`, written once.** It takes service messages, lets a bot
+    /// delete its own in a private chat, and refuses one sent 48 hours or more
+    /// before (`Sources` entry 87).
+    fn delete_one_message(&self, chat_id: i64, message_id: i64) -> WhatTheServiceGaveBack {
         self.ask(
             "deleteMessage",
-            fields(json!({ "chat_id": chat_id, "message_id": line_id })),
+            fields(json!({ "chat_id": chat_id, "message_id": message_id })),
             THE_BOUND_ON_AN_ORDINARY_CALL,
         )
     }
@@ -1259,7 +1272,7 @@ mod tests {
     /// conversation and nothing else; Telegram's method is written at one site
     /// in the crate, and the listener is the one file that calls it.
     #[test]
-    fn the_one_deletion_is_a_pins_line_by_its_identity_and_only_the_listener_asks() {
+    fn the_two_deletions_are_each_by_their_identity_and_each_has_one_caller() {
         let (service, client) = a_client();
         client.delete_a_pins_line(42, 50_007).unwrap();
         let heard = service.heard();
@@ -1268,6 +1281,7 @@ mod tests {
 
         let mut the_method = Vec::new();
         let mut the_callers = Vec::new();
+        let mut the_companions_callers = Vec::new();
         for (path, working) in the_working_half_of_every_file_under_src() {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
             for (at, line) in working.lines().enumerate() {
@@ -1277,6 +1291,9 @@ mod tests {
                 if line.contains(".delete_a_pins_line(") {
                     the_callers.push(name.clone());
                 }
+                if line.contains(".delete_an_albums_companion(") {
+                    the_companions_callers.push(name.clone());
+                }
             }
         }
         assert!(
@@ -1285,6 +1302,7 @@ mod tests {
         );
         the_callers.dedup();
         assert_eq!(the_callers, ["listener.rs"], "a pin's line is deleted from {the_callers:?}");
+        assert_eq!(the_companions_callers, ["actions.rs"], "a companion is deleted from {the_companions_callers:?}");
     }
 
     fn the_working_half_of_every_file_under_src() -> Vec<(PathBuf, String)> {

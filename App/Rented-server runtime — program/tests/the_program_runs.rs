@@ -781,6 +781,54 @@ fn an_adapter_with_no_supervisor_writes_no_frame_and_says_why() {
 /// passed to the supervisor"*. The file lands whole at the staging path the
 /// request names and nowhere else, and nothing is published. Step 10c's Files'
 /// owed acts piece 7.
+/// **`Server protocol and transfers` §1.1's four values of files, through the
+/// real program's real adapter with no supervisor running**, one bad path among
+/// the good. Built 2026-11-04.
+#[cfg(unix)]
+#[test]
+fn the_four_values_of_files_are_answered_by_the_adapter_with_no_supervisor_running() {
+    use smoozy_framing::requests as asked;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::MetadataExt;
+    let _deadline = TheTestsDeadline::started();
+    let area = APackageArea::made();
+    let folder = area.at.join("values-here");
+    std::fs::create_dir_all(&folder).expect("made");
+    let there = folder.join("wood.png");
+    std::fs::write(&there, b"four bytes").expect("written");
+    let paths = vec![
+        there.as_os_str().as_bytes().to_vec(),
+        folder.join("gone.png").as_os_str().as_bytes().to_vec(),
+        there.as_os_str().as_bytes().to_vec(),
+    ];
+    let request = Request::speaking(
+        THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+        Identity::issue(IdentityKind::Operation).expect("randomness"),
+        asked::THE_FOUR_VALUES_OF_FILES_REQUEST,
+    )
+    .carrying(
+        smoozy_framing::framing::Fields::none()
+            .and(asked::THE_PATHS_READ_FIELD, asked::the_paths_written(&paths)),
+    );
+    let answered = asked_through_the_adapter(&area, &request);
+    let answers = asked::the_values_read_back(
+        answered.fields.text(asked::THE_VALUES_READ_FIELD).expect("the values"),
+        3,
+    )
+    .expect("one answer for each path");
+    let seen = std::fs::metadata(&there).expect("there");
+    let values = asked::OnePathAnswered::Values {
+        size: 10,
+        inode: seen.ino(),
+        modification_time: seen.mtime(),
+        change_time: seen.ctime(),
+    };
+    assert_eq!(
+        answers,
+        vec![values.clone(), asked::OnePathAnswered::NothingThere, values]
+    );
+}
+
 #[test]
 fn the_copy_on_the_machine_is_answered_by_the_adapter_with_no_supervisor_running() {
     use std::os::unix::ffi::OsStrExt;
@@ -3726,6 +3774,7 @@ fn the_document_a_reading_prints() -> String {
     // case: the raw render lands at the regular output path and no walk is
     // needed.
     let gating = GatingConditions {
+        the_effects_on_for_render: None,
         compositing_switch: true,
         a_compositing_tree_is_present: false,
         a_live_final_output_node: false,
@@ -3800,6 +3849,7 @@ fn the_document_a_reading_prints() -> String {
                         ),
                     },
                 announced_add_on_case: None,
+                the_folders_at_the_machines_top: None,
             })
             .expect("the settings half renders"),
         ),
@@ -4152,7 +4202,9 @@ const A_DEVICE_LINE_AS_A_STAND_IN_PRINTS_IT: &str =
 
 /// **The stand-in that reads and renders, which also prints the device line
 /// before the marker** — `Queue & History` E13's observation, for the tee at
-/// the worker's own loop to take.
+/// the worker's own loop to take. **It writes one frame of what the job owes**,
+/// since a render ending at 0 having written none of it is failed (`Rendering`
+/// K14b, 2026-11-02).
 fn a_stand_in_that_reads_renders_and_names_its_device(root: &ARoot) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let stand_in = root.at.join("a-stand-in-that-names-its-device");
@@ -4167,9 +4219,12 @@ fn a_stand_in_that_reads_renders_and_names_its_device(root: &ARoot) -> PathBuf {
              *version-ask-*.py) printf '<<<SMOOZY-READING>>>5.2.0<<<END-SMOOZY-READING>>>'; exit 0;;\n\
              *reading-*.py) printf '<<<SMOOZY-READING>>>'; cat '{document}'; printf '<<<END-SMOOZY-READING>>>'; exit 0;;\n\
              esac\n\
+             [ \"$before\" = '--render-output' ] && out=\"$word\"\n\
+             before=\"$word\"\n\
              done\n\
              echo '00:00.600  cycles           | {A_DEVICE_LINE_AS_A_STAND_IN_PRINTS_IT}'\n\
              echo 'SMOOZY-MATERIAL {{\"job\":\"a stand-in\"}}'\n\
+             [ -n \"$out\" ] && printf a-frame > \"${{out}}0001.png\"\n\
              exit 0\n",
             document = document.display()
         ),
@@ -4242,6 +4297,49 @@ fn a_failed_jobs_reason_reaches_the_note_answer_in_words_through_the_real_progra
         Some(words.as_str())
     );
     assert_eq!(ending.the_device_line_as_observed, None);
+}
+
+/// **`Rendering` K14b, end to end through the real program: a render that ends
+/// at 0 having written none of what the job owed reaches the note as *failed*,
+/// and a supervisor's restart reads the same word back.** The stand-in reads,
+/// prints the marker, writes nothing and ends at 0, which is the ending *Reports
+/// 1* records for a 5.3 scene with no camera; nothing here says a real Blender
+/// does it. **It runs where the kernel answers for a process**, as the finished
+/// test below does.
+#[test]
+fn a_render_ending_at_nought_having_written_nothing_reaches_the_note_as_failed_and_stays_so() {
+    let _deadline = TheTestsDeadline::started();
+    use smoozy_framing::requests as asked;
+    if the_pair_of_this_process().is_none() {
+        println!("UNPROVED HERE: this system publishes no per-process record.");
+        return;
+    }
+    let mut area = APackageArea::made();
+    let root = ARoot::recorded_in(&area);
+    let stand_in = a_stand_in_that_reads_and_renders(&root);
+    let job = root.a_job_the_render_worker_can_take(&stand_in);
+    area.start_the_supervisor();
+    submitted(&area, &job);
+
+    let words = smoozy_rendering_machine::endings::FailedReason::NothingTheJobOwedWasWritten.in_words();
+    let it_reads_failed = |note: &smoozy_framing::framing::Answered| {
+        assert_eq!(note.fields.text(asked::THE_ENDING_FIELD), Some(asked::IT_FAILED));
+        assert_eq!(note.fields.text(asked::THE_EXIT_STATUS_FIELD), Some("0"));
+        assert_eq!(
+            note.fields.text(asked::THE_REASON_THE_MACHINE_RECORDED_FIELD),
+            Some(words.as_str())
+        );
+        let read = smoozy_queue_history_machine::acting::note::TheNote::read_from_the_answer(&note.fields)
+            .expect("the desktop's reader reads the answer whole");
+        assert_eq!(
+            read.ending.expect("an ending").the_reason_the_machine_recorded.as_deref(),
+            Some(words.as_str())
+        );
+    };
+    it_reads_failed(&the_note_once_it_has_ended(&area, &job));
+    area.kill_the_supervisor();
+    area.start_the_supervisor();
+    it_reads_failed(&the_note_once_it_has_ended(&area, &job));
 }
 
 /// **A finished job, end to end through the real program: the device line
@@ -4355,6 +4453,12 @@ fn an_ended_jobs_capture_record_reaches_the_note_answer_through_the_real_program
     submitted(&area, &job);
 
     let note = the_note_once_it_has_ended(&area, &job);
+    // **A stand-in run with no output path wrote `0001.png` into this crate's
+    // folder**, on every run of the whole workspace.
+    assert!(
+        !std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("0001.png").exists(),
+        "the stand-in left a file in the crate's folder"
+    );
     let records = the_capture_records_read_from(&note.fields)
         .expect("the ending carries the capture records, read back whole");
     assert_eq!(records.len(), 1, "one attempt, one capture record");
@@ -5591,6 +5695,7 @@ fn the_set_up_cards_reading_names_the_ready_run_and_the_last_finished_job_after_
                 exit_status: Some(0),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: Some(the_line.to_string()),
             },
             smoozy_state::observed::Reading::taken(
@@ -6535,6 +6640,41 @@ fn the_files_reading_is_taken_by_a_file_inspection_worker_and_comes_back_through
     // before the file stands right before it**, and its handler's throwaway
     // folder is gone when the reading ends.
     the_reads_load_time_script_stands_before_the_file(&words, file.unwrap());
+
+    // `Render Settings` Q4: the saved library pairs pass through admission,
+    // the operation record and the worker's first answer, not only a direct call.
+    let files=area.at.join("files");
+    std::fs::create_dir_all(&files).unwrap();
+    let top=files.join("top.blend");
+    let library=area.at.join("fixed-library.blend");
+    std::fs::write(&top,b"top").unwrap();
+    std::fs::write(&library,b"linked simulation").unwrap();
+    let pair=smoozy_dependencies_machine::remap::compose_pair(
+        smoozy_dependencies_machine::check::Kind::Library,"filepath",
+        &smoozy_dependencies_machine::bytes::RecordedLocation::as_the_reading_carried_it(b"//lib/rig.blend"),
+        smoozy_dependencies_machine::remap::NewLocation::AFixedCopy(
+            smoozy_dependencies_machine::bytes::MachineLocation::composed(library.display().to_string().into_bytes()))).unwrap();
+    let script=std::fs::read_to_string(&stand_in).unwrap().replace("exit 0\n",r#"for word in "$@"; do
+  case "$word" in *.blend)
+    if [ "$(cat "$(dirname "$word")/lib/rig.blend")" != "linked simulation" ]; then exit 27; fi
+  ;; esac
+done
+exit 0
+"#);
+    std::fs::write(&stand_in,script).unwrap();
+    let request=a_request_of(asked::THE_READING_OF_A_BLEND_REQUEST,
+        smoozy_framing::framing::Fields::none()
+            .and(asked::THE_WHICH_READING_FIELD,asked::THE_FILES_READING)
+            .and(asked::THE_BUILD_FIELD,stand_in.display().to_string())
+            .and(asked::THE_BLEND_FIELD,top.display().to_string())
+            .and(asked::THE_BLENDER_VERSION_FIELD,"5.3.0")
+            .and(asked::THE_READINGS_LIBRARY_PAIRS_FIELD,serde_json::to_vec(&vec![pair]).unwrap()));
+    let linked=asked_until_it_ends(&area,&request);
+    assert_eq!(linked.fields.text(asked::THE_EXIT_STATUS_FIELD),Some("0"),"{:?}",linked.fields);
+    let record=std::path::Path::new(linked.fields.text(asked::THE_ORDINARY_STREAM_FIELD).unwrap()).parent().unwrap();
+    assert!(!record.join("opening").exists(),"opening links are removed after the reading");
+    assert_eq!(std::fs::read(&library).unwrap(),b"linked simulation");
+
 }
 
 /// **`Job files and outputs` R18 on a read's line**: `--python` and the

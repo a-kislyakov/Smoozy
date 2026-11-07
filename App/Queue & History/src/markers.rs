@@ -707,13 +707,14 @@ pub(crate) mod tests {
     /// the same day: the desk's History deletes a pair's two records together
     /// and reaches a check whose full range is still live by no delete and no
     /// clearing.
+    /// **200 from 2026-11-04**: R6a carries simulation progress before rendering.
     #[test]
-    fn the_plan_defines_one_hundred_and_ninety_nine_distinct_clauses() {
+    fn the_plan_defines_two_hundred_distinct_clauses() {
         let plan =
             fs::read_to_string(the_architecture_folder().join(format!("{THIS_PLANS_NAME}.md")))
                 .expect("the plan is readable");
         let defined: HashSet<String> = the_clauses_defined_by(&plan).into_iter().collect();
-        assert_eq!(defined.len(), 199, "{:?}", {
+        assert_eq!(defined.len(), 200, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

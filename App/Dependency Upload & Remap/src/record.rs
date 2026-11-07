@@ -144,6 +144,18 @@ pub enum HoldingFile {
 }
 
 impl HoldingFile {
+    /// **G9a: `{blend_name}`'s value, for a sitting rooted in this file** — the
+    /// name after its last separator, without its `.blend` ending (`Job files
+    /// and outputs` I2's own rule), from the source where that is known, which
+    /// is where `//` is measured from and the name the bake was made under.
+    /// Nothing where the name does not end so.
+    pub fn the_blend_name(&self) -> Option<Vec<u8>> {
+        smoozy_job_files::reading::the_blend_name_of(match self {
+            HoldingFile::OnTheUsersComputer(source) => source.final_segment(),
+            HoldingFile::OnTheMachineWithNoKnownLocalOrigin { location, .. } => location.as_bytes(),
+        })
+    }
+
     /// **K3's whole point: the answer travels with the file.** K5's case does
     /// not, because there is no user-side file for it to travel with.
     pub fn its_answers_travel(&self) -> bool {

@@ -385,9 +385,17 @@ def smoozy_every_tree():
             if tree is not None:
                 frontier.append(tree)
     for scene in bpy.data.scenes:
-        tree = getattr(scene, "compositing_node_group", None)
-        if tree is not None:
-            frontier.append(tree)
+        # From 5.3 every effect's group, and the older one-group name is never
+        # read: it answers only the active effect's, and warns.
+        # `Job files and outputs` R4 item 1. Before 5.3 a scene has no such stack.
+        effects = getattr(scene, "compositor_effects", None)
+        if effects is None:
+            trees = [getattr(scene, "compositing_node_group", None)]
+        else:
+            trees = [effect.node_group for effect in effects]
+        for tree in trees:
+            if tree is not None:
+                frontier.append(tree)
     for obj in bpy.data.objects:
         for modifier in getattr(obj, "modifiers", ()):
             tree = getattr(modifier, "node_group", None)
@@ -457,8 +465,15 @@ for pair in PAIRS:
         for datablock in holder:
             current = getattr(datablock, setting)
             if smoozy_match_text(current) == wanted:
-                setattr(datablock, setting, new_location)
                 reached = reached + 1
+                # **M8b: a library the file already loaded from the new location
+                # is left exactly as it is.** The opening folder put it there. A
+                # reload now would throw away what the file's own start scripts
+                # set on its data, and a new location would part it from the
+                # recorded text a script may name it by.
+                if kind == "Library" and os.path.realpath(bpy.path.abspath(current)) == os.path.realpath(new_location):
+                    continue
+                setattr(datablock, setting, new_location)
                 # **M8 and Fact 101: for a library the assignment is followed by
                 # the reload**, and it works on a library that never loaded.
                 # **Fact 99: for an image the material assigns and does not
@@ -623,6 +638,20 @@ mod tests {
         assert!(text.contains("if kind == \"Library\":"));
         assert!(crate::remap::takes_a_reload_after_assignment(Kind::Library));
         assert!(!crate::remap::takes_a_reload_after_assignment(Kind::Image));
+    }
+
+    /// **M8b: a library the file already loaded from the new location is left
+    /// alone, and the test comes before the assignment**, because the assignment is
+    /// what would part it from the recorded text.
+    #[test]
+    fn a_library_already_in_place_is_neither_assigned_nor_reloaded() {
+        let text = the_material_python(&a_material());
+        let the_test = text
+            .find("os.path.realpath(bpy.path.abspath(current)) == os.path.realpath(new_location)")
+            .expect("the test is there");
+        let the_assignment = text.find("setattr(datablock, setting, new_location)").expect("the assignment");
+        let the_reload = text.find("datablock.reload()").expect("the reload");
+        assert!(the_test < the_assignment && the_assignment < the_reload);
     }
 
     /// **M4a: the pair's match text is composed at composition and travels with

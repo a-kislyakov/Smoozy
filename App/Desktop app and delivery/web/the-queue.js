@@ -414,6 +414,19 @@ function theQueueIsAskedFor() {
 /// chooses it — the drawing's own *picking a row is a real thing the app does*.
 /// **The delete key does nothing on a queue entry**, where the equivalent act is
 /// Cancel, and Design says why: that is not a key press.
+/// **Open Queue on one job's entry** — a click on a notification about a job
+/// the Queue holds (`Desktop app and delivery` T29). The job is named by its
+/// identity, as History's `theHistoryEntryIsOpened` names it.
+///
+/// **Queue showing is its own drawn screen not being hidden**, read here rather
+/// than asked of the rail, so the page harnesses that stand in for the rail
+/// need nothing new.
+export function theQueueEntryIsOpened(job) {
+  if (job) theChosenJob = job;
+  if (host && !host.hidden) theQueueIsAskedFor();
+  else theCurrentPlaceIs(THE_QUEUE, theChosenJob);
+}
+
 function theRowIsChosen(job) {
   if (!job) return;
   theChosenJob = job;
@@ -1425,9 +1438,9 @@ export function theEntryIsDrawn(into, said, extra) {
   // (a record kept before the file's path was); a job's identity cannot.
   if (!said.entryJob) return;
   const previewKey = screen + " " + said.entryJob;
-  let lostPreview = !said.frameHeading && !!thePreviewSteps.get(previewKey)?.unavailable;
+  let lostPreview = !said.frameHeading && !!thePreviewSteps.get(said.entryJob)?.unavailable;
   if (theLargePreview && theLargePreview.key === previewKey && !said.frameHeading) {
-    const steps = thePreviewSteps.get(previewKey);
+    const steps = thePreviewSteps.get(said.entryJob);
     if (steps) steps.unavailable = true;
     thePreviewGoesAway(screen);
     lostPreview = true;
@@ -2416,8 +2429,9 @@ export function thePreviewGoesAway(screen) {
 function thePreviewIsDrawn(side, said, job, screen, opens) {
   if (!said.frameHeading) return;
   const key = screen + " " + job;
-  const steps = thePreviewSteps.get(key) || { at: null, pick: undefined, open: false, typed: null, error: null };
-  thePreviewSteps.set(key, steps);
+  // A job keeps its choice when it leaves Queue for History.
+  const steps = thePreviewSteps.get(job) || { at: null, pick: undefined, open: false, typed: null, error: null };
+  thePreviewSteps.set(job, steps);
   const group = document.createElement("div");
   group.className = "grp";
   const heading = document.createElement("h3");
@@ -2800,10 +2814,10 @@ function theTelegramIsDrawn(side, said) {
     line.appendChild(after);
   }
   group.appendChild(line);
-  if (said.telegramOlder) {
+  if (said.telegramOlder || said.telegramNotInstalled) {
     const note = document.createElement("p");
     note.className = "bar-note";
-    note.textContent = said.telegramOlder;
+    note.textContent = said.telegramOlder || said.telegramNotInstalled;
     group.appendChild(note);
   }
   side.appendChild(group);

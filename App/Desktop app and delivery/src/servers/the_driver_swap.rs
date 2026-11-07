@@ -386,20 +386,66 @@ pub struct TheDriverAtSubmission {
     pub the_program_is_this_applications_own: bool,
 }
 
+/// **The engine a job will use, as `Server Setup` R1c's bullet of 2026-11-02
+/// reads it at submission.** Added 2026-11-02, the first 5.3 live pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TheEngineAtSubmission {
+    Cycles,
+    /// **EEVEE, or a third engine the file names.** The bar is Cycles'
+    /// (`Rendering` L23a).
+    AnotherEngine,
+    /// **No pick, and no reading of the job's scene.**
+    NotKnown,
+}
+
+impl TheEngineAtSubmission {
+    /// **The user's pick (`Render Settings` E1), else the file's own for the
+    /// job's scene as the reading gives it (`Render Settings` E4)** — what the page's engine in
+    /// force and the render's start both resolve.
+    pub fn of(
+        the_users_pick: Option<smoozy_render_settings::engine::OfferedEngine>,
+        the_jobs_scene_as_read: Option<(
+            &smoozy_render_settings::reading::SceneReading,
+            &smoozy_render_settings::file_half::RecordedReading,
+        )>,
+    ) -> Self {
+        use smoozy_render_settings::engine::{what_the_page_shows, OfferedEngine, WhatThePageShows};
+        let the_engine = match (the_users_pick, the_jobs_scene_as_read) {
+            (Some(pick), _) => pick,
+            (None, Some((scene, reading))) => match what_the_page_shows(scene, reading) {
+                WhatThePageShows::Offered(engine) => engine,
+                WhatThePageShows::TheFilesOwn(_) => return TheEngineAtSubmission::AnotherEngine,
+            },
+            (None, None) => return TheEngineAtSubmission::NotKnown,
+        };
+        match the_engine {
+            OfferedEngine::Cycles => TheEngineAtSubmission::Cycles,
+            OfferedEngine::Eevee => TheEngineAtSubmission::AnotherEngine,
+        }
+    }
+}
+
 impl TheDriverAtSubmission {
     /// **`Server Setup` R1c's four, for one job, with the program's own
     /// condition before them.** `the_device` is `Queue & History` E12a's
     /// resolved device choice, nothing where it is not known at submission;
     /// `the_card_make` is `Job files and outputs` M1b's field the manifest
     /// carries; `the_jobs_blender` is the version its pick answered.
+    ///
+    /// **`Server Setup` R1c's bullet of 2026-11-02: only a Cycles job**, because
+    /// only a Cycles job's line names `OPTIX` (`Rendering` L21's bullet of that
+    /// day). **An engine not known keeps the device rule**: the desktop cannot
+    /// tell what the line will name, so the job is judged on its device alone,
+    /// as it was, and the machine decides the line from its own reading.
     pub fn holds_this_job(
         &self,
         the_device: Option<smoozy_render_settings::device::DeviceChoice>,
+        the_engine: TheEngineAtSubmission,
         the_card_make: &smoozy_job_files::manifest::TheCardMakeAtSubmission,
         the_jobs_blender: Option<Version>,
     ) -> bool {
-        let its_launch_would_name_optix = the_device
-            == Some(smoozy_render_settings::device::DeviceChoice::TheCards)
+        let its_launch_would_name_optix = the_engine != TheEngineAtSubmission::AnotherEngine
+            && the_device == Some(smoozy_render_settings::device::DeviceChoice::TheCards)
             && matches!(
                 smoozy_rendering::technology::the_technology_the_manifest_names(the_card_make),
                 Ok(smoozy_rendering::technology::Technology::Optix)
@@ -1078,34 +1124,72 @@ fn the_machine_now<R: tauri::Runtime>(
 /// up tab is told it is under way, so the card reads *restarting* at its
 /// restart; and it takes `Server Setup` T4's mark the way the ready action
 /// does ([`crate::setting_up::the_swap_run_on`]).
+///
+/// **`Server Setup` R1b, as written 2026-11-03: the machine is read before the
+/// exclusion is taken**, because taking it is what puts *Setting up* on the card.
+/// The Sesterce pass's card flipped for seven minutes between that and a refusal,
+/// one attempt after another, over a setup that had stopped part-way.
 fn the_swap_run_is_started<R: tauri::Runtime>(app: tauri::AppHandle<R>, server: String, found: Vec<Version>) {
-    // **Nobody pressed for it, so the setup's words stay** (`Server Setup`
-    // Y7a as changed 2026-10-30, the twenty-third notes, note 3).
-    if !crate::setting_up::a_run_nobody_pressed_for_begins(&server, smoozy_server_setup::run::SetupKind::TheReadyAction) {
-        return;
-    }
-    crate::surface::set_up::the_run_under_way_is_told(&app, &server);
     let spawned = std::thread::Builder::new()
         .name("smoozy driver swap".to_string())
         .spawn({
             let (app, server) = (app.clone(), server.clone());
             move || {
                 use tauri::Manager;
+                if !a_swap_may_begin_on_the_machine(&app, &server) {
+                    the_comparison_concluded(&server, None);
+                    return;
+                }
+                // **Nobody pressed for it, so the setup's words stay** (`Server
+                // Setup` Y7a as changed 2026-10-30, the twenty-third notes,
+                // note 3).
+                if !crate::setting_up::a_run_nobody_pressed_for_begins(&server, smoozy_server_setup::run::SetupKind::TheReadyAction) {
+                    return;
+                }
+                crate::surface::set_up::the_run_under_way_is_told(&app, &server);
                 let point = app
                     .try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>()
                     .and_then(|periods| periods.the_sessions_of(&server));
                 let came_to = point.map(|point| crate::setting_up::the_swap_run_on(&app, &point, &server, found));
                 crate::setting_up::a_run_ends(&server);
                 match came_to {
-                    Some(came_to) => crate::surface::set_up::the_swap_runs_ending_is_told(&app, &server, &came_to),
-                    None => crate::surface::set_up::the_run_under_way_is_told(&app, &server),
+                    Some(came_to) if !the_machine_refused_it_for_a_stopped_setup(&came_to) => {
+                        crate::surface::set_up::the_swap_runs_ending_is_told(&app, &server, &came_to)
+                    }
+                    // **A refusal that arrives all the same says no second
+                    // ending**: the card reads the machine again.
+                    _ => crate::surface::set_up::the_run_under_way_is_told(&app, &server),
                 }
             }
         });
     if spawned.is_err() {
-        crate::setting_up::a_run_ends(&server);
         crate::surface::set_up::the_run_under_way_is_told(&app, &server);
     }
+}
+
+/// **Whether the swap's own run was refused because a stopped setup stands.**
+fn the_machine_refused_it_for_a_stopped_setup(came_to: &WhereTheSetUpGot) -> bool {
+    matches!(
+        came_to,
+        WhereTheSetUpGot::TheRunEnded {
+            ending: TheRunsEnding::ASetupThatStoppedPartWayStands { .. },
+            ..
+        }
+    )
+}
+
+/// **`Server Setup` R1b's two readings before a swap's run begins, taken over the
+/// server's own point.** No point and no placement is no run, as the start below
+/// it has always read them.
+fn a_swap_may_begin_on_the_machine<R: tauri::Runtime>(app: &tauri::AppHandle<R>, server: &str) -> bool {
+    let Some(machine) = the_machine_now(app, server) else {
+        return false;
+    };
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
+        return false;
+    };
+    let drove = crate::setting_up::the_runs_this_copy_drove_on_the_confirmed_installation(app, server);
+    runtime.block_on(crate::setting_up::a_swap_may_begin(&machine.sessions, &machine.package_area, &drove))
 }
 
 #[cfg(test)]
@@ -1170,6 +1254,48 @@ mod tests {
         assert_eq!(the_comparison_on(Some(&own), false, &[v("4.5.3")]), None);
         let at = a_driver("580.178.04", WhereK1PlacesIt::ItsOwnKernel);
         assert_eq!(the_comparison_on(Some(&at), false, &found), None);
+    }
+
+    /// **`Server Setup` R1b, as written 2026-11-03: the machine is read before
+    /// the exclusion is taken**, so a swap that cannot begin never puts *Setting
+    /// up* on the card, and what it found ends what the comparison concluded.
+    #[test]
+    fn the_machine_is_read_before_a_swaps_run_takes_the_exclusion() {
+        let working = include_str!("the_driver_swap.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the working half");
+        let started = working
+            .split("fn the_swap_run_is_started<R: tauri::Runtime>(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .expect("the start");
+        let read = started.find("a_swap_may_begin_on_the_machine(&app, &server)").expect("the reading");
+        let forgotten = started.find("the_comparison_concluded(&server, None)").expect("it is forgotten");
+        let begins = started.find("a_run_nobody_pressed_for_begins").expect("the exclusion");
+        assert!(read < forgotten && forgotten < begins, "{read} {forgotten} {begins}");
+    }
+
+    /// **The refusal that still arrives is told as nothing**, so no line about a
+    /// second ending stands on the card over the first.
+    #[test]
+    fn a_refusal_for_a_stopped_setup_is_no_ending_of_its_own() {
+        let refused = WhereTheSetUpGot::TheRunEnded {
+            at: smoozy_server_setup::run::Boundary::Started,
+            ending: TheRunsEnding::ASetupThatStoppedPartWayStands {
+                standing: an_operation(),
+                said: "a setup stands".to_string(),
+            },
+        };
+        assert!(the_machine_refused_it_for_a_stopped_setup(&refused));
+        let failed = WhereTheSetUpGot::TheRunEnded {
+            at: smoozy_server_setup::run::Boundary::Started,
+            ending: TheRunsEnding::AStepFailed {
+                step: smoozy_server_setup::ready_action::Step::Driver,
+                said: "no".to_string(),
+            },
+        };
+        assert!(!the_machine_refused_it_for_a_stopped_setup(&failed));
     }
 
     /// **The live set is `Queue & History` §17's three states**, and an ended
@@ -1247,21 +1373,26 @@ mod tests {
             the_program_is_this_applications_own: true,
         };
         let nvidia = TheCardMakeAtSubmission::TheMakes(vec![smoozy_servers::hardware::NVIDIA.to_string()]);
-        assert!(at.holds_this_job(Some(DeviceChoice::TheCards), &nvidia, Some(v("5.2.2"))));
-        assert!(!at.holds_this_job(Some(DeviceChoice::TheProcessor), &nvidia, Some(v("5.2.2"))));
-        assert!(!at.holds_this_job(None, &nvidia, Some(v("5.2.2"))), "a device not known at submission");
+        assert!(at.holds_this_job(Some(DeviceChoice::TheCards), TheEngineAtSubmission::Cycles, &nvidia, Some(v("5.2.2"))));
+        assert!(!at.holds_this_job(Some(DeviceChoice::TheProcessor), TheEngineAtSubmission::Cycles, &nvidia, Some(v("5.2.2"))));
+        assert!(!at.holds_this_job(None, TheEngineAtSubmission::Cycles, &nvidia, Some(v("5.2.2"))), "a device not known at submission");
+        // **`Server Setup` R1c's bullet of 2026-11-02.**
+        assert!(!at.holds_this_job(Some(DeviceChoice::TheCards), TheEngineAtSubmission::AnotherEngine, &nvidia, Some(v("5.2.2"))));
+        assert!(at.holds_this_job(Some(DeviceChoice::TheCards), TheEngineAtSubmission::NotKnown, &nvidia, Some(v("5.2.2"))), "the device rule stands");
+        assert!(!at.holds_this_job(None, TheEngineAtSubmission::NotKnown, &nvidia, Some(v("5.2.2"))), "the device rule stands");
         assert!(!at.holds_this_job(
             Some(DeviceChoice::TheCards),
+            TheEngineAtSubmission::Cycles,
             &TheCardMakeAtSubmission::TheMakes(vec!["AMD".to_string()]),
             Some(v("5.2.2"))
         ));
-        assert!(!at.holds_this_job(Some(DeviceChoice::TheCards), &TheCardMakeAtSubmission::NoCard, Some(v("5.2.2"))));
+        assert!(!at.holds_this_job(Some(DeviceChoice::TheCards), TheEngineAtSubmission::Cycles, &TheCardMakeAtSubmission::NoCard, Some(v("5.2.2"))));
         let older = TheDriverAtSubmission {
             the_program_is_this_applications_own: false,
             ..at.clone()
         };
-        assert!(!older.holds_this_job(Some(DeviceChoice::TheCards), &nvidia, Some(v("5.2.2"))));
-        assert!(!TheDriverAtSubmission::default().holds_this_job(Some(DeviceChoice::TheCards), &nvidia, Some(v("5.2.2"))));
+        assert!(!older.holds_this_job(Some(DeviceChoice::TheCards), TheEngineAtSubmission::Cycles, &nvidia, Some(v("5.2.2"))));
+        assert!(!TheDriverAtSubmission::default().holds_this_job(Some(DeviceChoice::TheCards), TheEngineAtSubmission::Cycles, &nvidia, Some(v("5.2.2"))));
     }
 
     /// **`Server Setup` R1c's release bullets, judged** — every ending a run

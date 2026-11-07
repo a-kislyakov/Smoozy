@@ -211,6 +211,27 @@ pub const TIME_LIMIT_OFF: Spelling = Spelling::Cited {
 /// name and not the value would be no better off.
 pub const THE_TIME_LIMITS_OFF_VALUE: u64 = 0;
 
+/// **C10, C1 item 3 under EEVEE, from 5.3 alone** — `time_limit` on the scene's
+/// EEVEE settings: a decimal number in seconds starting at 0.0, whose
+/// description reads *"Limit the render time. Zero disables the limit."*
+/// Read at the desk on 5.3.0 Beta and 5.4.0 Alpha and absent on 5.2.3
+/// (*Settings 2*; [`THE_5_3_DESK_READING`]). **Never composed for a version
+/// [`EEVEE_HAS_A_TIME_LIMIT_FROM`] does not reach**, because `Rendering` L10a
+/// would fail every older EEVEE job on a name its object does not carry.
+pub const EEVEE_TIME_LIMIT_OFF: Spelling = Spelling::Cited {
+    name: "time_limit",
+    written_out_from_the_scene: "scene.eevee.time_limit",
+    source: THE_5_3_DESK_READING,
+};
+
+/// **The first Blender whose EEVEE has a time limit**, as major and minor.
+pub const EEVEE_HAS_A_TIME_LIMIT_FROM: (u32, u32) = (5, 3);
+
+/// **Where [`EEVEE_TIME_LIMIT_OFF`] was read**: not the lookup of 2026-09-20,
+/// which spoke for four versions without this one.
+pub const THE_5_3_DESK_READING: &str =
+    "Audits/Build/Blender 5.3/Piece 1, the desk readings — what landed.md, reading 1";
+
 /// **C10, C1 item 4: the property the layer-samples rule lives at** —
 /// `use_layer_samples`, `scene.cycles.use_layer_samples`, taking exactly
 /// `USE`, `BOUNDED` and `IGNORE` and starting at `USE`.

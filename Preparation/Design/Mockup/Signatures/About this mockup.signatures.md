@@ -74,3 +74,10 @@ This note had no companion signatures file before this one. It is a document und
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the twenty-fourth notes, note 2, plan and drawing pass.md`, outside any round — the count moved to 335 and the seventeenth notes' note 11 written into the history. No auditor has seen it.
 
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the Telegram discussion's two wants, plan and drawing pass.md`, outside any round — the count moved to 339 and the Telegram discussion's two wants written into the history. No auditor has seen it.
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — a build with no update keys says so.md`, outside any round — the count moved to 340 and `about-no-updates` written into the history. No auditor has seen it.
+
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — a Linux rollback with an unreadable record says so.md`, outside any round — the count moved to 341 and `upd-rollback-unread` written into the history. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 11/Brief — the OptiX check and two Render Settings faults.md`, outside any round — the count to 342 and the entry for `su-nooptix`.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — the count to 343 and the entry for `res-drvold`. No auditor has seen it.

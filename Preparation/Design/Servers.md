@@ -62,7 +62,7 @@ Beside that, in three columns: **what it is doing**, **what it has to render wit
 
 **The list carries a footer**, with how many servers there are and how many are connected.
 
-**On a computer without the SSH tools, one line above the list says why no key is checked.** It is the [Keys](Keys.md) screen's statement, word for word — *SSH tools are not installed on this computer. No key can be created or checked until they are.* — because the rows' key marks rest on the same readings, which is the [architecture](../Architecture/Keys.md) U6a's rule. Said once, never per row, and no key mark pretends to a verdict nobody read.
+**On a computer without the SSH tools, one line above the list says why no key is checked.** It is the [Keys](Keys.md) screen's statement, word for word — *SSH tools not installed. Keys can't be created or checked without them.* (*words changed 2026-11-06 (was *SSH tools not installed. Install them to create or check keys.*): the check after the last fix, as Keys says it. No auditor has seen it.*) (*words changed 2026-11-06 (was *SSH tools are not installed on this computer. No key can be created or checked until they are.*): the last words read before the release. No auditor has seen it.*) — because the rows' key marks rest on the same readings, which is the [architecture](../Architecture/Keys.md) U6a's rule. Said once, never per row, and no key mark pretends to a verdict nobody read.
 
 ## Actions on a row
 

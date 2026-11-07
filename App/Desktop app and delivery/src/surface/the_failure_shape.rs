@@ -355,7 +355,7 @@ pub fn the_failures_are_posted(
     };
 
     for record in &standing {
-        // **The composed sentence, before X7's two substitutions.** The screen
+        // **The composed sentence, before X7's substitutions.** The screen
         // takes it again through the point.
         let sentence = the_sentence_for(record);
 

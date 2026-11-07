@@ -430,19 +430,12 @@ whenTold(THE_SEARCH_FOLDERS, (delivery) => {
   theSentences(f.covers, said.aFolderCoversEverything, said.chooseTheFolderHoldingAll);
   f.add.textContent = said.addAFolder || "";
 
-  // `§ Search folders`' order line, with the drawing's own bold on *which
-  // folder*. Five nodes and never one string.
+  // `§ Search folders`' order line: three sentences, each its own string.
   f.how.replaceChildren();
-  const bold = made("b");
-  bold.textContent = said.whichFolder || "";
   for (const one of [
     document.createTextNode(said.dragOrUseTheArrows || ""),
     document.createTextNode(" "),
     document.createTextNode(said.theFirstFolderHoldingAMatch || ""),
-    document.createTextNode(" "),
-    bold,
-    document.createTextNode(" "),
-    document.createTextNode(said.isTakenFrom || ""),
     document.createTextNode(" "),
     document.createTextNode(said.whereOneFolderHoldsTwo || ""),
   ]) {

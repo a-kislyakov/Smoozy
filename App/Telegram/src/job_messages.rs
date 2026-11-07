@@ -475,6 +475,14 @@ pub struct AFailedJob {
     /// one cause Smoozy can read off the machine (`Telegram` E1 carries its
     /// sentence).
     pub disk_free_at_the_ending: Option<u64>,
+    /// **Whether the attempt ended before any render began** (the note's ending,
+    /// `Rendering` K14). `Design/Queue & History`'s *Failed before rendering.*, in
+    /// this message's short form.
+    pub no_render_began: bool,
+    /// **The reason the machine recorded** (the note's ending), said where no
+    /// render began and where Blender exited at 0 and the job still failed: it
+    /// is Smoozy's own sentence and nothing is read from a stream (`Telegram` E1).
+    pub the_reason_the_machine_recorded: Option<String>,
 }
 
 /// **`Whole app`'s sentence for the one failure whose cause Smoozy can read**:
@@ -584,22 +592,49 @@ pub fn what_is_said_instead_of_try_it_again(cause: TheCause) -> Option<&'static 
 }
 
 /// **`Telegram` E1, E2, E3 and Y4a — the failing message.** The drawing's
-/// `tg-fail`: *"Kitchen — final failed at frame 148 of 240. Blender ended
-/// with status 1."*, *"147 frames are on the server and can be downloaded."*,
+/// `tg-fail`: *"Kitchen — final failed at frame 148 of 240. Blender exited
+/// with code 1."*, *"147 frames are on the server and can be downloaded."*,
 /// then the buttons.
 pub fn the_failure_message(failed: &AFailedJob) -> AComposedMessage {
     let mut lines = Vec::new();
-    let at = match failed.at_frame {
-        Some((frame, of)) => format!(" at frame {frame} of {of}"),
-        None => String::new(),
-    };
-    let status = match failed.exit_status {
-        Some(status) => format!("Blender ended with status {status}."),
-        None => "Blender ended without an exit status.".to_string(),
-    };
-    lines.push(format!("🔴 Failed{at}. {status}"));
+    if failed.no_render_began {
+        // **`Telegram` E1, 2026-11-04: `Design/Queue & History`'s words.** *Blender
+        // ended without an exit status* was false: no render had started, and on the
+        // film's first job no render Blender had even been launched.
+        lines.push("🔴 Failed before rendering.".to_string());
+        if let Some(reason) = failed.the_reason_the_machine_recorded.as_deref().filter(|reason| !reason.is_empty()) {
+            let mut letters = reason.chars();
+            lines.extend(letters.next().map(|first| first.to_uppercase().chain(letters).collect::<String>()));
+        }
+    } else {
+        let at = match failed.at_frame {
+            Some((frame, of)) => format!(" at frame {frame} of {of}"),
+            None => String::new(),
+        };
+        let status = match failed.exit_status {
+            // **An exit at 0 is a failure only by the machine's own reason**
+            // (`Rendering` K14b, or a render that never reported starting), so
+            // the phone says that reason, as History does. *Changed 2026-11-06,
+            // the last words read before the release: it read *Blender ended
+            // with status 0.* beside *Failed*.*
+            Some(0) => failed
+                .the_reason_the_machine_recorded
+                .as_deref()
+                .filter(|reason| !reason.is_empty())
+                .map(|reason| {
+                    let mut letters = reason.chars();
+                    let first: String = letters.next().map(|first| first.to_uppercase().collect()).unwrap_or_default();
+                    format!("{first}{}.", letters.as_str())
+                })
+                .unwrap_or_else(|| "Blender exited normally but wrote none of the job's files.".to_string()),
+            Some(status) => format!("Blender exited with code {status}."),
+            None => "Blender exited without an exit code.".to_string(),
+        };
+        lines.push(format!("🔴 Failed{at}. {status}"));
+    }
     // `Whole app` and `Telegram` E1: the disk is full, beside the exit status.
-    if failed.disk_free_at_the_ending == Some(0) {
+    // **It says *when the render ended***, so not where none began.
+    if failed.disk_free_at_the_ending == Some(0) && !failed.no_render_began {
         lines.push(THE_DISK_IS_FULL.to_string());
     }
     lines.push(match failed.frames_on_the_server {
@@ -612,6 +647,9 @@ pub fn the_failure_message(failed: &AFailedJob) -> AComposedMessage {
         streams
             .iter()
             .filter(|(stream, outcome)| !an_empty_errors_stream_goes_unsaid(*stream, *outcome, failed.ordinary_output))
+            // **Where no render began and no stream was opened, there is nothing to
+            // say of either**: the headline has said it.
+            .filter(|(_, outcome)| !(failed.no_render_began && *outcome == ACollectionOutcome::NeverEstablished))
             .filter_map(|(stream, outcome)| what_the_outcome_says(*stream, *outcome)),
     );
     if let Some(sentence) = what_is_said_instead_of_try_it_again(failed.cause) {
@@ -652,6 +690,20 @@ pub struct AFinishedJob {
     pub ended: SystemTime,
     /// Where the job belongs to a group, G1 speaks for it instead.
     pub group: Option<String>,
+    /// **E1a: C27's files written and files owed**, where the ending carried a
+    /// statement.
+    pub files: Option<(u64, u64)>,
+}
+
+/// **E1a: *3 of 4 files written*, where the count came up short.**
+fn a_short_count_in_words(files: Option<(u64, u64)>) -> Option<String> {
+    let (written, owed) = files.filter(|(written, owed)| written < owed)?;
+    Some(format!(
+        "{} of {} {} written",
+        with_thousands(written),
+        with_thousands(owed),
+        if owed == 1 { "file" } else { "files" }
+    ))
 }
 
 /// **E1 and G1 — the finishing message for one job, or nothing where the job
@@ -664,7 +716,7 @@ pub fn the_finishing_message(finished: &AFinishedJob) -> Option<AMarkedText> {
     let took = finished.ended.duration_since(finished.started).ok();
     Some(a_user_message(&finished.server, &finished.label, "", &format!(
         "Finished. {}{}.",
-        frames_in_words(finished.frames),
+        a_short_count_in_words(finished.files).unwrap_or_else(|| frames_in_words(finished.frames)),
         took.map(|d| format!(" in {}", how_long_in_words(d))).unwrap_or_default()
     )))
 }
@@ -723,7 +775,12 @@ pub fn the_given_up_message(given_up: &AGivenUpJob) -> AComposedMessage {
 /// none has not ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AMembersEnding {
-    Finished { frames: u64 },
+    Finished {
+        frames: u64,
+        /// **E1a: C27's files written and files owed**, where the ending
+        /// carried a statement.
+        files: Option<(u64, u64)>,
+    },
     Failed,
     GivenUp,
     /// G2: *"a member left stopped still counts toward the last member"*.
@@ -759,10 +816,22 @@ pub fn what_the_group_says(server: &(impl TheServersName + ?Sized), the_groups_l
     let finished: Vec<u64> = members
         .iter()
         .filter_map(|m| match m.ending {
-            Some(AMembersEnding::Finished { frames }) => Some(frames),
+            Some(AMembersEnding::Finished { frames, .. }) => Some(frames),
             _ => None,
         })
         .collect();
+    // **E1a: where any finished member came up short**, the two counts over
+    // every finished member that has them.
+    let the_files = members.iter().filter_map(|m| match m.ending {
+        Some(AMembersEnding::Finished { files, .. }) => files,
+        _ => None,
+    });
+    let any_came_up_short = the_files.clone().any(|(written, owed)| written < owed);
+    let the_files_in_words = any_came_up_short
+        .then(|| the_files.fold((0, 0), |(written, owed), one| (written + one.0, owed + one.1)))
+        .and_then(|sum| a_short_count_in_words(Some(sum)))
+        .map(|words| format!(", {words}"))
+        .unwrap_or_default();
     if finished.is_empty() {
         return None;
     }
@@ -777,7 +846,7 @@ pub fn what_the_group_says(server: &(impl TheServersName + ?Sized), the_groups_l
         _ => None,
     };
     Some(a_user_message(server, the_groups_label, "", &format!(
-        "Finished. {scenes}, {}{}.",
+        "Finished. {scenes}, {}{the_files_in_words}{}.",
         frames_in_words(finished.iter().sum()),
         took.unwrap_or_default()
     )))
@@ -1008,7 +1077,7 @@ pub fn the_drop_message(server: &(impl TheServersName + ?Sized), label: &str, fr
 /// copy and the version the one L21's mark held. Standard words that Design
 /// may replace; added 2026-10-16, the Telegram worker's piece 3.
 pub fn the_drop_for_a_removed_blender(server: &(impl TheServersName + ?Sized), label: &str, version: &str) -> AMarkedText {
-    a_user_message(server, label, "", &format!("Not rendered. Blender {version} was removed from this server."))
+    a_user_message(server, label, "", &format!("Not rendered: Blender {version} was removed from this server."))
 }
 
 /// **`State, identity and recovery` E5 — the journal dropped events before
@@ -1348,8 +1417,8 @@ mod tests {
             the_start_message(&server, job), the_stop_question(&server, job, false).text,
             the_stop_question(&server, job, true).text, the_job_already_ended(&server, job),
             the_failure_message(&failed).text, the_given_up_message(&given).text,
-            the_finishing_message(&AFinishedJob { server: server.clone(), label: job.into(), frames: 3, started: at(0), ended: at(60), group: None }).unwrap(),
-            what_the_group_says(&server, job, &[member(Some(AMembersEnding::Finished { frames: 3 }), 0, 60)]).unwrap(),
+            the_finishing_message(&AFinishedJob { server: server.clone(), label: job.into(), frames: 3, started: at(0), ended: at(60), group: None, files: None }).unwrap(),
+            what_the_group_says(&server, job, &[member(Some(AMembersEnding::Finished { frames: 3, files: None }), 0, 60)]).unwrap(),
             the_waiting_message(&waiting).unwrap().text,
             the_answer_was_applied(&server, job, TheAnswer::GoOn, 3),
             the_answer_already_applied(&server, job, TheAnswer::Dont, 3, at(0)),
@@ -1387,7 +1456,32 @@ mod tests {
             complaints,
             cause,
             disk_free_at_the_ending: Some(61_000_000_000),
+            no_render_began: false,
+            the_reason_the_machine_recorded: None,
         }
+    }
+
+    /// **E1, `Design/Queue & History`: a job that failed before any render says so,
+    /// with the reason**, and nothing about Blender ending, about a render or about a
+    /// stream never opened. The buttons follow the cause as ever.
+    #[test]
+    fn a_failure_before_any_render_says_so_in_its_short_form() {
+        use ACollectionOutcome::NeverEstablished;
+        let mut failed = kitchen(TheCause::Undetermined, NeverEstablished, NeverEstablished);
+        failed.no_render_began = true;
+        failed.the_reason_the_machine_recorded = Some("could not copy the bake folder //caches/shot/".to_string());
+        failed.exit_status = None;
+        failed.at_frame = None;
+        failed.frames_on_the_server = 0;
+        failed.disk_free_at_the_ending = Some(0);
+        let text = the_failure_message(&failed).text;
+        assert!(text.contains("🔴 Failed before rendering.\nCould not copy the bake folder //caches/shot/\nNo frames on the server."), "{text}");
+        for false_here in ["exit code", "exit status", "No output was recorded", "Errors log", "was full"] {
+            assert!(!text.contains(false_here), "{false_here}: {text}");
+        }
+        // A job Blender was launched for keeps what its streams hold.
+        failed.ordinary_output = ACollectionOutcome::CollectionIncomplete;
+        assert!(the_failure_message(&failed).text.contains("Output log incomplete."));
     }
 
     /// **`Whole app` and E1 — the disk is full, said beside the machine's own
@@ -1399,7 +1493,7 @@ mod tests {
         let mut failed = kitchen(TheCause::TheMachinesOwn, Collected, CollectedAndTheStreamWasEmpty);
         failed.disk_free_at_the_ending = Some(0);
         let lines: Vec<String> = the_failure_message(&failed).text.lines().map(str::to_string).collect();
-        assert_eq!(lines[2], "🔴 Failed at frame 148 of 240. Blender ended with status 1.");
+        assert_eq!(lines[2], "🔴 Failed at frame 148 of 240. Blender exited with code 1.");
         assert_eq!(lines[3], THE_DISK_IS_FULL);
         for reading in [None, Some(1)] {
             failed.disk_free_at_the_ending = reading;
@@ -1456,7 +1550,7 @@ mod tests {
         let message = the_failure_message(&kitchen(TheCause::TheMachinesOwn, Collected, CollectedAndTheStreamWasEmpty));
         assert_eq!(
             message.text,
-            "RunPod 4090\nKitchen — final\n🔴 Failed at frame 148 of 240. Blender ended with status 1.\n147 frames on the server."
+            "RunPod 4090\nKitchen — final\n🔴 Failed at frame 148 of 240. Blender exited with code 1.\n147 frames on the server."
         );
         assert_eq!(labels(&message), ["Send Output log", "Retry"]);
     }
@@ -1475,7 +1569,7 @@ mod tests {
         let message = the_failure_message(&no_camera);
         assert_eq!(
             message.text,
-            "RunPod 4090\nKitchen — final\n🔴 Failed. Blender ended with status 1.\nNo frames on the server.\nCause unknown. Use Submit again in Smoozy."
+            "RunPod 4090\nKitchen — final\n🔴 Failed. Blender exited with code 1.\nNo frames on the server.\nCause unknown. Use Submit again in Smoozy."
         );
         assert_eq!(labels(&message), ["Send Output log"]);
         let partly = the_failure_message(&kitchen(TheCause::Undetermined, CollectionIncomplete, CollectedAndTheStreamWasEmpty));
@@ -1587,11 +1681,37 @@ mod tests {
         failed.at_frame = None;
         failed.frames_on_the_server = 0;
         let message = the_failure_message(&failed);
-        assert!(message.text.contains("🔴 Failed. Blender ended without an exit status."));
+        assert!(message.text.contains("🔴 Failed. Blender exited without an exit code."));
         assert!(message.text.contains("No frames on the server."));
         for button in &message.buttons {
             assert!(!button.payload.to_string().contains("printed:"));
         }
+    }
+
+    /// **`Rendering` K14b on the phone: an exit at 0 that failed says the
+    /// machine's reason, as History does**, and never *code 0* beside *Failed*.
+    /// Added 2026-11-06, the last words read before the release.
+    #[test]
+    fn a_failure_at_nought_says_the_machines_reason() {
+        let mut failed = kitchen(TheCause::Undetermined, ACollectionOutcome::Collected, ACollectionOutcome::Collected);
+        failed.exit_status = Some(0);
+        failed.at_frame = None;
+        failed.frames_on_the_server = 0;
+        failed.the_reason_the_machine_recorded = Some("Blender exited normally but wrote none of the job's files".to_string());
+        let text = the_failure_message(&failed).text;
+        assert!(text.contains("🔴 Failed. Blender exited normally but wrote none of the job's files.\n"), "{text}");
+        failed.the_reason_the_machine_recorded = None;
+        let text = the_failure_message(&failed).text;
+        assert!(text.contains("🔴 Failed. Blender exited normally but wrote none of the job's files.\n"), "{text}");
+        assert!(!text.contains("code 0"), "{text}");
+        // **The other exit-at-0 reason, a render that never reported
+        // starting**, reads as the same pair. Added 2026-11-06, the check
+        // after the last fix.
+        failed.the_reason_the_machine_recorded =
+            Some("Blender exited normally but never reported starting to render".to_string());
+        let text = the_failure_message(&failed).text;
+        assert!(text.contains("🔴 Failed. Blender exited normally but never reported starting to render.\n"), "{text}");
+        assert!(!text.contains("code 0"), "{text}");
     }
 
     fn at(seconds: u64) -> SystemTime {
@@ -1606,7 +1726,7 @@ mod tests {
     /// only where a member finished.** The drawing's `tg-batch`.
     #[test]
     fn a_group_speaks_once_and_only_when_a_member_finished() {
-        let finished = Some(AMembersEnding::Finished { frames: 120 });
+        let finished = Some(AMembersEnding::Finished { frames: 120, files: None });
         let mut members: Vec<AMember> = (0..12).map(|n| member(finished, n * 3600, n * 3600 + 4000)).collect();
         members[11].ending = None;
         assert_eq!(what_the_group_says("Vast 5060", "Product spins", &members), None);
@@ -1637,6 +1757,7 @@ mod tests {
             started: at(0),
             ended: at(6 * 3600 + 120),
             group: None,
+            files: None,
         };
         assert_eq!(
             the_finishing_message(&job).unwrap(),
@@ -1644,6 +1765,42 @@ mod tests {
         );
         job.group = Some("group-1".into());
         assert_eq!(the_finishing_message(&job), None);
+    }
+
+    /// **E1a: a count that came up short takes the frames' place, and the state
+    /// word stays.** A whole count, and none at all, read as they did.
+    #[test]
+    fn e1a_a_finish_whose_count_came_up_short_says_how_many_of_how_many() {
+        let job = |files| AFinishedJob {
+            server: "RunPod 4090".into(),
+            label: "Kitchen".into(),
+            frames: 0,
+            started: at(0),
+            ended: at(120),
+            group: None,
+            files,
+        };
+        assert_eq!(
+            the_finishing_message(&job(Some((1, 2)))).unwrap(),
+            "RunPod 4090\nKitchen\nFinished. 1 of 2 files written in 2 minutes."
+        );
+        assert_eq!(
+            the_finishing_message(&job(Some((1200, 2400)))).unwrap(),
+            "RunPod 4090\nKitchen\nFinished. 1,200 of 2,400 files written in 2 minutes."
+        );
+        assert_eq!(the_finishing_message(&job(Some((2, 2)))).unwrap(), "RunPod 4090\nKitchen\nFinished. 0 frames in 2 minutes.");
+        assert_eq!(the_finishing_message(&job(None)).unwrap(), "RunPod 4090\nKitchen\nFinished. 0 frames in 2 minutes.");
+
+        // **G1: over the finished members, where any came up short.**
+        let finished = |frames, files| member(Some(AMembersEnding::Finished { frames, files }), 0, 600);
+        assert_eq!(
+            what_the_group_says("Vast 5060", "Spins", &[finished(120, Some((120, 120))), finished(60, Some((60, 120))), finished(40, None)]).unwrap(),
+            "Vast 5060\nSpins\nFinished. 3 scenes, 220 frames, 180 of 240 files written in 10 minutes."
+        );
+        assert_eq!(
+            what_the_group_says("Vast 5060", "Spins", &[finished(120, Some((120, 120))), finished(60, None)]).unwrap(),
+            "Vast 5060\nSpins\nFinished. 2 scenes, 180 frames in 10 minutes."
+        );
     }
 
     /// **V1: the three choices, with the floor under all three.**
@@ -1828,7 +1985,7 @@ mod tests {
     fn a_drop_for_a_removed_blender_and_a_gap_are_said_plainly() {
         assert_eq!(
             the_drop_for_a_removed_blender("RunPod 4090", "Kitchen", "4.2.3"),
-            "RunPod 4090\nKitchen\nNot rendered. Blender 4.2.3 was removed from this server."
+            "RunPod 4090\nKitchen\nNot rendered: Blender 4.2.3 was removed from this server."
         );
         let gap = some_events_were_missed("RunPod 4090");
         assert!(gap.starts_with("RunPod 4090\n"));

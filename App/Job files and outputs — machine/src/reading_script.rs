@@ -80,6 +80,10 @@
 //!   node tree"*; **from 5.0 a scene carries no `node_tree` at all** and the
 //!   name is `scene.compositing_node_group`, *"Compositor Nodes"*
 //!   ([`THE_LOOKUP`], confirmed by [`THIS_PIECES_LOOKUP`]).
+//! - **From 5.3, the stack of effects** (R4 item 1): `scene.compositor_effects`,
+//!   each effect's `node_group` and `enable_for_render`, 5.4 the same
+//!   ([`THE_EFFECTS_LOOKUP`]). **That route reads no older name**, which is the
+//!   third side of [`AcrossTheBoundary`].
 //! - **The tree's final output node.** `CompositorNodeComposite`, labelled
 //!   *Composite*, described *"Final render output"* — **present in 4.5 and in
 //!   no later version**; `NodeGroupOutput`, labelled *Group Output*, present in
@@ -346,6 +350,18 @@ impl Spelling {
 pub struct AcrossTheBoundary {
     pub four_five: Option<Spelling>,
     pub from_five_zero: Option<Spelling>,
+    /// **The third side, from 5.3.** Where a scene holds a stack of effects, a
+    /// few names part from 5.0 to 5.2's; every other name is the same.
+    pub from_five_three: TheThirdSide,
+}
+
+/// **What a name does from 5.3** ([`TheVersionInHand::holds_a_stack_of_effects`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TheThirdSide {
+    TheSameAsFromFiveZero,
+    /// Its own spelling, or an absence meaning **this version's route reads no
+    /// such thing**.
+    ItsOwn(Option<Spelling>),
 }
 
 impl AcrossTheBoundary {
@@ -357,7 +373,10 @@ impl AcrossTheBoundary {
     ) -> Result<Option<&'static str>, MissingSpelling> {
         let side = match version.branch() {
             WhichBranch::FourFive => self.four_five,
-            WhichBranch::FromFiveZero => self.from_five_zero,
+            WhichBranch::FromFiveZero => match self.from_five_three {
+                TheThirdSide::ItsOwn(own) if version.holds_a_stack_of_effects() => own,
+                _ => self.from_five_zero,
+            },
         };
         match side {
             None => Ok(None),
@@ -371,6 +390,7 @@ impl AcrossTheBoundary {
         AcrossTheBoundary {
             four_five: Some(cited),
             from_five_zero: Some(cited),
+            from_five_three: TheThirdSide::TheSameAsFromFiveZero,
         }
     }
 }
@@ -379,8 +399,30 @@ impl AcrossTheBoundary {
 // The names, at their one declaration point
 // ---------------------------------------------------------------------------
 
+/// **The desk reading of the stack's names**, on 5.3.0 Beta and 5.4.0 Alpha with
+/// 5.2.3 as the control, each read off that Blender's own property lists:
+/// `Audits/Build/Blender 5.3/Piece 1, the desk readings — what landed.md`,
+/// reading 1. 5.3's and 5.4's words agree; 5.2.3 has none of the three.
+pub const THE_EFFECTS_LOOKUP: &str = "the 5.3 integration's desk reading, 2026-11-02 \
+     (Audits/Build/Blender 5.3/Piece 1, the desk readings — what landed.md, reading 1)";
+
+/// **`Render Settings` Q2 item 1, from 5.3: EEVEE's time limit**, on the scene's
+/// EEVEE settings, *"Limit the render time. Zero disables the limit."*
+pub const THE_EEVEE_TIME_LIMIT: AcrossTheBoundary = AcrossTheBoundary {
+    four_five: None,
+    from_five_zero: None,
+    from_five_three: TheThirdSide::ItsOwn(Some(Spelling::Cited {
+        name: "time_limit",
+        source: THE_EFFECTS_LOOKUP,
+    })),
+};
+
 /// **The scene's compositing tree.** 4.5 alone has `node_tree`; from 5.0 the
 /// name is `compositing_node_group` and a scene has no `node_tree` at all.
+///
+/// **From 5.3 this route reads no such thing** (R4 item 1): that name answers
+/// only the active effect's group, Blender marks it for removal in 6.0, and
+/// reading it puts a line on the Errors stream that the user reads as Blender's.
 pub const THE_SCENES_COMPOSITING_TREE: AcrossTheBoundary = AcrossTheBoundary {
     four_five: Some(Spelling::Cited {
         name: "node_tree",
@@ -390,7 +432,56 @@ pub const THE_SCENES_COMPOSITING_TREE: AcrossTheBoundary = AcrossTheBoundary {
         name: "compositing_node_group",
         source: THE_LOOKUP,
     }),
+    from_five_three: TheThirdSide::ItsOwn(None),
 };
+
+/// **R4 item 1, from 5.3: a scene's stack of effects**, *"Compositor effects for
+/// this scene"*.
+pub const THE_SCENES_EFFECTS: AcrossTheBoundary = AcrossTheBoundary {
+    four_five: None,
+    from_five_zero: None,
+    from_five_three: TheThirdSide::ItsOwn(Some(Spelling::Cited {
+        name: "compositor_effects",
+        source: THE_EFFECTS_LOOKUP,
+    })),
+};
+
+/// **An effect's group**, *"Node group that controls what this effect does"*.
+pub const AN_EFFECTS_GROUP: AcrossTheBoundary = AcrossTheBoundary {
+    four_five: None,
+    from_five_zero: None,
+    from_five_three: TheThirdSide::ItsOwn(Some(Spelling::Cited {
+        name: "node_group",
+        source: THE_EFFECTS_LOOKUP,
+    })),
+};
+
+/// **An effect's render switch**, *"Use effect during render"*: a node writes
+/// only where its effect has it on (*File output nodes 13*).
+pub const AN_EFFECTS_RENDER_SWITCH: AcrossTheBoundary = AcrossTheBoundary {
+    four_five: None,
+    from_five_zero: None,
+    from_five_three: TheThirdSide::ItsOwn(Some(Spelling::Cited {
+        name: "enable_for_render",
+        source: THE_EFFECTS_LOOKUP,
+    })),
+};
+
+/// **The name the walk over the marks must not step on, from 5.3.** That walk
+/// goes through every pointer on a scene whose type it reaches, so it would read
+/// the older one-group name and warn on every file (`Piece 1, the desk readings
+/// — what landed.md`, reading 2). Every effect's group is reached through the
+/// stack and the file's own list of groups, so nothing is lost by stepping over
+/// it. Before 5.3 the list is [`THE_WALK_STEPS_OVER`] as it was.
+pub fn the_walk_steps_over(version: TheVersionInHand) -> Result<Vec<&'static str>, MissingSpelling> {
+    let mut over = THE_WALK_STEPS_OVER.to_vec();
+    if version.holds_a_stack_of_effects() {
+        if let Some(cited) = THE_SCENES_COMPOSITING_TREE.from_five_zero {
+            over.push(cited.name()?);
+        }
+    }
+    Ok(over)
+}
 
 /// **The tree's final output node** — R4 item 1's *live final output node*. The
 /// Composite node in 4.5, which no later version registers at all; the Group
@@ -404,6 +495,7 @@ pub const THE_FINAL_OUTPUT_NODES_TYPE: AcrossTheBoundary = AcrossTheBoundary {
         name: "NodeGroupOutput",
         source: THIS_PIECES_LOOKUP,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **B3's first limit's two ends**: the picture arriving inside a group and the
@@ -429,6 +521,7 @@ pub const THE_FOUR_FIVE_USE_NODES_SWITCH: AcrossTheBoundary = AcrossTheBoundary 
         source: THE_LOOKUP,
     }),
     from_five_zero: None,
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **D12's switch, from 5.2 alone**: it stops the scene's own frames being
@@ -451,6 +544,7 @@ pub const THE_NODES_FOLDER: AcrossTheBoundary = AcrossTheBoundary {
         name: "directory",
         source: THE_LOOKUP,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **I2: from 5.0 the node's own base file name sits between the folder and the
@@ -461,6 +555,7 @@ pub const THE_NODES_BASE_FILE_NAME: AcrossTheBoundary = AcrossTheBoundary {
         name: "file_name",
         source: THE_LOOKUP,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **The list carrying one entry per output**, and the entry's own piece of
@@ -475,6 +570,7 @@ pub const THE_NODES_OUTPUT_LIST: AcrossTheBoundary = AcrossTheBoundary {
         name: "file_output_items",
         source: THE_LOOKUP,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 pub const AN_OUTPUTS_OWN_PIECE_OF_PATH: AcrossTheBoundary = AcrossTheBoundary {
@@ -486,6 +582,7 @@ pub const AN_OUTPUTS_OWN_PIECE_OF_PATH: AcrossTheBoundary = AcrossTheBoundary {
         name: "name",
         source: THIS_PIECES_LOOKUP,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **The per-output format switch, whose name and sense both moved at 5.0 while
@@ -506,6 +603,7 @@ pub const THE_PER_OUTPUT_FORMAT_SWITCH: AcrossTheBoundary = AcrossTheBoundary {
         name: "override_node_format",
         source: THE_LOOKUP,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **Whether the switch above being on means the output carries its own
@@ -525,6 +623,7 @@ pub const THE_GATHERING_MARKS_PROPERTY: AcrossTheBoundary = AcrossTheBoundary {
         name: "media_type",
         source: THIS_PIECES_LOOKUP,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 pub const THE_GATHERING_MARKS_VALUE: AcrossTheBoundary = AcrossTheBoundary {
@@ -536,6 +635,7 @@ pub const THE_GATHERING_MARKS_VALUE: AcrossTheBoundary = AcrossTheBoundary {
         name: "MULTI_LAYER_IMAGE",
         source: THIS_PIECES_LOOKUP,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **The media setting, where the version has one**, which is also what has to
@@ -547,6 +647,7 @@ pub const THE_MEDIA_KIND: AcrossTheBoundary = AcrossTheBoundary {
         name: "media_type",
         source: THIS_PIECES_LOOKUP,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **A file output node's own ending switch, from 5.2 alone.** Before 5.2 the
@@ -635,6 +736,7 @@ pub const A_STILL_PICTURES_MEDIA_KIND: AcrossTheBoundary = AcrossTheBoundary {
         name: "IMAGE",
         source: THE_VIDEO_WANTS_TEST,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **R4c: the format a first-frame check of a video job is written in** —
@@ -684,6 +786,7 @@ pub const WHERE_A_PLAIN_NODES_NAMES_START: AcrossTheBoundary = AcrossTheBoundary
         name: "file_name",
         source: THE_NAME_START_DESK_TEST,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **P18a: the setting whose last piece starts a multilayer File Output
@@ -701,6 +804,7 @@ pub const WHERE_A_GATHERING_NODES_NAME_STARTS: AcrossTheBoundary = AcrossTheBoun
         name: "file_name",
         source: THE_NAME_START_DESK_TEST,
     }),
+    from_five_three: TheThirdSide::TheSameAsFromFiveZero,
 };
 
 /// **P18a, performed inside Blender: every name a first-frame check will write
@@ -746,8 +850,13 @@ def smoozy_the_check_is_marked(scene, names, mark, every_setting):
         if every_setting:
             setattr(one.render, names["the_scenes_name_start"],
                     smoozy_marked(getattr(one.render, names["the_scenes_name_start"]), mark))
-        top = getattr(one, names["the_scenes_compositing_tree"])
-        frontier = [top] if top is not None else []
+        # **R4 item 1**: from 5.3 every effect's group; before it the one tree.
+        if names["the_scenes_effects"]:
+            frontier = [getattr(effect, names["an_effects_group"]) for effect in getattr(one, names["the_scenes_effects"])]
+            frontier = [top for top in frontier if top is not None]
+        else:
+            top = getattr(one, names["the_scenes_compositing_tree"])
+            frontier = [top] if top is not None else []
         while frontier:
             tree = frontier.pop()
             if tree.as_pointer() in seen:
@@ -791,6 +900,8 @@ pub fn the_names_the_mark_is_set_by(
         "the_plain_nodes_names_start": WHERE_A_PLAIN_NODES_NAMES_START.for_version(version)?,
         "the_gathering_nodes_name_start": WHERE_A_GATHERING_NODES_NAME_STARTS.for_version(version)?,
         "the_scenes_compositing_tree": THE_SCENES_COMPOSITING_TREE.for_version(version)?,
+        "the_scenes_effects": THE_SCENES_EFFECTS.for_version(version)?,
+        "an_effects_group": AN_EFFECTS_GROUP.for_version(version)?,
         "the_file_output_nodes_type": THE_FILE_OUTPUT_NODES_TYPE.for_version(version)?,
         "the_nodes_folder": THE_NODES_FOLDER.for_version(version)?,
         "the_nodes_output_list": THE_NODES_OUTPUT_LIST.for_version(version)?,
@@ -853,6 +964,13 @@ fn the_script_composed(
     put(
         "the_scenes_compositing_tree",
         THE_SCENES_COMPOSITING_TREE.for_version(version)?,
+    );
+    put("the_scenes_effects", THE_SCENES_EFFECTS.for_version(version)?);
+    put("the_eevee_time_limit", THE_EEVEE_TIME_LIMIT.for_version(version)?);
+    put("an_effects_group", AN_EFFECTS_GROUP.for_version(version)?);
+    put(
+        "an_effects_render_switch",
+        AN_EFFECTS_RENDER_SWITCH.for_version(version)?,
     );
     put(
         "the_final_output_nodes_type",
@@ -958,7 +1076,7 @@ fn the_script_composed(
             String::from_utf8_lossy(THE_CLOSING_SENTINEL),
         ],
         "names": names,
-        "the_walk_steps_over": THE_WALK_STEPS_OVER,
+        "the_walk_steps_over": the_walk_steps_over(version)?,
         "the_asking_scenes_name": THE_ASKING_SCENES_NAME,
         // **R4b**: only the pre-load reading asks for every scene's half.
         "every_scene": every_scene && the_jobs_scene.is_none(),
@@ -995,7 +1113,7 @@ fn the_script_composed(
     debug_assert!(!started.contains(['"', '\\']));
     Ok(format!(
         "import sys\nsys.stdout.write(\"{started}\")\nsys.stdout.flush()\n\
-         import json\nSMOOZY = json.loads(r'''{rendered}''')\n{THE_READ_AS_THE_FILE_HAS_IT}{THE_CHECKS_MARK_IN_BLENDER}{THE_BODY}"
+         import json\nSMOOZY = json.loads(r'''{rendered}''')\n{THE_READ_AS_THE_FILE_HAS_IT}{THE_CHECKS_MARK_IN_BLENDER}{THE_SIMULATION_SHUTTER}{THE_BODY}"
     ))
 }
 
@@ -1237,8 +1355,9 @@ impl ThePrintedReading {
             return self;
         };
         let the_blend_name = crate::reading::the_blend_name_of(path.as_bytes());
+        let version = self.outputs.taken_by;
         for destination in &mut self.outputs.destinations {
-            destination.put_in_the_replaced_text(the_blend_name.as_deref());
+            destination.put_in_the_replaced_text(the_blend_name.as_deref(), version);
         }
         self
     }
@@ -1306,6 +1425,17 @@ pub fn the_one_document_from(
     }
     let observed = printed.outputs;
     let the_beauty_walk = match &observed.the_compositing_tree {
+        // **B1a: from 5.3 the tree is the stack, walked as one chain**, by the
+        // effects on at the job's first frame.
+        Some(tree) if crate::main_output::it_is_a_stack_of_effects(tree) => {
+            let at_the_first_frame = observed.per_frame.first().map_or(&observed.gating, |frame| &frame.gating);
+            crate::main_output::walk_the_beauty_through_the_effects(
+                tree,
+                at_the_first_frame.the_effects_on_for_render.as_deref().unwrap_or(&[]),
+                enters_at,
+                observed.taken_by,
+            )
+        }
         Some(tree) => {
             crate::main_output::walk_the_beauty(tree, enters_at, observed.taken_by)
         }
@@ -1378,6 +1508,25 @@ pub fn the_destinations_that_will_be_written(
         .collect()
 }
 
+/// `Rendering` L10b and `Render Settings` Q2b share the saved shutter reading.
+/// Documented: Blender RenderSettings, 5.2; observed in the 2026-11-06 desk check.
+pub const THE_SIMULATION_SHUTTER: &str = r#"
+def smoozy_motion_blur(scene):
+    render = scene.render
+    return {"enabled": bool(render.use_motion_blur),
+            "position": render.motion_blur_position,
+            "shutter": float(render.motion_blur_shutter)}
+
+def smoozy_simulation_tail(scene):
+    import math
+    blur = smoozy_motion_blur(scene)
+    if not blur["enabled"] or blur["position"] == "END":
+        return 0
+    reach = blur["shutter"] * (0.5 if blur["position"] == "CENTER" else 1.0)
+    return math.ceil(reach)
+
+"#;
+
 const THE_BODY: &str = r#"
 import bpy, json, os, sys
 
@@ -1408,8 +1557,20 @@ def as_bytes(value):
     return list(raw)
 
 
-def scene_tree(scene):
-    return getattr(scene, NAMES["the_scenes_compositing_tree"])
+# **`Job files and outputs` R4 item 1**: a scene's compositor as (the effect's
+# name, its group, whether it is on for render). From 5.3 every effect holding a
+# group, in list order, and the older one-group name is never read. Before 5.3
+# one entry with no effect named, so everything below reads as it always did.
+def the_effects_of(scene):
+    if not NAMES["the_scenes_effects"]:
+        top = getattr(scene, NAMES["the_scenes_compositing_tree"])
+        return [(None, top, True)] if top is not None else []
+    out = []
+    for effect in getattr(scene, NAMES["the_scenes_effects"]):
+        group = getattr(effect, NAMES["an_effects_group"])
+        if group is not None:
+            out.append((effect.name, group, bool(getattr(effect, NAMES["an_effects_render_switch"]))))
+    return out
 
 
 def is_kind(node, wanted):
@@ -1426,24 +1587,26 @@ def renders_through_a_scene_strip(scene):
 
 
 def gating_of(scene):
-    tree = scene_tree(scene)
+    on = [one for one in the_effects_of(scene) if one[2]]
     live = False
     muted = False
-    if tree is not None:
+    for _effect, tree, _on in on:
         for node in tree.nodes:
             if is_kind(node, NAMES["the_final_output_nodes_type"]):
                 live = True
                 muted = bool(node.mute)
                 break
+        if live:
+            break
     four_five = None
     if NAMES["the_four_five_use_nodes_switch"]:
         four_five = bool(getattr(scene, NAMES["the_four_five_use_nodes_switch"]))
     save_output = None
     if NAMES["the_save_output_switch"]:
         save_output = bool(getattr(scene.render, NAMES["the_save_output_switch"]))
-    return {
+    gating = {
         "compositing_switch": bool(scene.render.use_compositing),
-        "a_compositing_tree_is_present": tree is not None,
+        "a_compositing_tree_is_present": len(on) > 0,
         "a_live_final_output_node": live,
         "the_final_output_node_is_muted": muted,
         "four_fives_use_nodes_switch": four_five,
@@ -1451,17 +1614,27 @@ def gating_of(scene):
         "the_render_goes_out_through_a_sequencer_holding_a_scene_strip":
             renders_through_a_scene_strip(scene),
     }
+    # **R4 item 1**: which effects are on, as this frame has them, so a keyed
+    # or driven switch comes with it.
+    if NAMES["the_scenes_effects"]:
+        gating["the_effects_on_for_render"] = [as_bytes(one[0]) for one in on]
+    return gating
 
 
 def every_tree_of(scene):
-    """The scene's own compositing tree and every group tree inside it, each
-    with the chain of (tree, group node) it was reached through, so a walk can
-    step back out of a group. A tree used in two places is walked once, at the
-    first chain that reached it."""
-    top = scene_tree(scene)
-    if top is None:
-        return
+    """Every tree of the scene's compositor, each at the first chain that
+    reached it, whichever effect holds it."""
     seen = set()
+    for _effect, top, _on in the_effects_of(scene):
+        for one in the_trees_under(top, seen):
+            yield one
+
+
+def the_trees_under(top, seen):
+    """A compositing tree and every group tree inside it, each with the chain of
+    (tree, group node) it was reached through, so a walk can step back out of a
+    group. A tree used in two places is walked once, at the first chain that
+    reached it."""
     frontier = [(top, None)]
     while frontier:
         tree, stack = frontier.pop()
@@ -1548,10 +1721,19 @@ def an_endings_bytes(scene, node, settings):
     return as_bytes(ENDINGS[a_formats_key(settings)])
 
 
-def the_view_layers_feeding(tree, socket, stack):
+def the_view_layers_feeding(tree, socket, stack, the_top_entrys_layer):
     """Which view layers feed one input socket, by following the links
     backwards to the Render Layers nodes the picture entered on. A group
-    boundary is stepped through in both directions, by socket place."""
+    boundary is stepped through in both directions, by socket place.
+
+    **`Job files and outputs` I8, from 5.3: a top-level Group Input is the
+    render's entry, for the first view layer** (`Frames 9`), handed in here. A
+    Group Input inside a nested group carries what the outer tree hands it, and
+    is stepped through as ever. **Caution, the runner's ruling:** which layer it
+    carries where the first is off at a frame is not established, a render with
+    only the second layer on having crashed in 5.3 and in 5.2.2. So this stands
+    as written. A later effect's Group Input is named the same, not traced back
+    through the chain."""
     found = []
     seen = set()
     frontier = [(tree, socket, stack)]
@@ -1571,6 +1753,8 @@ def the_view_layers_feeding(tree, socket, stack):
                 continue
             if is_kind(giver, NAMES["the_groups_own_input_type"]):
                 if chain is None:
+                    if the_top_entrys_layer is not None and the_top_entrys_layer not in found:
+                        found.append(the_top_entrys_layer)
                     continue
                 outer, group, beyond = chain
                 index = socket_index(giver.outputs, link.from_socket)
@@ -1593,94 +1777,114 @@ def the_view_layers_feeding(tree, socket, stack):
 
 
 def destinations_of(scene, which_scene):
-    out = [
-        {
-            "kind": "TheRegularOutputPath",
-            "recorded_location": as_bytes(scene.render.filepath),
-            "format": {
-                "as_the_file_records_it": as_bytes(
-                    scene.render.image_settings.file_format
-                ),
-                "the_ending_it_writes": as_bytes(scene.render.file_extension)
-                if scene.render.use_file_extension
-                else None,
-                "is_video_shaped": bool(scene.render.is_movie_format),
-            },
-            "origin": "TheScenesOutputPath",
-            "scene": which_scene,
-            "the_view_layers_that_feed_it": [
-                as_bytes(layer.name) for layer in scene.view_layers if layer.use
-            ],
-        }
-    ]
-    for tree, stack in every_tree_of(scene):
-        for node in tree.nodes:
-            if not is_kind(node, NAMES["the_file_output_nodes_type"]):
-                continue
-            if node.mute:
-                continue
-            folder = as_bytes(getattr(node, NAMES["the_nodes_folder"]))
-            base = None
-            if NAMES["the_nodes_base_file_name"]:
-                base = as_bytes(getattr(node, NAMES["the_nodes_base_file_name"]))
-            if gathers_into_one_file(node):
-                layers = []
-                for socket in node.inputs:
+    out = []
+    # **`Job files and outputs` R4 item 3 as corrected 2026-11-02**: a scene
+    # reached through a strip writes nothing through its own regular output
+    # path (observed at the desk in six versions), so only the job's own scene
+    # gives one.
+    if which_scene == "TheJobsOwnScene":
+        out.append(
+            {
+                "kind": "TheRegularOutputPath",
+                "recorded_location": as_bytes(scene.render.filepath),
+                "format": {
+                    "as_the_file_records_it": as_bytes(
+                        scene.render.image_settings.file_format
+                    ),
+                    "the_ending_it_writes": as_bytes(scene.render.file_extension)
+                    if scene.render.use_file_extension
+                    else None,
+                    "is_video_shaped": bool(scene.render.is_movie_format),
+                },
+                "origin": "TheScenesOutputPath",
+                "scene": which_scene,
+                "the_view_layers_that_feed_it": [
+                    as_bytes(layer.name) for layer in scene.view_layers if layer.use
+                ],
+            }
+        )
+    # **`Job files and outputs` R4 item 2, from 5.3**: every effect holding a
+    # group, the active one no differently, each node named by its effect. A
+    # node whose effect is off at every frame stepped contributes none. A group
+    # two effects hold is walked once per effect, each owing by its own switch.
+    the_top_entrys_layer = None
+    if NAMES["the_scenes_effects"] and len(scene.view_layers) > 0:
+        the_top_entrys_layer = scene.view_layers[0].name
+    on_somewhere = EFFECTS_ON_AT_SOME_FRAME.get(scene.name)
+    for the_effect, top, _on in the_effects_of(scene):
+        if the_effect is not None and on_somewhere is not None and the_effect not in on_somewhere:
+            continue
+        named_by_its_effect = {} if the_effect is None else {"the_effect": as_bytes(the_effect)}
+        for tree, stack in the_trees_under(top, set()):
+            for node in tree.nodes:
+                if not is_kind(node, NAMES["the_file_output_nodes_type"]):
+                    continue
+                if node.mute:
+                    continue
+                folder = as_bytes(getattr(node, NAMES["the_nodes_folder"]))
+                base = None
+                if NAMES["the_nodes_base_file_name"]:
+                    base = as_bytes(getattr(node, NAMES["the_nodes_base_file_name"]))
+                if gathers_into_one_file(node):
+                    layers = []
+                    for socket in node.inputs:
+                        if not socket.is_linked:
+                            continue
+                        for one in the_view_layers_feeding(tree, socket, stack, the_top_entrys_layer):
+                            if one not in layers:
+                                layers.append(one)
+                    out.append(
+                        {
+                            "kind": {
+                                "AWholeFileOutputNodeGatheringIntoOneFile": {
+                                    "node": as_bytes(node.name),
+                                    "the_nodes_base_file_name": base,
+                                    **named_by_its_effect,
+                                }
+                            },
+                            "recorded_location": folder,
+                            "format": {
+                                "as_the_file_records_it": as_bytes(node.format.file_format),
+                                "the_ending_it_writes": an_endings_bytes(scene, node, node.format),
+                                "is_video_shaped": False,
+                            },
+                            "origin": {"AFileOutputNodeNamed": as_bytes(node.name)},
+                            "scene": which_scene,
+                            "the_view_layers_that_feed_it": [as_bytes(one) for one in layers],
+                        }
+                    )
+                    continue
+                for at, socket, entry, own in the_outputs_of(node):
                     if not socket.is_linked:
                         continue
-                    for one in the_view_layers_feeding(tree, socket, stack):
-                        if one not in layers:
-                            layers.append(one)
-                out.append(
-                    {
-                        "kind": {
-                            "AWholeFileOutputNodeGatheringIntoOneFile": {
-                                "node": as_bytes(node.name),
-                                "the_nodes_base_file_name": base,
-                            }
-                        },
-                        "recorded_location": folder,
-                        "format": {
-                            "as_the_file_records_it": as_bytes(node.format.file_format),
-                            "the_ending_it_writes": an_endings_bytes(scene, node, node.format),
-                            "is_video_shaped": False,
-                        },
-                        "origin": {"AFileOutputNodeNamed": as_bytes(node.name)},
-                        "scene": which_scene,
-                        "the_view_layers_that_feed_it": [as_bytes(one) for one in layers],
-                    }
-                )
-                continue
-            for at, socket, entry, own in the_outputs_of(node):
-                if not socket.is_linked:
-                    continue
-                settings = node.format
-                if entry is not None:
-                    switch = bool(getattr(entry, NAMES["the_per_output_format_switch"]))
-                    if switch == NAMES["the_switch_is_on_when_the_output_has_its_own_format"]:
-                        settings = entry.format
-                out.append(
-                    {
-                        "kind": {
-                            "AnOutputOfAFileOutputNode": {
-                                "node": as_bytes(node.name),
-                                "output": as_bytes(own),
-                                "the_nodes_base_file_name": base,
-                            }
-                        },
-                        "recorded_location": folder,
-                        "format": {
-                            "as_the_file_records_it": as_bytes(settings.file_format),
-                            "the_ending_it_writes": an_endings_bytes(scene, node, settings),
-                            "is_video_shaped": False,
-                        },
-                        "origin": {"AFileOutputNodeNamed": as_bytes(node.name)},
-                        "scene": which_scene,
-                        "the_view_layers_that_feed_it": [
-                            as_bytes(one) for one in the_view_layers_feeding(tree, socket, stack)
-                        ],
-                    }
-                )
+                    settings = node.format
+                    if entry is not None:
+                        switch = bool(getattr(entry, NAMES["the_per_output_format_switch"]))
+                        if switch == NAMES["the_switch_is_on_when_the_output_has_its_own_format"]:
+                            settings = entry.format
+                    out.append(
+                        {
+                            "kind": {
+                                "AnOutputOfAFileOutputNode": {
+                                    "node": as_bytes(node.name),
+                                    "output": as_bytes(own),
+                                    "the_nodes_base_file_name": base,
+                                    **named_by_its_effect,
+                                }
+                            },
+                            "recorded_location": folder,
+                            "format": {
+                                "as_the_file_records_it": as_bytes(settings.file_format),
+                                "the_ending_it_writes": an_endings_bytes(scene, node, settings),
+                                "is_video_shaped": False,
+                            },
+                            "origin": {"AFileOutputNodeNamed": as_bytes(node.name)},
+                            "scene": which_scene,
+                            "the_view_layers_that_feed_it": [
+                                as_bytes(one) for one in the_view_layers_feeding(tree, socket, stack, the_top_entrys_layer)
+                            ],
+                        }
+                    )
     return out
 
 
@@ -1790,29 +1994,42 @@ def the_baked_caches_on_the_machine():
     # the default folder beside the `.blend` (D21c): `blendcache_` and the
     # file's own name without its ending. A cache marked baked whose folder
     # is not on this machine is left out, and renders as it would at home.
-    blend = bpy.data.filepath
-    beside = os.path.join(
-        os.path.dirname(blend),
-        "blendcache_" + os.path.splitext(os.path.basename(blend))[0],
-    )
+    #
+    # **A cache on a linked object goes by its library, 2026-11-04** (D21b-iii):
+    # observed at the desk in 5.2.3, a linked cloth reads `blendcache_` and the
+    # library's name beside the library, and an external one measures `//` from
+    # the library. **The library's real place is looked at as well as where it was
+    # opened**, since `Dependency Upload & Remap` M8b's link stands in one folder
+    # and its files in another. **And what is handed on is the real folder, never
+    # a link**: the copy refuses one (`Dependency Upload & Remap` M22c), and
+    # through that same folder everything beside the file is reached through a
+    # link.
     found = []
     for cache in the_point_caches_the_redirect_sets():
         # **R18**: as the file had them, never the read's throwaway values.
         if not smoozy_as_the_file_has_it(cache, "is_baked"):
             continue
         recorded = smoozy_as_the_file_has_it(cache, "filepath")
-        if smoozy_as_the_file_has_it(cache, "use_external"):
-            # The blend-file shorthand `//` is the folder the `.blend` sits in.
-            where = recorded
-            if where.startswith("//"):
-                where = os.path.join(os.path.dirname(blend), where[2:])
-        else:
-            where = beside
+        library = cache.id_data.library
+        opened = bpy.path.abspath(library.filepath) if library is not None else bpy.data.filepath
+        for blend in (opened, os.path.realpath(opened)):
+            if smoozy_as_the_file_has_it(cache, "use_external"):
+                # The blend-file shorthand `//` is the folder the `.blend` sits in.
+                where = recorded
+                if where.startswith("//"):
+                    where = os.path.join(os.path.dirname(blend), where[2:])
+            else:
+                where = os.path.join(
+                    os.path.dirname(blend),
+                    "blendcache_" + os.path.splitext(os.path.basename(blend))[0],
+                )
+            if os.path.isdir(where):
+                break
         if not os.path.isdir(where):
             continue
         one = {
             "recorded_location": as_bytes(recorded) if recorded else None,
-            "its_files_sit_in": as_bytes(where),
+            "its_files_sit_in": as_bytes(os.path.realpath(where)),
         }
         if one not in found:
             found.append(one)
@@ -1827,10 +2044,11 @@ def what_each_carrier_of_an_added_write_place_records(scene, place):
     if place == "TheBakeOutputPath":
         return [scene.render.bake.filepath]
     if place == "ThePointCache":
-        return [
+        values = [
             smoozy_as_the_file_has_it(cache, "filepath")
             for cache in the_point_caches_the_redirect_sets()
         ]
+        return values
     if place == "TheGeometryNodesBakeFolder":
         values = []
         for obj in bpy.data.objects:
@@ -2022,6 +2240,11 @@ def the_kind_of(node, top):
             }
         }
     if is_kind(node, NAMES["the_groups_own_input_type"]):
+        # **`Job files and outputs` B1a, from 5.3: at the top of an effect's
+        # group it is where the render enters.** Inside a nested group it stays
+        # B3's first limit.
+        if top and NAMES["the_scenes_effects"]:
+            return {"TheRendersEntry": {"outputs": [as_bytes(one.name) for one in node.outputs]}}
         return "TheGroupsOwnInput"
     if is_kind(node, NAMES["the_final_output_nodes_type"]) and top:
         return "TheFinalOutputNode"
@@ -2329,6 +2552,9 @@ def the_entry_at(scene, frame, errors, the_jobs_scene_is_asked=False):
     }
 
 
+# **`Job files and outputs` R4 item 2**: which effects each scene has on at some
+# frame it was stepped through, by name. Filled by the walk just below.
+EFFECTS_ON_AT_SOME_FRAME = {}
 tables = {}
 per_frame = []
 the_jobs_frames = set(FRAMES)
@@ -2343,6 +2569,10 @@ for scene in bpy.data.scenes:
     for frame in the_span_of(scene, extra):
         if moves:
             scene.frame_set(frame)
+        if NAMES["the_scenes_effects"]:
+            EFFECTS_ON_AT_SOME_FRAME.setdefault(scene.name, set()).update(
+                one[0] for one in the_effects_of(scene) if one[2]
+            )
         for layer in scene.view_layers:
             tables.setdefault((scene.name, layer.name), []).append([frame, bool(layer.use)])
         if scene == the_jobs_scene and (not the_jobs_frames or frame in the_jobs_frames):
@@ -2423,18 +2653,41 @@ def the_views_of(the_scene):
 
 def the_tree_shared_with(the_scene):
     if not NAMES["the_four_five_use_nodes_switch"]:
-        mine = scene_tree(the_scene)
-        if mine is not None:
+        mine = [one[1] for one in the_effects_of(the_scene)]
+        if mine:
             for scene in bpy.data.scenes:
-                if scene != the_scene and scene_tree(scene) is mine:
+                if scene != the_scene and any(one[1] is tree for one in the_effects_of(scene) for tree in mine):
                     return as_bytes(scene.name)
     return None
 
 
+# **`Job files and outputs` B1a**: from 5.3 the stack, as a tree of effects in list
+# order with no links; before it the one tree.
+def the_compositing_tree_of(the_scene):
+    effects = the_effects_of(the_scene)
+    if not effects:
+        return None
+    if not NAMES["the_scenes_effects"]:
+        return the_tree_as_read(effects[0][1], True)
+    return {
+        "nodes": [
+            {"name": as_bytes(name), "kind": {"AnEffect": {"inner": the_tree_as_read(tree, True)}}}
+            for name, tree, _on in effects
+        ],
+        "links": [],
+    }
+
+
 def the_outputs_half_of(the_scene, its_reached, its_per_frame, its_destinations, its_views, its_shared_with, recorded):
+    # **`Job files and outputs` R4 item 1**: from 5.3 the scene's own gating is
+    # its first frame's, the frame B1 enters at, since a keyed effect switch
+    # would otherwise be read at wherever the stepping stopped.
+    gating = gating_of(the_scene)
+    if NAMES["the_scenes_effects"] and its_per_frame:
+        gating = its_per_frame[0]["gating"]
     return {
         "taken_by": {"major": bpy.app.version[0], "minor": bpy.app.version[1]},
-        "gating": gating_of(the_scene),
+        "gating": gating,
         "destinations": its_destinations,
         "scenes_reached_through_a_sequencer_strip": [
             {
@@ -2448,9 +2701,7 @@ def the_outputs_half_of(the_scene, its_reached, its_per_frame, its_destinations,
         "per_frame": its_per_frame,
         "recorded_locations": recorded,
         "views": its_views,
-        "the_compositing_tree": the_tree_as_read(scene_tree(the_scene), True)
-        if scene_tree(the_scene) is not None
-        else None,
+        "the_compositing_tree": the_compositing_tree_of(the_scene),
         # `Job files and outputs` B25: the job's own view transform, which a
         # derivative of a working-format picture is made in.
         "the_view_transform": as_bytes(the_scene.view_settings.view_transform),
@@ -2535,6 +2786,9 @@ for scene in bpy.data.scenes:
             "frame_end": int(scene.frame_end),
             "frame_step": step,
             "frame_count": count,
+            # `Render Settings` Q2b: the same search, without extra playing.
+            "prepare_simulations": the_scene_holds_a_simulation_not_baked(scene),
+            "motion_blur": smoozy_motion_blur(scene),
             "full_size": full,
             "resolution_percentage": percentage,
             "size_at_the_files_percentage": the_size_at(full, percentage),
@@ -2550,6 +2804,11 @@ for scene in bpy.data.scenes:
                 "minimum": int(scene.cycles.adaptive_min_samples),
             },
             "time_limit": float(scene.cycles.time_limit),
+            **(
+                {"eevee_time_limit": float(getattr(scene.eevee, NAMES["the_eevee_time_limit"]))}
+                if NAMES["the_eevee_time_limit"]
+                else {}
+            ),
             "layer_samples_rule": {
                 "USE": "Use",
                 "BOUNDED": "Bounded",
@@ -2581,11 +2840,23 @@ for item in the_jobs_scene.render.bl_rna.properties["engine"].enum_items:
     eevee = item.identifier
     break
 
+# **`Render Settings` Q2 item 7**: what P20's first stat would find, for the
+# page's folder line. A name that is not text is left out, since no run can name
+# it, and a list that will not read is no list.
+def the_folders_at_the_machines_top():
+    try:
+        names = [one.name.decode("utf-8", "replace") for one in os.scandir(b"/") if one.is_dir()]
+    except OSError:
+        return None
+    return sorted(name for name in names if "\ufffd" not in name)
+
+
 document = {
     "outputs": the_outputs_half_of(
         the_jobs_scene, reached, per_frame, destinations, views, shared_with, recorded_locations
     ),
     "settings": {
+        "the_folders_at_the_machines_top": the_folders_at_the_machines_top(),
         "scenes": scenes_out,
         "offered_engine_identifiers": {
             "cycles": NAMES["the_cycles_identifier"]
@@ -2619,6 +2890,25 @@ sys.stdout.flush()
 mod tests {
     use super::*;
     use crate::reading::WhichBranch;
+
+    // `Job files and outputs` D21b-i: cloth preservation was withdrawn.
+    #[test]
+    fn memory_cloth_reserves_no_fallback_folder_beside_a_disk_cache() {
+        let function = &THE_BODY[THE_BODY.find("def what_each_carrier_of_an_added_write_place_records").unwrap()
+            ..THE_BODY.find("def the_destinations_of_an_added_write_place").unwrap()];
+        let script = r#"
+from types import SimpleNamespace as NS
+memory=NS(use_disk_cache=False,is_baked=False)
+bpy=NS(data=NS(objects=[NS(modifiers=[NS(type='CLOTH',point_cache=memory)])]))
+smoozy_as_the_file_has_it=lambda holder,name:getattr(holder,name)
+the_point_caches_the_redirect_sets=lambda:[NS(filepath='//other-cache')]
+assert what_each_carrier_of_an_added_write_place_records(None,'ThePointCache') == ['//other-cache']
+memory.is_baked=True
+assert what_each_carrier_of_an_added_write_place_records(None,'ThePointCache') == ['//other-cache']
+"#;
+        let out=std::process::Command::new("python3").arg("-c").arg(format!("{function}\n{script}")).output().unwrap();
+        assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
+    }
 
     fn an_invocation(major: u16, minor: u16) -> TheInvocation {
         TheInvocation {
@@ -2672,12 +2962,20 @@ def a_node(gathering, folder, file_name, outputs):
 
 def a_scene(path, nodes):
     scene = A(render=A(filepath=path), sequence_editor=None)
-    setattr(scene, NAMES["the_scenes_compositing_tree"], A(nodes=nodes))
+    tree = A(nodes=nodes)
+    if NAMES["the_scenes_effects"]:
+        setattr(scene, NAMES["the_scenes_effects"], [A(**{NAMES["an_effects_group"]: tree})])
+    else:
+        setattr(scene, NAMES["the_scenes_compositing_tree"], tree)
     return scene
 
 def written(scene):
     out = [scene.render.filepath + "0001.png"]
-    for node in getattr(scene, NAMES["the_scenes_compositing_tree"]).nodes:
+    if NAMES["the_scenes_effects"]:
+        tree = getattr(getattr(scene, NAMES["the_scenes_effects"])[0], NAMES["an_effects_group"])
+    else:
+        tree = getattr(scene, NAMES["the_scenes_compositing_tree"])
+    for node in tree.nodes:
         folder = getattr(node, NAMES["the_nodes_folder"])
         mark = NAMES["the_gathering_mark"]
         gathering = getattr(node.format, mark["property"]) == mark["value"]
@@ -2786,6 +3084,18 @@ print(json.dumps(results))
                     {"scene": "out/sub/", "nodes": [
                         [false, "out/slash", "fsub/", ["mist"]],
                         [true, "out/ml", "", ["mist"]],
+                    ]},
+                ]),
+            ),
+            // **From 5.3 the same names, reached through the stack of effects**
+            // (`Job files and outputs` R4 item 1): the mark asks for no older name.
+            (
+                "5.1",
+                TheVersionInHand::of(5, 3),
+                serde_json::json!([
+                    {"scene": "out/sub/shot_", "nodes": [
+                        [false, "out/flat", "nm_", ["mist"]],
+                        [true, "out/ml", "mlname_", ["a/beauty_"]],
                     ]},
                 ]),
             ),
@@ -3033,6 +3343,10 @@ print(json.dumps(results))
         assert!(found.contains(r#"if smoozy_as_the_file_has_it(cache, "use_external"):"#));
         assert!(found.contains(r#""blendcache_" + os.path.splitext(os.path.basename(blend))[0]"#));
         assert!(found.contains("if not os.path.isdir(where):"));
+        // **2026-11-04: by the library where the object is linked, and never a link
+        // handed on**, since the copy refuses one.
+        assert!(found.contains("library = cache.id_data.library"));
+        assert!(found.contains(r#""its_files_sit_in": as_bytes(os.path.realpath(where))"#));
         assert!(text.contains(
             r#""the_baked_caches_on_the_machine": the_baked_caches_on_the_machine(),"#
         ));
@@ -3345,6 +3659,22 @@ print(json.dumps(results))
         );
     }
 
+    /// **`Job files and outputs` R4 item 3 as corrected 2026-11-02: a strip's
+    /// scene gives its File Output nodes and no regular output path.** The
+    /// script says so where the destination is written, with the job's own
+    /// scene named, and it still walks a strip's scene for its nodes. Run for
+    /// real in `a_scene_with_strips_writes_where_the_job_says`.
+    #[test]
+    fn a_strip_scene_gives_no_regular_output_path() {
+        let script = the_script(5, 3);
+        let at = script.find("def destinations_of(scene, which_scene):").expect("the walk");
+        let its_body = &script[at..at + 900];
+        let the_test = its_body.find("if which_scene == \"TheJobsOwnScene\":").expect("only the job's own scene");
+        let the_regular = its_body.find("\"kind\": \"TheRegularOutputPath\"").expect("the regular output path");
+        assert!(the_test < the_regular, "{its_body}");
+        assert!(script.contains("\"ReachedThroughASequencerStrip\": {"), "the nodes are still walked");
+    }
+
     /// **The regular output path's folder is read the same way** (I2, added
     /// 2026-10-18, piece P2): `{blend_name}` in it is put in before the
     /// redirect maps it and the front of the name is left as recorded; a
@@ -3655,7 +3985,7 @@ print(json.dumps(results))
             .filter(|line| line.trim_start().starts_with("except"))
             .count();
         assert_eq!(
-            catches, 4,
+            catches, 5,
             "a catch was added or removed without this count moving with it"
         );
         // The first catch writes into the error map, which `Render Settings`
@@ -3663,6 +3993,9 @@ print(json.dumps(results))
         // three are R4b's** (2026-10-10): each writes into the error map of a
         // scene the reading does not name, which makes that scene's half no
         // reading of it and never fails the reading of the scene it names.
+        // **The fifth is `Render Settings` Q2 item 7's**: no list is a state the
+        // page reads as *cannot say*, and it is no part of the file's reading.
+        assert!(text.contains("except OSError:\n        return None\n    return sorted(name for name in names"));
         assert!(text.contains("errors[\"the regular output path at frame \""));
         assert!(text.contains("per_frame.append(the_entry_at(scene, frame, ERRORS, True))"));
         assert_eq!(text.matches("its_errors[\"the reading of this scene").count(), 2);
@@ -3691,7 +4024,7 @@ print(json.dumps(results))
             .lines()
             .filter(|line| line.trim_start().starts_with("try:"))
             .count();
-        assert_eq!(tries, 6);
+        assert_eq!(tries, 7);
         assert!(text.contains("bpy.data.scenes.remove(throwaway)"));
         assert!(text.contains("    finally:\n        the_range_is_set_on(scene, saved[0], saved[1])"));
     }
@@ -3745,6 +4078,7 @@ print(json.dumps(results))
                 ),
                 a_destination(
                     DestinationKind::AnOutputOfAFileOutputNode {
+                        the_effect: None,
                         node: ArtistsText::of(b"Beauty".to_vec()),
                         output: ArtistsText::of(b"Image".to_vec()),
                         the_nodes_base_file_name: None,
@@ -3995,6 +4329,7 @@ print(json.dumps(results))
         let across = AcrossTheBoundary {
             four_five: Some(absent),
             from_five_zero: None,
+            from_five_three: TheThirdSide::TheSameAsFromFiveZero,
         };
         assert!(across.for_version(TheVersionInHand::of(4, 5)).is_err());
         // The other side is an absence of a different kind: this version has no
@@ -4658,5 +4993,94 @@ print(json.dumps(results))
             the_open_files_path: None,
             the_check_is_written_as_a_picture: false,
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // The 5.3 integration's piece 3
+    // -----------------------------------------------------------------------
+
+    /// **The third side of the table.** 4.5 and 5.0 to 5.2 read as they did; from
+    /// 5.3 the older name is no name at all and the stack's three are cited; and
+    /// every other name is the same on the third side as on the second.
+    #[test]
+    fn from_five_three_the_older_name_is_gone_and_the_stack_is_cited() {
+        let five_two = TheVersionInHand::of(5, 2);
+        for version in [TheVersionInHand::of(5, 3), TheVersionInHand::of(5, 4)] {
+            assert!(version.holds_a_stack_of_effects());
+            assert_eq!(THE_SCENES_COMPOSITING_TREE.for_version(version), Ok(None));
+            assert_eq!(THE_SCENES_EFFECTS.for_version(version), Ok(Some("compositor_effects")));
+            assert_eq!(AN_EFFECTS_GROUP.for_version(version), Ok(Some("node_group")));
+            assert_eq!(AN_EFFECTS_RENDER_SWITCH.for_version(version), Ok(Some("enable_for_render")));
+            assert_eq!(THE_NODES_FOLDER.for_version(version), THE_NODES_FOLDER.for_version(five_two));
+            assert_eq!(the_walk_steps_over(version).unwrap().last(), Some(&"compositing_node_group"));
+        }
+        assert!(!five_two.holds_a_stack_of_effects());
+        assert_eq!(THE_SCENES_COMPOSITING_TREE.for_version(five_two), Ok(Some("compositing_node_group")));
+        assert_eq!(THE_SCENES_COMPOSITING_TREE.for_version(TheVersionInHand::of(4, 5)), Ok(Some("node_tree")));
+        assert_eq!(THE_SCENES_EFFECTS.for_version(five_two), Ok(None));
+        assert_eq!(the_walk_steps_over(five_two).unwrap(), THE_WALK_STEPS_OVER.to_vec());
+    }
+
+    /// **The name reaches no 5.3 script as anything but a step-over, and every
+    /// script before 5.3 is handed no stack.** The script's words are the same
+    /// text in each; the handed-in document decides.
+    #[test]
+    fn a_five_three_script_hands_in_the_stack_and_no_older_name() {
+        let five_three = the_script(5, 3);
+        assert!(five_three.contains(r#""the_scenes_compositing_tree":null"#));
+        assert!(five_three.contains(r#""the_scenes_effects":"compositor_effects""#));
+        assert!(five_three.contains(r#""an_effects_render_switch":"enable_for_render""#));
+        let five_two = the_script(5, 2);
+        assert!(five_two.contains(r#""the_scenes_compositing_tree":"compositing_node_group""#));
+        assert!(five_two.contains(r#""the_scenes_effects":null"#));
+        let marks = the_names_the_mark_is_set_by(TheVersionInHand::of(5, 3)).unwrap();
+        assert_eq!(marks["the_scenes_effects"], "compositor_effects");
+        assert_eq!(marks["an_effects_group"], "node_group");
+        assert!(marks["the_scenes_compositing_tree"].is_null());
+    }
+
+    /// **R4 item 1 and B1a through the Rust half**: the printed stack parses, the
+    /// walk runs through it by the first frame's effects, and a printed reading
+    /// holding no stack parses as it did.
+    #[test]
+    fn a_printed_stack_is_walked_by_the_effects_on_at_the_first_frame() {
+        let bytes = |text: &str| serde_json::json!(text.as_bytes());
+        let tree = serde_json::json!({
+            "nodes": [{
+                "name": bytes("Scene Effect"),
+                "kind": {"AnEffect": {"inner": {
+                    "nodes": [
+                        {"name": bytes("Group Input"), "kind": {"TheRendersEntry": {"outputs": [bytes("Image"), bytes("")]}}},
+                        {"name": bytes("Group Output"), "kind": "TheFinalOutputNode"}
+                    ],
+                    "links": [{"from": {"node": 0, "index": 0}, "to": {"node": 1, "index": 0}}]
+                }}}
+            }],
+            "links": []
+        });
+        let tree: TheCompositingTree = serde_json::from_value(tree).expect("the stack parses");
+        let enters_at = WhereTheRenderEnters { scene: ArtistsText::of(b"Scene".to_vec()), view_layer: ArtistsText::of(b"ViewLayer".to_vec()) };
+        assert_eq!(
+            crate::main_output::walk_the_beauty_through_the_effects(
+                &tree,
+                &[ArtistsText::of(b"Scene Effect".to_vec())],
+                &enters_at,
+                TheVersionInHand::of(5, 3),
+            ),
+            WhatTheWalkFound::Reached { destinations: Vec::new(), it_reached_the_final_output_node: true }
+        );
+        let gating: GatingConditions = serde_json::from_value(serde_json::json!({
+            "compositing_switch": true,
+            "a_compositing_tree_is_present": true,
+            "a_live_final_output_node": false,
+            "the_final_output_node_is_muted": false,
+            "four_fives_use_nodes_switch": null,
+            "save_output_switch": true,
+            "the_render_goes_out_through_a_sequencer_holding_a_scene_strip": false
+        }))
+        .expect("a gating with no stack parses");
+        assert_eq!(gating.the_effects_on_for_render, None);
+        assert!(gating.a_nodes_effect_is_on(None));
+        assert!(!serde_json::to_string(&gating).unwrap().contains("the_effects_on_for_render"));
     }
 }

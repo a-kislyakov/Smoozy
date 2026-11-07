@@ -724,3 +724,17 @@ Every entry in this part is **shape 3**. Each says what breaks and what was sear
 **Label: bounded observation, and one inference on top of it.** [B28](#b28-the-names-the-launch-time-pairs-use-the-near-misses-and-the-group-that-swallows-a-wrong-name-c7-c9-v4-y4-rendering-l8-l10a-l11-section-13-items-24-and-28) is sixty runs and sixty repeats in four versions on **the Creator's Mac, macOS on Apple silicon, nothing rented** — and **no Linux machine tried any of these names in any version**, while every machine Smoozy renders on is rented Linux. The comparison names that as its own largest gap. **The inference is `Rendering` L10a's**: the check reads a pair's name back against the object it was assigned on, and what the comparison observed is that answer *after* a swallowed assignment, never the check itself and never before an assignment.
 
 **Breaks:** a name spelled differently on Linux is a pair that applies to nothing — loud in every group and version but 4.5's Cycles, and in that one corner the name check is the only thing standing, itself untried anywhere. **What holds:** the names are read out of each version's own running program and off each version's own documentation page for all but Cycles' two; nothing in the document is composed from a label, a panel or a manual wording; and one run at Build settles the check, on a material the launch contract already composes.
+
+## B32. EEVEE's time limit, from 5.3 alone (C1 item 3, C3, C10) — added 2026-11-02
+
+**Label: documented for the setting (*Settings 2*, *Settings 3*, *Settings 16*), observed for its name and its off value.** The name, its kind and its off value were read at the desk on 5.3.0 Beta `5d8151335b6b` and 5.4.0 Alpha `3f4216e1bad1`, and are absent on 5.2.3 `e13b728c6880`: `Audits/Build/Blender 5.3/Piece 1, the desk readings — what landed.md`, reading 1.
+
+**What Smoozy's own composition does with it, observed the same day** (`Audits/Build/Blender 5.3/Piece 4, EEVEE's time limit and templates in a bake folder — what landed.md`; the test is `a_typed_count_under_eevee_outlasts_the_time_limit_the_file_was_saved_with`). An EEVEE file at 400 by 400, saved with Render Samples 4,096 and, where the version has one, a one-second limit; 600 typed; frame 1; the processor's Mac, no window.
+
+| | The count alone, in plain Blender | Through Smoozy's job |
+| --- | --- | --- |
+| 5.2.3 (no limit there) | 600 of 600 | 600 of 600, ended at 0 |
+| 5.3.0 Beta | 125 of 600 printed, about 2 seconds | 600 of 600, ended at 0 |
+| 5.4.0 Alpha | 1 of 600 printed, about 2 seconds | 600 of 600, ended at 0 |
+
+**Not covered:** Linux, a graphics card, more than one view layer. C5 stands.

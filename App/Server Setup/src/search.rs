@@ -48,11 +48,22 @@ pub fn the_search_is_restricted_to_one_filesystem() -> bool {
 ///
 /// **Nothing is dropped where no area is known**, which is a machine this module
 /// has not placed a root on.
+///
+/// **And nothing inside setup's staging folder is a candidate: B10, as written
+/// 2026-11-03.** It is a run's material, published by R1 item 7 or never. On the
+/// Sesterce pass a failed setup's staged 5.2.3 was offered in the table with
+/// *Remove* and set the bar R1b's comparison read. Every reader of the list reads
+/// what this leaves.
 pub fn the_candidates(found: Vec<String>, smoozys_own_blender_area: Option<&str>) -> Vec<String> {
     let Some(area) = smoozys_own_blender_area else {
         return found;
     };
-    found.into_iter().filter(|path| path != area).collect()
+    let inside_the_staging_folder =
+        format!("{}/", smoozy_job_files::publication::the_setup_runs_staging_folder(area));
+    found
+        .into_iter()
+        .filter(|path| path != area && !path.starts_with(&inside_the_staging_folder))
+        .collect()
 }
 
 /// One candidate the search found, with what it answered.
@@ -538,6 +549,23 @@ pub fn this_module_can_remove_the_managed_build(package_name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **B10, as written 2026-11-03: a build still in setup's staging folder is
+    /// no candidate**, the path the Sesterce pass's table listed with *Remove*.
+    /// A published build beside it, and a folder that only starts the same, stay.
+    #[test]
+    fn a_build_in_setups_staging_folder_is_no_candidate() {
+        let area = "/home/sesterce/smoozy/blender";
+        let staged = "/home/sesterce/smoozy/blender/staging-setup/27f8-unpacked/blender-5.2.3-linux-x64/blender";
+        let published = "/home/sesterce/smoozy/blender/blender-5.3.0-20261102-223303/blender";
+        let another = "/home/sesterce/smoozy/blender/staging-setup-not/blender";
+        let elsewhere = "/opt/staging-setup/blender";
+        let found = |paths: &[&str]| paths.iter().map(|path| path.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            the_candidates(found(&[area, staged, published, another, elsewhere]), Some(area)),
+            found(&[published, another, elsewhere])
+        );
+    }
 
     fn a_candidate(path: &str, answered: Option<&str>) -> ACandidate {
         ACandidate {

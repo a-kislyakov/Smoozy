@@ -201,10 +201,15 @@ pub fn the_caption(server_label: &(impl TheServersName + ?Sized), job_label: &st
     a_user_message(server_label, job_label, &format!(" · Frame {frame}{which} · Not colour-accurate"), "")
 }
 
+/// **`Telegram` I3 — the one line for all three caps**: weight, width and height
+/// together, and ratio. Until 2026-11-02 it said *dimensions* for all three. The
+/// drawing has no such state; Rule 9 binds.
+const OVER_THE_LIMITS: &str = "Preview not sent: over Telegram's limits.";
+
 /// **`Telegram` I3 — what the user is told, once per job, where a picture is
-/// outside Telegram's limits.** The drawing has no such state; Rule 9 binds.
+/// outside Telegram's limits.**
 pub fn outside_the_limits(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: u64) -> AMarkedText {
-    a_user_message(server_label, job_label, &format!(" · Frame {frame}"), "Preview not sent: Telegram does not accept its dimensions.")
+    a_user_message(server_label, job_label, &format!(" · Frame {frame}"), OVER_THE_LIMITS)
 }
 
 /// **`Telegram` I3 — a picture Telegram refused although it fit**, said once
@@ -218,7 +223,7 @@ pub fn telegram_did_not_accept(server_label: &(impl TheServersName + ?Sized), jo
 /// (`Telegram` V1's floor). Added 2026-10-16, the Telegram worker's piece 6;
 /// the drawing has no such state, so Rule 9 binds.
 pub fn a_frame_outside_the_limits(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: u64) -> AMarkedText {
-    a_user_message(server_label, job_label, &format!(" · Frame {frame}"), "Preview not sent: Telegram does not accept its dimensions.")
+    a_user_message(server_label, job_label, &format!(" · Frame {frame}"), OVER_THE_LIMITS)
 }
 
 /// **`Telegram` I4 — a cleared picture is being made again**, said in answer
@@ -487,18 +492,13 @@ impl ThePictures {
             if lone {
                 messages.attach_a_stop(message, subject, &self.server_label, &label, class)
             } else {
-                messages
-                    .send_about_in(
-                        &crate::job_messages::AComposedMessage {
-                            text: a_user_message(&self.server_label, &label, &format!(" · Frame {frame}"), ""),
-                            buttons: vec![],
-                        },
-                        subject,
-                        &self.server_label,
-                        &label,
-                        class,
-                    )
-                    .map(|_| ())
+                messages.send_a_companion(
+                    a_user_message(&self.server_label, &label, &format!(" · Frame {frame}"), ""),
+                    subject,
+                    &self.server_label,
+                    &label,
+                    class,
+                )
             }
         });
         if let Some(Err(WhyAMessageWasNotSent::NotSent(ended))) = &attached {
@@ -1072,6 +1072,100 @@ pub(crate) mod tests {
         );
     }
 
+    /// **`Telegram` C1b's line of 2026-11-02: a companion says nothing but its
+    /// Stop, so it goes when its Stop goes.** The first 5.3 live pass saw, after
+    /// *B9 multilayer grade*'s album, a message holding only the server's name
+    /// and *B9 multilayer grade · Frame 1*. **What it bites on**: the ending took
+    /// the one button away and left the message standing. While the job is live
+    /// it stays, and a message with words of its own only loses its button.
+    #[test]
+    fn an_albums_companion_goes_with_its_stop_and_nothing_else_does() {
+        let service = Arc::new(AStandInService::new());
+        service.then_answers(&the_album_answer(501, 2));
+        service.then_answers(r#"{"ok":true,"result":{"message_id":503}}"#);
+        let mut messages = a_frames_messages(&service);
+        let mut pictures = ThePictures::new(5, "RunPod 4090");
+        let copies = vec![
+            a_copy(140, "Interior", a_png_header(1280, 720)),
+            a_copy(140, "FX", a_png_header(1280, 720)),
+        ];
+        pictures.send_a_frame_with_its_stop(&mut messages, copies, AClassOfSend::FramePicturesAndMedia, Some(&the_job()));
+        // **A lone picture of the same job keeps its caption and loses its button.**
+        service.then_answers(r#"{"ok":true,"result":{"message_id":700}}"#);
+        pictures.send_with_its_stop(
+            &mut messages,
+            a_derivative("job-a", 141, a_png_header(1280, 720)),
+            AClassOfSend::FramePicturesAndMedia,
+            Some(&the_job()),
+        );
+        let calls = service.heard().len();
+
+        assert_eq!(messages.remove_the_stops_where(&|_| false).unwrap(), 0, "while the job is live it stays");
+        assert_eq!(service.heard().len(), calls);
+
+        // **A line that reaches nothing leaves it owed.**
+        service.then_is_not_reached("line cut");
+        assert!(messages.remove_the_stops_where(&|_| true).is_err());
+        let mut restarted = TheJobMessages { store: messages.store, queue: messages.queue.clone(), notes: Box::new(|_| {}), conversation: 5 };
+
+        assert_eq!(restarted.remove_the_stops_where(&|_| true).unwrap(), 2);
+        let heard = service.heard();
+        let after: Vec<(&str, i64)> = heard[calls..]
+            .iter()
+            .map(|call| {
+                let WhatACallCarries::Fields(fields) = &call.carries else { panic!("{call:?}") };
+                (call.method.as_str(), fields["message_id"].as_i64().unwrap())
+            })
+            .collect();
+        assert_eq!(
+            after,
+            [("deleteMessage", 503), ("deleteMessage", 503), ("editMessageReplyMarkup", 700)],
+            "the companion is deleted, and the picture keeps its caption"
+        );
+        assert_eq!(restarted.remove_the_stops_where(&|_| true).unwrap(), 0);
+        assert_eq!(service.heard().len(), heard.len(), "done once");
+    }
+
+    /// **Where Telegram refuses the deletion, its button still goes** (`Telegram`
+    /// B18: a message 48 hours old or more), so no Stop stands on an ended job.
+    #[test]
+    fn a_companion_too_old_to_delete_still_loses_its_stop() {
+        let service = Arc::new(AStandInService::new());
+        service.then_answers(&the_album_answer(501, 2));
+        service.then_answers(r#"{"ok":true,"result":{"message_id":503}}"#);
+        let mut messages = a_frames_messages(&service);
+        let mut pictures = ThePictures::new(5, "RunPod 4090");
+        let copies = vec![
+            a_copy(140, "Interior", a_png_header(1280, 720)),
+            a_copy(140, "FX", a_png_header(1280, 720)),
+        ];
+        pictures.send_a_frame_with_its_stop(&mut messages, copies, AClassOfSend::FramePicturesAndMedia, Some(&the_job()));
+        let calls = service.heard().len();
+        service.then_answers(r#"{"ok":false,"error_code":400,"description":"Bad Request: message can't be deleted"}"#);
+        assert_eq!(messages.remove_the_stops_where(&|_| true).unwrap(), 1);
+        let heard = service.heard();
+        assert_eq!(
+            heard[calls..].iter().map(|call| call.method.as_str()).collect::<Vec<_>>(),
+            ["deleteMessage", "editMessageReplyMarkup"]
+        );
+    }
+
+    /// **A job already ended gets no companion**, as before, so nothing is ever
+    /// sent with nothing to say.
+    #[test]
+    fn an_album_of_an_ended_job_has_no_companion() {
+        let service = Arc::new(AStandInService::new());
+        service.then_answers(&the_album_answer(501, 2));
+        let mut messages = a_frames_messages(&service);
+        let mut pictures = ThePictures::new(5, "RunPod 4090");
+        let copies = vec![
+            a_copy(140, "Interior", a_png_header(1280, 720)),
+            a_copy(140, "FX", a_png_header(1280, 720)),
+        ];
+        pictures.send_a_frame_with_its_stop(&mut messages, copies, AClassOfSend::FramePicturesAndMedia, None);
+        assert_eq!(service.heard().iter().map(|call| call.method.as_str()).collect::<Vec<_>>(), ["sendMediaGroup"]);
+    }
+
     /// **A one-layer frame makes one `sendPhoto`, its caption unchanged**, and
     /// its stop attached, exactly as before.
     #[test]
@@ -1203,7 +1297,7 @@ pub(crate) mod tests {
             ["sendMessage", "sendMediaGroup", "sendMediaGroup", "sendPhoto"]
         );
         let said = the_words_heard(&service);
-        assert!(said[0].1.contains("Frame 1\nPreview not sent") && said[0].1.ends_with("Telegram does not accept its dimensions."));
+        assert!(said[0].1.contains("Frame 1\nPreview not sent") && said[0].1.ends_with("over Telegram's limits."));
         assert!(the_albums_captions(&heard[1]).iter().all(|c| !c.contains("Huge")));
         assert_eq!(the_albums_captions(&heard[2]).len(), 2);
         assert!(said[3].1.contains("Frame 3 · Interior ·"), "{:?}", said[3]);

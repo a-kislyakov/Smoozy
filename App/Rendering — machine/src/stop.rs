@@ -27,6 +27,9 @@
 //! render. **A builder moves the constant on a measurement of their own and
 //! never on either of these two.**
 //!
+//! **Caution, 2026-11-02:** 5.3's stops were timed on the Mac alone, so how long
+//! one takes on a rented card is not known (§9 item 7's caution, *Frames 15*).
+//!
 //! **Markers used in this file that belong to another document, each with
 //! the document it belongs to.** `Server protocol and transfers` C8, C16,
 //! C17, C21. `Job files and outputs` C17.

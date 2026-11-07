@@ -178,8 +178,11 @@ const CANCEL_AND_GO_BACK: &str = "Cancel";
 
 // **The server list says the same two**, and takes them from here rather
 // than keeping a copy (step 10a round 1, fix-here item 30).
-pub(crate) const THE_TOOLS_ARE_NOT_INSTALLED: &str = "SSH tools are not installed on this computer.";
-pub(crate) const UNTIL_THEY_ARE: &str = "No key can be created or checked until they are.";
+pub(crate) const THE_TOOLS_ARE_NOT_INSTALLED: &str = "SSH tools not installed.";
+/// **It says when the limit ends and names no act**: `Specs/Keys` asks the
+/// user to install nothing. Changed 2026-11-06, the check after the last fix
+/// (it read *Install them to create or check keys.*, which asked).
+pub(crate) const UNTIL_THEY_ARE: &str = "Keys can't be created or checked without them.";
 
 // ── A row — `Design/Keys § A row` ──────────────────────────────────────────
 
@@ -264,8 +267,8 @@ const THE_KEY_ITSELF_WORKS: &str = "The key itself works.";
 /// `Keys` carries the situation beside the verdict rather than letting the row
 /// say *the file could not be read*.
 const IT_IS_PROTECTED_AND_HAS_NO_PUBLIC_HALF: &str =
-    "This key has a passphrase and no public key file beside it.";
-const UNTIL_THAT_FILE_IS_BESIDE_IT: &str = "It cannot be checked until that file is beside it.";
+    "Passphrase set and no .pub file beside it.";
+const UNTIL_THAT_FILE_IS_BESIDE_IT: &str = "Can't be checked without one.";
 
 // ── The two ways out of an unusable row ────────────────────────────────────
 
@@ -402,7 +405,8 @@ const ONE_SERVER_CONNECTS_WITH_IT: &str =
     "One server uses it and will need a new key.";
 const SERVERS_CONNECT_WITH_IT: &str =
     "These servers use it and will each need a new key.";
-const THAT_COVERS_WHAT_SMOOZY_KNOWS: &str = "Only Smoozy's servers are listed.";
+/// **The one sentence after the servers**: *Only Smoozy's servers are listed.*
+/// went 2026-11-06 (the last words read before the release), since the list says it.
 const OTHER_TOOLS_AND_COMPUTERS: &str = "Other apps and computers may also use this key.";
 /// **`Keys` W6: the confirmation names the file set by full path.** The drawing
 /// names the folder instead; the clause wins under Rule 10, and the paths travel
@@ -903,7 +907,7 @@ fn the_readings_are_taken<R: Runtime>(app: &AppHandle<R>, rows: Vec<KeyRow>) {
 }
 
 /// **`Keys` U1 set 2 and `Keys` U1a, performed.**
-fn the_discovery_pass<R: Runtime>(app: &AppHandle<R>, readings: &OnThisComputer) -> Vec<KeyRow> {
+pub(crate) fn the_discovery_pass<R: Runtime>(app: &AppHandle<R>, readings: &OnThisComputer) -> Vec<KeyRow> {
     let Ok(home) = locations::resolve(Location::UserHome) else {
         return Vec::new();
     };
@@ -2152,10 +2156,6 @@ pub fn the_answer_says(says: &TheAnswer) -> Event {
                         } else {
                             SERVERS_CONNECT_WITH_IT
                         })),
-                    )
-                    .saying(
-                        "thatCoversWhatSmoozyKnows",
-                        Said::Prose(Prose::new(THAT_COVERS_WHAT_SMOOZY_KNOWS)),
                     )
                     .saying(
                         "otherToolsAndComputers",

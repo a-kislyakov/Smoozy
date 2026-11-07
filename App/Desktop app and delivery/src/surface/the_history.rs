@@ -208,6 +208,8 @@ const THE_RENDER_DID_NOT_FINISH: &str = "The render did not finish.";
 const SMOOZY_DOES_NOT_KNOW_WHY: &str = "Cause unknown.";
 const NO_FRAME_WAS_COMPLETED: &str =
     "The render did not finish. No frames completed.";
+/// **Design, *Where no render began*: nothing started, so nothing did not finish.**
+const FAILED_BEFORE_RENDERING: &str = "Failed before rendering.";
 const YOU_STOPPED_THIS_RENDER: &str = "You stopped this render.";
 /// **Design, *History*: the stop box's conditional, said after the act, and
 /// never that the frame was not saved.** `Servers` W19a: a stop lands either
@@ -266,6 +268,12 @@ const IS_THE_ONE_SMOOZY_CANNOT_CONFIRM: &str =
 const THE_FRAME_WORD: &str = "Frame";
 const EVERY_FRAME_IS_RENDERED: &str =
     "All frames rendered.";
+/// **`Queue & History` E3, reversed 2026-11-02: what a finish says in place of
+/// that line where only part of what it owed was written.** *3 of 4 files
+/// written.*, the figures travelling as values beside these words.
+const FILES_WORD_OF: &str = "of";
+const FILES_WRITTEN_TRAIL: &str = "files written.";
+const ONE_FILE_WRITTEN_TRAIL: &str = "file written.";
 pub(crate) const NO_FRAME_TO_START_FROM: &str =
     "Resume unavailable: this job's progress is unknown.";
 pub(crate) const NO_FRAME_FINISHED_SO_NOTHING_TO_START_FROM: &str =
@@ -309,24 +317,30 @@ const DELETE_THIS_ENTRY_AND_ITS_CHECK_QUESTION: &str = "Delete this entry and it
 const THE_CHECKS_GREY: &str = "e-chk";
 const THE_RECORD_IS_DELETED: &str =
     "This entry and its settings are deleted permanently, so it cannot be submitted again.";
-const THE_FRAMES_ON_THE_SERVER_ARE_UNTOUCHED: &str = "frames on the server are untouched.";
-const THE_FRAME_ON_THE_SERVER_IS_UNTOUCHED: &str = "frame on the server is untouched.";
+/// **What the delete box says is not changed, in one sentence** — *60 frames
+/// on the server and 48 downloaded frames are not changed.* — as the clear
+/// boxes say it. *Changed 2026-11-06, the last words read before the release:
+/// it was two sentences, *The 60 frames on the server are untouched.* and *The
+/// 48 frames already downloaded to your computer are untouched too.**
+const FRAMES_ON_THE_SERVER: &str = "frames on the server";
+const FRAME_ON_THE_SERVER: &str = "frame on the server";
+const FRAMES_ON_THE_SERVER_AND: &str = "frames on the server and";
+const FRAME_ON_THE_SERVER_AND: &str = "frame on the server and";
+const DOWNLOADED_FRAMES: &str = "downloaded frames";
+const DOWNLOADED_FRAME: &str = "downloaded frame";
+const ARE_NOT_CHANGED: &str = "are not changed.";
+const IS_NOT_CHANGED: &str = "is not changed.";
+/// **Design, *Deleting an entry*: each half said without a number, where the
+/// entry knows none** — the upstream must-do of step 10b round 1 of *jobs,
+/// history and downloads*.
+const THE_FRAMES_ON_THE_SERVER_ARE_UNTOUCHED_UNCOUNTED: &str = "Frames on the server";
+const FRAMES_ON_THE_SERVER_UNCOUNTED_AND: &str = "Frames on the server and";
+const ANYTHING_ALREADY_DOWNLOADED: &str = "Downloaded frames are not changed.";
+const DOWNLOADED_FRAMES_UNCOUNTED: &str = "downloaded frames";
 const NOTHING_WAS_RENDERED: &str =
     "Nothing was rendered.";
 const WHATEVER_IT_RENDERED_IS_ON_A_SERVER: &str =
     "What it rendered is on a server that is no longer available.";
-const THE_WORD_THE: &str = "The";
-const ALREADY_DOWNLOADED_ARE_UNTOUCHED: &str =
-    "frames already downloaded to your computer are untouched too.";
-const ALREADY_DOWNLOADED_IS_UNTOUCHED: &str =
-    "frame already downloaded to your computer is untouched too.";
-const ANYTHING_ALREADY_DOWNLOADED: &str =
-    "Anything already downloaded to your computer is untouched.";
-/// **Design, *Deleting an entry*: the server's half said without a number,
-/// where the entry knows none** — the upstream must-do of step 10b round 1 of *jobs,
-/// history and downloads*. It is the counted sentence without its count.
-const THE_FRAMES_ON_THE_SERVER_ARE_UNTOUCHED_UNCOUNTED: &str =
-    "The frames on the server are untouched.";
 const KEEP_THE_ENTRY: &str = "Keep the entry";
 
 /// **A History read that failed is said** — must-do 3(a) of step 10b round 1 of
@@ -505,6 +519,11 @@ const WAS_TOO_OLD_FOR_OPTIX_IN_BLENDER: &str = ", was too old for OptiX in Blend
 /// value it has not got. Ruled at this site.
 const THE_NVIDIA_DRIVER_WAS_TOO_OLD_FOR_OPTIX_IN_BLENDER: &str =
     "The NVIDIA driver was too old for OptiX in Blender";
+/// **The two again from 5.3**, where the card cannot be used at all under Cycles
+/// (`Rendering` L23a's bullet of 2026-11-02).
+const WAS_TOO_OLD_FOR_CYCLES_GPU_IN_BLENDER: &str = ", was too old for Cycles GPU rendering in Blender";
+const THE_NVIDIA_DRIVER_WAS_TOO_OLD_FOR_CYCLES_GPU_IN_BLENDER: &str =
+    "The NVIDIA driver was too old for Cycles GPU rendering in Blender";
 const THE_BOLD_ENDS: &str = ",";
 const AND_SMOOZY_COULDNT_UPDATE_IT: &str = "and could not be updated.";
 
@@ -733,6 +752,13 @@ pub struct TheEndingsFailure {
     /// naming whose words they are. Step 10c's sixth pass, fault 3: the machine
     /// recorded why both jobs failed and no screen said it.
     pub what_the_server_said: Option<String>,
+    /// **Where no render began, that same reason, said at once beneath the plain
+    /// sentence** (Design, *Where no render began*; Rule 8's truth over *Nothing else
+    /// on a failed entry names a cause*, for this case alone). It is what Smoozy
+    /// itself was doing, not a cause read from Blender's words. **A value, and never
+    /// through the typography point** (M9), because it can hold a path as the file
+    /// records it. [`Self::what_the_server_said`] is then empty: one reason, one place.
+    pub the_reason_beneath: Option<String>,
     /// Whether the record opens the machine's own words (M13a). **The control
     /// and never a line of either stream** (M13b).
     pub blender_output: bool,
@@ -810,6 +836,36 @@ pub struct RenderItAgain {
     pub carry_on: Option<TheCarryOn>,
     /// Why the second control is missing, where it is.
     pub why: Option<&'static str>,
+    /// **`Queue & History` E3: a finish whose count came up short says this in
+    /// place of [`Self::why`]**, the outcome staying *Finished*.
+    pub the_count_came_up_short: Option<smoozy_queue_history::acting::note::TheFilesCounted>,
+}
+
+impl RenderItAgain {
+    /// **`Queue & History` E3 over one finish**: where the count came up short,
+    /// the line is the count. No count, and a whole one, leave it as it is.
+    fn over_a_count(mut self, counted: Option<smoozy_queue_history::acting::note::TheFilesCounted>) -> RenderItAgain {
+        if let Some(counted) = counted.filter(|counted| counted.it_came_up_short()) {
+            self.why = None;
+            self.the_count_came_up_short = Some(counted);
+        }
+        self
+    }
+
+    /// **The line, in words.** The figures come from `Job files and outputs`
+    /// C27, so nothing here reckons them.
+    pub(crate) fn the_line(&self) -> Option<String> {
+        match (self.the_count_came_up_short, self.why) {
+            (Some(counted), _) => Some(format!(
+                "{} {FILES_WORD_OF} {} {}",
+                counted.written,
+                counted.owed,
+                if counted.owed == 1 { ONE_FILE_WRITTEN_TRAIL } else { FILES_WRITTEN_TRAIL },
+            )),
+            (None, Some(why)) => Some(why.to_string()),
+            (None, None) => None,
+        }
+    }
 }
 
 /// **The carry-on, as the architecture reckons it** — must-do 2 of step 10a
@@ -1556,6 +1612,11 @@ pub fn the_entry_beside_a_reading(
         .what_the_note_carried
         .last_frame_figure
         .or(record.what_the_note_carried.given_up_where_it_was);
+    let no_render_began = record
+        .what_the_note_carried
+        .ending
+        .as_ref()
+        .is_some_and(|ending| ending.no_render_began);
     TheHistoryEntry {
         entry: TheJobEntry {
             job: record.job.as_text(),
@@ -1653,9 +1714,20 @@ pub fn the_entry_beside_a_reading(
                     .as_ref()
                     .map(|ending| ending.the_attempt_whose_capture_record_holds_the_words),
             ),
+            // **Record version 60: the machine's own word that no render began**
+            // (`Rendering` K14). Absent on an older record, which keeps its words.
+            no_render_began,
         )
         .map(|failure| TheEndingsFailure {
-            what_the_server_said: beside.the_reason_the_machine_recorded.clone(),
+            what_the_server_said: beside
+                .the_reason_the_machine_recorded
+                .clone()
+                .filter(|_| !no_render_began),
+            the_reason_beneath: beside
+                .the_reason_the_machine_recorded
+                .as_deref()
+                .filter(|_| no_render_began)
+                .map(the_reason_as_a_sentence),
             // **The raw text is offered where there is some** (`Design/Whole
             // app`, the failure shape) — never a control that opens nothing.
             blender_output: beside.the_words_are_kept(),
@@ -1670,13 +1742,21 @@ pub fn the_entry_beside_a_reading(
             (Some(crate::record::job_records::TheKeptSetup::Kept(_)), Some(asked))
                 if !record.the_frames.they_cannot_be_counted =>
             {
-                Some(the_ways_to_render_it_again(
+                let again = the_ways_to_render_it_again(
                     the_figure_reads_against,
                     &asked.the_order(),
                     figure,
                     WhereTheFigureCameFrom::RecordedWhenTheJobEnded,
                     the_server_stands,
-                ))
+                );
+                // **`Queue & History` E3: *All frames rendered.* does not stand
+                // over a count that came up short.** Read against a finish the
+                // record learned, never one a reading says is owed.
+                Some(if the_figure_reads_against == AnEnding::Finished {
+                    again.over_a_count(record.what_the_note_carried.the_files_counted)
+                } else {
+                    again
+                })
             }
             _ => None,
         },
@@ -1736,8 +1816,11 @@ pub fn the_entry_beside_a_reading(
             // **Stated only on a finished ending**, by the backend word alone
             // where the line is a shape the research holds, and as printed
             // otherwise (the Creator's third notes, note 9); every other
-            // ending, and a finished one with no line, draws *not known*.
+            // ending draws *not known*. **A finished job that printed no line
+            // draws no *Ran on* at all** (`Design/Queue & History`, 2026-11-03):
+            // nothing was path traced, a compositor-only frame among them.
             the_devices_that_did_the_work(record).as_deref(),
+            ending == AnEnding::Finished,
         ),
         // **Design, and the drawing's own line on the entry whose ending was
         // never learned.** Drawn only where both halves are true: no ending was
@@ -2094,13 +2177,19 @@ fn the_marks_on(record: &LocalJobRecord, the_earlier_entry_stands: bool) -> Vec<
             AMark::TheDriverWasBelowTheBar(below) => {
                 let blender = crate::surface::the_queue::the_blenders_line(&below.the_jobs_blender);
                 let the_rest = APart::words(AND_SMOOZY_COULDNT_UPDATE_IT);
+                let (after_the_version, with_no_version) =
+                    if crate::surface::the_queue::the_blender_cannot_use_the_card_below_its_bar(&below.the_jobs_blender) {
+                        (WAS_TOO_OLD_FOR_CYCLES_GPU_IN_BLENDER, THE_NVIDIA_DRIVER_WAS_TOO_OLD_FOR_CYCLES_GPU_IN_BLENDER)
+                    } else {
+                        (WAS_TOO_OLD_FOR_OPTIX_IN_BLENDER, THE_NVIDIA_DRIVER_WAS_TOO_OLD_FOR_OPTIX_IN_BLENDER)
+                    };
                 match &below.the_drivers_version {
                     Some(version) => AMarkOnTheEntry {
                         bold: 2,
                         ..a_mark(
                             THE_NVIDIA_DRIVER,
                             vec![
-                                APart::said("", version.clone(), WAS_TOO_OLD_FOR_OPTIX_IN_BLENDER),
+                                APart::said("", version.clone(), after_the_version),
                                 APart::said("", blender, THE_BOLD_ENDS),
                                 the_rest,
                             ],
@@ -2109,7 +2198,7 @@ fn the_marks_on(record: &LocalJobRecord, the_earlier_entry_stands: bool) -> Vec<
                     None => AMarkOnTheEntry {
                         bold: 1,
                         ..a_mark(
-                            THE_NVIDIA_DRIVER_WAS_TOO_OLD_FOR_OPTIX_IN_BLENDER,
+                            with_no_version,
                             vec![APart::said("", blender, THE_BOLD_ENDS), the_rest],
                         )
                     },
@@ -2370,6 +2459,16 @@ fn the_setup_on(
             ..AFactOnTheEntry::default()
         },
     ];
+    // **`Queue & History` E12a's bullet of 2026-11-02: only a Cycles job states
+    // the ask.** The file's saved Cycles device decides nothing under EEVEE, and
+    // `Rendering` L21 names no technology for it. Not known: as it was.
+    let the_engine_is_not_cycles = the_engine_in_force_is_cycles(
+        payload.and_then(|payload| payload.engine.as_ref()).map(|engine| engine.pick),
+        companion.and_then(|companion| companion.engine.as_ref()).map(|was| was.as_text()),
+    ) == Some(false);
+    if the_engine_is_not_cycles {
+        facts.retain(|fact| fact.name != RENDERS_ON_FACT);
+    }
     // **A job whose folder is chosen at render start and not learned yet has
     // no folder, so nothing is *written to***: the drawing's `q-wait` draws no
     // *Writing to* row. The Creator's second notes, piece 4's queue half.
@@ -2387,6 +2486,21 @@ fn the_setup_on(
 /// 4's: `CYCLES` in every version, the built-in real-time engine
 /// `BLENDER_EEVEE_NEXT` in 4.5 and `BLENDER_EEVEE` in 5.2. **Until 2026-10-07
 /// the entry drew the identifier itself** beside a picked engine.
+/// **`Queue & History` E12a's bullet of 2026-11-02: whether the engine in force
+/// is Cycles**, the user's pick, else the file's own as the entry holds it.
+/// **Nothing where neither stands.** Beside [`the_files_engine_by_name`], whose
+/// spelling of Cycles this is.
+fn the_engine_in_force_is_cycles(
+    pick: Option<smoozy_render_settings::engine::OfferedEngine>,
+    the_files_own: Option<&str>,
+) -> Option<bool> {
+    match (pick, the_files_own) {
+        (Some(pick), _) => Some(pick == smoozy_render_settings::engine::OfferedEngine::Cycles),
+        (None, Some(identifier)) => Some(identifier == "CYCLES"),
+        (None, None) => None,
+    }
+}
+
 fn the_files_engine_by_name(identifier: &str) -> String {
     use crate::surface::render_settings::words as the_page;
     match identifier {
@@ -3345,6 +3459,11 @@ fn the_history_entry_is_said(mut event: Event, entry: &TheHistoryEntry) -> Event
                 Said::Prose(Prose::new(second.clone())),
             );
         }
+        // **Design, *Where no render began*: where a second sentence goes, as a
+        // value**, since it can hold a path as the file records it.
+        if let Some(reason) = &failure.the_reason_beneath {
+            event = event.saying("failWhatToDoAboutIt", Said::Value(Verbatim::new(reason.clone())));
+        }
         // **Each value beside its label: the label is prose the user reads and
         // the value is not** (must-do 20).
         for (at, (label, value)) in failure.values.iter().enumerate() {
@@ -3435,8 +3554,8 @@ fn the_history_entry_is_said(mut event: Event, entry: &TheHistoryEntry) -> Event
             // **Absent rather than greyed, and one line says why** — Design's
             // own rule for the missing carry-on.
             None => {
-                if let Some(why) = again.why {
-                    event = event.saying("carryOnWhy", Said::Prose(Prose::new(why)));
+                if let Some(line) = again.the_line() {
+                    event = event.saying("carryOnWhy", Said::Prose(Prose::new(line)));
                 }
             }
         }
@@ -3482,9 +3601,9 @@ fn the_history_entry_is_said(mut event: Event, entry: &TheHistoryEntry) -> Event
 // The three boxes this screen raises
 // ───────────────────────────────────────────────────────────────────────────
 
-/// **Design, *Deleting an entry*: three sentences and the control is one
-/// word.** Where nothing of the job was downloaded the second untouched
-/// sentence is absent, because there is nothing untouched to name.
+/// **Design, *Deleting an entry*: the record's sentence, then what is not
+/// changed, and the control is one word.** Where nothing of the job was
+/// downloaded the downloaded half is absent, because there is nothing to name.
 ///
 /// **Must-do 10: never *0 frames*, and never *nothing* for *not known*.** A
 /// count that is known is said as a count, and none downloaded draws no
@@ -3503,31 +3622,50 @@ pub fn the_delete_box(
     downloaded: Option<u32>,
 ) -> TheBoxThatAsks {
     let mut said = vec![vec![APart::words(THE_RECORD_IS_DELETED)]];
-    if the_server_is_gone {
+    // **The server's half**, where it has one to say: a count, or none known.
+    let on_the_server = if the_server_is_gone {
         said.push(vec![APart::words(WHATEVER_IT_RENDERED_IS_ON_A_SERVER)]);
+        None
     } else {
         match frames_on_the_server {
-            Some(0) => said.push(vec![APart::words(NOTHING_WAS_RENDERED)]),
-            Some(how_many) => said.push(vec![
-                APart::words(THE_WORD_THE),
-                APart::figure(
-                    how_many.to_string(),
-                    by_count(how_many, THE_FRAME_ON_THE_SERVER_IS_UNTOUCHED, THE_FRAMES_ON_THE_SERVER_ARE_UNTOUCHED),
-                ),
-            ]),
-            None => said.push(vec![APart::words(THE_FRAMES_ON_THE_SERVER_ARE_UNTOUCHED_UNCOUNTED)]),
+            Some(0) => {
+                said.push(vec![APart::words(NOTHING_WAS_RENDERED)]);
+                None
+            }
+            known => Some(known),
         }
-    }
-    match downloaded {
-        Some(0) => {}
-        Some(how_many) => said.push(vec![
-            APart::words(THE_WORD_THE),
-            APart::figure(
-                how_many.to_string(),
-                by_count(how_many, ALREADY_DOWNLOADED_IS_UNTOUCHED, ALREADY_DOWNLOADED_ARE_UNTOUCHED),
-            ),
+    };
+    // **The downloaded half**: nothing where none was downloaded.
+    let downloaded = match downloaded {
+        Some(0) => None,
+        known => Some(known),
+    };
+    match (on_the_server, downloaded) {
+        (Some(on_the_server), Some(downloaded)) => {
+            let mut line = vec![match on_the_server {
+                Some(how_many) => APart::figure(how_many.to_string(), by_count(how_many, FRAME_ON_THE_SERVER_AND, FRAMES_ON_THE_SERVER_AND)),
+                None => APart::words(FRAMES_ON_THE_SERVER_UNCOUNTED_AND),
+            }];
+            line.push(match downloaded {
+                Some(how_many) => APart::figure(how_many.to_string(), by_count(how_many, DOWNLOADED_FRAME, DOWNLOADED_FRAMES)),
+                None => APart::words(DOWNLOADED_FRAMES_UNCOUNTED),
+            });
+            line.push(APart::words(ARE_NOT_CHANGED));
+            said.push(line);
+        }
+        (Some(on_the_server), None) => said.push(match on_the_server {
+            Some(how_many) => vec![
+                APart::figure(how_many.to_string(), by_count(how_many, FRAME_ON_THE_SERVER, FRAMES_ON_THE_SERVER)),
+                APart::words(by_count(how_many, IS_NOT_CHANGED, ARE_NOT_CHANGED)),
+            ],
+            None => vec![APart::words(THE_FRAMES_ON_THE_SERVER_ARE_UNTOUCHED_UNCOUNTED), APart::words(ARE_NOT_CHANGED)],
+        }),
+        (None, Some(Some(how_many))) => said.push(vec![
+            APart::figure(how_many.to_string(), by_count(how_many, DOWNLOADED_FRAME, DOWNLOADED_FRAMES)),
+            APart::words(by_count(how_many, IS_NOT_CHANGED, ARE_NOT_CHANGED)),
         ]),
-        None => said.push(vec![APart::words(ANYTHING_ALREADY_DOWNLOADED)]),
+        (None, Some(None)) => said.push(vec![APart::words(ANYTHING_ALREADY_DOWNLOADED)]),
+        (None, None) => {}
     }
     TheBoxThatAsks {
         which: "delete",
@@ -3646,7 +3784,10 @@ pub fn the_clear_removed_box(entries: u32, per_server: &[(String, u32)]) -> TheB
 /// and the disk-full carve-out's second sentence beside it.
 ///
 /// **Nothing else on a failed entry names a cause** (M13b, and Design's own
-/// *Nothing else on a failed entry names a cause*).
+/// *Nothing else on a failed entry names a cause*), **but one**: where no render
+/// began, the sentence says so and the entry puts the machine's reason beneath it
+/// (Design, *Where no render began*, the build runner's ruling of 2026-11-04: Rule 8's
+/// truth outranks it for this case). A render that began keeps these words.
 ///
 /// **Must-do 9: where a failed render's error stream was empty and no full disk
 /// is named, the plain sentence *is* the no-errors one** — the headline Design
@@ -3657,11 +3798,16 @@ pub fn the_failure_for(
     no_frame_was_completed: bool,
     the_disk_is_full_on: Option<&str>,
     the_complaints_stream_was_empty: bool,
+    no_render_began: bool,
 ) -> Option<TheEndingsFailure> {
     if !ending.carries_the_failure_shape() {
         return None;
     }
+    // **Design, *Where no render began***, ahead of everything below: each of those
+    // sentences is about a render, and the disk-full one says *when the render ended*.
+    let the_disk_is_full_on = the_disk_is_full_on.filter(|_| !no_render_began);
     let said = match (ending, no_frame_was_completed) {
+        (AnEnding::Failed, _) if no_render_began => FAILED_BEFORE_RENDERING.to_string(),
         (AnEnding::Failed, _) if the_complaints_stream_was_empty && the_disk_is_full_on.is_none() => {
             THE_RENDER_FAILED_AND_THE_OUTPUT_MAY_SAY_WHY.to_string()
         }
@@ -3693,12 +3839,23 @@ pub fn the_failure_for(
         // **The record's own, and [`the_entry_for`] puts it on** — this
         // composes the sentence from the ending alone.
         what_the_server_said: None,
+        the_reason_beneath: None,
         blender_output: true,
         // **Design draws the report control on every failed ending but the one
         // the user caused**: a stop is not a fault and there is nothing to
         // report about it.
         report_a_problem: ending != AnEnding::Stopped,
     })
+}
+
+/// **The machine's reason, to stand as a line of its own**: the record keeps it as a
+/// clause, begun in lower case. Only its first letter changes, and nothing else.
+fn the_reason_as_a_sentence(reason: &str) -> String {
+    let mut letters = reason.chars();
+    match letters.next() {
+        Some(first) => first.to_uppercase().chain(letters).collect(),
+        None => String::new(),
+    }
 }
 
 /// **Where the disk-full carve-out fires on this entry, the server's name to
@@ -3764,6 +3921,7 @@ pub fn the_ways_to_render_it_again(
         submit_again,
         carry_on: None,
         why: Some(why),
+        the_count_came_up_short: None,
     };
     match ending {
         // A clean finish: nothing left to carry on from.
@@ -3799,6 +3957,7 @@ pub fn the_ways_to_render_it_again(
             came_from,
         }),
         why: None,
+        the_count_came_up_short: None,
     }
 }
 
@@ -3841,6 +4000,7 @@ pub fn the_rendered_group(
     ended: Option<&str>,
     rendered_for: Option<&str>,
     ran_on: Option<&str>,
+    it_finished: bool,
 ) -> Vec<ARenderedFact> {
     let a_line = |name: &'static str, parts: Vec<APart>| ARenderedFact {
         name,
@@ -3859,7 +4019,7 @@ pub fn the_rendered_group(
         parts: a_value(value),
         a_moment: value.is_some(),
     };
-    vec![
+    let mut facts = vec![
         a_line(
             LAST_FRAME_FACT,
             match last_frame {
@@ -3879,8 +4039,11 @@ pub fn the_rendered_group(
         a_time(STARTED_FACT, started),
         a_time(ENDED_FACT, ended),
         a_line(RENDERED_FOR_FACT, a_value(rendered_for)),
-        a_line(RAN_ON_FACT, a_value(ran_on)),
-    ]
+    ];
+    if ran_on.is_some() || !it_finished {
+        facts.push(a_line(RAN_ON_FACT, a_value(ran_on)));
+    }
+    facts
 }
 
 #[cfg(test)]
@@ -3908,6 +4071,7 @@ mod tests {
             exit_status: None,
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         record.what_the_note_carried.last_frame_figure = Some(60);
@@ -4178,6 +4342,7 @@ mod tests {
                     exit_status: Some(0),
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 });
             }
@@ -4330,6 +4495,7 @@ mod tests {
                     exit_status: Some(0),
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 });
             }
@@ -4473,6 +4639,7 @@ mod tests {
                     exit_status: Some(1),
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 });
                 note.last_frame_figure = Some(40);
@@ -4674,6 +4841,7 @@ mod tests {
             exit_status: Some(0),
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         records.the_fill_in(&jobs[2], &note).expect("filled in");
@@ -4744,18 +4912,18 @@ mod tests {
         // **Item C1's word is the same grey italic, and a phrase too.**
         assert_eq!(AnEnding::StartNotKnown.class(), AnEnding::NotKnown.class());
         assert!(words(AnEnding::StartNotKnown) > 2);
-        assert!(the_failure_for(AnEnding::StartNotKnown, false, None, false).is_none());
+        assert!(the_failure_for(AnEnding::StartNotKnown, false, None, false, false).is_none());
     }
 
     /// **Only three of the five carry the failure shape.** A clean finish did
     /// what it was asked; an ending Smoozy never learned is not an ending.
     #[test]
     fn a_clean_finish_and_an_unknown_ending_carry_no_failure_shape() {
-        assert!(the_failure_for(AnEnding::Finished, false, None, false).is_none());
-        assert!(the_failure_for(AnEnding::NotKnown, false, None, false).is_none());
-        assert!(the_failure_for(AnEnding::Failed, false, None, false).is_some());
-        assert!(the_failure_for(AnEnding::Stopped, false, None, false).is_some());
-        assert!(the_failure_for(AnEnding::GivenUp, false, None, false).is_some());
+        assert!(the_failure_for(AnEnding::Finished, false, None, false, false).is_none());
+        assert!(the_failure_for(AnEnding::NotKnown, false, None, false, false).is_none());
+        assert!(the_failure_for(AnEnding::Failed, false, None, false, false).is_some());
+        assert!(the_failure_for(AnEnding::Stopped, false, None, false, false).is_some());
+        assert!(the_failure_for(AnEnding::GivenUp, false, None, false, false).is_some());
     }
 
     /// **The disk-full carve-out fills the second sentence and takes the
@@ -4763,7 +4931,7 @@ mod tests {
     /// *Nothing else on a failed entry names a cause*.
     #[test]
     fn the_disk_full_sentence_replaces_the_dont_know_half_and_names_the_server() {
-        let plain = the_failure_for(AnEnding::Failed, false, None, false).unwrap();
+        let plain = the_failure_for(AnEnding::Failed, false, None, false, false).unwrap();
         assert!(plain
             .as_the_diary_keeps_it()
             .contains(SMOOZY_DOES_NOT_KNOW_WHY));
@@ -4771,7 +4939,7 @@ mod tests {
         assert!(plain.values.is_empty());
 
         let full =
-            the_failure_for(AnEnding::Failed, false, Some("RunPod 4090"), false).unwrap();
+            the_failure_for(AnEnding::Failed, false, Some("RunPod 4090"), false, false).unwrap();
         assert!(!full
             .as_the_diary_keeps_it()
             .contains(SMOOZY_DOES_NOT_KNOW_WHY));
@@ -4808,6 +4976,7 @@ mod tests {
                 exit_status: Some(28),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
             record.what_the_note_carried.last_frame_figure = Some(40);
@@ -4843,10 +5012,38 @@ mod tests {
         ended(&mut record, TheOutcomeAsWritten::LeftStopped, Some(0));
         assert_eq!(second(&record), None, "route (b) is a render that ended failing");
         // **One sentence for the one diagnosis**, and it is the folder's.
-        let full = the_failure_for(AnEnding::Failed, false, Some("the big box"), false).unwrap();
+        let full = the_failure_for(AnEnding::Failed, false, Some("the big box"), false, false).unwrap();
         assert_eq!(full.what_to_do_about_it.as_deref(), Some(THE_DIAGNOSIS));
         let source = include_str!("the_history.rs").split("#[cfg(test)]").next().unwrap().to_string();
         assert!(!source.contains(concat!("const THE_DISK", "_ON")), "History keeps a disk sentence of its own");
+    }
+
+    /// **Design, *Where no render began*: the film's first job.** It reads what
+    /// happened, with the reason at once, no control to open first and no sentence
+    /// about a render. The disk-full sentence says *when the render ended*, so it does
+    /// not stand here either.
+    #[test]
+    fn a_failure_before_any_render_says_so_and_a_render_that_began_keeps_its_words() {
+        let before = the_failure_for(AnEnding::Failed, true, Some("Old 4080"), true, true).unwrap();
+        assert_eq!(before.as_the_diary_keeps_it(), "Failed before rendering.");
+        assert_eq!(before.what_to_do_about_it, None);
+        assert!(before.values.is_empty());
+        assert!(before.report_a_problem);
+        for no_frame in [true, false] {
+            let began = the_failure_for(AnEnding::Failed, no_frame, None, false, false).unwrap();
+            assert_ne!(began.as_the_diary_keeps_it(), "Failed before rendering.");
+        }
+        assert_eq!(
+            the_failure_for(AnEnding::Failed, true, None, false, false).unwrap().as_the_diary_keeps_it(),
+            "The render did not finish. No frames completed.",
+            "a render that began and ended badly keeps today's words"
+        );
+        let stopped = the_failure_for(AnEnding::Stopped, true, None, false, true).unwrap();
+        assert_ne!(stopped.as_the_diary_keeps_it(), "Failed before rendering.");
+        assert_eq!(
+            the_reason_as_a_sentence("could not copy the bake folder //caches/shot/"),
+            "Could not copy the bake folder //caches/shot/"
+        );
     }
 
     /// **Must-do 20: the page does not write the word *Server* itself.** The
@@ -4855,7 +5052,7 @@ mod tests {
     #[test]
     fn the_disk_full_servers_label_is_prose_the_application_sent() {
         let entry = TheHistoryEntry {
-            failure: the_failure_for(AnEnding::Failed, false, Some("RunPod 4090"), false),
+            failure: the_failure_for(AnEnding::Failed, false, Some("RunPod 4090"), false, false),
             ..TheHistoryEntry::default()
         };
         let text = said(&the_history_entry_is_said(Event::about(About::TheRun, THE_HISTORY_SAYS), &entry));
@@ -4874,7 +5071,7 @@ mod tests {
     #[test]
     fn a_failed_entry_with_empty_errors_claims_nothing_about_the_output() {
         for no_frame in [false, true] {
-            let failure = the_failure_for(AnEnding::Failed, no_frame, None, true).unwrap();
+            let failure = the_failure_for(AnEnding::Failed, no_frame, None, true, false).unwrap();
             assert_eq!(failure.said, "The render failed. Blender's output may say why.");
             let said = failure.said.to_lowercase();
             assert!(!said.contains("no errors"), "{said}");
@@ -4889,13 +5086,13 @@ mod tests {
     #[test]
     fn the_no_errors_ending_is_the_plain_sentence_and_the_diarys() {
         for no_frame in [false, true] {
-            let failure = the_failure_for(AnEnding::Failed, no_frame, None, true).unwrap();
+            let failure = the_failure_for(AnEnding::Failed, no_frame, None, true, false).unwrap();
             assert_eq!(failure.as_the_diary_keeps_it(), THE_RENDER_FAILED_AND_THE_OUTPUT_MAY_SAY_WHY);
         }
-        let with_the_disk = the_failure_for(AnEnding::Failed, false, Some("Old 4080"), true).unwrap();
+        let with_the_disk = the_failure_for(AnEnding::Failed, false, Some("Old 4080"), true, false).unwrap();
         assert_eq!(with_the_disk.said, THE_RENDER_DID_NOT_FINISH, "a named cause keeps its own sentence");
         let entry = TheHistoryEntry {
-            failure: the_failure_for(AnEnding::Failed, false, None, true),
+            failure: the_failure_for(AnEnding::Failed, false, None, true, false),
             ..TheHistoryEntry::default()
         };
         let text = said(&the_history_entry_is_said(Event::about(About::TheRun, THE_HISTORY_SAYS), &entry));
@@ -4911,7 +5108,7 @@ mod tests {
     #[test]
     fn a_recorded_ending_carries_no_cross_and_does_not_repeat_the_retry() {
         for ending in [AnEnding::Failed, AnEnding::Stopped, AnEnding::GivenUp] {
-            let failure = the_failure_for(ending, false, None, false).unwrap();
+            let failure = the_failure_for(ending, false, None, false, false).unwrap();
             for control in failure.the_controls() {
                 assert_ne!(control.what_it_is, WhatItIs::TheCross);
                 assert_ne!(control.what_it_is, WhatItIs::TryAgain);
@@ -4923,10 +5120,10 @@ mod tests {
     /// draws the report control on every other failed ending.
     #[test]
     fn the_one_ending_the_user_caused_offers_no_report() {
-        let stopped = the_failure_for(AnEnding::Stopped, false, None, false).unwrap();
+        let stopped = the_failure_for(AnEnding::Stopped, false, None, false, false).unwrap();
         assert!(!stopped.report_a_problem);
         for ending in [AnEnding::Failed, AnEnding::GivenUp] {
-            assert!(the_failure_for(ending, false, None, false)
+            assert!(the_failure_for(ending, false, None, false, false)
                 .unwrap()
                 .report_a_problem);
         }
@@ -5062,11 +5259,11 @@ mod tests {
     /// confirmed** — nothing adds one to it.
     #[test]
     fn the_rendered_line_names_the_boundary_frame() {
-        let group = the_rendered_group(Some(60), true, NONE_FINISHED, None, None, None, None, None);
+        let group = the_rendered_group(Some(60), true, NONE_FINISHED, None, None, None, None, None, false);
         assert_eq!(group[0].parts[1].value, "60");
-        let group = the_rendered_group(Some(0), false, NONE_FINISHED, None, None, None, None, None);
+        let group = the_rendered_group(Some(0), false, NONE_FINISHED, None, None, None, None, None, false);
         assert_eq!(group[0].parts, vec![APart::value("0")], "frame 0 is a frame and not *none finished*");
-        let group = the_rendered_group(None, false, NONE_FINISHED, None, None, None, None, None);
+        let group = the_rendered_group(None, false, NONE_FINISHED, None, None, None, None, None, false);
         assert_eq!(group[0].parts, vec![APart::words(NONE_FINISHED)]);
     }
 
@@ -5111,7 +5308,19 @@ mod tests {
         let none = the_delete_box(Some(60), false, Some(0));
         assert_eq!(none.said.len(), 2);
         let some = the_delete_box(Some(60), false, Some(48));
-        assert_eq!(some.said.len(), 3);
+        assert_eq!(some.said.len(), 2, "one sentence names both halves");
+        assert_eq!(
+            some.said[1],
+            vec![
+                APart::figure("60", FRAMES_ON_THE_SERVER_AND),
+                APart::figure("48", DOWNLOADED_FRAMES),
+                APart::words(ARE_NOT_CHANGED),
+            ]
+        );
+        assert_eq!(
+            none.said[1],
+            vec![APart::figure("60", FRAMES_ON_THE_SERVER), APart::words(ARE_NOT_CHANGED)]
+        );
     }
 
     /// **Must-do 10, first case: a gone server with nothing downloaded never
@@ -5149,26 +5358,35 @@ mod tests {
             the_box.said,
             vec![
                 vec![APart::words(THE_RECORD_IS_DELETED)],
-                vec![APart::words(THE_FRAMES_ON_THE_SERVER_ARE_UNTOUCHED_UNCOUNTED)],
-                vec![APart::words(ANYTHING_ALREADY_DOWNLOADED)],
+                vec![
+                    APart::words(FRAMES_ON_THE_SERVER_UNCOUNTED_AND),
+                    APart::words(DOWNLOADED_FRAMES_UNCOUNTED),
+                    APart::words(ARE_NOT_CHANGED),
+                ],
             ]
         );
         let words = every_word(&the_box);
         assert!(!words.chars().any(|one| one.is_ascii_digit()), "{words}");
         // **The counted case is unchanged** — the drawing's own.
-        assert!(every_word(&the_delete_box(Some(60), false, Some(48))).contains(THE_FRAMES_ON_THE_SERVER_ARE_UNTOUCHED));
+        assert!(every_word(&the_delete_box(Some(60), false, Some(48))).contains(FRAMES_ON_THE_SERVER_AND));
+        assert_eq!(
+            the_delete_box(None, false, Some(0)).said[1],
+            vec![APart::words(THE_FRAMES_ON_THE_SERVER_ARE_UNTOUCHED_UNCOUNTED), APart::words(ARE_NOT_CHANGED)]
+        );
         // **One home for the downloaded sentence**: it is written once in this
         // file's working half.
         let working = include_str!("the_history.rs").split("#[cfg(test)]").next().unwrap();
-        assert_eq!(working.matches("\"Anything already downloaded to your computer is untouched.\"").count(), 1);
+        assert_eq!(working.matches("\"Downloaded frames are not changed.\"").count(), 1);
     }
 
     /// **Must-do 12: one of anything is singular**, in all three boxes.
     #[test]
     fn one_entry_is_an_entry_and_one_frame_is_a_frame() {
         let one_of_each = every_word(&the_delete_box(Some(1), false, Some(1)));
-        assert!(one_of_each.contains(THE_FRAME_ON_THE_SERVER_IS_UNTOUCHED), "{one_of_each}");
-        assert!(one_of_each.contains(ALREADY_DOWNLOADED_IS_UNTOUCHED), "{one_of_each}");
+        assert!(one_of_each.contains(FRAME_ON_THE_SERVER_AND), "{one_of_each}");
+        assert!(one_of_each.contains(DOWNLOADED_FRAME), "{one_of_each}");
+        let alone = every_word(&the_delete_box(Some(1), false, Some(0)));
+        assert!(alone.contains(FRAME_ON_THE_SERVER) && alone.contains(IS_NOT_CHANGED), "{alone}");
         let one = the_clear_box("RunPod 4090", 1);
         assert!(every_word(&one).contains(ITS_ENTRY_IS_DELETED));
         assert_eq!(one.go_ahead[1].trail, ENTRY_WORD);
@@ -5214,7 +5432,7 @@ mod tests {
     /// point** — M32, and `Reporting a problem` V1's parity.
     #[test]
     fn the_diarys_sentence_is_the_composed_one_before_the_point() {
-        let failure = the_failure_for(AnEnding::Failed, false, Some("Old 4080"), false).unwrap();
+        let failure = the_failure_for(AnEnding::Failed, false, Some("Old 4080"), false, false).unwrap();
         let kept = failure.as_the_diary_keeps_it();
         assert_eq!(kept, THE_RENDER_DID_NOT_FINISH);
         assert!(!kept.contains("Old 4080"));
@@ -5534,6 +5752,7 @@ mod tests {
                 exit_status: Some(0),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
             store.write_the_provisional_record(&made).expect("written");
@@ -6166,6 +6385,29 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
         );
         assert_eq!(marks[0].bold, 1);
 
+        // **From 5.3 the mark says what stops there** (`Rendering` L23a's bullet
+        // of 2026-11-02, the live pass's own figures).
+        record.the_driver_was_below_the_bar = Some(TheDriverWasBelowTheBar {
+            the_drivers_version: Some("575.64.03".to_string()),
+            the_jobs_blender: "5.3.0".to_string(),
+        });
+        assert_eq!(
+            read_whole(&the_marks_on(&record, false)[0]),
+            "The NVIDIA driver, 575.64.03, was too old for Cycles GPU rendering in Blender 5.3, and could not be updated."
+        );
+        record.the_driver_was_below_the_bar = Some(TheDriverWasBelowTheBar {
+            the_drivers_version: None,
+            the_jobs_blender: "5.3.0".to_string(),
+        });
+        assert_eq!(
+            read_whole(&the_marks_on(&record, false)[0]),
+            "The NVIDIA driver was too old for Cycles GPU rendering in Blender 5.3, and could not be updated."
+        );
+        record.the_driver_was_below_the_bar = Some(TheDriverWasBelowTheBar {
+            the_drivers_version: None,
+            the_jobs_blender: "5.1.0".to_string(),
+        });
+
         // **On the entry both screens draw**, and on the event.
         let beside = BesideTheRecord::default();
         let entry = the_entry_for(&record, &beside, false, true).entry;
@@ -6306,6 +6548,72 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
         assert_eq!(crate::surface::the_queue::the_full_ranges_frames(None, &submitted), "1,2,3,4");
         drop(local);
         let _ = std::fs::remove_dir_all(folder);
+    }
+
+    #[test]
+    fn only_a_cycles_job_states_what_it_was_asked_to_render_on() {
+        // **`Queue & History` E12a's bullet of 2026-11-02**, the live pass on
+        // real production files: an EEVEE job seen on the card read *Renders
+        // on CPU*, from the file's saved Cycles device.
+        use crate::record::job_records::TheKeptSetup;
+        use smoozy_queue_history::record::TheDeviceAsk;
+        use smoozy_render_settings::device::DeviceChoice;
+        use smoozy_render_settings::engine::{EngineEntry, OfferedEngine};
+        use smoozy_render_settings::file_half::BlenderIdentity;
+        use smoozy_render_settings::payload::{compose, Companion, Composition};
+        use smoozy_render_settings::store::SceneEntries;
+        use smoozy_state::identities::IdentityKind;
+
+        let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+        let mut record = crate::record::deletions::tests::a_record_in_history(&server, "a job");
+        let the_payload = |engine: Option<OfferedEngine>| {
+            let mut payload = compose(Composition {
+                version_pick: &BlenderIdentity {
+                    path: "/root/smoozy/blender/5.3/blender".to_string(),
+                    version: smoozy_server_setup::blender::Version { major: 5, minor: 3, patch: 0 },
+                },
+                scene: None,
+                answers: &SceneEntries::default(),
+                standing: None,
+                stale: false,
+            });
+            payload.engine = engine.map(|pick| EngineEntry { pick, identifier: None });
+            TheKeptSetup::Kept(payload)
+        };
+        let a_companion = |engine: &str| Companion {
+            engine: Some(smoozy_render_settings::names::ExactName::as_the_reading_produced_it(engine)),
+            ..Companion::default()
+        };
+        let the_row = |record: &LocalJobRecord, kept: &TheKeptSetup| {
+            the_setup_on(record, Some(kept), None)
+                .into_iter()
+                .find(|fact| fact.name == RENDERS_ON_FACT)
+                .map(|fact| fact.value)
+        };
+        for ask in [
+            TheDeviceAsk::TheFilesOwnAsTheReadingInForceGaveIt(DeviceChoice::TheProcessor),
+            TheDeviceAsk::TheFilesOwnAsTheReadingInForceGaveIt(DeviceChoice::TheCards),
+            TheDeviceAsk::TheUsersOwn(DeviceChoice::TheCards),
+        ] {
+            record.device_asked_for = ask;
+            // **The file's own EEVEE, the user's EEVEE, a third engine: no row.**
+            record.the_files_values_beside_the_overrides = Some(a_companion("BLENDER_EEVEE"));
+            assert_eq!(the_row(&record, &the_payload(None)), None, "{ask:?}");
+            record.the_files_values_beside_the_overrides = Some(a_companion("BLENDER_EEVEE_NEXT"));
+            assert_eq!(the_row(&record, &the_payload(None)), None, "{ask:?}");
+            record.the_files_values_beside_the_overrides = Some(a_companion("CYCLES"));
+            assert_eq!(the_row(&record, &the_payload(Some(OfferedEngine::Eevee))), None, "{ask:?}");
+            record.the_files_values_beside_the_overrides = Some(a_companion("BLENDER_WORKBENCH"));
+            assert_eq!(the_row(&record, &the_payload(None)), None, "{ask:?}");
+            // **Cycles keeps it, the user's and the file's alike.**
+            record.the_files_values_beside_the_overrides = Some(a_companion("CYCLES"));
+            assert!(the_row(&record, &the_payload(None)).is_some(), "{ask:?}");
+            record.the_files_values_beside_the_overrides = Some(a_companion("BLENDER_EEVEE"));
+            assert!(the_row(&record, &the_payload(Some(OfferedEngine::Cycles))).is_some(), "{ask:?}");
+            // **The engine not known: as it was.**
+            record.the_files_values_beside_the_overrides = None;
+            assert!(the_row(&record, &the_payload(None)).is_some(), "{ask:?}");
+        }
     }
 
     /// **Step 10c's sixth pass, fault 6: *Submitted with* draws what the user
@@ -6463,6 +6771,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_folders_at_the_machines_top: None,
             },
             Some(&picked),
             &four_values,
@@ -6534,6 +6843,56 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
         );
     }
 
+    /// **Design, *Where no render began*, the film's first job whole**: no exit
+    /// status, a recorded reason and the machine's word that no render began. The
+    /// sentence says what happened, the reason stands beneath it at once as a value,
+    /// and there is no control to open first. **The page draws it** where a second
+    /// sentence goes. On an older record the word is absent and today's words stand.
+    #[test]
+    fn a_job_that_failed_before_any_render_says_so_with_the_reason_beneath() {
+        use smoozy_queue_history::acting::note::{TheEndingOnTheNote, TheOutcomeAsWritten};
+        use smoozy_state::identities::IdentityKind;
+
+        let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+        let mut record = crate::record::deletions::tests::a_record_in_history(&server, "shot");
+        let reason = "could not copy the bake folder //caches/shots/100_0040/";
+        let ending = |no_render_began| TheEndingOnTheNote {
+            outcome: TheOutcomeAsWritten::Failed,
+            exit_status: None,
+            the_attempt_whose_capture_record_holds_the_words: 1,
+            the_reason_the_machine_recorded: Some(reason.to_string()),
+            no_render_began,
+            the_device_line_as_observed: None,
+        };
+        let beside = BesideTheRecord {
+            the_reason_the_machine_recorded: Some(reason.to_string()),
+            ..BesideTheRecord::default()
+        };
+        record.what_the_note_carried.ending = Some(ending(true));
+        let entry = the_entry_for(&record, &beside, false, true);
+        let failure = entry.failure.clone().expect("a failed ending carries the shape");
+        assert_eq!(failure.said, "Failed before rendering.");
+        assert_eq!(
+            failure.the_reason_beneath.as_deref(),
+            Some("Could not copy the bake folder //caches/shots/100_0040/")
+        );
+        assert_eq!(failure.what_the_server_said, None, "one reason, in one place");
+        assert!(failure.the_controls().iter().all(|control| control.act.as_str() != THE_SERVERS_WORDS_ACT));
+        let mut kept = TheHistoryOnScreen::default();
+        kept.entry = Some(entry);
+        let text = said(&the_history_says(&kept));
+        assert!(text.contains("failWhatToDoAboutIt"), "{text}");
+        assert!(text.contains("Could not copy the bake folder //caches/shots/100_0040/"), "{text}");
+        assert!(text.contains("Failed before rendering."), "{text}");
+
+        // **A render that began, or a record from before the word**: today's words.
+        record.what_the_note_carried.ending = Some(ending(false));
+        let failure = the_entry_for(&record, &beside, false, true).failure.expect("the shape");
+        assert_eq!(failure.said, NO_FRAME_WAS_COMPLETED);
+        assert_eq!(failure.what_the_server_said.as_deref(), Some(reason));
+        assert_eq!(failure.the_reason_beneath, None);
+    }
+
     /// **Step 10c's sixth pass, fault 3: why a job failed reaches the entry,
     /// where the machine's reason has been kept beside the record.** The plain
     /// sentence is unchanged and names no cause; the reason is the raw text
@@ -6551,6 +6910,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
             exit_status: None,
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         let reason = "Smoozy does not know how to render on a NVIDIA GeForce GTX 1650";
@@ -6618,6 +6978,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 exit_status: Some(0),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: the_line.map(str::to_string),
             });
             record
@@ -6646,10 +7007,14 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 "{not_finished:?}: a line from a run that did not finish says nothing"
             );
         }
-        assert_eq!(
-            ran_on(&ended(TheOutcomeAsWritten::Finished, None)),
-            vec![APart::words(NOT_KNOWN)],
-            "a finished job whose line was not observed"
+        // **`Design/Queue & History`, 2026-11-03: a finished job that printed no
+        // line has no *Ran on* at all**: nothing was path traced.
+        assert!(
+            the_entry_for(&ended(TheOutcomeAsWritten::Finished, None), &BesideTheRecord::default(), false, true)
+                .rendered
+                .into_iter()
+                .all(|fact| fact.name != RAN_ON_FACT),
+            "a compositor-only frame"
         );
         // **An ending Smoozy never learned has no line to read.**
         let unknown = crate::record::deletions::tests::a_record_in_history(&server, "Kitchen");
@@ -6676,6 +7041,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 exit_status: Some(0),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: Some(the_line.to_string()),
             });
             the_entry_for(&record, &BesideTheRecord::default(), false, true)
@@ -6758,6 +7124,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 exit_status: Some(0),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
         // **Piece 6d: the control is offered where the words are kept**, and
@@ -6856,6 +7223,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 exit_status: Some(0),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
             the_entry_for(&one, &BesideTheRecord::default(), false, true)
@@ -6899,6 +7267,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 exit_status: Some(0),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
             the_entry_for(&one, &BesideTheRecord::default(), false, true)
@@ -7036,6 +7405,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
             exit_status: None,
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         store.the_fill_in(&job.job, &note).unwrap();
@@ -7740,6 +8110,7 @@ console.log(JSON.stringify({
             exit_status: None,
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
+            no_render_began: false,
             the_device_line_as_observed: None,
         });
         record.what_the_note_carried.last_frame_figure = Some(60);
@@ -7777,6 +8148,35 @@ console.log(JSON.stringify({
         let finished = the_entry_for(&record, &beside, false, true).again.unwrap();
         assert_eq!(finished.carry_on, None);
         assert_eq!(finished.why, Some(EVERY_FRAME_IS_RENDERED));
+        assert_eq!(finished.the_line().as_deref(), Some(EVERY_FRAME_IS_RENDERED));
+
+        // **`Queue & History` E3: only part of what it owed.** The case the 5.3
+        // integration's piece 1 made: the regular output written and a node's
+        // files missing. The ending stays *Finished*.
+        use smoozy_queue_history::acting::note::TheFilesCounted;
+        record.what_the_note_carried.the_files_counted = Some(TheFilesCounted { written: 240, owed: 480 });
+        let entry = the_entry_for(&record, &beside, false, true);
+        assert_eq!(entry.ending, Some(AnEnding::Finished));
+        let short = entry.again.unwrap();
+        assert_eq!(short.carry_on, None);
+        assert_eq!(short.the_line().as_deref(), Some("240 of 480 files written."));
+        record.what_the_note_carried.the_files_counted = Some(TheFilesCounted { written: 0, owed: 1 });
+        assert_eq!(
+            the_entry_for(&record, &beside, false, true).again.unwrap().the_line().as_deref(),
+            Some("0 of 1 file written.")
+        );
+        // **All of it, and no count at all, stand as they did.**
+        record.what_the_note_carried.the_files_counted = Some(TheFilesCounted { written: 480, owed: 480 });
+        assert_eq!(the_entry_for(&record, &beside, false, true).again.unwrap().the_line().as_deref(), Some(EVERY_FRAME_IS_RENDERED));
+        record.what_the_note_carried.the_files_counted = None;
+        assert_eq!(the_entry_for(&record, &beside, false, true).again.unwrap().the_line().as_deref(), Some(EVERY_FRAME_IS_RENDERED));
+
+        // **Only a finish takes it**: a failure's own line and pair are left alone.
+        record.what_the_note_carried.the_files_counted = Some(TheFilesCounted { written: 60, owed: 240 });
+        record.what_the_note_carried.ending.as_mut().unwrap().outcome = TheOutcomeAsWritten::Failed;
+        let failed = the_entry_for(&record, &beside, false, true).again.unwrap();
+        assert!(failed.carry_on.is_some());
+        assert_eq!(failed.the_count_came_up_short, None);
     }
 
     /// **The 38's piece 3 — Design, *The rest of the entry*, `Queue & History`
@@ -7797,6 +8197,7 @@ console.log(JSON.stringify({
                 exit_status: Some(0),
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
+                no_render_began: false,
                 the_device_line_as_observed: None,
             });
             record.what_the_note_carried.last_frame_figure = figure;

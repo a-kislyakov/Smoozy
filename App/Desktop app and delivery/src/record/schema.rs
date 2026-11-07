@@ -42,7 +42,7 @@ use super::RecordFailure;
 /// would open a record it had not finished making; one that claimed a version
 /// below a migration it carries would run that migration and then refuse the
 /// record it had just written.
-pub const BINARY_KNOWS: u32 = 57;
+pub const BINARY_KNOWS: u32 = 60;
 
 /// The one-row table the version lives in.
 ///
@@ -2574,3 +2574,58 @@ pub const VERSION_56: &[&str] = &[
 /// arrangement's lifetime: removing the arrangement removes it.
 pub const VERSION_57: &[&str] =
     &["ALTER TABLE download_arrangement ADD COLUMN ending_walk_completed_for INTEGER"];
+
+/// Version 58 — **the OptiX library the driver came without** — `Servers`
+/// H11b's OptiX-library bullet, the Creator's ruling of 2026-11-02 that setup
+/// checks for it.
+///
+/// **What it is for.** Where the driver answers, the hardware reading also
+/// asks the machine's loader for the OptiX library, and a library not found is
+/// told on the server's card — greyed as *last seen* when not connected — so
+/// it is held with the rest of the reading the row already holds.
+///
+/// - `hardware_no_optix_library` is one more column of that reading, **nought
+///   on every record before this version** — no library recorded as missing,
+///   which is how every earlier reading read.
+///
+/// **One column added, as version 41 added the driver's; nothing existing is
+/// touched or carried. Versions 1 to 57 are not edited.**
+pub const VERSION_58: &[&str] = &["ALTER TABLE server_row ADD COLUMN hardware_no_optix_library INTEGER NOT NULL DEFAULT 0
+        CHECK (hardware_no_optix_library IN (0, 1))"];
+
+/// Version 59 — **`Job files and outputs` C27's two counts, kept with the
+/// ending** — `Queue & History` E3 as reversed on 2026-11-02, the 5.3
+/// integration's piece 5.
+///
+/// **What it is for.** *All frames rendered.* does not show over a job that
+/// wrote only part of what it owed, and History says *3 of 4 files written.*
+/// instead. The note's answer has always carried the counts; nothing kept them.
+///
+/// - `note_files_written` and `note_files_owed` — both or neither. **Nothing on
+///   every record before this version, and where the ending carried no
+///   statement**, and the line then stands as it did.
+///
+/// **Two optional columns added, as version 50 added its four; nothing existing
+/// is touched or carried. Versions 1 to 58 are not edited.**
+pub const VERSION_59: &[&str] = &[
+    "ALTER TABLE job_record ADD COLUMN note_files_written INTEGER",
+    "ALTER TABLE job_record ADD COLUMN note_files_owed INTEGER",
+];
+
+/// Version 60 — **whether an attempt ended before any render began**, kept with
+/// the ending, as the paragraph after `Queue & History` N3 says, for `Design/Queue
+/// & History`'s *Failed before rendering.* The launch film's first job, 2026-11-04.
+///
+/// **What it is for.** A job that failed before Blender began rendering read *The
+/// render did not finish. No frames completed.* The machine knows better, and
+/// nothing already kept says so for every such ending: *the record has no exit
+/// status* misses a job Blender was launched for and stopped in its launch
+/// material, and `render_start_learned` reads 1 on the film's own job.
+///
+/// - `no_render_began` — **nought on every record before this version**, so an old
+///   entry keeps the words it always had.
+///
+/// **One column added, as version 58 added its; nothing existing is touched or
+/// carried. Versions 1 to 59 are not edited.**
+pub const VERSION_60: &[&str] = &["ALTER TABLE job_record ADD COLUMN no_render_began INTEGER NOT NULL DEFAULT 0
+        CHECK (no_render_began IN (0, 1))"];

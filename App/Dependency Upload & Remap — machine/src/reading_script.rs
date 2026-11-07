@@ -185,9 +185,17 @@ def smoozy_trees_with_owners():
             if tree is not None:
                 frontier.append((tree, owner.name))
     for scene in bpy.data.scenes:
-        tree = getattr(scene, "compositing_node_group", None)
-        if tree is not None:
-            frontier.append((tree, scene.name))
+        # From 5.3 every effect's group, and the older one-group name is never
+        # read: it answers only the active effect's, and warns.
+        # `Job files and outputs` R4 item 1. Before 5.3 a scene has no such stack.
+        effects = getattr(scene, "compositor_effects", None)
+        if effects is None:
+            trees = [getattr(scene, "compositing_node_group", None)]
+        else:
+            trees = [effect.node_group for effect in effects]
+        for tree in trees:
+            if tree is not None:
+                frontier.append((tree, scene.name))
     for obj in bpy.data.objects:
         for modifier in getattr(obj, "modifiers", ()):
             tree = getattr(modifier, "node_group", None)

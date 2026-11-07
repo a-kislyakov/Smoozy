@@ -4329,7 +4329,7 @@ checksum = "b9be42f50aa861c555654aa3a37f52f4b1074bacf4e48fe0ef7fa584e80f1f0f"
 
 [[package]]
 name = "smoozy-dependencies"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "libc",
  "serde",
@@ -4348,7 +4348,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-dependencies-machine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4360,7 +4360,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-desktop"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ashpd",
  "block2",
@@ -4405,7 +4405,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-download"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde_json",
  "smoozy-dependencies",
@@ -4421,7 +4421,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-file-browser"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "libc",
  "russh",
@@ -4436,14 +4436,14 @@ dependencies = [
 
 [[package]]
 name = "smoozy-framing"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "smoozy-state",
 ]
 
 [[package]]
 name = "smoozy-job-files"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "russh",
  "serde",
@@ -4457,7 +4457,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-job-files-machine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4467,7 +4467,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-keys"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "smoozy-reporting",
  "smoozy-security-and-licence",
@@ -4476,7 +4476,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-queue-history"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4492,7 +4492,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-queue-history-machine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4506,7 +4506,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-release"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "smoozy-desktop",
  "smoozy-server-protocol",
@@ -4514,7 +4514,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-render-settings"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4532,7 +4532,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-render-settings-machine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4545,7 +4545,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-rendering"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4565,7 +4565,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-rendering-machine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4582,7 +4582,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-reporting"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "smoozy-security-and-licence",
  "smoozy-state",
@@ -4590,7 +4590,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-runtime"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "libc",
  "serde",
@@ -4602,7 +4602,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-scenarios"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "libc",
  "rusqlite",
@@ -4628,11 +4628,11 @@ dependencies = [
 
 [[package]]
 name = "smoozy-security-and-licence"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "smoozy-server"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "libc",
  "rustls",
@@ -4655,7 +4655,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-server-protocol"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ed25519-dalek",
  "russh",
@@ -4674,7 +4674,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-server-setup"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "rustls",
  "serde",
@@ -4693,7 +4693,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-server-setup-machine"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "sha2 0.11.0",
  "smoozy-framing",
@@ -4703,7 +4703,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-servers"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "russh",
  "smoozy-job-files",
@@ -4711,6 +4711,7 @@ dependencies = [
  "smoozy-reporting",
  "smoozy-security-and-licence",
  "smoozy-server-protocol",
+ "smoozy-server-setup-machine",
  "smoozy-servers-values",
  "smoozy-state",
  "tokio",
@@ -4719,14 +4720,14 @@ dependencies = [
 
 [[package]]
 name = "smoozy-servers-values"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "smoozy-state",
 ]
 
 [[package]]
 name = "smoozy-state"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "getrandom 0.4.3",
  "smoozy-security-and-licence",
@@ -4734,7 +4735,7 @@ dependencies = [
 
 [[package]]
 name = "smoozy-telegram"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",

@@ -1220,6 +1220,8 @@ pub const THE_WHICH_READING_FIELD: &str = "which reading";
 /// R1's one document, whose script `Job files and outputs` R3 puts on both
 /// sides, launched the way the render launches (`Job files and outputs` R7).
 pub const THE_FILES_READING: &str = "the file's reading";
+/// `Render Settings` Q4: optional saved library pairs for the reading's opening folder.
+pub const THE_READINGS_LIBRARY_PAIRS_FIELD: &str = "the reading's library pairs";
 /// **`Dependency Upload & Remap` G1's reading, the check's reading**, run with
 /// that module's own launch line.
 pub const THE_CHECKS_READING: &str = "the check's reading";
@@ -1446,7 +1448,7 @@ pub const IT_WAS_NOT_CANCELLED: &str = "not cancelled";
 /// (`Server protocol and transfers` §1.1's rule).
 ///
 /// **Answered by the entry point in the invocation that carries it, and never
-/// passed to the supervisor** — the one exception to P1's passing, because the
+/// passed to the supervisor** — the first exception to P1's passing, because the
 /// supervisor serves its callers one after another and a copy of many
 /// gigabytes there would hold every other request behind it. **A package that
 /// does not know it passes it on as every other name, and its supervisor
@@ -1795,13 +1797,151 @@ pub const THE_COUNT_IS_INCOMPLETE_FIELD: &str = "the count is incomplete";
 /// Nothing below the counted folder was skipped.
 pub const THE_COUNT_IS_WHOLE: &str = "no";
 
+// --------------------------------------- the four values of files on the machine
+//
+// **Built 2026-11-04**, out of a real folder of 480 files (`Dependency Upload &
+// Remap` Q5 route 1, §1.1's paragraph of 2026-10-03).
+
+/// **§1.1's request *the four values of files on the machine***: for each path,
+/// `Job files and outputs` R10's four values, read by the filesystem call that
+/// follows a link, in the units the command route reads.
+///
+/// **Carries** [`THE_PATHS_READ_FIELD`]; **answers** [`THE_VALUES_READ_FIELD`].
+///
+/// **Answered by the entry point in the invocation that carries it, and never
+/// passed to the supervisor**, as [`THE_FILE_IS_COPIED_ON_THE_MACHINE_REQUEST`]
+/// is. **A package that does not know it passes it on and its supervisor
+/// refuses it by name**, and that refusal is how the desktop learns to use the
+/// command route: a release's declared request set is written empty as built.
+///
+/// **C6: a pure reading.** Nothing on the machine is written.
+pub const THE_FOUR_VALUES_OF_FILES_REQUEST: &str = "the four values of files on the machine";
+
+/// **The paths, each ended by a zero byte**, which no path can hold (`Server
+/// protocol and transfers` P7's bytes). A protocol field and never a word of a
+/// command.
+pub const THE_PATHS_READ_FIELD: &str = "the paths read";
+/// **One line of text for each path, in the order asked** — see
+/// [`the_values_written`].
+pub const THE_VALUES_READ_FIELD: &str = "the values read";
+
+/// **The most paths one ask carries.** With [`THE_LONGEST_WORDS_BESIDE_NOT_READ`]
+/// this keeps the worst answer inside `framing::THE_LARGEST_FRAME`.
+pub const THE_MOST_PATHS_IN_ONE_ASK: usize = 4_000;
+/// **The most path bytes one ask carries**, under `framing::THE_LARGEST_FRAME`
+/// with room for the frame's own fields.
+pub const THE_MOST_PATH_BYTES_IN_ONE_ASK: usize = 512 * 1024;
+/// **The machine's own words beside *not read* are cut here**, on a character's
+/// edge, so one answer's size is known before it is asked.
+pub const THE_LONGEST_WORDS_BESIDE_NOT_READ: usize = 180;
+
+/// **What one path answered.**
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OnePathAnswered {
+    /// Size, inode, modification time, change time: R10's order and units.
+    Values { size: u64, inode: u64, modification_time: i64, change_time: i64 },
+    /// **The system said no such file**, a dangling link among them, as a file
+    /// `stat -L` could not find.
+    NothingThere,
+    /// Anything else, with the machine's own words.
+    NotRead(String),
+}
+
+/// **The paths, as the one field carries them.**
+pub fn the_paths_written(paths: &[Vec<u8>]) -> Vec<u8> {
+    let mut field = Vec::with_capacity(paths.iter().map(|path| path.len() + 1).sum());
+    for path in paths {
+        field.extend_from_slice(path);
+        field.push(0);
+    }
+    field
+}
+
+/// **The paths the one field carries.** Each ends at its zero byte, so an empty
+/// field holds none.
+pub fn the_paths_read_back(field: &[u8]) -> Vec<&[u8]> {
+    field.split(|byte| *byte == 0).take(field.iter().filter(|byte| **byte == 0).count()).collect()
+}
+
+/// **The answer, as the one field carries it**: for each path one line, the
+/// four numbers, or [`NOTHING_IS_THERE`], or [`IT_WAS_NOT_READ`] and the words.
+pub fn the_values_written(answers: &[OnePathAnswered]) -> String {
+    let mut out = String::new();
+    for answer in answers {
+        match answer {
+            OnePathAnswered::Values { size, inode, modification_time, change_time } => {
+                out.push_str(&format!("{size} {inode} {modification_time} {change_time}"));
+            }
+            OnePathAnswered::NothingThere => out.push_str(NOTHING_IS_THERE),
+            OnePathAnswered::NotRead(words) => {
+                out.push_str(IT_WAS_NOT_READ);
+                out.push_str(": ");
+                let words = words.replace(['\n', '\r'], " ");
+                let mut cut = words.len().min(THE_LONGEST_WORDS_BESIDE_NOT_READ);
+                while !words.is_char_boundary(cut) {
+                    cut -= 1;
+                }
+                out.push_str(&words[..cut]);
+            }
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// **The answer, read back**, or nothing where a line reads as none of the three
+/// or the count is not the count asked. **Four fields or nothing**, as the
+/// command route's own reader has it: no partly-read identity.
+pub fn the_values_read_back(field: &str, asked: usize) -> Option<Vec<OnePathAnswered>> {
+    let answers = field
+        .lines()
+        .map(|line| {
+            if line == NOTHING_IS_THERE {
+                return Some(OnePathAnswered::NothingThere);
+            }
+            if let Some(words) = line.strip_prefix(IT_WAS_NOT_READ) {
+                return Some(OnePathAnswered::NotRead(words.trim_start_matches(": ").to_string()));
+            }
+            let mut fields = line.split(' ');
+            let answered = OnePathAnswered::Values {
+                size: fields.next()?.parse().ok()?,
+                inode: fields.next()?.parse().ok()?,
+                modification_time: fields.next()?.parse().ok()?,
+                change_time: fields.next()?.parse().ok()?,
+            };
+            fields.next().is_none().then_some(answered)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    (answers.len() == asked).then_some(answers)
+}
+
+/// **A long list, split into the asks that carry it**, in its own order, by
+/// [`THE_MOST_PATHS_IN_ONE_ASK`] and [`THE_MOST_PATH_BYTES_IN_ONE_ASK`].
+pub fn the_asks_over(paths: &[Vec<u8>]) -> Vec<&[Vec<u8>]> {
+    let mut asks = Vec::new();
+    let (mut from, mut bytes) = (0, 0);
+    for (at, path) in paths.iter().enumerate() {
+        let this_one = path.len() + 1;
+        if at > from && (at - from == THE_MOST_PATHS_IN_ONE_ASK || bytes + this_one > THE_MOST_PATH_BYTES_IN_ONE_ASK) {
+            asks.push(&paths[from..at]);
+            from = at;
+            bytes = 0;
+        }
+        bytes += this_one;
+    }
+    if from < paths.len() {
+        asks.push(&paths[from..]);
+    }
+    asks
+}
+
 /// **Every request named in this file**, with where it stands under C6 and
 /// the fields named here that it carries.
 ///
 /// **The tests below hold this list to the file's own constants**, so a name
 /// added without an entry fails, and hold each name to one spelling in the
 /// workspace and to the machine program's two lists.
-pub const EVERY_REQUEST_NAMED_HERE: [ARequestNamedHere; 37] = [
+pub const EVERY_REQUEST_NAMED_HERE: [ARequestNamedHere; 38] = [
     ARequestNamedHere {
         name: THE_HEALTH_ANSWER_REQUEST,
         under_c6: UnderC6::APureReading,
@@ -1953,6 +2093,7 @@ pub const EVERY_REQUEST_NAMED_HERE: [ARequestNamedHere; 37] = [
         carries: &[
             THE_WHICH_READING_FIELD,
             THE_BUILD_FIELD,
+            THE_READINGS_LIBRARY_PAIRS_FIELD,
             THE_BLEND_FIELD,
             THE_BLENDER_VERSION_FIELD,
         ],
@@ -2039,6 +2180,11 @@ pub const EVERY_REQUEST_NAMED_HERE: [ARequestNamedHere; 37] = [
         name: THE_FOLDERS_SIZE_IS_COUNTED_REQUEST,
         under_c6: UnderC6::APureReading,
         carries: &[THE_COUNTED_FOLDER_FIELD],
+    },
+    ARequestNamedHere {
+        name: THE_FOUR_VALUES_OF_FILES_REQUEST,
+        under_c6: UnderC6::APureReading,
+        carries: &[THE_PATHS_READ_FIELD],
     },
 ];
 
@@ -2235,6 +2381,14 @@ pub const THE_ATTEMPT_THAT_HOLDS_THE_WORDS_FIELD: &str = "the attempt that holds
 /// the machine's own record of why the ending was classified as it was, and
 /// **nothing mined from a stream** (`Queue & History` N3). Added at step 10c's fix piece 2.
 pub const THE_REASON_THE_MACHINE_RECORDED_FIELD: &str = "the reason the machine recorded";
+/// **Whether the attempt ended before any render began** (`Rendering` K14's
+/// *before the render instruction*; the paragraph after `Queue & History` N3),
+/// which the machine knows and no outcome word says. **Sent only where it did**,
+/// and read as *a render began* where it is absent, so a note from an older machine
+/// program keeps the words it always had. Added 2026-11-04.
+pub const NO_RENDER_BEGAN_FIELD: &str = "no render began";
+/// The one value [`NO_RENDER_BEGAN_FIELD`] is sent with.
+pub const IT_IS_YES: &str = "yes";
 /// **The device line as the render worker observed it at its own loop**
 /// (`Queue & History` E13), verbatim — the line Blender printed, never a
 /// reading of it. **Absent where no line passed.**
@@ -2853,6 +3007,55 @@ mod tests {
 
     /// **The list above names every request constant in this file, and
     /// nothing else.**
+    /// **`Server protocol and transfers` §1.1's four-value request, 2026-11-04:
+    /// any path's bytes cross whole, and each answer reads back as itself.**
+    #[test]
+    fn the_paths_and_their_values_read_back_as_written() {
+        let paths = vec![b"/a b/c".to_vec(), vec![b'/', 0xff, b'\n', b'x'], b"/".to_vec()];
+        let field = the_paths_written(&paths);
+        assert_eq!(the_paths_read_back(&field), vec![paths[0].as_slice(), paths[1].as_slice(), paths[2].as_slice()]);
+        assert!(the_paths_read_back(&[]).is_empty());
+
+        let answers = vec![
+            OnePathAnswered::Values { size: 0, inode: u64::MAX, modification_time: i64::MIN, change_time: -1 },
+            OnePathAnswered::NothingThere,
+            OnePathAnswered::NotRead("Permission denied (os error 13)".to_string()),
+        ];
+        let written = the_values_written(&answers);
+        assert_eq!(the_values_read_back(&written, 3), Some(answers.clone()));
+        // **A count that is not the count asked, or a short line, is no answer.**
+        assert_eq!(the_values_read_back(&written, 2), None);
+        assert_eq!(the_values_read_back("4096 912 1\n", 1), None);
+        assert_eq!(the_values_read_back("4096 912 1 2 3\n", 1), None);
+    }
+
+    /// **The brief's *very long list*: one frame is the limit, so a long list
+    /// goes in several asks, none past either limit, none empty, in its order —
+    /// and the worst answer to the largest ask still fits one frame.**
+    #[test]
+    fn a_long_list_is_split_so_every_ask_and_every_answer_fits_one_frame() {
+        use crate::framing::THE_LARGEST_FRAME;
+        let by_count: Vec<Vec<u8>> = (0..THE_MOST_PATHS_IN_ONE_ASK * 2 + 1).map(|at| format!("/f/{at}").into_bytes()).collect();
+        let asks = the_asks_over(&by_count);
+        assert_eq!(asks.iter().map(|ask| ask.len()).collect::<Vec<_>>(), vec![4_000, 4_000, 1]);
+        assert_eq!(asks.concat(), by_count, "in its own order, nothing lost");
+
+        let by_size = vec![vec![b'x'; 4096]; 300];
+        let asks = the_asks_over(&by_size);
+        assert_eq!(asks.len(), 3, "128 of 4,097 bytes go in 512 KiB");
+        for ask in &asks {
+            assert!(the_paths_written(ask).len() <= THE_MOST_PATH_BYTES_IN_ONE_ASK);
+        }
+        assert_eq!(asks.concat(), by_size);
+        assert!(the_asks_over(&[]).is_empty());
+
+        // **The worst answer**: every path refused, with the longest words.
+        let worst = vec![OnePathAnswered::NotRead("x".repeat(10_000)); THE_MOST_PATHS_IN_ONE_ASK];
+        let written = the_values_written(&worst);
+        assert!(written.len() < THE_LARGEST_FRAME - 4096, "{} bytes", written.len());
+        assert!(THE_MOST_PATH_BYTES_IN_ONE_ASK < THE_LARGEST_FRAME - 4096);
+    }
+
     #[test]
     fn the_list_holds_every_request_this_file_names() {
         let declared: Vec<String> = the_request_constants_declared_here()

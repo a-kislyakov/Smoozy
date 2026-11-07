@@ -1189,6 +1189,56 @@ pub async fn read_the_running_kernels_module(
     }
 }
 
+/// **`Server Setup` R1 item 5: what the package system holds of a driver**,
+/// read where the check failed and no restart is owed. Added 2026-11-03, out of
+/// the Sesterce live pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhatTheDriverPackagesSay {
+    /// **A driver package is installed**: the module may want a boot, and the
+    /// route goes as it always did.
+    ADriverPackageStands,
+    /// **The kernel half stands with no driver package on it**: a removal
+    /// stopped part-way, and the step finishes it.
+    AKernelHalfIsLeftBehind,
+    /// **Neither.** A machine with nothing to remove, or a removal that stopped
+    /// later than the kernel half, takes the detection route; and after that
+    /// route, this is what says it left nothing.
+    NoDriverPackage,
+    /// **The reading could not be had, or was not taken.** Nothing is concluded
+    /// from it, and everything goes as it did before this reading existed.
+    NotRead,
+}
+
+/// **The answer to [`crate::elevated::THE_DRIVER_PACKAGES_READING`], whole.**
+pub fn what_the_driver_packages_say(output: &str) -> WhatTheDriverPackagesSay {
+    let output = output.trim();
+    if output.is_empty() {
+        WhatTheDriverPackagesSay::NoDriverPackage
+    } else if output == "a driver stands" {
+        WhatTheDriverPackagesSay::ADriverPackageStands
+    } else {
+        WhatTheDriverPackagesSay::AKernelHalfIsLeftBehind
+    }
+}
+
+/// **`Server Setup` R1 item 5's reading, taken on Ubuntu and nowhere else.**
+/// A command that did not reach the machine, or did not end cleanly, is
+/// [`WhatTheDriverPackagesSay::NotRead`].
+pub async fn read_the_driver_packages(
+    channel: &mut impl CommandChannel,
+    family: crate::kind::DistributionFamily,
+) -> WhatTheDriverPackagesSay {
+    if family != crate::kind::DistributionFamily::Ubuntu {
+        return WhatTheDriverPackagesSay::NotRead;
+    }
+    match channel.run(crate::elevated::THE_DRIVER_PACKAGES_READING).await {
+        Ok(result) if result.ended_cleanly() => {
+            what_the_driver_packages_say(&String::from_utf8_lossy(&result.output))
+        }
+        _ => WhatTheDriverPackagesSay::NotRead,
+    }
+}
+
 /// **The published exit that means a driver is installed on the machine and is
 /// not loaded**, which is R1 item 5's *"where a driver is already installed"* in
 /// the tool's own words.

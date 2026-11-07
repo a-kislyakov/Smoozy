@@ -586,6 +586,7 @@ mod tests {
                 ),
                 scenes: Attribution::Established(vec!["Interior".to_string()]),
                 source: Some("FILE".to_string()),
+                the_files_own_text: None,
             }],
             flat_list: Vec::new(),
             weak_references: Vec::new(),

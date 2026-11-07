@@ -78,3 +78,15 @@
 2026-10-29 — Claude Opus 5.5 (Zed), the twenty-first notes' design pass, part B, holding `Audits/Build/Step 10c/Brief — the twenty-first notes, the design pass, part B (Zed, Opus).md`, outside any round — § How the three sit together: the height rule holds in the narrow form too (note 4). No auditor has seen it.
 
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the Telegram discussion's two wants, plan and drawing pass.md`, outside any round — the two *Settings keeps three* bullets struck: the default takes all five. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — The line about the driver, from 5.3. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the real files found.md`, outside any round — A row counting nothing is not listed; the folder line never names a folder the machine lacks at its top. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job pressed during a send, and the check beside it.md`, outside any round — Render held during the check's send and until it has answered for a library that landed. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — the foot's Telegram line, not installed. No auditor has seen it.
+
+2026-11-04 — GPT-6.1 (Codex) — Recorded the page presses and preview ruling.
+
+2026-11-06 — GPT-6.1 Sol high (Codex) — Wrote the simulation promise, choice and range before building.
+
+2026-11-06 — GPT-6.1 (Codex) — Shown simulation ranges include the saved shutter tail, including the first-frame check; written before code. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — Prepare simulations' three lines and the Telegram line's *Install*. The last words read before the release. No auditor has seen it.

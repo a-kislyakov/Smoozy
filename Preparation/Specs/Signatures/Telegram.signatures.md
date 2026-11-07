@@ -53,3 +53,7 @@
 - 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 10c/Brief — the twenty-sixth notes, notes 1 to 3, Telegram.md`, outside any round — the twenty-sixth notes, notes 2 and 3: `/status` names a silent server once, and its reply offers no Stop. No auditor has seen it.
 
 - 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the phone builder of step 13's second words sweep, outside any round — two quoted replies shortened as the phone says them: *Could not tell which job that message is about. Nothing changed.* and *Reporting set to “Alerts only” for every job and new jobs.*, each with its inline note. No auditor has seen it.
+
+- 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a preview too heavy for Telegram.md`, outside any round, on the build runner's word — *Send a frame*'s sentence on the two limits corrected. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — The companion is taken away when its job ends. No auditor has seen it.
+2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — the page and Queue say the piece is not installed. No auditor has seen it.

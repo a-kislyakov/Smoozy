@@ -77,7 +77,7 @@ const ABANDON = "abandon";
 const STOP = "stop";
 const INSTALL_A_BLENDER = "install-a-blender";
 const REMOVE_A_BLENDER = "remove-a-blender";
-// `Server Setup` G2's *Install it*, which the application answers.
+// `Server Setup` G2's *Install*, which the application answers.
 const INSTALL_TELEGRAM = "install-telegram";
 // `Servers` B6's connect that carries the remembered setup — the action of the
 // card where the connection an add asked for was not made. Added 2026-10-03.
@@ -1596,16 +1596,21 @@ function theRunCardIsDrawn(panel, server) {
     const before = document.createElement("span");
     before.textContent = panel.the_closing_paragraph.before;
     closing.appendChild(before);
-    closing.appendChild(document.createTextNode(" "));
     // **The control's name is written in the paragraph exactly as it reads on
-    // the control**, which is Design's own requirement.
-    const named = document.createElement("b");
-    named.textContent = panel.the_closing_paragraph.the_controls_name;
-    closing.appendChild(named);
-    closing.appendChild(document.createTextNode(" "));
-    const after = document.createElement("span");
-    after.textContent = panel.the_closing_paragraph.after;
-    closing.appendChild(after);
+    // the control**, which is Design's own requirement. The retry form names
+    // none (2026-11-06).
+    if (panel.the_closing_paragraph.the_controls_name) {
+      closing.appendChild(document.createTextNode(" "));
+      const named = document.createElement("b");
+      named.textContent = panel.the_closing_paragraph.the_controls_name;
+      closing.appendChild(named);
+    }
+    if (panel.the_closing_paragraph.after) {
+      closing.appendChild(document.createTextNode(" "));
+      const after = document.createElement("span");
+      after.textContent = panel.the_closing_paragraph.after;
+      closing.appendChild(after);
+    }
     one.appendChild(closing);
   }
 

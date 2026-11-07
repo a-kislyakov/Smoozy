@@ -808,6 +808,55 @@ pub enum TheLaunchMeets {
     /// **The box, and nothing else in the window**: the reinstall is owed, or
     /// the rest of the rollback could not finish.
     TheBox(TheRollbackBox),
+    /// **The record could not be read for the phase at that moment**
+    /// (2026-11-01, the D6b line under Z11): a box with *Quit* alone, and
+    /// **never the ordinary launch**, which could complete the failed build's
+    /// probe (Z21a). Until then this launch ended with nothing on screen.
+    TheRecordCouldNotBeRead(TheUnreadableRecordBox),
+}
+
+impl TheLaunchMeets {
+    /// **The box this launch shows, posted on the one queue and kept in the
+    /// shell's managed state**, where its answers arrive (`surface::menus`).
+    /// The two outcomes that show no box post nothing.
+    pub fn is_posted_and_kept<R: tauri::Runtime, M: tauri::Manager<R>>(
+        self,
+        app: &M,
+        queue: &crate::events::TheOneQueue,
+    ) {
+        match self {
+            Self::TheBox(the_box) => {
+                the_box.is_posted_on(queue, the_box.opens_failed);
+                app.manage(Arc::new(the_box));
+            }
+            Self::TheRecordCouldNotBeRead(the_box) => {
+                the_box.is_posted_on(queue);
+                app.manage(Arc::new(the_box));
+            }
+            Self::Nothing | Self::TheRollbackFinished => {}
+        }
+    }
+}
+
+/// **The box a launch shows where the record could not be read for the
+/// phase**: no version to name and nothing to reinstall from, so it says what
+/// happened and offers *Quit* alone. Kept in the shell's managed state, so
+/// *Quit* has somewhere to arrive.
+pub struct TheUnreadableRecordBox {
+    /// Whether an update is known to have been under way: the record named an
+    /// owed phase before a later read failed, or Z11's cache still holds the
+    /// previous package. Only then does the box name the update.
+    pub the_update_was_underway: bool,
+}
+
+impl TheUnreadableRecordBox {
+    /// The box posted on the one queue.
+    pub fn is_posted_on(&self, queue: &crate::events::TheOneQueue) {
+        let _ = queue.read_then_post(
+            || Ok::<_, ()>(()),
+            |_| crate::surface::menus::the_unreadable_record_box(self.the_update_was_underway),
+        );
+    }
 }
 
 /// **The box a later launch shows over an owed rollback** (Design, *Updating*,
@@ -844,23 +893,34 @@ fn what_the_launch_meets_with<P: ThePackageSystem>(
     if !record_path.exists() {
         return Ok(TheLaunchMeets::Nothing);
     }
+    // **A record that cannot be read for the phase is said** (2026-11-01, the
+    // D6b line under Z11), with the update named only where it is known.
+    let unread = |known: bool, cache: &Cache| {
+        TheLaunchMeets::TheRecordCouldNotBeRead(TheUnreadableRecordBox {
+            the_update_was_underway: known || cache.previous().exists(),
+        })
+    };
     let (phase, failed_version) = {
-        let connection = rusqlite::Connection::open_with_flags(
+        let Ok(connection) = rusqlite::Connection::open_with_flags(
             record_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .map_err(|e| e.to_string())?;
-        if crate::record::schema::version_in(&connection).map_err(|e| format!("{e:?}"))? < 52 {
-            return Ok(TheLaunchMeets::Nothing);
+        ) else {
+            return Ok(unread(false, &cache));
+        };
+        match crate::record::schema::version_in(&connection) {
+            Ok(version) if version < 52 => return Ok(TheLaunchMeets::Nothing),
+            Ok(_) => {}
+            Err(_) => return Ok(unread(false, &cache)),
         }
-        let phase =
-            update_trust::the_linux_rollback_phase(&connection).map_err(|e| format!("{e:?}"))?;
+        let Ok(phase) = update_trust::the_linux_rollback_phase(&connection) else {
+            return Ok(unread(false, &cache));
+        };
         if phase == 0 {
             return Ok(TheLaunchMeets::Nothing);
         }
-        let probe = update_trust::the_update_in_probe(&connection)
-            .map_err(|e| format!("{e:?}"))?
-            .ok_or("no recovery record")?;
+        let Ok(Some(probe)) = update_trust::the_update_in_probe(&connection) else {
+            return Ok(unread(true, &cache));
+        };
         (phase, probe.version)
     };
     let the_box = |opens_failed| TheRollbackBox {
@@ -975,19 +1035,38 @@ impl TheRollbackBox {
 
 /// **Step 8 in the running application** — `src/main.rs`'s one call, on
 /// Linux, after the instance hold and before the shell's ordinary start.
+/// **Where the record, the cache or this program cannot be found, the launch
+/// shows the unreadable box** (2026-11-01): never nothing, and never the
+/// ordinary launch.
 #[cfg(target_os = "linux")]
-pub fn what_this_launch_meets() -> Result<TheLaunchMeets, String> {
-    let record_path =
-        crate::platform::locations::resolve(crate::platform::locations::Location::LocalRecord)
-            .map_err(|e| format!("{e:?}"))?;
+pub fn what_this_launch_meets() -> TheLaunchMeets {
+    let cache = Cache::here();
+    let unread = |cache: Option<&Cache>| {
+        TheLaunchMeets::TheRecordCouldNotBeRead(TheUnreadableRecordBox {
+            the_update_was_underway: cache.is_some_and(|cache| cache.previous().exists()),
+        })
+    };
+    let Ok(cache) = cache else {
+        return unread(None);
+    };
+    let (Ok(record_path), Ok(program)) = (
+        crate::platform::locations::resolve(crate::platform::locations::Location::LocalRecord),
+        std::env::current_exe(),
+    ) else {
+        return unread(Some(&cache));
+    };
+    let underway = cache.previous().exists();
     what_the_launch_meets_with(
         &record_path,
-        Cache::here()?,
+        cache,
         checking::this_copys_row(),
         &super::trust::TheCarriedSet::this_build(),
         &system::ThePackageKit::connect,
-        std::env::current_exe().map_err(|e| e.to_string())?,
+        program,
     )
+    .unwrap_or(TheLaunchMeets::TheRecordCouldNotBeRead(TheUnreadableRecordBox {
+        the_update_was_underway: underway,
+    }))
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2369,6 +2448,46 @@ mod tests {
         let made = system.clone();
         let met = what_the_launch_meets_with(&path, Cache { root: folder.join("linux-update") }, None, &carried, &|| Ok(made.clone()), a_harmless_program()).unwrap();
         assert!(matches!(met, TheLaunchMeets::Nothing), "a finished rollback still showed something");
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    /// **A record that cannot be read for the phase shows a box with *Quit*
+    /// alone, never the ordinary launch** (2026-11-01, the D6b line under
+    /// Z11). Until then the launch ended with nothing on screen. The system is
+    /// asked nothing and nothing is removed; the box names the update where
+    /// the cache still holds the previous package, and not where it holds
+    /// nothing.
+    // The Linux cache reads Unix paths; Windows uses its own update route.
+    #[cfg(unix)]
+    #[test]
+    fn a_launch_whose_record_cannot_be_read_shows_a_box_and_not_the_ordinary_launch() {
+        let (folder, path, cache, carried, previous) = an_update_owing_its_rollback("unreadable", 1);
+        let root = cache.root.clone();
+        for beside in ["-wal", "-shm"] {
+            let mut name = path.clone().into_os_string();
+            name.push(beside);
+            let _ = std::fs::remove_file(name);
+        }
+        std::fs::write(&path, b"this is not a record").unwrap();
+        let system = ASystem::answering(Ok(()), Ok(()));
+        for (cache, underway) in [(cache, true), (Cache { root: folder.join("no-cache") }, false)] {
+            let made = system.clone();
+            let met = what_the_launch_meets_with(
+                &path,
+                cache,
+                Some(super::super::manifest::THE_DEBIAN_13_ROW),
+                &carried,
+                &|| Ok(made.clone()),
+                a_harmless_program(),
+            );
+            let Ok(TheLaunchMeets::TheRecordCouldNotBeRead(the_box)) = met else {
+                panic!("a record that could not be read did not show the box");
+            };
+            assert_eq!(the_box.the_update_was_underway, underway);
+        }
+        assert!(system.asked().is_empty(), "the system was asked with nothing to reinstall from");
+        assert!(root.exists() && previous.exists());
+        assert_eq!(std::fs::read(&path).unwrap(), b"this is not a record");
         std::fs::remove_dir_all(folder).unwrap();
     }
 

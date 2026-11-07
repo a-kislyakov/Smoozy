@@ -121,7 +121,7 @@ use smoozy_server_protocol::subsystem::{StatusCode, SubsystemFailure};
 use smoozy_server_protocol::transfers::integrity::Digest;
 use smoozy_server_protocol::transfers::moving::{KeepsTheRecord, LocalFailure};
 use smoozy_server_protocol::transfers::publication::Intent;
-use smoozy_server_protocol::transfers::{Ending, TransferRecord};
+use smoozy_server_protocol::transfers::{Ending, SourceReading, TransferRecord};
 use smoozy_state::identities::{Identity, IdentityKind};
 
 use crate::checking_a_file::{TheCheckReachesTheRecord, TheSittingIsOf, TheUsersOwnComputer};
@@ -253,6 +253,56 @@ pub fn the_row_is_on_its_way(
     match (layout, what_the_row_sends(one)) {
         (Some(layout), Some(row)) => a_row_is_on_its_way(layout, row, on_its_way),
         _ => false,
+    }
+}
+
+/// **`Dependency Upload & Remap` A9c: a press still counting what goes**, which
+/// stands in Transfers and in the check's foot from the press, and only in this
+/// run's memory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ASendBeingCounted {
+    pub request: Identity,
+    pub server: String,
+    pub file: String,
+    /// **The moment of the press, in milliseconds**, which its row in Transfers
+    /// says as any request's start.
+    pub started_at_millis: i64,
+}
+
+fn the_counts_under_way() -> std::sync::MutexGuard<'static, Vec<ASendBeingCounted>> {
+    static HELD: OnceLock<Mutex<Vec<ASendBeingCounted>>> = OnceLock::new();
+    HELD.get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// **Every press still counting what goes.**
+pub fn the_sends_being_counted() -> Vec<ASendBeingCounted> {
+    the_counts_under_way().clone()
+}
+
+/// **Whether a press of this check's upload control is still counting.**
+pub fn a_send_is_being_counted(server: &str, file: &str) -> bool {
+    the_counts_under_way().iter().any(|one| one.server == server && one.file == file)
+}
+
+/// **`Dependency Upload & Remap` A9e's (a): whether a send of this file's check on
+/// this server is counted, running or waiting.** The count is read first: a send is
+/// entered in the register before its count ends.
+pub fn a_send_is_going(server: &str, file: &str) -> bool {
+    a_send_is_being_counted(server, file)
+        || the_register().iter().any(|send| {
+            send.server == server && send.file == file && send.files.iter().any(|one| one.ended.is_none())
+        })
+}
+
+/// **The count ends however the press ends**, so nothing stands in Transfers
+/// for a press that has gone.
+struct TheCountEnds(Identity);
+
+impl Drop for TheCountEnds {
+    fn drop(&mut self) {
+        the_counts_under_way().retain(|one| one.request != self.0);
     }
 }
 
@@ -467,12 +517,58 @@ fn the_folders_files_and_their_mirrors(
     )
 }
 
+/// **`Dependency Upload & Remap` Q5a: a set row's members as they stand here, each
+/// with its mirror**, what Q5's clause on a set row reads.
+struct TheSetsFiles {
+    files: Vec<(StoredLocation, MachineLocation)>,
+    members: Vec<Vec<u8>>,
+    pattern: Vec<u8>,
+    mirrored_folder: Vec<u8>,
+}
+
+fn the_sets_files_and_their_mirrors(one: &ACheckedRow, of: &TheSittingIsOf) -> Option<TheSetsFiles> {
+    let layout = of.layout.as_ref()?;
+    let ResolvedTo::AFolderForASetRow(folder) = &one.the_answer()?.resolution.as_ref()?.to else {
+        return None;
+    };
+    let pattern = one.wanted.first()?.the_sets_pattern()?.to_vec();
+    let members = smoozy_dependencies::search::the_sets_members_in(folder, &pattern, &TheUsersOwnComputer)?;
+    let files = members
+        .iter()
+        .map(|member| {
+            let source = StoredLocation::as_the_system_returned_it(&join(folder.as_bytes(), member));
+            mirror_of(layout, &source).ok().map(|mirror| (source, mirror))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let mirrored_folder = mirror_of(layout, folder).ok()?.as_bytes().to_vec();
+    Some(TheSetsFiles { files, members, pattern, mirrored_folder })
+}
+
 /// **The names each mirror folder holds, read once per folder for one pass**
 /// — what Q5's read-through asks first, so a file not at its mirror costs one
 /// listing of its folder and no worker. `None` for a folder that would not
 /// read.
 #[derive(Default)]
 pub(crate) struct TheMirrorFoldersRead(BTreeMap<Vec<u8>, Option<Vec<Vec<u8>>>>);
+
+/// **The names one mirror folder holds**, read once per folder for one pass.
+async fn the_names_in_the_mirrors_folder<M>(
+    machine: &mut M,
+    folders: &mut TheMirrorFoldersRead,
+    folder: Vec<u8>,
+) -> Option<Vec<Vec<u8>>>
+where
+    M: TheMachineAFileIsReadOn + Send,
+{
+    match folders.0.get(&folder) {
+        Some(names) => names.clone(),
+        None => {
+            let names = machine.the_names_in(&folder).await;
+            folders.0.insert(folder, names.clone());
+            names
+        }
+    }
+}
 
 /// **`Dependency Upload & Remap` Q5 route 2, the read-through, at one
 /// mirror** — *nothing there* where the mirror's folder holds no such name,
@@ -488,15 +584,7 @@ where
     M: TheMachineAFileIsReadOn + Send,
 {
     let folder = smoozy_dependencies::bytes::folder_of(mirror.as_bytes());
-    let names = match folders.0.get(&folder) {
-        Some(names) => names.clone(),
-        None => {
-            let names = machine.the_names_in(&folder).await;
-            folders.0.insert(folder, names.clone());
-            names
-        }
-    };
-    let Some(names) = names else {
+    let Some(names) = the_names_in_the_mirrors_folder(machine, folders, folder).await else {
         return MachineContents::DidNotComplete;
     };
     let name = smoozy_dependencies::bytes::last_segment(mirror.as_bytes());
@@ -506,33 +594,146 @@ where
     smoozy_dependencies::acting::machine::the_machine_copys_contents(machine, mirror).await
 }
 
+/// **`Dependency Upload & Remap` Q5a: each local file's digest, held for the
+/// sitting or the press**, so a file several linked files name is digested once
+/// a round. Added 2026-11-04.
+#[derive(Default)]
+pub struct TheLocalDigests(BTreeMap<Vec<u8>, Option<smoozy_dependencies::contents::ContentIdentity>>);
+
+impl TheLocalDigests {
+    fn of(&mut self, source: &StoredLocation) -> Option<smoozy_dependencies::contents::ContentIdentity> {
+        self.0
+            .entry(source.as_bytes().to_vec())
+            .or_insert_with(|| smoozy_dependencies::adapter::TheUsersOwnDisk.the_local_files_content_identity(source))
+            .clone()
+    }
+}
+
+/// **`Dependency Upload & Remap` Q5a: what the walk over a reading's rows is
+/// handed** — the stop it looks for, where it passes its count (*done*, *whole*),
+/// and the digests held for the sitting.
+pub struct TheWalkIsWatched<'w> {
+    pub stopped: &'w mut (dyn FnMut() -> bool + Send),
+    pub counted: &'w mut (dyn FnMut(usize, usize) + Send),
+    pub digests: &'w mut TheLocalDigests,
+}
+
+/// **How often a wait in the walk looks for a stop.** A press reads at once to
+/// the eye and costs nothing while it waits.
+const HOW_OFTEN_A_WAIT_LOOKS_FOR_A_STOP: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// **`Dependency Upload & Remap` Q5a: one step of the walk, given up where a stop
+/// is asked.** `a_command`, `a_reading` and the link's turn have no limit of their
+/// own, and only the connection's keepalive ends them, so a command that never
+/// answers on a connection that still answers keepalives would hold the check for
+/// ever with nothing to stop it. **Letting the step go is safe**: every one is a
+/// reading, a turn or a lease goes with its guard, and a link left at a site is
+/// replaced by the next use (`Server protocol and transfers` §7.8), which
+/// `crate::managing_files`' count of a folder already leans on.
+async fn unless_a_stop_is_asked<T>(
+    step: impl std::future::Future<Output = T>,
+    stopped: &mut (dyn FnMut() -> bool + Send),
+) -> Option<T> {
+    tokio::pin!(step);
+    loop {
+        if stopped() {
+            return None;
+        }
+        tokio::select! {
+            biased;
+            done = &mut step => return Some(done),
+            _ = tokio::time::sleep(HOW_OFTEN_A_WAIT_LOOKS_FOR_A_STOP) => {}
+        }
+    }
+}
+
+/// **`Dependency Upload & Remap` Q5 route 1's gathering: every mirror a placement
+/// record names and the map does not hold yet, asked for in one ask**, or as many
+/// as the request's limit takes (`Server protocol and transfers` §1.1). **A file
+/// not answered here is left out of the map**, and Q5 reads it one at a time, as
+/// it does on a program without the request. `None` where a stop was asked.
+async fn the_four_values_are_gathered<M>(
+    machine: &mut M,
+    of: &TheSittingIsOf,
+    snapshot: &InMemoryRecord,
+    four_values: &mut BTreeMap<Vec<u8>, Option<SourceReading>>,
+    mirrors: impl Iterator<Item = &MachineLocation>,
+    stopped: &mut (dyn FnMut() -> bool + Send),
+) -> Option<()>
+where
+    M: TheMachineAFileIsReadOn + Send,
+{
+    use smoozy_dependencies::acting::machine::WhatTheAskOfManyCameTo;
+    let mut wanted: Vec<Vec<u8>> = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for mirror in mirrors {
+        let at = mirror.as_bytes();
+        // **A location that is not text cannot ride the command route**, and it
+        // reads as that route reads it (`crate::checking_a_file::the_four_values_once`).
+        if !four_values.contains_key(at)
+            && std::str::from_utf8(at).is_ok()
+            && the_placement_at(snapshot, &of.machine, mirror).is_some()
+            && seen.insert(at.to_vec())
+        {
+            wanted.push(at.to_vec());
+        }
+    }
+    for ask in smoozy_server_protocol::requests::the_asks_over(&wanted) {
+        match unless_a_stop_is_asked(machine.the_four_values_of_many(ask), stopped).await? {
+            WhatTheAskOfManyCameTo::Read(answers) => {
+                four_values.extend(ask.iter().cloned().zip(answers));
+            }
+            WhatTheAskOfManyCameTo::TheProgramDoesNotAnswerIt | WhatTheAskOfManyCameTo::NoAnswer => break,
+        }
+    }
+    Some(())
+}
+
 /// **`Dependency Upload & Remap` Q5 over one file at its mirror**, both
 /// routes: the record's four values where a placement record names the
 /// mirror, and **the read-through where they do not establish it** — no
 /// record at all, values that moved, or a channel that cannot answer (the
 /// 38's piece 7; until then this asked the first route alone and only where a
 /// record stood).
+///
+/// **`Dependency Upload & Remap` Q5a: the mirror's four values at most once in
+/// `four_values`**, and **a file with no record and no such name on the machine
+/// costs no digest of the local file**, whose digest nothing would be compared with.
+#[allow(clippy::too_many_arguments)]
 async fn what_q5_establishes<M>(
     machine: &mut M,
     of: &TheSittingIsOf,
     snapshot: &InMemoryRecord,
     folders: &mut TheMirrorFoldersRead,
+    four_values: &mut BTreeMap<Vec<u8>, Option<SourceReading>>,
+    digests: &mut TheLocalDigests,
     source: &StoredLocation,
     mirror: &MachineLocation,
 ) -> Establishment
 where
     M: TheMachineAFileIsReadOn + Send,
 {
-    let local = smoozy_dependencies::adapter::TheUsersOwnDisk.the_local_files_content_identity(source);
+    let a_record_names_it = the_placement_at(snapshot, &of.machine, mirror).is_some();
+    if !a_record_names_it {
+        let folder = smoozy_dependencies::bytes::folder_of(mirror.as_bytes());
+        if let Some(names) = the_names_in_the_mirrors_folder(machine, folders, folder).await {
+            let name = smoozy_dependencies::bytes::last_segment(mirror.as_bytes());
+            if !names.iter().any(|one| one.as_slice() == name) {
+                return Establishment::NotAlreadyThere { occupied_by_a_different_file: false };
+            }
+        }
+    }
+    let local = digests.of(source);
     if local.is_none() {
         return Establishment::TheLocalFileCouldNotBeRead;
     }
-    let now = match (
-        the_placement_at(snapshot, &of.machine, mirror).is_some(),
-        std::str::from_utf8(mirror.as_bytes()),
-    ) {
-        (true, Ok(mirror_text)) => as_the_module_reads_it(machine.the_four_values_of(mirror_text).await),
-        _ => FourValuesNow::TheChannelCannotAnswer,
+    let now = if a_record_names_it {
+        match crate::checking_a_file::the_four_values_once(machine, four_values, mirror.as_bytes()).await {
+            Some(values) => FourValuesNow::Answered(values),
+            None => FourValuesNow::TheChannelCannotAnswer,
+        }
+    } else {
+        FourValuesNow::TheChannelCannotAnswer
     };
     let by_record = already_on_the_machine(
         source,
@@ -576,12 +777,23 @@ where
 /// sent to, so every found row was *found on your computer*. **The case it now
 /// also meets** is the same file checked a second time after its found files
 /// went up.
+///
+/// **`Dependency Upload & Remap` Q5a and Q5 route 1, 2026-11-04.** A real folder
+/// of 480 files stood about 12 minutes here at one command a file, with no count
+/// and no way to stop it. **So the walk holds its list first, asks for the four
+/// values of every file a record names in one ask, says how far it has got as it
+/// goes, and gives up any step where a stop is asked.** What the count still
+/// measures after that: the local hashing, a file that needs the server's digest,
+/// a program without the request, and a line with no answer.
 pub async fn what_is_already_on_the_server<M>(
     machine: &mut M,
     record: &dyn TheCheckReachesTheRecord,
     of: &TheSittingIsOf,
     rows: &mut [ACheckedRow],
-) where
+    four_values: &mut BTreeMap<Vec<u8>, Option<SourceReading>>,
+    watched: &mut TheWalkIsWatched<'_>,
+) -> WhereTheWalkEnded
+where
     M: TheMachineAFileIsReadOn + Send,
 {
     let snapshot = the_snapshot(record, &of.machine);
@@ -617,62 +829,146 @@ pub async fn what_is_already_on_the_server<M>(
         one.state_when_the_check_ran = one.state;
     }
     let Some(snapshot) = snapshot else {
-        return;
+        return WhereTheWalkEnded::ItRanToItsEnd;
     };
+    // **The walk holds its list before it starts**, so its count is true
+    // (`Dependency Upload & Remap` Q5a, `Design/Dependency Upload & Remap § While
+    // it is still reading below a linked file`).
+    let the_walk: Vec<Option<WhatARowWalks>> = rows
+        .iter()
+        .map(|one| {
+            if one.state != RowState::FoundOnYourComputer {
+                return None;
+            }
+            // **A folder row is on the server where every file under it is**,
+            // each established as one file is. After 0.1.8, the checks'
+            // leftovers, item 1: a folder sent whole is read so on the next
+            // check, and the warning it stopped does not come back.
+            // **`Dependency Upload & Remap` Q5a: a set row is read the same way, as
+            // Q5's own clause on a set row has it**, and **a row part of which is up
+            // counts only the rest.**
+            if let Some(set) = the_sets_files_and_their_mirrors(one, of) {
+                return Some(WhatARowWalks { files: set.files.clone(), the_set: Some(set), one_file: false });
+            }
+            if let Some(files) = the_folders_files_and_their_mirrors(one, of) {
+                return Some(WhatARowWalks { files, the_set: None, one_file: false });
+            }
+            the_file_and_its_mirror(one, of)
+                .map(|file| WhatARowWalks { files: vec![file], the_set: None, one_file: true })
+        })
+        .collect();
+    let whole: usize = the_walk.iter().flatten().map(|row| row.files.len()).sum();
+    if whole == 0 {
+        return WhereTheWalkEnded::ItRanToItsEnd;
+    }
+    let mut done = 0;
+    (watched.counted)(done, whole);
+    let mirrors = the_walk.iter().flatten().flat_map(|row| row.files.iter().map(|(_, mirror)| mirror));
+    if the_four_values_are_gathered(machine, of, &snapshot, four_values, mirrors, &mut *watched.stopped)
+        .await
+        .is_none()
+    {
+        return WhereTheWalkEnded::AStopWasAsked;
+    }
     let mut folders = TheMirrorFoldersRead::default();
-    for one in rows.iter_mut() {
-        if one.state != RowState::FoundOnYourComputer {
-            continue;
-        }
-        // **A folder row is on the server where every file under it is**,
-        // each established as one file is. After 0.1.8, the checks'
-        // leftovers, item 1: a folder sent whole is read so on the next
-        // check, and the warning it stopped does not come back.
-        if let Some(files) = the_folders_files_and_their_mirrors(one, of) {
-            let mut every_one = !files.is_empty();
-            for (source, mirror) in files {
-                if !every_one {
-                    break;
-                }
-                every_one = matches!(
-                    what_q5_establishes(machine, of, &snapshot, &mut folders, &source, &mirror).await,
-                    Establishment::AlreadyOnTheMachine(_)
-                );
-            }
-            if every_one {
-                one.state = RowState::AlreadyOnTheMachine;
-                one.state_when_the_check_ran = one.state;
-            }
-            continue;
-        }
-        let Some((source, mirror)) = the_file_and_its_mirror(one, of) else {
+    for (one, the_rows_walk) in rows.iter_mut().zip(&the_walk) {
+        let Some(WhatARowWalks { files, the_set, one_file }) = the_rows_walk else {
             continue;
         };
-        if the_placement_at(&snapshot, &of.machine, &mirror).is_some()
-            && smoozy_dependencies::adapter::TheUsersOwnDisk
-                .the_local_files_content_identity(&source)
-                .is_none()
-        {
-            // **`Dependency Upload & Remap` Q7: the record says a file was sent
-            // for this reference to this machine and the local original is no
-            // longer there to compare.**
-            one.state = RowState::SentBeforeNotConfirmed;
-            one.state_when_the_check_ran = one.state;
+        if *one_file {
+            let (source, mirror) = &files[0];
+            // **Both routes** — the record's, and the machine's own read-through
+            // where the record does not establish it (`Dependency Upload & Remap`
+            // Q5; the read-through since the 38's piece 7). **A file at its mirror
+            // that no record names is *already on the server* where its contents
+            // are the same**: a record lost, another computer, or a copy put there
+            // through Files.
+            let Some(established) = unless_a_stop_is_asked(
+                what_q5_establishes(machine, of, &snapshot, &mut folders, four_values, &mut *watched.digests, source, mirror),
+                &mut *watched.stopped,
+            )
+            .await
+            else {
+                return WhereTheWalkEnded::AStopWasAsked;
+            };
+            done += 1;
+            (watched.counted)(done, whole);
+            match established {
+                Establishment::AlreadyOnTheMachine(_) => {
+                    one.state = RowState::AlreadyOnTheMachine;
+                    one.state_when_the_check_ran = one.state;
+                }
+                // **`Dependency Upload & Remap` Q7: the record says a file was sent
+                // for this reference to this machine and the local original is no
+                // longer there to compare.**
+                Establishment::TheLocalFileCouldNotBeRead if the_placement_at(&snapshot, &of.machine, mirror).is_some() => {
+                    one.state = RowState::SentBeforeNotConfirmed;
+                    one.state_when_the_check_ran = one.state;
+                }
+                _ => {}
+            }
             continue;
         }
-        // **Both routes** — the record's, and the machine's own read-through
-        // where the record does not establish it (`Dependency Upload & Remap`
-        // Q5; the read-through since the 38's piece 7). **A file at its mirror
-        // that no record names is *already on the server* where its contents
-        // are the same**: a record lost, another computer, or a copy put there
-        // through Files.
-        if let Establishment::AlreadyOnTheMachine(_) =
-            what_q5_establishes(machine, of, &snapshot, &mut folders, &source, &mirror).await
-        {
+        let mut up = 0;
+        let mut bytes = 0;
+        for (source, mirror) in files {
+            let Some(established) = unless_a_stop_is_asked(
+                what_q5_establishes(machine, of, &snapshot, &mut folders, four_values, &mut *watched.digests, source, mirror),
+                &mut *watched.stopped,
+            )
+            .await
+            else {
+                return WhereTheWalkEnded::AStopWasAsked;
+            };
+            done += 1;
+            (watched.counted)(done, whole);
+            if matches!(established, Establishment::AlreadyOnTheMachine(_)) {
+                up += 1;
+                bytes += a_local_path(source.as_bytes())
+                    .and_then(|path| std::fs::metadata(path).ok())
+                    .map_or(0, |found| found.len());
+            }
+        }
+        let mut every_one = !files.is_empty() && up == files.len();
+        if let (true, Some(set)) = (every_one, the_set) {
+            // **The membership can only withhold** (Q5's clause on a set row).
+            let Some(names) = unless_a_stop_is_asked(
+                the_names_in_the_mirrors_folder(machine, &mut folders, set.mirrored_folder.clone()),
+                &mut *watched.stopped,
+            )
+            .await
+            else {
+                return WhereTheWalkEnded::AStopWasAsked;
+            };
+            every_one = names.is_some_and(|members| {
+                set_row_membership(&set.pattern, &set.members, &MirroredFolderListing { members }) == Membership::Equal
+            });
+        }
+        if every_one {
             one.state = RowState::AlreadyOnTheMachine;
             one.state_when_the_check_ran = one.state;
+        } else if up > 0 {
+            one.the_part_already_up = Some((up, bytes));
         }
     }
+    WhereTheWalkEnded::ItRanToItsEnd
+}
+
+/// **What the walk takes for one row, worked out before it starts.**
+struct WhatARowWalks {
+    files: Vec<(StoredLocation, MachineLocation)>,
+    the_set: Option<TheSetsFiles>,
+    /// **A whole-location row**, which Q7's *sent before* can reach; a folder or
+    /// set row counts its files instead.
+    one_file: bool,
+}
+
+/// **Where the walk ended**: `Dependency Upload & Remap` V10's *stopped by the
+/// user* where a stop was asked, and rows it had not reached stay as they were.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhereTheWalkEnded {
+    ItRanToItsEnd,
+    AStopWasAsked,
 }
 
 /// **The keeper's snapshot of one machine's records**, or nothing where the
@@ -740,9 +1036,11 @@ pub async fn a_row_is_confirmed<C: AHeldConnection, R: TheCheckReachesTheRecord 
     if placements.is_empty() {
         return false;
     }
+    let paths: Vec<_> = placements.iter().map(|p| p.mirrored_location.clone()).collect();
+    let mut fresh = the_published_values(sessions, of, &paths).await;
     let mut outcome = ConfirmationOutcome::Confirmed;
     for placement in placements {
-        let now = the_four_values_at(sessions, &of.server, &placement.mirrored_location).await;
+        let now = fresh.remove(placement.mirrored_location.as_bytes()).unwrap_or(FourValuesNow::TheChannelCannotAnswer);
         let mut this_one = confirm(
             &placement,
             &WhatWasRead {
@@ -787,21 +1085,90 @@ pub async fn a_row_is_confirmed<C: AHeldConnection, R: TheCheckReachesTheRecord 
             _ => ConfirmationOutcome::Confirmed,
         };
     }
+    // **`Dependency Upload & Remap` G11b: every row of the real file.**
     if let Ok(mut held) = held.lock() {
-        if let Some(one) = held
-            .sittings
-            .get_mut(&key)
-            .and_then(|sitting| sitting.rows.get_mut(at))
-        {
-            match outcome {
-                ConfirmationOutcome::Confirmed => one.state = RowState::AlreadyOnTheMachine,
-                ConfirmationOutcome::Gone => one.state = RowState::NotFound,
-                ConfirmationOutcome::NotConfirmed => {}
+        if let Some(sitting) = held.sittings.get_mut(&key) {
+            if let Some(file) = sitting.rows.get(at).map(ACheckedRow::the_real_file) {
+                for one in sitting.rows.iter_mut().filter(|one| one.the_real_file() == file) {
+                    match outcome {
+                        ConfirmationOutcome::Confirmed => one.state = RowState::AlreadyOnTheMachine,
+                        ConfirmationOutcome::Gone => one.state = RowState::NotFound,
+                        ConfirmationOutcome::NotConfirmed => {}
+                    }
+                }
             }
         }
     }
     the_standing_is_brought_up_to_date(record, held, of);
     true
+}
+
+/// `Dependency Upload & Remap` Q5 route 1, K7 and Q7; `Server protocol and
+/// transfers` §1.1: fresh identities, gathered within the request's frame bounds.
+async fn the_published_values<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    of: &TheSittingIsOf,
+    paths: &[MachineLocation],
+) -> BTreeMap<Vec<u8>, FourValuesNow> {
+    use smoozy_dependencies::acting::machine::WhatTheAskOfManyCameTo;
+    let mut answers = BTreeMap::new();
+    if let Some(layout) = of.layout.as_ref() {
+        let package_area = layout.area(smoozy_job_files::layout::Area::Package);
+        let mut machine = crate::reading_the_file::ThisServersMachine {
+            sessions,
+            package_area: &package_area,
+            server: &of.server,
+        };
+        let wanted: Vec<_> = paths
+            .iter()
+            .filter(|p| std::str::from_utf8(p.as_bytes()).is_ok())
+            .map(|p| p.as_bytes().to_vec())
+            .collect();
+        for ask in smoozy_server_protocol::requests::the_asks_over(&wanted) {
+            match machine.the_four_values_of_many(ask).await {
+                WhatTheAskOfManyCameTo::Read(values) => {
+                    for (path, value) in ask.iter().zip(values) {
+                        // The request's adapter collapses absent and unreadable.
+                        // Q7 still distinguishes a gone file through the subsystem.
+                        let now = match value {
+                            Some(v) => FourValuesNow::Answered(v),
+                            None => the_absence_at(sessions, path).await,
+                        };
+                        answers.insert(path.clone(), now);
+                    }
+                }
+                WhatTheAskOfManyCameTo::TheProgramDoesNotAnswerIt
+                | WhatTheAskOfManyCameTo::NoAnswer => break,
+            }
+        }
+    }
+    for path in paths {
+        if !answers.contains_key(path.as_bytes()) {
+            answers.insert(
+                path.as_bytes().to_vec(),
+                the_four_values_at(sessions, &of.server, path).await,
+            );
+        }
+    }
+    answers
+}
+
+async fn the_absence_at<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    path: &[u8],
+) -> FourValuesNow {
+    let path = path.to_vec();
+    match sessions
+        .a_reading(true, move |subsystem| {
+            Box::pin(async move { Ok(subsystem.stat(&path).await) })
+        })
+        .await
+    {
+        Ok(Ok(Err(SubsystemFailure::TheServerRefused(StatusCode::NoSuchFile)))) => {
+            FourValuesNow::NothingThere
+        }
+        _ => FourValuesNow::TheChannelCannotAnswer,
+    }
 }
 
 /// **The four values of a machine file, and *nothing there* where the file
@@ -1143,6 +1510,9 @@ struct AFileToSend {
     size: u64,
     /// **A linked `.blend`**, which the check reads below once it lands.
     a_library: bool,
+    /// **`Dependency Upload & Remap` A9b: the real file of the row it goes for**,
+    /// which every row of that file follows.
+    the_real_file: Vec<u8>,
 }
 
 /// What one row is, as the pre-flight reads it.
@@ -1162,12 +1532,13 @@ enum TheRowIs {
 /// **The rows a press of the upload control sends** — every row *found on
 /// your computer*, a linked `.blend` among them since the 38's piece 7 (this
 /// file's head).
+///
+/// **`Dependency Upload & Remap` G11b and `Dependency Upload & Remap` A9b: each
+/// real file once.**
 pub fn the_rows_the_upload_sends(rows: &[ACheckedRow]) -> Vec<usize> {
-    rows.iter()
-        .enumerate()
-        .filter(|(_, one)| one.state == RowState::FoundOnYourComputer)
-        .map(|(at, _)| at)
-        .collect()
+    crate::surface::the_dependency_check::one_row_per_real_file(rows, |one| {
+        one.state == RowState::FoundOnYourComputer
+    })
 }
 
 /// **`Dependency Upload & Remap` A9a: the rows the upload control counts** —
@@ -1198,6 +1569,8 @@ async fn the_pre_flight<C: AHeldConnection>(
     holds: Option<&crate::record::neighbouring_records::WhatTheLocalRecordHolds>,
     sessions: &ThisServersSessions<C>,
     folders: &mut TheMirrorFoldersRead,
+    four_values: &mut BTreeMap<Vec<u8>, Option<SourceReading>>,
+    digests: &mut TheLocalDigests,
 ) -> TheRowIs {
     let of = &asked.of;
     let Some(layout) = of.layout.as_ref() else {
@@ -1267,6 +1640,20 @@ async fn the_pre_flight<C: AHeldConnection>(
         }
     };
 
+    // **`Dependency Upload & Remap` Q5 route 1: the row's mirrors a placement record
+    // names, asked for in one ask.** A mirror that will not fit is left to the
+    // loop below, which says so.
+    {
+        let mirrors: Vec<MachineLocation> =
+            sources.iter().filter_map(|source| mirror_of(layout, source).ok()).collect();
+        let mut machine = crate::reading_the_file::ThisServersMachine {
+            sessions,
+            package_area: &package_area,
+            server: &of.server,
+        };
+        let _ = the_four_values_are_gathered(&mut machine, of, snapshot, four_values, mirrors.iter(), &mut || false).await;
+    }
+
     let mut to_send = Vec::new();
     let mut differ = Vec::new();
     for source in sources {
@@ -1281,8 +1668,7 @@ async fn the_pre_flight<C: AHeldConnection>(
                 return TheRowIs::CouldNotBeSent(WhyItDidNotGoUp::TheUploadFailed)
             }
         };
-        let local =
-            smoozy_dependencies::adapter::TheUsersOwnDisk.the_local_files_content_identity(&source);
+        let local = digests.of(&source);
         let Some(size) = local.as_ref().map(|local| local.size) else {
             return TheRowIs::CouldNotBeSent(WhyItDidNotGoUp::ItCouldNotBeReadHere);
         };
@@ -1296,7 +1682,7 @@ async fn the_pre_flight<C: AHeldConnection>(
             package_area: &package_area,
             server: &of.server,
         };
-        match what_q5_establishes(&mut machine, of, snapshot, folders, &source, &mirror).await {
+        match what_q5_establishes(&mut machine, of, snapshot, folders, four_values, digests, &source, &mirror).await {
             Establishment::AlreadyOnTheMachine(_) => continue,
             // **`Dependency Upload & Remap` Q8: a different file is already
             // at that location.**
@@ -1314,6 +1700,7 @@ async fn the_pre_flight<C: AHeldConnection>(
             mirror,
             size,
             a_library: one.kind == Kind::Library,
+            the_real_file: one.the_real_file(),
         });
     }
 
@@ -1411,6 +1798,23 @@ fn is_a_folder_here(at: &StoredLocation) -> bool {
     a_local_path(at.as_bytes()).is_some_and(|path| path.is_dir())
 }
 
+/// **`Dependency Upload & Remap` F28's line of 2026-11-02: how many files a
+/// folder-shaped row sends, and how many bytes**, by [`the_files_under`], the walk
+/// the send itself takes. **Nothing where the location is not a folder here, or
+/// the folder will not read.**
+pub(crate) fn what_a_folder_row_sends(at: &StoredLocation) -> Option<(usize, u64)> {
+    if !is_a_folder_here(at) {
+        return None;
+    }
+    let files = the_files_under(at)?;
+    let bytes = files
+        .iter()
+        .filter_map(|file| std::fs::metadata(a_local_path(file.as_bytes())?).ok())
+        .map(|found| found.len())
+        .sum();
+    Some((files.len(), bytes))
+}
+
 /// **Every file under a folder on this computer, subfolders included**, in a
 /// fixed order — or nothing where the folder, or a folder under it, will not
 /// read: a folder sent part-way would stand on the machine as a cache with
@@ -1503,6 +1907,27 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
     let Some(one_at_a_time) = ASendRuns::for_the_check(&key) else {
         return came_to;
     };
+    // **`Dependency Upload & Remap` A9c: from the press, the request stands in
+    // Transfers with its *Stop*, and the foot says so**, before the first file
+    // is read on either side.
+    let Ok(request) = Identity::issue(IdentityKind::Operation) else {
+        return came_to;
+    };
+    let request_text = request.as_text();
+    the_counts_under_way().push(ASendBeingCounted {
+        request: request.clone(),
+        server: of.server.clone(),
+        file: of.file.clone(),
+        started_at_millis: SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(0, |since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX)),
+    });
+    let the_count_ends = TheCountEnds(request.clone());
+    let under_way = the_run.a_request_goes_under_way(&request, &of.machine.server_row, sessions);
+    if let Ok(mut held) = held.lock() {
+        held.what_a_send_said.remove(&key);
+    }
+    record.a_transfer_moved();
     let Some(snapshot) = the_snapshot(record.as_ref(), &of.machine) else {
         return came_to;
     };
@@ -1548,23 +1973,24 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
             .filter(|(_, one)| !the_row_is_on_its_way(one, of.layout.as_ref(), &on_its_way))
             .collect()
     };
+    let a_row_was_already_going = the_rows.is_empty() && !asked.rows.is_empty();
 
     // **`Dependency Upload & Remap` M16a: a *could not be fixed* row is tried again on its own** — M14's
     // production run once more for that one file, no check re-run and nothing
     // re-sent. The 38's piece 7.
     if let Some(layout) = of.layout.as_ref() {
         let package_area = layout.area(smoozy_job_files::layout::Area::Package);
-        for (at, one) in the_rows.iter().filter(|(_, one)| one.state == RowState::CouldNotBeFixed) {
+        for (_, one) in the_rows.iter().filter(|(_, one)| one.state == RowState::CouldNotBeFixed) {
             let mut machine = crate::reading_the_file::ThisServersMachine {
                 sessions,
                 package_area: &package_area,
                 server: &of.server,
             };
             match a_library_is_fixed(&mut machine, record.as_ref(), of, one, true).await {
-                Ok(()) => the_row_became(held, &key, *at, RowState::AlreadyOnTheMachine, None),
+                Ok(()) => the_row_became(held, &key, &one.the_real_file(), RowState::AlreadyOnTheMachine, None),
                 Err(why) => {
                     came_to.failed += 1;
-                    the_row_became(held, &key, *at, RowState::CouldNotBeFixed, Some(why_it_did_not_go_up(why)));
+                    the_row_became(held, &key, &one.the_real_file(), RowState::CouldNotBeFixed, Some(why_it_did_not_go_up(why)));
                 }
             }
         }
@@ -1574,16 +2000,27 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
     let mut files: Vec<AFileToSend> = Vec::new();
     let mut going: BTreeMap<usize, HowTheRowGoes> = BTreeMap::new();
     let mut folders = TheMirrorFoldersRead::default();
+    let mut four_values = BTreeMap::new();
+    let mut digests = TheLocalDigests::default();
+    // **`Dependency Upload & Remap` A9b: a file this send already carries is not
+    // arranged for a second row.**
+    let mut mirrors_carried = std::collections::BTreeSet::new();
     for (at, one) in &the_rows {
-        match the_pre_flight(one, *at, asked, &snapshot, holds.as_ref(), sessions, &mut folders).await {
+        // **`Dependency Upload & Remap` A9c: *Stop* ends the count**, and nothing
+        // was arranged.
+        if the_run.the_user_stopped_it(&request_text) {
+            return came_to;
+        }
+        match the_pre_flight(one, *at, asked, &snapshot, holds.as_ref(), sessions, &mut folders, &mut four_values, &mut digests).await {
             TheRowIs::NotSent => {}
             TheRowIs::AlreadyThere => {
-                came_to.already_there += 1;
-                the_row_became(held, &key, *at, RowState::AlreadyOnTheMachine, None);
+                // **`Dependency Upload & Remap` Q5a: said in files, not rows.**
+                came_to.already_there += one.members.unwrap_or(1);
+                the_row_became(held, &key, &one.the_real_file(), RowState::AlreadyOnTheMachine, None);
             }
             TheRowIs::CouldNotBeSent(why) => {
                 came_to.failed += 1;
-                the_row_became(held, &key, *at, RowState::CouldNotBeSent, Some(why));
+                the_row_became(held, &key, &one.the_real_file(), RowState::CouldNotBeSent, Some(why));
             }
             TheRowIs::AskedToReplace(overwrite) => {
                 if came_to.asks_to_replace.is_none() {
@@ -1594,22 +2031,38 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
                 }
             }
             TheRowIs::Sent(these) => {
-                going.entry(*at).or_default().left = these.len();
-                files.extend(these);
+                let these: Vec<AFileToSend> = these
+                    .into_iter()
+                    .filter(|file| mirrors_carried.insert(file.mirror.as_bytes().to_vec()))
+                    .collect();
+                if !these.is_empty() {
+                    going.entry(*at).or_default().left = these.len();
+                    files.extend(these);
+                }
             }
         }
     }
-    record.a_transfer_moved();
     if files.is_empty() {
+        // **`Dependency Upload & Remap` A9c: a send that will not happen says
+        // so**, where nothing else on the panel does: a failed row and the
+        // replace box say their own.
+        let said = if came_to.failed > 0 || came_to.asks_to_replace.is_some() {
+            None
+        } else if came_to.already_there > 0 {
+            Some(crate::surface::the_dependency_check::WhatASendSaid::TheyAreAlreadyOnTheServer(came_to.already_there))
+        } else if a_row_was_already_going {
+            Some(crate::surface::the_dependency_check::WhatASendSaid::TheyAreAlreadyUploading)
+        } else {
+            None
+        };
+        if let (Some(said), Ok(mut held)) = (said, held.lock()) {
+            held.what_a_send_said.insert(key.clone(), said);
+        }
+        drop(the_count_ends);
         the_standing_is_brought_up_to_date(record.as_ref(), held, of);
+        record.a_transfer_moved();
         return came_to;
     }
-
-    // **One request, and it is under way while this runs** (`File Browser`
-    // U7's shape, which the Transfers row reads).
-    let Ok(request) = Identity::issue(IdentityKind::Operation) else {
-        return came_to;
-    };
     // **`Dependency Upload & Remap` A9a once more, under the register's own
     // lock, and the send entered in the same hold** — so another press whose
     // pre-flight ran beside this one cannot arrange a file this one is about
@@ -1648,9 +2101,16 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
         })
     };
     let Some(send) = send else {
+        if let Ok(mut held) = held.lock() {
+            held.what_a_send_said
+                .insert(key.clone(), crate::surface::the_dependency_check::WhatASendSaid::TheyAreAlreadyUploading);
+        }
+        drop(the_count_ends);
         the_standing_is_brought_up_to_date(record.as_ref(), held, of);
+        record.a_transfer_moved();
         return came_to;
     };
+    drop(the_count_ends);
     drop(one_at_a_time);
     let _ended_if_let_go = TheSendEndsIfLetGo(request.clone());
     let mut saved = false;
@@ -1662,7 +2122,6 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
         return came_to;
     }
     came_to.request = Some(request.clone());
-    let under_way = the_run.a_request_goes_under_way(&request, &of.machine.server_row, sessions);
     let tell_it = Arc::clone(&record);
     let tell = move || tell_it.a_transfer_is_moving();
     record.a_transfer_moved();
@@ -1747,8 +2206,9 @@ struct TheSendRunning<'f> {
 }
 
 /// **One channel of a send**: the next file, to its ending, then the next —
-/// and after each, the file's ending in the run's register, the send's count,
-/// and its row brought to what its files came to once its last one has ended.
+/// with publication identities gathered in bounded groups before the files'
+/// endings, the send's count and each row's final state are reported
+/// (`Dependency Upload & Remap` Q5 route 1).
 #[allow(clippy::too_many_arguments)]
 async fn a_channel_of_the_send<C: AHeldConnection>(
     running: &TheSendRunning<'_>,
@@ -1763,93 +2223,164 @@ async fn a_channel_of_the_send<C: AHeldConnection>(
     key: &str,
 ) {
     let request_text = request.as_text();
-    while let Some(at) = running.next.of(running.files.len()) {
-        let file = &running.files[at];
-        let ended = if the_run.the_user_stopped_it(&request_text)
-            || the_run.the_user_stopped_this(&request_text, file.mirror.as_bytes())
-        {
-            HowItEnded::DidNotFinish
-        } else {
-            one_file_goes_up(
-                asked, witness, file, at, running, sessions, the_run, record, request, tell,
-            )
-            .await
-        };
-        a_file_of_the_send_moved(request, at, |sent| sent.ended = Some(ended.clone()));
-        the_file_of_the_send_is_saved(record.as_ref(), request, at);
-        {
-            let mut came_to = running
-                .came_to
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            match ended {
-                HowItEnded::Published => {
-                    came_to.published += 1;
-                    if file.a_library {
-                        came_to.libraries_published += 1;
-                    }
-                }
-                HowItEnded::Refused | HowItEnded::Failed => came_to.failed += 1,
-                HowItEnded::DidNotFinish => came_to.did_not_finish += 1,
-            }
-        }
-        // **The row's state from its files' publications**, once its last
-        // file has ended.
-        let row = file.row;
-        let became = {
-            let mut going = running
-                .going
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let how = going.entry(row).or_default();
-            how.left = how.left.saturating_sub(1);
-            match ended {
-                HowItEnded::Published => {}
-                HowItEnded::Refused => {
-                    how.refused_in = Some(the_folder_holding(file.mirror.as_bytes()));
-                    how.failed = Some(WhyItDidNotGoUp::TheServerRefusedTheWrite);
-                }
-                HowItEnded::Failed => {
-                    how.failed.get_or_insert(WhyItDidNotGoUp::TheUploadFailed);
-                }
-                HowItEnded::DidNotFinish => how.did_not_finish = true,
-            }
-            if how.left == 0 {
-                match (&how.failed, how.did_not_finish) {
-                    (Some(why), _) => Some((RowState::CouldNotBeSent, Some(*why))),
-                    (None, true) => None,
-                    (None, false) => Some((RowState::AlreadyOnTheMachine, None)),
-                }
+    // `Dependency Upload & Remap` Q5 route 1: bounded groups, no timed wait.
+    loop {
+        let mut publications = Vec::new();
+        let mut endings = Vec::new();
+        for _ in 0..64 {
+            let Some(at) = running.next.of(running.files.len()) else {
+                break;
+            };
+            let file = &running.files[at];
+            let mut began = false;
+            let ended = if the_run.the_user_stopped_it(&request_text)
+                || the_run.the_user_stopped_this(&request_text, file.mirror.as_bytes())
+            {
+                HowItEnded::DidNotFinish
             } else {
-                None
+                // **`Dependency Upload & Remap` G17b: a reading taken while this runs
+                // is not kept.**
+                if let Ok(mut held) = held.lock() {
+                    held.the_files_going_up.one_begins(&asked.of.machine);
+                }
+                began = true;
+                let ended = one_file_goes_up(
+                    asked,
+                    witness,
+                    file,
+                    at,
+                    running,
+                    sessions,
+                    the_run,
+                    record,
+                    request,
+                    tell,
+                    &mut publications,
+                )
+                .await;
+                ended
+            };
+            endings.push((at, ended, began));
+            if file.a_library
+                || file.size >= 1024 * 1024
+                || the_run.the_user_stopped_it(&request_text)
+            {
+                break;
             }
-        };
-        if let Some((state, why)) = became {
-            the_row_became(held, key, row, state, why);
         }
-        record.a_transfer_moved();
+        if endings.is_empty() {
+            break;
+        }
+        let paths: Vec<_> = publications
+            .iter()
+            .map(|(at, _)| running.files[*at].mirror.clone())
+            .collect();
+        let mut values = the_published_values(sessions, &asked.of, &paths).await;
+        let published: Vec<_> = publications
+            .into_iter()
+            .filter_map(|(at, content)| {
+                let file = &running.files[at];
+                match values.remove(file.mirror.as_bytes()) {
+                    Some(FourValuesNow::Answered(four_values)) => Some(Published {
+                        at: file.mirror.clone(),
+                        source: file.source.clone(),
+                        content,
+                        four_values,
+                    }),
+                    _ => None,
+                }
+            })
+            .collect();
+        the_group_is_recorded(record.as_ref(), &asked.of, published);
+        for (at, ended, began) in endings {
+            let file = &running.files[at];
+            if began {
+                if let Ok(mut held) = held.lock() {
+                    held.the_files_going_up.one_ends(&asked.of.machine);
+                }
+            }
+            // **`Dependency Upload & Remap` A9e's (b), counted before the file reads
+            // ended**, so *Render* never finds a gap between the two.
+            if file.a_library && matches!(ended, HowItEnded::Published) {
+                crate::surface::the_dependency_check::a_library_landed(held, key);
+            }
+            a_file_of_the_send_moved(request, at, |sent| sent.ended = Some(ended.clone()));
+            the_file_of_the_send_is_saved(record.as_ref(), request, at);
+            {
+                let mut came_to = running
+                    .came_to
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                match ended {
+                    HowItEnded::Published => {
+                        came_to.published += 1;
+                        if file.a_library {
+                            came_to.libraries_published += 1;
+                        }
+                    }
+                    HowItEnded::Refused | HowItEnded::Failed => came_to.failed += 1,
+                    HowItEnded::DidNotFinish => came_to.did_not_finish += 1,
+                }
+            }
+            // **The row's state from its files' publications**, once its last
+            // file has ended.
+            let row = file.row;
+            let became = {
+                let mut going = running
+                    .going
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let how = going.entry(row).or_default();
+                how.left = how.left.saturating_sub(1);
+                match ended {
+                    HowItEnded::Published => {}
+                    HowItEnded::Refused => {
+                        how.refused_in = Some(the_folder_holding(file.mirror.as_bytes()));
+                        how.failed = Some(WhyItDidNotGoUp::TheServerRefusedTheWrite);
+                    }
+                    HowItEnded::Failed => {
+                        how.failed.get_or_insert(WhyItDidNotGoUp::TheUploadFailed);
+                    }
+                    HowItEnded::DidNotFinish => how.did_not_finish = true,
+                }
+                if how.left == 0 {
+                    match (&how.failed, how.did_not_finish) {
+                        (Some(why), _) => Some((RowState::CouldNotBeSent, Some(*why))),
+                        (None, true) => None,
+                        (None, false) => Some((RowState::AlreadyOnTheMachine, None)),
+                    }
+                } else {
+                    None
+                }
+            };
+            if let Some((state, why)) = became {
+                the_row_became(held, key, &file.the_real_file, state, why);
+            }
+            record.a_transfer_moved();
+        }
     }
 }
 
 /// **A row brought to what its files came to.** It stays in the group it was
 /// drawn in (`Design/Dependency Upload & Remap § How the rows are grouped and
 /// sorted`: *"Nothing re-sorts under the user's hand"*).
+///
+/// **`Dependency Upload & Remap` A9b: every row of the real file, in the sitting
+/// standing now**, and never a place in a list a later check may have rebuilt.
 fn the_row_became(
     held: &Mutex<WhatTheRunHolds>,
     key: &str,
-    at: usize,
+    the_real_file: &[u8],
     state: RowState,
     why: Option<WhyItDidNotGoUp>,
 ) {
     if let Ok(mut held) = held.lock() {
-        if let Some(one) = held
-            .sittings
-            .get_mut(key)
-            .and_then(|sitting| sitting.rows.get_mut(at))
-        {
-            one.state = state;
-            one.why_it_did_not_go_up = why;
-            one.its_failure_was_cleared = false;
+        if let Some(sitting) = held.sittings.get_mut(key) {
+            for one in sitting.rows.iter_mut().filter(|one| one.the_real_file() == the_real_file) {
+                one.state = state;
+                one.why_it_did_not_go_up = why;
+                one.its_failure_was_cleared = false;
+            }
         }
     }
 }
@@ -1872,6 +2403,7 @@ async fn one_file_goes_up<C: AHeldConnection>(
     record: &Arc<dyn TheRecordAnUploadWrites>,
     request: &Identity,
     tell: &(dyn Fn() + Sync),
+    publications: &mut Vec<(usize, ContentIdentity)>,
 ) -> HowItEnded {
     let of = &asked.of;
     let request_text = request.as_text();
@@ -2098,27 +2630,11 @@ async fn one_file_goes_up<C: AHeldConnection>(
     }
     match ending {
         Ending::Published => {
-            // **`Dependency Upload & Remap` K7 and Q11: the placement record,
-            // written at publication**, with the four values read off the
-            // published file and the transfer's own digest (Q1, `Server
-            // protocol and transfers` S22). Where the four values cannot be
-            // read, no record is written: nothing could ever compare against
-            // it, and a later check sends the file again.
-            if let (Some(content), FourValuesNow::Answered(four_values)) = (
-                what_was_staged,
-                the_four_values_at(sessions, &of.server, &file.mirror).await,
-            ) {
-                the_publication_is_written(
-                    record.as_ref(),
-                    of,
-                    Published {
-                        at: file.mirror.clone(),
-                        source: file.source.clone(),
-                        content,
-                        four_values,
-                    },
-                    intent == Intent::ReplaceIntended,
-                );
+            // `Dependency Upload & Remap` V13 and `Dependency Upload & Remap` V13a: invalidate at once,
+            // including a publication whose identity cannot later be read.
+            the_publications_marks_are_written(record.as_ref(), of, &file.mirror, None, intent == Intent::ReplaceIntended);
+            if let Some(content) = what_was_staged {
+                publications.push((at, content));
             }
             HowItEnded::Published
         }
@@ -2200,6 +2716,40 @@ impl KeepsTheRecord for TheSendsRecords<'_> {
     }
 }
 
+// `Dependency Upload & Remap` K7 and Q5 route 1: the group's placement
+// records are written together. `Dependency Upload & Remap` V13 and `Dependency Upload & Remap` V13a marks were made at publication.
+fn the_group_is_recorded(
+    record: &dyn TheRecordAnUploadWrites,
+    of: &TheSittingIsOf,
+    published: Vec<Published>,
+) {
+    if published.is_empty() {
+        return;
+    }
+    record.with_the_record(&mut |connection| {
+        if connection
+            .execute_batch("SAVEPOINT the_published_group")
+            .is_err()
+        {
+            return;
+        }
+        let keeper = TheDependencyRecord::over(connection);
+        let all_written = published.iter().all(|p| {
+            keeper
+                .a_placement_is_written(&PlacementRecord::at_publication(
+                    of.machine.clone(),
+                    p.clone(),
+                ))
+                .is_ok()
+        });
+        let _ = connection.execute_batch(if all_written {
+            "RELEASE the_published_group"
+        } else {
+            "ROLLBACK TO the_published_group; RELEASE the_published_group"
+        });
+    });
+}
+
 /// **`Dependency Upload & Remap` K7's placement record and V13's marks, in one
 /// save, at a publication.**
 ///
@@ -2209,17 +2759,30 @@ impl KeepsTheRecord for TheSendsRecords<'_> {
 ///   tree resolved the location is marked *disturbed* — **except the check
 ///   whose own rows sent it**, since what this sitting published is what its
 ///   check described.
+#[cfg(test)]
 fn the_publication_is_written(
     record: &dyn TheRecordAnUploadWrites,
     of: &TheSittingIsOf,
     published: Published,
     it_replaced_a_file: bool,
 ) {
+    let landed_at = published.at.clone();
+    let placement = PlacementRecord::at_publication(of.machine.clone(), published);
+    the_publications_marks_are_written(record, of, &landed_at, Some(&placement), it_replaced_a_file);
+}
+
+/// `Dependency Upload & Remap` V13 and `Dependency Upload & Remap` V13a: publication invalidates old
+/// standings even before the grouped K7 identity reading answers.
+fn the_publications_marks_are_written(
+    record: &dyn TheRecordAnUploadWrites,
+    of: &TheSittingIsOf,
+    landed_at: &MachineLocation,
+    placement: Option<&PlacementRecord>,
+    it_replaced_a_file: bool,
+) {
     let Some(layout) = of.layout.as_ref() else {
         return;
     };
-    let landed_at = published.at.clone();
-    let placement = PlacementRecord::at_publication(of.machine.clone(), published);
     let mut marked: Vec<CheckStanding> = Vec::new();
     record.with_the_record(&mut |connection| {
         if connection
@@ -2229,7 +2792,7 @@ fn the_publication_is_written(
             return;
         }
         let keeper = TheDependencyRecord::over(connection);
-        let mut all_went_down = keeper.a_placement_is_written(&placement).is_ok();
+        let mut all_went_down = placement.is_none_or(|p| keeper.a_placement_is_written(p).is_ok());
         let standings = keeper.the_standings_on(&of.machine).unwrap_or_default();
         let roots: Vec<MachineLocation> = standings
             .iter()
@@ -2313,13 +2876,12 @@ pub(crate) fn the_standing_is_brought_up_to_date<R: TheCheckReachesTheRecord + ?
     held: &Mutex<WhatTheRunHolds>,
     of: &TheSittingIsOf,
 ) {
-    let states: Vec<(RowState, smoozy_dependencies::record::HoldingFile)> = match held.lock() {
+    let (states, counts): (Vec<(RowState, smoozy_dependencies::record::HoldingFile)>, _) = match held.lock() {
         Ok(held) => match held.sittings.get(&keyed(&of.server, &of.file)) {
-            Some(sitting) => sitting
-                .rows
-                .iter()
-                .map(|row| (row.state, row.holding.clone()))
-                .collect(),
+            Some(sitting) => (
+                sitting.rows.iter().map(|row| (row.state, row.holding.clone())).collect(),
+                crate::surface::the_dependency_check::the_warning_counts(&sitting.rows, Default::default()),
+            ),
             None => return,
         },
         Err(_) => return,
@@ -2347,6 +2909,7 @@ pub(crate) fn the_standing_is_brought_up_to_date<R: TheCheckReachesTheRecord + ?
             }),
         })
         .collect();
+    let reference_counts = counts_at_completion(&rows);
     let mut brought = None;
     record.with_the_record(&mut |connection| {
         let keeper = TheDependencyRecord::over(connection);
@@ -2354,7 +2917,11 @@ pub(crate) fn the_standing_is_brought_up_to_date<R: TheCheckReachesTheRecord + ?
             return;
         };
         let standing = CheckStanding {
-            counts: counts_at_completion(&rows),
+            counts: smoozy_dependencies::standing::Counts {
+                confirmed: reference_counts.confirmed,
+                set_aside: reference_counts.set_aside,
+                ..counts
+            },
             every_row_confirmed_or_set_aside: every_row_is_confirmed_or_set_aside(&rows),
             ..standing
         };
@@ -2398,6 +2965,442 @@ mod tests {
 
     fn stored(bytes: &[u8]) -> StoredLocation {
         StoredLocation::as_the_system_returned_it(bytes)
+    }
+
+    // ── The check's walk, `Dependency Upload & Remap` Q5a and Q5 route 1 ─────────
+
+    /// **What the machine does with an ask of many files.**
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum TheAskOfMany {
+        Answers,
+        /// A program of an earlier release.
+        IsRefused,
+        /// A line with no answer.
+        BringsNothing,
+        /// A command that never answers, on a connection that still does.
+        NeverEnds,
+    }
+
+    /// **A machine standing in for a rental, holding files by their mirrors.**
+    struct AWalksMachine {
+        files: BTreeMap<Vec<u8>, SourceReading>,
+        the_ask: TheAskOfMany,
+        the_one_at_a_time_never_ends: bool,
+        asks_of_many: Vec<usize>,
+        read_one_at_a_time: Vec<Vec<u8>>,
+    }
+
+    impl AWalksMachine {
+        fn holding(files: BTreeMap<Vec<u8>, SourceReading>, the_ask: TheAskOfMany) -> AWalksMachine {
+            AWalksMachine {
+                files,
+                the_ask,
+                the_one_at_a_time_never_ends: false,
+                asks_of_many: Vec::new(),
+                read_one_at_a_time: Vec::new(),
+            }
+        }
+    }
+
+    impl smoozy_dependencies::acting::checking::TheMachineAReadingIsAskedOf for AWalksMachine {
+        /// **Route 2's digest, which this stand-in cannot give**: *did not
+        /// complete*, on every route alike, so the routes compare.
+        async fn ask(&mut self, _request: &smoozy_server_protocol::framing::Request)
+            -> smoozy_server_protocol::asking_the_supervisor::WhatCameBack
+        {
+            smoozy_server_protocol::asking_the_supervisor::WhatCameBack::NothingCorrelatedCameBack
+        }
+
+        async fn read_the_stream_back(&mut self, _path: &[u8], _length: u64) -> Result<Vec<u8>, String> {
+            Err("no streams here".to_string())
+        }
+    }
+
+    impl TheMachineAFileIsReadOn for AWalksMachine {
+        async fn the_four_values_of(&mut self, the_blend: &str) -> smoozy_render_settings::readings::FourValuesNow {
+            use smoozy_render_settings::readings::FourValuesNow as Now;
+            if self.the_one_at_a_time_never_ends {
+                std::future::pending::<()>().await;
+            }
+            self.read_one_at_a_time.push(the_blend.as_bytes().to_vec());
+            match self.files.get(the_blend.as_bytes()) {
+                Some(values) => Now::Answered(values.clone()),
+                None => Now::TheChannelCannotAnswer,
+            }
+        }
+
+        async fn the_four_values_of_many(
+            &mut self,
+            paths: &[Vec<u8>],
+        ) -> smoozy_dependencies::acting::machine::WhatTheAskOfManyCameTo {
+            use smoozy_dependencies::acting::machine::WhatTheAskOfManyCameTo as CameTo;
+            self.asks_of_many.push(paths.len());
+            match self.the_ask {
+                TheAskOfMany::Answers => {
+                    CameTo::Read(paths.iter().map(|path| self.files.get(path).cloned()).collect())
+                }
+                TheAskOfMany::IsRefused => CameTo::TheProgramDoesNotAnswerIt,
+                TheAskOfMany::BringsNothing => CameTo::NoAnswer,
+                TheAskOfMany::NeverEnds => std::future::pending().await,
+            }
+        }
+
+        async fn the_names_in(&mut self, folder: &[u8]) -> Option<Vec<Vec<u8>>> {
+            let mut under = folder.to_vec();
+            under.push(b'/');
+            Some(
+                self.files
+                    .keys()
+                    .filter_map(|at| at.strip_prefix(under.as_slice()))
+                    .map(<[u8]>::to_vec)
+                    .collect(),
+            )
+        }
+    }
+
+    struct AWalksRecord(Mutex<crate::record::LocalRecord>);
+
+    impl TheCheckReachesTheRecord for AWalksRecord {
+        fn with_the_record(&self, act: &mut dyn FnMut(&rusqlite::Connection)) -> bool {
+            act(self.0.lock().expect("the record").connection());
+            true
+        }
+    }
+
+    /// **A shot on this computer**: one folder of `in_the_folder` files and
+    /// `alone` files of their own, each row found here.
+    ///
+    /// **The five tests that use it run on macOS and Linux only**, added after
+    /// hosted run `42299470433` of 2026-11-06, their first on Windows. Each
+    /// stores the shot's own files on this computer and sends them, and a
+    /// send starts at the mirror of the file's whole location (`Dependency
+    /// Upload & Remap` A4). **On Windows that is not built, on purpose**: the
+    /// plan holds a Windows location permanently unresolved (A4, and that
+    /// plan's §12 item 3), and the mirror refuses a location that does not
+    /// start at `/` — which every Windows location is — as
+    /// `TheLocationsFormIsNotOneTheLandingRuleCovers`. So the shot itself
+    /// cannot be built there; `checking_a_file`'s tests keep the same gate for
+    /// the same reason.
+    struct AWalksShot {
+        folder: std::path::PathBuf,
+        rows: Vec<ACheckedRow>,
+        of: TheSittingIsOf,
+        record: AWalksRecord,
+        /// Every file's mirror.
+        mirrors: Vec<MachineLocation>,
+    }
+
+    impl Drop for AWalksShot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.folder);
+        }
+    }
+
+    fn a_found_row(holding: &StoredLocation, at: &StoredLocation, kind: Kind) -> ACheckedRow {
+        use smoozy_dependencies::check::{Attribution, GroupedBy, Row};
+        use smoozy_dependencies::search::Outstanding;
+        let reference = RecordedLocation::as_the_reading_carried_it(at.as_bytes());
+        ACheckedRow {
+            row: Row { references: vec![reference.clone()], grouped_by: GroupedBy::TidiedText(at.as_bytes().to_vec()) },
+            kind,
+            scenes: Attribution::Established(vec!["Scene".to_string()]),
+            state_when_the_check_ran: RowState::FoundOnYourComputer,
+            state: RowState::FoundOnYourComputer,
+            holding: HoldingFile::OnTheUsersComputer(holding.clone()),
+            answers: vec![LocatedAnswer {
+                key: LocatedAnswerKey { holding_file: HoldingFile::OnTheUsersComputer(holding.clone()), reference: reference.clone() },
+                resolution: Some(Resolution { to: ResolvedTo::AWholeLocation(at.clone()), how: HowResolved::TheRecordedLocationItself }),
+                set_aside: false,
+                rejected_guess: None,
+                read_as: Vec::new(),
+            }],
+            wanted: vec![Outstanding::a_file(reference)],
+            proposal: None,
+            members: None,
+            size: Some(1),
+            why_it_did_not_go_up: None,
+            the_part_already_up: None,
+            its_failure_was_cleared: false,
+        }
+    }
+
+    fn a_walks_shot(named: &str, in_the_folder: usize, alone: usize) -> AWalksShot {
+        let folder = std::env::temp_dir().join(format!(
+            "smoozy-the-walk-{named}-{}",
+            &Identity::issue(IdentityKind::Operation).expect("randomness").as_text()[..12]
+        ));
+        std::fs::create_dir_all(folder.join("bake")).expect("a folder");
+        let bytes_of = |path: &std::path::Path| {
+            crate::the_found_files_sent::path_bytes(path).expect("a path the record can hold")
+        };
+        let record = AWalksRecord(Mutex::new(
+            crate::record::LocalRecord::open_at(&folder.join("record.sqlite3")).expect("it opens"),
+        ));
+        let machine = MachineKey::of(
+            Identity::issue(IdentityKind::LocalServer).expect("randomness"),
+            Identity::issue(IdentityKind::Installation).expect("randomness"),
+        );
+        let holding = stored(&bytes_of(&folder.join("top.blend")));
+        let mut sources: Vec<std::path::PathBuf> = (0..in_the_folder).map(|at| folder.join(format!("bake/{at:05}.bgeo"))).collect();
+        let alone_at: Vec<std::path::PathBuf> = (0..alone).map(|at| folder.join(format!("wood-{at}.png"))).collect();
+        sources.extend(alone_at.iter().cloned());
+        let mut mirrors = Vec::new();
+        for source in &sources {
+            std::fs::write(source, b"the same bytes").expect("written");
+            let at = stored(&bytes_of(source));
+            let mirror = mirror_of(&a_layout(), &at).expect("fits");
+            let keeper_of = record.0.lock().expect("the record");
+            TheDependencyRecord::over(keeper_of.connection())
+                .a_placement_is_written(&PlacementRecord::at_publication(
+                    machine.clone(),
+                    Published {
+                        at: mirror.clone(),
+                        source: at,
+                        content: ContentIdentity::of(b"the same bytes"),
+                        four_values: four(14),
+                    },
+                ))
+                .expect("the placement");
+            mirrors.push(mirror);
+        }
+        let mut rows = Vec::new();
+        if in_the_folder > 0 {
+            let mut one = a_found_row(&holding, &stored(&bytes_of(&folder.join("bake"))), Kind::Image);
+            one.wanted = vec![smoozy_dependencies::search::Outstanding::a_file(
+                RecordedLocation::as_the_reading_carried_it(b"//bake"),
+            )];
+            rows.push(one);
+        }
+        rows.extend(alone_at.iter().map(|at| a_found_row(&holding, &stored(&bytes_of(at)), Kind::Image)));
+        let of = TheSittingIsOf {
+            server: machine.server_row.as_text(),
+            file: String::from_utf8(holding.as_bytes().to_vec()).expect("text"),
+            root: MachineLocation::composed(holding.as_bytes().to_vec()),
+            holding: HoldingFile::OnTheUsersComputer(holding),
+            with: a_blender(),
+            machine,
+            layout: Some(a_layout()),
+        };
+        AWalksShot { folder, rows, of, record, mirrors }
+    }
+
+    impl AWalksShot {
+        fn the_files_on_the_machine(&self) -> BTreeMap<Vec<u8>, SourceReading> {
+            self.mirrors.iter().map(|mirror| (mirror.as_bytes().to_vec(), four(14))).collect()
+        }
+
+        /// **The walk**, run whole, with what it counted.
+        fn walked(
+            &mut self,
+            machine: &mut AWalksMachine,
+            digests: &mut TheLocalDigests,
+            mut stopped: impl FnMut(usize) -> bool + Send,
+        ) -> (WhereTheWalkEnded, Vec<(usize, usize)>) {
+            let counted = Arc::new(Mutex::new(Vec::new()));
+            let mut four_values = BTreeMap::new();
+            let mut rows = std::mem::take(&mut self.rows);
+            let counted_now = Arc::clone(&counted);
+            let the_count = Arc::clone(&counted);
+            let ended = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("a runtime")
+                .block_on(async {
+                    tokio::time::timeout(
+                        std::time::Duration::from_secs(20),
+                        what_is_already_on_the_server(
+                            machine,
+                            &self.record,
+                            &self.of,
+                            &mut rows,
+                            &mut four_values,
+                            &mut TheWalkIsWatched {
+                                stopped: &mut || stopped(the_count.lock().expect("the count").len()),
+                                counted: &mut |done, whole| counted_now.lock().expect("the count").push((done, whole)),
+                                digests,
+                            },
+                        ),
+                    )
+                    .await
+                })
+                .expect("nothing holds the walk for ever");
+            self.rows = rows;
+            let counted = counted.lock().expect("the count").clone();
+            (ended, counted)
+        }
+
+        fn the_rows_read(&self) -> Vec<(RowState, Option<(usize, u64)>)> {
+            self.rows.iter().map(|one| (one.state, one.the_part_already_up)).collect()
+        }
+    }
+
+    /// **The film's own shape, 480 of 522 files in one bake folder: one question
+    /// for all of them**, where the walk took about 12 minutes at one a file.
+    #[cfg(unix)]
+    #[test]
+    fn a_rounds_files_are_asked_for_in_one_question() {
+        let mut shot = a_walks_shot("one-question", 480, 42);
+        let mut machine = AWalksMachine::holding(shot.the_files_on_the_machine(), TheAskOfMany::Answers);
+        let (ended, counted) = shot.walked(&mut machine, &mut TheLocalDigests::default(), |_| false);
+        assert_eq!(ended, WhereTheWalkEnded::ItRanToItsEnd);
+        assert_eq!(machine.asks_of_many, vec![522], "one question for the round's files");
+        assert!(machine.read_one_at_a_time.is_empty(), "{} read one at a time", machine.read_one_at_a_time.len());
+        assert!(shot.rows.iter().all(|one| one.state == RowState::AlreadyOnTheMachine));
+        // **The count is true**: it holds its whole before it starts, and moves by one.
+        assert_eq!(counted.first(), Some(&(0, 522)));
+        assert_eq!(counted.last(), Some(&(522, 522)));
+        assert_eq!(counted.len(), 523);
+    }
+
+    /// **The brief's checks: every case reads the same by the one question as one
+    /// at a time** — files whose values match, moved, or are not on the machine at
+    /// all, in a folder row and alone — and **a program that refuses the question
+    /// and a line that brings nothing leave the one-at-a-time route to answer**.
+    #[cfg(unix)]
+    #[test]
+    fn every_way_of_asking_reads_the_rows_the_same() {
+        let a_round = |the_ask: TheAskOfMany| {
+            let mut shot = a_walks_shot("the-same", 6, 4);
+            let mut on_the_machine = shot.the_files_on_the_machine();
+            // A file in the folder that moved, one that is gone; the same alone.
+            on_the_machine.insert(shot.mirrors[1].as_bytes().to_vec(), four(15));
+            on_the_machine.remove(shot.mirrors[2].as_bytes());
+            on_the_machine.insert(shot.mirrors[7].as_bytes().to_vec(), four(15));
+            on_the_machine.remove(shot.mirrors[8].as_bytes());
+            let mut machine = AWalksMachine::holding(on_the_machine, the_ask);
+            let _ = shot.walked(&mut machine, &mut TheLocalDigests::default(), |_| false);
+            let asks = machine.asks_of_many.clone();
+            let one_at_a_time = machine.read_one_at_a_time.len();
+            (shot.the_rows_read(), asks, one_at_a_time)
+        };
+        let (by_the_one_question, asks, one_at_a_time) = a_round(TheAskOfMany::Answers);
+        assert_eq!(asks, vec![10]);
+        assert_eq!(one_at_a_time, 0, "every path answered for itself, the bad ones too");
+        assert_eq!(by_the_one_question[0].0, RowState::FoundOnYourComputer, "the folder with a file moved and one gone");
+        assert_eq!(by_the_one_question[0].1.map(|(up, _)| up), Some(4), "the rest of it is counted up");
+        assert_eq!(by_the_one_question[1].0, RowState::AlreadyOnTheMachine);
+        assert_eq!(by_the_one_question[2].0, RowState::FoundOnYourComputer, "moved");
+        assert_eq!(by_the_one_question[3].0, RowState::FoundOnYourComputer, "gone");
+        assert_eq!(by_the_one_question[4].0, RowState::AlreadyOnTheMachine);
+        for the_ask in [TheAskOfMany::IsRefused, TheAskOfMany::BringsNothing] {
+            let (one_at_a_time_rows, asks, read) = a_round(the_ask);
+            assert_eq!(one_at_a_time_rows, by_the_one_question);
+            assert_eq!(asks, vec![10], "asked once, and not again");
+            assert_eq!(read, 10, "each file then read as it always was");
+        }
+    }
+
+    /// **The very long list: a file past the request's limit goes in its next ask**,
+    /// and a location that is not text is left to the route that says so.
+    #[test]
+    fn a_very_long_list_goes_in_several_asks() {
+        let machine_key = MachineKey::of(
+            Identity::issue(IdentityKind::LocalServer).expect("randomness"),
+            Identity::issue(IdentityKind::Installation).expect("randomness"),
+        );
+        let mirrors: Vec<MachineLocation> = (0..4_001)
+            .map(|at| MachineLocation::composed(format!("/ephemeral/smoozy/files/f{at}").into_bytes()))
+            .chain([MachineLocation::composed(vec![b'/', 0xff])])
+            .collect();
+        let mut snapshot = InMemoryRecord::default();
+        snapshot.placements = mirrors
+            .iter()
+            .map(|mirror| {
+                PlacementRecord::at_publication(
+                    machine_key.clone(),
+                    Published {
+                        at: mirror.clone(),
+                        source: stored(b"/Users/a/f"),
+                        content: ContentIdentity::of(b"f"),
+                        four_values: four(1),
+                    },
+                )
+            })
+            .collect();
+        let of = TheSittingIsOf {
+            server: machine_key.server_row.as_text(),
+            file: "/Users/a/top.blend".to_string(),
+            root: MachineLocation::composed(b"/Users/a/top.blend".to_vec()),
+            holding: HoldingFile::OnTheUsersComputer(stored(b"/Users/a/top.blend")),
+            with: a_blender(),
+            machine: machine_key,
+            layout: Some(a_layout()),
+        };
+        let files = mirrors.iter().take(4_001).map(|one| (one.as_bytes().to_vec(), four(1))).collect();
+        let mut machine = AWalksMachine::holding(files, TheAskOfMany::Answers);
+        let mut four_values = BTreeMap::new();
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("a runtime")
+            .block_on(the_four_values_are_gathered(
+                &mut machine,
+                &of,
+                &snapshot,
+                &mut four_values,
+                mirrors.iter(),
+                &mut || false,
+            ));
+        assert_eq!(machine.asks_of_many, vec![4_000, 1]);
+        assert_eq!(four_values.len(), 4_001);
+        assert!(four_values.values().all(Option::is_some));
+    }
+
+    /// **A press of *Stop* ends the walk within a file**, and the rows it had not
+    /// reached stay as they were.
+    #[cfg(unix)]
+    #[test]
+    fn stop_ends_the_walk_within_a_file() {
+        let mut shot = a_walks_shot("stop", 0, 5);
+        let mut machine = AWalksMachine::holding(shot.the_files_on_the_machine(), TheAskOfMany::IsRefused);
+        // The count holds (0, 5) and then (1, 5) when the stop is asked.
+        let (ended, counted) = shot.walked(&mut machine, &mut TheLocalDigests::default(), |counted| counted >= 3);
+        assert_eq!(ended, WhereTheWalkEnded::AStopWasAsked);
+        assert_eq!(counted.last(), Some(&(2, 5)));
+        assert_eq!(machine.read_one_at_a_time.len(), 2);
+        let states: Vec<RowState> = shot.rows.iter().map(|one| one.state).collect();
+        assert_eq!(states[..2], [RowState::AlreadyOnTheMachine, RowState::AlreadyOnTheMachine]);
+        assert_eq!(states[2..], [RowState::FoundOnYourComputer; 3]);
+    }
+
+    /// **A stuck answer does not hold the check for ever**: `a_command`, `a_reading`
+    /// and the turn have no limit of their own, and *Stop* ends the wait, on the
+    /// one question and on the one-at-a-time route alike.
+    #[cfg(unix)]
+    #[test]
+    fn stop_ends_a_wait_on_an_answer_that_never_comes() {
+        for (the_ask, the_one_never_ends) in [(TheAskOfMany::NeverEnds, false), (TheAskOfMany::IsRefused, true)] {
+            let mut shot = a_walks_shot("stuck", 0, 3);
+            let mut machine = AWalksMachine::holding(shot.the_files_on_the_machine(), the_ask);
+            machine.the_one_at_a_time_never_ends = the_one_never_ends;
+            let asked_at = std::time::Instant::now();
+            let (ended, counted) = shot.walked(&mut machine, &mut TheLocalDigests::default(), move |_| {
+                asked_at.elapsed() > std::time::Duration::from_millis(300)
+            });
+            assert_eq!(ended, WhereTheWalkEnded::AStopWasAsked);
+            assert_eq!(counted, vec![(0, 3)]);
+            assert!(asked_at.elapsed() < std::time::Duration::from_secs(5), "{:?}", asked_at.elapsed());
+        }
+    }
+
+    /// **A file several linked files name is digested once a round**: the second
+    /// walk of the round reads what the first held, whatever the disk now says.
+    #[cfg(unix)]
+    #[test]
+    fn a_rounds_second_walk_holds_each_files_digest() {
+        let mut shot = a_walks_shot("digest", 0, 1);
+        let mut digests = TheLocalDigests::default();
+        let mut machine = AWalksMachine::holding(shot.the_files_on_the_machine(), TheAskOfMany::Answers);
+        let _ = shot.walked(&mut machine, &mut digests, |_| false);
+        assert_eq!(shot.rows[0].state, RowState::AlreadyOnTheMachine);
+        std::fs::write(shot.folder.join("wood-0.png"), b"changed since").expect("written");
+        shot.rows[0].state = RowState::FoundOnYourComputer;
+        let _ = shot.walked(&mut machine, &mut digests, |_| false);
+        assert_eq!(shot.rows[0].state, RowState::AlreadyOnTheMachine, "the file was digested again");
+        // **A fresh round digests it afresh**, so the change is found there.
+        shot.rows[0].state = RowState::FoundOnYourComputer;
+        let _ = shot.walked(&mut machine, &mut TheLocalDigests::default(), |_| false);
+        assert_eq!(shot.rows[0].state, RowState::FoundOnYourComputer);
     }
 
     /// **`Dependency Upload & Remap` A9a's per-file reading of the register**:
@@ -2573,6 +3576,16 @@ mod tests {
                 machine: machine.clone(),
                 layout: Some(a_layout()),
             };
+            // `Dependency Upload & Remap` V13 and `Dependency Upload & Remap` V13a: marks are already
+            // written while the grouped identity reading is still pending.
+            the_publications_marks_are_written(&record, &of, &texture, None, it_replaced_a_file);
+            {
+                let opened = record.0.lock().expect("record");
+                let keeper = TheDependencyRecord::over(opened.connection());
+                assert!(keeper.the_placements_on(&machine).unwrap().iter().all(|p| p.mirrored_location != texture));
+                assert!(keeper.the_standing(&the_textures_own, &machine).unwrap().unwrap().replaced_since_check);
+                assert_eq!(keeper.the_standing(&another, &machine).unwrap().unwrap().disturbed, it_replaced_a_file);
+            }
             the_publication_is_written(
                 &record,
                 &of,

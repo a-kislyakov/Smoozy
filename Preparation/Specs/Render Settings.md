@@ -40,7 +40,7 @@ Setting up a render is not one uninterrupted sitting. The user compares scenes, 
 
 **Switching scenes keeps each scene's settings.** Every scene holds its own set, so moving to another scene and back finds the first scene exactly as it was left — overrides and all. Nothing is redrawn from the file because the user looked away. Label: **Creator-stated** (2026-07-27).
 
-**Switching files keeps them too**, and so does switching servers. A `.blend` the user set up, left, and came back to still carries what they typed into it, whether they went to another file on the same machine or to a different machine entirely. Label: **Creator-stated** (2026-07-27).
+**Switching files keeps them too**, and so does switching servers. A `.blend` the user set up, left, and came back to still carries what they typed into it, whether they went to another file on the same machine or to a different machine entirely. Label: **Creator-stated** (2026-07-27). *(A range a history entry loaded is not something they typed: the [Rendering spec](Rendering.md), under* The setup waits while they go*. Added 2026-11-03. No auditor has seen it.)*
 
 **A dropped connection does not take them.** What the user typed is theirs — numbers they chose, owing nothing to the machine — so a connection falling over leaves it all intact, and reconnecting finds the settings as they were. Setting up a long render can take a while, and a connection that falls over in the middle of it does not undo the work. Label: **Creator-stated** (2026-07-27).
 
@@ -298,6 +298,8 @@ A scene carries whether its render uses the machine's **GPUs** or its **processo
 **Choosing the processor is a real choice, not always a mistake.** Some work genuinely needs it, so Smoozy does not refuse it or quietly change it. Label: **Creator-stated** (2026-07-27).
 
 **Where the scene says processor on a machine that has GPUs, Smoozy says so.** It states what will happen and leaves the choice alone — the user either meant it or did not, and only they know which. This is the same shape as everything else here: say what is true, do not decide for the artist.
+
+**Where a Cycles job on the GPUs cannot render on this server's driver, from Blender 5.3, Smoozy says that too.** Below the driver 5.3 asks for, Cycles cannot use the cards at all. It is one line, and it stops nothing: the user may still send the job. EEVEE and the processor are not told, because both render there. On a server where Smoozy can replace the driver nothing is said here, because the job waits for the replacement instead (see the [Queue & History spec](Queue%20&%20History.md)). Label: **observed** (the 5.3.0 Beta, one driver below the bar, on one rented machine, 2026-11-02), the line the build runner's ruling of that day. *No auditor has seen this.*
 
 **What that warning can say is bounded by two things, and both are now known.** A render started from outside can override the scene's own choice, so what this page shows is not necessarily what the render does. And a scene asking for the graphics cards is no promise that it gets them: on a rented Linux machine left as it comes, every card is switched on but no card technology is chosen, and a scene asking for the cards then renders on the processor with Blender saying nothing at all about it. Label: **observed** (Blender 4.5, 5.0, 5.1 and 5.2) — the override on a Mac and on a rented Linux machine, and the machine left as it comes on one rented Linux machine. So the warning can state the setting and what it means, and cannot promise the outcome.
 

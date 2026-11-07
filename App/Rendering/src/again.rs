@@ -111,6 +111,7 @@ pub fn the_entries_the_payload_kept(
 ) -> smoozy_render_settings::store::SceneEntries {
     use smoozy_render_settings::names::{NamedAnswer, Provenance};
     smoozy_render_settings::store::SceneEntries {
+        prepare_simulations: Some(payload.prepare_simulations),
         frame_range: payload.frame_range.clone(),
         frame_range_text: payload
             .frame_range
@@ -137,6 +138,7 @@ pub fn the_entries_the_payload_kept(
             })
             .collect(),
         simplify: payload.simplify.clone(),
+        what_a_loaded_range_stands_on: None,
     }
 }
 
@@ -190,6 +192,8 @@ pub fn a_kept_setup_with_no_scene_is_loaded(
     offer_drawn: bool,
 ) {
     use smoozy_render_settings::store::{Answer, PageInHand, Where};
+    // **`Render Settings` Y15b: what stood in the set, kept before it is cleared.**
+    let beneath = store.what_stands_beneath_a_load_of_the_pre_read_set(&file);
     store.hand_everything_back(file.clone(), PageInHand::NoSceneInHand);
     let ticked: Vec<_> = store
         .per_file(&file)
@@ -206,6 +210,7 @@ pub fn a_kept_setup_with_no_scene_is_loaded(
         _ => None,
     };
     let answers = [
+        entries.prepare_simulations.map(Answer::PrepareSimulations),
         entries
             .frame_range
             .clone()
@@ -226,6 +231,7 @@ pub fn a_kept_setup_with_no_scene_is_loaded(
     if let Some((form, text)) = typed_range {
         store.answer_the_typed_range(Where::ThePreReadSet { file: file.clone() }, form, &text);
     }
+    store.the_pre_read_set_was_loaded(file.clone(), beneath);
     if let Some(pick) = the_users_override {
         store.pick_a_version(file, pick);
     }
@@ -708,6 +714,7 @@ mod tests {
             },
         };
         let mut payload = Payload {
+            prepare_simulations: false,
             version_pick: VersionPick::of(&crate::material::testing::a_blender()),
             scene: Some(SceneEntry {
                 name: ExactName::as_the_reading_produced_it("Kitchen"),
@@ -752,6 +759,7 @@ mod tests {
         assert_eq!(kept.scene, kept_name("Kitchen"));
         assert_eq!(kept.version, KeptVersion::ResolvedAutomatically);
         assert_eq!(kept.entries.frame_range, payload.frame_range);
+        assert_eq!(kept.entries.prepare_simulations, Some(false));
         assert_eq!(kept.entries.sample_count, Some(512));
         assert_eq!(kept.entries.resolution_percentage, Some(50));
         assert_eq!(kept.entries.simplify.use_simplify, Some(true));
@@ -786,6 +794,7 @@ mod tests {
         );
         a_kept_setup_with_no_scene_is_loaded(&mut store, file.clone(), &entries, None, false);
         let read = store.the_answers_composition_reads(&file, None);
+        assert_eq!(read.prepare_simulations, Some(false));
         assert_eq!(read.sample_count, Some(512));
         assert_eq!(read.resolution_percentage, Some(50));
         assert!(read.simplify.is_empty());

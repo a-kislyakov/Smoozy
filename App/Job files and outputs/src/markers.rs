@@ -701,13 +701,19 @@ mod tests {
     /// added **P18a** — a first-frame check writes into its range job's
     /// folder (note 6). Built 2026-10-31 by note 6's builder: `Job files and
     /// outputs — machine`'s reading script and folder choice.
+    ///
+    /// **244 from 2026-11-02**, the 5.3 integration: **D8a** and **B1a** (piece
+    /// 3), **P7b** and **D8b** (piece 5). Counted here by piece 6.
+    ///
+    /// **245 from 2026-11-02**: **D10a**, the job's own scene gives the job's
+    /// folder.
     #[test]
     fn the_plan_defines_two_hundred_and_thirty_eight_distinct_clauses() {
         let plan =
             fs::read_to_string(the_architecture_folder().join(format!("{THIS_PLANS_NAME}.md")))
                 .expect("the plan is readable");
         let defined: HashSet<String> = the_clauses_defined_by(&plan).into_iter().collect();
-        assert_eq!(defined.len(), 240, "{:?}", {
+        assert_eq!(defined.len(), 246, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

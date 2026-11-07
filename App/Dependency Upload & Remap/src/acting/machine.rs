@@ -177,6 +177,81 @@ where
     }
 }
 
+/// **What one ask of many files came to** — `Server protocol and transfers`
+/// §1.1's request, Q5 route 1's gathering.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WhatTheAskOfManyCameTo {
+    /// **One answer for each path, in the order asked**, each the same as the
+    /// command route gives: the values, or nothing. *Nothing there* and *not
+    /// read* both land on nothing, because `stat -L` failing is one answer on
+    /// that route too, and Q5 route 2 is what tells them apart.
+    Read(Vec<Option<SourceReading>>),
+    /// **The package said it does not answer that request**, or does not speak
+    /// that version. The command route stays, as Q5 route 1 says.
+    TheProgramDoesNotAnswerIt,
+    /// **No answer that can be read.** Nothing is claimed.
+    NoAnswer,
+}
+
+/// **The one request**, the paths as one protocol field and never a word of a
+/// command (A8). Its identity is for correlation (`Server protocol and
+/// transfers` C6's pure reading).
+pub fn the_ask_of_many(paths: &[Vec<u8>]) -> Option<Request> {
+    Some(
+        Request::speaking(
+            THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+            Identity::issue(IdentityKind::Operation).ok()?,
+            asked::THE_FOUR_VALUES_OF_FILES_REQUEST,
+        )
+        .carrying(Fields::none().and(asked::THE_PATHS_READ_FIELD, asked::the_paths_written(paths))),
+    )
+}
+
+/// **What came back, read**, one answer for each of `how_many` paths or none.
+pub fn what_the_ask_of_many_came_to(
+    came_back: smoozy_server_protocol::asking_the_supervisor::WhatCameBack,
+    how_many: usize,
+) -> WhatTheAskOfManyCameTo {
+    use smoozy_server_protocol::asking_the_supervisor::WhatCameBack;
+    let WhatCameBack::ItAnswered(answered) = came_back else {
+        return WhatTheAskOfManyCameTo::NoAnswer;
+    };
+    if answered.the_request_name_it_says_it_does_not_answer().is_some()
+        || answered.the_protocol_version_it_says_it_does_not_speak().is_some()
+    {
+        return WhatTheAskOfManyCameTo::TheProgramDoesNotAnswerIt;
+    }
+    let Some(answers) = answered
+        .fields
+        .text(asked::THE_VALUES_READ_FIELD)
+        .and_then(|field| asked::the_values_read_back(field, how_many))
+    else {
+        return WhatTheAskOfManyCameTo::NoAnswer;
+    };
+    WhatTheAskOfManyCameTo::Read(
+        answers
+            .into_iter()
+            .map(|answer| match answer {
+                asked::OnePathAnswered::Values { size, inode, modification_time, change_time } => {
+                    Some(SourceReading { size, inode: inode.to_string(), modification_time, change_time })
+                }
+                asked::OnePathAnswered::NothingThere | asked::OnePathAnswered::NotRead(_) => None,
+            })
+            .collect(),
+    )
+}
+
+/// **One ask of many files, through the machine's own program.**
+pub async fn the_four_values_of_many<M>(machine: &mut M, paths: &[Vec<u8>]) -> WhatTheAskOfManyCameTo
+where
+    M: super::checking::TheMachineAReadingIsAskedOf,
+{
+    let Some(request) = the_ask_of_many(paths) else {
+        return WhatTheAskOfManyCameTo::NoAnswer;
+    };
+    what_the_ask_of_many_came_to(machine.ask(&request).await, paths.len())
+}
+
 /// The four values as the reading writes them, or nothing where what came back
 /// is not four numbers.
 ///
@@ -366,6 +441,48 @@ mod tests {
         ] {
             assert_eq!(what_the_digest_came_to(&not_one), MachineContents::DidNotComplete);
         }
+    }
+
+    /// **Q5 route 1's gathering: the answer read as the command route reads it,
+    /// and a refusal by name is what leaves that route standing.**
+    #[test]
+    fn the_ask_of_many_reads_as_one_at_a_time_and_a_refusal_keeps_the_command_route() {
+        use smoozy_server_protocol::asking_the_supervisor::WhatCameBack;
+        use smoozy_server_protocol::framing::Answered;
+        let paths = vec![b"/m/a.png".to_vec(), vec![b'/', 0xff], b"/m/c.png".to_vec()];
+        let request = the_ask_of_many(&paths).expect("randomness");
+        assert_eq!(request.name, asked::THE_FOUR_VALUES_OF_FILES_REQUEST);
+        assert_eq!(request.fields.value(asked::THE_PATHS_READ_FIELD), Some(asked::the_paths_written(&paths).as_slice()));
+        let answer = |text: &str| {
+            WhatCameBack::ItAnswered(
+                Answered::to(&request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "0.1.9")
+                    .carrying(Fields::none().and(asked::THE_VALUES_READ_FIELD, text)),
+            )
+        };
+        assert_eq!(
+            what_the_ask_of_many_came_to(answer("4096 8 1 2\nnothing there\nnot read: Permission denied\n"), 3),
+            WhatTheAskOfManyCameTo::Read(vec![
+                Some(SourceReading { size: 4096, inode: "8".to_string(), modification_time: 1, change_time: 2 }),
+                None,
+                None,
+            ])
+        );
+        // **An answer that does not hold one line for each path claims nothing.**
+        assert_eq!(what_the_ask_of_many_came_to(answer("4096 8 1 2\n"), 3), WhatTheAskOfManyCameTo::NoAnswer);
+        assert_eq!(
+            what_the_ask_of_many_came_to(WhatCameBack::NothingCorrelatedCameBack, 3),
+            WhatTheAskOfManyCameTo::NoAnswer
+        );
+        assert_eq!(
+            what_the_ask_of_many_came_to(WhatCameBack::ItWasNeverAsked, 3),
+            WhatTheAskOfManyCameTo::NoAnswer
+        );
+        let older = Answered::to(&request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "0.1.8")
+            .saying_it_does_not_answer_that_request(asked::THE_FOUR_VALUES_OF_FILES_REQUEST);
+        assert_eq!(
+            what_the_ask_of_many_came_to(WhatCameBack::ItAnswered(older), 3),
+            WhatTheAskOfManyCameTo::TheProgramDoesNotAnswerIt
+        );
     }
 
     /// **The request names the whole file, from its first byte, as the bytes

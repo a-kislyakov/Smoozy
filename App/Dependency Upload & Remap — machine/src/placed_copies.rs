@@ -137,12 +137,17 @@ impl TheCopyTheMachineOwes {
     /// **The place's own words begin with *the***, so this sentence does not
     /// add one. Until 2026-10-02 it read *"the uploaded the geometry nodes bake
     /// folder"* (Rule 9).
+    ///
+    /// **Shortened 2026-11-04** (`Design/Queue & History`): it read *the files
+    /// uploaded for the geometry nodes bake folder (/ephemeral/…)*. A user reads it
+    /// at once now, so it names the folder as their file names it, and never
+    /// Smoozy's own copy of it. A geometry-nodes bake is just *the bake folder*.
     pub fn in_words(&self) -> String {
-        format!(
-            "the files uploaded for {} ({})",
-            self.place.in_words(),
-            String::from_utf8_lossy(self.from.as_bytes())
-        )
+        let place = match self.place {
+            AnAddedWritePlace::TheGeometryNodesBakeFolder => "the bake folder",
+            other => other.in_words(),
+        };
+        format!("{place} {}", String::from_utf8_lossy(self.recorded.as_bytes()))
     }
 }
 
@@ -218,11 +223,22 @@ impl TheCopyOfABakeOnTheMachine {
 
     /// **The copy, in standard software words**, for the attempt's reason
     /// where it could not be made.
+    ///
+    /// **Shortened 2026-11-04, the same kind of sentence as the sent copy's**: the
+    /// folder as the file records it, or Smoozy's own path only where it records none.
     pub fn in_words(&self) -> String {
-        format!(
-            "the baked physics cache files at {}",
-            String::from_utf8_lossy(self.from.as_bytes())
-        )
+        match &self.recorded {
+            Some(recorded) => format!(
+                "{} {}",
+                AnAddedWritePlace::ThePointCache.in_words(),
+                String::from_utf8_lossy(recorded)
+            ),
+            None => format!(
+                "{} at {}",
+                AnAddedWritePlace::ThePointCache.in_words(),
+                String::from_utf8_lossy(self.from.as_bytes())
+            ),
+        }
     }
 }
 
@@ -437,11 +453,30 @@ mod tests {
             place: AnAddedWritePlace::TheGeometryNodesBakeFolder,
             recorded: RecordedLocation::as_the_reading_carried_it(b"//bakePath"),
         };
-        assert_eq!(
-            copy.in_words(),
-            "the files uploaded for the geometry nodes bake folder (/root/assets/files/a/bakePath)"
-        );
+        assert_eq!(copy.in_words(), "the bake folder //bakePath");
         assert!(!copy.in_words().contains("the the"));
+    }
+
+    /// **The folder as the file records it, and Smoozy's own path only where the
+    /// file records none** (`Design/Queue & History`, 2026-11-04).
+    #[test]
+    fn a_copys_words_name_the_folder_as_the_file_does() {
+        let sent = TheCopyTheMachineOwes {
+            from: MachineLocation::composed(b"/ephemeral/assets/x".to_vec()),
+            place: AnAddedWritePlace::TheBakeOutputPath,
+            recorded: RecordedLocation::as_the_reading_carried_it(b"//bake/"),
+        };
+        assert_eq!(sent.in_words(), "the bake output folder //bake/");
+        let recorded = TheCopyOfABakeOnTheMachine {
+            from: MachineLocation::composed(b"/ephemeral/x/cloth".to_vec()),
+            recorded: Some(b"//cloth/".to_vec()),
+        };
+        assert_eq!(recorded.in_words(), "the physics cache folder //cloth/");
+        let by_default = TheCopyOfABakeOnTheMachine {
+            from: MachineLocation::composed(b"/ephemeral/x/blendcache_t".to_vec()),
+            recorded: None,
+        };
+        assert_eq!(by_default.in_words(), "the physics cache folder at /ephemeral/x/blendcache_t");
     }
 
     /// **M22a: the four kinds the redirect assigns, and only those, are a write

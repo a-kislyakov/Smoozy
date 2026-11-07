@@ -1357,6 +1357,7 @@ pub async fn what_this_machine_needs<C: AHeldConnection>(
             the_drivers_version: None,
             the_optix_bar,
             anything_is_live: false,
+            the_driver_packages: readings::WhatTheDriverPackagesSay::NotRead,
         };
         acts::the_drivers_version_where_a_bar_applies(&mut channel, &bare, &driver).await
     };
@@ -1387,6 +1388,9 @@ pub async fn what_this_machine_needs<C: AHeldConnection>(
         // **`Server Setup` R1b's live set is read at the driver step itself**,
         // where the swap would be made, so no other run pays a reading for it.
         anything_is_live: false,
+        // **`Server Setup` R1 item 5's reading of the driver's packages is
+        // taken at the driver step itself**, for the same reason.
+        the_driver_packages: readings::WhatTheDriverPackagesSay::NotRead,
     }
 }
 
@@ -1727,8 +1731,16 @@ pub const HOW_LONG_THE_RUN_THAT_STOPPED_IS_WAITED_FOR: Duration = Duration::from
 /// the failed step's words (`Server Setup` S2a: *"the recorded fact of that
 /// read is the ending's content"*). The user reads it on the stopped-setup
 /// panel. Added 2026-09-26. Shortened 2026-10-28 (the loose ends after the
-/// words sweep).
-pub const THE_RECOVERY_WAS_NOT_CARRIED_ON: &str =
+/// words sweep). **Shortened again 2026-11-06, the check after the last fix**:
+/// the panel's own lead above it already says *Cannot resume mid-step.*, so
+/// these words say only what stopped. They are shown verbatim, past the
+/// typography point, so they hold no apostrophe.
+pub const THE_RECOVERY_WAS_NOT_CARRIED_ON: &str = "The previous setup stopped mid-step.";
+
+/// **The same record as written from 2026-10-28 to 2026-11-06.** A server may
+/// still hold it as a failed step's words, so it is matched as well. Never
+/// changed.
+pub const THE_RECOVERY_WAS_NOT_CARRIED_ON_UNTIL_2026_11_06: &str =
     "This run took over a setup that stopped mid-step. A step is not resumed mid-step, so the \
      setup was not continued.";
 
@@ -1739,9 +1751,11 @@ pub const THE_RECOVERY_WAS_NOT_CARRIED_ON_EARLIER: &str =
      restart a step part-way through, so it did not carry the setup on.";
 
 /// **Whether a failed step's words are Smoozy's record that a recovery was
-/// not carried on**, in either wording.
+/// not carried on**, in any of its three wordings.
 pub fn the_recovery_was_not_carried_on(words: &str) -> bool {
-    words == THE_RECOVERY_WAS_NOT_CARRIED_ON || words == THE_RECOVERY_WAS_NOT_CARRIED_ON_EARLIER
+    words == THE_RECOVERY_WAS_NOT_CARRIED_ON
+        || words == THE_RECOVERY_WAS_NOT_CARRIED_ON_UNTIL_2026_11_06
+        || words == THE_RECOVERY_WAS_NOT_CARRIED_ON_EARLIER
 }
 
 /// **Why one opening was refused**, told apart only where the machine said so
@@ -2975,10 +2989,24 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
             };
             acts::the_drivers_version_where_a_bar_applies(&mut channel, &self.needs, &check).await
         };
+        // **`Server Setup` R1 item 5, as written 2026-11-03: where the check
+        // failed and no restart is owed, what the package system holds is read**,
+        // so a removal that stopped part-way is finished rather than walked past.
+        let the_driver_packages = if matches!(check, readings::WhatTheDriverCheckSaid::ItAnswered)
+            || check.a_driver_is_already_installed(module)
+        {
+            readings::WhatTheDriverPackagesSay::NotRead
+        } else {
+            let mut channel = OnThisServersPoint {
+                sessions: self.sessions,
+            };
+            readings::read_the_driver_packages(&mut channel, self.needs.family).await
+        };
         let mut needs = ready_action::WhatTheMachineNeeds {
             the_driver_answers: matches!(check, readings::WhatTheDriverCheckSaid::ItAnswered),
             a_driver_is_already_installed: check.a_driver_is_already_installed(module),
             the_drivers_version,
+            the_driver_packages,
             ..self.needs.clone()
         };
         // **`Server Setup` R1b: where the swap would be made, the live set is
@@ -3001,6 +3029,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
             ready_action::what_the_driver_step_does(&needs),
             ready_action::WhatTheDriverStepDoes::TheDistributionsOwnDetectionRoute
                 | ready_action::WhatTheDriverStepDoes::TheSwapUpToTheBar
+                | ready_action::WhatTheDriverStepDoes::TheStoppedRemovalIsFinished
         );
         // **`Server Setup` E4's fourth bullet, before the state and before
         // anything goes out** — the family's route is elevated from its first
@@ -6530,6 +6559,10 @@ pub fn the_tellings_are_delivered_on<R: tauri::Runtime>(
             let mut sessions = sessions;
             loop {
                 let came_to = the_tellings_on_one_connection(&app, &server, &sessions);
+                // **`Server Setup` G2a: taken after the tellings**, which can
+                // move the role, so a connection and a move of the switch
+                // both read it here.
+                the_telegram_role_is_read(&app, &server);
                 // **And where the material would not compose**: a token the store
                 // no longer holds has forgotten the stored fact, which the section
                 // draws (the Creator's eleventh notes, note 2).
@@ -6548,6 +6581,55 @@ pub fn the_tellings_are_delivered_on<R: tauri::Runtime>(
     if started.is_err() {
         under_way.not_started(&the_server);
     }
+}
+
+/// **`Server Setup` G2a: whether the role is enabled, read off the machine and
+/// held for the page and Queue**, which take no reading themselves and so wait
+/// on nothing. **Off the drawing thread, and only while Telegram is on.** With
+/// no package area recorded, or no answer, it holds nothing and nothing is said.
+/// The page is told whatever came back, since a run's ending may be waiting on
+/// it; Queue only where it moved.
+pub fn the_telegram_role_is_read<R: tauri::Runtime>(app: &tauri::AppHandle<R>, server: &str) {
+    use tauri::Manager;
+    let Some(point) = app
+        .try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>()
+        .and_then(|periods| periods.the_sessions_of(server))
+        .filter(ThisServersSessions::a_connection_is_live)
+    else {
+        return;
+    };
+    let Some(started) = app.try_state::<std::sync::Mutex<crate::start::Started>>() else {
+        return;
+    };
+    let package_area = {
+        let Ok(started) = started.lock() else {
+            return;
+        };
+        let Some(record) = started.record.as_ref() else {
+            return;
+        };
+        if !crate::record::settings::the_telegram_settings(record.connection()).is_ok_and(|telegram| telegram.switched_on) {
+            return;
+        }
+        crate::record::server_rows::all(record.connection())
+            .ok()
+            .and_then(|rows| rows.into_iter().find(|row| row.local_server_identifier == server))
+            .as_ref()
+            .and_then(the_package_area_of)
+    };
+    let asked = crate::servers::published::a_reading_of_the_telegram_role_begins(server);
+    let (app, server) = (app.clone(), server.to_string());
+    let _ = std::thread::Builder::new().name("smoozy role reading".to_string()).spawn(move || {
+        let enabled = match (package_area, tokio::runtime::Builder::new_current_thread().enable_all().build()) {
+            (Some(area), Ok(runtime)) => runtime.block_on(the_telegram_roles_reading(&point, &area)),
+            _ => None,
+        };
+        let moved = crate::servers::published::a_reading_of_the_telegram_role_came_back(&server, asked, enabled);
+        crate::surface::render_settings::the_telegram_role_was_read(&app, &server);
+        if moved {
+            crate::surface::the_queue::the_queue_is_told_again(&app);
+        }
+    });
 }
 
 /// **The live Telegram pass, fault 11: what changed is told at once to every
@@ -6726,7 +6808,7 @@ fn the_telegram_section_is_posted_again<R: tauri::Runtime>(app: &tauri::AppHandl
 }
 
 /// **`Server Setup` G2's dedicated entry point, on one connected server** —
-/// *Install it* on the Set up card (`Design/Server Setup § Adding Telegram to a
+/// *Install* on the Set up card (`Design/Server Setup § Adding Telegram to a
 /// server already set up`; the 38's piece 11, hole 14).
 ///
 /// **A run of `Server Setup` Y6b's own kind, *the Telegram placement***, so it
@@ -6805,7 +6887,7 @@ pub fn the_telegram_placement_on<R: tauri::Runtime>(
 /// steps' composition holds no step that would read the cards, the driver or
 /// the unpack tool, so none of those readings is taken.
 ///
-/// **`Server Setup` G3 is not reached from here**: the card offers *Install it*
+/// **`Server Setup` G3 is not reached from here**: the card offers *Install*
 /// only on a connected server, and a server connects only where Smoozy's
 /// program answers under a confirmed installation — so a package is always
 /// there. A row with no confirmed installation answers that the server is not
@@ -6851,6 +6933,7 @@ pub async fn the_telegram_material_is_placed<C: AHeldConnection>(
         the_drivers_version: None,
         the_optix_bar: None,
         anything_is_live: false,
+        the_driver_packages: readings::WhatTheDriverPackagesSay::NotRead,
     };
     let mut run = match TheRunBeingDriven::opened(
         sessions,
@@ -6987,6 +7070,7 @@ pub async fn a_blender_is_removed<C: AHeldConnection>(
         the_drivers_version: None,
         the_optix_bar: None,
         anything_is_live: false,
+        the_driver_packages: readings::WhatTheDriverPackagesSay::NotRead,
     };
     // **`Server Setup` B15's second route is an elevated act**, so the login's
     // elevation is read as every elevated run reads it (`Server Setup` M3's
@@ -7718,7 +7802,7 @@ impl TheMaterialFromTheRecord<'_> {
     ///
     /// **Nothing is owed to a server that holds no material** under the
     /// installation it answers under now: one told nothing under it was never
-    /// given Telegram there, and *Install it* is its route (the map's hole 14).
+    /// given Telegram there, and *Install* is its route (the map's hole 14).
     /// **Off, only the switch is owed**; on, the files where any of what they
     /// carry is behind, and the switch where it is.
     pub fn what_this_server_is_owed(&mut self) -> WhatThisServerIsOwed {
@@ -8884,6 +8968,8 @@ fn the_text_so_far(bytes: &[u8]) -> std::borrow::Cow<'_, str> {
 /// never written anywhere.
 #[derive(Debug, Clone, Default)]
 pub struct TheRunsWords {
+    /// `Server Setup` Y7e: held apart from the server's streams.
+    failure_reason: Option<String>,
     /// **`Server Setup` Y7a's keeping, apart by stream and by step**, every
     /// byte as printed (M9).
     printed: elevated::WhatTheRunPrinted,
@@ -9157,6 +9243,17 @@ pub fn the_window_on(server: &str) -> Vec<(elevated::WhichStream, String)> {
 
 /// **The whole of what the run on `server` printed**, the ordinary stream and
 /// then the complaints, each whole.
+/// `Server Setup` Y7e: the run's own reason, cleared with a new user's run.
+pub fn the_setup_reason_is_kept(server: &str, reason: String) {
+    the_words_are_kept_on(the_words_kept(), server);
+    kept_in(the_words_kept(), server, |words| words.failure_reason = Some(reason));
+}
+
+pub fn the_setup_reason_on(server: &str) -> Option<String> {
+    the_words_kept().lock().ok()?.iter().find(|(one, _)| one == server)?
+        .1.failure_reason.clone()
+}
+
 pub fn the_whole_of_what_was_printed_on(server: &str) -> Option<(String, String)> {
     let kept = the_words_kept().lock().ok()?;
     let (_, words) = kept.iter().find(|(one, _)| one == server)?;
@@ -9440,6 +9537,37 @@ pub fn the_swap_run_on<R: tauri::Runtime>(
     // **`Server Setup` R1c's release**, as at the ready action's ending.
     crate::servers::the_driver_swap::the_holds_are_released_after_the_run(app, server, &came_to);
     came_to
+}
+
+/// **`Server Setup` R1b, as written 2026-11-03: whether the swap's run may begin
+/// on this machine at all**, read before the exclusion is taken. No setup may
+/// stand, because the machine refuses a fresh run then and carrying that setup on
+/// is the user's *Set up again*. And the driver must give its version, because
+/// the comparison reads the connection's first answer, which the Sesterce pass's
+/// swap had removed by the time the comparison read it.
+///
+/// **A health answer that could not be had says no setup stands**, as
+/// [`the_run_the_state_stands_for`] reads it, and the machine's own refusal is
+/// still there behind it.
+///
+/// **A stopped run this copy drove that left no state counts the same**
+/// (`Server Setup` S4 item 5): `drove` is those runs, newest first, and a swap's
+/// run opened over one would replace it (`Server Setup` §11's sweep).
+pub async fn a_swap_may_begin<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    package_area: &str,
+    drove: &[Identity],
+) -> bool {
+    if the_run_the_state_stands_for(sessions, package_area).await.is_some()
+        || the_run_that_stopped_and_left_no_state(sessions, package_area, drove).await.is_some()
+    {
+        return false;
+    }
+    let mut channel = OnThisServersPoint { sessions };
+    smoozy_servers::readings::ask_the_drivers_versions(&mut channel)
+        .await
+        .0
+        .is_some()
 }
 
 /// **`Server Setup` R1b's swap run, driven: the readings, item 5's swap, item
@@ -10131,6 +10259,23 @@ pub fn the_cards_reading_as_answered(answered: &Answered) -> Option<TheCardsRead
     })
 }
 
+/// **`Server Setup` G2a's reading: `Server Setup` Y6b's own, the role's half of it.**
+pub async fn the_telegram_roles_reading<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    package_area: &str,
+) -> Option<bool> {
+    the_cards_reading(sessions, package_area).await?.the_role_is_enabled
+}
+
+/// **`Server Setup` G2a: whether the dedicated entry point is running on that
+/// server or waiting its turn** — read from `Server Setup` Y9a's line, not kept.
+pub fn the_telegram_placement_is_asked_for_on(server: &str) -> bool {
+    the_kind_being_driven_on(server) == Some(SetupKind::TheTelegramPlacement)
+        || the_acts_still_waiting_on(server)
+            .iter()
+            .any(|act| matches!(act, ASetUpAct::TheTelegramPlacement))
+}
+
 /// **The card's reading, asked of the machine over the connection that
 /// stands.** `None` where it could not be asked or was not answered.
 pub async fn the_cards_reading<C: AHeldConnection>(
@@ -10726,6 +10871,15 @@ fn it_still_stands_under(under: Option<&str>, the_installation_now: Option<&str>
 /// **The installation the machine answers under now is handed in**, and a run
 /// from another installation is not returned
 /// (`State, identity and recovery` Y10).
+/// **[`the_runs_this_copy_drove_on`], under the installation the row confirms
+/// now**, for a caller holding the application rather than a run's asker.
+pub fn the_runs_this_copy_drove_on_the_confirmed_installation<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    server: &str,
+) -> Vec<Identity> {
+    the_runs_this_copy_drove_on(server, the_installation_confirmed_for(app, server).as_deref())
+}
+
 pub fn the_runs_this_copy_drove_on(
     server: &str,
     the_installation_now: Option<&str>,
@@ -11442,6 +11596,23 @@ pub fn the_users_build_line(
 pub(crate) mod tests {
     use super::*;
 
+    /// **A recovery that was not carried on is read in all three of its
+    /// wordings**, because a server keeps the words it was written with, and
+    /// a machine's words in any other shape are not it. Added 2026-11-06, the
+    /// check after the last fix.
+    #[test]
+    fn the_recovery_not_carried_on_is_read_in_every_wording() {
+        for words in [
+            THE_RECOVERY_WAS_NOT_CARRIED_ON,
+            THE_RECOVERY_WAS_NOT_CARRIED_ON_UNTIL_2026_11_06,
+            THE_RECOVERY_WAS_NOT_CARRIED_ON_EARLIER,
+        ] {
+            assert!(the_recovery_was_not_carried_on(words), "{words}");
+        }
+        assert!(!the_recovery_was_not_carried_on("The GPU driver did not respond after the restart."));
+        assert!(!THE_RECOVERY_WAS_NOT_CARRIED_ON.contains('\''), "shown verbatim, so no straight apostrophe");
+    }
+
     /// **Step 10c's owed piece 12: `Server Setup` §12's *a Blender was taken
     /// off*, in the diary's fixed form, for a removal that reached *done*** —
     /// naming the version and the route: the machine's own software manager
@@ -11741,7 +11912,7 @@ pub(crate) mod tests {
     /// owes it** — the 38's piece 11, hole 14 as the map leans.
     ///
     /// - **Told nothing, or told only under an earlier installation: nothing.**
-    ///   It was never given Telegram there, and *Install it* is its route.
+    ///   It was never given Telegram there, and *Install* is its route.
     /// - **Off: the switch alone**, never the files.
     /// - **On again after off, everything else current: the switch alone.**
     /// - **A renamed server: the files**, because the label rides the role

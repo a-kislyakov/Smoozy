@@ -49,8 +49,8 @@ pub enum Kind {
     /// The record kept with a packed file.
     PackedFileRecord,
     /// **G8: an import node's path, read off the node itself** — six kinds of
-    /// import node, the same six in every version, plus the sound route in
-    /// 5.2 alone. In 4.5 that path takes no part in the file's own path
+    /// import node in 4.5 to 5.2 and seven in 5.3, plus the sound route in 5.2
+    /// and 5.3. In 4.5 that path takes no part in the file's own path
     /// housekeeping, so the node walk is the only route to it.
     ImportNodePath,
 }

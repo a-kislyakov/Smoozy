@@ -369,9 +369,15 @@ mod the_copy_on_the_machine;
 #[cfg(unix)]
 mod the_folders_size;
 
+/// **The four values of many files**, which `Server protocol and transfers`
+/// §1.1's request *the four values of files on the machine* is — answered by the
+/// SSH command adapter itself, as the two above are. Built 2026-11-04.
+#[cfg(unix)]
+mod the_four_values_of_files;
+
 /// **The preview worker**, which is `Job files and outputs`' kind run by this
 /// program — one derivative of one frame (`Job files and outputs` B22 to
-/// `Job files and outputs` B29); see the file's own front matter. Gated as the four above are. Added
+/// `Job files and outputs` B29); see the file's own front matter. Gated as the ones above are. Added
 /// 2026-10-03, the 38's piece 3.
 #[cfg(unix)]
 mod the_preview_worker;
@@ -733,6 +739,15 @@ mod unix {
         // `Server protocol and transfers` §1.1, 2026-10-30.
         if request.name == asked::THE_FOLDERS_SIZE_IS_COUNTED_REQUEST {
             let answered = crate::the_folders_size::answered(&request, THE_PACKAGE_VERSION);
+            let mut out = std::io::stdout();
+            write_one_frame(&mut out, &write_result_frame(&answered))
+                .map_err(|why| format!("smoozy-server: {}", why.as_text()))?;
+            return out.flush().map_err(|why| format!("smoozy-server: {why}"));
+        }
+        // **The four values of many files are read here too, and never passed
+        // on** — `Server protocol and transfers` §1.1, built 2026-11-04.
+        if request.name == asked::THE_FOUR_VALUES_OF_FILES_REQUEST {
+            let answered = crate::the_four_values_of_files::answered(&request, THE_PACKAGE_VERSION);
             let mut out = std::io::stdout();
             write_one_frame(&mut out, &write_result_frame(&answered))
                 .map_err(|why| format!("smoozy-server: {}", why.as_text()))?;
@@ -2623,6 +2638,7 @@ mod unix {
                                 the_attempt_whose_capture_record_holds_the_words: written
                                     .attempt_count,
                                 the_reason_the_machine_recorded: None,
+                                no_render_began: false,
                                 the_device_line_as_observed: None,
                             },
                             figure,
@@ -3458,6 +3474,7 @@ mod unix {
                 marker_passed: None,
                 something_followed_the_marker: None,
                 device_line: None,
+                no_render_began: true,
             };
             match self.a_render_attempt_ended(
                 operation,
@@ -3644,6 +3661,7 @@ mod unix {
                     } else {
                         ending.reason.clone()
                     },
+                    no_render_began: ending.no_render_began,
                     the_device_line_as_observed: ending.device_line.clone(),
                 },
                 figure,
@@ -7484,13 +7502,25 @@ mod unix {
                     .to_string(),
             ));
         }
+        // `Render Settings` Q4: keep the saved library pairs with this operation.
+        let pairs = if which == WhichReading::TheFilesReading {
+            request.fields.value(asked::THE_READINGS_LIBRARY_PAIRS_FIELD).map(<[u8]>::to_vec)
+        } else { None };
+        if let Some(bytes) = &pairs {
+            if serde_json::from_slice::<Vec<smoozy_dependencies_machine::remap::Pair>>(bytes)
+                .map_or(true, |pairs| pairs.iter().any(|pair|
+                    pair.kind != smoozy_dependencies_machine::check::Kind::Library)) {
+                return empty.carrying(a_file_inspection_refused(
+                    "the reading's library pairs did not read back".into()));
+            }
+        }
         let parts = TheOperationsParts {
             which,
             build: build.to_vec(),
             blend: blend.to_vec(),
             version,
             staging: None,
-            pairs: None,
+            pairs,
             range: None,
         };
         empty.carrying(a_file_inspection_is_started(
@@ -11279,10 +11309,7 @@ mod unix {
             smoozy_job_files_machine::layout::WhereThePackageAreaSits::UnderTheRoot,
         );
         let blender_area = layout.area(smoozy_job_files_machine::layout::Area::Blender);
-        let staging = format!(
-            "{blender_area}/{}setup",
-            smoozy_job_files_machine::publication::THE_STAGING_PREFIX
-        );
+        let staging = smoozy_job_files_machine::publication::the_setup_runs_staging_folder(&blender_area);
         std::fs::create_dir_all(&staging).map_err(|why| format!("{staging}: {why}"))?;
         Ok((staging, blender_area))
     }
@@ -11632,6 +11659,13 @@ mod unix {
                 )))
             }
         }
+        // **`Server Setup` §11's cleanup, once the run is admitted**, so a refused
+        // opening sweeps nothing. Added 2026-11-03.
+        the_earlier_runs_staging_is_swept(
+            start,
+            &open,
+            taken_over.is_none() && open.kind == SetupKind::TheReadyAction,
+        );
         start.the_setup_run_this_supervisor_opened = Some(open);
         // **`Server Setup` Y7a item 2: the next setup run opens, so the last
         // run's step words go.** Added 2026-10-24.
@@ -13636,26 +13670,116 @@ mod unix {
     /// nothing about the run: the ending is already written, and material the
     /// sweep could not remove is litter on the machine, not a failed setup.
     fn sweep_the_completed_runs_staging(open: &TheOpenSetupRun) {
+        sweep_what_the_record_names(open);
+        // **`Server Setup` §11's cleanup, as written 2026-11-03: the folder goes
+        // with its material where that leaves it empty.** `remove_dir` removes
+        // nothing that holds anything, so a stopped run's material stays, and
+        // every run makes the folder again as it opens
+        // ([`where_a_setup_run_works`]). A refusal is not worth a word.
+        let _ = std::fs::remove_dir(&open.staging);
+    }
+
+    /// **The paths one run's record names**, under the name of the run that
+    /// staged them, and nothing else (`Rented-server runtime` G20's bound).
+    fn sweep_what_the_record_names(open: &TheOpenSetupRun) {
+        the_paths_a_record_names_are_swept(
+            std::path::Path::new(&open.staging),
+            &open.run.as_text(),
+            open.staged_under.as_deref(),
+            open.your_build.the_archive.as_deref(),
+            open.the_blender_version.as_deref(),
+        );
+    }
+
+    /// **`Server Setup` §11's cleanup, the half at a run's start, written
+    /// 2026-11-03: what no resume can reach is swept, each earlier run's paths by
+    /// its own record.**
+    ///
+    /// - **An abandoned run's**, at any run's start.
+    /// - **Every earlier run's, at a fresh ready action's**: it replaces the last
+    ///   one (`Server Setup` Y6b), and the desktop's press takes a stopped run
+    ///   this copy knows over before it opens a fresh one (`Server Setup` S4
+    ///   item 5), so nothing it finds can be carried on.
+    /// - **Never the material of the run opening**, named through its chain.
+    ///
+    /// **A stopped run is otherwise kept**, because its record says a resume is
+    /// possible. A record that cannot be read is left alone.
+    fn the_earlier_runs_staging_is_swept(
+        start: &TheSupervisorsStart,
+        opening: &TheOpenSetupRun,
+        it_is_a_fresh_ready_action: bool,
+    ) {
+        let records = match start
+            .records
+            .every_operation_record_of_the_kind(the_word_for(WorkerKind::Setup))
+        {
+            Ok(records) => records,
+            Err(why) => {
+                eprintln!(
+                    "smoozy-server: setup run {} could not read the earlier runs to sweep: {}",
+                    opening.run.as_text(),
+                    what_the_store_said(&why)
+                );
+                return;
+            }
+        };
+        let its_own = opening
+            .staged_under
+            .clone()
+            .unwrap_or_else(|| opening.run.as_text());
+        for record in records {
+            if record.operation == opening.run {
+                continue;
+            }
+            let Some(field) = record
+                .the_kinds_safe_boundary_marker
+                .as_deref()
+                .and_then(TheSetupKindsOwnField::read_back)
+            else {
+                continue;
+            };
+            let run = record.operation.as_text();
+            if field.staged_under.as_deref().unwrap_or(&run) == its_own {
+                continue;
+            }
+            if it_is_a_fresh_ready_action || field.ending.as_deref() == Some(asked::IT_WAS_ABANDONED) {
+                the_paths_a_record_names_are_swept(
+                    std::path::Path::new(&opening.staging),
+                    &run,
+                    field.staged_under.as_deref(),
+                    field.the_users_own_archive.as_deref(),
+                    field.the_blender_version.as_deref(),
+                );
+            }
+        }
+    }
+
+    /// **The sweep itself, from a record's four values.** Its words go on the
+    /// supervisor's own stream and change nothing: material that could not be
+    /// removed is litter on the machine, not a failed setup.
+    fn the_paths_a_record_names_are_swept(
+        area: &std::path::Path,
+        run: &str,
+        staged_under: Option<&str>,
+        the_users_archive: Option<&str>,
+        the_blender_version: Option<&str>,
+    ) {
         use smoozy_server_setup_machine::acting::worker::{
             the_completed_runs_staging_is_swept, WhatTheSweepDid,
         };
+        let under = staged_under.unwrap_or(run);
         // **`Server Setup` B7: a run that installed the user's own archive**
         // sweeps that archive and the folder it unpacked into, and nothing
         // else — it fetched nothing. Added 2026-10-08, the 38's piece 14a.
-        if let Some(name) = &open.your_build.the_archive {
-            let under = open
-                .staged_under
-                .clone()
-                .unwrap_or_else(|| open.run.as_text());
-            let area = std::path::Path::new(&open.staging);
+        if let Some(name) = the_users_archive {
             let mut paths = vec![
                 smoozy_server_setup_machine::acting::worker::where_the_archive_is_unpacked(
-                    area, &under,
+                    area, under,
                 ),
             ];
             if let Ok(archive) =
                 smoozy_server_setup_machine::acting::worker::where_the_users_archive_is_staged(
-                    area, &under, name,
+                    area, under, name,
                 )
             {
                 paths.push(archive);
@@ -13670,9 +13794,7 @@ mod unix {
                 };
                 if let Err(why) = gone {
                     eprintln!(
-                        "smoozy-server: setup run {} completed, and its staged {} could not be \
-                         removed: {why}",
-                        open.run.as_text(),
+                        "smoozy-server: setup run {run}'s staged {} could not be removed: {why}",
                         at.display()
                     );
                 }
@@ -13682,34 +13804,21 @@ mod unix {
         // **A run with no version fetched nothing** — the machine already held
         // the Blender, or no Blender was asked for — so there is nothing the
         // record names.
-        let Some(version) = open
-            .the_blender_version
-            .as_deref()
+        let Some(version) = the_blender_version
             .and_then(smoozy_server_setup_machine::blender::TheVersionAsked::read)
             .map(|asked| asked.version)
         else {
             return;
         };
-        let under = open
-            .staged_under
-            .clone()
-            .unwrap_or_else(|| open.run.as_text());
-        for did in the_completed_runs_staging_is_swept(
-            std::path::Path::new(&open.staging),
-            &under,
-            version,
-        ) {
+        for did in the_completed_runs_staging_is_swept(area, under, version) {
             match did {
                 WhatTheSweepDid::Removed(at) => eprintln!(
-                    "smoozy-server: setup run {} completed, and its staged {} was removed",
-                    open.run.as_text(),
+                    "smoozy-server: setup run {run}'s staged {} was removed",
                     at.display()
                 ),
                 WhatTheSweepDid::NothingWasThere(_) => {}
                 WhatTheSweepDid::NotRemoved { at, why } => eprintln!(
-                    "smoozy-server: setup run {} completed, and its staged {} could not be \
-                     removed: {why}",
-                    open.run.as_text(),
+                    "smoozy-server: setup run {run}'s staged {} could not be removed: {why}",
                     at.display()
                 ),
             }
@@ -15762,7 +15871,7 @@ mod unix {
     /// which rides the pre-package surface rather than the supervisor's
     /// endpoint. It is here so that a reader checking this list for
     /// completeness meets it rather than filing it as a gap for a third time.
-    pub const EVERY_REQUEST_THIS_MODULE_KNOWS_ABOUT: [ARequestThisModuleKnowsAbout; 60] = [
+    pub const EVERY_REQUEST_THIS_MODULE_KNOWS_ABOUT: [ARequestThisModuleKnowsAbout; 61] = [
         ARequestThisModuleKnowsAbout {
             what: "G12's health answer, with V9's setup-in-progress state riding beside it",
             stands: WhereARequestStands::AnsweredHere("THE_HEALTH_ANSWER_REQUEST"),
@@ -16001,6 +16110,12 @@ mod unix {
             what: "`Server protocol and transfers` §1.1's copy on the machine — `THE_FILE_IS_COPIED_ON_THE_MACHINE_REQUEST`",
             stands: WhereARequestStands::NotTheSupervisorsEndpoint(
                 "the SSH command adapter answers it in its own invocation and never passes it on, which is that document's paragraph of 2026-10-02 and `Rented-server runtime`'s after W2, so its absence from the dispatch is correct rather than a gap; a supervisor asked it by an older adapter refuses it by name",
+            ),
+        },
+        ARequestThisModuleKnowsAbout {
+            what: "`Server protocol and transfers` §1.1's four values of files on the machine — `THE_FOUR_VALUES_OF_FILES_REQUEST`",
+            stands: WhereARequestStands::NotTheSupervisorsEndpoint(
+                "the SSH command adapter answers it in its own invocation and never passes it on, as it does the copy on the machine, which is that document's paragraph of 2026-10-03, so its absence from the dispatch is correct rather than a gap; a supervisor asked it by an older adapter refuses it by name",
             ),
         },
         ARequestThisModuleKnowsAbout {
@@ -19335,7 +19450,7 @@ mod unix {
                     crate::the_render_worker::TheEndingAsRecorded {
                         ending: ending.to_string(),
                         cause: cause.map(str::to_string),
-                        reason: failed.then(|| "Blender ended with status 1".to_string()),
+                        reason: failed.then(|| "Blender exited with code 1".to_string()),
                         exit_status: Some(if failed { 1 } else { 0 }),
                         ordinary: Some(CollectionOutcome::Collected.in_words().to_string()),
                         complaints: Some(
@@ -19352,6 +19467,7 @@ mod unix {
                         marker_passed: Some(true),
                         something_followed_the_marker: Some(true),
                         device_line: None,
+                        no_render_began: false,
                     },
                     None,
                     Some(two_there_and_one_not()),
@@ -19377,6 +19493,7 @@ mod unix {
                     exit_status: None,
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 },
                 WhatTheFigureIs::NoFrameCountsAsAlreadyThere,
@@ -19475,11 +19592,11 @@ mod unix {
             // started here, and a length is never made up.
             assert_eq!(
                 said_once(&said, "Server A\nKitchen\nFinished."),
-                "Server A\nKitchen\nFinished. 2 frames."
+                "Server A\nKitchen\nFinished. 2 of 3 files written."
             );
             let machines = said_once(&said, "Server A\nHall\n🔴 Failed");
             assert!(
-                machines.contains("Blender ended with status 1."),
+                machines.contains("Blender exited with code 1."),
                 "{machines}"
             );
             assert!(machines.contains("2 frames on the server."), "{machines}");
@@ -19694,6 +19811,7 @@ mod unix {
                             marker_passed: Some(true),
                             something_followed_the_marker: Some(true),
                             device_line: None,
+                            no_render_began: false,
                         },
                         None,
                         Some(TheStatementAtTheEnding::It(statement)),
@@ -19705,6 +19823,100 @@ mod unix {
             assert_eq!(
                 said_once(&sim.said_to_the_user(), "Server A\nSuzanne\nFinished."),
                 "Server A\nSuzanne\nFinished. 1 frame."
+            );
+        }
+
+        /// **`Telegram` E1a, with the journal reading the real note: the case
+        /// the 5.3 integration's piece 1 made, a node's file missing and the rest
+        /// written.** The outcome stays *finished*, and the message says the
+        /// count. The statement is what the walk of that job's folder found.
+        #[test]
+        fn a_job_with_a_nodes_file_missing_finishes_saying_how_many_files() {
+            use smoozy_job_files_machine::reckoning::{
+                the_completeness_statement, AWalkEntry, WhatKindOfEntry,
+            };
+            const WHAT_THE_READING_PRINTED: &str = include_str!(
+                "../../Job files and outputs — machine/tests/the_curly_brace_stand_in_as_blender_5_3_printed_it.json"
+            );
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            on.on_the_machine(|machine| {
+                let (job, operation) = a_render_running(machine, "Suzanne", vec![1], None);
+                let directory = machine.start.queue.one_record(&job).expect("held").record_directory;
+                let at = format!("{directory}/{}", smoozy_job_files_machine::manifest::MANIFEST_FILE_NAME);
+                let mut manifest = smoozy_job_files_machine::manifest::SubmissionManifest::read_back(
+                    &std::fs::read(&at).expect("the manifest"),
+                )
+                .expect("it reads back");
+                let folder = manifest.job_output_folder.the_path_it_names().expect("named at submission").to_string();
+                let mut stream = smoozy_job_files_machine::reading::THE_OPENING_SENTINEL.to_vec();
+                stream.extend_from_slice(WHAT_THE_READING_PRINTED.as_bytes());
+                stream.extend_from_slice(smoozy_job_files_machine::reading::THE_CLOSING_SENTINEL);
+                let composed = smoozy_job_files_machine::composing::the_reading_and_everything_derived_from(
+                    smoozy_job_files_machine::reading_script::the_printed_reading_in(&stream).expect("it reads"),
+                    smoozy_job_files_machine::composing::WhatTheReadingIsComposedAgainst {
+                        the_folder_the_blend_sits_in: b"/home/ubuntu/rendering",
+                        job_output_folder: &folder,
+                        enters_at: &smoozy_job_files_machine::main_output::WhereTheRenderEnters {
+                            scene: smoozy_job_files_machine::reading::ArtistsText::of(b"Scene".to_vec()),
+                            view_layer: smoozy_job_files_machine::reading::ArtistsText::of(b"a".to_vec()),
+                        },
+                        the_jobs_pins: &[],
+                    },
+                )
+                .expect("a reading");
+                let smoozy_job_files_machine::inventory::WhatTheInventoryIs::It(inventory) = &composed.inventory else {
+                    panic!("the inventory is composed: {:?}", composed.inventory);
+                };
+                // **The regular output and one node's file; the other node's is missing.**
+                let walk: Vec<AWalkEntry> = [("_preview/standin - aImage0001.png", 13452), ("_preview0001.png", 10940)]
+                    .into_iter()
+                    .map(|(name, size)| AWalkEntry {
+                        path_under_the_job_output_folder: name.as_bytes().to_vec(),
+                        kind: WhatKindOfEntry::AFile,
+                        size,
+                    })
+                    .collect();
+                let statement = the_completeness_statement(inventory, &walk, &folder);
+                assert!(statement.the_count_came_up_short());
+                manifest.recorded_reading = smoozy_job_files_machine::manifest::TheRecordedReading::ItWasReadBeforeSubmitting(
+                    Box::new(composed.as_the_manifest_carries_it()),
+                );
+                std::fs::write(&at, manifest.as_written()).expect("the manifest carries the reading");
+                machine
+                    .start
+                    .a_render_attempt_ended(
+                        &operation,
+                        crate::the_render_worker::TheEndingAsRecorded {
+                            ending: asked::IT_FINISHED.to_string(),
+                            cause: None,
+                            reason: None,
+                            exit_status: Some(0),
+                            ordinary: None,
+                            complaints: None,
+                            ordinary_retained: None,
+                            ordinary_discarded: None,
+                            ordinary_first_loss: None,
+                            complaints_retained: None,
+                            complaints_discarded: None,
+                            complaints_first_loss: None,
+                            marker_passed: Some(true),
+                            something_followed_the_marker: Some(true),
+                            device_line: None,
+                            no_render_began: false,
+                        },
+                        None,
+                        Some(TheStatementAtTheEnding::It(statement)),
+                        WhatTheFigureIs::NoFrameCountsAsAlreadyThere,
+                    )
+                    .expect("the ending is written");
+            });
+            rounds(6, &mut worker, &clock);
+            assert_eq!(
+                said_once(&sim.said_to_the_user(), "Server A\nSuzanne\nFinished."),
+                "Server A\nSuzanne\nFinished. 2 of 3 files written."
             );
         }
 
@@ -19766,7 +19978,7 @@ mod unix {
             );
             assert_eq!(
                 said[1],
-                "Server A\nkitchen.blend\nFinished. 1 of 2 scenes, 2 frames."
+                "Server A\nkitchen.blend\nFinished. 1 of 2 scenes, 2 frames, 2 of 3 files written."
             );
         }
 
@@ -19806,7 +20018,7 @@ mod unix {
                 "the group's message was not sent once: {said:#?}"
             );
             assert_eq!(
-                the_groups[0], "Server A\nkitchen.blend\nFinished. 2 scenes, 4 frames.",
+                the_groups[0], "Server A\nkitchen.blend\nFinished. 2 scenes, 4 frames, 4 of 6 files written.",
                 "{said:#?}"
             );
         }
@@ -21099,7 +21311,7 @@ mod unix {
             rounds(4, &mut worker, &clock);
             assert_eq!(
                 sim.said_to_the_user(),
-                ["Server A\nKitchen\nNot rendered. Blender 4.2.3 was removed from this server."],
+                ["Server A\nKitchen\nNot rendered: Blender 4.2.3 was removed from this server."],
                 "the drop is told, and a cancel is the user's own act"
             );
         }
@@ -21615,7 +21827,7 @@ mod unix {
                     crate::the_render_worker::TheEndingAsRecorded {
                         ending: ending.to_string(),
                         cause: Some(crate::the_render_worker::THE_MACHINES_OWN.to_string()),
-                        reason: Some("Blender ended with status 1".to_string()),
+                        reason: Some("Blender exited with code 1".to_string()),
                         exit_status: Some(1),
                         ordinary: None,
                         complaints: None,
@@ -21628,6 +21840,7 @@ mod unix {
                         marker_passed: Some(true),
                         something_followed_the_marker: Some(true),
                         device_line: None,
+                        no_render_began: false,
                     },
                     None,
                     Some(statement),
@@ -21652,6 +21865,7 @@ mod unix {
                     exit_status: None,
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
+                    no_render_began: false,
                     the_device_line_as_observed: None,
                 },
                 WhatTheFigureIs::NoFrameCountsAsAlreadyThere,
@@ -22294,6 +22508,7 @@ mod unix {
                         attempt: 1,
                         readings: smoozy_state::observed::Reading::taken(
                             LiveReadings {
+                                simulation: None,
                                 frame_in_hand: Some(148),
                                 view_layer: None,
                                 samples: None,
@@ -25414,6 +25629,7 @@ mod unix {
                             exit_status: None,
                             the_attempt_whose_capture_record_holds_the_words: 1,
                             the_reason_the_machine_recorded: None,
+                            no_render_began: false,
                             the_device_line_as_observed: None,
                         },
                         WhatTheFigureIs::ThisIsAVideoJob,
@@ -25768,6 +25984,7 @@ mod unix {
                         exit_status: None,
                         the_attempt_whose_capture_record_holds_the_words: 1,
                         the_reason_the_machine_recorded: None,
+                        no_render_began: false,
                         the_device_line_as_observed: None,
                     },
                     WhatTheFigureIs::ThisIsAVideoJob,
@@ -26050,7 +26267,7 @@ mod unix {
             let said = sim.said_to_the_user();
             assert_eq!(
                 said_once(&said, "Server A\nKitchen · Frame 1\nPreview not sent"),
-                "Server A\nKitchen · Frame 1\nPreview not sent: Telegram does not accept its dimensions."
+                "Server A\nKitchen · Frame 1\nPreview not sent: over Telegram's limits."
             );
             assert_eq!(said.len(), 1, "once for the job: {said:#?}");
         }
@@ -28550,6 +28767,7 @@ mod unix {
                         started,
                         ended: started + Duration::from_secs(120),
                         group: None,
+                        files: None,
                     },
                 )
                 .expect("a job in no group has its own message")
@@ -28712,6 +28930,7 @@ mod unix {
                         exit_status: Some(0),
                         the_attempt_whose_capture_record_holds_the_words: 1,
                         the_reason_the_machine_recorded: None,
+                        no_render_began: false,
                         the_device_line_as_observed: line.map(str::to_string),
                     },
                     Reading::taken(
@@ -31654,6 +31873,218 @@ mod unix {
             std::fs::remove_dir_all(&area).ok();
         }
 
+        /// **The opening itself sweeps**, through the request a desktop sends: an
+        /// abandoned run's material under the real staging folder is gone once a
+        /// fresh Blender install is admitted.
+        #[test]
+        fn a_setup_runs_opening_sweeps_an_abandoned_runs_material() {
+            use smoozy_server_setup_machine::acting::{fetching, worker};
+            let mut machine = a_machine_a_placement_wrote();
+            std::os::unix::fs::symlink("/usr/bin/true", &machine.start.commit_rests_on.pointer)
+                .expect("a worker stand-in that ends at once");
+            let root = std::env::current_exe()
+                .expect("the test program")
+                .parent()
+                .expect("its folder")
+                .join(format!(
+                    "smoozy-open-sweeps-{}",
+                    Identity::issue(IdentityKind::Operation).expect("randomness").as_text()
+                ));
+            std::fs::create_dir_all(&root).expect("the root");
+            std::fs::write(&machine.start.the_roots_record, root.display().to_string())
+                .expect("the root recorded");
+            let abandoned = a_setup_record_of(
+                &mut machine,
+                SetupKind::TheReadyAction,
+                &[(Boundary::Started, 1)],
+                Some(asked::IT_WAS_ABANDONED),
+            );
+            let Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record)) =
+                machine.start.records.what_is_held_under(&abandoned)
+            else {
+                panic!("the record was just written");
+            };
+            let mut field = record
+                .the_kinds_safe_boundary_marker
+                .as_deref()
+                .and_then(TheSetupKindsOwnField::read_back)
+                .expect("its field");
+            field.the_blender_version = Some("5.2.3".to_string());
+            machine.start.write_the_setup_field(&abandoned, &field).expect("the field is written");
+            let staging = root.join("blender/staging-setup");
+            let version = smoozy_server_setup_machine::blender::TheVersionAsked::read("5.2.3")
+                .expect("a version")
+                .version;
+            let unpacked = worker::where_the_archive_is_unpacked(&staging, &abandoned.as_text());
+            let archive = fetching::where_the_archive_is_staged(&staging, &abandoned.as_text(), version);
+            std::fs::create_dir_all(&unpacked).expect("the unpacked folder");
+            std::fs::write(&archive, b"archive").expect("the archive");
+            let opened = answer(
+                &asking(
+                    asked::THE_SETUP_RUN_IS_OPENED_REQUEST,
+                    Fields::none()
+                        .and(
+                            asked::THE_KIND_OF_SETUP_FIELD,
+                            the_word_for_setup_kind(SetupKind::ABlenderInstall),
+                        )
+                        .and(asked::HOW_MANY_COMPOSED_BOUNDARIES_FIELD, "0"),
+                ),
+                &mut machine.start,
+            );
+            assert_eq!(
+                opened.fields.text(asked::WHAT_BECAME_OF_IT_FIELD),
+                Some(asked::IT_IS_STILL_IN_HAND),
+                "{:?}",
+                opened.fields
+            );
+            assert!(!unpacked.exists() && !archive.exists(), "the abandoned run's material stayed");
+            assert!(staging.is_dir(), "the opening run's own folder went");
+            machine.start.the_setup_run_this_supervisor_opened = None;
+            std::fs::remove_dir_all(&root).ok();
+        }
+
+        /// **`Server Setup` §11's cleanup at a run's start, written 2026-11-03**:
+        /// an abandoned run's material goes at any run's start, a stopped run's
+        /// stays beside an additive run or its own recovery, and a fresh ready
+        /// action sweeps it.
+        #[test]
+        fn a_runs_start_sweeps_what_no_resume_can_reach() {
+            use smoozy_server_setup_machine::acting::{fetching, worker};
+            let mut machine = a_machine_a_placement_wrote();
+            let area = std::env::temp_dir().join(format!("smoozy-sweep-start-{}", std::process::id()));
+            std::fs::remove_dir_all(&area).ok();
+            let staging = area.join("staging");
+            let version = smoozy_server_setup_machine::blender::TheVersionAsked::read("5.2.3")
+                .expect("a version")
+                .version;
+            let staged = |under: &str| {
+                std::fs::create_dir_all(worker::where_the_archive_is_unpacked(&staging, under))
+                    .expect("the unpacked folder");
+                std::fs::write(fetching::where_the_archive_is_staged(&staging, under, version), b"archive")
+                    .expect("the archive");
+            };
+            let it_stands = |under: &str| {
+                worker::where_the_archive_is_unpacked(&staging, under).exists()
+                    && fetching::where_the_archive_is_staged(&staging, under, version).exists()
+            };
+            let mut a_run_that_staged = |ending: &str| {
+                let run = a_setup_record_of(
+                    &mut machine,
+                    SetupKind::TheReadyAction,
+                    &[(Boundary::Started, 1)],
+                    Some(ending),
+                );
+                let Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record)) =
+                    machine.start.records.what_is_held_under(&run)
+                else {
+                    panic!("the record was just written");
+                };
+                let mut field = record
+                    .the_kinds_safe_boundary_marker
+                    .as_deref()
+                    .and_then(TheSetupKindsOwnField::read_back)
+                    .expect("its field");
+                field.the_blender_version = Some("5.2.3".to_string());
+                machine.start.write_the_setup_field(&run, &field).expect("the field is written");
+                run
+            };
+            let abandoned = a_run_that_staged(asked::IT_WAS_ABANDONED).as_text();
+            let stopped = a_run_that_staged("a step failed").as_text();
+            let opening = |kind: SetupKind, staged_under: Option<&str>| TheOpenSetupRun {
+                run: Identity::issue(IdentityKind::Operation).expect("randomness"),
+                kind,
+                composed: Vec::new(),
+                reached: Vec::new(),
+                staging: staging.display().to_string(),
+                blender_area: area.join("blender").display().to_string(),
+                pending: None,
+                staged_build: None,
+                published_build: None,
+                your_build: Default::default(),
+                the_blender_version: None,
+                staged_under: staged_under.map(str::to_string),
+                the_libraries_not_found: Vec::new(),
+                the_stop_was_asked_for: false,
+                abandons: false,
+                the_elevated_step_started: None,
+                last_refresh: std::time::Instant::now(),
+            };
+
+            // **A Blender install opening beside them.**
+            staged(&abandoned);
+            staged(&stopped);
+            the_earlier_runs_staging_is_swept(&machine.start, &opening(SetupKind::ABlenderInstall, None), false);
+            assert!(!it_stands(&abandoned), "an abandoned run's material stayed");
+            assert!(it_stands(&stopped), "a stopped run's material went while a resume is possible");
+
+            // **Its own recovery keeps what it is about to read.**
+            staged(&abandoned);
+            the_earlier_runs_staging_is_swept(&machine.start, &opening(SetupKind::TheReadyAction, Some(&stopped)), false);
+            assert!(!it_stands(&abandoned));
+            assert!(it_stands(&stopped), "a recovery swept its own material");
+
+            // **A fresh ready action replaces the stopped run.** Even so it
+            // touches nothing the records do not name.
+            let another = staging.join("nobodys-file");
+            std::fs::write(&another, b"not a run's").expect("the file");
+            the_earlier_runs_staging_is_swept(&machine.start, &opening(SetupKind::TheReadyAction, None), true);
+            assert!(!it_stands(&stopped), "the replaced run's material stayed");
+            assert!(another.exists(), "a path no record names was removed");
+            std::fs::remove_dir_all(&area).ok();
+        }
+
+        /// **`Server Setup` §11's cleanup, as written 2026-11-03: a recovery that
+        /// finishes sweeps what the first run staged, under the first run's name,
+        /// and the folder goes where that leaves it empty.** The Sesterce pass's
+        /// only listing of the folder holding them was taken while the first run
+        /// stood failed. **A stopped run's material keeps the folder.**
+        #[test]
+        fn a_finished_recovery_sweeps_the_first_runs_material_and_the_empty_folder() {
+            use smoozy_server_setup_machine::acting::{fetching, worker};
+            let area = std::env::temp_dir().join(format!("smoozy-sweep-chain-{}", std::process::id()));
+            std::fs::remove_dir_all(&area).ok();
+            let staging = area.join("staging");
+            let version = smoozy_server_setup_machine::blender::TheVersionAsked::read("5.2.3")
+                .expect("a version")
+                .version;
+            let staged_by_the_first_run = || {
+                std::fs::create_dir_all(worker::where_the_archive_is_unpacked(&staging, "the-first-run"))
+                    .expect("the unpacked folder");
+                std::fs::write(fetching::where_the_archive_is_staged(&staging, "the-first-run", version), b"archive")
+                    .expect("the archive");
+            };
+            let open = TheOpenSetupRun {
+                run: Identity::issue(IdentityKind::Operation).expect("randomness"),
+                kind: SetupKind::TheReadyAction,
+                composed: Vec::new(),
+                reached: Vec::new(),
+                staging: staging.display().to_string(),
+                blender_area: area.join("blender").display().to_string(),
+                pending: None,
+                staged_build: None,
+                published_build: None,
+                your_build: Default::default(),
+                the_blender_version: Some("5.2.3".to_string()),
+                staged_under: Some("the-first-run".to_string()),
+                the_libraries_not_found: Vec::new(),
+                the_stop_was_asked_for: false,
+                abandons: false,
+                the_elevated_step_started: None,
+                last_refresh: std::time::Instant::now(),
+            };
+            staged_by_the_first_run();
+            sweep_the_completed_runs_staging(&open);
+            assert!(!staging.exists(), "the staging folder stood after a finished setup");
+
+            staged_by_the_first_run();
+            let another = staging.join("another-run-unpacked");
+            std::fs::create_dir_all(&another).expect("another run's material");
+            sweep_the_completed_runs_staging(&open);
+            assert!(another.is_dir(), "another run's material went");
+            assert!(!worker::where_the_archive_is_unpacked(&staging, "the-first-run").exists());
+            std::fs::remove_dir_all(&area).ok();
+        }
+
         /// **`Server Setup` S4 item 2 and `Server Setup` B8a: a recovery of a
         /// user's-build install cut after its publication finds the build by
         /// the install record**, so the final check has a build to read — its
@@ -32515,6 +32946,7 @@ mod unix {
                 marker_passed: Some(true),
                 something_followed_the_marker: Some(true),
                 device_line: None,
+                no_render_began: false,
             });
             let unwritten = a_capture(3);
             let WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(mut held) = machine
@@ -36373,6 +36805,7 @@ mod unix {
                             reading: smoozy_job_files_machine::reading::TheOutputsHalf {
                                 taken_by: smoozy_job_files_machine::reading::TheVersionInHand::of(5, 2),
                                 gating: smoozy_job_files_machine::reading::GatingConditions {
+                                    the_effects_on_for_render: None,
                                     compositing_switch: true,
                                     a_compositing_tree_is_present: true,
                                     a_live_final_output_node: true,

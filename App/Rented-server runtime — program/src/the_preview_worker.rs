@@ -27,7 +27,8 @@
 //! **hears the source's size and tells it the target**
 //! (`smoozy_job_files_machine::main_output::the_target_size`, `Job files and
 //! outputs` B26a), waits for it, measures what it wrote against that clause's
-//! byte cap, renames it into place,
+//! byte cap, **makes it again smaller where it is over**
+//! ([`the_lightest_of_its_writes`]), renames it into place,
 //! and reports.
 //!
 //! # `Queue & History` §16's termination contract, kept
@@ -38,12 +39,14 @@
 //!    displaces it, and no request stops a production. **The one ending this
 //!    worker gives its own Blender is
 //!    [`HOW_LONG_ONE_PRODUCTION_IS_GIVEN`]'s**, a Build bound, so a Blender
-//!    that never ends cannot hold every later production behind it.
+//!    that never ends cannot hold every later production behind it. All the
+//!    writes of one copy share it.
 //! 2. **The worker outlives every member of its group**: it holds both streams
 //!    to their end and reaps the Blender before it reports.
 //! 3. **The cleanup owed is the sweep of the derivative's staging path**, so a
 //!    production that did not finish never publishes a partial — the staged
-//!    name is removed and nothing is renamed.
+//!    name is removed and nothing is renamed. A heavier write held aside
+//!    ([`the_lightest_of_its_writes`]) sits under the same staging prefix.
 //! 4. **A displaced operation's outcome is its own**, never a failure of the
 //!    work that displaced it — moot while nothing displaces one.
 //!
@@ -66,8 +69,9 @@ use smoozy_job_files_machine::derivatives::{
     what_one_frame_is_made_of, ADerivativeToMake, WhyNothingIsMade, THE_SCRIPTS_FILE_NAME,
 };
 use smoozy_job_files_machine::main_output::{
-    the_target_size, where_this_copy_is_written_in, ADerivativesRecord,
-    THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES,
+    the_size_to_write_it_at_next, the_target_size, where_this_copy_is_written_in, ATargetSize,
+    ADerivativesRecord, WhereADerivativeIsWritten, THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES,
+    THE_MOST_WRITES_OF_ONE_COPY,
 };
 use smoozy_runtime::acting::capture::TheCopyIntoTheSinks;
 use smoozy_runtime::acting::endpoint::TheEndpointAsACaller;
@@ -114,7 +118,10 @@ pub const THE_PRODUCTION_FIELD: &str = "the production";
 /// measured a derivative at about 2.4 seconds with every core taken by a
 /// render, and this is two hundred and fifty times that, so it bites only on
 /// a Blender that will never end — which would otherwise hold every later
-/// production on the machine behind it, one being made at a time.
+/// production on the machine behind it, one being made at a time. **It is one
+/// bound for a copy, however many times `Job files and outputs` B26a writes
+/// it**, so three writes hold later productions no longer than one could; the
+/// copy already written stands if a later write runs into it.
 pub const HOW_LONG_ONE_PRODUCTION_IS_GIVEN: Duration = Duration::from_secs(600);
 
 /// How often the worker looks whether its Blender has ended.
@@ -537,6 +544,7 @@ pub fn the_derivative_is_made(
         build,
         &made_of.treatment,
         made_of.the_picture_inside.as_ref(),
+        made_of.the_composited_picture.as_ref(),
         &made_of.record,
     );
     if main.came_to != WhatTheProductionCameTo::Published {
@@ -552,6 +560,7 @@ pub fn the_derivative_is_made(
             build,
             &other.treatment,
             other.the_picture_inside.as_ref(),
+            None,
             &other.record,
         );
         main.the_other_layers.push(ending);
@@ -560,15 +569,16 @@ pub fn the_derivative_is_made(
 }
 
 /// **One copy of the frame**, the main one or one other layer's: the script
-/// written, the Blender started by the build's own path and told the size,
-/// its streams held to their end and it reaped, the copy measured and renamed
-/// into place — or why not. **The file it is made of is its record's own**
-/// (`Job files and outputs` B31).
+/// written, the copy written and measured, made again smaller where
+/// `Job files and outputs` B26a's byte cap asks it, and renamed into place —
+/// or why not. **The file it is made of is its record's own** (`Job files and
+/// outputs` B31).
 fn one_copy_is_made(
     work: &ThePreviewsWork,
     build: &str,
     treatment: &smoozy_job_files_machine::derivatives::TheTreatment,
     the_picture_inside: Option<&smoozy_job_files_machine::reading::ArtistsText>,
+    the_composited_picture: Option<&smoozy_job_files_machine::reading::ArtistsText>,
     the_record: &ADerivativesRecord,
 ) -> TheProductionsEnding {
     let record = Some(the_record.clone());
@@ -583,17 +593,152 @@ fn one_copy_is_made(
         staged_at: at.staged_at.clone(),
         treatment: treatment.clone(),
         the_picture_inside: the_picture_inside.map(|picture| picture.as_bytes().to_vec()),
+        the_composited_picture: the_composited_picture.map(|picture| picture.as_bytes().to_vec()),
     });
     if let Err(why) = std::fs::write(&work.script, script) {
         return TheProductionsEnding::not_made(format!("{}: {why}", work.script), record);
     }
+    let began = Instant::now();
+    let first = match one_write(work, build, &at, None, began, record.clone()) {
+        Ok(first) => first,
+        Err(ending) => return ending,
+    };
+    let written = the_lightest_of_its_writes(work, build, &at, first, began);
+    let the_written = |mut ending: TheProductionsEnding| {
+        ending.the_sources_size = written.the_sources_size;
+        ending.the_size_it_was_written_at = Some(written.at);
+        ending.exit_status = written.exit_status;
+        ending.signal = written.signal;
+        ending
+    };
+    // **`Job files and outputs` B29: published by a rename**, which is the one
+    // unit in that document that publishes over an existing name.
+    if let Err(why) = std::fs::rename(&at.staged_at, &at.published_at) {
+        std::fs::remove_file(&at.staged_at).ok();
+        return the_written(TheProductionsEnding::not_made(
+            format!("{} could not be renamed into place: {why}", at.staged_at),
+            record,
+        ));
+    }
+    if let Err(why) =
+        smoozy_runtime::acting::durable::flush_the_directory_holding(std::path::Path::new(&at.published_at))
+    {
+        eprintln!(
+            "smoozy-server: a derivative was published and its directory was not flushed: {}",
+            why.as_text()
+        );
+    }
+    let ratio_past_the_cap = written
+        .the_sources_size
+        .is_some_and(|(width, height)| the_target_size(width, height).it_could_not_be_brought_under_every_cap);
+    the_written(TheProductionsEnding {
+        came_to: WhatTheProductionCameTo::Published,
+        the_record: record,
+        published_at: Some(at.published_at.clone()),
+        bytes: Some(written.bytes),
+        the_sources_size: None,
+        the_size_it_was_written_at: None,
+        it_could_not_be_brought_under_every_cap: ratio_past_the_cap
+            || written.bytes > THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES,
+        exit_status: None,
+        signal: None,
+        words: None,
+        the_other_layers: Vec::new(),
+    })
+}
+
+/// **What one write left at the staged name.**
+#[derive(Debug, Clone, Copy)]
+struct AWrite {
+    bytes: u64,
+    /// The size it was told, which is the size it was written at.
+    at: (u32, u32),
+    the_sources_size: Option<(u32, u32)>,
+    exit_status: Option<i32>,
+    signal: Option<i32>,
+}
+
+/// **`Job files and outputs` B26a, *how the production comes under the byte
+/// cap*.** A write at or under the cap is kept as it is and nothing more is
+/// started. **Over it, the same script is started again and told a smaller
+/// size**, so the copy is made from the source again and not from the heavier
+/// copy. That heavier copy is held aside under the staging prefix meanwhile, and
+/// comes back to the staged name where a later write fails or weighs no less:
+/// **nothing is published until the last write has ended**, so no consumer
+/// meets a copy about to be replaced, and a frame keeps the copy it has. What
+/// comes back is at the staged name; whether it is under the cap is the caller's
+/// to record.
+fn the_lightest_of_its_writes(
+    work: &ThePreviewsWork,
+    build: &str,
+    at: &WhereADerivativeIsWritten,
+    first: AWrite,
+    began: Instant,
+) -> AWrite {
+    let held_at = format!("{}.heavier", at.staged_at);
+    let mut lightest = first;
+    let mut writes = 1;
+    while writes < THE_MOST_WRITES_OF_ONE_COPY {
+        let Some(smaller) = the_size_to_write_it_at_next(lightest.at, lightest.bytes) else {
+            break;
+        };
+        if std::fs::rename(&at.staged_at, &held_at).is_err() {
+            break;
+        }
+        writes += 1;
+        eprintln!(
+            "smoozy-server: a derivative of frame {} weighed {} bytes at {} by {} and is made again at {} by {}",
+            work.frame, lightest.bytes, lightest.at.0, lightest.at.1, smaller.width, smaller.height
+        );
+        let lighter = match one_write(work, build, at, Some(smaller), began, None) {
+            Ok(write) if write.bytes < lightest.bytes => Some(write),
+            Ok(_) => None,
+            Err(ending) => {
+                eprintln!(
+                    "smoozy-server: a derivative of frame {} was not made again: {}",
+                    work.frame,
+                    ending.words.unwrap_or_default()
+                );
+                None
+            }
+        };
+        match lighter {
+            Some(write) => {
+                std::fs::remove_file(&held_at).ok();
+                lightest = write;
+            }
+            None => {
+                // A rename over the name, whatever the later write left there.
+                std::fs::rename(&held_at, &at.staged_at).ok();
+                break;
+            }
+        }
+    }
+    lightest
+}
+
+/// **One start of the Blender for one copy**: started by the build's own path and
+/// told the size — `told`, or `Job files and outputs` B26a's target where this is
+/// the copy's first write — its streams held to their end and it reaped, and what
+/// it left at the staged name measured. **`began` is when the copy's first write
+/// started**: [`HOW_LONG_ONE_PRODUCTION_IS_GIVEN`] is one bound for them all. The
+/// ending it gives back where nothing was left is the copy's, with the staged
+/// name swept.
+fn one_write(
+    work: &ThePreviewsWork,
+    build: &str,
+    at: &WhereADerivativeIsWritten,
+    told: Option<ATargetSize>,
+    began: Instant,
+    record: Option<ADerivativesRecord>,
+) -> Result<AWrite, TheProductionsEnding> {
     let sinks = match TheCopyIntoTheSinks::opening(&work.capture) {
         Ok(sinks) => Arc::new(sinks),
         Err(why) => {
-            return TheProductionsEnding::not_made(
+            return Err(TheProductionsEnding::not_made(
                 format!("the two sinks could not be opened: {why}"),
                 record,
-            )
+            ))
         }
     };
     // Handed to the kernel as the program to run, never through a shell.
@@ -606,10 +751,10 @@ fn one_copy_is_made(
     {
         Ok(started) => started,
         Err(why) => {
-            return TheProductionsEnding::not_made(
+            return Err(TheProductionsEnding::not_made(
                 format!("the production could not be started: {build} could not be run: {why}"),
                 record,
-            )
+            ))
         }
     };
 
@@ -638,7 +783,7 @@ fn one_copy_is_made(
                             // with no pixels is told nothing, and its script
                             // ends at the failure status.
                             if size.0 > 0 && size.1 > 0 {
-                                let target = the_target_size(size.0, size.1);
+                                let target = told.unwrap_or_else(|| the_target_size(size.0, size.1));
                                 if let Some(input) = its_input.as_mut() {
                                     if input.write_all(the_size_told(target).as_bytes()).is_ok()
                                         && input.flush().is_ok()
@@ -670,7 +815,6 @@ fn one_copy_is_made(
 
     // **Reaped, so the production leaves no process behind**, within
     // [`HOW_LONG_ONE_PRODUCTION_IS_GIVEN`].
-    let began = Instant::now();
     let mut given_up = false;
     let ended = loop {
         match started.try_wait() {
@@ -705,29 +849,29 @@ fn one_copy_is_made(
     };
     if heard.the_sources_size == Some((0, 0)) || heard.the_sources_size.is_some_and(|size| size.0 == 0 || size.1 == 0) {
         sweep();
-        return the_written(TheProductionsEnding::nothing_to_make(
+        return Err(the_written(TheProductionsEnding::nothing_to_make(
             &WhyNothingIsMade::TheSourceHasNoPixels,
             record,
-        ));
+        )));
     }
     if given_up {
         sweep();
-        return the_written(TheProductionsEnding::not_made(
+        return Err(the_written(TheProductionsEnding::not_made(
             format!(
                 "the production's Blender had not ended after {} seconds and was ended",
                 HOW_LONG_ONE_PRODUCTION_IS_GIVEN.as_secs()
             ),
             record,
-        ));
+        )));
     }
     let staged_length = std::fs::metadata(&at.staged_at)
         .ok()
         .filter(|metadata| metadata.is_file())
         .map(|metadata| metadata.len());
-    let ran_to_its_end = exit_status == Some(0) && heard.made && heard.told.is_some();
-    let Some(bytes) = staged_length.filter(|_| ran_to_its_end) else {
+    let ran_to_its_end = exit_status == Some(0) && heard.made;
+    let (Some(bytes), Some(written_at)) = (staged_length.filter(|_| ran_to_its_end), heard.told) else {
         sweep();
-        return the_written(TheProductionsEnding::not_made(
+        return Err(the_written(TheProductionsEnding::not_made(
             format!(
                 "the production's Blender ended at {} and {}",
                 match (exit_status, signal) {
@@ -744,41 +888,14 @@ fn one_copy_is_made(
                 }
             ),
             record,
-        ));
+        )));
     };
-    // **`Job files and outputs` B29: published by a rename**, which is the one
-    // unit in that document that publishes over an existing name.
-    if let Err(why) = std::fs::rename(&at.staged_at, &at.published_at) {
-        sweep();
-        return the_written(TheProductionsEnding::not_made(
-            format!("{} could not be renamed into place: {why}", at.staged_at),
-            record,
-        ));
-    }
-    if let Err(why) =
-        smoozy_runtime::acting::durable::flush_the_directory_holding(std::path::Path::new(&at.published_at))
-    {
-        eprintln!(
-            "smoozy-server: a derivative was published and its directory was not flushed: {}",
-            why.as_text()
-        );
-    }
-    let ratio_past_the_cap = heard
-        .the_sources_size
-        .is_some_and(|(width, height)| the_target_size(width, height).it_could_not_be_brought_under_every_cap);
-    the_written(TheProductionsEnding {
-        came_to: WhatTheProductionCameTo::Published,
-        the_record: record,
-        published_at: Some(at.published_at.clone()),
-        bytes: Some(bytes),
-        the_sources_size: None,
-        the_size_it_was_written_at: None,
-        it_could_not_be_brought_under_every_cap: ratio_past_the_cap
-            || bytes > THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES,
-        exit_status: None,
-        signal: None,
-        words: None,
-        the_other_layers: Vec::new(),
+    Ok(AWrite {
+        bytes,
+        at: written_at,
+        the_sources_size: heard.the_sources_size,
+        exit_status,
+        signal,
     })
 }
 
@@ -869,6 +986,7 @@ mod tests {
 
         // **Attempt 1's recorded reading**, through the one composition.
         let gating = GatingConditions {
+            the_effects_on_for_render: None,
             compositing_switch: true,
             a_compositing_tree_is_present: false,
             a_live_final_output_node: false,
@@ -1267,6 +1385,7 @@ if tuple(one.size) == tuple(two.size):
                 };
                 let path = source.display().to_string().into_bytes();
                 let made_of = WhatOneFrameIsMadeOf {
+                    the_composited_picture: None,
                     the_source: APresentFileAndItsDestination {
                         file: APresentFile {
                             path: path.clone(),
@@ -1399,6 +1518,598 @@ if tuple(one.size) == tuple(two.size):
             assert_eq!(size.first().map(String::as_str), Some("7500"), "{version}: {size:?}");
             assert_eq!(size.get(1).map(String::as_str), Some("2500"), "{version}: {size:?}");
             println!("{version}: the wide copy is {:?} bytes, under every cap: {}", wide.bytes, !wide.it_could_not_be_brought_under_every_cap);
+        }
+    }
+
+    /// **A stand-in for a Blender, for `Job files and outputs` B26a's measuring:
+    /// it speaks the size handshake and writes a file of the weight `weighs`
+    /// works out from the size it was told** (`w` and `h`). It says each start
+    /// in `starts` as the name it wrote and the size. `before_it_writes` may end
+    /// it first. It reads where to write from the worker's own script, the last
+    /// word it is started with.
+    struct AStandIn {
+        folder: std::path::PathBuf,
+        program: String,
+        starts: std::path::PathBuf,
+    }
+
+    impl Drop for AStandIn {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.folder).ok();
+        }
+    }
+
+    impl AStandIn {
+        fn weighing(source: (u32, u32), weighs: &str, before_it_writes: &str) -> AStandIn {
+            use std::os::unix::fs::PermissionsExt;
+            let folder = std::env::current_exe()
+                .expect("this test knows where it is")
+                .ancestors()
+                .nth(3)
+                .expect("a test program sits three folders inside the build folder")
+                .join("tmp")
+                .join(format!(
+                    "smoozy-b26a-{}",
+                    Identity::issue(IdentityKind::Operation).expect("randomness").as_text()
+                ));
+            std::fs::create_dir_all(&folder).expect("the folder");
+            let starts = folder.join("starts");
+            let opens = String::from_utf8_lossy(smoozy_job_files_machine::derivatives::THE_SIZE_OPENS);
+            let closes = String::from_utf8_lossy(smoozy_job_files_machine::derivatives::THE_SIZE_CLOSES);
+            let made = String::from_utf8_lossy(smoozy_job_files_machine::derivatives::THE_MADE_MARK);
+            let (width, height) = source;
+            let text = format!(
+                "#!/bin/sh\n\
+                 for word in \"$@\"; do script=\"$word\"; done\n\
+                 staged=$(sed -n 's/.*\\\\\"staged_at\\\\\":\\\\\"\\([^\\\\]*\\)\\\\\".*/\\1/p' \"$script\")\n\
+                 echo '{opens}{width} {height}{closes}'\n\
+                 read w h || exit 1\n\
+                 echo \"${{staged##*/}} $w $h\" >> '{starts}'\n\
+                 {before_it_writes}\n\
+                 head -c $(({weighs})) /dev/zero > \"$staged\"\n\
+                 echo '{made}'\n",
+                starts = starts.display(),
+            );
+            let program = folder.join("stand-in");
+            std::fs::write(&program, text).expect("the stand-in");
+            std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).expect("runnable");
+            AStandIn { program: program.display().to_string(), folder, starts }
+        }
+
+        fn starts(&self) -> Vec<String> {
+            std::fs::read_to_string(&self.starts)
+                .unwrap_or_default()
+                .lines()
+                .map(str::to_string)
+                .collect()
+        }
+
+        /// One frame's copies made by the worker's own route, the frame's other
+        /// View Layers' among them.
+        fn makes(&self, other_layers: u32) -> TheProductionsEnding {
+            use smoozy_job_files_machine::derivatives::{
+                APresentFileAndItsDestination, AnotherLayersCopy, TheTreatment, WhatOneFrameIsMadeOf,
+            };
+            use smoozy_job_files_machine::main_output::{APresentFile, WhereThePictureCameFrom};
+            let operation = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let capture = CaptureRecord {
+                job: operation.clone(),
+                attempt: 1,
+                ordinary_sink: self.folder.join("ordinary").display().to_string(),
+                complaints_sink: self.folder.join("complaints").display().to_string(),
+                ceiling: CaptureCeiling::from(1 << 30),
+            };
+            smoozy_runtime::capture::MakesTheSinks::make(
+                &smoozy_runtime::acting::capture::TheSinksOnTheMachine,
+                &capture,
+            )
+            .expect("the sinks");
+            let work = ThePreviewsWork {
+                operation,
+                run: Identity::issue(IdentityKind::Run).expect("randomness"),
+                job: Identity::issue(IdentityKind::Job).expect("randomness"),
+                frame: 1,
+                attempt: 1,
+                record_directory: self.folder.display().to_string(),
+                the_job_was_interrupted: false,
+                script: self.folder.join("derivative.py").display().to_string(),
+                capture,
+            };
+            let record = |main: bool, place: u32| ADerivativesRecord {
+                the_source_file: b"/j/f_0001.png".to_vec(),
+                frame: 1,
+                the_view_layer_its_picture_came_from: None,
+                it_is_the_main_copy: main,
+                its_place_in_the_frames_set: place,
+                where_it_came_from: None,
+            };
+            let made_of = WhatOneFrameIsMadeOf {
+                the_composited_picture: None,
+                the_source: APresentFileAndItsDestination {
+                    file: APresentFile {
+                        path: b"/j/f_0001.png".to_vec(),
+                        frame: Some(1),
+                        the_picture_it_holds: None,
+                        format: b"PNG".to_vec(),
+                        bytes: 1,
+                        is_video_shaped: false,
+                        it_sits_in_the_main_outputs_folder: true,
+                    },
+                    multi_layer: false,
+                    the_destination_it_came_from: WhereThePictureCameFrom::TheOutputPath,
+                    the_view_layers_that_feed_it: Vec::new(),
+                },
+                treatment: TheTreatment::ItAlreadyCarriesItsTreatment,
+                the_picture_inside: None,
+                record: record(true, 0),
+                the_other_layers: (1..=other_layers)
+                    .map(|place| AnotherLayersCopy {
+                        treatment: TheTreatment::ItAlreadyCarriesItsTreatment,
+                        the_picture_inside: None,
+                        record: record(false, place),
+                    })
+                    .collect(),
+            };
+            the_derivative_is_made(&work, &self.program, &made_of)
+        }
+
+        /// What sits in the record directory besides the stand-in's own files:
+        /// no staged name is left behind.
+        fn staged_names_left(&self) -> Vec<String> {
+            std::fs::read_dir(&self.folder)
+                .expect("the folder")
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .filter(|name| name.starts_with(smoozy_job_files_machine::publication::THE_STAGING_PREFIX))
+                .collect()
+        }
+
+        fn weight_of(&self, name: &str) -> u64 {
+            std::fs::metadata(self.folder.join(name)).expect("published").len()
+        }
+    }
+
+    const THE_CAP: u64 = THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES;
+    /// A weight that follows the area, as a frame of noise's does.
+    const NOISE: &str = "w * h * 3";
+
+    /// **`Job files and outputs` B26a: a copy under the cap is written once**, at
+    /// the size `the_target_size` set, and is what was written.
+    #[test]
+    fn b26a_a_copy_under_the_byte_cap_is_written_once() {
+        let blender = AStandIn::weighing((3840, 2160), "w * h / 10", "");
+        let ending = blender.makes(0);
+        assert_eq!(ending.came_to, WhatTheProductionCameTo::Published, "{ending:?}");
+        assert_eq!(blender.starts(), ["staging-preview-1.png 3840 2160"]);
+        assert_eq!(ending.the_size_it_was_written_at, Some((3840, 2160)));
+        assert_eq!(ending.the_sources_size, Some((3840, 2160)));
+        assert_eq!(ending.bytes, Some(3840 * 2160 / 10));
+        assert_eq!(blender.weight_of("preview-1.png"), 3840 * 2160 / 10);
+        assert!(!ending.it_could_not_be_brought_under_every_cap);
+        assert!(blender.staged_names_left().is_empty(), "{:?}", blender.staged_names_left());
+    }
+
+    /// **`Job files and outputs` B26a: a copy over the cap is made again smaller,
+    /// keeping the ratio, and the smaller is what is published.**
+    #[test]
+    fn b26a_a_copy_over_the_byte_cap_is_written_again_smaller() {
+        let blender = AStandIn::weighing((3840, 2160), NOISE, "");
+        let ending = blender.makes(0);
+        assert_eq!(ending.came_to, WhatTheProductionCameTo::Published, "{ending:?}");
+        assert_eq!(blender.starts().len(), 2, "{:?}", blender.starts());
+        let (width, height) = ending.the_size_it_was_written_at.expect("the size it went out at");
+        assert!(width < 3840, "{width}");
+        assert!((f64::from(width) / f64::from(height) - 16.0 / 9.0).abs() < 0.01, "{width} {height}");
+        assert_eq!(ending.the_sources_size, Some((3840, 2160)), "the source's own size stands");
+        let weighs = blender.weight_of("preview-1.png");
+        assert!(weighs <= THE_CAP, "{weighs}");
+        assert_eq!(ending.bytes, Some(weighs));
+        assert!(!ending.it_could_not_be_brought_under_every_cap, "{ending:?}");
+        assert!(blender.staged_names_left().is_empty(), "{:?}", blender.staged_names_left());
+    }
+
+    /// **Three writes at most**, and a copy that never comes under the cap is
+    /// published at its lightest with the fact on the record.
+    #[test]
+    fn b26a_three_writes_then_the_lightest_is_published_with_the_fact() {
+        let blender = AStandIn::weighing((3840, 2160), "11000000 + w * h / 1000", "");
+        let ending = blender.makes(0);
+        assert_eq!(ending.came_to, WhatTheProductionCameTo::Published, "{ending:?}");
+        let starts = blender.starts();
+        assert_eq!(starts.len() as u32, smoozy_job_files_machine::main_output::THE_MOST_WRITES_OF_ONE_COPY);
+        assert!(ending.it_could_not_be_brought_under_every_cap, "{ending:?}");
+        let (width, height) = ending.the_size_it_was_written_at.expect("the size it went out at");
+        assert_eq!(starts.last().map(String::as_str), Some(format!("staging-preview-1.png {width} {height}").as_str()));
+        assert_eq!(ending.bytes, Some(11_000_000 + u64::from(width) * u64::from(height) / 1000));
+        assert_eq!(ending.bytes, Some(blender.weight_of("preview-1.png")));
+        assert!(blender.staged_names_left().is_empty(), "{:?}", blender.staged_names_left());
+    }
+
+    /// **A smaller write that weighs no less ends the tries**: the first stands.
+    #[test]
+    fn b26a_a_smaller_write_that_weighs_no_less_leaves_the_first() {
+        let blender = AStandIn::weighing(
+            (3840, 2160),
+            "w == 3840 ? 11000000 : 12000000",
+            "",
+        );
+        let ending = blender.makes(0);
+        assert_eq!(ending.came_to, WhatTheProductionCameTo::Published, "{ending:?}");
+        assert_eq!(blender.starts().len(), 2, "{:?}", blender.starts());
+        assert_eq!(ending.the_size_it_was_written_at, Some((3840, 2160)));
+        assert_eq!(ending.bytes, Some(11_000_000));
+        assert_eq!(blender.weight_of("preview-1.png"), 11_000_000);
+        assert!(ending.it_could_not_be_brought_under_every_cap);
+        assert!(blender.staged_names_left().is_empty(), "{:?}", blender.staged_names_left());
+    }
+
+    /// **A later write that fails costs nothing**: the copy already written is
+    /// published with the fact, rather than the frame losing its preview.
+    #[test]
+    fn b26a_a_later_write_that_fails_leaves_the_copy_already_written() {
+        let blender = AStandIn::weighing((3840, 2160), NOISE, "[ \"$w\" = 3840 ] || exit 3");
+        let ending = blender.makes(0);
+        assert_eq!(ending.came_to, WhatTheProductionCameTo::Published, "{ending:?}");
+        assert_eq!(blender.starts().len(), 2, "{:?}", blender.starts());
+        assert_eq!(ending.the_size_it_was_written_at, Some((3840, 2160)));
+        assert_eq!(blender.weight_of("preview-1.png"), 3840 * 2160 * 3);
+        assert!(ending.it_could_not_be_brought_under_every_cap);
+        assert_eq!(ending.exit_status, Some(0), "the ending speaks for the copy it published");
+        assert!(blender.staged_names_left().is_empty(), "{:?}", blender.staged_names_left());
+    }
+
+    /// **A first write that fails is what it always was**: nothing published, so
+    /// the frame stays owed (`Queue & History` P1a), and one start.
+    #[test]
+    fn b26a_a_first_write_that_fails_publishes_nothing() {
+        let blender = AStandIn::weighing((3840, 2160), NOISE, "exit 3");
+        let ending = blender.makes(0);
+        assert_eq!(ending.came_to, WhatTheProductionCameTo::NotMade, "{ending:?}");
+        assert_eq!(blender.starts().len(), 1);
+        assert!(!blender.folder.join("preview-1.png").exists());
+    }
+
+    /// **Each View Layer's copy is measured on its own.** The main copy is light
+    /// and is written once; the other layer's is heavy and is written twice.
+    #[test]
+    fn b26a_each_view_layers_copy_comes_under_the_byte_cap_on_its_own() {
+        let blender = AStandIn::weighing(
+            (3840, 2160),
+            "w * h * 3 * heavy + w * h / 10 * (1 - heavy)",
+            "case \"${staged##*/}\" in *layer*) heavy=1;; *) heavy=0;; esac",
+        );
+        let ending = blender.makes(1);
+        assert_eq!(ending.came_to, WhatTheProductionCameTo::Published, "{ending:?}");
+        let starts = blender.starts();
+        assert_eq!(starts.len(), 3, "{starts:?}");
+        assert_eq!(starts[0], "staging-preview-1.png 3840 2160");
+        assert_eq!(ending.the_size_it_was_written_at, Some((3840, 2160)), "the main copy is untouched");
+        let other = &ending.the_other_layers[0];
+        assert_eq!(other.came_to, WhatTheProductionCameTo::Published, "{other:?}");
+        assert!(other.the_size_it_was_written_at.expect("written").0 < 3840, "{other:?}");
+        assert!(blender.weight_of("preview-1-layer-1.png") <= THE_CAP);
+        assert!(!other.it_could_not_be_brought_under_every_cap, "{other:?}");
+        assert!(blender.staged_names_left().is_empty(), "{:?}", blender.staged_names_left());
+    }
+
+    /// **`Job files and outputs` B26a on real Blenders, through this worker's
+    /// own route**, 5.2.3 and the 5.3 beta, one at a time. Run by hand at the
+    /// desk, never beside a build:
+    ///
+    /// ```text
+    /// SMOOZY_DESK_OUT=<an empty folder> cargo test -p smoozy-server \
+    ///     a_frame_too_heavy_comes_under_the_byte_cap_at_the_desk -- --ignored --nocapture
+    /// ```
+    ///
+    /// **On both of `Job files and outputs` B26's routes**: a 4K frame of pure noise comes out under the
+    /// cap, the shape it went in and the right picture, and Telegram's own check
+    /// says it fits; a 4K plain gradient comes out at 4K, from a multi-layer
+    /// file with no compression too, its pixels those of the copy made without
+    /// `Job files and outputs` B26 step 4's naming of the compression. Telling the noise
+    /// apart: each half of the frame is noise over its own range, so a copy's two
+    /// halves say whether it is this picture, and the multi-layer file's second
+    /// View Layer has its halves the other way round, so its copy says it is that
+    /// layer's.
+    #[test]
+    #[ignore = "run by hand at the desk with Blender 5.2.3 and the 5.3 beta"]
+    fn a_frame_too_heavy_comes_under_the_byte_cap_at_the_desk() {
+        use smoozy_job_files_machine::derivatives::{
+            APresentFileAndItsDestination, AnotherLayersCopy, TheTreatment, WhatOneFrameIsMadeOf,
+        };
+        use smoozy_job_files_machine::main_output::{APresentFile, WhereThePictureCameFrom};
+        use smoozy_job_files_machine::reading::ArtistsText;
+        use smoozy_telegram::pictures::{whether_it_fits, WhetherItFits};
+        use std::path::{Path, PathBuf};
+
+        const THE_FRAMES: &str = r#"
+import sys, numpy
+import OpenImageIO as oiio
+out = sys.argv[sys.argv.index("--") + 1]
+W, H = 3840, 2160
+rng = numpy.random.default_rng(7)
+def noise(low_on_the_left):
+    a = rng.random((H, W, 3), dtype=numpy.float32) * 0.5
+    a[:, W // 2:] += 0.5
+    return a if low_on_the_left else a[:, ::-1]
+ramp = numpy.repeat(numpy.linspace(0, 1, W, dtype=numpy.float32)[None, :, None], H, axis=0).repeat(3, axis=2)
+def png(name, a):
+    spec = oiio.ImageSpec(W, H, 3, oiio.UINT8)
+    buf = oiio.ImageBuf(spec)
+    assert buf.set_pixels(spec.roi, a), buf.geterror()
+    assert buf.write(out + "/" + name, oiio.TypeUInt8, "png"), buf.geterror()
+def multi_layer(name, layers, compression="zip"):
+    names = tuple(layer + ".Combined." + letter for layer, _ in layers for letter in "RGBA")
+    spec = oiio.ImageSpec(W, H, len(names), oiio.HALF)
+    spec.channelnames = names
+    spec.attribute("compression", compression)
+    whole = numpy.concatenate(
+        [numpy.dstack((a, numpy.ones((H, W, 1), dtype=numpy.float32))) for _, a in layers], axis=2
+    )
+    buf = oiio.ImageBuf(spec)
+    assert buf.set_pixels(spec.roi, whole), buf.geterror()
+    assert buf.write(out + "/" + name, oiio.HALF, "exr"), buf.geterror()
+png("noise.png", noise(True))
+png("gradient.png", ramp)
+multi_layer("noise-ml.exr", [("ViewLayer", noise(True)), ("Second", noise(False))])
+multi_layer("gradient-ml.exr", [("ViewLayer", ramp)])
+multi_layer("gradient-none.exr", [("ViewLayer", ramp)], "none")
+print("SMOOZY-DESK-FRAMES", flush=True)
+"#;
+        const THE_LOOK: &str = r#"
+import sys, numpy
+import OpenImageIO as oiio
+path = sys.argv[sys.argv.index("--") + 1]
+buf = oiio.ImageBuf(path)
+a = buf.get_pixels(oiio.FLOAT)
+w = a.shape[1]
+print("SMOOZY-DESK-LOOK", buf.spec().width, buf.spec().height, buf.spec().nchannels,
+      "%.4f" % float(a[:, :w // 2].mean()), "%.4f" % float(a[:, w // 2:].mean()), flush=True)
+"#;
+        const THE_COMPARISON_OF_PIXELS: &str = r#"
+import sys, numpy
+import OpenImageIO as oiio
+one, two = sys.argv[sys.argv.index("--") + 1:][:2]
+a = oiio.ImageBuf(one)
+b = oiio.ImageBuf(two)
+print("SMOOZY-DESK-SAME", a.spec().width, a.spec().height,
+      bool(numpy.array_equal(a.get_pixels(oiio.UINT8), b.get_pixels(oiio.UINT8))), flush=True)
+"#;
+        let out = PathBuf::from(std::env::var("SMOOZY_DESK_OUT").expect("SMOOZY_DESK_OUT"));
+        for (version, blender) in [
+            ("5.2.3", "/Applications/Blender.app/Contents/MacOS/Blender"),
+            ("5.3b", "/Applications/Blender 5.3b.app/Contents/MacOS/Blender"),
+        ] {
+            let folder = out.join(version);
+            std::fs::create_dir_all(&folder).expect("the folder");
+            let run = |script: &str, name: &str, argument: &Path| -> String {
+                let at = folder.join(name);
+                std::fs::write(&at, script).expect("the script");
+                let said = Command::new(blender)
+                    .args(["-b", "--factory-startup", "--python-exit-code", "1", "--python"])
+                    .arg(&at)
+                    .arg("--")
+                    .arg(argument)
+                    .stdin(Stdio::null())
+                    .output()
+                    .expect("Blender runs");
+                let text = String::from_utf8_lossy(&said.stdout).to_string();
+                assert!(said.status.success(), "{text}\n{}", String::from_utf8_lossy(&said.stderr));
+                text
+            };
+            assert!(run(THE_FRAMES, "frames.py", &folder).contains("SMOOZY-DESK-FRAMES"), "{version}");
+            for name in ["noise.png", "gradient.png"] {
+                let weighs = std::fs::metadata(folder.join(name)).expect("written").len();
+                println!("{version}: the source {name} weighs {weighs} bytes");
+            }
+            assert!(
+                std::fs::metadata(folder.join("noise.png")).expect("written").len() > THE_CAP,
+                "the noise is over the cap to begin with"
+            );
+
+            // One copy looked at: its size, and its two halves' means.
+            let look = |path: &Path| -> (u32, u32, u32, f64, f64) {
+                let said = run(THE_LOOK, "look.py", path);
+                let line = said
+                    .lines()
+                    .find(|line| line.starts_with("SMOOZY-DESK-LOOK"))
+                    .expect("it looked")
+                    .split_whitespace()
+                    .skip(1)
+                    .map(str::to_string)
+                    .collect::<Vec<_>>();
+                (
+                    line[0].parse().unwrap(),
+                    line[1].parse().unwrap(),
+                    line[2].parse().unwrap(),
+                    line[3].parse().unwrap(),
+                    line[4].parse().unwrap(),
+                )
+            };
+            let run_on_two = |script: &str, name: &str, one: &Path, two: &Path| -> String {
+                let at = folder.join(name);
+                std::fs::write(&at, script).expect("the script");
+                let said = Command::new(blender)
+                    .args(["-b", "--factory-startup", "--python-exit-code", "1", "--python"])
+                    .arg(&at)
+                    .arg("--")
+                    .args([one, two])
+                    .stdin(Stdio::null())
+                    .output()
+                    .expect("Blender runs");
+                assert!(said.status.success(), "{}", String::from_utf8_lossy(&said.stderr));
+                String::from_utf8_lossy(&said.stdout).to_string()
+            };
+            // The multi-layer copy as it was before `Job files and outputs` B26 step 4 named the
+            // compression: the worker's own script at the source's own size, with
+            // that one line taken out.
+            let the_copy_with_no_name = |frame: i64, name: &str| -> PathBuf {
+                let at = folder.join(format!("no-name-{frame}.png"));
+                let script = the_derivatives_script(&ADerivativeToMake {
+                    source: folder.join(name).display().to_string().into_bytes(),
+                    staged_at: at.display().to_string(),
+                    treatment: TheTreatment::TheJobsOwnViewTransform(b"Standard".to_vec()),
+                    the_picture_inside: Some(b"ViewLayer.Combined".to_vec()),
+                    the_composited_picture: None,
+                });
+                let the_line = "flat.specmod().attribute(\"compression\", \"zip\")\n";
+                assert!(script.contains(the_line), "the script names the compression");
+                let script_at = folder.join(format!("no-name-{frame}.py"));
+                std::fs::write(&script_at, script.replace(the_line, "")).expect("the script");
+                let mut started = Command::new(blender)
+                    .args(the_words_of_a_derivative(script_at.to_str().unwrap()).iter().map(|word| OsStr::from_bytes(word)))
+                    .stdin(Stdio::piped())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .spawn()
+                    .expect("Blender runs");
+                started.stdin.take().expect("its input").write_all(b"3840 2160\n").expect("told");
+                assert!(started.wait().expect("it ended").success(), "{version}");
+                at
+            };
+            let make = |frame: i64, name: &str, inside: &[&str]| {
+                let source = folder.join(name);
+                let operation = Identity::issue(IdentityKind::Operation).expect("randomness");
+                let streams = folder.join(format!("streams-{frame}"));
+                std::fs::create_dir_all(&streams).expect("the streams' folder");
+                let capture = CaptureRecord {
+                    job: operation.clone(),
+                    attempt: 1,
+                    ordinary_sink: streams.join("ordinary").display().to_string(),
+                    complaints_sink: streams.join("complaints").display().to_string(),
+                    ceiling: CaptureCeiling::from(1 << 30),
+                };
+                smoozy_runtime::capture::MakesTheSinks::make(
+                    &smoozy_runtime::acting::capture::TheSinksOnTheMachine,
+                    &capture,
+                )
+                .expect("the sinks");
+                let work = ThePreviewsWork {
+                    operation,
+                    run: Identity::issue(IdentityKind::Run).expect("randomness"),
+                    job: Identity::issue(IdentityKind::Job).expect("randomness"),
+                    frame,
+                    attempt: 1,
+                    record_directory: folder.display().to_string(),
+                    the_job_was_interrupted: false,
+                    script: streams.join("derivative.py").display().to_string(),
+                    capture,
+                };
+                let path = source.display().to_string().into_bytes();
+                let a_layer = |layer: &str| ArtistsText::of(format!("{layer}.Combined").into_bytes());
+                let treatment = if inside.is_empty() {
+                    TheTreatment::ItAlreadyCarriesItsTreatment
+                } else {
+                    TheTreatment::TheJobsOwnViewTransform(b"Standard".to_vec())
+                };
+                let record = |main: bool, place: u32| ADerivativesRecord {
+                    the_source_file: path.clone(),
+                    frame,
+                    the_view_layer_its_picture_came_from: None,
+                    it_is_the_main_copy: main,
+                    its_place_in_the_frames_set: place,
+                    where_it_came_from: None,
+                };
+                let made_of = WhatOneFrameIsMadeOf {
+                    the_composited_picture: None,
+                    the_source: APresentFileAndItsDestination {
+                        file: APresentFile {
+                            path: path.clone(),
+                            frame: Some(frame),
+                            the_picture_it_holds: None,
+                            format: if inside.is_empty() { b"PNG".to_vec() } else { b"OPEN_EXR_MULTILAYER".to_vec() },
+                            bytes: std::fs::metadata(&source).map(|m| m.len()).unwrap_or(0),
+                            is_video_shaped: false,
+                            it_sits_in_the_main_outputs_folder: true,
+                        },
+                        multi_layer: !inside.is_empty(),
+                        the_destination_it_came_from: WhereThePictureCameFrom::TheOutputPath,
+                        the_view_layers_that_feed_it: Vec::new(),
+                    },
+                    treatment: treatment.clone(),
+                    the_picture_inside: inside.first().map(|layer| a_layer(layer)),
+                    record: record(true, 0),
+                    the_other_layers: inside
+                        .iter()
+                        .enumerate()
+                        .skip(1)
+                        .map(|(place, layer)| AnotherLayersCopy {
+                            treatment: treatment.clone(),
+                            the_picture_inside: Some(a_layer(layer)),
+                            record: record(false, place as u32),
+                        })
+                        .collect(),
+                };
+                let began = Instant::now();
+                let ending = the_derivative_is_made(&work, blender, &made_of);
+                println!(
+                    "{version}: {name}: {:?} of {:?} at {:?}, {:?} bytes, over a cap: {}, in {:.1} seconds",
+                    ending.came_to,
+                    ending.the_sources_size,
+                    ending.the_size_it_was_written_at,
+                    ending.bytes,
+                    ending.it_could_not_be_brought_under_every_cap,
+                    began.elapsed().as_secs_f64(),
+                );
+                ending
+            };
+            let it_fits = |ending: &TheProductionsEnding| {
+                assert_eq!(ending.came_to, WhatTheProductionCameTo::Published, "{version}: {ending:?}");
+                assert!(!ending.it_could_not_be_brought_under_every_cap, "{version}: {ending:?}");
+                let at = ending.published_at.as_ref().expect("published");
+                let bytes = std::fs::read(at).expect("it reads");
+                assert!(bytes.len() as u64 <= THE_CAP, "{version}: {}", bytes.len());
+                assert_eq!(ending.bytes, Some(bytes.len() as u64), "{version}");
+                assert_eq!(whether_it_fits(&bytes), WhetherItFits::Fits, "{version}");
+                println!("{version}: {at} weighs {} bytes and Telegram's check says it fits", bytes.len());
+                look(Path::new(at))
+            };
+            let a_smaller_right_picture = |ending: &TheProductionsEnding, left_is_lower: bool| {
+                let (width, height, channels, left, right) = it_fits(ending);
+                assert!(width < 3840 && height < 2160, "{version}: {width} {height}");
+                assert_eq!(ending.the_size_it_was_written_at, Some((width, height)), "{version}");
+                assert_eq!(ending.the_sources_size, Some((3840, 2160)), "{version}");
+                assert!((f64::from(width) / f64::from(height) - 16.0 / 9.0).abs() < 0.01, "{version}");
+                assert_eq!(channels, 3, "{version}: the copy carries no transparency (`Job files and outputs` B28)");
+                println!("{version}: the halves' means {left} and {right}");
+                assert_eq!(left < right, left_is_lower, "{version}: {left} {right}");
+                assert!((left - right).abs() > 0.2, "{version}: {left} {right}");
+            };
+            let at_4k_as_before = |ending: &TheProductionsEnding| {
+                let (width, height, channels, left, right) = it_fits(ending);
+                assert_eq!((width, height), (3840, 2160), "{version}");
+                assert_eq!(channels, 3, "{version}");
+                assert!(left < right, "{version}: {left} {right}");
+            };
+
+            // **Blender's own route.**
+            a_smaller_right_picture(&make(1, "noise.png", &[]), true);
+            at_4k_as_before(&make(2, "gradient.png", &[]));
+            // **The bundled library's route, and a View Layer's own copy.**
+            let two_layers = make(3, "noise-ml.exr", &["ViewLayer", "Second"]);
+            a_smaller_right_picture(&two_layers, true);
+            a_smaller_right_picture(&two_layers.the_other_layers[0], false);
+            at_4k_as_before(&make(4, "gradient-ml.exr", &["ViewLayer"]));
+            // **`Job files and outputs` B26 step 4: a multi-layer file with no
+            // compression comes out at 4K**, its PNG's compression named. Without
+            // the name the bundled library carries the source's over and the PNG
+            // weighs its pixels. Its pixels are those of the copy made without
+            // the name; a file with ZIP comes out byte for byte as it did.
+            let none = make(5, "gradient-none.exr", &["ViewLayer"]);
+            at_4k_as_before(&none);
+            let unnamed = the_copy_with_no_name(5, "gradient-none.exr");
+            let unnamed_weighs = std::fs::metadata(&unnamed).expect("written").len();
+            println!("{version}: without the name it weighed {unnamed_weighs} bytes, with it {:?}", none.bytes);
+            assert!(unnamed_weighs > THE_CAP, "{version}: {unnamed_weighs}");
+            let published = PathBuf::from(none.published_at.as_ref().expect("published"));
+            let said = run_on_two(THE_COMPARISON_OF_PIXELS, "same.py", &published, &unnamed);
+            println!("{version}: {}", said.lines().find(|line| line.starts_with("SMOOZY-DESK-SAME")).unwrap_or("no comparison"));
+            assert!(said.contains("SMOOZY-DESK-SAME 3840 2160 True"), "{version}: {said}");
+            let zipped = the_copy_with_no_name(4, "gradient-ml.exr");
+            assert_eq!(
+                std::fs::read(&zipped).expect("written"),
+                std::fs::read(folder.join("preview-4.png")).expect("published"),
+                "{version}: a file with ZIP comes out byte for byte as it did"
+            );
         }
     }
 
@@ -1543,6 +2254,7 @@ bpy.ops.render.render(write_still=True)
                 the_frames_layers,
             );
             let made_of = WhatOneFrameIsMadeOf {
+                the_composited_picture: None,
                 the_source: APresentFileAndItsDestination {
                     file: APresentFile {
                         path,
@@ -1701,6 +2413,7 @@ bpy.ops.render.render(write_still=True)
             capture,
         };
         let made_of = WhatOneFrameIsMadeOf {
+            the_composited_picture: None,
             the_source: present[0].clone(),
             treatment: TheTreatment::ItAlreadyCarriesItsTreatment,
             the_picture_inside: None,

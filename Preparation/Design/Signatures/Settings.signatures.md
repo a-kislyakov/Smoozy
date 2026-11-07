@@ -46,3 +46,5 @@
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), builder 4 of the live Telegram pass's faults, on the build runner's follow-up to `Audits/Build/Step 10c/Brief — the live pass's faults, builder 4, the desk's Telegram.md`, outside any round — § Telegram: a connected server learns of a change at once, any other on its next connection (the live pass's fault 11). No auditor has seen it.
 
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the Telegram discussion's two wants, plan and drawing pass.md`, outside any round — *What a job reports*: five radios with the minutes field; a choice from the phone becomes the default. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the search folders' order line. The last words read before the release. No auditor has seen it.

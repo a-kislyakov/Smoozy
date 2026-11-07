@@ -267,9 +267,11 @@ pub fn the_diary_is_handed_the_sentence(
 /// `Reporting a problem` J6, as widened on 2026-09-17: the line carries the
 /// sentence, **the server row's local identifier with the user's own label
 /// beside it and never in place of it**, the file's recorded path as its
-/// subject, and the moment on this computer's clock. The two callers are a read
-/// of a `.blend` that gave nothing (`Render Settings` §12) and a dependency
-/// check that could not run (`Dependency Upload & Remap` §11).
+/// subject, and the moment on this computer's clock. The callers are a read
+/// of a `.blend` that gave nothing (`Render Settings` §12), a dependency
+/// check that could not run (`Dependency Upload & Remap` §11), and a setup
+/// failure before placement (`Desktop app and delivery` M32a). Setup carries
+/// an empty file path because it concerns no file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct APresentationWithNoRecord<'a> {
     /// The server row's local identifier.

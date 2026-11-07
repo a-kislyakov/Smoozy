@@ -100,3 +100,15 @@
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the note 6 builder, holding `Audits/Build/Step 10c/Brief — the twenty-first notes, note 6, the check writes into the job's folder.md`, outside any round — P18a's *What is not yet established* struck and replaced by what the desk test established (where the mark goes per Blender; a slash-ended path takes it as a new last piece), and one sentence that the range job takes the folder its check made. No auditor has seen it.
 
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), builder 3 of the live Telegram pass's faults, holding `Audits/Build/Step 10c/Brief — the live pass's faults, builder 3, the video's name.md`, outside any round — I20 gained how a video's name is predicted: asked of Blender with the scene's start and end set to the job's first and last frame, for that one question, observed in the desk test `A desk test — the name of a video over part of its range.md` (fault 4). No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 2, outside any round — C27 notes `Rendering` K14b's one reading. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 3, outside any round — R4 items 1 and 2, D8a, I8, B1a, B3, B4, B5 and B19a: the compositor as a stack of effects, from 5.3. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 5, outside any round — P7b, D8b, I2, §14 item 31, `Sources` entry 84. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — D1a's note on 5.3 and 5.4, source kept where it was. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a preview too heavy for Telegram.md`, outside any round — B26a: how the production comes under the byte cap. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a preview too heavy for Telegram.md`, outside any round, on the build runner's ruling — B26 step 4: the PNG's compression is named; `Sources` entry 85. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the real files found.md`, outside any round — R4 item 3, D10a, P21's note, `Sources` entry 86. No auditor has seen it.
+2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job's reading sees its libraries, and failing before a render.md`, outside any round — R1a; D21b-iii. No auditor has seen it.
+
+2026-11-06 — GPT-6.1 (Codex) — Conditional cloth preservation and shutter-based playing range, before code.
+
+2026-11-06 — GPT-6.1 (Codex) — Cloth withdrawal and linked simulations on the settings page, within the runner's brief.

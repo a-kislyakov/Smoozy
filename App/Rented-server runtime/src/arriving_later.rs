@@ -766,7 +766,7 @@ mod tests {
         let program = (
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../Rented-server runtime — program/src"),
-            9,
+            10,
         );
 
         let mut out = Vec::new();

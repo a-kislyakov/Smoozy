@@ -398,17 +398,23 @@ pub fn a_condition_was_raised_is_told_to_the_operating_system(
     said_once: &TheThingsSaidOnce,
     notifications: &TheNotificationService,
     condition: &Identity,
+    the_server_row: &Identity,
     the_subjects_own_name: Verbatim,
 ) {
     let what = kinds::what_a_raised_connection_condition_posts(condition);
     if !said_once.a_post_is_owed(&what.key) {
         return;
     }
-    notifications.post(APost::from(
-        what,
-        the_subjects_own_name,
-        picture::the_picture_for(std::env::consts::OS, None),
-    ));
+    // **T29: a click goes to the server row**, not to the condition the key is
+    // built on.
+    notifications.post_going_to(
+        APost::from(
+            what,
+            the_subjects_own_name,
+            picture::the_picture_for(std::env::consts::OS, None),
+        ),
+        the_server_row,
+    );
 }
 
 /// **The condition record ended, so the post comes down and the key is spent**
@@ -630,12 +636,15 @@ mod tests {
         let said_once = TheThingsSaidOnce::new();
         let condition = Identity::issue(smoozy_state::identities::IdentityKind::Condition)
             .expect("the desk has randomness");
+        let server_row = Identity::issue(smoozy_state::identities::IdentityKind::LocalServer)
+            .expect("the desk has randomness");
 
         for _ in 0..100 {
             a_condition_was_raised_is_told_to_the_operating_system(
                 &said_once,
                 &service,
                 &condition,
+                &server_row,
                 Verbatim::new("Old 4080"),
             );
         }
@@ -670,6 +679,7 @@ mod tests {
             &said_once,
             &service,
             &again,
+            &server_row,
             Verbatim::new("Old 4080"),
         );
         assert_eq!(system.posted.lock().expect("nothing poisoned it").len(), 2);

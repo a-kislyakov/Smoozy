@@ -50,3 +50,7 @@
 2026-10-28 — Claude Opus 5.5 (Zed), the loose ends after the words sweep, 2026-10-28, outside any round — § A row: the quoted no-tools line loses *Your keys are not at fault.* No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the desk builder of step 13's second words sweep, outside any round — the too-old line that cannot read the job list now reads *Out of date. Not updated: could not read its job list.*, and the paste of a line that cannot carry files reads *This command can't transfer files. Paste the one under SSH over exposed TCP.* (the build runner's ruling: words the user reads never name a provider). Meaning unchanged. Each carries its inline note. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the SSH-tools line, as Keys says it. The last words read before the release. No auditor has seen it.
+
+2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the five after the check.md`, outside any round — the SSH-tools line, as Keys says it. The check after the last fix. No auditor has seen it.

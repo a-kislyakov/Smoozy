@@ -563,12 +563,25 @@ mod on_a_desk_with_a_socket_pair {
 
     /// Every publication, written down.
     #[derive(Default)]
-    struct WhatWasPublished(Mutex<Vec<Vec<u8>>>);
+    struct WhatWasPublished(Mutex<Vec<Vec<u8>>>, std::sync::atomic::AtomicUsize, std::sync::atomic::AtomicUsize);
 
     impl WhenAFileIsPublished for WhatWasPublished {
         fn a_file_was_published(&self, landing_path: &[u8], outcome: &UnitOutcome) {
             assert_eq!(outcome, &UnitOutcome::Done);
-            self.0.lock().expect("the list").push(landing_path.to_vec());
+            // **`Dependency Upload & Remap` G17b: each file was said to be going up,
+            // and to have ended, before it is told here as published.**
+            let mut list = self.0.lock().expect("the list");
+            list.push(landing_path.to_vec());
+            assert!(self.2.load(std::sync::atomic::Ordering::SeqCst) >= list.len(), "published with nothing said to have gone up");
+            assert!(self.1.load(std::sync::atomic::Ordering::SeqCst) >= self.2.load(std::sync::atomic::Ordering::SeqCst));
+        }
+
+        fn a_file_begins_going_up(&self) {
+            self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+
+        fn a_file_stopped_going_up(&self) {
+            self.2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
     }
 

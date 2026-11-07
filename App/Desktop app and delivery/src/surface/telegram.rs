@@ -504,7 +504,7 @@ pub(crate) fn what_smoozy_tells_now(
 ///
 /// **A server Smoozy has never told anything is not named, with Telegram on or
 /// off**: it was never given Telegram, so the next connection does not bring
-/// it, and the set-up card's *Install it* line is the honest place for it.
+/// it, and the set-up card's *Install* line is the honest place for it.
 /// Ruled for the off state by piece 8 and narrowed to both states on
 /// 2026-09-14 by fix-here item 10 of the round *setting it up, and what the desktop keeps*.
 pub fn what_the_section_holds(connection: &rusqlite::Connection, the_answer: Option<&'static str>) -> WhatTheSectionHolds {

@@ -88,3 +88,5 @@
 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — the three admin-password choices are named as the screen names them: *Don't save*, *While connected*, *Save* (were *Do not remember it*, *Remember it while this connection lasts*, *Remember it*). Meaning unchanged. Creator-stated, the final words sweep. No auditor has seen it. Appended by the build runner.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code), the plan pass for Want 1 of the twenty-sixth notes, outside any round — *Getting the app, and updates* gains one paragraph: the Windows download is signed through SignPath Foundation's free open-source route, Windows names SignPath Foundation as publisher, an unsigned release stays possible; Creator-stated with their words. No auditor has seen it.
+
+2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — a build with no update keys says so.md`, outside any round — *Getting the app, and updates* gains one paragraph: a version that cannot update itself says so, never that it could not reach the update service. Creator-stated with their words. No auditor has seen it.

@@ -1413,6 +1413,47 @@ console.log(JSON.stringify(got));
 
     /// The walk through the seventh notes, note 2. Each panel's file is three
     /// bytes, the first its key's length, so which file was handed shows.
+
+    #[test]
+    fn film_page_a_strip_press_survives_a_check_update() {
+        let rows = vec![a_row(Some("Server"))];
+        let list = crate::surface::servers::the_screen_from(&rows, &[], None, None, &Default::default());
+        let server = list.rows[0].server.as_str().to_string();
+        let answer = the_screen(WhatTheRecordSaid::Rows(rows), &server, None, &Default::default());
+        let scratch = std::env::temp_dir().join(format!("smoozy-film-strip-{}", std::process::id()));
+        fs::create_dir_all(&scratch).unwrap();
+        for (name,text) in THE_STRIPS_STAND_INS { fs::write(scratch.join(name),text).unwrap(); }
+        fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("web/a-server.js"),scratch.join("a-server.js")).unwrap();
+        fs::write(scratch.join("package.json"), r#"{"type":"module"}"#).unwrap();
+        fs::write(scratch.join("answers.json"),serde_json::json!({"server":server,"screen":answer}).to_string()).unwrap();
+        fs::write(scratch.join("harness.mjs"),format!("{THE_STRIPS_DOCUMENT}{}",r#"
+const assert = (await import("node:assert/strict")).default;
+const originalMatches = Element.prototype.matches;
+Element.prototype.matches = function(selector) {
+ if(selector.includes(",")) return selector.split(",").some(one => this.matches(one));
+ if(selector === "button") return this.tagName === "BUTTON";
+ return originalMatches.call(this,selector);
+};
+page.aPanelIsRegistered({panel:page.RENDER_SETTINGS,itIsDrawn(){}});
+page.aPanelIsRegistered({panel:page.THE_DEPENDENCY_CHECK,itIsDrawn(){}});
+page.thePanelIsOpenedOver(server,page.RENDER_SETTINGS);
+page.thePanelIsOpenedOver(server,page.THE_DEPENDENCY_CHECK);
+const pressed = stripOf(page.RENDER_SETTINGS);
+for(const handler of documentListeners.pointerdown || []) handler({button:0,target:pressed});
+page.theStripReads(server,page.THE_DEPENDENCY_CHECK,{title:"Check",reading:"Checking"});
+await Promise.resolve();
+assert.equal(stripOf(page.RENDER_SETTINGS),pressed,"the check replaced the held strip");
+for(const handler of documentListeners.pointerup || []) handler({target:pressed});
+for(const handler of documentListeners.click || []) handler({target:pressed});
+pressed.click();
+await Promise.resolve();
+assert.equal(theState().open,"set","the strip did not open Render Settings");
+"#)).unwrap();
+        let ran=std::process::Command::new("node").arg(scratch.join("harness.mjs")).current_dir(&scratch).output().unwrap();
+        let _=fs::remove_dir_all(&scratch);
+        assert!(ran.status.success(),"{}",String::from_utf8_lossy(&ran.stderr));
+    }
+
     const THE_FRESH_STRIP_WALK: &str = r#"
 const first = answers.first;
 const other = first === page.RENDER_SETTINGS ? page.THE_DEPENDENCY_CHECK : page.RENDER_SETTINGS;

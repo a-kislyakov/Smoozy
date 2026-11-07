@@ -591,6 +591,7 @@ pub(crate) mod tests {
         TheOutputsHalf {
             taken_by: smoozy_job_files::reading::TheVersionInHand::of(4, 5),
             gating: smoozy_job_files::reading::GatingConditions {
+                the_effects_on_for_render: None,
                 compositing_switch: false,
                 a_compositing_tree_is_present: false,
                 a_live_final_output_node: false,

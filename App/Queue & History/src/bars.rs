@@ -78,9 +78,10 @@ pub struct FirstBar {
 ///
 /// `planned_for_the_unit` is the renderlet's planned count on 4.5 and the
 /// frame's whole planned samples — every renderlet B1 counted for that
-/// frame, summed — on 5.0 and later. `the_unit_has_ended` is B3b's signal:
-/// R12's trailing zero on an untiled frame, or the next unit beginning, or
-/// the job's own ending — never a figure.
+/// frame, summed — on 5.0 and later. `the_unit_has_ended` is B3b's signal: the
+/// next unit beginning, or the job's own ending — never a figure. R12's mark
+/// (the trailing zero on an untiled frame, `Finished` on any frame short of its
+/// count or with tiles) is read from `held` beside it.
 pub fn the_first_bar(
     grammar: WhichGrammar,
     held: &LiveReadings,
@@ -95,8 +96,8 @@ pub fn the_first_bar(
         // that day this was the tile figure alone, and the bar sat at nought
         // through the whole first tile. The tile figure is still not what takes
         // the bar to full: a finished 2049×2049 run ends on 3/4 tiles, so B3b
-        // fills it on the unit's ending.
-        let fill = if the_unit_has_ended {
+        // fills it on the unit's ending, or on R12's `Finished` (2026-11-02).
+        let fill = if the_unit_has_ended || held.stopped_short {
             Fill::Percent(100)
         } else if tiles.of == 0 {
             Fill::NoPercentage
@@ -311,6 +312,8 @@ mod tests {
 
     fn a_scene(layers: Vec<ViewLayerReading>) -> SceneReading {
         SceneReading {
+            prepare_simulations: None,
+            motion_blur: None,
             name: ExactName::as_the_reading_produced_it("Kitchen"),
             frame_start: 1,
             frame_end: 4,
@@ -331,6 +334,7 @@ mod tests {
                 minimum: 0,
             },
             time_limit: 0.0,
+            eevee_time_limit: None,
             layer_samples_rule: LayerSamplesRule::Use,
             saved_with: "4.5.12".to_string(),
             view_layers: layers,
@@ -468,6 +472,31 @@ mod tests {
             false,
         );
         assert_eq!(unread.fill, Fill::NoPercentage);
+    }
+
+    /// **`Queue & History` R12's line of 2026-11-02, B3b and B4: the mark takes
+    /// a tiled frame's bar to its end, and to no further**, with the figures
+    /// beside it as printed: the live pass's `3/4 tiles · 48/4096 samples`.
+    /// **What it bites on**: the tiled arm read only the unit's ending.
+    #[test]
+    fn the_mark_takes_a_tiled_frames_bar_to_its_end_and_never_past_it() {
+        for (seen, of, tiles) in [(48, 4096, (3, 4)), (0, 16, (3, 4)), (16, 16, (3, 4)), (16, 16, (4, 4)), (16, 16, (9, 4))] {
+            let readings = LiveReadings {
+                stopped_short: true,
+                ..held(seen, of, Some(tiles))
+            };
+            let bar = the_first_bar(WhichGrammar::FivePointZeroAndLater, &readings, of, false);
+            assert_eq!(bar.fill, Fill::Percent(100), "{seen}/{of} at {tiles:?}");
+            assert_eq!(bar.unit, TheFirstBarsUnit::Tiles);
+            assert_eq!(bar.samples_as_printed, Some(SamplePair { seen, of }));
+            assert_eq!(bar.tiles_as_printed, Some(TilePair { done: tiles.0, of: tiles.1 }));
+        }
+        // **A frame with no mark reads as before**, and a whole frame's bar did
+        // not reach further than full by its figures.
+        let last_tile_done = the_first_bar(WhichGrammar::FivePointZeroAndLater, &held(16, 16, Some((4, 4))), 16, false);
+        assert_eq!(last_tile_done.fill, Fill::Percent(100));
+        let short = the_first_bar(WhichGrammar::FivePointZeroAndLater, &held(48, 4096, Some((3, 4))), 4096, false);
+        assert_eq!(short.fill, Fill::Percent(75));
     }
 
     /// **Piece 3c: B4 as corrected — on a tiled frame the first bar moves

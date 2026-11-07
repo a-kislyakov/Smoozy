@@ -90,3 +90,6 @@
 - 2026-10-26 — GPT-6.1 Sol (Codex) — Carried the free-and-open-source decision into this plan; preserved the former text.
 
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Removed withdrawn paid text or obsolete references in wave 5; the account holds the complete change and check list.
+2026-11-02 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 11/Brief — the OptiX check and two Render Settings faults.md`, outside any round — H11b: the reading looks for the OptiX library where the driver answers, and a driver without it is told on every kind; nothing installed for it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — H11b: the words follow what the row stops. No auditor has seen it.
+2026-11-02 — Claude Opus 5.5 (Claude Code subagent), a builder on the runner's ruling after the first 5.3 live pass, outside any round — H11b follows `Rendering` L21. No auditor has seen it.

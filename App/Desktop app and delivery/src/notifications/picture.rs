@@ -39,11 +39,13 @@ pub enum HowThisSystemTakesIt {
     /// supply exists, which is why T15's *already on disk* is what makes the
     /// route work at all.
     AnAttachmentFromDisk,
-    /// **Linux: pixels supplied in memory**, which is the only route the
-    /// specification documents, with no stated size limit — **but there is no
-    /// capability string for it**, so a client cannot ask in advance whether
-    /// the server will render it and hints may be ignored silently.
-    PixelsSuppliedInMemory,
+    /// **Linux: the file's address in the `image-path` hint** — the
+    /// specification: *"should be either an URI (file:// is the only URI schema
+    /// supported right now)"*. *(T16's Linux third, corrected 2026-11-01: it
+    /// said pixels in memory were the only documented route, so no picture
+    /// went.)* **There is still no capability string for it**, so a server may
+    /// ignore it silently and nothing detects that it did.
+    AFileAddressInAHint,
     /// **Windows: two Microsoft pages disagree and neither acknowledges the
     /// other.** One lists three image sources of which two need a package
     /// identity an unpackaged app lacks; another documents a local file path
@@ -58,7 +60,7 @@ pub enum HowThisSystemTakesIt {
 pub fn how_this_system_takes_it(system: &str) -> HowThisSystemTakesIt {
     match system {
         "macos" => HowThisSystemTakesIt::AnAttachmentFromDisk,
-        "linux" => HowThisSystemTakesIt::PixelsSuppliedInMemory,
+        "linux" => HowThisSystemTakesIt::AFileAddressInAHint,
         "windows" => HowThisSystemTakesIt::ALocalFilePath,
         _ => HowThisSystemTakesIt::NotAtAll,
     }
@@ -92,14 +94,13 @@ pub enum ThePicture {
 /// **The reasons this application composes no picture, and none of them is a
 /// fault.**
 ///
-/// **T17a lists five ways the picture is absent and this enumeration holds
-/// four**, and the difference is not drift: two of T17a's five — the Linux
-/// server dropping a picture that was sent, and the Windows contradiction — are
-/// things that happen after the post has gone, which nothing here can know
-/// about and nothing here composes a reason for. **The fifth of T17a's, the
-/// Linux route not being built, is [`WhyThereIsNoPicture::TheLinuxRouteIsNotBuilt`]
-/// below**, and it was added to that clause on 2026-09-12 (U-2) because the plan
-/// carried four where the application had five.
+/// **T17a's ways the picture is absent are more than this enumeration holds**,
+/// and the difference is not drift: the Linux server dropping a picture that
+/// was sent, and the Windows contradiction, happen after the post has gone, so
+/// nothing here can know of them; and macOS's held copy that cannot be made
+/// read-only is decided in `macos.rs` at the attaching. *(The Linux route not
+/// being built was a reason here from 2026-09-12 to 2026-11-01, when the route
+/// was built — T16's Linux third.)*
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WhyThereIsNoPicture {
     /// **T17: the derivative is not yet on disk at the moment of posting.**
@@ -110,39 +111,9 @@ pub enum WhyThereIsNoPicture {
     /// **macOS: it does not fit** the 10 MB attachment ceiling (T16, §22
     /// item 25).
     ItIsOverTheMacsAttachmentCeiling,
-    /// **Linux: the pixels-in-memory route is not built**, and the reason is
-    /// written at [`THE_LINUX_ROUTE_IS_OWED`].
-    TheLinuxRouteIsNotBuilt,
     /// This system takes no picture at all.
     ThisSystemTakesNone,
 }
-
-/// **The Linux picture is owed, and this is where the cost of closing it is
-/// written down.**
-///
-/// **T16's Linux route is pixels supplied in memory**, which is the only route
-/// the freedesktop specification documents. Supplying them means decoding the
-/// fetched derivative, and `Job files and outputs` B12 admits **PNG or
-/// JPEG** — so closing it wants a PNG decoder **and** a JPEG decoder declared
-/// for the Linux artifact. Neither is in the Linux tree beneath anything this
-/// crate already takes.
-///
-/// **What it would buy is not establishable.** §22 item 13: there is **no
-/// capability string** for the picture on Linux, so a client cannot ask in
-/// advance whether the server will render it, hints may be ignored silently,
-/// **and nothing detects that the picture did not appear.** So the weight
-/// would be spent on an artifact nobody on this project can observe, on the
-/// one of the three systems where the specification itself says the client
-/// cannot find out.
-///
-/// **What holds without it** is item 13's own answer: the notification still
-/// says the job finished, which is the kind's own content; the derivative is
-/// on the job record and the picture is reachable in the app; and **T17a
-/// already bounds what the finished-job switch may claim**, so no promise
-/// anywhere is broken by its absence.
-pub const THE_LINUX_ROUTE_IS_OWED: &str =
-    "a PNG and a JPEG decoder declared for the Linux artifact, feeding the specification's \
-     image-data hint";
 
 /// **T16 and T17, performed.**
 ///
@@ -170,8 +141,10 @@ pub fn the_picture_for(
         HowThisSystemTakesIt::ALocalFilePath => {
             ThePicture::ThisFileOnDisk(derivative.path.clone())
         }
-        HowThisSystemTakesIt::PixelsSuppliedInMemory => {
-            ThePicture::None(WhyThereIsNoPicture::TheLinuxRouteIsNotBuilt)
+        // **T16's Linux third: the file's address, in the `image-path`
+        // hint**, whatever the size — the specification states no limit.
+        HowThisSystemTakesIt::AFileAddressInAHint => {
+            ThePicture::ThisFileOnDisk(derivative.path.clone())
         }
         HowThisSystemTakesIt::NotAtAll => {
             ThePicture::None(WhyThereIsNoPicture::ThisSystemTakesNone)
@@ -187,12 +160,73 @@ pub fn as_path(picture: &ThePicture) -> Option<&Path> {
     }
 }
 
+/// **The `file://` address of a file, for the Linux `image-path` hint** — T16's
+/// Linux third. The specification: *"file:// is the only URI schema supported
+/// right now"*. **Every byte outside the plain set is written as `%` and two
+/// hex digits**, the address form the URI standard gives, so a space or a `#`
+/// in a folder name stays part of the path rather than ending it.
+pub fn a_file_address(path: &Path) -> String {
+    #[cfg(unix)]
+    let bytes: Vec<u8> = {
+        use std::os::unix::ffi::OsStrExt;
+        path.as_os_str().as_bytes().to_vec()
+    };
+    #[cfg(not(unix))]
+    let bytes: Vec<u8> = path.to_string_lossy().into_owned().into_bytes();
+    let mut address = String::from("file://");
+    for byte in bytes {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
+                address.push(byte as char)
+            }
+            other => address.push_str(&format!("%{other:02X}")),
+        }
+    }
+    address
+}
+
+/// **macOS takes an attachment by moving it, unless it cannot write to it** —
+/// T16a, added 2026-11-01 from the Mac watch of that day.
+///
+/// Apple: *"Once validated, the system moves the attached files into the
+/// attachment data store so that the appropriate processes can access the
+/// files. The system copies attachments located inside an app's bundle."*
+/// **What the Mac's own log showed** is the system copying the frame into its
+/// store, the application's side deleting the original (*"File is writable.
+/// Deleting file"*), and Notification Center then failing to open the original
+/// path to draw the picture. **So the job record's held copy was deleted by
+/// the post, and the picture never showed.**
+///
+/// **The held copy is made read-only before it is attached**, which is the
+/// state the system leaves alone; nothing is made and nothing is moved, so T15
+/// stands. Returns whether the file is now read-only; **where it is not, the
+/// post goes without the picture** rather than hand the system the record's
+/// only copy. Removing a read-only file is still the folder's to allow, so the
+/// age sweep and a deletion remove it as before.
+pub fn the_file_is_left_for_the_system_to_copy(path: &Path) -> bool {
+    let Ok(read) = std::fs::metadata(path) else {
+        return false;
+    };
+    let mut permissions = read.permissions();
+    if !permissions.readonly() {
+        permissions.set_readonly(true);
+        if std::fs::set_permissions(path, permissions).is_err() {
+            return false;
+        }
+    }
+    std::fs::metadata(path)
+        .map(|read| read.permissions().readonly())
+        .unwrap_or(false)
+}
+
 /// **T17a: what the per-kind switch may claim is bounded — the kind, never the
 /// picture and never delivery.**
 ///
 /// **The picture is a common case rather than a property**, and it is absent
 /// five ways that are none of them faults — four that are facts about a system
-/// and one that is a fact about Smoozy, the Linux route not being built.
+/// and one that is a fact about Smoozy, a macOS held copy that cannot be made
+/// read-only. *(Until 2026-11-01 the fact about Smoozy was the Linux route not
+/// being built; it is built.)*
 /// *"So a label may say what the kind is and not what it carries."* **A flat claim is wrong in ordinary use
 /// rather than in an edge case**, which is what makes this a bound rather than
 /// a caution.
@@ -229,7 +263,7 @@ mod tests {
         );
         assert_eq!(
             how_this_system_takes_it("linux"),
-            HowThisSystemTakesIt::PixelsSuppliedInMemory
+            HowThisSystemTakesIt::AFileAddressInAHint
         );
         assert_eq!(
             how_this_system_takes_it("windows"),
@@ -281,15 +315,33 @@ mod tests {
         );
     }
 
-    /// **The Linux route is owed and says so**, rather than quietly attaching
-    /// a path the specification does not document taking.
+    /// **Linux sends the held copy by its file address** — the
+    /// specification's `image-path` hint, read 2026-11-01. T16's Linux third
+    /// said pixels in memory were the only documented route, so no picture
+    /// went; the specification documents a `file://` address beside them.
     #[test]
-    fn linux_posts_without_a_picture_and_names_what_would_close_it() {
+    fn linux_sends_the_held_copy_by_its_file_address() {
         assert_eq!(
-            the_picture_for("linux", Some(&a_derivative(1024))),
-            ThePicture::None(WhyThereIsNoPicture::TheLinuxRouteIsNotBuilt)
+            how_this_system_takes_it("linux"),
+            HowThisSystemTakesIt::AFileAddressInAHint
         );
-        assert!(THE_LINUX_ROUTE_IS_OWED.contains("decoder"));
+        assert_eq!(
+            the_picture_for("linux", Some(&a_derivative(50 * 1024 * 1024))),
+            ThePicture::ThisFileOnDisk(PathBuf::from("/tmp/smoozy-job/preview.png")),
+            "the Linux picture is still withheld, though the specification documents \
+             `image-path` with a file:// address"
+        );
+    }
+
+    /// **The address is a `file://` one with every byte outside the plain set
+    /// escaped**, so a space or a `#` in a folder name stays part of the path.
+    #[test]
+    fn a_file_address_keeps_the_whole_path() {
+        assert_eq!(
+            a_file_address(Path::new("/home/a b/.local/share/Smoozy/previews/7f46.png")),
+            "file:///home/a%20b/.local/share/Smoozy/previews/7f46.png"
+        );
+        assert_eq!(a_file_address(Path::new("/x/#1/ü.png")), "file:///x/%231/%C3%BC.png");
     }
 
     /// **T15: nothing is made here.**
@@ -332,20 +384,45 @@ mod tests {
         }
     }
 
+    /// **The Mac watch of 2026-11-01, finding 2: the held copy is not the
+    /// system's to move.** Attached as it was, macOS deleted it after copying
+    /// it, and the picture never showed. Made read-only first, it stays where
+    /// the record holds it — and the age sweep can still remove it.
+    #[test]
+    fn the_held_copy_is_left_read_only_and_can_still_be_removed() {
+        let folder = std::env::temp_dir().join(format!("smoozy-picture-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let held = folder.join("7f46df05fbf8b8d563c3833e9b11baca.png");
+        std::fs::write(&held, b"png").expect("a held copy");
+
+        assert!(the_file_is_left_for_the_system_to_copy(&held));
+        let read = std::fs::metadata(&held).expect("it is still there");
+        assert!(
+            read.permissions().readonly(),
+            "T16a: a writable attachment is moved by macOS, and the record's copy goes with it"
+        );
+        assert_eq!(std::fs::read(&held).expect("it still reads"), b"png");
+        // Asked twice, it is still read-only and still says so.
+        assert!(the_file_is_left_for_the_system_to_copy(&held));
+
+        std::fs::remove_file(&held).expect("the age sweep can still remove it");
+        assert!(!the_file_is_left_for_the_system_to_copy(&held), "a file that is gone is not attached");
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
     /// **T17a's bound, stated where the agent who draws the switch will be.**
     #[test]
     fn what_a_switch_may_claim_is_bounded() {
         assert!(A_SWITCH_MAY_SAY_WHAT_THE_KIND_IS_AND_NOT_WHAT_IT_CARRIES);
-        // The four reasons this application composes, none of them a fault.
-        // **T17a's list has five**, and the type's own head says why two of
-        // them cannot be reasons anything here composes.
+        // The three reasons this application composes, none of them a fault.
+        // The type's own head says why T17a's others are not composed here.
         let ways = [
             WhyThereIsNoPicture::TheDerivativeIsNotOnDiskYet,
             WhyThereIsNoPicture::ItIsOverTheMacsAttachmentCeiling,
-            WhyThereIsNoPicture::TheLinuxRouteIsNotBuilt,
             WhyThereIsNoPicture::ThisSystemTakesNone,
         ];
-        assert_eq!(ways.len(), 4);
+        assert_eq!(ways.len(), 3);
         assert!(as_path(&ThePicture::None(ways[0])).is_none());
     }
 }
