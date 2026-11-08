@@ -13,6 +13,7 @@
  */
 @import "the-drawing.css";
 @import "selecting-text.css";
+@import "focus.css";
 @import "chrome.css";
 @import "menus.css";
 @import "panes.css";

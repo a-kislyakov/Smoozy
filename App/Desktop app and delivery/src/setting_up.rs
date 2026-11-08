@@ -6300,9 +6300,13 @@ fn the_material_lands_in_the_package_area(material: &TheMaterial, package_area: 
         .all(|(path, _)| path.starts_with(&format!("{package_area}/")))
 }
 
-/// What is said where the material would not have landed in the package area.
+/// What is said where the material would not have landed in the package area:
+/// the files' state alone, since the lead above it names Telegram. Shown
+/// verbatim, so no straight apostrophe. *(Words changed 2026-11-07, step 13's
+/// final words check, finding G; was* Telegram's files are outside this
+/// server's Smoozy folder. None was placed.*)*
 const THE_FILES_WOULD_NOT_HAVE_LANDED: &str =
-    "Telegram's files are outside this server's Smoozy folder. None was placed.";
+    "Files not uploaded: their path is outside the Smoozy folder on this server.";
 
 /// **How a run ends where the role's desired state was not written** —
 /// `switching_it_on` for a first *enabled*, otherwise the pair restarting a
@@ -6861,22 +6865,25 @@ pub fn the_telegram_placement_on<R: tauri::Runtime>(
             server: server.to_string(),
         },
     ));
-    if matches!(
-        came_to,
-        WhereTheSetUpGot::TheRunEnded {
-            ending: TheRunsEnding::ItReachedDone { .. },
-            ..
-        }
-    ) {
-        the_act_is_in_the_diary(
-            app,
-            server,
-            smoozy_server_setup::diary::ActLine::TelegramsPieceWasPlacedByItsOwnAction {
-                the_desired_state_was_set_to_enabled: true,
-            },
-        );
-    }
+    the_act_is_in_the_diary(app, server, the_telegram_placements_line(&came_to));
     came_to
+}
+
+/// **`Server Setup` §12's act line for the dedicated entry point: one per use,
+/// whatever it came to.** *Done* says the desired state was set to enabled;
+/// any other ending, that it was not confirmed. *(Until 2026-11-07 only *done*
+/// wrote a line, so a failed *Install* left the diary empty: the demo's fault
+/// 2.)*
+fn the_telegram_placements_line(came_to: &WhereTheSetUpGot) -> smoozy_server_setup::diary::ActLine {
+    smoozy_server_setup::diary::ActLine::TelegramsPieceWasPlacedByItsOwnAction {
+        the_desired_state_was_set_to_enabled: matches!(
+            came_to,
+            WhereTheSetUpGot::TheRunEnded {
+                ending: TheRunsEnding::ItReachedDone { .. },
+                ..
+            }
+        ),
+    }
 }
 
 /// **`Server Setup` G2's dedicated entry point, driven** — the opening
@@ -11595,6 +11602,54 @@ pub fn the_users_build_line(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    /// **The demo's fault 2: a failed Telegram *Install* writes its diary line
+    /// too** — `Server Setup` §12, one per use of the dedicated entry point —
+    /// saying the desired state was not confirmed. *Done* says it was set.
+    #[test]
+    fn after_0_3_0_fault_2_a_failed_telegram_install_writes_a_diary_line() {
+        use smoozy_server_setup::diary::ActLine;
+        let ended = |ending: TheRunsEnding| WhereTheSetUpGot::TheRunEnded { at: Boundary::Started, ending };
+        let done = ended(TheRunsEnding::ItReachedDone {
+            a_blender_was_published: false,
+            the_driver_missed_the_optix_bar: false,
+            the_swap_waits: false,
+        });
+        assert_eq!(
+            the_telegram_placements_line(&done),
+            ActLine::TelegramsPieceWasPlacedByItsOwnAction { the_desired_state_was_set_to_enabled: true }
+        );
+        for failed in [
+            ended(TheRunsEnding::TheTelegramMaterialWasNotComposed {
+                said: "Telegram token not saved on this computer. Replace it in Settings.".to_string(),
+            }),
+            ended(TheRunsEnding::AStepFailed {
+                step: smoozy_server_setup::ready_action::Step::TelegramMaterial,
+                said: "no such folder".to_string(),
+            }),
+            ended(TheRunsEnding::TheUserStoppedIt),
+            WhereTheSetUpGot::TheConnectionWent,
+        ] {
+            let line = the_telegram_placements_line(&failed);
+            assert_eq!(
+                line,
+                ActLine::TelegramsPieceWasPlacedByItsOwnAction { the_desired_state_was_set_to_enabled: false },
+                "{failed:?}"
+            );
+            assert!(line.text().ends_with("the desired state was not confirmed"), "{}", line.text());
+        }
+    }
+
+    /// **Step 13's final words check, finding G**: the files' state alone, in
+    /// the industry's word, with no straight apostrophe — it is shown verbatim.
+    #[test]
+    fn step_13_g_files_outside_the_folder_say_not_uploaded() {
+        assert_eq!(
+            THE_FILES_WOULD_NOT_HAVE_LANDED,
+            "Files not uploaded: their path is outside the Smoozy folder on this server."
+        );
+        assert!(!THE_FILES_WOULD_NOT_HAVE_LANDED.contains('\''));
+    }
 
     /// **A recovery that was not carried on is read in all three of its
     /// wordings**, because a server keeps the words it was written with, and

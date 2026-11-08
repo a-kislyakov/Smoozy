@@ -676,3 +676,7 @@ Observed in controlled desk tests: `Audits/Build/Blender 5.3/Why cloth stands st
 ## C23 — Cloth withdrawal and shutter retained, 2026-11-06
 
 Observed on real Linux jobs and hand controls, Blender 5.2.3 and 5.3.0 RC: `Audits/Build/Blender 5.3/The Linux check of simulations and the film's faults — what happened.md`, sections 2 and 4. Scene-start-1 Flag did not retain skipped-frame status after playing; early-start Flag with blur differed at the first frame under preservation. START 2.25 shutter tail matched the control byte for byte. These observations do not explain Blender's cause or cover every cloth.
+
+## C24 — The later start, 2026-11-08
+
+Observed in controlled tests. Each kind's own first frame 20, stepped from 1 and from 20: frames 20, 30 and 40 identical in every kind and in 4.5.12, 5.0.1, 5.1.2, 5.2.3 and 5.3.0 RC, but a simulation zone with its object's Cache off (`Audits/Blender Research/Earlier frames/Hand tests — 5.3.md`, test 5; `Preparation/Blender Research/Findings/5.3/Earlier frames.md`, question 4). A frame before the first frame (same, test 7; question 5). Frames asked before the later start, the shutter at the near end, and the route through the render worker's own driver on 4.5.12, 5.0.1, 5.1.2, 5.2.3 and 5.3.0 RC: `Audits/Build/Twenty-seventh notes/Playing from the simulation's own start — what landed.md`, the tests being `App/Rendering — machine/src/acting/the_later_start_at_the_desk.rs`. Small scenes on one Mac, no window. Not covered: Linux, graphics cards, real production files.

@@ -313,6 +313,7 @@ mod tests {
     fn a_scene(layers: Vec<ViewLayerReading>) -> SceneReading {
         SceneReading {
             prepare_simulations: None,
+            simulations_begin: None,
             motion_blur: None,
             name: ExactName::as_the_reading_produced_it("Kitchen"),
             frame_start: 1,

@@ -1458,8 +1458,9 @@ function aNoticeIn(box) {
 ///   anything else, a press anywhere else closes it, the picked row in the
 ///   menu's bold.
 ///
-/// `context` is what the dialog hands Keys to show, as text.
-function aKeyControl(frm, said, held, context) {
+/// `context` is what the dialog hands Keys to show, as text. `choosesTheOnlyKey`
+/// is the Add dialog's alone: where exactly one usable key exists, it is chosen.
+function aKeyControl(frm, said, held, context, choosesTheOnlyKey = false) {
   const keyLabel = document.createElement("label");
   keyLabel.textContent = said.key;
   frm.appendChild(keyLabel);
@@ -1488,6 +1489,9 @@ function aKeyControl(frm, said, held, context) {
   let offered = null;
   let opens = null;
   let ask = null;
+  // **How many times the user has chosen here**, through the list, Open Keys
+  // or New key, so a key chosen for them never lands over one of theirs.
+  let picks = 0;
 
   const theRowsAreMarked = () => {
     for (const [key, row] of rows) {
@@ -1575,10 +1579,32 @@ function aKeyControl(frm, said, held, context) {
     if (told.verdict === "unusable") {
       if (row.button.parentNode) row.button.parentNode.removeChild(row.button);
       rows.delete(told.key);
-      return;
+    } else {
+      row.verdict = told.verdict;
+      theRowReads(row);
     }
-    row.verdict = told.verdict;
-    theRowReads(row);
+    theOnlyUsableKeyIsChosen();
+  };
+  // **Where exactly one usable key exists, the Add dialog opens with it
+  // chosen** — `Design/Servers § Adding a server` (the build runner's ruling
+  // of 2026-11-08, under Rule 10). The verdicts arrive behind the list
+  // (`Keys` U10a), so it is decided once the last one is in, and never over
+  // a key the field already holds — the user's own pick included, even one
+  // whose answer is still on its way.
+  const theOnlyUsableKeyIsChosen = () => {
+    if (!choosesTheOnlyKey || shown.key) return;
+    const listed = Array.from(rows.values()).filter((row) => !row.gone);
+    if (listed.some((row) => row.verdict === null)) return;
+    const usable = listed.filter((row) => row.verdict === "usable");
+    if (usable.length !== 1) return;
+    const picksBefore = picks;
+    shell.core.invoke("the_key_a_dialog_holds", { key: usable[0].offer.key }).then((held) => {
+      if (!held || shown.key || picks !== picksBefore) return;
+      shown.key = held.key;
+      shown.fingerprint = held.fingerprint;
+      theControlReads(held.shows_as);
+      if (shown.whenChosen) shown.whenChosen();
+    });
   };
   const theListIsAskedFor = () => {
     theLastKeyAsk += 1;
@@ -1630,6 +1656,7 @@ function aKeyControl(frm, said, held, context) {
   // Escape still reaches the dialog.
   function chosen(button) {
     if (button.classList.contains("off")) return;
+    picks += 1;
     shut();
     face.focus();
     if (button === opens) {
@@ -1669,6 +1696,7 @@ function aKeyControl(frm, said, held, context) {
   });
 
   const theKeysScreenIsOpened = (withTheNewKeyDialog) => {
+    picks += 1;
     aServerDialogPicksAKey(context(), (chosenThere) => {
       // **A cancel hands back nothing and the dialog stays as it was**; a
       // cancel caused by the user going elsewhere leaves them where they went.
@@ -1784,11 +1812,17 @@ function theAddDialogIsOpened() {
     // **`Keys` U11: the Add dialog hands over its own fields as they stand**,
     // any or all of which may be empty.
     let name = null;
-    const key = aKeyControl(frm, said, { key: "", fingerprint: "", showsAs: "" }, () => ({
-      label: name ? name.value : "",
-      username: username.value,
-      host: host.value,
-    }));
+    const key = aKeyControl(
+      frm,
+      said,
+      { key: "", fingerprint: "", showsAs: "" },
+      () => ({
+        label: name ? name.value : "",
+        username: username.value,
+        host: host.value,
+      }),
+      true,
+    );
     const keyRefusal = aRefusalUnder(frm);
     key.whenChosen = () => theRefusalReads(keyRefusal, "");
 
@@ -2001,7 +2035,20 @@ function aTickBox(label) {
     box.setAttribute("aria-checked", String(box.classList.contains("on")));
   };
   box.addEventListener("click", toggle);
+  // **Space ticks it**, as a tick box does (`Design/Whole app`, *Tab lands on
+  // the control itself*; the Creator's twenty-seventh notes, note 1).
+  theKeysTick(box, toggle);
   return { box, on: () => box.classList.contains("on") };
+}
+
+/// **Space or Return presses a tick or a choice that is not a native control**,
+/// the key a click would be. Every tick box on this screen goes through here.
+function theKeysTick(line, press) {
+  line.addEventListener("keydown", (event) => {
+    if (event.key !== " " && event.key !== "Enter") return;
+    event.preventDefault();
+    press();
+  });
 }
 
 function theRefusalsAreDrawnInto(where) {
@@ -2425,6 +2472,11 @@ function theRemovalBoxIsDrawn(server, said) {
       const off = document.createElement("div");
       off.className = "svoff";
       const label = document.createElement("label");
+      // **A Tab stop, ticked by Space, with its ring on the tick** (`Design/
+      // Whole app`, *Tab lands on the control itself*; the twenty-seventh
+      // notes, note 1). Until then it could be ticked only by a click.
+      label.setAttribute("role", "checkbox");
+      label.tabIndex = 0;
       const tick = document.createElement("span");
       tick.className = "cb";
       label.appendChild(tick);
@@ -2437,6 +2489,7 @@ function theRemovalBoxIsDrawn(server, said) {
         const on = label.classList.contains("on");
         tick.classList.toggle("on", on);
         tick.textContent = on ? "✓" : "";
+        label.setAttribute("aria-checked", String(on));
       };
       if (said.the_switch_off.already) label.classList.add("on");
       theTickIsShown();
@@ -2444,6 +2497,7 @@ function theRemovalBoxIsDrawn(server, said) {
         label.classList.toggle("on");
         theTickIsShown();
       });
+      theKeysTick(label, () => label.click());
       off.appendChild(label);
       const covers = document.createElement("span");
       covers.className = "mnote2";

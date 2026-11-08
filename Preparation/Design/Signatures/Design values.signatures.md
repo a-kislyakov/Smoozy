@@ -31,3 +31,7 @@
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Removed withdrawn paid text or obsolete references in wave 5; the account holds the complete change and check list.
 
 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — the ending's display word is *abandoned* where it was *given up* (the colour table's ending row and the paragraph under it). Tokens and colours unchanged. No auditor has seen it. Appended by the build runner.
+
+2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the job page at every width, and the reorder handle.md`, outside any round — the new token `--main-min` (280, measured), the job page's and the server list's own steps (534 and 806), and the drag grip drawn as six dots, which corrects the stale line calling marks off the type scale (the Creator's twenty-seventh notes, notes 4, 5 and 8). No auditor has seen it.
+
+2026-11-08 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the three Linux failures before 0.3.1.md`, outside any round — the drag grip on a group's heading sits on its first line, so a heading that wraps in a wider face keeps it there (Linux's Chrome, hosted run 42508904896). No auditor has seen it.

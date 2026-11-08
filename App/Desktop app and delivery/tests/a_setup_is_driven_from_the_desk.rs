@@ -7376,8 +7376,15 @@ mod on_a_desk_with_a_socket_pair {
             assert!(telegram_is_on);
 
             let said = smoozy_desktop::surface::set_up::what_it_came_to(&left.came_to);
+            // **On a Mac the sentence says what to do** (the build runner's
+            // ruling 1 of 2026-11-07, the demo's fault 1).
             assert_eq!(
-                said.said, "Setup stopped. Could not read the saved Telegram token.",
+                said.said,
+                if cfg!(target_os = "macos") {
+                    "Setup stopped. Could not read the saved Telegram token. If macOS asks to allow Smoozy, allow it, then try again."
+                } else {
+                    "Setup stopped. Could not read the saved Telegram token."
+                },
                 "{failure:?}: {:?}",
                 left.came_to
             );
@@ -8794,6 +8801,26 @@ mod on_a_desk_with_a_socket_pair {
         }
     }
 
+    /// **A snap's build on the stand-in machine, in a folder of its own login
+    /// area**, never the desk's own `/snap/bin`. The removal is check-first
+    /// (`Server Setup` S7): it lists the build's folder over the file-transfer
+    /// subsystem and sends nothing where the build is not in it. This test's
+    /// far end is the desk's own file system, so `/snap/bin/blender` read as
+    /// *maybe there* on a Mac, where `/snap` cannot be listed, and as *already
+    /// gone* on Linux, where snapd keeps `/snap/bin`. **Hosted run
+    /// 42508904896 is where this was found**: on its Linux machine the run
+    /// reached *done* with nothing sent to the manager. With `with_the_build`
+    /// false the folder is there and the build is not. Added 2026-11-08.
+    fn a_snap_build_on_the_stand_in(scratch: &Scratch, with_the_build: bool) -> String {
+        let folder = scratch.at("snap/bin");
+        std::fs::create_dir_all(&folder).expect("the stand-in's snap folder is made");
+        let build = folder.join("blender");
+        if with_the_build {
+            std::fs::write(&build, b"").expect("the stand-in's snap build is made");
+        }
+        build.to_string_lossy().into_owned()
+    }
+
     /// **Step 10c's owed piece 12 — `Server Setup` §12's *a Blender was taken
     /// off*, written where a removal ends removed, on both of `Server Setup`
     /// B15's routes.** The plain deletion of a build under Smoozy's own Blender
@@ -8841,8 +8868,8 @@ mod on_a_desk_with_a_socket_pair {
             }]
         );
 
-        let the_snap = |package: &'static str| TheRemovalAsked {
-            executable: "/snap/bin/blender".to_string(),
+        let the_snap = |package: &'static str, executable: String| TheRemovalAsked {
+            executable,
             the_answered_version: "5.2.0".to_string(),
             covered: Vec::new(),
             the_managers_package: Some(package),
@@ -8850,7 +8877,9 @@ mod on_a_desk_with_a_socket_pair {
         let mut script = with_the_probe(ended_cleanly(""));
         script.push(("sudo -n snap remove blender".to_string(), ended_cleanly("blender removed")));
         let scratch = Scratch::new("s12-the-managers-removal");
-        let left = a_removal_is_driven_here(&scratch, sftp_server.clone(), script.clone(), the_snap("blender"));
+        let build = a_snap_build_on_the_stand_in(&scratch, true);
+        let left = a_removal_is_driven_here(&scratch, sftp_server.clone(), script.clone(), the_snap("blender", build));
+        assert!(left.asked.iter().any(|said| said == "sudo -n snap remove blender"), "{:?}", left.asked);
         assert!(it_reached_done(&left.came_to), "the manager's removal came to {:?}", left.came_to);
         assert_eq!(
             left.diary,
@@ -8861,7 +8890,8 @@ mod on_a_desk_with_a_socket_pair {
         );
 
         let scratch = Scratch::new("s12-a-refused-removal");
-        let refused = a_removal_is_driven_here(&scratch, sftp_server, script, the_snap("blender-bin"));
+        let build = a_snap_build_on_the_stand_in(&scratch, true);
+        let refused = a_removal_is_driven_here(&scratch, sftp_server, script, the_snap("blender-bin", build));
         assert!(!it_reached_done(&refused.came_to), "{:?}", refused.came_to);
         assert!(refused.diary.is_empty(), "a refused removal wrote {:?}", refused.diary);
     }
@@ -8875,14 +8905,18 @@ mod on_a_desk_with_a_socket_pair {
     /// machine's removal step then carries the package and the mark
     /// *performed*, and the run reaches *done*. **For any other package name
     /// nothing goes to the manager**, no removal step is commanded, and the
-    /// run ends failed at the removal. Undone — the snap row left on the plain
-    /// deletion, or the package not checked against the pairing — this fails.
+    /// run ends failed at the removal. **Where the build is already gone from
+    /// its folder, nothing goes to the manager** and the step's mark is
+    /// *nothing to do* (`Server Setup` S7). Undone — the snap row left on the
+    /// plain deletion, or the package not checked against the pairing — this
+    /// fails. *(The build stood in the desk's own `/snap/bin` until
+    /// 2026-11-08; see [`a_snap_build_on_the_stand_in`].)*
     #[test]
     fn a_managed_blender_is_removed_through_its_own_manager_with_that_package_alone() {
         let _deadline = TheTestsDeadline::started();
         let sftp_server = the_server_or_say_so!();
-        let the_removal = |package: &'static str| TheRemovalAsked {
-            executable: "/snap/bin/blender".to_string(),
+        let the_removal = |package: &'static str, executable: String| TheRemovalAsked {
+            executable,
             the_answered_version: "5.2.0".to_string(),
             covered: Vec::new(),
             the_managers_package: Some(package),
@@ -8891,7 +8925,8 @@ mod on_a_desk_with_a_socket_pair {
         script.push(("sudo -n snap remove blender".to_string(), ended_cleanly("blender removed")));
 
         let scratch = Scratch::new("b15-the-managers-removal");
-        let left = a_removal_is_driven_here(&scratch, sftp_server.clone(), script.clone(), the_removal("blender"));
+        let build = a_snap_build_on_the_stand_in(&scratch, true);
+        let left = a_removal_is_driven_here(&scratch, sftp_server.clone(), script.clone(), the_removal("blender", build));
         assert!(
             matches!(
                 &left.came_to,
@@ -8916,8 +8951,33 @@ mod on_a_desk_with_a_socket_pair {
             Some(asked::IT_PERFORMED.to_string())
         )));
 
+        let scratch = Scratch::new("b15-already-gone");
+        let gone = a_snap_build_on_the_stand_in(&scratch, false);
+        let left = a_removal_is_driven_here(&scratch, sftp_server.clone(), script.clone(), the_removal("blender", gone));
+        assert!(
+            matches!(
+                &left.came_to,
+                WhereTheSetUpGot::TheRunEnded {
+                    at: smoozy_server_setup::run::Boundary::Done,
+                    ending: TheRunsEnding::ItReachedDone { .. },
+                }
+            ),
+            "the removal of a build already gone came to {:?}",
+            left.came_to
+        );
+        assert!(
+            left.asked.iter().all(|said| !said.contains("snap") && !said.contains("remove")),
+            "a build already gone was sent to the manager: {:?}",
+            left.asked
+        );
+        assert!(left.marks.contains(&(
+            asked::THE_BUILD_IS_REMOVED_STEP.to_string(),
+            Some(asked::IT_HAD_NOTHING_TO_DO.to_string())
+        )), "{:?}", left.marks);
+
         let scratch = Scratch::new("b15-another-package");
-        let refused = a_removal_is_driven_here(&scratch, sftp_server, script, the_removal("blender-bin"));
+        let build = a_snap_build_on_the_stand_in(&scratch, true);
+        let refused = a_removal_is_driven_here(&scratch, sftp_server, script, the_removal("blender-bin", build));
         assert!(
             refused.asked.iter().all(|said| !said.contains("snap") && !said.contains("remove")),
             "a command went to the manager for another package: {:?}",

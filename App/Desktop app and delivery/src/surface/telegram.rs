@@ -246,6 +246,13 @@ mod words {
     // **fix-here item 5 of the round *setting it up, and what the desktop keeps***, in the
     // licence key screen's pattern: a save that did not answer in time
     // (`Security and licence` §3.0 rule 5 as amended).
+    // On a Mac it says what to do, since the system's own box is what a save
+    // waits on: the build runner's ruling 1 of 2026-11-07, on the demo's
+    // faults 1 and 7.
+    #[cfg(target_os = "macos")]
+    pub const THE_TOKEN_WAS_NOT_CONFIRMED: &str =
+        "Could not confirm the token was saved. If macOS asks to allow Smoozy, allow it, then try again.";
+    #[cfg(not(target_os = "macos"))]
     pub const THE_TOKEN_WAS_NOT_CONFIRMED: &str = "Saving the token was not confirmed. Allow Smoozy access and try again.";
 
     // The mockup's `#stgbotok`.
@@ -1223,19 +1230,32 @@ fn the_replacement_is_saved<R: Runtime>(app: &AppHandle<R>, serial: u64, check: 
         );
         // **The section behind the box is drawn again on a failure
         // too.** Added 2026-09-19, from the Gemini catch-up's Area 3
-        // Verdict, F-1. A replacement moves the generation and forgets
-        // the stored-token fact before it stores anything
-        // (`told_record::a_replacement_token_accepted`), so a failed
-        // one leaves the record saying *no token stored* while the
-        // section still showed the row of dots — the old round's H2
-        // stops those dots only when the section is drawn again. The
-        // application lock was let go at the end of the block above.
+        // Verdict, F-1. Until 2026-11-07 a replacement moved the
+        // generation and forgot the stored-token fact before it stored
+        // anything, so a failed one left the record saying *no token
+        // stored*; since then a failed one moves nothing
+        // (`told_record::a_replacement_token_accepted`, `Telegram` L4 as
+        // amended), and drawing again costs nothing. The application
+        // lock was let go at the end of the block above.
         the_section_is_posted_from(app, None);
     } else {
         the_walkthrough_is_posted(app, serial, TheStage::Shut);
+        the_kept_install_failures_go(app);
         the_section_is_posted_from(app, None);
         // Fault 11: the new token reaches every server connected now.
         crate::setting_up::the_tellings_are_delivered_on_every_live_connection(app);
+    }
+}
+
+/// **A token saved, or a bot set up: every server's kept *Install* sentence
+/// goes, on Render settings and on the set-up card**, because it may name a
+/// token that is no longer the one on record (Rule 8). Called before the
+/// section is drawn again, which is what draws Render settings again.
+/// *(Added 2026-11-07, the demo's fault 13.)*
+fn the_kept_install_failures_go<R: Runtime>(app: &AppHandle<R>) {
+    crate::servers::published::every_telegram_install_failure_goes();
+    if let Some(queue) = app.try_state::<Arc<TheOneQueue>>() {
+        crate::surface::set_up::the_telegram_install_lines_go(queue.inner());
     }
 }
 
@@ -1289,6 +1309,7 @@ fn the_bot_is_kept<R: Runtime>(app: &AppHandle<R>, serial: u64, retry: TheKeepTo
     match outcome {
         Ok(()) => {
             the_walkthrough_is_posted(app, serial, TheStage::TheBotReplied { username });
+            the_kept_install_failures_go(app);
             the_section_is_posted_from(app, None);
             // Fault 11: the bot, and the switch on, reach every server
             // connected now.
@@ -1873,6 +1894,46 @@ mod tests {
             let body = the_body_of(signature);
             assert!(body.contains(telling), "{signature} tells no connected server");
         }
+    }
+
+    /// **The demo's fault 13: a token saved, or a bot set up, takes every kept
+    /// *Install* sentence away before anything is drawn again**, on the success
+    /// branch only. Asserted over the acts' own text, as fault 11's test is,
+    /// because each runs inside the shell; what goes is `published`'s own test.
+    #[test]
+    fn after_0_3_0_fault_13_a_saved_token_takes_the_kept_install_failures_away() {
+        for signature in ["fn the_bot_is_kept<R: Runtime>(", "fn the_replacement_is_saved<R: Runtime>("] {
+            let body = the_body_of(signature);
+            let success = body
+                .split("the_walkthrough_is_posted(app, serial, TheStage::")
+                .find(|part| part.starts_with("Shut") || part.starts_with("TheBotReplied"))
+                .unwrap_or_else(|| panic!("{signature} has no success branch"));
+            let goes = success.find("the_kept_install_failures_go(app);");
+            let drawn = success.find("the_section_is_posted_from(app, None);");
+            assert!(goes.is_some() && goes < drawn, "{signature} leaves the kept Install sentences standing");
+        }
+        let failing = the_body_of("fn the_replacement_is_saved<R: Runtime>(");
+        let failing = failing.split("} else {").next().expect("the failure branch");
+        assert!(!failing.contains("the_kept_install_failures_go("), "a failed save took a true sentence away");
+    }
+
+    /// **The runner's ruling 1 on the demo's faults 1 and 7, 2026-11-07**: a
+    /// save that did not answer in time says what to do on a Mac, where the
+    /// system's own box is what it waits on, in the shared *Could not …* shape.
+    #[test]
+    fn after_0_3_0_a_save_that_timed_out_says_to_allow_smoozy() {
+        assert_eq!(
+            words::THE_TOKEN_WAS_NOT_CONFIRMED,
+            if cfg!(target_os = "macos") {
+                "Could not confirm the token was saved. If macOS asks to allow Smoozy, allow it, then try again."
+            } else {
+                "Saving the token was not confirmed. Allow Smoozy access and try again."
+            }
+        );
+        assert_eq!(
+            the_sentence_for_a_replacement_not_accepted(&told_record::WhyTheReplacementWasNotAccepted::TheTokenWasNotConfirmed),
+            words::THE_TOKEN_WAS_NOT_CONFIRMED
+        );
     }
 
     /// **fix-here item 5 and fix-here item 14: keeping that did not finish is its own stage, with the

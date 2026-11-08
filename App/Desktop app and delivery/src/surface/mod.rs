@@ -76,6 +76,8 @@ pub mod transfers;
 
 #[cfg(test)]
 mod selecting_text;
+#[cfg(test)]
+mod focus;
 
 /// **The one registration list.** A piece adds one line.
 ///
@@ -2167,7 +2169,7 @@ mod a_redraw_keeps_its_place {
         ("a-server.js", r#"export const RENDER_SETTINGS = "set"; export const SET_UP = "setupview"; export const FILES = "files"; export const panels = []; export function aPanelIsRegistered(panel) { panels.push(panel); } export function thePanelIsOpenedOver() {} export function theStripReads() {} export function theCurrentTabIs() {} export function thePanelCollapsesAsItsChevronDoes() {}"#),
         ("files.js", r#"export function theBrowserIsOpenedAt() {} export function theSavedWithVersionReadFor() { return ""; }"#),
         ("event-route.js", r#"export function whenTold(kind, handler) { (globalThis.told[kind] ||= []).push(handler); }"#),
-        ("panes.js", r#"export function theSeamsAreLive() {}"#),
+        ("panes.js", r#"export function theSeamsAreLive() {} export function thePagesAreMarked() {}"#),
         ("servers.js", r#"export function theMomentReads(seconds) { return String(seconds); }"#),
         ("the-dependency-check.js", r#"export async function theCheckIsOpenedOn() {} export async function theCheckIsShownOn() {}"#),
         ("the-failure-shape.js", r#"export const EXPANDED = "e"; export function theControlsFrom() { return []; } export function theFailureShape() { return document.createElement("div"); }"#),

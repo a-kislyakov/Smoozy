@@ -113,3 +113,5 @@
 
 2026-11-06 — GPT-6.1 (Codex) — Cloth withdrawal and linked simulations on the settings page, within the runner's brief.
 2026-11-06 — GPT-6.1 (Codex) — Planned grouped publication and folder confirmation reads, and current-file reading status.
+2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the output window, the re-run mark, and the dependency check.md`, outside any round — M14a: a remap that waits for its linked files. No auditor has seen it.
+2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the bake folder named after the file on the computer.md`, outside any round — G6: the default cache folder named after the file on the computer, and not after the file above for a linked object. No auditor has seen it.

@@ -86,6 +86,11 @@
   gap: 16px;
   padding: var(--gutter);
 }
+/* **An empty holder takes no room.** The holder is made the first time a
+ * failure stands and is never taken away, so once the failure was cleared
+ * its padding alone stood as a blank band 44 pixels tall across the window's
+ * foot (the Creator's twenty-seventh notes, both screenshots). */
+.failures:empty { display: none; }
 
 /* The collapsed form on a list row: dot, sentence, cross, on one line. */
 .failure-row {

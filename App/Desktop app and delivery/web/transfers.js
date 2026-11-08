@@ -819,6 +819,16 @@ function aBox(onTop) {
   };
 }
 
+/// **Space or Return presses a tick or a choice that is not a native control**,
+/// the key a click would be.
+function theKeysPress(line, press) {
+  line.addEventListener("keydown", (event) => {
+    if (event.key !== " " && event.key !== "Enter") return;
+    event.preventDefault();
+    press();
+  });
+}
+
 function aRowOfAnswers(answers) {
   const row = el("div", "mrow");
   row.appendChild(el("span", "grow"));
@@ -972,13 +982,20 @@ function theFormatBoxIsDrawn(said, whenDone, closesOnDone, whenReadItNow, whenSo
       // the Creator's note 16 on their second notes).
       one.dataset.format = format.name;
       const tick = el("span", "cb");
+      // **A Tab stop, ticked by Space, its ring on the tick** (`Design/Whole
+      // app`, *Tab lands on the control itself*; the Creator's twenty-seventh
+      // notes, note 1). Until then a format could be ticked only by a click.
+      one.setAttribute("role", "checkbox");
+      one.tabIndex = 0;
       const setIt = (on) => {
         one.classList.toggle("on", on);
+        one.setAttribute("aria-checked", String(on));
         tick.classList.toggle("on", on);
         tick.textContent = on ? "✓" : "";
       };
       setIt(format.chosen);
       one.addEventListener("click", () => setIt(!one.classList.contains("on")));
+      theKeysPress(one, () => setIt(!one.classList.contains("on")));
       one.appendChild(tick);
       const fmtName = el("span", "fmn");
       fmtName.textContent = format.said;
@@ -1099,9 +1116,12 @@ function theFormatBoxIsDrawn(said, whenDone, closesOnDone, whenReadItNow, whenSo
     const one = el("label", "fmt", "choice3");
     if (at !== undefined) one.dataset.at = String(at);
     one.setAttribute("role", "radio");
+    // A Tab stop, picked by Space as by a click (the same note).
+    one.tabIndex = 0;
     one.appendChild(el("span", "rb"));
     fill(one);
     one.addEventListener("click", () => (whenChosen ? whenChosen(one) : choose(one)));
+    theKeysPress(one, () => (whenChosen ? whenChosen(one) : choose(one)));
     choices.push(one);
     folders.appendChild(one);
     return one;

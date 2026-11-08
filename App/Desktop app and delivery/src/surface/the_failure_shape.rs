@@ -1402,4 +1402,84 @@ mod tests {
 
         }
     }
+    /// **An empty holder at the window's foot takes no room** — the blank
+    /// band of the Creator's twenty-seventh notes, both screenshots, about 44
+    /// pixels tall under the panes. The failure holder is made the first time
+    /// a failure stands and is never taken away, so once that failure was
+    /// cleared its padding alone stood across the foot. Run in a real browser
+    /// with the application's stylesheets and the real `web/the-failure-shape.js`:
+    /// a failure stands, then is cleared, and the holder takes no height; the
+    /// other two holders of the same shape (a server's output, something
+    /// underway) take none while empty. **It failed before the fix**: 44
+    /// pixels, then 24 and 24. Skipped, and says so, where no Chrome is
+    /// installed.
+    #[test]
+    fn twenty_seventh_an_empty_holder_at_the_windows_foot_takes_no_room_in_a_real_browser() {
+        let chrome = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser",
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        ].into_iter().map(std::path::PathBuf::from).find(|path| path.exists());
+        let Some(chrome) = chrome else {
+            eprintln!("SKIPPED: no Chrome; the empty holders were not measured");
+            return;
+        };
+        let folder = std::env::temp_dir().join(format!("smoozy-twenty-seventh-band-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).unwrap();
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for entry in std::fs::read_dir(&web).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|ext| ext.to_str()) == Some("css") {
+                std::fs::copy(&path, folder.join(path.file_name().unwrap())).unwrap();
+            }
+        }
+        for page in ["the-failure-shape.js", "the-value-drawn.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).unwrap();
+        }
+        std::fs::write(folder.join("event-route.js"), r#"export function whenTold(kind, handler) {
+  const held = globalThis.told.get(kind) || []; held.push(handler); globalThis.told.set(kind, held);
+}"#).unwrap();
+        std::fs::write(folder.join("index.html"), r#"<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="smoozy.css">
+<style>html, body { margin:0; height:100%; overflow:hidden; } .app { height:100%; } #out { display:none; }</style>
+</head><body><div class="app"><div class="titlebar"></div><div class="pane" id="pane"><div class="body"><nav class="rail"></nav><div class="main"></div></div></div></div>
+<pre id="out"></pre>
+<script>globalThis.told = new Map(); window.__TAURI__ = {core:{invoke() { return Promise.resolve(null); }}};</script>
+<script type="module">
+import './the-failure-shape.js';
+const out = document.getElementById('out');
+try {
+  const post = (kind, said) => { for (const handler of told.get(kind) || []) handler({said}); };
+  post('presentation:a-failure-is-standing', {key:'k1', sentence:'The connection to 4000ada was lost.', kind:'k', subject:'s1', subjectKind:'server'});
+  const held = document.getElementById('the-failures');
+  const standing = held.getBoundingClientRect().height;
+  post('presentation:a-failure-was-cleared', {key:'k1'});
+  const pane = document.getElementById('pane');
+  const empty = (name) => { const one = document.createElement('div'); one.className = name; pane.appendChild(one); return one.getBoundingClientRect().height; };
+  out.textContent = JSON.stringify({standing, cleared: held.getBoundingClientRect().height, children: held.children.length,
+    output: empty('machines-own-words'), underway: empty('underway')});
+} catch (error) { out.textContent = JSON.stringify({error: String(error.stack || error)}); }
+</script></body></html>"#).unwrap();
+        let page = folder.join("index.html");
+        let url = format!("file://{}", page.to_string_lossy().replace('\\', "/").replace(' ', "%20"));
+        let ran = std::process::Command::new(&chrome)
+            .args(["--headless", "--disable-gpu", "--no-first-run", "--allow-file-access-from-files",
+                "--virtual-time-budget=5000", "--window-size=1245,780", "--dump-dom"])
+            .arg(format!("--user-data-dir={}", folder.join("profile").display()))
+            .arg(url)
+            .output();
+        let _ = std::fs::remove_dir_all(&folder);
+        let ran = ran.expect("the browser starts");
+        let dom = String::from_utf8_lossy(&ran.stdout);
+        let result = dom.split("<pre id=\"out\">").nth(1).and_then(|part| part.split("</pre>").next()).unwrap_or("");
+        let measured: serde_json::Value = serde_json::from_str(result).unwrap_or_else(|error| panic!("no measurement: {error}:\n{dom}"));
+        assert!(measured.get("error").is_none(), "{measured}");
+        assert!(measured["standing"].as_f64().unwrap() > 0.0, "a standing failure is drawn: {measured}");
+        assert_eq!(measured["children"], 0, "the failure was cleared: {measured}");
+        for holder in ["cleared", "output", "underway"] {
+            assert_eq!(measured[holder].as_f64(), Some(0.0), "{holder}: an empty holder takes room: {measured}");
+        }
+    }
 }

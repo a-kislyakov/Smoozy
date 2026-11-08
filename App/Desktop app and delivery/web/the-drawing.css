@@ -18,11 +18,18 @@
    than value**, so no number moved:
 
      1. `.app` no longer carries `container-type: inline-size` or
-        `container-name: win`.
+        `container-name: win`, and `.qdetail` and `.svlist` no longer carry
+        theirs.
      2. Every `@container win (max-width: Npx)` block is now an ordinary
         selector block keyed to a step mark that `web/panes.js` writes onto
         `.app` — `.app[data-narrow~="s1"]` and so on, at the same 1180, 1020,
         900, 780 and 680 boundaries, with every declaration inside untouched.
+        The job page's own `@container entry (width < 534px)` block and the
+        server list's `@container servers (max-width: 806px)` are keyed the
+        same way, to the marks `web/panes.js` writes onto the page itself —
+        `.qdetail[data-narrow~="stacked"]` and `.svlist[data-narrow~="folded"]`
+        — at the same numbers. `.qdetail` and `.svlist` drop their
+        `container-type` and `container-name` as `.app` does.
 
    **Why the mechanism differs is stated in `smoozy.css`'s own header and
    nowhere else**, which is what the ruling asks. Do not restate it here.
@@ -70,6 +77,7 @@ p { margin: 0; }
   --rail-w:  214px;  /* navigation only, never the server list */
   --list-w:  380px;  /* a list beside a detail */
   --side-w:  234px;  /* the column holding a preview */
+  --main-min: 280px; /* the narrowest a job's main column goes beside its preview */
 
   /* — the side gutter: how far a screen's own content sits from the edge of
        the pane it is in. One number, because it is one question, and every
@@ -480,7 +488,11 @@ body { display: flex; flex-direction: column; }
 /* ── Queue & History ── */
 #queueview, #historyview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 #queueview[hidden], #historyview[hidden] { display: none; }
-.qsplit { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, var(--list-w)) minmax(0, 1fr); }
+/* The entry beside the list keeps a floor of its own — its main column's
+   floor and its two gutters — and the list gives way to it, so a list
+   dragged wide in a narrow window cannot squeeze the entry into a strip
+   (the Creator's twenty-seventh notes, notes 4 and 5). */
+.qsplit { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, var(--list-w)) minmax(calc(var(--main-min) + 2 * var(--gutter)), 1fr); }
 .qlist { min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
 .qhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; padding: 13px var(--gutter); border-bottom: 1px solid var(--line); }
 .qhead h1 { margin: 0; font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
@@ -533,7 +545,7 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .qrow.in { padding-left: calc(var(--gutter) + 14px); }
 /* A row that cannot be moved keeps the space and shows nothing in it, so the
    rows still line up and the withheld grip is itself the answer. */
-.qrow .qgrip { margin-top: 3px; }
+.qrow .qgrip { margin-top: 4px; }
 .qgrip.nodrag { visibility: hidden; }
 .qrow.stale .qn, .qrow.stale .qs { color: var(--ink3); }
 /* Each line of a row stays one line: a cell that does not fit ends in an
@@ -563,7 +575,17 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
    count on a line of its own — "Cancel all" over "4". */
 .glnk { font: inherit; font-size: var(--t-sm); color: var(--accent); font-weight: 550; background: none; border: 0; cursor: pointer; padding: 0; white-space: nowrap; }
 /* The group's heading is the grip for the whole block. A row has its own. */
-.qgrip { color: var(--ink3); cursor: grab; font-size: var(--t-xs); letter-spacing: -3px; flex: 0 0 auto; }
+.qgrip { position: relative; flex: 0 0 auto; width: 8px; height: 12px; color: var(--ink3); cursor: grab; }
+/* The grip is drawn, not typed: six dots, two columns of three, centred on
+   the name's line, a step darker on hover. Until 2026-11-07 it was the
+   letters ⋮⋮ pulled together, which read as a stray colon (the Creator's
+   twenty-seventh notes, note 8). */
+.qgrip::before { content: ""; position: absolute; left: 1px; top: 1px; width: 2px; height: 2px; border-radius: 50%; background: currentColor; box-shadow: 4px 0 currentColor, 0 4px currentColor, 4px 4px currentColor, 0 8px currentColor, 4px 8px currentColor; }
+.qrow:hover .qgrip, .qgh:hover .qgrip { color: var(--ink2); }
+/* On a heading the grip sits on the first line, never the middle of the
+   block: in a wider face the heading wraps (2026-11-08). 1.62 is the
+   page's own line height. */
+.qgh .qgrip { align-self: flex-start; margin-top: calc((var(--t-sm) * 1.62 - 12px) / 2); }
 /* Where a control is gone for good, its reason takes the space rather than a
    greyed button that cannot be pressed. */
 .gonel { font-size: var(--t-sm); color: var(--ink3); align-self: center; }
@@ -592,7 +614,10 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
    2026-10-18). */
 .qdacts + .qanswer { flex-basis: 100%; }
 .qdsub { font-size: var(--t-sm); color: var(--ink3); margin-top: 2px; }
-.qdbody { flex: 1; min-height: 0; overflow-y: auto; padding: 20px var(--gutter) 26px; display: grid; grid-template-columns: minmax(0,1fr) var(--side-w); gap: 24px 30px; align-content: start; }
+/* The main column keeps its floor and the preview column gives way first:
+   it grows toward its own width only from the room left over above the
+   main column's floor (the Creator's twenty-seventh notes, notes 4 and 5). */
+.qdbody { flex: 1; min-height: 0; overflow-y: auto; padding: 20px var(--gutter) 26px; display: grid; grid-template-columns: minmax(var(--main-min), 1fr) minmax(180px, var(--side-w)); gap: 24px 30px; align-content: start; }
 .qdmain, .qdside { display: flex; flex-direction: column; gap: 19px; min-width: 0; }
 
 .stepper { display: flex; align-items: center; gap: 9px; }
@@ -1523,7 +1548,10 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
    the chosen one. At 196 it fitted in the ordinary weight and not in the bold,
    so choosing Warnings and notifications wrapped it to two lines and pushed
    every section under it down. The rail's own width is the number. */
-.stgwrap { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); }
+/* Settings' own section list is its own width, not the rail's: a rail dragged
+   wide took Settings' list with it, and the page lost the width twice (the
+   Creator's twenty-seventh notes, notes 4 and 5). */
+.stgwrap { flex: 1; min-height: 0; display: grid; grid-template-columns: 214px minmax(0, 1fr); }
 .stgnav { border-right: 1px solid var(--line); background: var(--sunk); padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .stgnav button { font: inherit; font-size: var(--t-md); text-align: left; color: var(--ink2); background: none; border: 0; border-radius: var(--r-md); padding: 6px 10px; cursor: pointer; }
 .stgnav button:hover { background: var(--sel); }
@@ -2305,6 +2333,27 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .app[data-narrow~="s1"] .dltg > .grp + .grp > h3 + * { grid-row: 2; }
 .app[data-narrow~="s1"] .dltg > .grp + .grp > h3 + * + * { grid-row: 3; }
 
+/* A job's page also stacks by its own width, whatever the window's: with
+   the rail and the list dragged wide, a window well above 1180 can leave
+   the page too narrow for both its columns. It stacks below what the two
+   columns need at their smallest — two gutters, the gap, the main column's
+   floor and the preview's smallest width: 22 + 30 + 280 + 180 + 22 = 534 —
+   and takes the first step's own layout (the Creator's twenty-seventh
+   notes, notes 4 and 5, 2026-11-07). The mockup asks the page's own
+   container; here `web/panes.js` writes the mark onto the page. */
+.qdetail[data-narrow~="stacked"] .qdbody { grid-template-columns: minmax(0, 1fr); }
+.qdetail[data-narrow~="stacked"] .qdbody > .seam { display: none; }
+.qdetail[data-narrow~="stacked"] .qdside { flex-direction: row; flex-wrap: wrap; gap: 22px; }
+.qdetail[data-narrow~="stacked"] .qdside > .grp { flex: 1 1 210px; }
+.qdetail[data-narrow~="stacked"] .dltg { flex: 1 1 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 22px; align-items: start; }
+.qdetail[data-narrow~="stacked"] .dltg > .grp { display: contents; }
+.qdetail[data-narrow~="stacked"] .dltg > .grp > * { grid-column: 1; }
+.qdetail[data-narrow~="stacked"] .dltg > .grp + .grp > * { grid-column: 2; }
+.qdetail[data-narrow~="stacked"] .dltg > .grp > .adl,
+.qdetail[data-narrow~="stacked"] .dltg > .grp + .grp > h3 { grid-row: 1; align-self: center; }
+.qdetail[data-narrow~="stacked"] .dltg > .grp + .grp > h3 + * { grid-row: 2; }
+.qdetail[data-narrow~="stacked"] .dltg > .grp + .grp > h3 + * + * { grid-row: 3; }
+
 .app[data-narrow~="s2"] .svrow { grid-template-columns: minmax(0,1fr) minmax(0,1.25fr) 248px; }
 .app[data-narrow~="s2"] .svmain { grid-column: 1; grid-row: 1 / span 2; }
 .app[data-narrow~="s2"] .svwork { grid-column: 2; grid-row: 1; }
@@ -2314,6 +2363,17 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .app[data-narrow~="s2"] .frow .fmeta.kind,
 .app[data-narrow~="s2"] .frow .sortb.kind { display: none; }
 .app[data-narrow~="s2"] .cols { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+
+/* The server list folds by its own width too: with the rail dragged wide, a
+   window above 1020 can leave the list as narrow as the second step's, 806
+   pixels (1020 less the rail's own 214), and its rows squeezed the address
+   onto three lines (the Creator's twenty-seventh notes, notes 4 and 5). The
+   mockup asks the list's own container; here `web/panes.js` writes the mark. */
+.svlist[data-narrow~="folded"] .svrow { grid-template-columns: minmax(0,1fr) minmax(0,1.25fr) 248px; }
+.svlist[data-narrow~="folded"] .svmain { grid-column: 1; grid-row: 1 / span 2; }
+.svlist[data-narrow~="folded"] .svwork { grid-column: 2; grid-row: 1; }
+.svlist[data-narrow~="folded"] .svhw { grid-column: 2; grid-row: 2; margin-top: 5px; font-size: var(--t-sm); color: var(--ink3); }
+.svlist[data-narrow~="folded"] .svacts { grid-column: 3; grid-row: 1 / span 2; align-content: start; }
 
 .app[data-narrow~="s3"] .body { --rail-w: 168px; --list-w: 300px; }
 .app[data-narrow~="s3"] .frow { grid-template-columns: 17px minmax(0, 1fr) 100px; }
@@ -2410,6 +2470,14 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* The seam sits on the line it moves, so each of its hosts has to be a
    positioning context. None of them was before. */
 .body, .qsplit, .qdbody { position: relative; }
+/* The preview's seam sits in the gap beside the preview column: placed in
+   that column's own cell of the page and moved left by half the gap, so it
+   follows the column at whatever width the column takes, and runs the whole
+   height of the content, scrolled or not. Until 2026-11-07 it was placed
+   from the page's outer edge, which sits a gutter further right, so its
+   line fell 17 pixels inside the column (the Creator's twenty-seventh
+   notes, note 3). */
+.qdbody > .seam { grid-column: 2; grid-row: 1; left: calc(30px / -2); }
 
 /* ══════════════════════════════════════════════════════════════════
    NOTIFICATIONS.
@@ -2787,12 +2855,16 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .fsztip[hidden] { display: none; }
 .log .qlines > span.err { color: var(--ink); }
-.pvstep { display: flex; align-items: center; gap: 0; }
+/* At the preview column's smallest widths, Show latest drops under the
+   arrows rather than spilling out of the column: it takes its own words'
+   width, so at the column's own width it still sits on the arrows' line
+   (the Creator's twenty-seventh notes, notes 4 and 5). */
+.pvstep { display: flex; align-items: center; gap: 0; flex-wrap: wrap; row-gap: 6px; }
 .pvstep .pvframe { display: contents; }
 .pvstep [data-pvgo="-1"] { order: 1; margin-left: 7px; }
 .pvstep .pvframe input { order: 2; width: 58px; flex: none; margin: 0 2px; }
 .pvstep [data-pvgo="1"] { order: 3; }
-.pvstep [data-pvlatest] { order: 4; margin-left: 10px; }
+.pvstep [data-pvlatest] { order: 4; margin-left: 10px; flex: 0 1 auto; width: auto; }
 .pvstep .sb { width: 24px; height: 24px; flex: none; }
 .pvlarge .pvbox { width: 100%; max-height: none; }
 /* A picture looked at in Files (the Creator's seventeenth notes, note 11):
@@ -2829,8 +2901,13 @@ body.resizing { cursor: col-resize; user-select: none; }
 .qst.e-chk { color: var(--ink3); font-weight: 600; }
 /* The check on the entry: its picture, what it is, what came of it. */
 .ffunit { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--sunk); }
-.ffunit .ffu { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.ffunit > .mini { flex: none; }
+.ffunit .ffu { flex: 1 1 12em; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* The words and the card's buttons share what is left after the picture,
+   and a button drops under the words, lined up after the picture, rather
+   than squeezing them to a word a line (the Creator's twenty-seventh notes,
+   note 4). */
+.ffunit .ffr { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ffr > .mini { flex: none; }
 .ffw1 { font-size: var(--t-sm); font-weight: 600; color: var(--ink); }
 .ffw2 { font-size: var(--t-sm); color: var(--ink2); line-height: 1.45; }
 .ffw2 b { font-weight: 600; color: var(--ink); }

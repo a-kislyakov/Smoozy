@@ -57,5 +57,10 @@ mod libraries_at_load_at_the_desk;
 // by default.
 #[cfg(all(test, unix))]
 mod a_reading_sees_its_libraries_at_the_desk;
+// `Rendering` L10b's later start and `Job files and outputs` R4 item 8's first
+// frame, through the worker's driver, run by hand with real Blenders, ignored by
+// default. Added 2026-11-08.
+#[cfg(all(test, unix))]
+mod the_later_start_at_the_desk;
 #[cfg(unix)]
 pub mod the_optix_library;

@@ -4805,15 +4805,21 @@ fn the_simulation_rows(held: &WhatTheRunHolds, key: &FileKey, ticked: &[ExactNam
         let range = if !on {
             "Unbaked simulations may render frozen or not match playback.".to_string()
         } else if let (Some(low), Some(high)) = (list.iter().min(), list.iter().max()) {
-            let start = one.frame_start.min(*low);
+            // `Rendering` L10b: the start, raised to where the simulations
+            // begin where the reading gives that, never lowered (added
+            // 2026-11-08).
+            let start = |lowest: i64| one.simulations_begin.map_or(one.frame_start.min(lowest), |begins| one.frame_start.min(lowest).max(begins));
             let last_played = |last| one.motion_blur.as_ref().map_or(last, |blur| blur.last_played_frame(last));
-            let high = last_played(*high);
+            let played = |lowest: i64, highest: i64| Some((start(lowest), last_played(highest))).filter(|(from, to)| from <= to);
+            let job = played(*low, *high);
             let check = held.submission.get(&keyed(&key.server.as_text(), &key.path))
                 .is_some_and(|choice| choice.the_first_frame_check) && list.len() > 1;
-            if check {
-                let first = list[0];
-                format!("Plays frames {}–{} for the check and {}–{} for the job, on every attempt.", one.frame_start.min(first), last_played(first), start, high)
-            } else { format!("Plays frames {}–{} before rendering, on every attempt.", start, high) }
+            match (job, check.then(|| played(list[0], list[0]))) {
+                (None, _) => format!("Plays nothing: simulations start at frame {}.", one.simulations_begin.unwrap_or(one.frame_start)),
+                (Some((from, to)), Some(Some((check_from, check_to)))) => format!("Plays frames {check_from}–{check_to} for the check and {from}–{to} for the job, on every attempt."),
+                (Some((from, to)), Some(None)) => format!("Plays frames {from}–{to} for the job and nothing for the check, on every attempt."),
+                (Some((from, to)), None) => format!("Plays frames {from}–{to} before rendering, on every attempt."),
+            }
         } else { return None; };
         Some(TheSimulationRow { scene: one.name.as_text().to_string(), name: (ticked.len() > 1).then(|| Verbatim::new(one.name.as_text())), label: Prose::new("Prepare simulations"), on, range: Prose::new(range) })
     }).collect()
@@ -8339,6 +8345,7 @@ console.log(JSON.stringify({
     pub(crate) fn a_scene(name: &str) -> SceneReading {
         SceneReading {
             prepare_simulations: None,
+            simulations_begin: None,
             motion_blur: None,
             name: ExactName::as_the_reading_produced_it(name),
             frame_start: 1,
@@ -8439,6 +8446,45 @@ console.log(JSON.stringify({
         held.readings.the_period_ended(&key.server);
         assert!(rows(&held).is_empty());
         assert_eq!(held.store.the_answers_composition_reads(&key, Some(&interior)).prepare_simulations, Some(false));
+    }
+
+    // `Render Settings` Q2b and `Rendering` L10b, added 2026-11-08: the lowest
+    // frame is raised to where the simulations begin, never lowered, and a
+    // job with nothing left to play says so (`Design/Render Settings`,
+    // *Prepare simulations*).
+    #[test]
+    fn simulation_rows_start_where_the_simulations_begin() {
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let key = FileKey { server: an_identity(&server), path: file.into() };
+        let mut held = a_run_with_a_reading();
+        let interior = ExactName::as_the_reading_produced_it("Interior");
+        let line = |held: &mut WhatTheRunHolds, begins: Option<i64>, asked: &str, check: bool| {
+            let mut read = held.readings.standing(&key).unwrap().clone();
+            read.settings.scenes[0].prepare_simulations = Some(true);
+            read.settings.scenes[0].frame_start = 1;
+            read.settings.scenes[0].frame_end = 1000;
+            read.settings.scenes[0].simulations_begin = begins;
+            let pick = read.taken_by.clone();
+            held.readings.a_reading_landed(key.clone(), &smoozy_render_settings::file_half::StartedUnder {
+                version_pick: pick.clone(), file_identity: read.file_identity.clone()
+            }, read.settings, Some(&pick), &read.file_identity, std::time::SystemTime::now());
+            held.store.answer(Where::AScene { file: key.clone(), scene: interior.clone() }, Answer::FrameRange(frames::parse_the_frame_field(asked).unwrap()));
+            held.submission.entry(keyed(&server, file)).or_default().the_first_frame_check = check;
+            the_simulation_rows(held, &key, &[], Some(&interior))[0].range.as_str().replace('\u{a0}', " ")
+        };
+        // The Creator's shape: cloth at 20, frames 1–60 asked.
+        assert_eq!(line(&mut held, Some(20), "1-60", false), "Plays frames 20–60 before rendering, on every attempt.");
+        assert_eq!(line(&mut held, Some(900), "998-1000", false), "Plays frames 900–1000 before rendering, on every attempt.");
+        // Never lowered, and no answer is the old start.
+        assert_eq!(line(&mut held, Some(-5), "10-60", false), "Plays frames 1–60 before rendering, on every attempt.");
+        assert_eq!(line(&mut held, None, "998-1000", false), "Plays frames 1–1000 before rendering, on every attempt.");
+        // Nothing left to play.
+        assert_eq!(line(&mut held, Some(900), "1-10", false), "Plays nothing: simulations start at frame 900.");
+        assert_eq!(line(&mut held, Some(900), "1-10", true), "Plays nothing: simulations start at frame 900.");
+        // The check plays nothing and the job does.
+        assert_eq!(line(&mut held, Some(900), "1-1000", true), "Plays frames 900–1000 for the job and nothing for the check, on every attempt.");
+        assert_eq!(line(&mut held, Some(20), "30-60", true), "Plays frames 20–30 for the check and 20–60 for the job, on every attempt.");
     }
 
     // `Render Settings` Q2b and `Rendering` L10b: each job has its own shutter tail.

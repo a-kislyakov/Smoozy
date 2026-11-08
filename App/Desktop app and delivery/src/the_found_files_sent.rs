@@ -2380,6 +2380,7 @@ fn the_row_became(
                 one.state = state;
                 one.why_it_did_not_go_up = why;
                 one.its_failure_was_cleared = false;
+                one.its_remap_waits_for_its_linked_files = false;
             }
         }
     }
@@ -3121,6 +3122,7 @@ mod tests {
             why_it_did_not_go_up: None,
             the_part_already_up: None,
             its_failure_was_cleared: false,
+            its_remap_waits_for_its_linked_files: false,
         }
     }
 

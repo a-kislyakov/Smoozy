@@ -171,6 +171,45 @@ impl KeepsTheProvedBot for TheProvedBotRecord<'_> {
 }
 
 impl TheProvedBotRecord<'_> {
+    /// **`Telegram` L4 as amended 2026-11-07: a fresh item for a replacement
+    /// token, owed an erase until its save is confirmed** (`Security and
+    /// licence` E1, E4), so a save that lands and is cut off before the record
+    /// moves is never a secret nothing points at. The record's reference and
+    /// the stored fact are not touched: the old token stays what is saved.
+    pub fn a_fresh_item_owed_until_its_save_is_confirmed(&self) -> Result<HeldSecret, ARecordFailure> {
+        let item = a_fresh_bot_tokens_item()?;
+        self.connection
+            .execute(
+                "INSERT OR IGNORE INTO owed_erase (kind, subject) VALUES ('bot token', ?1)",
+                [item.subject.as_str()],
+            )
+            .map_err(failed)?;
+        Ok(item)
+    }
+
+    /// **`Telegram` L4 as amended 2026-11-07: the confirmed item takes the old
+    /// one's place**, inside the caller's transaction. The old item is marked
+    /// owing an erase (`Security and licence` E1's first write), the reference
+    /// moves to the new item, the new item's own mark is cleared, and the
+    /// stored fact is written for the bot (`Security and licence` §3.0 rule
+    /// 6). **Answers the old item**, which the caller erases next (E14).
+    pub fn the_saved_item_replaces_the_old(&self, bot: &TheBot, saved: &HeldSecret) -> Result<HeldSecret, ARecordFailure> {
+        let c = self.connection;
+        let old = the_current_bot_tokens_item(c)?;
+        c.execute("INSERT OR IGNORE INTO owed_erase (kind, subject) VALUES ('bot token', ?1)", [old.subject.as_str()])
+            .map_err(failed)?;
+        c.execute(
+            "INSERT INTO telegram_token_item (the_one_row, bot_id, subject) VALUES (1, ?1, ?2)
+             ON CONFLICT(the_one_row) DO UPDATE SET bot_id = excluded.bot_id, subject = excluded.subject",
+            rusqlite::params![bot.id, saved.subject.as_str()],
+        )
+        .map_err(failed)?;
+        c.execute("DELETE FROM owed_erase WHERE kind = 'bot token' AND subject = ?1", [saved.subject.as_str()])
+            .map_err(failed)?;
+        self.the_token_was_stored_for(bot)?;
+        Ok(old)
+    }
+
     /// **The bot whose token the record says is stored, or none.** A read that
     /// did not answer is a failure, and a caller drawing from it draws *not
     /// stored*, the side that claims nothing.

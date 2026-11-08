@@ -14,11 +14,12 @@
 //!   `smoozy_telegram::told`.
 //! - **Which servers Smoozy has not reached**, derived when asked and never
 //!   stored (`Telegram` L3).
-//! - **A replacement token accepted** (`Telegram` L4): the old token's item
-//!   erased in `Security and licence` §5.1's order for `Security and licence`
-//!   E14's event, the
-//!   generation moved on, the new token stored, and every server left on the old
-//!   generation named. **Telegram switched off erases nothing** since 2026-10-31
+//! - **A replacement token accepted** (`Telegram` L4): the new token stored in
+//!   an item of its own, then the generation moved on, then the old token's
+//!   item erased in `Security and licence` §5.1's order for `Security and
+//!   licence` E14's event, and every server left on the old generation named.
+//!   **The old token goes only after the new one is confirmed saved**
+//!   (2026-11-07). **Telegram switched off erases nothing** since 2026-10-31
 //!   (`Telegram` K1, the Creator's fifteenth notes, note 1).
 //! - **The material composed and handed to `Server Setup`'s one placement act**,
 //!   `smoozy_server_setup::acts::place_the_telegram_material`, and the told
@@ -292,9 +293,10 @@ pub fn retry_the_owed_bot_keys(connection: &rusqlite::Connection, store: &dyn Se
 }
 
 /// **`Security and licence` E14, the bot token replaced: the desktop token
-/// item, in §5.1's order** — the first step of a replacement
-/// ([`a_replacement_token_accepted`]). What becomes of the copies on machines
-/// is that document's §10.
+/// item, in §5.1's order** — the item the record names now. A replacement
+/// erases the item it replaced, after the new one is saved
+/// ([`the_replaced_item_is_erased`], [`a_replacement_token_accepted`]). What
+/// becomes of the copies on machines is that document's §10.
 ///
 /// **Switching Telegram off is no longer this event** (2026-10-31, `Telegram`
 /// K1, the Creator's fifteenth notes, note 1: *"Needs fixing."*). The same
@@ -306,13 +308,18 @@ pub fn the_replaced_token_is_erased(connection: &rusqlite::Connection, store: &d
     // **What the event erases is `Security and licence`'s answer and is read
     // from it**: the fourth kind's item, read from the local record.
     // Where that answer ever names no such item, nothing is owed.
-    let item = match the_current_bot_tokens_item(connection) {
-        Ok(item) => item,
-        Err(_) => return Erasure::NothingDoneTheMarkWouldNotWrite,
-    };
+    match the_current_bot_tokens_item(connection) {
+        Ok(item) => the_replaced_item_is_erased(connection, store, &item),
+        Err(_) => Erasure::NothingDoneTheMarkWouldNotWrite,
+    }
+}
+
+/// **E14 for one named item** — the one a confirmed replacement took the place
+/// of (`Telegram` L4 as amended 2026-11-07).
+pub fn the_replaced_item_is_erased(connection: &rusqlite::Connection, store: &dyn SecretStore, item: &HeldSecret) -> Erasure {
     match ErasureEvent::BotTokenReplaced.erases_store_item() {
         ErasesStoreItem::OfKind(kind) if kind == item.kind => {
-            erasure::erase(&mut TheBotTokensMarks(connection), store, &item, THE_STORE_CALLS_DEADLINE)
+            erasure::erase(&mut TheBotTokensMarks(connection), store, item, THE_STORE_CALLS_DEADLINE)
         }
         _ => Erasure::Done,
     }
@@ -331,13 +338,9 @@ pub enum WhyTheReplacementWasNotAccepted {
     ADifferentBot(Box<TheCheckPassed>),
     /// The local record did not answer.
     TheRecordDidNotAnswer(RecordFailure),
-    /// **`Security and licence` E1's first write would not land**, so the old
-    /// item was not touched and nothing was stored.
-    TheOldTokensEraseCouldNotBeMarked,
-    /// **The generation has moved and the new token is not stored.** Every
-    /// server is already named as holding the old one, which is true: the old
-    /// token was retired when the replacement was issued. Accepting again stores
-    /// it.
+    /// **The new token is not stored**, and nothing moved: the old token, the
+    /// generation and the record are as they were (`Telegram` L4 as amended
+    /// 2026-11-07). Accepting again stores it.
     TheTokenWasNotStored(StoreFailure),
     /// **The new token's save did not answer in time**: `Security and
     /// licence` §3.0 rule 5 as amended, *not confirmed* and never done or *not
@@ -357,16 +360,26 @@ impl From<RecordFailure> for WhyTheReplacementWasNotAccepted {
 /// **`Telegram` L4: a replacement token accepted.**
 ///
 /// The check has already run (`Telegram` S3), because only a passed check can
-/// be handed in. Then, in this order:
+/// be handed in. Then, in this order — **the old token is erased only after the
+/// new one is confirmed saved, so a failed save never leaves less saved than
+/// before** (`Telegram` L4 as amended 2026-11-07, the build runner's ruling 1
+/// on the demo's faults 1 and 7):
 ///
 /// 1. **`Telegram` P4**: the token must name the bot on record.
-/// 2. The old key's erase is attempted. A refusal or unconfirmed erase is
-///    recorded for a later retry; the replacement uses a separate item.
-/// 3. **The generation moved on, and the bot's username refreshed**
-///    (`Telegram` S3a), in one transaction. **This comes before the store**,
-///    because every old holder was retired at the moment the replacement was
-///    issued, so the record's mark is already true whatever the store does.
-/// 4. The new key stored under its reserved subject, with its saved marker.
+/// 2. **A fresh item for the new token, owed an erase until confirmed**
+///    (`Security and licence` E1, E4).
+/// 3. The new token saved there. **A save refused or not confirmed ends here**,
+///    with the old token, the generation and the record as they were.
+/// 4. **In one transaction**: the proof refreshed (`Telegram` S3a), the
+///    generation moved on, the reference moved to the new item, its mark
+///    cleared, the old item marked, and the stored fact written for the bot
+///    (`Security and licence` §3.0 rule 6).
+/// 5. The old item's erase (`Security and licence` E14). A refusal or an
+///    unanswered erase leaves its mark for the sweep (E3, E4).
+///
+/// *(Until 2026-11-07 the old token was erased and the generation moved before
+/// the save, so a save that timed out behind macOS's own box left no token
+/// saved: the demo's fault 7.)*
 ///
 /// **What comes back names every server left on the old generation**, which
 /// is what the user is shown and what §19's line records.
@@ -390,20 +403,8 @@ pub fn a_replacement_token_accepted(
         .the_next()
         .ok_or(WhyTheReplacementWasNotAccepted::TheGenerationCannotGoOn)?;
 
-    if the_replaced_token_is_erased(connection, store) == Erasure::NothingDoneTheMarkWouldNotWrite {
-        return Err(WhyTheReplacementWasNotAccepted::TheOldTokensEraseCouldNotBeMarked);
-    }
-
-    let marking = connection.unchecked_transaction().map_err(RecordFailure::from)?;
-    keeper
-        .the_proof_was_recorded(&refreshed, conversation)
-        .map_err(|why| RecordFailure::Engine { reported: why.0 })?;
-    hold_the_generation(connection, next)?;
-    marking.commit().map_err(RecordFailure::from)?;
-
-    // The old item may still be owed, including a late erase. Reserve a
-    // separate item and keep the replacement regardless of that old result.
-    let item = keeper.the_item_for_saving(&refreshed)
+    let item = keeper
+        .a_fresh_item_owed_until_its_save_is_confirmed()
         .map_err(|why| RecordFailure::Engine { reported: why.0 })?;
     match store.put(&item, token, THE_STORE_CALLS_DEADLINE) {
         Ok(()) => {}
@@ -411,11 +412,20 @@ pub fn a_replacement_token_accepted(
         Err(StoreFailure::StoreUnavailable) => return Err(WhyTheReplacementWasNotAccepted::TheTokenWasNotConfirmed),
         Err(why) => return Err(WhyTheReplacementWasNotAccepted::TheTokenWasNotStored(why)),
     }
-    // **`Security and licence` §3.0 rule 6: the fact that a token is stored,
-    // written only after the save succeeded**, for the bot it names.
+
+    let moving = connection.unchecked_transaction().map_err(RecordFailure::from)?;
     keeper
-        .the_token_was_stored_for(&refreshed)
+        .the_proof_was_recorded(&refreshed, conversation)
         .map_err(|why| RecordFailure::Engine { reported: why.0 })?;
+    hold_the_generation(connection, next)?;
+    let old = keeper
+        .the_saved_item_replaces_the_old(&refreshed, &item)
+        .map_err(|why| RecordFailure::Engine { reported: why.0 })?;
+    moving.commit().map_err(RecordFailure::from)?;
+
+    if old != item {
+        let _ = the_replaced_item_is_erased(connection, store, &old);
+    }
 
     let fleet = the_fleet(connection)?;
     Ok(AReplacementAccepted {
@@ -527,6 +537,14 @@ pub mod the_composing_sentences {
         "Telegram token not saved on this computer. Replace it in Settings.";
     pub const THE_TOKEN_IS_NO_LONGER_STORED: &str =
         "Telegram token no longer saved on this computer. Replace it in Settings.";
+    /// **A read that timed out or was refused says what to do on a Mac**,
+    /// where the system's own box is what it waits on: the build runner's
+    /// ruling 1 of 2026-11-07, on the demo's fault 1. The other systems keep
+    /// the plain sentence.
+    #[cfg(target_os = "macos")]
+    pub const THE_TOKEN_COULD_NOT_BE_READ: &str =
+        "Could not read the saved Telegram token. If macOS asks to allow Smoozy, allow it, then try again.";
+    #[cfg(not(target_os = "macos"))]
     pub const THE_TOKEN_COULD_NOT_BE_READ: &str = "Could not read the saved Telegram token.";
     pub const THE_TOKEN_IS_EMPTY: &str = "The saved Telegram token is empty. Replace it in Settings.";
     /// The three said by the run's own composing, before the record is asked
@@ -577,10 +595,11 @@ pub mod the_composing_sentences {
     /// A server may hold a sentence another computer wrote, so a Mac matches
     /// the *credential store* wording and the other systems the *keychain*
     /// one. Never shortened: a record on a server may hold any of them.
-    pub const ALSO_MATCHED: [(&str, usize); 3] = [
+    pub const ALSO_MATCHED: [(&str, usize); 4] = [
         ("Smoozy's folder on this server is not recorded.", 2),
         ("No password storage on this computer for the Telegram token.", 8),
         (NOWHERE_TO_STORE_THE_TOKEN_ON_THE_OTHER_SYSTEMS, 8),
+        (THE_TOKEN_COULD_NOT_BE_READ_ON_THE_OTHER_SYSTEMS, 6),
     ];
     #[cfg(target_os = "macos")]
     const NOWHERE_TO_STORE_THE_TOKEN_ON_THE_OTHER_SYSTEMS: &str =
@@ -588,6 +607,13 @@ pub mod the_composing_sentences {
     #[cfg(not(target_os = "macos"))]
     const NOWHERE_TO_STORE_THE_TOKEN_ON_THE_OTHER_SYSTEMS: &str =
         "No keychain on this computer for the Telegram token.";
+    /// The read's sentence as the other systems word it, and as it read
+    /// everywhere until 2026-11-07.
+    #[cfg(target_os = "macos")]
+    const THE_TOKEN_COULD_NOT_BE_READ_ON_THE_OTHER_SYSTEMS: &str = "Could not read the saved Telegram token.";
+    #[cfg(not(target_os = "macos"))]
+    const THE_TOKEN_COULD_NOT_BE_READ_ON_THE_OTHER_SYSTEMS: &str =
+        "Could not read the saved Telegram token. If macOS asks to allow Smoozy, allow it, then try again.";
 
     /// **The list's own sentence where `words` is one of them, whole and
     /// exactly**, and nothing otherwise. Words a machine wrote are matched and
@@ -895,6 +921,8 @@ mod tests {
         assert_eq!(the_current_generation(c).unwrap(), TokenGeneration(2));
         assert_eq!(accepted.left_on_an_old_generation.len(), 2);
         assert_eq!(store.held.borrow().get(&the_current_bot_tokens_item(c).unwrap()).map(Vec::as_slice), Some(&b"7:new"[..]));
+        assert!(!store.held.borrow().contains_key(&the_bot_tokens_item()), "the old token was not erased after the save");
+        assert!(TheBotTokensMarks(c).marks().unwrap().is_empty(), "an erase is still owed");
         assert_eq!(TheProvedBotRecord::over(c).the_bot_whose_token_is_stored().unwrap(), Some(7), "fix-here item 2: the stored fact is written");
         assert_eq!(
             TheProvedBotRecord::over(c).the_proved_bot().unwrap().unwrap().0.username,
@@ -911,22 +939,76 @@ mod tests {
         let _ = std::fs::remove_dir_all(folder);
     }
 
-    /// **A store that refuses leaves the mark true and the token unstored**, and
-    /// accepting again finishes it.
+    /// **The runner's ruling 1 on the demo's faults 1 and 7: a refused save
+    /// leaves no less saved than before** (`Telegram` L4 as amended
+    /// 2026-11-07). The old token, its item, the stored fact, the generation
+    /// and the proof are as they were. *(Until 2026-11-07 this test held the
+    /// old order: the generation moved and no token was saved.)*
     #[test]
-    fn a_refused_store_leaves_the_generation_moved_and_no_token() {
+    fn after_0_3_0_a_refused_save_leaves_the_old_token_saved_and_nothing_moved() {
         let folder = a_folder("refused");
         let record = LocalRecord::open_at(&folder.join("local-record.sqlite3")).unwrap();
         let c = record.connection();
-        TheProvedBotRecord::over(c)
-            .the_proof_was_recorded(&TheBot { id: 7, username: "smoozy_a7k2_bot".into() }, TheConversation(1))
-            .unwrap();
+        let bot = TheBot { id: 7, username: "smoozy_a7k2_bot".into() };
+        TheProvedBotRecord::over(c).the_proof_was_recorded(&bot, TheConversation(1)).unwrap();
         let store = AStore { refuse_puts: true, ..AStore::default() };
-        let why = a_replacement_token_accepted(c, &store, a_passed_check_for(7, "smoozy_a7k2_bot", "7:new")).unwrap_err();
-        assert!(matches!(why, WhyTheReplacementWasNotAccepted::TheTokenWasNotStored(_)));
-        assert_eq!(the_current_generation(c).unwrap(), TokenGeneration(2));
-        assert!(store.held.borrow().is_empty());
-        assert_eq!(TheProvedBotRecord::over(c).the_bot_whose_token_is_stored().unwrap(), None, "fix-here item 2: no save, no stored fact");
+        store.held.borrow_mut().insert(the_bot_tokens_item(), b"7:old".to_vec());
+        TheProvedBotRecord::over(c).the_token_was_stored_for(&bot).unwrap();
+        let why = a_replacement_token_accepted(c, &store, a_passed_check_for(7, "smoozy_zz99_bot", "7:new")).unwrap_err();
+        assert!(matches!(why, WhyTheReplacementWasNotAccepted::TheTokenWasNotStored(StoreFailure::LockedOrRefused)), "{why:?}");
+        assert_eq!(the_current_generation(c).unwrap(), TokenGeneration::THE_FIRST, "the generation moved without a token");
+        assert_eq!(the_current_bot_tokens_item(c).unwrap(), the_bot_tokens_item(), "the record left the old item");
+        assert_eq!(store.held.borrow().get(&the_bot_tokens_item()).map(Vec::as_slice), Some(&b"7:old"[..]), "the old token was erased");
+        assert_eq!(TheProvedBotRecord::over(c).the_bot_whose_token_is_stored().unwrap(), Some(7), "the stored fact was forgotten");
+        assert_eq!(TheProvedBotRecord::over(c).the_proved_bot().unwrap(), Some((bot, TheConversation(1))), "the proof moved");
+        assert!(!TheBotTokensMarks(c).marks().unwrap().contains(&the_bot_tokens_item()), "the old token is owed an erase");
+        drop(record);
+        let _ = std::fs::remove_dir_all(folder);
+    }
+
+    /// **The new token's item is owed an erase while its save is in flight**,
+    /// so a save that lands and is then cut off before the record moves is
+    /// never a secret nothing points at (`Security and licence` E1, E2, E4).
+    #[test]
+    fn after_0_3_0_the_new_token_is_owed_an_erase_while_its_save_is_in_flight() {
+        struct AStoreThatLooks<'a> {
+            c: &'a rusqlite::Connection,
+            inner: AStore,
+            owed_while_saved: std::cell::Cell<Option<bool>>,
+        }
+        impl SecretStore for AStoreThatLooks<'_> {
+            fn put(&self, item: &HeldSecret, value: Plaintext, deadline: Duration) -> Result<(), StoreFailure> {
+                self.owed_while_saved.set(Some(TheBotTokensMarks(self.c).marks().unwrap().contains(item)));
+                self.inner.put(item, value, deadline)
+            }
+            fn get(&self, item: &HeldSecret, deadline: Duration) -> Result<Plaintext, GetFailure> {
+                self.inner.get(item, deadline)
+            }
+            fn erase(&self, item: &HeldSecret, deadline: Duration) -> Result<(), StoreFailure> {
+                self.inner.erase(item, deadline)
+            }
+            fn probe(&self, _: Duration) -> ProbeOutcome {
+                ProbeOutcome::RoundTripWorked
+            }
+            fn enumerate(&self, _: Duration) -> Result<Vec<HeldSecret>, StoreFailure> {
+                Ok(Vec::new())
+            }
+        }
+        let folder = a_folder("in-flight");
+        let record = LocalRecord::open_at(&folder.join("local-record.sqlite3")).unwrap();
+        let c = record.connection();
+        let bot = TheBot { id: 7, username: "smoozy_a7k2_bot".into() };
+        TheProvedBotRecord::over(c).the_proof_was_recorded(&bot, TheConversation(1)).unwrap();
+        let store = AStoreThatLooks { c, inner: AStore::default(), owed_while_saved: std::cell::Cell::new(None) };
+        store.inner.held.borrow_mut().insert(the_bot_tokens_item(), b"7:old".to_vec());
+        TheProvedBotRecord::over(c).the_token_was_stored_for(&bot).unwrap();
+        a_replacement_token_accepted(c, &store, a_passed_check_for(7, "smoozy_a7k2_bot", "7:new")).unwrap();
+        assert_eq!(store.owed_while_saved.get(), Some(true), "the new item was saved with nothing to find it");
+        let new_item = the_current_bot_tokens_item(c).unwrap();
+        assert_ne!(new_item, the_bot_tokens_item());
+        assert!(TheBotTokensMarks(c).marks().unwrap().is_empty(), "the saved item is still owed, or the old one was not erased");
+        assert_eq!(store.inner.held.borrow().get(&new_item).map(Vec::as_slice), Some(&b"7:new"[..]));
+        assert!(!store.inner.held.borrow().contains_key(&the_bot_tokens_item()), "the old token was not erased");
         drop(record);
         let _ = std::fs::remove_dir_all(folder);
     }
@@ -1110,12 +1192,31 @@ mod tests {
             Why::TheTokenIsNotInTheStore(GetFailure::NotThere).in_words(),
             "Telegram token no longer saved on this computer. Replace it in Settings."
         );
+        // **The runner's ruling 1 on the demo's fault 1, 2026-11-07**: a read
+        // that timed out, or was refused, says what to do on a Mac, where the
+        // system's own box is what it waits on.
         for failure in [GetFailure::LockedOrRefused, GetFailure::StoreUnavailable] {
             assert_eq!(
                 Why::TheTokenIsNotInTheStore(failure).in_words(),
-                "Could not read the saved Telegram token."
+                if cfg!(target_os = "macos") {
+                    "Could not read the saved Telegram token. If macOS asks to allow Smoozy, allow it, then try again."
+                } else {
+                    "Could not read the saved Telegram token."
+                }
             );
         }
+        // **A server may hold the sentence as it read before**, and it is still
+        // matched to today's.
+        assert_eq!(
+            the_composing_sentences::the_one_said("Could not read the saved Telegram token."),
+            Some(the_composing_sentences::THE_TOKEN_COULD_NOT_BE_READ)
+        );
+        assert_eq!(
+            the_composing_sentences::the_one_said(
+                "Could not read the saved Telegram token. If macOS asks to allow Smoozy, allow it, then try again."
+            ),
+            Some(the_composing_sentences::THE_TOKEN_COULD_NOT_BE_READ)
+        );
         // **Every reason's sentence is on the one closed list** the run panel
         // reads a failed Telegram step by (the Creator's twelfth notes, note 2).
         for why in &every {
@@ -1398,9 +1499,16 @@ mod tests {
         TheProvedBotRecord::over(c)
             .the_proof_was_recorded(&TheBot { id: 7, username: "smoozy_a7k2_bot".into() }, TheConversation(1))
             .unwrap();
+        // **The demo's fault 7**: the old token was saved, and a save that
+        // timed out behind macOS's own box must leave it saved (the runner's
+        // ruling 1 of 2026-11-07). Until then this test held *None* here.
+        TheProvedBotRecord::over(c)
+            .the_token_was_stored_for(&TheBot { id: 7, username: "smoozy_a7k2_bot".into() })
+            .unwrap();
         let why = a_replacement_token_accepted(c, &APutThatTimesOut, a_passed_check_for(7, "smoozy_a7k2_bot", "7:new")).unwrap_err();
         assert!(matches!(why, WhyTheReplacementWasNotAccepted::TheTokenWasNotConfirmed), "{why:?}");
-        assert_eq!(TheProvedBotRecord::over(c).the_bot_whose_token_is_stored().unwrap(), None);
+        assert_eq!(TheProvedBotRecord::over(c).the_bot_whose_token_is_stored().unwrap(), Some(7), "the old token is no longer saved");
+        assert_eq!(the_current_generation(c).unwrap(), TokenGeneration::THE_FIRST, "the generation moved without a token");
         drop(record);
         let _ = std::fs::remove_dir_all(folder);
     }

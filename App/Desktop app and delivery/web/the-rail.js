@@ -133,7 +133,7 @@
 // a timer (P9, P10). This file keeps all four.
 
 import { whenTold } from "./event-route.js";
-import { theSeamsAreLive } from "./panes.js";
+import { theSeamsAreLive, thePagesAreMarked } from "./panes.js";
 import { theValueIsDrawnInto } from "./the-value-drawn.js";
 
 const shell = window.__TAURI__;
@@ -214,6 +214,10 @@ function theShellIsDrawn(rail) {
       seam.type = "button";
       seam.className = "seam";
       seam.dataset.seam = "rail";
+      // **Dragged, never a Tab stop**: no key moves it, and Design promises
+      // dragging, not a keyboard route (`Design/Whole app`, *Tab lands on the
+      // control itself*; the Creator's twenty-seventh notes, note 1).
+      seam.tabIndex = -1;
       const declared = layout.seams.find((one) => one.key === "rail");
       if (!declared) return;
       // Prose, through the typography point. Nothing here composes a sentence.
@@ -550,6 +554,10 @@ export function theCurrentPlaceIs(place, which) {
   currentServer = which;
   theRailShowsWhereWeAre();
   theScreenIsMounted(place, which);
+  // **A screen shown is a moment its page's own width is read** — a page that
+  // was hidden measured nothing (`web/panes.js`; the Creator's twenty-seventh
+  // notes, notes 4 and 5).
+  thePagesAreMarked();
 }
 
 const THE_PLACES = [

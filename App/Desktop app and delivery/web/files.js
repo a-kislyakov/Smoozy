@@ -1488,6 +1488,10 @@ function theCheckIsOpenedForTheChosen() {
 // ── The bar along the bottom ────────────────────────────────────────────────
 
 function theBottomBarIsDrawn(answer) {
+  // **A tick pressed from the keyboard keeps the focus** when the bar is drawn
+  // again from the answer it changed (the twenty-seventh notes, note 1).
+  const theTickHadFocus = Boolean(document.activeElement && bottom.contains(document.activeElement)
+    && document.activeElement.classList.contains("fhid"));
   bottom.textContent = "";
   bottom.appendChild(saidAsText(answer.bottom.uploads_go_to));
   const grow = document.createElement("span");
@@ -1502,7 +1506,8 @@ function theBottomBarIsDrawn(answer) {
   // **The box is the bar's last thing**, so the count and free space, which
   // change width from folder to folder, never move it (`Design/File Browser §
   // The list`; the Creator's note 2 on the test copy).
-  bottom.appendChild(theHiddenFilesBox(answer.bottom.show_hidden_files));
+  const tick = bottom.appendChild(theHiddenFilesBox(answer.bottom.show_hidden_files));
+  if (theTickHadFocus) tick.focus();
   // The last count this server had is drawn at once, so a redraw of the bar
   // does not drop it while the new one is asked for.
   if (theLastCountsServer === server) theCountIsDrawn(theLastCount);
@@ -1595,10 +1600,15 @@ function theListShows(row, answer) {
 function theHiddenFilesBox(box) {
   const tick = document.createElement("label");
   tick.className = "mcheck fhid";
+  // **The line is the Tab stop and Space ticks it; the ring is on the tick**
+  // (`Design/Whole app`, *Tab lands on the control itself*; the Creator's
+  // twenty-seventh notes, note 1). Until then it could be ticked only by a
+  // click.
+  tick.setAttribute("role", "checkbox");
+  tick.setAttribute("aria-checked", String(Boolean(box.ticked)));
+  tick.tabIndex = 0;
   const mark = document.createElement("span");
   mark.className = "cb";
-  mark.setAttribute("role", "checkbox");
-  mark.setAttribute("aria-checked", String(Boolean(box.ticked)));
   mark.classList.toggle("on", Boolean(box.ticked));
   mark.textContent = box.ticked ? "✓" : "";
   tick.appendChild(mark);
@@ -1607,7 +1617,19 @@ function theHiddenFilesBox(box) {
   word.textContent = box.label;
   tick.appendChild(word);
   tick.addEventListener("click", () => theHiddenFilesBoxIsTurned());
+  theKeysTick(tick, () => theHiddenFilesBoxIsTurned());
   return tick;
+}
+
+/// **Space or Return presses a tick that is not a native control**, the key a
+/// click would be.
+function theKeysTick(line, press) {
+  line.addEventListener("keydown", (event) => {
+    if (event.key !== " " && event.key !== "Enter") return;
+    event.preventDefault();
+    event.stopPropagation();
+    press();
+  });
 }
 
 /// **The user ticked or unticked the box** — `File Browser` L20 and `File Browser` L21.
@@ -2152,10 +2174,12 @@ function theDeleteBoxIsDrawn(reading, victims) {
 
   const tick = document.createElement("label");
   tick.className = "mcheck";
+  // The line is the Tab stop and Space ticks it (the same note).
+  tick.setAttribute("role", "checkbox");
+  tick.setAttribute("aria-checked", String(reading.the_permanence_warning_is_switched_off));
+  tick.tabIndex = 0;
   const mark = document.createElement("span");
   mark.className = "cb";
-  mark.setAttribute("role", "checkbox");
-  mark.setAttribute("aria-checked", String(reading.the_permanence_warning_is_switched_off));
   mark.classList.toggle("on", reading.the_permanence_warning_is_switched_off);
   mark.textContent = reading.the_permanence_warning_is_switched_off ? "✓" : "";
   tick.appendChild(mark);
@@ -2163,12 +2187,14 @@ function theDeleteBoxIsDrawn(reading, victims) {
   const word = document.createElement("span");
   word.textContent = reading.dont_warn_again;
   tick.appendChild(word);
-  tick.addEventListener("click", () => {
-    const now = mark.getAttribute("aria-checked") !== "true";
-    mark.setAttribute("aria-checked", String(now));
+  const turned = () => {
+    const now = tick.getAttribute("aria-checked") !== "true";
+    tick.setAttribute("aria-checked", String(now));
     mark.classList.toggle("on", now);
     mark.textContent = now ? "✓" : "";
-  });
+  };
+  tick.addEventListener("click", turned);
+  theKeysTick(tick, turned);
   if (!switchedOff) box.body.appendChild(tick);
 
   // **Which warning it does not cover, by name.**
@@ -2188,7 +2214,7 @@ function theDeleteBoxIsDrawn(reading, victims) {
           // **The tick is the user's answer to a question, so it is saved at
           // the press** (must-do 24). A switch-off the record would not take
           // is said here.
-          if (mark.getAttribute("aria-checked") === "true" && !switchedOff) {
+          if (tick.getAttribute("aria-checked") === "true" && !switchedOff) {
             shell.core.invoke("the_delete_warning_was_switched_off", { server }).catch(() => {});
           }
           theDeleteGoes(victims);

@@ -657,7 +657,11 @@ mod tests {
         let mut mockup = declarations_in(&format!("{before}{after}"));
         let shipped = declarations_in(&the_drawing());
 
-        for gone in ["container-type: inline-size", "container-name: win"] {
+        // **The job page is the second container** (the Creator's
+        // twenty-seventh notes, notes 4 and 5): `.qdetail` drops the same two
+        // properties, and its one query is keyed to the mark `web/panes.js`
+        // writes onto the page.
+        for gone in ["container-type: inline-size", "container-name: win", "container-type: inline-size", "container-name: entry", "container-type: inline-size", "container-name: servers"] {
             let at = mockup
                 .iter()
                 .position(|declaration| declaration == gone)
@@ -769,6 +773,77 @@ mod tests {
         assert_eq!(
             THE_NARROWING_STEPS[4].at, THE_FLOOR,
             "the floor and the last step are two different widths"
+        );
+    }
+
+    /// **The job page's own step is the mockup's, it is the sum it says it
+    /// is, and the drawing and the page agree** — the Creator's
+    /// twenty-seventh notes, notes 4 and 5, and `Preparation/Design/Whole
+    /// app.md`, step 1: *a job's page also moves its preview column under
+    /// the main column when the page itself is too narrow for both, whatever
+    /// the window's width.* The one number is the page's two gutters, the gap
+    /// between its columns, the main column's floor (`--main-min`) and the
+    /// preview column's smallest width — so that, the drawing's grid giving
+    /// the preview only what the main column's floor leaves, no dragged
+    /// width enters the comparison.
+    #[test]
+    fn the_job_pages_own_step_is_the_mockups_and_the_drawing_and_the_page_agree() {
+        let mockup = without_comments(&the_mockups_stylesheet());
+        let opens = mockup.find("@container entry (width < ").expect("the mockup stacks the job page by its own width")
+            + "@container entry (width < ".len();
+        let at: u32 = mockup[opens..opens + mockup[opens..].find("px)").unwrap()].parse().unwrap();
+        let token = |name: &str| -> u32 {
+            let from = mockup.find(&format!("{name}:")).unwrap_or_else(|| panic!("the mockup declares {name}")) + name.len() + 1;
+            let value = mockup[from..from + mockup[from..].find(';').unwrap()].trim();
+            value.trim_end_matches("px").parse().unwrap_or_else(|_| panic!("{name} is a width: {value}"))
+        };
+        let preview = THE_SEAMS.iter().find(|seam| seam.key == "preview").unwrap();
+        assert_eq!(
+            at,
+            2 * token("--gutter") + 30 + token("--main-min") + preview.smallest,
+            "the job page stacks at a width that is not two gutters, the gap, the main column's floor              and the preview's smallest width"
+        );
+        assert!(
+            mockup.contains("minmax(var(--main-min), 1fr) minmax(180px, var(--side-w))"),
+            "the page's grid no longer gives the preview only what the main column's floor leaves"
+        );
+        assert!(
+            the_page_module().contains(&format!("const THE_PAGE_STACKS_BELOW = {{ at: {at}, mark: \"stacked\" }};")),
+            "web/panes.js stacks the job page at a different width from the mockup's {at}"
+        );
+        assert!(
+            the_drawing().contains(".qdetail[data-narrow~=\"stacked\"] .qdbody {"),
+            "the drawing has no rule keyed to the job page's own mark"
+        );
+        assert!(
+            !the_page_module().split_once("export function thePagesAreMarked").unwrap().1.split("\n}").next().unwrap().contains("invoke"),
+            "the job page's mark writer calls the application. **P11: the narrowing steps write nothing**"
+        );
+    }
+
+    /// **The server list folds by its own width at the second step's own
+    /// width for it, and the drawing and the page agree** — 1020 less the
+    /// rail's drawn 214, so that with the rail where the drawing puts it
+    /// nothing moves, and with the rail dragged wide the rows fold as the
+    /// second step folds them rather than squeezing (the Creator's
+    /// twenty-seventh notes, notes 4 and 5, checked on the other places the
+    /// account named).
+    #[test]
+    fn the_server_lists_own_step_is_the_second_steps_less_the_rail() {
+        let mockup = without_comments(&the_mockups_stylesheet());
+        let opens = mockup.find("@container servers (max-width: ").expect("the mockup folds the server list by its own width")
+            + "@container servers (max-width: ".len();
+        let at: u32 = mockup[opens..opens + mockup[opens..].find("px)").unwrap()].parse().unwrap();
+        let rail: u32 = {
+            let from = mockup.find("--rail-w:").unwrap() + "--rail-w:".len();
+            mockup[from..from + mockup[from..].find(';').unwrap()].trim().trim_end_matches("px").parse().unwrap()
+        };
+        assert_eq!(at, THE_NARROWING_STEPS[1].at - rail, "the server list folds at a width that is not the second step's less the rail");
+        assert!(the_page_module().contains(&format!("const THE_SERVER_LIST_FOLDS_AT = {{ at: {at}, mark: \"folded\" }};")));
+        assert!(the_drawing().contains(".svlist[data-narrow~=\"folded\"] .svrow {"), "the drawing has no rule keyed to the list's mark");
+        assert!(
+            std::fs::read_to_string(the_page_folder().join("the-rail.js")).unwrap().contains("thePagesAreMarked();"),
+            "showing a screen no longer reads its page's own width"
         );
     }
 

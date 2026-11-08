@@ -1,0 +1,78 @@
+/* Design/Whole app, Keyboard shortcuts — *Tab lands on the control itself*:
+ * the ring sits on the tick, the radio, the switch or the button, never round
+ * the words beside it. The Creator's twenty-seventh notes, note 1; the account
+ * is `Audits/Build/Twenty-seventh notes/The window's notes — what each one
+ * is.md`.
+ *
+ * **Kept out of `the-drawing.css`**, which a test holds line for line to the
+ * mockup, as `selecting-text.css` is. Every ring here is the drawing's own:
+ * a 2-pixel accent outline, or the one-pixel accent border a field already
+ * shows while it is typed into.
+ */
+
+/* ── A tick or a dot with its words beside it ──────────────────────────────
+ * The whole line is the Tab stop, so a click on the words still ticks. The
+ * line draws no ring; the tick or the dot does. A dot is ringed with a
+ * shadow, which follows the circle on every engine. */
+.box:focus-visible,
+.rad:focus-visible,
+.fmt:focus-visible,
+.mcheck:focus-visible,
+.svoff label:focus-visible,
+.band .off:focus-visible {
+  outline: none;
+}
+.box:focus-visible > i,
+.fmt:focus-visible > .cb,
+.mcheck:focus-visible > .cb,
+.svoff label:focus-visible > .cb,
+.band .off:focus-visible > .cb {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.rad:focus-visible > i,
+.fmt:focus-visible > .rb {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+
+/* ── A control whose words are the control ─────────────────────────────────
+ * A button, a link, a row: the ring round it is on the control itself. **No
+ * weight at all**, so every ring the drawing or a screen already draws still
+ * wins; this only replaces the browser's own ring where nothing else draws
+ * one. A drag handle is not a Tab stop and is left out. */
+:where(
+  button:not([tabindex="-1"]):focus-visible,
+  a[href]:not([tabindex="-1"]):focus-visible,
+  summary:focus-visible,
+  select:focus-visible,
+  [tabindex]:not([tabindex="-1"]):focus-visible
+) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A server's row is the control. The drawing's ring is written for the role
+ * the row no longer carries (`servers.js`, the row), so it is drawn here,
+ * inside the row's edge as every row's is. */
+.svrow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* ── A text field ──────────────────────────────────────────────────────────
+ * The one-pixel accent border Files' rename line already uses, never the
+ * system's glow. A refused value keeps its red border while it is typed in. */
+:is(input:not([type]), input[type="text"], input[type="password"], input[type="search"], input[type="number"], textarea):focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.set.typed:not(.bad) .fld:focus {
+  border-color: var(--accent);
+}
+.pvframe input[aria-invalid="true"]:focus {
+  border-color: var(--bad);
+}
+/* Add a server's Name: the field has no edge of its own, its holder draws it. */
+.svnamefield:focus-within {
+  border-color: var(--accent);
+}

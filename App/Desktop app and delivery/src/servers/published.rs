@@ -493,11 +493,27 @@ pub fn the_telegram_role_on(server: &str) -> Option<bool> {
     the_telegram_roles().lock().ok()?.get(server)?.enabled
 }
 
-/// **What the dedicated entry point failed with**, until the next press.
+/// **What the dedicated entry point failed with**, until the next press, the
+/// connection ending, or a token saved ([`every_telegram_install_failure_goes`]).
 pub fn the_telegram_install_failed_with(server: &str, said: Option<String>) {
     if let Ok(mut held) = the_telegram_roles().lock() {
         held.entry(server.to_string()).or_default().failed = said;
     }
+}
+
+/// **A token was saved, or a bot set up: every server's kept *Install* sentence
+/// goes**, since the token it may have named is no longer the one on record
+/// (Rule 8: once untrue, it goes). Answers the servers whose sentence went.
+/// What was read of each role stays. *(Added 2026-11-07, the demo's fault 13:
+/// Render settings kept *Telegram token not saved on this computer.* after the
+/// save that made it untrue.)*
+pub fn every_telegram_install_failure_goes() -> Vec<String> {
+    let Ok(mut held) = the_telegram_roles().lock() else {
+        return Vec::new();
+    };
+    held.iter_mut()
+        .filter_map(|(server, role)| role.failed.take().map(|_| server.clone()))
+        .collect()
 }
 
 /// [`the_telegram_install_failed_with`]'s sentence, where one stands.
@@ -1298,6 +1314,24 @@ mod tests {
         assert_eq!(what_the_telegram_install_failed_with(server), None);
         assert!(!a_reading_of_the_telegram_role_came_back(server, on_its_way, Some(false)));
         assert_eq!(the_telegram_role_on(server), None, "a reading from the old connection landed");
+    }
+
+    /// **The demo's fault 13: a saved token takes every server's kept *Install*
+    /// sentence away**, because it may no longer be true. What was read of the
+    /// role stays.
+    #[test]
+    fn after_0_3_0_fault_13_every_kept_install_failure_goes_and_the_readings_stay() {
+        let (one, two) = ("server-fault-13-one", "server-fault-13-two");
+        the_telegram_install_failed_with(one, Some("Telegram token not saved on this computer.".to_string()));
+        the_telegram_install_failed_with(two, Some("It failed.".to_string()));
+        let asked = a_reading_of_the_telegram_role_begins(two);
+        assert!(a_reading_of_the_telegram_role_came_back(two, asked, Some(false)));
+        let went = every_telegram_install_failure_goes();
+        assert!(went.contains(&one.to_string()) && went.contains(&two.to_string()), "{went:?}");
+        assert_eq!(what_the_telegram_install_failed_with(one), None);
+        assert_eq!(what_the_telegram_install_failed_with(two), None);
+        assert_eq!(the_telegram_role_on(two), Some(false), "a reading went with the sentence");
+        assert!(!every_telegram_install_failure_goes().contains(&one.to_string()), "nothing stood to go");
     }
 
     #[test]

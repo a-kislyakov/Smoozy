@@ -134,3 +134,5 @@
 2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job's reading sees its libraries, and failing before a render.md`, outside any round — E1: *Failed before rendering.* No auditor has seen it.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — E1's exit at 0 and the exit code words. The last words read before the release. No auditor has seen it.
+
+2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the token, the Install's reason, and two Set up words.md`, outside any round — L4: the old token erased only after the new one is confirmed saved. No auditor has seen it.

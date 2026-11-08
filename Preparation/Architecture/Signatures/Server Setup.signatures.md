@@ -139,3 +139,5 @@
 2026-11-03 — Claude Opus 5.5 (Claude Code), the 5.3 integration's build runner — §13 item 30 settled from the live passes.
 
 2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.
+
+2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the token, the Install's reason, and two Set up words.md`, outside any round — §12: a failed Telegram placement writes its act line. No auditor has seen it.

@@ -40,7 +40,9 @@ pub(crate) mod tests {
     /// 2026-10-17**, when owed piece 8 of step 10c added
     /// `src/acting/simplify_at_the_desk.rs`. **27 from 2026-11-04**, when
     /// `src/acting/a_reading_sees_its_libraries_at_the_desk.rs` was added.
-    const THE_FILE_COUNT: usize = 27;
+    /// **28 from 2026-11-08**, when `src/acting/the_later_start_at_the_desk.rs`
+    /// was added for L10b's later start.
+    const THE_FILE_COUNT: usize = 28;
 
     /// Whether a word has a clause marker's shape.
     ///

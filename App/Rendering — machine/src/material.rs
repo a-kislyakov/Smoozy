@@ -284,10 +284,16 @@ pub enum Entry {
 /// is read for its lowest and highest frames rather than its first and last
 /// entries: a re-run's scattered missing frames and a *Carry on* job's tail
 /// both step from the scene's start to the highest frame they render.
+/// **From 2026-11-08 the start is raised to where the simulations begin**,
+/// where the reading in force gives that (L10b's later start).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TheStepping {
     pub the_lists_lowest: i64,
     pub the_lists_highest: i64,
+    /// **L10b's later start, added 2026-11-08: `Job files and outputs` R4
+    /// item 8's first frame**, which the material raises its start to, never
+    /// lowering it. None where the reading cannot account or gives nothing.
+    pub the_simulations_begin: Option<i64>,
 }
 
 impl TheStepping {
@@ -301,7 +307,14 @@ impl TheStepping {
         Some(TheStepping {
             the_lists_lowest: *list.iter().min()?,
             the_lists_highest: *list.iter().max()?,
+            the_simulations_begin: None,
         })
+    }
+
+    /// **L10b's later start**: the same stepping, with where the simulations
+    /// begin as the reading in force gives it.
+    pub fn beginning_at(self, the_simulations_begin: Option<i64>) -> TheStepping {
+        TheStepping { the_simulations_begin, ..self }
     }
 }
 
@@ -807,6 +820,7 @@ pub mod testing {
     pub fn a_scene(name: &str) -> SceneReading {
         SceneReading {
             prepare_simulations: None,
+            simulations_begin: None,
             motion_blur: None,
             name: ExactName::as_the_reading_produced_it(name),
             frame_start: 1,
@@ -1056,6 +1070,18 @@ pub(crate) mod tests {
         assert!(material.contains_no_failure_handling());
     }
 
+    /// **L10b's later start, added 2026-11-08: the stepping carries `Job files
+    /// and outputs` R4 item 8's first frame where the reading gives one**, and
+    /// nothing where it cannot account, for the material to raise its start to.
+    #[test]
+    fn the_stepping_carries_where_the_simulations_begin() {
+        let at = TheStepping::for_the_list(true, &[1, 60]).unwrap().beginning_at(Some(20));
+        assert_eq!(at.the_simulations_begin, Some(20));
+        assert_eq!((at.the_lists_lowest, at.the_lists_highest), (1, 60));
+        assert_eq!(TheStepping::for_the_list(true, &[1]).unwrap().the_simulations_begin, None);
+        assert_eq!(TheStepping::for_the_list(true, &[1]).unwrap().beginning_at(None).the_simulations_begin, None);
+    }
+
     /// **L10b: the stepping sits after every pair and before the read-back,
     /// and only where `Job files and outputs` R4 item 8 says yes.** The list
     /// is read for its lowest and highest frames, so a re-run's scattered
@@ -1069,7 +1095,8 @@ pub(crate) mod tests {
             stepping,
             TheStepping {
                 the_lists_lowest: 5,
-                the_lists_highest: 17
+                the_lists_highest: 17,
+                the_simulations_begin: None,
             }
         );
         let job = a_job();

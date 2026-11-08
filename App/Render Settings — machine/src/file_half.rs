@@ -360,6 +360,7 @@ pub mod testing {
     pub fn a_scene(name: &str) -> SceneReading {
         SceneReading {
             prepare_simulations: None,
+            simulations_begin: None,
             motion_blur: None,
             name: ExactName::as_the_reading_produced_it(name),
             frame_start: 1,

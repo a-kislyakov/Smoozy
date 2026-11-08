@@ -73,6 +73,10 @@ pub struct AttemptInputs<'a> {
     /// this attempt: whether the job's scene holds a simulation that is not
     /// baked** — which is what L10b's stepping is gated on. Added 2026-10-02.
     pub the_scene_holds_a_simulation_not_baked: bool,
+    /// **`Job files and outputs` R4 item 8's first frame, read off the same
+    /// reading**, which L10b's later start raises the stepping's start to.
+    /// None where it cannot account. Added 2026-11-08.
+    pub where_the_simulations_begin: Option<i64>,
     /// **L10c, `Job files and outputs` R4c, read off the step-4 reading of
     /// this attempt: whether it switched the job's scene from a video to a
     /// still picture**, so the material makes the same switch. Added
@@ -209,7 +213,8 @@ pub fn compose_the_attempt(
         the_stepping: material::TheStepping::for_the_list(
             inputs.payload.prepare_simulations && inputs.the_scene_holds_a_simulation_not_baked,
             inputs.the_reckonings_list,
-        ),
+        )
+        .map(|stepping| stepping.beginning_at(inputs.where_the_simulations_begin)),
         // **L10c**, where `Job files and outputs` R4c's reading switched.
         the_check_is_written_as_a_picture: inputs.the_check_is_written_as_a_picture,
     })
@@ -366,6 +371,7 @@ pub(crate) mod tests {
             launch_material_path: "/ephemeral/smoozy/job-records/j1/material.py".to_string(),
             load_time_script_path: "/ephemeral/smoozy/job-records/j1/load-time.py".to_string(),
             the_scene_holds_a_simulation_not_baked: false,
+            where_the_simulations_begin: None,
             the_check_is_written_as_a_picture: false,
             a_destination_is_video_shaped: false,
         })
@@ -422,6 +428,7 @@ pub(crate) mod tests {
             launch_material_path: "/ephemeral/smoozy/job-records/j1/material.py".to_string(),
             load_time_script_path: "/ephemeral/smoozy/job-records/j1/load-time.py".to_string(),
             the_scene_holds_a_simulation_not_baked: false,
+            where_the_simulations_begin: None,
             the_check_is_written_as_a_picture: false,
             a_destination_is_video_shaped: false,
         })
@@ -571,6 +578,7 @@ pub(crate) mod tests {
             launch_material_path: "/m.py".to_string(),
             load_time_script_path: "/l.py".to_string(),
             the_scene_holds_a_simulation_not_baked: false,
+            where_the_simulations_begin: None,
             the_check_is_written_as_a_picture: false,
             a_destination_is_video_shaped: false,
         })
@@ -619,6 +627,7 @@ pub(crate) mod tests {
                 launch_material_path: "/m.py".to_string(),
                 load_time_script_path: "/l.py".to_string(),
                 the_scene_holds_a_simulation_not_baked: false,
+                where_the_simulations_begin: None,
                 the_check_is_written_as_a_picture: false,
                 a_destination_is_video_shaped: false,
             })
@@ -651,7 +660,7 @@ pub(crate) mod tests {
         let payload = an_untouched_payload();
         let reading = a_reading();
         let scene = a_scene("Kitchen");
-        let stepping_of = |says: bool| {
+        let stepping_of_from = |says: bool, begins: Option<i64>| {
             compose_the_attempt(AttemptInputs {
                 job: &job,
                 manifest: &manifest,
@@ -666,6 +675,7 @@ pub(crate) mod tests {
                 launch_material_path: "/m.py".to_string(),
                 load_time_script_path: "/l.py".to_string(),
                 the_scene_holds_a_simulation_not_baked: says,
+                where_the_simulations_begin: begins,
                 the_check_is_written_as_a_picture: false,
                 a_destination_is_video_shaped: false,
             })
@@ -678,14 +688,20 @@ pub(crate) mod tests {
                 _ => None,
             })
         };
+        let stepping_of = |says: bool| stepping_of_from(says, None);
         assert_eq!(stepping_of(false), None);
         assert_eq!(
             stepping_of(true),
             Some(crate::material::TheStepping {
                 the_lists_lowest: 5,
-                the_lists_highest: 17
+                the_lists_highest: 17,
+                the_simulations_begin: None,
             })
         );
+        // **L10b's later start, added 2026-11-08**: item 8's first frame rides
+        // the stepping, and plays no part where item 8 says no.
+        assert_eq!(stepping_of_from(true, Some(12)).unwrap().the_simulations_begin, Some(12));
+        assert_eq!(stepping_of_from(false, Some(12)), None);
     }
 
     #[test]
@@ -863,6 +879,7 @@ pub(crate) mod tests {
                 launch_material_path: "/root/smoozy/job-records/j/material-1.py".to_string(),
                 load_time_script_path: "/root/smoozy/job-records/j/load-time-1.py".to_string(),
                 the_scene_holds_a_simulation_not_baked: false,
+                where_the_simulations_begin: None,
                 the_check_is_written_as_a_picture: false,
                 a_destination_is_video_shaped: false,
             })
@@ -927,6 +944,7 @@ pub(crate) mod tests {
                 launch_material_path: "/m.py".to_string(),
                 load_time_script_path: "/l.py".to_string(),
                 the_scene_holds_a_simulation_not_baked: false,
+                where_the_simulations_begin: None,
                 the_check_is_written_as_a_picture: false,
                 a_destination_is_video_shaped: video,
             })
@@ -988,6 +1006,7 @@ pub(crate) mod tests {
                 launch_material_path: "/m.py".to_string(),
                 load_time_script_path: "/l.py".to_string(),
                 the_scene_holds_a_simulation_not_baked: false,
+                where_the_simulations_begin: None,
                 the_check_is_written_as_a_picture: false,
                 a_destination_is_video_shaped: video,
             })

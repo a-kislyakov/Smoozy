@@ -171,6 +171,10 @@ mod on_a_desk_with_a_socket_pair {
         /// **Every fixing fails while this holds** — the 38's piece 7, for
         /// `Dependency Upload & Remap` M16a's *Try again*.
         fixings_fail: AtomicBool,
+        /// **Every fixing reports each of its pairs not applied while this
+        /// holds** — the demo's faults 6 and 8 (2026-11-07), for `Dependency
+        /// Upload & Remap` M14a's remap that waits for its linked files.
+        fixings_miss_their_pairs: AtomicBool,
         /// **Every byte written by a file session**, counted off the `WRITE`
         /// requests as they are sent — the 38's piece 7, so a send that
         /// carries on can be told from one that starts over.
@@ -227,9 +231,10 @@ mod on_a_desk_with_a_socket_pair {
                     )
                     .into_bytes();
                     for pair in &pairs {
+                        let missed = self.fixings_miss_their_pairs.load(Ordering::SeqCst);
                         let line = serde_json::json!({
                             "kind": pair.kind, "setting": pair.setting, "match_text": pair.match_text,
-                            "applied": true, "data_blocks": 1, "assignment_alone": "Established",
+                            "applied": !missed, "data_blocks": if missed { 0 } else { 1 }, "assignment_alone": "Established",
                             "reloaded": false, "values_found": []
                         });
                         said.extend_from_slice(
@@ -753,6 +758,7 @@ mod on_a_desk_with_a_socket_pair {
             digests_taken: AtomicUsize::new(0),
             stops_asked: Mutex::new(Vec::new()),
             fixings_fail: AtomicBool::new(false),
+            fixings_miss_their_pairs: AtomicBool::new(false),
             bytes_written: std::sync::atomic::AtomicU64::new(0),
             many_values: Mutex::new(Vec::new()),
             single_values: AtomicUsize::new(0),
@@ -1172,6 +1178,7 @@ mod on_a_desk_with_a_socket_pair {
             digests_taken: AtomicUsize::new(0),
             stops_asked: Mutex::new(Vec::new()),
             fixings_fail: AtomicBool::new(false),
+            fixings_miss_their_pairs: AtomicBool::new(false),
             bytes_written: std::sync::atomic::AtomicU64::new(0),
             many_values: Mutex::new(Vec::new()),
             single_values: AtomicUsize::new(0),
@@ -3394,6 +3401,121 @@ mod on_a_desk_with_a_socket_pair {
             "the fixed copy points the set's own picture at its mirror"
         );
         assert!(Path::new(std::ffi::OsStr::from_bytes(fixings[0].fixed_copy.as_bytes())).is_file());
+    }
+
+    // ------------- the demo's faults 6 and 8: a remap that waits for its files
+
+    /// **The demo's faults 6 and 8, `Dependency Upload & Remap` M14a of
+    /// 2026-11-07, on the stand-in machine: a library whose remap misses its
+    /// paths while a library it links is held back reads *Uploaded; remap
+    /// waits for its linked files.*, on the server and not failed, and is
+    /// fixed once that library arrives.** A remap that still misses with
+    /// nothing of its own left to upload is *could not be fixed*, as before.
+    ///
+    /// **What it bites on**: the waiting library drawn as *remap failed* and
+    /// counted as a failure, or a remap that misses with nothing left to
+    /// upload drawn as waiting.
+    #[test]
+    fn a_library_whose_own_library_is_held_back_waits_rather_than_fails() {
+        let scratch = Scratch::new("remap-waits");
+        let project = scratch.at.join("project");
+        std::fs::create_dir_all(project.join("lib/tex")).expect("the project");
+        let root = project.join("scene.blend");
+        std::fs::write(&root, b"blend").expect("the root");
+        let library = project.join("lib/props.blend");
+        std::fs::write(&library, b"library").expect("the library");
+        let its_library = project.join("lib/sub.blend");
+        std::fs::write(&its_library, b"its library").expect("the library's library");
+        std::fs::write(project.join("lib/tex/wood.png"), b"wood").expect("a picture");
+        let no_references = serde_json::to_vec(&serde_json::json!({
+            "references": [], "flat_list": [], "weak_references": [], "observed_stand_ins": []
+        }))
+        .expect("it writes");
+        let library_document = serde_json::to_vec(&serde_json::json!({
+            "references": [
+                {"kind": "Image", "datablock": "wood.png", "setting": "filepath",
+                 "recorded": b"//tex/wood.png".to_vec(), "scenes": {"Established": ["Scene"]}, "source": "FILE"},
+                {"kind": "Library", "datablock": "sub.blend", "setting": "filepath",
+                 "recorded": b"//sub.blend".to_vec(), "scenes": {"Established": ["Scene"]}, "source": null}
+            ],
+            "flat_list": [], "weak_references": [], "observed_stand_ins": []
+        }))
+        .expect("it writes");
+        let mut documents = BTreeMap::new();
+        documents.insert(
+            bytes_of(&root),
+            serde_json::to_vec(&serde_json::json!({
+                "references": [
+                    {"kind": "Library", "datablock": "props.blend", "setting": "filepath",
+                     "recorded": b"//lib/props.blend".to_vec(), "scenes": {"Established": ["Scene"]}, "source": null}
+                ],
+                "flat_list": [], "weak_references": [], "observed_stand_ins": []
+            }))
+            .expect("it writes"),
+        );
+        let Some(probe) = a_desk(&scratch, HowItReads::FromAScript(BTreeMap::new())) else {
+            println!("SKIPPED: no OpenSSH sftp-server on this system. The waiting remap is unproved here.");
+            return;
+        };
+        documents.insert(bytes_of(&the_mirror_of(&probe, &library)), library_document);
+        documents.insert(bytes_of(&the_mirror_of(&probe, &its_library)), no_references);
+        drop(probe);
+        let desk = a_desk(&scratch, HowItReads::FromAScript(documents)).expect("an sftp-server");
+        let the_row = |rows: &[(RowState, String, Option<String>)], recorded: &str| {
+            rows.iter()
+                .position(|row| row.1 == recorded)
+                .unwrap_or_else(|| panic!("no row for {recorded}: {rows:#?}"))
+        };
+        let drawn = |of: &TheSittingIsOf| {
+            format!(
+                "{:?}",
+                the_panel(&desk.held.lock().expect("the run"), &of.server, &of.file, None)
+                    .the_table
+                    .expect("a table")
+            )
+        };
+
+        // **The library goes up; its own library and its picture are found
+        // below it and held back**, and its remap misses.
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        let sent = a_send_on(&desk, &of, None, false);
+        assert_eq!((sent.published, sent.libraries_published), (1, 1), "{sent:?}");
+        desk.machine.fixings_miss_their_pairs.store(true, Ordering::SeqCst);
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        let rows = the_rows_on(&desk, &of);
+        println!("HELD BACK: {rows:#?}");
+        assert_eq!(rows[the_row(&rows, "//sub.blend")].0, RowState::FoundOnYourComputer, "{rows:#?}");
+        assert_eq!(
+            rows[the_row(&rows, "//lib/props.blend")].0,
+            RowState::AlreadyOnTheMachine,
+            "the library's remap was called a failure while its own library was still to upload"
+        );
+        let said = drawn(&of);
+        assert!(said.contains("Uploaded; remap waits for its linked"), "{said}");
+        assert!(!said.contains("remap failed"), "{said}");
+        assert!(!said.contains("\"try-again\""), "a waiting remap offers Retry: {said}");
+        assert_eq!(the_standing_on(&desk, &of).counts.could_not_be_fixed, 0);
+
+        // **Everything up, the remap still missing: a failure, as before.**
+        let sent = a_send_on(&desk, &of, None, false);
+        println!("THE REST: {sent:?}");
+        let (_, of) = a_check_on(&desk, &root, a_5_2(), Vec::new());
+        let rows = the_rows_on(&desk, &of);
+        println!("ALL UP, STILL MISSING: {rows:#?}");
+        let at = the_row(&rows, "//lib/props.blend");
+        assert_eq!(rows[at].0, RowState::CouldNotBeFixed, "{rows:#?}");
+        let said = drawn(&of);
+        assert!(said.contains("Uploaded; remap failed: a path did not"), "{said}");
+        assert!(!said.contains("remap waits"), "{said}");
+        assert!(said.contains("\"try-again\""), "a failed remap offers no Retry: {said}");
+
+        // **And once the remap applies, the row is on the server and fixed.**
+        desk.machine.fixings_miss_their_pairs.store(false, Ordering::SeqCst);
+        let again = a_send_on(&desk, &of, Some(vec![at]), false);
+        println!("TRY AGAIN: {again:?}");
+        assert_eq!(the_rows_on(&desk, &of)[at].0, RowState::AlreadyOnTheMachine);
+        let said = drawn(&of);
+        assert!(!said.contains("remap failed") && !said.contains("remap waits"), "{said}");
     }
 
     // ------------------- the tenth notes, note 4: the check runs again by itself

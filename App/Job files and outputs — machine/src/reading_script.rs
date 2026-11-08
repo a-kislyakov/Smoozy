@@ -1236,6 +1236,11 @@ pub struct ThePrintedReading {
     /// Absent from a script older than that date, which reads as no.
     #[serde(default)]
     pub the_scene_holds_a_simulation_not_baked: bool,
+    /// **R4 item 8, *Where the simulations begin*, added 2026-11-08** —
+    /// carried into [`TheOneDocument`] whole. Absent from a script older than
+    /// that date, which reads as cannot account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub where_the_simulations_begin: Option<crate::reading::WhereTheSimulationsBegin>,
     /// **The scene this reading read**, by its own name — the job's named
     /// scene, or where the job names none the scene a run with no window
     /// takes as `bpy.context.scene` (the 38's piece 10, item 25; `Design/Render
@@ -1281,6 +1286,10 @@ pub struct AnotherScenesHalf {
     /// Absent where reading the scene raised, which its errors then say.
     pub outputs: Option<TheObservedOutputs>,
     pub the_scene_holds_a_simulation_not_baked: bool,
+    /// R4 item 8, *Where the simulations begin*, for this scene. Absent from a
+    /// script older than 2026-11-08.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub where_the_simulations_begin: Option<crate::reading::WhereTheSimulationsBegin>,
     pub errors: BTreeMap<String, String>,
 }
 
@@ -1329,6 +1338,7 @@ impl ThePrintedReading {
                 errors: half.errors.clone(),
                 the_baked_caches_on_the_machine: self.the_baked_caches_on_the_machine.clone(),
                 the_scene_holds_a_simulation_not_baked: half.the_scene_holds_a_simulation_not_baked,
+                where_the_simulations_begin: half.where_the_simulations_begin.clone(),
                 the_scene_it_read: Some(half.scene.clone()),
                 the_open_files_path: self.the_open_files_path.clone(),
                 // **R4c** is the render-start reading's alone, and R4b's
@@ -1462,6 +1472,7 @@ pub fn the_one_document_from(
         dependencies: printed.dependencies,
         the_baked_caches_on_the_machine: printed.the_baked_caches_on_the_machine,
         the_scene_holds_a_simulation_not_baked: printed.the_scene_holds_a_simulation_not_baked,
+        where_the_simulations_begin: printed.where_the_simulations_begin,
         the_scene_it_read: printed.the_scene_it_read,
     })
 }
@@ -1946,6 +1957,157 @@ def the_scene_holds_a_simulation_not_baked(scene):
             if not smoozy_as_the_file_has_it(cache, "is_baked"):
                 return True
     return False
+
+
+SMOOZY_THE_FILES_SIMULATIONS = None
+
+
+def the_files_simulations():
+    # **`Job files and outputs` R4 item 8, *Where the simulations begin*,
+    # added 2026-11-08** (the Creator's twenty-seventh notes, note 6): what in
+    # the whole file depends on earlier frames, and from which frame, read once.
+    # **Every object the file holds and every scene's rigid-body world**, not
+    # the job's scene alone: anything reaching the render from outside the
+    # scene's own objects reaches it through an object the file holds
+    # (*Earlier frames 6*, hand test 8), and reading more only lowers the start.
+    # Gives a reason it cannot account, or the fixed starts and the objects
+    # whose simulation zones follow the scene that evaluates them.
+    global SMOOZY_THE_FILES_SIMULATIONS
+    if SMOOZY_THE_FILES_SIMULATIONS is not None:
+        return SMOOZY_THE_FILES_SIMULATIONS
+
+    def found(why):
+        global SMOOZY_THE_FILES_SIMULATIONS
+        SMOOZY_THE_FILES_SIMULATIONS = {"cannot": why, "fixed": [], "zones": []}
+        return SMOOZY_THE_FILES_SIMULATIONS
+
+    # *Earlier frames 7*: what a script cannot place.
+    handlers = bpy.app.handlers
+    if len(handlers.frame_change_pre) or len(handlers.frame_change_post):
+        return found("a frame-change handler is registered")
+    for text in bpy.data.texts:
+        if text.use_module:
+            return found("the file runs its script " + text.name + " as it opens")
+    for every in (bpy.data.libraries, bpy.data.objects, bpy.data.collections,
+                  bpy.data.node_groups, bpy.data.meshes, bpy.data.scenes):
+        for one in every:
+            if getattr(one, "is_missing", False):
+                return found("linked data is missing: " + one.name)
+    fixed = []
+    zones = []
+
+    def take(value):
+        fixed.append(int(value // 1))
+
+    def take_the_cache(cache):
+        take(cache.frame_start)
+        for item in getattr(cache, "point_caches", ()):
+            take(item.frame_start)
+
+    for obj in bpy.data.objects:
+        pose = getattr(obj, "pose", None)
+        if pose is not None and pose.ik_solver == "ITASC" and pose.ik_param is not None \
+                and pose.ik_param.mode == "SIMULATION":
+            return found("the armature " + obj.name + " uses iTaSC in Simulation mode")
+        # A linked or overridden object's baked mark is not trusted (hand test 8).
+        linked = obj.library is not None or obj.override_library is not None
+
+        def counts(cache):
+            return linked or not smoozy_as_the_file_has_it(cache, "is_baked")
+
+        for modifier in getattr(obj, "modifiers", ()):
+            if modifier.type == "NODES":
+                for bake in modifier.bakes:
+                    node = bake.node
+                    if node is None:
+                        return found("a bake on " + obj.name + " has lost its node")
+                    if node.bl_idname != "GeometryNodeSimulationOutput":
+                        continue
+                    if not obj.use_simulation_cache:
+                        return found("the simulation on " + obj.name + " has its Cache off")
+                    if bake.use_custom_simulation_frame_range:
+                        take(bake.frame_start)
+                    else:
+                        zones.append(obj.as_pointer())
+                continue
+            if modifier.type == "FLUID":
+                if modifier.fluid_type == "DOMAIN" and modifier.domain_settings.cache_type == "REPLAY":
+                    domain = modifier.domain_settings
+                    if domain.cache_frame_offset != 0:
+                        return found("the fluid on " + obj.name + " has a cache offset")
+                    take(domain.cache_frame_start)
+                continue
+            cache = getattr(modifier, "point_cache", None)
+            if cache is not None and counts(cache):
+                take_the_cache(cache)
+            canvas = getattr(modifier, "canvas_settings", None)
+            if canvas is not None:
+                for surface in canvas.canvas_surfaces:
+                    if counts(surface.point_cache):
+                        take(surface.frame_start)
+                        take_the_cache(surface.point_cache)
+        for system in getattr(obj, "particle_systems", ()):
+            if system.settings.type == "HAIR" and not system.use_hair_dynamics:
+                continue
+            if not counts(system.point_cache):
+                continue
+            if system.settings.type == "HAIR":
+                # *Earlier frames 2*, test 3: the system's own cache sets the
+                # first frame, not `cloth.point_cache`.
+                take_the_cache(system.point_cache)
+            else:
+                # Test 2: the emission start governs; the cache's follows it.
+                take(system.settings.frame_start)
+                take_the_cache(system.point_cache)
+    for each_scene in bpy.data.scenes:
+        world = each_scene.rigidbody_world
+        if world is not None:
+            if each_scene.library is not None or not smoozy_as_the_file_has_it(world.point_cache, "is_baked"):
+                take_the_cache(world.point_cache)
+    SMOOZY_THE_FILES_SIMULATIONS = {"cannot": None, "fixed": fixed, "zones": zones}
+    return SMOOZY_THE_FILES_SIMULATIONS
+
+
+def the_simulations_first_frame(scene):
+    # **R4 item 8, *Where the simulations begin*, for one scene**: the lowest
+    # first frame, or why it cannot account. A simulation zone with no range
+    # of its own follows the scene's Simulation Range where on, else its start
+    # (hand test 6); for an object outside this scene, which scene governs is
+    # not established, so the lowest across every scene is taken. **Anything
+    # that goes wrong here cannot account**, and never fails the reading:
+    # falling back to the old start is always allowed.
+    try:
+        return the_simulations_first_frame_or_raise(scene)
+    except Exception as why:
+        return {"CannotAccount": "the reading could not place it: " + str(why)}
+
+
+def the_simulations_first_frame_or_raise(scene):
+    files = the_files_simulations()
+    if files["cannot"]:
+        return {"CannotAccount": files["cannot"]}
+    # A place whose frames are another scene's (*Earlier frames 6*): no
+    # conversion to this scene's frames is established.
+    if the_scenes_reached_from(scene):
+        return {"CannotAccount": "a Scene strip shows another scene"}
+    for tree, _stack in every_tree_of(scene):
+        for node in tree.nodes:
+            if is_kind(node, NAMES["the_render_layers_nodes_type"]):
+                if node.scene is not None and node.scene != scene:
+                    return {"CannotAccount": "a Render Layers node shows another scene"}
+
+    def its_own(one):
+        return one.simulation_frame_start if one.use_custom_simulation_range else one.frame_start
+
+    starts = list(files["fixed"])
+    if files["zones"]:
+        here = set(one.as_pointer() for one in scene.objects)
+        lowest = min(its_own(one) for one in bpy.data.scenes)
+        for pointer in files["zones"]:
+            starts.append(int((its_own(scene) if pointer in here else lowest) // 1))
+    if not starts:
+        return {"CannotAccount": "no simulation was found"}
+    return {"AtFrame": min(starts)}
 
 
 def the_replay_fluid_domains():
@@ -2723,6 +2885,7 @@ if EVERY_SCENE:
         its_errors = the_other_scenes_errors.setdefault(other.name, {})
         half = None
         simulation = False
+        begins = None
         try:
             its_reached = the_scenes_reached_from(other)
             half = the_outputs_half_of(
@@ -2735,6 +2898,7 @@ if EVERY_SCENE:
                 [],
             )
             simulation = the_scene_holds_a_simulation_not_baked(other)
+            begins = the_simulations_first_frame(other)
         except Exception as why:
             its_errors["the reading of this scene"] = str(why)
         the_other_halves.append(
@@ -2742,6 +2906,7 @@ if EVERY_SCENE:
                 "scene": as_bytes(other.name),
                 "outputs": half,
                 "the_scene_holds_a_simulation_not_baked": simulation,
+                "where_the_simulations_begin": begins,
                 "errors": its_errors,
             }
         )
@@ -2788,6 +2953,9 @@ for scene in bpy.data.scenes:
             "frame_count": count,
             # `Render Settings` Q2b: the same search, without extra playing.
             "prepare_simulations": the_scene_holds_a_simulation_not_baked(scene),
+            # `Render Settings` Q2b, added 2026-11-08: R4 item 8's first frame,
+            # nothing where the reading cannot account.
+            "simulations_begin": the_simulations_first_frame(scene).get("AtFrame"),
             "motion_blur": smoozy_motion_blur(scene),
             "full_size": full,
             "resolution_percentage": percentage,
@@ -2870,6 +3038,8 @@ document = {
     "errors": ERRORS,
     "the_baked_caches_on_the_machine": the_baked_caches_on_the_machine(),
     "the_scene_holds_a_simulation_not_baked": the_scene_holds_a_simulation_not_baked(the_jobs_scene),
+    # **R4 item 8, *Where the simulations begin*, added 2026-11-08.**
+    "where_the_simulations_begin": the_simulations_first_frame(the_jobs_scene),
     "the_scene_it_read": as_bytes(the_jobs_scene.name),
     # **`Job files and outputs` I2, added 2026-10-18**: the open file's own
     # path, which `{blend_name}` in a node's names is replaced from.
@@ -3857,11 +4027,166 @@ print(json.dumps(results))
         );
     }
 
+    /// **R4 item 8, *Where the simulations begin*, added 2026-11-08**: the
+    /// script's own function, run against a stand-in Blender, case by case —
+    /// each kind's first frame, the whole file walked, and every case the
+    /// reading cannot account for.
+    #[test]
+    fn the_reading_says_where_the_simulations_begin_or_why_it_cannot() {
+        let text = the_script(5, 3);
+        let function = &text[text.find("def the_files_simulations():").expect("the walk")
+            ..text.find("def the_replay_fluid_domains():").unwrap()];
+        let stand_in = r#"
+import math, os
+from types import SimpleNamespace as NS
+class A(NS):
+    def as_pointer(self):
+        return id(self)
+def cache(start, baked=False, items=()):
+    return A(frame_start=start, is_baked=baked, point_caches=list(items))
+def thing(name, modifiers=(), systems=(), library=None, override=None, pose=None, sim_cache=True):
+    return A(name=name, modifiers=list(modifiers), particle_systems=list(systems), library=library,
+             override_library=override, pose=pose, use_simulation_cache=sim_cache, is_missing=False)
+def scene(name, start=1, sim=None, world=None, objects=()):
+    return A(name=name, frame_start=start, use_custom_simulation_range=sim is not None,
+             simulation_frame_start=sim if sim is not None else 1, rigidbody_world=world,
+             objects=list(objects), library=None, is_missing=False)
+def cloth(start, baked=False):
+    return A(type="CLOTH", point_cache=cache(start, baked))
+def zone(start=None, node="GeometryNodeSimulationOutput"):
+    bake = A(node=None if node is None else A(bl_idname=node),
+             use_custom_simulation_frame_range=start is not None, frame_start=start or 0)
+    return A(type="NODES", bakes=[bake])
+def particles(kind, emission, start, dynamics=False, baked=False):
+    return A(settings=A(type=kind, frame_start=emission), use_hair_dynamics=dynamics,
+             point_cache=cache(start, baked))
+def replay(start, offset=0):
+    return A(type="FLUID", fluid_type="DOMAIN",
+             domain_settings=A(cache_type="REPLAY", cache_frame_start=start, cache_frame_offset=offset))
+def paint(surface, its_cache):
+    return A(type="DYNAMIC_PAINT", canvas_settings=A(canvas_surfaces=[A(frame_start=surface, point_cache=cache(its_cache))]))
+smoozy_as_the_file_has_it = lambda holder, name: getattr(holder, name)
+NAMES = {"the_render_layers_nodes_type": "CompositorNodeRLayers"}
+is_kind = lambda node, kind: node.bl_idname == kind
+STRIPS = {}
+TREES = {}
+the_scenes_reached_from = lambda one: STRIPS.get(one.name, [])
+every_tree_of = lambda one: TREES.get(one.name, [])
+bpy = None
+
+def a_file(scenes, others=(), texts=(), libraries=(), handlers=()):
+    global bpy, SMOOZY_THE_FILES_SIMULATIONS
+    SMOOZY_THE_FILES_SIMULATIONS = None
+    objects = [one for s in scenes for one in s.objects] + list(others)
+    bpy = A(app=A(handlers=A(frame_change_pre=list(handlers), frame_change_post=[])),
+            data=A(objects=objects, scenes=list(scenes), texts=list(texts), libraries=list(libraries),
+                   collections=[], node_groups=[], meshes=[]))
+
+def begins(scenes, **rest):
+    a_file(scenes, **rest)
+    return the_simulations_first_frame(scenes[0])
+
+# The Creator's shape: cloth at 20 in a scene from 1.
+assert begins([scene("S", objects=[thing("Cloth", [cloth(20)])])]) == {"AtFrame": 20}
+# A baked cache does not count; on a linked or overridden object it does.
+assert begins([scene("S", objects=[thing("C", [cloth(20)]), thing("B", [cloth(1, baked=True)])])]) == {"AtFrame": 20}
+assert begins([scene("S", objects=[thing("C", [cloth(20)]), thing("L", [cloth(1, baked=True)], library=A())])]) == {"AtFrame": 1}
+assert begins([scene("S", objects=[thing("C", [cloth(20)]), thing("O", [cloth(3, baked=True)], override=A())])]) == {"AtFrame": 3}
+# A cache's further items count too.
+assert begins([scene("S", objects=[thing("C", [A(type="SOFT_BODY", point_cache=cache(50, items=[A(frame_start=45)]))])])]) == {"AtFrame": 45}
+# An emitter: the lower of its emission start, rounded down, and its cache's.
+assert begins([scene("S", objects=[thing("E", systems=[particles("EMITTER", 900.5, 900)])])]) == {"AtFrame": 900}
+assert begins([scene("S", objects=[thing("E", systems=[particles("EMITTER", 900.0, 1)])])]) == {"AtFrame": 1}
+# Hair with dynamics: its system's own cache; hair with none is left out.
+assert begins([scene("S", objects=[thing("H", systems=[particles("HAIR", 1.0, 15, dynamics=True)])])]) == {"AtFrame": 15}
+assert begins([scene("S", objects=[thing("H", [cloth(30)], systems=[particles("HAIR", 1.0, 2)])])]) == {"AtFrame": 30}
+# Dynamic Paint: the lower of the surface's start and its cache's.
+assert begins([scene("S", objects=[thing("P", [paint(30, 32)])])]) == {"AtFrame": 30}
+# A Replay domain; one with an offset cannot be placed.
+assert begins([scene("S", objects=[thing("F", [replay(40)])])]) == {"AtFrame": 40}
+assert "CannotAccount" in begins([scene("S", objects=[thing("F", [replay(40, offset=2)])])])
+# Simulation zones: the bake's own range, else the scene's Simulation Range, else its start.
+assert begins([scene("S", objects=[thing("Z", [zone(35)])])]) == {"AtFrame": 35}
+assert begins([scene("S", start=1, sim=900, objects=[thing("Z", [zone()])])]) == {"AtFrame": 900}
+assert begins([scene("S", start=700, objects=[thing("Z", [zone()])])]) == {"AtFrame": 700}
+# An object outside the job's scene: the whole file is read, a zone there by the lowest scene.
+away = thing("Away", [zone()])
+assert begins([scene("S", start=700, objects=[thing("C", [cloth(900)])]), scene("Other", start=5, objects=[away])]) == {"AtFrame": 5}
+assert begins([scene("S", objects=[thing("C", [cloth(900)])])], others=[thing("Drawn", [cloth(12)])]) == {"AtFrame": 12}
+# Every scene's rigid-body world.
+assert begins([scene("S", objects=[thing("C", [cloth(900)])]), scene("Bg", world=A(point_cache=cache(8)))]) == {"AtFrame": 8}
+assert begins([scene("S", objects=[thing("C", [cloth(900)])]), scene("Bg", world=A(point_cache=cache(8, baked=True)))]) == {"AtFrame": 900}
+
+def cannot(scenes, **rest):
+    said = begins(scenes, **rest)
+    assert list(said) == ["CannotAccount"] and said["CannotAccount"], said
+    return said["CannotAccount"]
+
+job = lambda: [scene("S", objects=[thing("C", [cloth(20)])])]
+cannot([scene("S", objects=[thing("Z", [zone(35)], sim_cache=False)])])
+cannot([scene("S", objects=[thing("Z", [zone(node=None)])])])
+cannot(job(), others=[thing("Arm", pose=A(ik_solver="ITASC", ik_param=A(mode="SIMULATION")))])
+assert begins(job(), others=[thing("Arm", pose=A(ik_solver="ITASC", ik_param=A(mode="ANIMATION")))]) == {"AtFrame": 20}
+cannot(job(), texts=[A(name="rig.py", use_module=True)])
+assert begins(job(), texts=[A(name="notes", use_module=False)]) == {"AtFrame": 20}
+cannot(job(), handlers=[print])
+cannot(job(), libraries=[A(name="lib.blend", is_missing=True, filepath="//lib.blend")])
+gone = thing("Gone"); gone.is_missing = True
+cannot(job(), others=[gone])
+STRIPS["S"] = [(A(), A(name="Other"))]
+cannot(job())
+STRIPS.clear()
+TREES["S"] = [(A(nodes=[A(bl_idname="CompositorNodeRLayers", scene=A(name="Other"))]), None)]
+cannot(job())
+TREES.clear()
+cannot([scene("S", objects=[thing("Plain")])])
+# Anything that raises cannot account, and never fails the reading.
+broken = thing("Broken", pose=A(ik_solver="ITASC"))
+assert "could not place" in cannot(job(), others=[broken])
+print("all held")
+"#;
+        let out = std::process::Command::new("python3")
+            .arg("-c")
+            .arg(format!("{function}\n{stand_in}"))
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        // **Printed for the job's scene, for every other scene's half, and per
+        // scene in the settings half** (`Render Settings` Q2b).
+        for printed in [
+            r#""where_the_simulations_begin": the_simulations_first_frame(the_jobs_scene),"#,
+            r#""where_the_simulations_begin": begins,"#,
+            r#""simulations_begin": the_simulations_first_frame(scene).get("AtFrame"),"#,
+        ] {
+            assert!(text.contains(printed), "{printed}");
+        }
+        // A printed reading without it carries nothing, and the document
+        // carries what was printed.
+        let mut value = serde_json::to_value(a_printed_reading()).unwrap();
+        assert!(value.get("where_the_simulations_begin").is_none());
+        value.as_object_mut().unwrap().insert("where_the_simulations_begin".to_string(), serde_json::json!({"AtFrame": 20}));
+        let printed: ThePrintedReading = serde_json::from_value(value).unwrap();
+        let document = the_one_document_from(printed, &WhereTheRenderEnters {
+            scene: ArtistsText::of(b"Kitchen".to_vec()),
+            view_layer: ArtistsText::of(b"ViewLayer".to_vec()),
+        })
+        .unwrap();
+        assert_eq!(
+            crate::reading::WhereTheSimulationsBegin::the_first_frame(document.where_the_simulations_begin.as_ref()),
+            Some(20)
+        );
+    }
+
     #[test]
     fn the_reading_says_whether_the_jobs_scene_holds_a_simulation_not_baked() {
         let text = the_script(5, 2);
         let item = &text[text.find("def the_scene_holds_a_simulation_not_baked(scene):").unwrap()
-            ..text.find("def the_replay_fluid_domains():").unwrap()];
+            ..text.find("SMOOZY_THE_FILES_SIMULATIONS = None").unwrap()];
         for read in [
             "world = scene.rigidbody_world",
             "for obj in scene.objects:",
@@ -3985,7 +4310,7 @@ print(json.dumps(results))
             .filter(|line| line.trim_start().starts_with("except"))
             .count();
         assert_eq!(
-            catches, 5,
+            catches, 6,
             "a catch was added or removed without this count moving with it"
         );
         // The first catch writes into the error map, which `Render Settings`
@@ -3995,7 +4320,11 @@ print(json.dumps(results))
         // reading of it and never fails the reading of the scene it names.
         // **The fifth is `Render Settings` Q2 item 7's**: no list is a state the
         // page reads as *cannot say*, and it is no part of the file's reading.
+        // **The sixth is R4 item 8's *Where the simulations begin*** (added
+        // 2026-11-08): what it cannot read is the state *cannot account*, with
+        // its reason, which keeps the old start.
         assert!(text.contains("except OSError:\n        return None\n    return sorted(name for name in names"));
+        assert!(text.contains("    except Exception as why:\n        return {\"CannotAccount\": \"the reading could not place it: \" + str(why)}"));
         assert!(text.contains("errors[\"the regular output path at frame \""));
         assert!(text.contains("per_frame.append(the_entry_at(scene, frame, ERRORS, True))"));
         assert_eq!(text.matches("its_errors[\"the reading of this scene").count(), 2);
@@ -4024,7 +4353,9 @@ print(json.dumps(results))
             .lines()
             .filter(|line| line.trim_start().starts_with("try:"))
             .count();
-        assert_eq!(tries, 7);
+        // Eight from 2026-11-08: R4 item 8's *Where the simulations begin* has
+        // its own, with the sixth catch above.
+        assert_eq!(tries, 8);
         assert!(text.contains("bpy.data.scenes.remove(throwaway)"));
         assert!(text.contains("    finally:\n        the_range_is_set_on(scene, saved[0], saved[1])"));
     }
@@ -4790,6 +5121,7 @@ print(json.dumps(results))
             scene: ArtistsText::of(b"Exterior".to_vec()),
             outputs: Some(theirs.clone()),
             the_scene_holds_a_simulation_not_baked: !printed.the_scene_holds_a_simulation_not_baked,
+            where_the_simulations_begin: None,
             errors: BTreeMap::from([("the regular output path at frame 1".to_string(), "x".to_string())]),
         };
         let named = printed.as_a_reading_naming(&half).expect("its half was read");
@@ -4989,6 +5321,7 @@ print(json.dumps(results))
             errors: BTreeMap::new(),
             the_baked_caches_on_the_machine: Vec::new(),
             the_scene_holds_a_simulation_not_baked: false,
+            where_the_simulations_begin: None,
             the_scene_it_read: None,
             the_open_files_path: None,
             the_check_is_written_as_a_picture: false,

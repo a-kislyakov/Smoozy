@@ -47,3 +47,4 @@
 2026-11-06 — GPT-6.1 (Codex) — Planned grouped publication and folder confirmation reads, and current-file reading status.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the bake folder statement and the absolute-path note. The last words read before the release. No auditor has seen it.
+2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the output window, the re-run mark, and the dependency check.md`, outside any round — *Install Blender…* beside *This server has no Blender.*; the waiting remap reason. No auditor has seen it.

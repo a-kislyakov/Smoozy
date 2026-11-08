@@ -451,6 +451,12 @@ def the_default_cache_folder(cache):
         return None
     if not smoozy_as_the_file_has_it(cache, "is_baked"):
         return None
+    # **G6, 2026-11-07: a cache on a linked object is not this file's.**
+    # Blender names its folder after the library, beside the library
+    # (`Job files and outputs` D21b-iii), and the library's own reading lists
+    # it (G14). Named after this file, it was a folder that is nowhere.
+    if getattr(getattr(cache, "id_data", None), "library", None) is not None:
+        return None
     blend = bpy.data.filepath
     if not blend:
         return None
@@ -964,6 +970,14 @@ mod tests {
         // so the check before 0.1.8 listed nothing for it.
         assert!(!rule.contains("os.path.isdir("), "{rule}");
         assert!(!rule.contains("os.path.exists("), "{rule}");
+        // **G6, 2026-11-07: a cache on a linked object is the library's**, asked
+        // before the file's own name is taken. Run for real in
+        // `a_cloth_on_a_linked_object_is_named_after_its_library_at_the_desk`.
+        let linked = rule
+            .find(r#"if getattr(getattr(cache, "id_data", None), "library", None) is not None:
+        return None"#)
+            .expect("a linked object's cache is left to its library");
+        assert!(linked < rule.find("blend = bpy.data.filepath").expect("the file's name"));
     }
 
     /// **G6c: a packed library's own location is taken before the map is

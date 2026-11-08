@@ -174,7 +174,9 @@ pub const THE_STATEMENT_THIS_BUILD_CARRIES: Option<ACarriedStatement> = Some(ACa
 });
 
 /// **The greatest update release sequence published when this build was made
-/// — zero, because none has been.**
+/// — ~~zero, because none has been~~ 2927, Smoozy 0.3.0's.** *(Struck
+/// 2026-11-08: zero held until Smoozy 0.3.0, the first release carrying
+/// `desktop-update`, was published at 2927.)*
 ///
 /// It is the floor a copy that remembers nothing is held to, the way the
 /// server package's built-in pair is (`Server protocol and transfers` B9):
@@ -182,7 +184,14 @@ pub const THE_STATEMENT_THIS_BUILD_CARRIES: Option<ACarriedStatement> = Some(ACa
 /// recovery` J7 discards would accept any genuine manifest ever signed. **It is
 /// raised by hand to the last published release's own sequence**, never to a
 /// value derived from the build.
-pub const THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE: u64 = 0;
+///
+/// **It is 2927, raised 2026-11-08, before 0.3.1: the release sequence of
+/// Smoozy 0.3.0's published `desktop-update`** (`v0.3.0`, from `3413d32d2`),
+/// read off that file at the latest address with `smoozy-release check`, which
+/// verified it through the desktop's own reading at release sequence 2927.
+/// Raised again before the next release's green run, to the last published
+/// update file's own sequence.
+pub const THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE: u64 = 2927;
 
 /// One recovery key, as the trust set uses it.
 #[derive(Debug, Clone, PartialEq, Eq)]

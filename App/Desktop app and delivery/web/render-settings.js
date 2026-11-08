@@ -1431,17 +1431,28 @@ function theDependencyBand(server, said) {
   const off = document.createElement("label");
   off.className = "off";
   off.dataset.box = "band-switch-off";
+  // **A tick, ticked by Space as by a click, its ring on the tick** (`Design/
+  // Whole app`, *Tab lands on the control itself*; the Creator's
+  // twenty-seventh notes, note 1). Ticked, the band goes, so it is drawn
+  // unticked.
+  off.setAttribute("role", "checkbox");
+  off.setAttribute("aria-checked", "false");
   off.tabIndex = 0;
   const mark = document.createElement("span");
   mark.className = "cb";
   off.appendChild(mark);
   off.appendChild(document.createTextNode(band.switch_it_off));
-  off.addEventListener("click", () =>
+  const switchedOff = () =>
     shell.core.invoke("the_missing_assets_warning_is_switched_off", {
       server,
       file: said.file_bytes,
-    })
-  );
+    });
+  off.addEventListener("click", switchedOff);
+  off.addEventListener("keydown", (event) => {
+    if (event.key !== " " && event.key !== "Enter") return;
+    event.preventDefault();
+    switchedOff();
+  });
   held.appendChild(off);
   // **Where the switch-off could not be read, the band says so** rather than
   // drawing itself as though the answer were known (F-10).

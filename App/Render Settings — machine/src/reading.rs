@@ -46,6 +46,11 @@ pub struct SceneReading {
     /// `Render Settings` Q2b: R4 item 8's existing answer. Old readings are unknown.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prepare_simulations: Option<bool>,
+    /// `Render Settings` Q2b, added 2026-11-08: `Job files and outputs` R4
+    /// item 8's first frame, which `Rendering` L10b raises the start to.
+    /// Absent where the reading cannot account, and in older readings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub simulations_begin: Option<i64>,
     /// `Render Settings` Q2b: saved shutter; absent in older readings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub motion_blur: Option<MotionBlur>,

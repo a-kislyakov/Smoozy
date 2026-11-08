@@ -131,3 +131,4 @@ X1a, 2026-10-27, Claude Opus 5.5, the nineteenth notes' note 7 design pass. No a
 2026-11-04 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job's reading sees its libraries, and failing before a render.md`, outside any round — §10's paragraph after N3: the ending says whether a render began. No auditor has seen it.
 
 2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.
+2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the output window, the re-run mark, and the dependency check.md`, outside any round — E8: Smoozy's own lines not shown; N9a: only on a re-run. No auditor has seen it.

@@ -103,3 +103,7 @@
 2026-11-04 — GPT-6.1 (Codex) — Recorded the page presses and preview ruling.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — § Typography's apostrophe, *Restarts to install.* and the unreadable-record box. The last words read before the release. No auditor has seen it.
+
+2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the job page at every width, and the reorder handle.md`, outside any round — step 1 also stacks a job's page by its own width; step 2 also folds the server list by its own; the pane beside a dragged one keeps its smallest width; Settings' section list keeps its own width when the rail is dragged (the Creator's twenty-seventh notes, notes 4 and 5). No auditor has seen it.
+
+2026-11-08 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the focus ring on the control.md`, outside any round — *Keyboard shortcuts* gains *Tab lands on the control itself*: the ring on the tick, radio, switch or button, never round its words; every tick and radio reached by Tab and pressed by Space; a drag handle not a Tab stop (the Creator's twenty-seventh notes, note 1). No auditor has seen it.

@@ -1034,6 +1034,7 @@ fn the_document_a_reading_prints(frames: std::ops::RangeInclusive<i64>) -> Strin
     let count = u32::try_from(last - first + 1).unwrap_or(1);
     let scene = SceneReading {
         prepare_simulations: None,
+        simulations_begin: None,
             motion_blur: None,
         name: ExactName::as_the_reading_produced_it("Scene"),
         frame_start: first,
@@ -1120,6 +1121,7 @@ fn the_document_a_reading_prints(frames: std::ops::RangeInclusive<i64>) -> Strin
         errors: std::collections::BTreeMap::new(),
         the_baked_caches_on_the_machine: Vec::new(),
         the_scene_holds_a_simulation_not_baked: false,
+        where_the_simulations_begin: None,
         // **The scene it read, by name** — the one scene above. A reading that
         // names none leaves the entry's picture size not known (`Queue &
         // History` N9's fill-in looks the size up by the scene's name). Added

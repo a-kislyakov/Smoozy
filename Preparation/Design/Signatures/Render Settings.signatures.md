@@ -90,3 +90,5 @@
 2026-11-06 — GPT-6.1 (Codex) — Shown simulation ranges include the saved shutter tail, including the first-frame check; written before code. No auditor has seen it.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — Prepare simulations' three lines and the Telegram line's *Install*. The last words read before the release. No auditor has seen it.
+
+2026-11-08 — Claude Opus 5.5 (Claude Code subagent) — Prepare simulations: the later start and its two new lines. No auditor has seen it.

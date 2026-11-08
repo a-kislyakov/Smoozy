@@ -140,9 +140,16 @@ enum AnInstruction {
     /// `Job files and outputs` D16's opening, naming the job identity.
     Marker { job: String },
     /// **L10b: the job's scene stepped frame by frame** from its own start —
-    /// or `lowest` where that is earlier — to `highest`, and the count printed
-    /// on the marker.
-    Step { lowest: i64, highest: i64 },
+    /// or `lowest` where that is earlier, raised to `begins` where given — to
+    /// `highest`, and the count printed on the marker.
+    Step {
+        lowest: i64,
+        highest: i64,
+        /// **L10b's later start, added 2026-11-08**: where the simulations
+        /// begin, which the start is raised to; absent where none is given.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        begins: Option<i64>,
+    },
     /// **L10c: the job's scene written as a still picture** — the media
     /// setting first where the version has one, then the format, then a read
     /// that raises where the scene still writes a video.
@@ -494,6 +501,7 @@ pub fn the_materials_text(
             Entry::Stepping(stepping) => instructions.push(AnInstruction::Step {
                 lowest: stepping.the_lists_lowest,
                 highest: stepping.the_lists_highest,
+                begins: stepping.the_simulations_begin,
             }),
             Entry::ReadBack {
                 property,
@@ -892,12 +900,17 @@ def smoozy_carry_out(document, first, last):
             # `Rendering` L10b: finish the saved shutter, then keep only
             # unbaked skipped cloth (`Job files and outputs` D21b-i).
             start = min(scene.frame_start, instruction["lowest"])
+            # **L10b's later start, added 2026-11-08**: raised to where the
+            # simulations begin (`Job files and outputs` R4 item 8), never
+            # lowered. Past the highest frame, nothing is played.
+            if instruction.get("begins") is not None:
+                start = max(start, instruction["begins"])
             highest = instruction["highest"] + smoozy_simulation_tail(scene)
             for frame in range(start, highest + 1):
                 print("SMOOZY-SIMULATION " + json.dumps({"frame": frame, "to": highest}), flush=True)
                 scene.frame_set(frame)
             print("SMOOZY-SIMULATION " + json.dumps({"finished": True}), flush=True)
-            smoozy_say({"stepped": highest - start + 1, "from": start, "to": highest})
+            smoozy_say({"stepped": max(0, highest - start + 1), "from": start, "to": highest})
         elif what == "WriteAsAPicture":
             # **L10c, the nineteenth notes, notes 3 and 9**: a first-frame
             # check of a job whose only output is a video, which the reading
@@ -1672,6 +1685,10 @@ mod tests {
         assert!(!without.contains(r#""do":"Step""#));
         let text = text_with(crate::material::TheStepping::for_the_list(true, &[12, 13, 24]));
         assert!(text.contains(r#"{"do":"Step","highest":24,"lowest":12}"#), "{text}");
+        // **L10b's later start, added 2026-11-08**: the first frame rides the
+        // same instruction where the reading gave one.
+        let later = text_with(crate::material::TheStepping::for_the_list(true, &[12, 13, 24]).map(|one| one.beginning_at(Some(20))));
+        assert!(later.contains(r#"{"begins":20,"do":"Step","highest":24,"lowest":12}"#), "{later}");
         let branch = &THE_BODY[THE_BODY.find(r#"elif what == "Step":"#).unwrap()
             ..THE_BODY.find(r#"elif what == "Redirect":"#).unwrap()];
         assert!(branch.contains(r#"start = min(scene.frame_start, instruction["lowest"])"#));
@@ -1912,6 +1929,48 @@ for on, position, length, tail in [(True,'START',2.25,3), (True,'CENTER',2.25,2)
             .arg(format!("import json\n{say}\n{THE_SIMULATION_SHUTTER}\n{THE_BODY}\n{check}"))
             .output().unwrap();
         assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    /// **L10b's later start, added 2026-11-08**: the material raises its start
+    /// to where the simulations begin, never lowers it, and plays nothing
+    /// where that is past the highest frame — printing only the closing line.
+    #[test]
+    fn the_start_is_raised_to_where_the_simulations_begin() {
+        let say = &THE_HEAD[THE_HEAD.find("SMOOZY_MARKER_HEAD =").unwrap()
+            ..THE_HEAD.find("def smoozy_scene").unwrap()];
+        let check = r#"
+from types import SimpleNamespace as NS
+lines = []
+def print(text, **options): lines.append(text)
+said = []
+scene = NS(frame_start=1, render=NS(use_motion_blur=False, motion_blur_position='CENTER', motion_blur_shutter=0.5))
+scene.seen = []
+scene.frame_set = lambda frame: scene.seen.append(frame)
+smoozy_scene = lambda document: scene
+def step(**instruction):
+    scene.seen.clear(); lines.clear()
+    smoozy_carry_out({'instructions': [dict(do='Step', **instruction)]}, 0, 1)
+    return list(scene.seen)
+assert step(lowest=1, highest=60, begins=20) == list(range(20, 61))
+assert step(lowest=30, highest=60, begins=20) == list(range(20, 61))
+assert step(lowest=1, highest=60, begins=-5) == list(range(1, 61))
+assert step(lowest=1, highest=60) == list(range(1, 61))
+assert step(lowest=1, highest=10, begins=900) == []
+assert [one for one in lines if one.startswith('SMOOZY-SIMULATION ')] == ['SMOOZY-SIMULATION ' + json.dumps({'finished': True})], lines
+assert any('"stepped": 0' in one for one in lines), lines
+scene.render.use_motion_blur = True
+scene.render.motion_blur_position = 'START'
+scene.render.motion_blur_shutter = 1.0
+assert step(lowest=1, highest=19, begins=20) == [20]
+"#;
+        let out = std::process::Command::new("python3").arg("-c")
+            .arg(format!("import json
+{say}
+{THE_SIMULATION_SHUTTER}
+{THE_BODY}
+{check}"))
+            .output().expect("Python runs the material with a stand-in scene; no Blender");
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     }
 
     #[test]

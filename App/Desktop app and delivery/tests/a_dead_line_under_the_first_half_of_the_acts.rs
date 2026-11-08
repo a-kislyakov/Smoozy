@@ -3817,6 +3817,7 @@ exit 0;
             };
             SceneReading {
                 prepare_simulations: None,
+                simulations_begin: None,
             motion_blur: None,
                 name: ExactName::as_the_reading_produced_it(name),
                 frame_start: 1,
@@ -3915,6 +3916,7 @@ exit 0;
                 errors: std::collections::BTreeMap::new(),
                 the_baked_caches_on_the_machine: Vec::new(),
                 the_scene_holds_a_simulation_not_baked: false,
+                where_the_simulations_begin: None,
                 the_scene_it_read: None,
                 the_open_files_path: None,
                 the_check_is_written_as_a_picture: false,

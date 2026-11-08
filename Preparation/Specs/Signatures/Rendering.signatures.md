@@ -50,3 +50,5 @@
 2026-11-06 — GPT-6.1 (Codex) — Cloth withdrawal and linked simulations on the settings page, within the runner's brief.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the Prepare simulations line's off words. The last words read before the release. No auditor has seen it.
+
+2026-11-08 — Claude Opus 5.5 (Claude Code subagent) — Playing from the earliest simulation's own start, the Creator's ruling of that day, and its Sources entry. No auditor has seen it.

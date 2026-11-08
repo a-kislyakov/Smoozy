@@ -4642,6 +4642,76 @@ struct ASinkAsRead {
     held_back: Vec<u8>,
     /// Whether any of its words have reached the page since the panel opened.
     any_sent: bool,
+    /// **How far the line being printed has been judged** — the ordinary
+    /// stream's alone, for [`SMOOZYS_OWN_LINE_HEADS`].
+    this_line: TheLineSoFar,
+}
+
+/// **The heads of the lines Smoozy's own launch material prints into the
+/// ordinary stream** — `Queue & History` E8, *Smoozy's own lines are not shown
+/// in either* (the demo's fault 10, 2026-11-07). `Job files and outputs` D16's
+/// marker (`Rendering — machine`'s `THE_MARKER_HEAD`) and `Queue & History`
+/// R6a's simulation reading (`Queue & History — machine`'s reader). Neither
+/// window shows them; the capture, the kept words and the failure panel keep
+/// every byte.
+pub const SMOOZYS_OWN_LINE_HEADS: [&str; 2] = ["SMOOZY-MATERIAL ", "SMOOZY-SIMULATION "];
+
+/// **A whole line, or the start of one, that is Smoozy's own.**
+fn a_line_of_smoozys_own(line: &[u8]) -> bool {
+    SMOOZYS_OWN_LINE_HEADS
+        .iter()
+        .any(|head| line.starts_with(head.as_bytes()))
+}
+
+/// **The line being printed, as judged so far.**
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TheLineSoFar {
+    /// Its start, held while it could still be one of Smoozy's own.
+    AtItsStart(String),
+    /// Not one of Smoozy's: what follows goes to the page.
+    Shown,
+    /// One of Smoozy's: nothing of it goes to the page.
+    PassedOver,
+}
+
+impl Default for TheLineSoFar {
+    fn default() -> Self {
+        TheLineSoFar::AtItsStart(String::new())
+    }
+}
+
+/// **`text`, with Smoozy's own lines taken out** — `Queue & History` E8. A
+/// line is judged at its start: one of [`SMOOZYS_OWN_LINE_HEADS`] is passed
+/// over to its end, and a start that could still become one waits for more.
+/// Nothing else in the text is changed.
+fn smoozys_own_lines_passed_over(line: &mut TheLineSoFar, text: &str) -> String {
+    let mut shown = String::new();
+    for piece in text.split_inclusive('\n') {
+        match std::mem::take(line) {
+            TheLineSoFar::Shown => {
+                shown.push_str(piece);
+                *line = TheLineSoFar::Shown;
+            }
+            TheLineSoFar::PassedOver => *line = TheLineSoFar::PassedOver,
+            TheLineSoFar::AtItsStart(mut start) => {
+                start.push_str(piece);
+                *line = if a_line_of_smoozys_own(start.as_bytes()) {
+                    TheLineSoFar::PassedOver
+                } else if !piece.ends_with('\n')
+                    && SMOOZYS_OWN_LINE_HEADS.iter().any(|head| head.starts_with(start.as_str()))
+                {
+                    TheLineSoFar::AtItsStart(start)
+                } else {
+                    shown.push_str(&start);
+                    TheLineSoFar::Shown
+                };
+            }
+        }
+        if piece.ends_with('\n') {
+            *line = TheLineSoFar::default();
+        }
+    }
+    shown
 }
 
 /// **What reads a sink's bytes from one length to another** — the reading
@@ -4707,8 +4777,11 @@ pub struct TheWordsThatArrived {
 ///   arrival says it is first, so the page starts the panel over.
 /// - **A character the read cut through is held back** until its end arrives,
 ///   and bytes that are not text at all are drawn as the replacement mark —
-///   the one way a page's text can carry them. Nothing else is changed (`Desktop
-///   app and delivery` M9).
+///   the one way a page's text can carry them.
+/// - **Smoozy's own lines are passed over** on the ordinary stream
+///   ([`SMOOZYS_OWN_LINE_HEADS`]; `Queue & History` E8, the demo's fault 10).
+///   Nothing else is changed; the kept words and the failure panel keep every
+///   byte (`Desktop app and delivery` M9).
 /// - **A read that fails reads again next time** from where it was; nothing is
 ///   counted as read that did not arrive.
 pub fn the_words_are_read(
@@ -4753,6 +4826,7 @@ pub fn the_words_are_read(
             held.read_to = 0;
             held.held_back.clear();
             held.any_sent = false;
+            held.this_line = TheLineSoFar::default();
         }
     }
     for (at, sink) in [&sinks.ordinary, &sinks.complaints].into_iter().enumerate() {
@@ -4767,6 +4841,11 @@ pub fn the_words_are_read(
             held.read_to = to;
             held.held_back.extend_from_slice(&bytes);
             new[at] = the_whole_characters(&mut held.held_back);
+            // **`Queue & History` E8: Smoozy's own lines are not shown** — on
+            // the ordinary stream, where the launch material prints them.
+            if at == 0 {
+                new[at] = smoozys_own_lines_passed_over(&mut held.this_line, &new[at]);
+            }
             held.any_sent |= !new[at].is_empty();
         }
     }
@@ -4849,7 +4928,8 @@ pub struct TheEntrysLines {
 }
 
 /// **`bytes`, taken into the lines**: each line end completes a line, and only
-/// the newest three are kept. Nothing in a line is changed but the carriage
+/// the newest three are kept, **Smoozy's own lines left out**
+/// ([`SMOOZYS_OWN_LINE_HEADS`]). Nothing in a line is changed but the carriage
 /// return before its end; a byte that is not text is the replacement mark, the
 /// one way a page's text can carry it.
 fn the_bytes_are_taken_into(lines: &mut TheEntrysLines, bytes: &[u8]) {
@@ -4868,6 +4948,10 @@ fn the_bytes_are_taken_into(lines: &mut TheEntrysLines, bytes: &[u8]) {
             Some(b'\r') => &line[..line.len() - 1],
             _ => &line[..],
         };
+        // **`Queue & History` E8: Smoozy's own lines are not shown.**
+        if a_line_of_smoozys_own(line) {
+            continue;
+        }
         lines.lines.push(String::from_utf8_lossy(line).into_owned());
         if lines.lines.len() > THE_ENTRYS_LINES {
             lines.lines.remove(0);
@@ -9124,6 +9208,84 @@ pub(crate) mod tests {
         assert_eq!(machine.asked.len(), asked);
     }
 
+    /// **`Queue & History` E8, *Smoozy's own lines are not shown in either*
+    /// (the demo's fault 10, 2026-11-07): a line beginning `SMOOZY-MATERIAL `
+    /// or `SMOOZY-SIMULATION ` reaches neither the entry's three lines nor the
+    /// live *Blender output* panel**, a marker cut across two reads is still
+    /// passed over whole, and a line that only begins like one is shown. The
+    /// complaints stream is left as it came.
+    ///
+    /// **What it bites on**: the marker lines shown among Blender's, a cut
+    /// marker's second half shown, a line that merely starts with `SMOOZY`
+    /// lost, or the errors stream edited.
+    #[test]
+    fn smoozys_own_marker_lines_reach_neither_window() {
+        let rendering = Identity::issue(IdentityKind::Job).unwrap();
+        let waiting = Identity::issue(IdentityKind::Job).unwrap();
+        let server = "server-markers";
+        let holds = WhatThisRunHolds::default();
+        let connection = holds.a_connection_begins(server);
+        let mut clock = 1_790_086_400u64;
+        let mut read_at = |sinks: &smoozy_queue_history::readings::TheSinksOfARenderingJob| {
+            let request = the_queue_reading_request().unwrap();
+            let state = the_queue_reading_in(WhatCameBack::ItAnswered(
+                Answered::to(&request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test").carrying(
+                    a_queue_answer_with_figures(&rendering, &waiting, None, Some(sinks)),
+                ),
+            ))
+            .expect("the answer reads");
+            clock += 5;
+            holds.a_reading_was_taken(
+                server,
+                connection,
+                Reading::taken(
+                    state,
+                    SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(clock),
+                    Clock::ThisComputer,
+                ),
+                None,
+            );
+        };
+        let first_part: &[u8] = b"Blender 5.2.2\nSMOOZY-MATERIAL {\"opened\":\"j\"}\nRead blend: /work/shot.blend\nSMOOZY-SIMULATION {\"frame\": 1";
+        let second_part: &[u8] = b"30, \"to\": 270}\r\nSMOOZY says hello\nFra:131 Sample 1/16\nSMOOZY-SIMULATION {\"finished\": true}\n";
+        let complaints: &[u8] = b"SMOOZY-SIMULATION {\"frame\": 1}\n";
+        let mut printed = first_part.to_vec();
+        let ordinary = the_sinks_at(1, 0, 0).ordinary.path;
+        let errors = the_sinks_at(1, 0, 0).complaints.path;
+        let mut machine = SinksInHand::default();
+        machine.bytes.insert(ordinary.clone(), printed.clone());
+        machine.bytes.insert(errors.clone(), complaints.to_vec());
+        read_at(&the_sinks_at(1, printed.len() as u64, complaints.len() as u64));
+
+        // **The live panel**, read twice, the simulation line cut between.
+        holds.the_words_are_opened(server, &rendering.as_text(), "Kitchen");
+        let first = the_words_are_read(&holds, server, &mut machine).expect("the first arrival");
+        assert_eq!(first.new[0], "Blender 5.2.2\nRead blend: /work/shot.blend\n");
+        assert_eq!(
+            first.new[1],
+            String::from_utf8_lossy(complaints),
+            "the errors stream is left as it came"
+        );
+        printed.extend_from_slice(second_part);
+        machine.bytes.insert(ordinary.clone(), printed.clone());
+        read_at(&the_sinks_at(1, printed.len() as u64, complaints.len() as u64));
+        let second = the_words_are_read(&holds, server, &mut machine).expect("the rest arrived");
+        assert_eq!(second.new[0], "SMOOZY says hello\nFra:131 Sample 1/16\n");
+
+        // **The entry's three lines**, from the same stream.
+        holds.the_entry_is_drawn_for(Some((server, &rendering.as_text())));
+        holds.the_queue_is_shown(None);
+        assert!(the_entrys_lines_are_read(&holds, server, &mut machine));
+        assert_eq!(
+            holds.the_entry_is_drawn_for(Some((server, &rendering.as_text()))),
+            vec![
+                "Read blend: /work/shot.blend".to_string(),
+                "SMOOZY says hello".to_string(),
+                "Fra:131 Sample 1/16".to_string(),
+            ],
+        );
+    }
+
     // ── The 38's piece 10: `Queue & History` N9's two routes ─────────────────
 
     /// **A machine whose job record directory holds files**, answering every
@@ -9251,6 +9413,7 @@ pub(crate) mod tests {
             errors: std::collections::BTreeMap::new(),
             the_baked_caches_on_the_machine: Vec::new(),
             the_scene_holds_a_simulation_not_baked: false,
+            where_the_simulations_begin: None,
             the_scene_it_read: Some(ArtistsText::of(b"Interior".to_vec())),
             the_open_files_path: None,
             the_check_is_written_as_a_picture: false,

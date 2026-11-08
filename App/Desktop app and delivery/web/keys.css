@@ -41,7 +41,8 @@
   text-align: left;
   width: 100%;
 }
-.rads button.rad:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Its ring is on the dot, in `focus.css`, not round the full-width button
+ * (the Creator's twenty-seventh notes, note 1). */
 
 /* **The one place a row's verdict goes**, which carries the underway mark until
  * the reading answers and the failure shape after it. It is `.ky-why`'s own

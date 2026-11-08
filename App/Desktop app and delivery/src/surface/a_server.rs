@@ -1861,7 +1861,7 @@ mod pane_and_rail_browser {
             "event-route.js",
             "export const listeners = new Map(); export function whenTold(k,f) { if (!listeners.has(k)) listeners.set(k,[]); listeners.get(k).push(f); } export async function tell(k,d={}) { for (const f of listeners.get(k)||[]) await f(d); }",
         ),
-        ("panes.js", "export function theSeamsAreLive() {}"),
+        ("panes.js", "export function theSeamsAreLive() {} export function thePagesAreMarked() {}"),
         (
             "the-value-drawn.js",
             "export function theValueIsDrawnInto(n,v) { n.textContent=v; } export function theValueDrawn(v) { const n=document.createElement('span'); n.textContent=v; return n; }",

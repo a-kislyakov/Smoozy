@@ -2,13 +2,17 @@
 // of `src/surface/panes.rs`, whose head carries the whole account of the piece
 // and the ruling behind it. `web/the-drawing.css` carries the steps themselves.
 //
-// **What this file does is three things and no fourth.**
+// **What this file does is four things and no fifth.**
 //
 //  1. It measures `.app`'s own width and writes a step mark onto it, at the
 //     five boundaries the drawing narrows at. Once at load, synchronously, and
 //     then whenever the window is resized.
-//  2. It draws the panel that appears below the floor and says so.
-//  3. It makes the seams between panes draggable, clamped at both ends, reset
+//  2. It measures the two pages that answer to their own width as well as
+//     the window's — a job's page and the server list — and marks each where
+//     it is too narrow, whatever the window's width (the Creator's
+//     twenty-seventh notes, notes 4 and 5).
+//  3. It draws the panel that appears below the floor and says so.
+//  4. It makes the seams between panes draggable, clamped at both ends, reset
 //     by a double-click, with the width written down when the drag ends.
 //
 // **The mockup narrows with CSS container queries and this does not.** Those
@@ -69,6 +73,26 @@ const THE_FLOOR_MARK = "floor";
 // `src/surface/panes.rs` holds the two together.
 const THE_STEP_THAT_STOPS_THE_SEAMS = "s3";
 
+// **The job page's own step**, and the one boundary not asked of the window.
+//
+// **Its one home is the mockup too**: `@container entry (width < 534px)`,
+// which a test in `src/surface/panes.rs` holds to this number and to the
+// sum it is — two gutters, the gap, the main column's floor (`--main-min`)
+// and the preview column's smallest width. Below it the two columns cannot
+// both have their smallest widths, so the page takes the first step's
+// layout. **No dragged width enters the comparison**: the drawing's grid
+// gives the preview column only the room left above the main column's
+// floor, so one fixed number holds for every width the preview is dragged
+// to. Compared strictly, as the mockup is.
+const THE_PAGE_STACKS_BELOW = { at: 534, mark: "stacked" };
+
+// **The server list's own step**: the mockup's `@container servers
+// (max-width: 806px)`, which is the second step's 1020 less the rail's own
+// 214 — the width the list has at that step when nobody has dragged the rail.
+// At or below it the rows fold their hardware under their work, as the second
+// step folds them. Compared at-or-below, as the mockup is.
+const THE_SERVER_LIST_FOLDS_AT = { at: 806, mark: "folded" };
+
 const app = document.querySelector(".app");
 
 // ── The mark ────────────────────────────────────────────────────────────────
@@ -100,9 +124,50 @@ function theNarrowingIsMarked() {
 // window drawing its widest state until that callback lands, which is a visible
 // flash at every start-up. A module's own top level runs when the page's module
 // graph is evaluated, which is before anything is painted.
-theNarrowingIsMarked();
+// **Measure each job page and mark it where it is too narrow for both its
+// columns.** Design (`Whole app`, step 1): *a job's page also moves its
+// preview column under the main column when the page itself is too narrow
+// for both, whatever the window's width.* The window's steps answer only to
+// the window, and the rail's and the list's seams can leave a page 470
+// pixels wide in a 1,245-pixel window (the Creator's twenty-seventh notes).
+//
+// **What is measured is the page's scrolling body where there is one**,
+// which is the width the two columns actually share once a scrollbar takes
+// its room; a page with no entry drawn is measured whole. **A page that is
+// not on screen measures nothing and is left as it was**: it is measured
+// again when its entry is drawn, which is what showing a screen does.
+//
+// **Its callers are the moments the page's width can change**: load, the
+// window's resize, each move of a drag and its double-click reset, the
+// remembered widths applied, and an entry drawn — `web/the-queue.js` calls it
+// for that last one. Nothing is scheduled. **And it writes nothing to the
+// record**, which is P11's *the narrowing steps write nothing*.
+//
+// **The server list is marked the same way**, at its own step, at the same
+// moments — showing a screen is one, and `web/the-rail.js` calls this then.
+export function thePagesAreMarked() {
+  for (const page of document.querySelectorAll(".qdetail")) {
+    const body = page.querySelector(".qdbody");
+    const across = body ? body.clientWidth : page.clientWidth;
+    if (!across) continue;
+    if (across < THE_PAGE_STACKS_BELOW.at) page.dataset.narrow = THE_PAGE_STACKS_BELOW.mark;
+    else delete page.dataset.narrow;
+  }
+  for (const list of document.querySelectorAll(".svlist")) {
+    const across = list.clientWidth;
+    if (!across) continue;
+    if (across <= THE_SERVER_LIST_FOLDS_AT.at) list.dataset.narrow = THE_SERVER_LIST_FOLDS_AT.mark;
+    else delete list.dataset.narrow;
+  }
+}
 
-window.addEventListener("resize", theNarrowingIsMarked);
+theNarrowingIsMarked();
+thePagesAreMarked();
+
+window.addEventListener("resize", () => {
+  theNarrowingIsMarked();
+  thePagesAreMarked();
+});
 
 // ── What the application says about the panes ───────────────────────────────
 //
@@ -238,6 +303,7 @@ function theRememberedWidthsAreApplied(seams) {
       app.style.setProperty(seam.property, `${seam.width}px`);
     }
   }
+  thePagesAreMarked();
 }
 
 // **Make every seam under `root` draggable.**
@@ -269,6 +335,14 @@ export function theSeamsAreLive(root, seams) {
     const declared = seams.find((seam) => seam.key === element.dataset.seam);
     if (declared) oneSeamDrags(element, declared);
   }
+}
+
+// **The pane a seam moves**: the first of its host's panes for a seam measured
+// from the left — the rail, the list — and the last for one measured from the
+// right, the preview column. The seam itself is one of the host's children.
+function thePaneOf(host, fromTheRight) {
+  const panes = Array.from(host.children).filter((one) => !one.classList.contains("seam"));
+  return (fromTheRight ? panes[panes.length - 1] : panes[0]) || host;
 }
 
 function oneSeamDrags(element, declared) {
@@ -308,9 +382,16 @@ function oneSeamDrags(element, declared) {
   element.addEventListener("pointermove", (pointer) => {
     if (!dragging) return;
     const box = host.getBoundingClientRect();
-    const across = declared.from_right
-      ? box.right - pointer.clientX
-      : pointer.clientX - box.left;
+    let across = pointer.clientX - box.left;
+    if (declared.from_right) {
+      // **The preview column is measured from its own outer edge**, and the
+      // seam sits half the gap outside it. The column is the page's last
+      // child. Until 2026-11-07 this measured from the page's outer edge, a
+      // gutter further right, which agreed with the seam drawn 17 pixels
+      // inside the column and so hid it (the twenty-seventh notes, note 3).
+      const half = (parseFloat(getComputedStyle(host).columnGap) || 0) / 2;
+      across = thePaneOf(host, true).getBoundingClientRect().right - pointer.clientX - half;
+    }
     // **The drag stops at both ends** — Design's *a pane cannot be dragged into
     // uselessness*. The application clamps again when the width is written
     // down, because a command is reachable without this arithmetic.
@@ -323,6 +404,17 @@ function oneSeamDrags(element, declared) {
     // `.body`, so from that step's width down the step wins and the user's
     // width is set aside rather than overwritten.
     app.style.setProperty(declared.property, `${width}px`);
+    // **And the width kept is the width drawn.** The drawing gives the pane
+    // beside a floor of its own — a job's main column beside the preview, the
+    // entry beside the list — and the grid gives this pane only what is left,
+    // so where it drew less than the drag asked, the drag stops there and that
+    // is the width written down (the twenty-seventh notes, notes 4 and 5).
+    const drawn = Math.round(thePaneOf(host, declared.from_right).getBoundingClientRect().width);
+    if (drawn < width) {
+      width = Math.max(declared.smallest, drawn);
+      app.style.setProperty(declared.property, `${width}px`);
+    }
+    thePagesAreMarked();
   });
 
   function theDragEnded() {
@@ -353,6 +445,7 @@ function oneSeamDrags(element, declared) {
   element.addEventListener("dblclick", () => {
     width = null;
     app.style.removeProperty(declared.property);
+    thePagesAreMarked();
     if (theWidthsCouldNotBeRead) return;
     shell.core.invoke("a_pane_width_was_reset", { seam: declared.key });
   });

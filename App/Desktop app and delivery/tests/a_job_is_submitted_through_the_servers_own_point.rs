@@ -1178,6 +1178,7 @@ mod on_a_desk_with_a_socket_pair {
         SettingsHalf {
             scenes: vec![SceneReading {
                 prepare_simulations: None,
+                simulations_begin: None,
             motion_blur: None,
                 name: name("Scene"),
                 frame_start: 1,
@@ -3410,8 +3411,11 @@ mod on_a_desk_with_a_socket_pair {
         assert!(
             landed
                 .file_name()
-                .is_some_and(|name| { name.to_string_lossy().contains(&job.as_text()) }),
-            "`Download` P10: the job's identity is in the folder's name — {landed:?}"
+                .is_some_and(|name| {
+                    // P10's dated note of 2026-11-07: the server's 8 characters.
+                    name.to_string_lossy().starts_with(&format!("{} ", &job.as_text()[..8]))
+                }),
+            "`Download` P10: the job's identity's 8 characters start the folder's name — {landed:?}"
         );
         for (at, bytes) in written.iter().enumerate() {
             let frame = landed.join(format!("frame_{:04}.png", at + 1));

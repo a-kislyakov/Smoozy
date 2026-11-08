@@ -50,6 +50,7 @@ p { margin: 0; }
   --rail-w:  214px;  /* navigation only, never the server list */
   --list-w:  380px;  /* a list beside a detail */
   --side-w:  234px;  /* the column holding a preview */
+  --main-min: 280px; /* the narrowest a job's main column goes beside its preview */
 
   /* — the side gutter: how far a screen's own content sits from the edge of
        the pane it is in. One number, because it is one question, and every
@@ -460,7 +461,11 @@ body { display: flex; flex-direction: column; }
 /* ── Queue & History ── */
 #queueview, #historyview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 #queueview[hidden], #historyview[hidden] { display: none; }
-.qsplit { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, var(--list-w)) minmax(0, 1fr); }
+/* The entry beside the list keeps a floor of its own — its main column's
+   floor and its two gutters — and the list gives way to it, so a list
+   dragged wide in a narrow window cannot squeeze the entry into a strip
+   (the Creator's twenty-seventh notes, notes 4 and 5). */
+.qsplit { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, var(--list-w)) minmax(calc(var(--main-min) + 2 * var(--gutter)), 1fr); }
 .qlist { min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); }
 .qhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; padding: 13px var(--gutter); border-bottom: 1px solid var(--line); }
 .qhead h1 { margin: 0; font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
@@ -513,7 +518,7 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .qrow.in { padding-left: calc(var(--gutter) + 14px); }
 /* A row that cannot be moved keeps the space and shows nothing in it, so the
    rows still line up and the withheld grip is itself the answer. */
-.qrow .qgrip { margin-top: 3px; }
+.qrow .qgrip { margin-top: 4px; }
 .qgrip.nodrag { visibility: hidden; }
 .qrow.stale .qn, .qrow.stale .qs { color: var(--ink3); }
 /* Each line of a row stays one line: a cell that does not fit ends in an
@@ -543,7 +548,17 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
    count on a line of its own — "Cancel all" over "4". */
 .glnk { font: inherit; font-size: var(--t-sm); color: var(--accent); font-weight: 550; background: none; border: 0; cursor: pointer; padding: 0; white-space: nowrap; }
 /* The group's heading is the grip for the whole block. A row has its own. */
-.qgrip { color: var(--ink3); cursor: grab; font-size: var(--t-xs); letter-spacing: -3px; flex: 0 0 auto; }
+.qgrip { position: relative; flex: 0 0 auto; width: 8px; height: 12px; color: var(--ink3); cursor: grab; }
+/* The grip is drawn, not typed: six dots, two columns of three, centred on
+   the name's line, a step darker on hover. Until 2026-11-07 it was the
+   letters ⋮⋮ pulled together, which read as a stray colon (the Creator's
+   twenty-seventh notes, note 8). */
+.qgrip::before { content: ""; position: absolute; left: 1px; top: 1px; width: 2px; height: 2px; border-radius: 50%; background: currentColor; box-shadow: 4px 0 currentColor, 0 4px currentColor, 4px 4px currentColor, 0 8px currentColor, 4px 8px currentColor; }
+.qrow:hover .qgrip, .qgh:hover .qgrip { color: var(--ink2); }
+/* On a heading the grip sits on the first line, never the middle of the
+   block: in a wider face the heading wraps (2026-11-08). 1.62 is the
+   page's own line height. */
+.qgh .qgrip { align-self: flex-start; margin-top: calc((var(--t-sm) * 1.62 - 12px) / 2); }
 /* Where a control is gone for good, its reason takes the space rather than a
    greyed button that cannot be pressed. */
 .gonel { font-size: var(--t-sm); color: var(--ink3); align-self: center; }
@@ -560,7 +575,7 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .hclear { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 0 100%; margin-top: 3px; }
 .qfoot { border-top: 1px solid var(--line); background: var(--rail); padding: 8px var(--gutter); font-size: var(--t-sm); color: var(--ink3); }
 
-.qdetail { min-height: 0; display: flex; flex-direction: column; }
+.qdetail { min-height: 0; display: flex; flex-direction: column; container-type: inline-size; container-name: entry; }
 .qdh { display: flex; align-items: flex-start; gap: 10px; padding: 13px var(--gutter); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .qdh h2 { margin: 0; font-size: var(--t-lg); font-weight: 620; letter-spacing: -0.01em; }
 /* The acts' own row under the name, from the left edge (the Creator's note 11
@@ -572,7 +587,10 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
    2026-10-18). */
 .qdacts + .qanswer { flex-basis: 100%; }
 .qdsub { font-size: var(--t-sm); color: var(--ink3); margin-top: 2px; }
-.qdbody { flex: 1; min-height: 0; overflow-y: auto; padding: 20px var(--gutter) 26px; display: grid; grid-template-columns: minmax(0,1fr) var(--side-w); gap: 24px 30px; align-content: start; }
+/* The main column keeps its floor and the preview column gives way first:
+   it grows toward its own width only from the room left over above the
+   main column's floor (the Creator's twenty-seventh notes, notes 4 and 5). */
+.qdbody { flex: 1; min-height: 0; overflow-y: auto; padding: 20px var(--gutter) 26px; display: grid; grid-template-columns: minmax(var(--main-min), 1fr) minmax(180px, var(--side-w)); gap: 24px 30px; align-content: start; }
 .qdmain, .qdside { display: flex; flex-direction: column; gap: 19px; min-width: 0; }
 
 .stepper { display: flex; align-items: center; gap: 9px; }
@@ -1378,7 +1396,7 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
    emphasis. */
 .svhead .mini { padding: 6px 12px; font-size: var(--t-md); }
 
-.svlist { flex: 1; min-height: 0; overflow-y: auto; }
+.svlist { flex: 1; min-height: 0; overflow-y: auto; container-type: inline-size; container-name: servers; }
 /* Every row is the same four columns at the same widths, and the actions
    column is fixed tracks rather than a flex run — so connect sits at one x
    in every row. A column that sized itself to its own row is what had the
@@ -1510,7 +1528,10 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
    the chosen one. At 196 it fitted in the ordinary weight and not in the bold,
    so choosing Warnings and notifications wrapped it to two lines and pushed
    every section under it down. The rail's own width is the number. */
-.stgwrap { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); }
+/* Settings' own section list is its own width, not the rail's: a rail dragged
+   wide took Settings' list with it, and the page lost the width twice (the
+   Creator's twenty-seventh notes, notes 4 and 5). */
+.stgwrap { flex: 1; min-height: 0; display: grid; grid-template-columns: 214px minmax(0, 1fr); }
 .stgnav { border-right: 1px solid var(--line); background: var(--sunk); padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .stgnav button { font: inherit; font-size: var(--t-md); text-align: left; color: var(--ink2); background: none; border: 0; border-radius: var(--r-md); padding: 6px 10px; cursor: pointer; }
 .stgnav button:hover { background: var(--sel); }
@@ -2296,6 +2317,27 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
   .dltg > .grp + .grp > h3 + * + * { grid-row: 3; }
 }
 
+/* A job's page also stacks by its own width, whatever the window's: with
+   the rail and the list dragged wide, a window well above 1180 can leave
+   the page too narrow for both its columns. It stacks below what the two
+   columns need at their smallest — two gutters, the gap, the main column's
+   floor and the preview's smallest width: 22 + 30 + 280 + 180 + 22 = 534 —
+   and takes the first step's own layout (the Creator's twenty-seventh
+   notes, notes 4 and 5, 2026-11-07). */
+@container entry (width < 534px) {
+  .qdbody { grid-template-columns: minmax(0, 1fr); }
+  .qdbody > .seam { display: none; }
+  .qdside { flex-direction: row; flex-wrap: wrap; gap: 22px; }
+  .qdside > .grp { flex: 1 1 210px; }
+  .dltg { flex: 1 1 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 22px; align-items: start; }
+  .dltg > .grp { display: contents; }
+  .dltg > .grp > * { grid-column: 1; }
+  .dltg > .grp + .grp > * { grid-column: 2; }
+  .dltg > .grp > .adl, .dltg > .grp + .grp > h3 { grid-row: 1; align-self: center; }
+  .dltg > .grp + .grp > h3 + * { grid-row: 2; }
+  .dltg > .grp + .grp > h3 + * + * { grid-row: 3; }
+}
+
 @container win (max-width: 1020px) {
   /* The work and the hardware now share one column, and it is the wider of
      the two: the work is one short line and the hardware is the rest. */
@@ -2308,6 +2350,18 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
   .frow .fmeta.kind, .frow .sortb.kind { display: none; }
   .cols { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 
+}
+
+/* The server list folds by its own width too: with the rail dragged wide, a
+   window above 1020 can leave the list as narrow as the second step's, 806
+   pixels (1020 less the rail's own 214), and its rows squeezed the address
+   onto three lines (the Creator's twenty-seventh notes, notes 4 and 5). */
+@container servers (max-width: 806px) {
+  .svrow { grid-template-columns: minmax(0,1fr) minmax(0,1.25fr) 248px; }
+  .svmain { grid-column: 1; grid-row: 1 / span 2; }
+  .svwork { grid-column: 2; grid-row: 1; }
+  .svhw   { grid-column: 2; grid-row: 2; margin-top: 5px; font-size: var(--t-sm); color: var(--ink3); }
+  .svacts { grid-column: 3; grid-row: 1 / span 2; align-content: start; }
 }
 
 @container win (max-width: 900px) {
@@ -2411,6 +2465,14 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* The seam sits on the line it moves, so each of its hosts has to be a
    positioning context. None of them was before. */
 .body, .qsplit, .qdbody { position: relative; }
+/* The preview's seam sits in the gap beside the preview column: placed in
+   that column's own cell of the page and moved left by half the gap, so it
+   follows the column at whatever width the column takes, and runs the whole
+   height of the content, scrolled or not. Until 2026-11-07 it was placed
+   from the page's outer edge, which sits a gutter further right, so its
+   line fell 17 pixels inside the column (the Creator's twenty-seventh
+   notes, note 3). */
+.qdbody > .seam { grid-column: 2; grid-row: 1; left: calc(30px / -2); }
 
 /* ══════════════════════════════════════════════════════════════════
    NOTIFICATIONS.
@@ -2787,12 +2849,16 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .fsztip[hidden] { display: none; }
 .log .qlines > span.err { color: var(--ink); }
-.pvstep { display: flex; align-items: center; gap: 0; }
+/* At the preview column's smallest widths, Show latest drops under the
+   arrows rather than spilling out of the column: it takes its own words'
+   width, so at the column's own width it still sits on the arrows' line
+   (the Creator's twenty-seventh notes, notes 4 and 5). */
+.pvstep { display: flex; align-items: center; gap: 0; flex-wrap: wrap; row-gap: 6px; }
 .pvstep .pvframe { display: contents; }
 .pvstep [data-pvgo="-1"] { order: 1; margin-left: 7px; }
 .pvstep .pvframe input { order: 2; width: 58px; flex: none; margin: 0 2px; }
 .pvstep [data-pvgo="1"] { order: 3; }
-.pvstep [data-pvlatest] { order: 4; margin-left: 10px; }
+.pvstep [data-pvlatest] { order: 4; margin-left: 10px; flex: 0 1 auto; width: auto; }
 .pvstep .sb { width: 24px; height: 24px; flex: none; }
 .pvlarge .pvbox { width: 100%; max-height: none; }
 /* A picture looked at in Files (the Creator's seventeenth notes, note 11):
@@ -2844,8 +2910,13 @@ body.resizing { cursor: col-resize; user-select: none; }
 .qst.e-chk { color: var(--ink3); font-weight: 600; }
 /* The check on the entry: its picture, what it is, what came of it. */
 .ffunit { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--sunk); }
-.ffunit .ffu { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.ffunit > .mini { flex: none; }
+.ffunit .ffu { flex: 1 1 12em; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+/* The words and the card's buttons share what is left after the picture,
+   and a button drops under the words, lined up after the picture, rather
+   than squeezing them to a word a line (the Creator's twenty-seventh notes,
+   note 4). */
+.ffunit .ffr { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ffr > .mini { flex: none; }
 .ffw1 { font-size: var(--t-sm); font-weight: 600; color: var(--ink); }
 .ffw2 { font-size: var(--t-sm); color: var(--ink2); line-height: 1.45; }
 .ffw2 b { font-weight: 600; color: var(--ink); }
@@ -4468,7 +4539,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
   <div class="body">
     <!-- The rail's own seam. The rail is on every screen, so its width is one
          width everywhere rather than one per screen. -->
-    <button type="button" class="seam" data-seam="--rail-w" data-min="150" data-max="340"
+    <button type="button" class="seam" data-seam="--rail-w" tabindex="-1" data-min="150" data-max="340"
             style="left:var(--rail-w)" aria-label="Resize the rail" title="Drag to resize · double-click to reset"></button>
 
     <div class="modal pvlarge" id="pvlarge" hidden role="dialog" aria-modal="true" aria-label="Frame preview">
@@ -5558,7 +5629,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
           <!-- The list beside its entry. Both the queue and history use it, and
                it is one width for both: they are the same shape of screen and
                a user who sets it on one means it on the other. -->
-          <button type="button" class="seam" data-seam="--list-w" data-min="280" data-max="620"
+          <button type="button" class="seam" data-seam="--list-w" tabindex="-1" data-min="280" data-max="620"
                   style="left:var(--list-w)" aria-label="Resize the list" title="Drag to resize · double-click to reset"></button>
 
           <div class="qlist">
@@ -5662,7 +5733,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                          q-checkrun; until then the check and its range were
                          two rows, the check's labelled First-frame check ·
                          Frame 1. -->
-                    <span class="qgrip nodrag" aria-hidden="true">&#8942;&#8942;</span><span class="qn">Kitchen &#8212; final<span class="qs">Interior &#183; 240&#160;frames &#183; frame 148</span></span>
+                    <span class="qgrip nodrag" aria-hidden="true"></span><span class="qn">Kitchen &#8212; final<span class="qs">Interior &#183; 240&#160;frames &#183; frame 148</span></span>
                     <span class="qst run">Rendering</span>
                     <span class="ffparts" data-ffrow="check" hidden><span class="ffpart now"><span class="fft">First-frame check &#183; frame 1</span><span class="ffw">rendering</span></span><span class="ffpart"><span class="fft">Full range &#183; frames 1&#8211;240</span><span class="ffw">not started</span></span></span><span class="ffparts" data-ffrow="wait" hidden><span class="ffpart done"><span class="fft">First-frame check &#183; frame 1</span><span class="ffw">rendered</span></span><span class="ffpart"><span class="fft">Full range &#183; frames 1&#8211;240</span><span class="ffw">not started</span></span></span><span class="ffparts" data-ffrow="after" hidden><span class="ffpart done"><span class="fft">First-frame check &#183; frame 1</span><span class="ffw">rendered</span></span><span class="ffpart now"><span class="fft">Full range &#183; frames 1&#8211;240</span><span class="ffw">frame 148</span></span></span>
                     <span class="qbars">
@@ -5672,20 +5743,20 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                   </button>
 
                   <button type="button" class="qrow">
-                    <span class="qgrip nodrag" aria-hidden="true">&#8942;&#8942;</span><span class="qn">Hallway &#8212; final<!-- Read "Interior · first frame rendered" until 2026-10-27 (nineteenth notes, note 7). --></span>
+                    <span class="qgrip nodrag" aria-hidden="true"></span><span class="qn">Hallway &#8212; final<!-- Read "Interior · first frame rendered" until 2026-10-27 (nineteenth notes, note 7). --></span>
                     <span class="qst held">Needs your answer</span>
                     <span class="ffparts"><span class="ffpart done"><span class="fft">First-frame check &#183; frame 1</span><span class="ffw">rendered</span></span><span class="ffpart"><span class="fft">Full range &#183; frames 1&#8211;240</span><span class="ffw">not started</span></span></span>
                     <span class="qbars"></span>
                   </button>
 
                   <button type="button" class="qrow" data-qr="wait">
-                    <span class="qgrip" title="Drag to reorder">&#8942;&#8942;</span><span class="qn">Kitchen &#8212; clay<span class="qs"><span data-ff="run held">Interior &#183; </span>240&#160;frames</span></span>
+                    <span class="qgrip" title="Drag to reorder"></span><span class="qn">Kitchen &#8212; clay<span class="qs"><span data-ff="run held">Interior &#183; </span>240&#160;frames</span></span>
                     <span class="qst"></span>
                     <span class="qbars"></span>
                   </button>
 
                   <button type="button" class="qrow">
-                    <span class="qgrip" title="Drag to reorder">&#8942;&#8942;</span><span class="qn">Kitchen &#8212; final<span class="qs">Interior &#183; a file it needs was replaced</span></span>
+                    <span class="qgrip" title="Drag to reorder"></span><span class="qn">Kitchen &#8212; final<span class="qs">Interior &#183; a file it needs was replaced</span></span>
                     <span class="qst"></span>
                     <span class="qbars"></span>
                   </button>
@@ -5696,7 +5767,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                        Queue & History H12). Held, so no grip and no place in
                        the queue; the word is the held job's amber. -->
                   <button type="button" class="qrow" data-qr="drv" data-qdrv hidden>
-                    <span class="qgrip nodrag" aria-hidden="true">&#8942;&#8942;</span><span class="qn">Kitchen &#8212; night<span class="qs">Interior &#183; 240&#160;frames</span></span>
+                    <span class="qgrip nodrag" aria-hidden="true"></span><span class="qn">Kitchen &#8212; night<span class="qs">Interior &#183; 240&#160;frames</span></span>
                     <span class="qst held">Waiting for driver update</span>
                     <span class="qbars"></span>
                   </button>
@@ -5710,7 +5781,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                        the queue, nothing in a menu. Where the machine refuses
                        it, the row goes and the panel says why. -->
                   <div class="qrow sub" data-qsub hidden>
-                    <span class="qgrip nodrag" aria-hidden="true">&#8942;&#8942;</span><span class="qn">Bathroom &#8212; final<span class="qs">Interior &#183; 180&#160;frames</span></span>
+                    <span class="qgrip nodrag" aria-hidden="true"></span><span class="qn">Bathroom &#8212; final<span class="qs">Interior &#183; 180&#160;frames</span></span>
                     <span class="qst">Submitting&#8230;<i class="spin"></i></span>
                     <span class="qbars"></span>
                   </div>
@@ -5740,15 +5811,15 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                          which the spec allows and does not warn about, because
                          moving the group is what gathers it back. -->
                     <div class="qgh">
-                      <span class="qgrip" title="Drag to move the group">&#8942;&#8942;</span>
+                      <span class="qgrip" title="Drag to move the group"></span>
                       <span>Product spins &#8212; all 4&#160;scenes</span>
                       <span class="grow"></span>
                       <button type="button" class="glnk" id="qcancelall">Cancel all 4</button>
                     </div>
-                    <button type="button" class="qrow in"><span class="qgrip nodrag" aria-hidden="true">&#8942;&#8942;</span><span class="qn">Scene 01<span class="qs">120&#160;frames &#183; frame 50</span></span><span class="qst run">Rendering</span><span class="qbars"><span class="qbar"><i style="width:24%"></i></span><span class="qbar w"><i style="width:41%"></i></span></span></button>
-                    <button type="button" class="qrow in"><span class="qgrip" title="Drag to reorder">&#8942;&#8942;</span><span class="qn">Scene 02<span class="qs">120&#160;frames</span></span><span class="qst"></span><span class="qbars"></span></button>
-                    <button type="button" class="qrow in"><span class="qgrip" title="Drag to reorder">&#8942;&#8942;</span><span class="qn">Scene 03<span class="qs">120&#160;frames</span></span><span class="qst"></span><span class="qbars"></span></button>
-                    <button type="button" class="qrow in"><span class="qgrip" title="Drag to reorder">&#8942;&#8942;</span><span class="qn">Scene 04<span class="qs">120&#160;frames</span></span><span class="qst"></span><span class="qbars"></span></button>
+                    <button type="button" class="qrow in"><span class="qgrip nodrag" aria-hidden="true"></span><span class="qn">Scene 01<span class="qs">120&#160;frames &#183; frame 50</span></span><span class="qst run">Rendering</span><span class="qbars"><span class="qbar"><i style="width:24%"></i></span><span class="qbar w"><i style="width:41%"></i></span></span></button>
+                    <button type="button" class="qrow in"><span class="qgrip" title="Drag to reorder"></span><span class="qn">Scene 02<span class="qs">120&#160;frames</span></span><span class="qst"></span><span class="qbars"></span></button>
+                    <button type="button" class="qrow in"><span class="qgrip" title="Drag to reorder"></span><span class="qn">Scene 03<span class="qs">120&#160;frames</span></span><span class="qst"></span><span class="qbars"></span></button>
+                    <button type="button" class="qrow in"><span class="qgrip" title="Drag to reorder"></span><span class="qn">Scene 04<span class="qs">120&#160;frames</span></span><span class="qst"></span><span class="qbars"></span></button>
                   </div>
                 </div>
               </section>
@@ -5764,7 +5835,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
 
                 <div class="qmrows">
                   <button type="button" class="qrow stale">
-                    <span class="qgrip" title="Drag to reorder">&#8942;&#8942;</span><span class="qn">Turntable &#8212; final<span class="qs" title="Was rendering frame 88 at 11:04. Current status unknown.">Was rendering frame 88 at 11:04. Current status unknown.</span></span>
+                    <span class="qgrip" title="Drag to reorder"></span><span class="qn">Turntable &#8212; final<span class="qs" title="Was rendering frame 88 at 11:04. Current status unknown.">Was rendering frame 88 at 11:04. Current status unknown.</span></span>
                     <span class="qst">Not updating</span>
                     <span class="qbars"></span>
                   </button>
@@ -5833,8 +5904,8 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                    so it is also the first thing a user wants to make bigger:
                    this is the one column that is a picture. Dragged from its
                    own edge, which is the right one. -->
-              <button type="button" class="seam" data-seam="--side-w" data-side="right"
-                      data-min="180" data-max="380" style="right:var(--side-w)"
+              <button type="button" class="seam" data-seam="--side-w" data-side="right" tabindex="-1"
+                      data-min="180" data-max="380"
                       aria-label="Resize the preview" title="Drag to resize · double-click to reset"></button>
               <div class="qdmain">
 
@@ -5846,12 +5917,14 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                      own entry. -->
                 <div class="ffunit" id="qchecklabel" hidden>
                   <button type="button" class="ffpic" data-ffpic data-ffk="q" data-ffu="after" aria-label="Open frame 1 large"></button>
+                  <div class="ffr">
                   <div class="ffu">
                     <p class="ffw1">First-frame check &#183; Frame 1</p>
                     <p class="ffw2" data-ffu="check">Frames 1&#8211;240 start only after you review this frame. Stopping the check removes them.</p>
                     <p class="ffw2" data-ffu="after">Rendered in 2&#160;minutes. You chose <b>Render all</b>.</p>
                   </div>
                   <button type="button" class="mini" data-go="log" data-ffu="after">Blender output</button>
+                  </div>
                 </div>
                 <div class="statusline" data-ff="sim" hidden>
                   <span class="sdot busy"></span>
@@ -6326,7 +6399,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
           <!-- The list beside its entry. Both the queue and history use it, and
                it is one width for both: they are the same shape of screen and
                a user who sets it on one means it on the other. -->
-          <button type="button" class="seam" data-seam="--list-w" data-min="280" data-max="620"
+          <button type="button" class="seam" data-seam="--list-w" tabindex="-1" data-min="280" data-max="620"
                   style="left:var(--list-w)" aria-label="Resize the list" title="Drag to resize · double-click to reset"></button>
           <div class="qlist">
             <div class="qhead">
@@ -6479,8 +6552,8 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                    so it is also the first thing a user wants to make bigger:
                    this is the one column that is a picture. Dragged from its
                    own edge, which is the right one. -->
-              <button type="button" class="seam" data-seam="--side-w" data-side="right"
-                      data-min="180" data-max="380" style="right:var(--side-w)"
+              <button type="button" class="seam" data-seam="--side-w" data-side="right" tabindex="-1"
+                      data-min="180" data-max="380"
                       aria-label="Resize the preview" title="Drag to resize · double-click to reset"></button>
               <div class="qdmain">
                 <!-- The check on its pair's History entry (nineteenth notes,
@@ -6491,6 +6564,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                      check · Frame 1" here, on the check's own entry. -->
                 <div class="ffunit" id="hchecklabel" hidden>
                   <button type="button" class="ffpic" data-ffpic data-ffk="h" data-ffu="ok" aria-label="Open frame 1 large"></button>
+                  <div class="ffr">
                   <div class="ffu">
                     <p class="ffw1">First-frame check &#183; Frame 1</p>
                     <p class="ffw2" data-ffu="ok">Rendered in 2&#160;minutes, today 23:00. You chose <b>Render all</b>.</p>
@@ -6499,6 +6573,7 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
                   </div>
                   <button type="button" class="mini" data-go="log" data-ffu="ok">Blender output</button>
                   <button type="button" class="mini" data-go="q" data-ffu="wait">Show in Queue</button>
+                  </div>
                 </div>
                 <div class="statusline">
                   <span class="sdot" style="background:var(--bad)" data-hv="fail disk"></span>
@@ -13010,11 +13085,25 @@ Fra:148 Mem:18.19G | Time:02:41.88 | Scene, Interior | Path Tracing Sample 812/2
       if (!dragging || dragging.seam !== seam) return;
       var r = host.getBoundingClientRect();
       var k = scaleOf(host) || 1;
-      var w = fromRight ? (r.right - e.clientX) / k : (e.clientX - r.left) / k;
+      var w;
+      if (fromRight) {
+        // The preview column is measured from its own outer edge, the page's
+        // last child, with the seam half the gap outside it.
+        var half = parseFloat(getComputedStyle(host).columnGap) / 2;
+        w = (host.lastElementChild.getBoundingClientRect().right - e.clientX) / k - half;
+      } else {
+        w = (e.clientX - r.left) / k;
+      }
       w = Math.max(lo, Math.min(hi, Math.round(w)));
-      seamW[name] = w + 'px';
       appWin.style.setProperty(name, w + 'px');
-      seam.style[fromRight ? 'right' : 'left'] = 'var(' + name + ')';
+      // The width kept is the width drawn: where the pane beside keeps its
+      // floor, the grid gives this pane less than the drag asked, and the
+      // drag stops there.
+      var pane = fromRight ? host.lastElementChild : host.querySelector(':scope > :not(.seam)');
+      var drawn = Math.round(pane.getBoundingClientRect().width / k);
+      if (drawn < w) { w = Math.max(lo, drawn); appWin.style.setProperty(name, w + 'px'); }
+      seamW[name] = w + 'px';
+      if (!fromRight) seam.style.left = 'var(' + name + ')';
     });
 
     function end(e) {

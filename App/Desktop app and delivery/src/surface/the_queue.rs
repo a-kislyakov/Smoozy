@@ -10667,7 +10667,7 @@ console.log(JSON.stringify(drawn));
   globalThis.told.set(kind, held);
 }"#,
         ),
-        ("panes.js", r#"export function theSeamsAreLive() {}"#),
+        ("panes.js", r#"export function theSeamsAreLive() {} export function thePagesAreMarked() {}"#),
         (
             "the-rail.js",
             r#"export const THE_QUEUE = "queueview";
@@ -11580,6 +11580,428 @@ try {
 } catch(error) {document.getElementById('out').textContent=JSON.stringify({error:String(error.stack || error)});}
 </script></body></html>"#;
 
+    /// **The Creator's twenty-seventh notes, notes 3, 4, 5 and 8, in a real
+    /// browser** — the account `Audits/Build/Twenty-seventh notes/The window's
+    /// notes — what each one is.md`. The application's stylesheets, the real
+    /// `web/panes.js` and `web/the-queue.js`, a window laid out as the
+    /// application lays it out (title bar, rail, the Queue's list and entry),
+    /// and the cloth job of the Creator's two screenshots. **Chrome, not the
+    /// Mac's own engine**: text widths differ a little, so a measurement here
+    /// is a lower bound for the Mac, not a match. Skipped, and says so, where
+    /// no Chrome is installed.
+    fn the_job_page_in_a_real_browser(name: &str, hash: &str, window: (u32, u32), picture: Option<(&std::path::Path, u32)>) -> Option<serde_json::Value> {
+        let chrome = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser",
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        ].into_iter().map(std::path::PathBuf::from).find(|path| path.exists());
+        let Some(chrome) = chrome else {
+            eprintln!("SKIPPED: no Chrome; the job page was not measured");
+            return None;
+        };
+        let folder = std::env::temp_dir().join(format!("smoozy-twenty-seventh-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).unwrap();
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for (stand_in, text) in THE_BOXES_STAND_INS {
+            if stand_in != "harness.js" && stand_in != "panes.js" { std::fs::write(folder.join(stand_in), text).unwrap(); }
+        }
+        for entry in std::fs::read_dir(&web).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|ext| ext.to_str()) == Some("css") {
+                std::fs::copy(&path, folder.join(path.file_name().unwrap())).unwrap();
+            }
+        }
+        // **The real `panes.js`**, since what is measured is how the page's
+        // own width marks the entry and how the preview's handle drags.
+        for page in ["panes.js", "the-queue.js", "the-value-drawn.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).unwrap();
+        }
+        std::fs::write(folder.join("entry.js"), THE_CLOTH_JOB).unwrap();
+        std::fs::write(folder.join("index.html"), THE_JOB_PAGE_IN_ITS_WINDOW).unwrap();
+        let url = format!("{}#{hash}", url_of(&folder.join("index.html")));
+        let mut args = vec![
+            "--headless".to_string(), "--disable-gpu".to_string(), "--no-first-run".to_string(),
+            "--allow-file-access-from-files".to_string(), "--hide-scrollbars".to_string(),
+            "--virtual-time-budget=5000".to_string(), format!("--window-size={},{}", window.0, window.1),
+            format!("--user-data-dir={}", folder.join("profile").display()),
+        ];
+        match picture {
+            Some((file, scale)) => {
+                args.push(format!("--force-device-scale-factor={scale}"));
+                args.push(format!("--screenshot={}", file.display()));
+            }
+            None => args.push("--dump-dom".to_string()),
+        }
+        let ran = std::process::Command::new(&chrome).args(&args).arg(&url).output();
+        let _ = std::fs::remove_dir_all(&folder);
+        let ran = ran.expect("the browser starts");
+        let page = String::from_utf8_lossy(&ran.stdout);
+        assert!(ran.status.success(), "the browser failed ({}):\n{}", ran.status, String::from_utf8_lossy(&ran.stderr));
+        if picture.is_some() {
+            return Some(serde_json::Value::Null);
+        }
+        let result = page.split("<pre id=\"out\">").nth(1).and_then(|part| part.split("</pre>").next()).unwrap_or("");
+        let result = result.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"");
+        let measured: serde_json::Value = serde_json::from_str(&result)
+            .unwrap_or_else(|error| panic!("no measurement: {error}:\n{page}"));
+        assert!(measured.get("error").is_none(), "{measured}");
+        Some(measured)
+    }
+
+    /// A file's address, as a browser is given it.
+    fn url_of(file: &std::path::Path) -> String {
+        let path = file.to_string_lossy().replace('\\', "/").replace(' ', "%20");
+        if path.starts_with('/') { format!("file://{path}") } else { format!("file:///{path}") }
+    }
+
+    /// **Notes 4 and 5: the job page holds at every width and every dragged
+    /// pane** — and note 3, the preview's handle. Swept from a 1,181-pixel
+    /// window to 1,600 with the rail at 214 and 340, the list at 280 and 620
+    /// and the preview column at 180 and 380, and at the two shapes of the
+    /// Creator's screenshots: nothing in the page is wider than its column,
+    /// the main column never runs under the side column, the card's words are
+    /// never narrower than their floor, the handle's line is in the gap
+    /// between the columns (and hidden where they stack), it reaches the foot
+    /// of the content, it is not a Tab stop, its drag reckons from the
+    /// column's own edge and stops where the main column would go under its
+    /// floor; and the list, dragged wide, gives way to the entry's own floor.
+    /// **It failed before the fix**: the account's own numbers — the
+    /// main column at about 105 pixels, the card's words at 45, the handle 17
+    /// pixels inside the column.
+    #[test]
+    fn twenty_seventh_4_and_5_the_job_page_holds_at_every_width_in_a_real_browser() {
+        let Some(measured) = the_job_page_in_a_real_browser("sweep", "sweep=yes", (1600, 900), None) else {
+            return;
+        };
+        assert_eq!(measured["faults"], serde_json::json!([]), "{measured}");
+        assert!(measured["beside"].as_u64().unwrap() > 0 && measured["stacked"].as_u64().unwrap() > 0,
+            "the sweep reaches both shapes: {measured}");
+        let pictures = std::env::var_os("SMOOZY_THE_JOB_PAGE_PICTURES");
+        let Some(pictures) = pictures else { return };
+        let pictures = std::path::PathBuf::from(pictures);
+        std::fs::create_dir_all(&pictures).unwrap();
+        for (file, hash, width) in [
+            ("Screenshot 1's shape, after.png", "rail=235&list=390&preview=286&shot=1", 1245),
+            ("Screenshot 2's shape, after.png", "rail=235&list=540&preview=286", 1245),
+            ("The preview handle, lit, after.png", "rail=235&list=390&preview=286&shot=1&lit=yes", 1245),
+            ("Narrower, a 1,225-pixel window.png", "rail=235&list=430&preview=286", 1225),
+            ("Narrower, a 1,205-pixel window.png", "rail=235&list=430&preview=286", 1205),
+            ("Narrower, a 1,185-pixel window.png", "rail=235&list=430&preview=286", 1185),
+        ] {
+            the_job_page_in_a_real_browser("picture", &format!("{hash}&picture=yes"), (width, 780), Some((&pictures.join(file), 1)));
+        }
+    }
+
+    /// **Note 8: the reorder handle is a drawn grip**, six dots in two columns
+    /// of three, on a waiting row and on a group's heading — never letters.
+    /// It is 8 by 12 pixels, holds no text, and its middle sits on the
+    /// middle of the name's line. **It failed before the fix**: the handle
+    /// was the text *⋮⋮* at the smallest text size, its middle below the
+    /// name's. The picture, at twice the size, is the Creator's.
+    #[test]
+    fn twenty_seventh_8_the_reorder_handle_is_a_drawn_grip_in_a_real_browser() {
+        let Some(measured) = the_job_page_in_a_real_browser("grip", "grip=yes", (1245, 780), None) else {
+            return;
+        };
+        for one in measured["grips"].as_array().unwrap() {
+            assert_eq!(one["text"], "", "no letters: {measured}");
+            assert_eq!((one["width"].as_f64(), one["height"].as_f64()), (Some(8.0), Some(12.0)), "8 by 12: {measured}");
+            assert_eq!(one["dots"], 6, "six dots: {measured}");
+            assert!(one["offMiddle"].as_f64().unwrap().abs() <= 1.0, "on the middle of its line: {measured}");
+        }
+        let grips = measured["grips"].as_array().unwrap();
+        assert!(grips.iter().any(|one| one["heading"] == true) && grips.iter().any(|one| one["heading"] == false),
+            "a waiting row's and a group heading's: {measured}");
+        if let Some(pictures) = std::env::var_os("SMOOZY_THE_JOB_PAGE_PICTURES") {
+            let pictures = std::path::PathBuf::from(pictures);
+            std::fs::create_dir_all(&pictures).unwrap();
+            the_job_page_in_a_real_browser("grip-picture", "grip=yes&picture=yes", (1245, 420),
+                Some((&pictures.join("The reorder handle, at twice the size.png"), 2)));
+        }
+    }
+
+    /// **A separator is never drawn with nothing after it, and on the job
+    /// page's reading lines it never stands on a line of its own** — the
+    /// runner's addition to `Audits/Build/Twenty-seventh notes/Brief — the
+    /// focus ring on the control.md`, from the Creator's screenshot 2, where a
+    /// "·" stood alone under *00:00.07 left*. The reading's "·" was its own
+    /// item of the wrapping line, where the drawing writes *~1m 40s left ·
+    /// Blender's estimate* as one; the queue's heading and a server's heading
+    /// drew their "·" whether or not a count came after it. **It failed before
+    /// the fix**: the heading's *2 jobs ·*, the server's *·*, and the reading's
+    /// dot alone on its line at the narrow shapes.
+    #[test]
+    fn twenty_seventh_a_separator_never_stands_alone_in_a_real_browser() {
+        let Some(measured) = the_job_page_in_a_real_browser("dots", "dots=yes", (1600, 900), None) else {
+            return;
+        };
+        assert_eq!(measured["dots"], serde_json::json!([]), "{measured}");
+        assert!(measured["onTheReadingLine"].as_u64().unwrap_or(0) > 0, "the reading's own \"·\" was read: {measured}");
+    }
+
+    /// The cloth job of the Creator's twenty-seventh notes: its first-frame
+    /// check rendered, the full range rendering, a waiting copy below it, and
+    /// the pane widths the page is given read from the address.
+    const THE_CLOTH_JOB: &str = r#"
+globalThis.told = new Map(); globalThis.screens = new Map();
+window.asked = [];
+window.theWidths = Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+window.__TAURI__ = {core:{invoke(command, args) {
+  asked.push([command, args]);
+  if (command === 'the_pane_layout') {
+    const seam = (key, property, smallest, largest, from_right, label) => ({key, property, smallest, largest, from_right,
+      label, hint:'Drag to resize · double-click to reset',
+      width: theWidths[key] === undefined ? undefined : Number(theWidths[key])});
+    return Promise.resolve({floor:{said:'Smoozy needs a wider window', how:'Make it at least 680 pixels wide.'},
+      the_record_would_not_answer:false,
+      seams:[seam('rail','--rail-w',150,340,false,'Resize the rail'), seam('list','--list-w',280,620,false,'Resize the list'),
+        seam('preview','--side-w',180,380,true,'Resize the preview')]});
+  }
+  return Promise.resolve(null);
+}}};
+window.theCloth = (more) => Object.assign({
+  theHeading:'Queue', theJobsFigure:'2', theJobsWord:'jobs',
+  lineCount:'1', line0Server:'s1', line0Name:'4000ada',
+  rowCount:'2',
+  row0Job:'j1', row0Line:'0', row0Name:'cloth', row0State:'Rendering', row0StateIs:'run', row0Renderlet:'96', row0Whole:'98',
+  row0PairCount:'2',
+  row0Pair0WhatLead:'First-frame check · frame', row0Pair0WhatValue:'1', row0Pair0StateLead:'rendered', row0Pair0Dot:'done',
+  row0Pair1WhatLead:'Full range · frames', row0Pair1WhatValue:'1-60', row0Pair1StateLead:'frame 59', row0Pair1Dot:'now',
+  row1Job:'j2', row1Line:'0', row1Name:'cloth', row1Grip:'yes',
+  row1PairCount:'2',
+  row1Pair0WhatLead:'First-frame check · frame', row1Pair0WhatValue:'1', row1Pair0StateLead:'rendered', row1Pair0Dot:'done',
+  row1Pair1WhatLead:'Full range · frames', row1Pair1WhatValue:'1-60', row1Pair1StateLead:'not started',
+  dragItUpTheQueue:'Drag to reorder',
+  entryJob:'j1', entryName:'cloth', entryReachBacks:'yes',
+  downloadAll:'Download all', downloadAllTo:'Download all to…',
+  filesOnTheServer:'Files on the server', filesOnYourComputer:'Files on your computer',
+  entryStopOrCancel:'Stop', entryStopOrCancelAct:'stop',
+  ffJob:'j0', ffHeadingLead:'First-frame check · Frame', ffHeadingValue:'1',
+  ffRenderedIn:'Rendered in', ffRenderedFor:'<1m', ffFullStop:'.', ffYouChose:'You chose', ffRenderAll:'Render all',
+  ffBlenderOutput:'Blender output',
+  ffpreviewPicture:'j0', ffpreviewFrame:'1', ffpreviewWhich:'latest', ffpreviewHeldCount:'1', ffpreviewHeldFrame0:'1',
+  ffpreviewHeldLayerCount0:'1', ffpreviewHeldMain0:'0', ffpreviewHeld0Layer0:'ViewLayer', ffpreviewHeld0Place0:'0',
+  entryStatusIs:'busy', entryStatusCount:'1', entryStatus0Lead:'Rendering',
+  renderingNow:'Rendering now', wholeJob:'Whole job', progNowCount:'5',
+  progNow0Lead:'Frame', progNow0Value:'59', progNow1Value:'96/100', progNow1Trail:'samples',
+  progNow2Value:'00:00.07', progNow2Trail:'left', progNow3Lead:'·', progNow4Lead:"Blender's estimate",
+  progNowAt:'96', progWhole:'98',
+  whatThisJobWrites:'What this job writes', writeCount:'1', write0Said:'61 PNG frames', write0PartCount:'1',
+  write0Part0Lead:'to', write0Part0Value:'//render/cloth_',
+  submittedWith:'Submitted with', legendItalic:'italic', legendTheFiles:"= the file's ·", legendBold:'bold', legendYours:'= yours',
+  factCount:'6',
+  fact0Name:'Blender', fact0Value:'5.2.3', fact0Files:'yes',
+  fact1Name:'Frames', fact1Value:'1–60', fact1Was:'1-60', theFilesValueLead:'file:',
+  fact2Name:'Resolution', fact2Value:'100%', fact2Files:'yes',
+  fact3Name:'Samples', fact3Value:'100', fact3Files:'yes',
+  fact4Name:'Engine', fact4Value:'Cycles', fact4Files:'yes',
+  fact5Name:'Renders on', fact5Value:'GPU', fact5Files:'yes',
+  frameHeading:'Frame preview', frameWord:'Frame', previousFrame:'Previous frame', nextFrame:'Next frame',
+  showLatest:'Show latest', showingFrame:'Showing frame', previewClose:'Close', enlargePreview:'Open the frame large',
+  notColourAccurate:'Not colour-accurate.', previewPicture:'j1', previewFrame:'57', previewWhich:'latest',
+  previewHeldCount:'1', previewHeldFrame0:'57', previewHeldLayerCount0:'1', previewHeldMain0:'0',
+  previewHeld0Layer0:'ViewLayer', previewHeld0Place0:'0',
+  downloadingOn:'yes', framesAsTheyRender:'Download frames as they render', downloadingEverything:'All formats',
+  telegramHeading:'Telegram', telegramStands:'offered', telegramJob:'j1', telegramLabel:'What this job reports',
+  telegramChoiceCount:'5',
+  telegramChoice0Value:'everything', telegramChoice0Said:'Everything',
+  telegramChoice1Value:'pictures-only', telegramChoice1Said:'Pictures only',
+  telegramChoice2Value:'a-picture-every-few-minutes', telegramChoice2Said:'A picture every few minutes',
+  telegramChoice3Value:'alerts-only', telegramChoice3Said:'Alerts only',
+  telegramChoice4Value:'nothing', telegramChoice4Said:'Off',
+  telegramPicked:'a-picture-every-few-minutes', telegramReads:'A picture every',
+  telegramMinutes:'1', telegramMinutesWord:'minutes', telegramMinutesName:'Minutes between pictures',
+}, more || {});
+"#;
+
+    /// The window, its title bar, a rail drawn in the drawing's own classes,
+    /// and the Queue's screen in the main pane; then, by the address, the
+    /// sweep, the grip's measure, or nothing (a picture).
+    const THE_JOB_PAGE_IN_ITS_WINDOW: &str = r#"<!doctype html><html data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="smoozy.css">
+<style>html, body { margin:0; height:100%; overflow:hidden; } .app { height:100%; } #out { display:none; }</style>
+</head><body><div class="app" id="app"><div class="titlebar"><div class="lights lights-left"></div><span class="nm">Smoozy</span><span class="grow"></span></div><div class="pane" id="pane"><div class="body" id="body">
+<nav class="rail"><div class="rsec"><div class="rhd"><span>Servers</span></div>
+<button type="button" class="item"><span class="lbl">All servers</span></button>
+<button type="button" class="item"><span class="lbl">4000ada</span></button></div>
+<div class="rdiv"></div><div class="rsec">
+<button type="button" class="item" aria-current="true"><span class="lbl">Queue</span></button>
+<button type="button" class="item"><span class="lbl">History</span></button>
+<button type="button" class="item"><span class="lbl">Transfers</span></button></div>
+<div class="rdiv"></div><div class="rsec">
+<button type="button" class="item"><span class="lbl">Keys</span></button>
+<button type="button" class="item"><span class="lbl">Settings</span></button></div></nav>
+<div class="main" id="main"></div></div></div></div><pre id="out"></pre>
+<script src="entry.js"></script>
+<script type="module">
+import './panes.js';
+import './the-queue.js';
+const out = document.getElementById('out');
+try {
+  const app = document.getElementById('app');
+  const host = document.createElement('div'); host.style.cssText = 'height:100%; display:flex; flex-direction:column;';
+  document.getElementById('main').appendChild(host);
+  screens.get('queueview').itIsDrawn(host);
+  const tell = (more) => { for (const handler of told.get('queue:the-queue') || []) handler({said: theCloth(more)}); };
+  await new Promise((done) => setTimeout(done, 20));
+  const theFirstShot = {frameHeading: undefined, renderingNow: undefined, entryStatusCount:'0', writeCount:'0'};
+  // **A scene-job group under the waiting row**, for its heading's grip.
+  const aGroup = {rowCount:'4', groupCount:'1', group0Group:'g1', group0Name:'turntable', group0Grip:'yes',
+    allScenesLead:'All scenes', group0Scenes:'2', group0ScenesWord:'scenes', cancelAll:'Cancel all', dragTheWholeGroup:'Drag to move the group',
+    row2Job:'j3', row2Line:'0', row2Name:'Scene 01', row2Group:'0', row2Grip:'yes',
+    row3Job:'j4', row3Line:'0', row3Name:'Scene 02', row3Group:'0', row3Grip:'yes'};
+  tell(theWidths.shot === '1' ? theFirstShot : theWidths.grip ? aGroup : {});
+  const result = {};
+  const box = (one) => one.getBoundingClientRect();
+  // **The handle lit, as a pointer over it lights it**, for the picture.
+  if (theWidths.lit) host.querySelector('.qdbody > .seam').classList.add('dragging');
+  if (theWidths.dots) {
+    // **A separator never stands alone** (the runner's addition to the
+    // twenty-seventh notes' focus brief): every "·" in the queue's heading,
+    // a server's heading and the job page's reading lines has words after it
+    // in its own line of text, and on the reading lines it shares its line
+    // with the words on both sides, at every shape the sweep reaches.
+    const faults = []; let onTheReadingLine = 0;
+    const theDotsIn = (holder) => {
+      const chars = [];
+      const walker = document.createTreeWalker(holder, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (!node.parentElement || !node.parentElement.getClientRects().length) continue;
+        for (let at = 0; at < node.data.length; at += 1) chars.push({node, at, char: node.data[at]});
+      }
+      return chars;
+    };
+    const lineOf = ({node, at}) => { const range = document.createRange(); range.setStart(node, at); range.setEnd(node, at + 1); const r = range.getClientRects()[0]; return r ? r.top + r.height / 2 : null; };
+    const read = (where, sharesItsLine) => {
+      for (const holder of host.querySelectorAll(where)) {
+        const chars = theDotsIn(holder);
+        chars.forEach((one, at) => {
+          if (one.char !== '·') return;
+          const before = chars.slice(0, at).reverse().find((other) => other.char.trim() && other.char !== '\u00a0');
+          const after = chars.slice(at + 1).find((other) => other.char.trim() && other.char !== '\u00a0');
+          const said = where + ' "' + holder.textContent.trim().replace(/\s+/g, ' ') + '"';
+          if (!after) { faults.push(said + ': a separator with nothing after it'); return; }
+          if (!sharesItsLine) return;
+          onTheReadingLine += 1;
+          const line = lineOf(one);
+          if (!before || Math.abs(lineOf(before) - line) > 2 || Math.abs(lineOf(after) - line) > 2)
+            faults.push(said + ' at ' + app.style.width + ': the separator does not share its line with the words either side');
+        });
+      }
+    };
+    const shape = (w, rail, list, side) => {
+      app.style.width = w + 'px';
+      app.style.setProperty('--rail-w', rail + 'px'); app.style.setProperty('--list-w', list + 'px'); app.style.setProperty('--side-w', side + 'px');
+      window.dispatchEvent(new Event('resize'));
+    };
+    read('.qhead .qsub', false);
+    read('.qmach .qm2.open', false);
+    for (const rail of [214, 340]) for (const list of [280, 620]) for (const side of [180, 380]) for (let w = 1181; w <= 1600; w += 20) {
+      shape(w, rail, list, side);
+      read('.qdmain .pline', true);
+    }
+    shape(1245, 235, 540, 286); read('.qdmain .pline', true);
+    result.dots = [...new Set(faults)]; result.onTheReadingLine = onTheReadingLine;
+  } else if (theWidths.grip) {
+    // **Note 8**: every grip that moves, measured against its own line.
+    result.grips = Array.from(host.querySelectorAll('.qgrip:not(.nodrag)')).map((grip) => {
+      const line = grip.closest('.qgh') ? grip.closest('.qgh').querySelector('b, span:not(.qgrip)') : grip.parentNode.querySelector('.qn');
+      const lineBox = box(line), at = box(grip);
+      const lineHeight = parseFloat(getComputedStyle(line).lineHeight) || lineBox.height;
+      const shadow = getComputedStyle(grip, '::before').boxShadow;
+      const dots = (shadow && shadow !== 'none' ? shadow.split(/,(?![^(]*\))/).length : 0) + (getComputedStyle(grip, '::before').content !== 'none' ? 1 : 0);
+      return {text: grip.textContent, width: at.width, height: at.height, dots, heading: !!grip.closest('.qgh'),
+        offMiddle: (at.top + at.height / 2) - (lineBox.top + Math.min(lineHeight, lineBox.height) / 2)};
+    });
+  } else if (theWidths.sweep) {
+    const faults = []; let beside = 0, stacked = 0;
+    const shape = (w, rail, list, side, quietly) => {
+      app.style.width = w + 'px';
+      app.style.setProperty('--rail-w', rail + 'px'); app.style.setProperty('--list-w', list + 'px'); app.style.setProperty('--side-w', side + 'px');
+      if (!quietly) window.dispatchEvent(new Event('resize'));
+    };
+    const parts = () => {
+      const body = host.querySelector('.qdbody');
+      return {body, main: body.querySelector('.qdmain'), side: body.querySelector('.qdside'), seam: body.querySelector('.seam')};
+    };
+    const check = (at) => {
+      const {body, main, side, seam} = parts();
+      const m = box(main), s = box(side);
+      if (body.scrollWidth > body.clientWidth + 1) faults.push(at + ': the page is ' + (body.scrollWidth - body.clientWidth) + 'px wider than its box');
+      for (const [column, edge] of [[main, m], [side, s]]) for (const one of column.querySelectorAll('*')) {
+        const r = box(one);
+        if (!r.width || !r.height) continue;
+        if (r.right > edge.right + 1 || r.left < edge.left - 1) { faults.push(at + ': ' + (one.className || one.tagName) + ' spills out of its column'); break; }
+      }
+      const sideBySide = s.top < m.bottom && s.left > m.left + 1;
+      if (sideBySide) beside += 1; else stacked += 1;
+      if (sideBySide && m.right > s.left + 0.5) faults.push(at + ': the main column runs under the side column');
+      const words = main.querySelector('.ffu');
+      const floor = 12 * parseFloat(getComputedStyle(words).fontSize);
+      if (box(words).width < floor - 0.5) faults.push(at + ': the card\'s words are ' + box(words).width + 'px, under ' + floor);
+      const handle = box(seam);
+      if (sideBySide) {
+        const line = handle.left + 4.5;
+        if (line < m.right || line > s.left) faults.push(at + ': the handle\'s line at ' + line + ' is not in the gap ' + m.right + '–' + s.left);
+      } else if (handle.width) faults.push(at + ': stacked, and the handle still shows');
+      if (seam.tabIndex !== -1) faults.push(at + ': the handle is a Tab stop');
+    };
+    for (const rail of [214, 340]) for (const list of [280, 620]) for (const side of [180, 380]) for (let w = 1181; w <= 1600; w += 20) {
+      shape(w, rail, list, side);
+      check(w + ' rail ' + rail + ' list ' + list + ' side ' + side);
+    }
+    shape(1245, 235, 390, 286); check('screenshot 1');
+    shape(1245, 235, 540, 286); check('screenshot 2');
+    // **The entry drawn is a moment the page's width is read**, as a list
+    // dragged elsewhere or a screen shown again leaves it.
+    shape(1600, 214, 280, 234); shape(1245, 235, 560, 286, true); tell(); check('drawn after a change nothing announced');
+    await new Promise((done) => setTimeout(done, 20));
+    // **The handle reaches the foot of the content, scrolled.**
+    shape(1600, 214, 280, 234);
+    const {body} = parts();
+    body.scrollTop = body.scrollHeight;
+    const foot = Math.max(box(parts().main).bottom, box(parts().side).bottom);
+    if (box(parts().seam).bottom < foot - 1) faults.push('scrolled: the handle ends at ' + box(parts().seam).bottom + ', the content at ' + foot);
+    body.scrollTop = 0;
+    // **The drag reckons from the column's own edge, and stops at the main
+    // column's floor.** Pressed on its line and moved nowhere, the width is
+    // the column's own; moved to the far left, the main column keeps its floor.
+    shape(1400, 214, 380, 234);
+    const press = (kind, x) => parts().seam.dispatchEvent(new PointerEvent(kind, {clientX: x, clientY: 300, pointerId: 1, bubbles: true}));
+    const line = box(parts().seam).left + 4.5, before = box(parts().side).width;
+    press('pointerdown', line); press('pointermove', line);
+    const still = parseFloat(app.style.getPropertyValue('--side-w'));
+    if (Math.abs(still - before) > 1) faults.push('pressed on its line, the column went from ' + before + ' to ' + still);
+    press('pointermove', box(parts().body).left); press('pointerup', box(parts().body).left);
+    const floor = parseFloat(getComputedStyle(parts().body).getPropertyValue('--main-min')) || 0;
+    const dragged = parseFloat(app.style.getPropertyValue('--side-w'));
+    const kept = asked.filter(([command]) => command === 'a_pane_drag_ended').pop();
+    if (!floor) faults.push('the main column has no floor');
+    if (box(parts().main).width < floor - 0.5) faults.push('dragged to the left, the main column is ' + box(parts().main).width + ', under ' + floor);
+    if (Math.abs(box(parts().side).width - dragged) > 1) faults.push('dragged to the left, the column drew ' + box(parts().side).width + ' and ' + dragged + ' was set');
+    if (!kept || kept[1].width !== dragged) faults.push('the width written was not the one drawn: ' + JSON.stringify(kept));
+    // **The list gives way to the entry's own floor**: dragged as far right
+    // as it goes in a narrow window with a wide rail, the entry keeps its
+    // main column's floor and its two gutters, and the width written is the
+    // list's drawn width.
+    shape(1181, 340, 380, 234);
+    const listSeam = host.querySelector('.qsplit > .seam');
+    const drag = (kind, x) => listSeam.dispatchEvent(new PointerEvent(kind, {clientX: x, clientY: 300, pointerId: 2, bubbles: true}));
+    drag('pointerdown', box(listSeam).left + 4.5); drag('pointermove', 1181); drag('pointerup', 1181);
+    const list = box(host.querySelector('.qlist')).width, page = box(host.querySelector('.qdetail')).width;
+    const gutter = parseFloat(getComputedStyle(parts().body).paddingLeft);
+    const listKept = asked.filter(([command, args]) => command === 'a_pane_drag_ended' && args.seam === 'list').pop();
+    if (page < floor + 2 * gutter - 0.5) faults.push('the list dragged wide leaves the entry ' + page + ', under ' + (floor + 2 * gutter));
+    if (!listKept || Math.abs(listKept[1].width - list) > 1) faults.push('the list drew ' + list + ' and ' + JSON.stringify(listKept) + ' was written');
+    check('the list dragged as wide as it goes');
+    Object.assign(result, {faults, beside, stacked});
+  }
+  out.textContent = JSON.stringify(result);
+} catch(error) {out.textContent=JSON.stringify({error:String(error.stack || error)});}
+</script></body></html>"#;
+
     /// **The Creator's eighteenth notes, notes 9 and 11, in a real browser,
     /// with the application's stylesheets and a window laid out as the
     /// application lays it out** (`#pane`, its `.body` holding the rail and the
@@ -11677,7 +12099,16 @@ try {
  const back = edges(arrows[0]), field = edges(row.querySelector('.pvframe input'));
  const next = edges(arrows[1]), latest = edges(row.querySelector('.mini'));
  seen.row = {back, field, next, latest};
- checks.rowInOrder = back.right <= field.left + 0.5 && field.right <= next.left + 0.5 && next.right <= latest.left + 0.5;
+ // **Show latest may drop under the arrows**, the drawing's own wrap
+ // (2026-11-07): where it does, it is wholly below them and inside the
+ // column. Linux's face is wide enough that it drops at the default width
+ // (hosted run 42508904896); until 2026-11-08 this read that as out of order.
+ const theColumn = edges(side());
+ const onTheArrowsLine = latest.top < Math.max(back.bottom, field.bottom, next.bottom) - 0.5;
+ checks.rowInOrder = back.right <= field.left + 0.5 && field.right <= next.left + 0.5
+   && (onTheArrowsLine ? next.right <= latest.left + 0.5
+     : latest.top >= Math.max(back.bottom, field.bottom, next.bottom) - 0.5
+       && latest.left >= theColumn.left - 0.5 && latest.right <= theColumn.right + 0.5);
  checks.arrowsTouchTheField = field.left - back.right <= 3 && next.left - field.right <= 3;
 
  // **Note 11 in the entry's column**: the column made a box that clips,

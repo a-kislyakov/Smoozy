@@ -491,6 +491,10 @@ struct WhatTheStepsSettled {
     /// step-4 reading — which is taken on every attempt, the map in force
     /// coming from the manifest or not — and what L10b's stepping is gated on.
     the_scene_holds_a_simulation_not_baked: bool,
+    /// **The same item 8's first frame, added 2026-11-08** — what L10b's
+    /// later start raises the stepping's start to; None where the reading
+    /// cannot account.
+    where_the_simulations_begin: Option<i64>,
     /// **`Job files and outputs` R4c, added 2026-10-27: whether this
     /// attempt's step-4 reading switched the job's scene from a video to a
     /// still picture** — a first-frame check of a video-only job — which is
@@ -810,6 +814,11 @@ where
         // **L10b's gate, read off this reading whether or not a map is
         // composed from it below** (`Job files and outputs` R4 item 8).
         settled.the_scene_holds_a_simulation_not_baked = printed.the_scene_holds_a_simulation_not_baked;
+        // **L10b's later start, added 2026-11-08**: item 8's first frame from
+        // the same reading, and none where it cannot account.
+        settled.where_the_simulations_begin = smoozy_job_files_machine::reading::WhereTheSimulationsBegin::the_first_frame(
+            printed.where_the_simulations_begin.as_ref(),
+        );
         // **L10c's gate, read off the same reading**: the material switches the
         // scene where, and only where, the reading did (`Job files and
         // outputs` R4c).
@@ -1294,6 +1303,7 @@ where
             launch_material_path: attempt.the_launch_materials_path.to_string(),
             load_time_script_path: attempt.the_load_time_scripts_path.to_string(),
             the_scene_holds_a_simulation_not_baked: settled.the_scene_holds_a_simulation_not_baked,
+            where_the_simulations_begin: settled.where_the_simulations_begin,
             the_check_is_written_as_a_picture: settled.the_check_is_written_as_a_picture,
             // **L17a: the video shape is handed to the line**, read off the
             // map in force and its inventory, so a job with a video-shaped
@@ -1836,6 +1846,7 @@ mod tests {
             errors: std::collections::BTreeMap::new(),
             the_baked_caches_on_the_machine: Vec::new(),
             the_scene_holds_a_simulation_not_baked: false,
+            where_the_simulations_begin: None,
             the_scene_it_read: None,
             the_open_files_path: None,
             the_check_is_written_as_a_picture: false,
@@ -2699,6 +2710,32 @@ mod tests {
             let text = &machine.the_last_text_placed;
             assert!(text.contains(r#"{"do":"ReadBack""#), "the launch material was the last text placed");
             assert_eq!(text.contains(step), says && on, "item 8 {says}, choice {on}, the manifest's map {carried_map}");
+        }
+    }
+
+    /// **L10b's later start, added 2026-11-08: the step-4 reading's first
+    /// frame (`Job files and outputs` R4 item 8) reaches the placed material**,
+    /// and a reading that cannot account hands none.
+    #[test]
+    fn the_step_four_readings_first_frame_reaches_the_material() {
+        use smoozy_job_files_machine::reading::WhereTheSimulationsBegin;
+        for (answer, step) in [
+            (Some(WhereTheSimulationsBegin::AtFrame(2)), r#"{"begins":2,"do":"Step","highest":3,"lowest":1}"#),
+            (Some(WhereTheSimulationsBegin::CannotAccount("a Scene strip shows another scene".to_string())), r#"{"do":"Step","highest":3,"lowest":1}"#),
+            (None, r#"{"do":"Step","highest":3,"lowest":1}"#),
+        ] {
+            let mut machine = answers();
+            let mut it = ARun::ordinary();
+            let mut printed = an_ordinary_reading();
+            printed.the_scene_holds_a_simulation_not_baked = true;
+            printed.where_the_simulations_begin = answer.clone();
+            it.reading = AReadingThat::prints(printed);
+            let (went, _) = run_it(&mut machine, &it);
+            let mut started = launched(went);
+            started.child.kill().ok();
+            started.child.wait().ok();
+            let text = &machine.the_last_text_placed;
+            assert!(text.contains(step), "{answer:?}: {text}");
         }
     }
 

@@ -292,6 +292,16 @@ aTabIsRegistered({
 // admin access (2026-09-21).
 whenTold(THE_ANSWER, (delivery) => {
   const answer = delivery.said || {};
+  // **A token saved, or a bot set up** (the demo's fault 13, 2026-11-07): a
+  // failed Telegram *Install*'s line goes from every server's card, since the
+  // reason it gave may no longer be true. Every other act's line stays.
+  if (answer.the_telegram_install_lines_go) {
+    for (const [server, words] of theLastWords) {
+      if (words.the_telegram_install) theLastWords.delete(server);
+    }
+    theCardIsDrawnWhereItChanged(said);
+    return;
+  }
   // **An answer about another server is not this tab's** — the answer names
   // the server it is about (must-do 30).
   if (answer.server !== current || !host || host.hidden) {

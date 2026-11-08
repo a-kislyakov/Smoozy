@@ -853,21 +853,24 @@ mod on_a_desk_with_a_socket_pair {
         fn write_a_diary_line(&self, _act: &smoozy_keys::diary::Act) {}
     }
 
-    /// **The bot token's one item, in memory, shared by every handle** — a
-    /// made-up token, never a real one.
+    /// **The bot token's items, in memory, shared by every handle, each kept
+    /// under its own name as a real store keeps it** — made-up tokens, never a
+    /// real one. *(Until 2026-11-07 it held one value whatever the item, so
+    /// erasing a replaced token's old item, which `Telegram` L4 as amended that
+    /// day does after the new one is saved, erased the new one too.)*
     #[derive(Clone, Default)]
-    struct AStoreHere(Arc<Mutex<Option<Vec<u8>>>>);
+    struct AStoreHere(Arc<Mutex<std::collections::HashMap<HeldSecret, Vec<u8>>>>);
 
     impl SecretStore for AStoreHere {
-        fn put(&self, _: &HeldSecret, value: Plaintext, _: Duration) -> Result<(), StoreFailure> {
-            *self.0.lock().expect("the item") = Some(value.expose(|bytes| bytes.to_vec()));
+        fn put(&self, item: &HeldSecret, value: Plaintext, _: Duration) -> Result<(), StoreFailure> {
+            self.0.lock().expect("the items").insert(item.clone(), value.expose(|bytes| bytes.to_vec()));
             Ok(())
         }
-        fn get(&self, _: &HeldSecret, _: Duration) -> Result<Plaintext, GetFailure> {
-            self.0.lock().expect("the item").clone().map(Plaintext::new).ok_or(GetFailure::NotThere)
+        fn get(&self, item: &HeldSecret, _: Duration) -> Result<Plaintext, GetFailure> {
+            self.0.lock().expect("the items").get(item).cloned().map(Plaintext::new).ok_or(GetFailure::NotThere)
         }
-        fn erase(&self, _: &HeldSecret, _: Duration) -> Result<(), StoreFailure> {
-            *self.0.lock().expect("the item") = None;
+        fn erase(&self, item: &HeldSecret, _: Duration) -> Result<(), StoreFailure> {
+            self.0.lock().expect("the items").remove(item);
             Ok(())
         }
         fn probe(&self, _: Duration) -> ProbeOutcome {

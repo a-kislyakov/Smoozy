@@ -116,6 +116,18 @@ pub trait TheReceivingSystemsRules {
 
     /// The longest component this system takes, in that same unit.
     fn the_longest_component(&self) -> usize;
+
+    /// **P10's dated note of 2026-11-07: whether a folder already stands at
+    /// this path on the receiving system.** Asked only of a job folder's old
+    /// name, the whole identity's, so a job that was downloading when the copy
+    /// was updated keeps landing in the folder its files are already in. It is
+    /// never asked of a render output's name and never decides a fetch (R8).
+    ///
+    /// **A system that cannot say answers no**, and the job lands under the
+    /// short name.
+    fn a_folder_stands_at(&self, _path: &[u8]) -> bool {
+        false
+    }
 }
 
 /// **P4: every landing path is judged by the adapter's name check before the
@@ -460,9 +472,34 @@ pub fn the_landing_path_inside_the_jobs_folder<R: TheReceivingSystemsRules + ?Si
 ) -> Vec<u8> {
     let the_jobs_folder = the_landing_path(
         the_destination,
-        &the_job_folders_landing_name(rules, job, label),
+        &the_job_folders_landing_name_at(rules, the_destination, job, label),
     );
     the_landing_path(&the_jobs_folder, relative_to_the_jobs_output_folder)
+}
+
+/// **P10's dated note of 2026-11-07: the job folder's landing name at one
+/// destination.** It is [`the_job_folders_landing_name`]'s short name, **unless
+/// the job's folder already stands there under the old name, the whole
+/// identity's**, which is then kept: a job part-way through downloading when
+/// the copy was updated goes on landing in the folder its files are in, rather
+/// than splitting into two.
+///
+/// The old name is composed exactly as it was before the 8 characters, so it
+/// is the folder that copy made. **It is the receiving system's one look at the
+/// destination here, and it decides the folder's name only**, never whether a
+/// file is fetched (R8).
+pub fn the_job_folders_landing_name_at<R: TheReceivingSystemsRules + ?Sized>(
+    rules: &R,
+    the_destination: &[u8],
+    job: &Identity,
+    label: Option<&str>,
+) -> Vec<u8> {
+    debug_assert_eq!(job.kind(), IdentityKind::Job);
+    let the_old_name = the_name_composed_from(rules, job.as_text().into_bytes(), label);
+    if rules.a_folder_stands_at(&the_landing_path(the_destination, &the_old_name)) {
+        return the_old_name;
+    }
+    the_job_folders_landing_name(rules, job, label)
 }
 
 /// **P10: the job folder's landing name is Smoozy's own composition and is
@@ -470,10 +507,11 @@ pub fn the_landing_path_inside_the_jobs_folder<R: TheReceivingSystemsRules + ?Si
 /// machine.**
 ///
 /// The machine-side name is `Job files and outputs` N3's: the job identity's
-/// textual form plus a bounded rendering of the label, **substitution rather
-/// than refusal**. The landing name is composed the same way — the identity's
-/// textual form (fixed-length lowercase letters and digits, safe in every
-/// system's unit) plus a bounded rendering of the label judged by
+/// first 8 characters plus a bounded rendering of the label, **substitution
+/// rather than refusal**. The landing name is composed the same way — the same
+/// 8 characters (lowercase letters and digits, safe in every system's unit;
+/// P10's dated note of 2026-11-07), a space, and a bounded rendering of the
+/// label judged by
 /// `Desktop app and delivery` C3 against the **receiving** system, with what
 /// cannot enter the name substituted and **the composed name judged again like
 /// any other** (`Desktop app and delivery` C20).
@@ -481,7 +519,11 @@ pub fn the_landing_path_inside_the_jobs_folder<R: TheReceivingSystemsRules + ?Si
 /// **So a label legal on Linux and unwritable as given on the destination — a
 /// trailing period on Windows is the case that will bite — costs the label's
 /// rendering and never the folder or the files**, and two jobs given one label
-/// land in two folders because the identity is in the name.
+/// land in two folders because the identity's 8 characters are in the name.
+///
+/// **Where a job may already be landing under its old name, compose with
+/// [`the_job_folders_landing_name_at`]**, which every landing path and
+/// *Files on your computer* do.
 ///
 /// **The full label stays authoritative on the entry, and the folder's real
 /// name is what paths show** (`Queue & History` Y8's presentation rule,
@@ -492,7 +534,20 @@ pub fn the_job_folders_landing_name<R: TheReceivingSystemsRules + ?Sized>(
     label: Option<&str>,
 ) -> Vec<u8> {
     debug_assert_eq!(job.kind(), IdentityKind::Job);
-    let identity = job.as_text().into_bytes();
+    // **P10's dated note of 2026-11-07: the same 8 characters as the
+    // machine's folder** (`Job files and outputs` N3's dated note).
+    let mut identity = job.as_text().into_bytes();
+    identity.truncate(smoozy_job_files::names::THE_IDENTITY_CHARACTERS_IN_A_FOLDER_NAME);
+    the_name_composed_from(rules, identity, label)
+}
+
+/// P10's composition from the identity's part the name carries: that part,
+/// a space, and the label's bounded rendering.
+fn the_name_composed_from<R: TheReceivingSystemsRules + ?Sized>(
+    rules: &R,
+    identity: Vec<u8>,
+    label: Option<&str>,
+) -> Vec<u8> {
     let Some(label) = label else {
         return identity;
     };
@@ -608,6 +663,43 @@ pub(crate) mod tests {
         fn the_longest_component(&self) -> usize {
             self.the_longest
         }
+    }
+
+    /// [`ASystem::plain`] with one folder already standing on it — a job's
+    /// folder under its old, whole-identity name, part-way through downloading
+    /// when the copy was updated.
+    pub(crate) struct AFolderAlreadyThere {
+        pub the_system: ASystem,
+        pub the_folder: Vec<u8>,
+    }
+
+    impl TheReceivingSystemsRules for AFolderAlreadyThere {
+        fn check(&self, component: &[u8]) -> TheNameCheckSaid {
+            self.the_system.check(component)
+        }
+
+        fn substitute(&self, component: &[u8]) -> Vec<u8> {
+            self.the_system.substitute(component)
+        }
+
+        fn length_in_this_systems_own_unit(&self, component: &[u8]) -> usize {
+            self.the_system.length_in_this_systems_own_unit(component)
+        }
+
+        fn the_longest_component(&self) -> usize {
+            self.the_system.the_longest_component()
+        }
+
+        fn a_folder_stands_at(&self, path: &[u8]) -> bool {
+            path == self.the_folder.as_slice()
+        }
+    }
+
+    /// The first 8 characters of a job's identity, as the server's folder
+    /// name takes them (`Job files and outputs` N3's dated note).
+    pub(crate) fn the_short_form(job: &Identity) -> String {
+        job.as_text()[..smoozy_job_files::names::THE_IDENTITY_CHARACTERS_IN_A_FOLDER_NAME]
+            .to_string()
     }
 
     fn a_job() -> Identity {
@@ -801,8 +893,8 @@ pub(crate) mod tests {
         let first = the_job_folders_landing_name(&system, &one, Some("night render"));
         let second = the_job_folders_landing_name(&system, &other, Some("night render"));
         assert_ne!(first, second);
-        assert!(first.starts_with(one.as_text().as_bytes()));
-        assert!(second.starts_with(other.as_text().as_bytes()));
+        assert!(first.starts_with(the_short_form(&one).as_bytes()));
+        assert!(second.starts_with(the_short_form(&other).as_bytes()));
     }
 
     #[test]
@@ -816,7 +908,7 @@ pub(crate) mod tests {
         let job = a_job();
         assert_eq!(
             the_job_folders_landing_name(&windows, &job, Some("shot 12.")),
-            job.as_text().into_bytes()
+            the_short_form(&job).into_bytes()
         );
         // And the same label on a system that takes it keeps its rendering.
         let linux = ASystem::plain();
@@ -834,8 +926,8 @@ pub(crate) mod tests {
         let long = "x".repeat(400);
         let composed = the_job_folders_landing_name(&system, &job, Some(&long));
         assert!(composed.len() <= system.the_longest);
-        assert!(composed.starts_with(job.as_text().as_bytes()));
-        assert!(composed.len() > job.as_text().len());
+        assert!(composed.starts_with(the_short_form(&job).as_bytes()));
+        assert!(composed.len() > the_short_form(&job).len());
     }
 
     #[test]
@@ -844,7 +936,80 @@ pub(crate) mod tests {
         let job = a_job();
         assert_eq!(
             the_job_folders_landing_name(&system, &job, None),
-            job.as_text().into_bytes()
+            the_short_form(&job).into_bytes()
+        );
+    }
+
+    #[test]
+    fn the_folder_on_the_computer_takes_the_same_8_characters_as_the_servers() {
+        // The Creator's twenty-seventh notes: the computer's folder still
+        // carried all 32 characters after the server's was shortened.
+        let system = ASystem::plain();
+        let job = a_job();
+        assert_eq!(
+            the_job_folders_landing_name(&system, &job, Some("cloth")),
+            format!("{} cloth", the_short_form(&job)).into_bytes()
+        );
+        assert_eq!(
+            the_landing_path_inside_the_jobs_folder(
+                &system,
+                b"/Users/a/Downloads",
+                &job,
+                Some("cloth"),
+                b"video/045 - cloth.png",
+            ),
+            format!("/Users/a/Downloads/{} cloth/video/045 - cloth.png", the_short_form(&job))
+                .into_bytes()
+        );
+    }
+
+    #[test]
+    fn a_job_already_downloading_under_its_whole_identity_keeps_landing_in_that_folder() {
+        // P10's dated note of 2026-11-07: a job part-way through downloading
+        // when the copy is updated keeps one folder, not two.
+        let job = a_job();
+        let the_old_folder = format!("/Users/a/Downloads/{} cloth", job.as_text()).into_bytes();
+        let downloading = AFolderAlreadyThere {
+            the_system: ASystem::plain(),
+            the_folder: the_old_folder.clone(),
+        };
+        let mut expected = the_old_folder.clone();
+        expected.extend_from_slice(b"/video/046 - cloth.png");
+        assert_eq!(
+            the_landing_path_inside_the_jobs_folder(
+                &downloading,
+                b"/Users/a/Downloads",
+                &job,
+                Some("cloth"),
+                b"video/046 - cloth.png",
+            ),
+            expected
+        );
+        // **Another job beside it, and the same job at another destination,
+        // take the short name**: the old folder is that job's alone, and only
+        // where it stands.
+        let another = a_job();
+        assert_eq!(
+            the_landing_path_inside_the_jobs_folder(
+                &downloading,
+                b"/Users/a/Downloads",
+                &another,
+                Some("cloth"),
+                b"video/046 - cloth.png",
+            ),
+            format!("/Users/a/Downloads/{} cloth/video/046 - cloth.png", the_short_form(&another))
+                .into_bytes()
+        );
+        assert_eq!(
+            the_landing_path_inside_the_jobs_folder(
+                &downloading,
+                b"/Volumes/work",
+                &job,
+                Some("cloth"),
+                b"video/046 - cloth.png",
+            ),
+            format!("/Volumes/work/{} cloth/video/046 - cloth.png", the_short_form(&job))
+                .into_bytes()
         );
     }
 }

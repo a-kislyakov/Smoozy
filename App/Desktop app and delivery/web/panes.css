@@ -26,9 +26,13 @@
  *
  * It reads whichever declaration of the property is in force, so a narrowing
  * step that re-declares the width moves the seam with it for nothing. */
+/* **The preview's seam has no line here**: the drawing places it, in the
+ * preview column's own cell of the job page, half the gap to its left. Until
+ * 2026-11-07 this placed it at `right: var(--side-w)` from the page's outer
+ * edge, a gutter further right than the column's, so its line fell 17
+ * pixels inside the column (the Creator's twenty-seventh notes, note 3). */
 .seam[data-seam="rail"] { left: var(--rail-w); }
 .seam[data-seam="list"] { left: var(--list-w); }
-.seam[data-seam="preview"] { right: var(--side-w); }
 
 /* ── 2. The floor panel's own box ────────────────────────────────────────────
  *

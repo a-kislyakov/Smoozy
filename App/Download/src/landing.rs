@@ -249,7 +249,7 @@ fn it_published(entry: &crate::request::EnumerationEntry) -> bool {
 /// holds it** — H5's paragraph of 2026-10-03, the Creator's note 15 on the
 /// test copy. For an arrangement's entry it is the destination in force plus
 /// P10's landing name, composed by
-/// [`crate::fetching::the_job_folders_landing_name`] with the same `rules` and
+/// [`crate::fetching::the_job_folders_landing_name_at`] with the same `rules` and
 /// `label` the fetch composed it with; for a manual request it is
 /// [`the_whole_jobs_landing_place`]. The order is unchanged.
 pub fn the_set_of_landing_places<R: crate::fetching::TheReceivingSystemsRules + ?Sized>(
@@ -266,9 +266,15 @@ pub fn the_set_of_landing_places<R: crate::fetching::TheReceivingSystemsRules + 
         }
     };
     if let Some(arrangement) = arrangement {
-        let the_landing_name =
-            crate::fetching::the_job_folders_landing_name(rules, &arrangement.job, the_jobs_label);
         for destination in arrangement.the_folders_it_has_fetched_into() {
+            // P10's dated note of 2026-11-07: the old whole-identity folder
+            // where the job was already landing in it, as the fetch does.
+            let the_landing_name = crate::fetching::the_job_folders_landing_name_at(
+                rules,
+                &destination,
+                &arrangement.job,
+                the_jobs_label,
+            );
             add(
                 crate::fetching::the_landing_path(&destination, &the_landing_name),
                 &mut out,
@@ -642,6 +648,45 @@ mod tests {
                 format!("/Volumes/work/{name}").into_bytes(),
                 b"/Users/a/Archive/abc night".to_vec()
             ]
+        );
+    }
+
+    #[test]
+    fn files_on_your_computer_opens_the_old_long_folder_a_job_was_already_downloading_into() {
+        // P10's dated note of 2026-11-07: a job part-way through downloading
+        // when the copy is updated keeps its whole-identity folder, so the set
+        // is that folder and not a short one with nothing in it.
+        let mut arrangement = an_arrangement(b"/Users/a/Downloads");
+        arrangement.reckoning.push(AReckoningEntry::acted_on(
+            b"f_0001.png".to_vec(),
+            Some(1),
+            WhatSmoozyDid::Fetched,
+            b"/Users/a/Downloads".to_vec(),
+        ));
+        let the_old_folder =
+            format!("/Users/a/Downloads/{} cloth", arrangement.job.as_text()).into_bytes();
+        let downloading = crate::fetching::tests::AFolderAlreadyThere {
+            the_system: ASystem::plain(),
+            the_folder: the_old_folder.clone(),
+        };
+        assert_eq!(
+            the_set_of_landing_places(Some(&arrangement), &downloading, Some("cloth"), &[], JOB_FOLDER),
+            vec![the_old_folder]
+        );
+        // **With no old folder standing, the set is the short one.**
+        assert_eq!(
+            the_set_of_landing_places(
+                Some(&arrangement),
+                &ASystem::plain(),
+                Some("cloth"),
+                &[],
+                JOB_FOLDER
+            ),
+            vec![format!(
+                "/Users/a/Downloads/{} cloth",
+                crate::fetching::tests::the_short_form(&arrangement.job)
+            )
+            .into_bytes()]
         );
     }
 

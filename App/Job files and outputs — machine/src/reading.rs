@@ -1234,11 +1234,38 @@ pub struct TheOneDocument {
     /// reads as no.**
     #[serde(default)]
     pub the_scene_holds_a_simulation_not_baked: bool,
+    /// **R4 item 8, *Where the simulations begin*, added 2026-11-08** (the
+    /// Creator's twenty-seventh notes, note 6): the first frame `Rendering`
+    /// L10b's start is raised to, or why the reading cannot account for
+    /// everything that depends on earlier frames. Absent from a reading
+    /// taken before that date, which reads as cannot account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub where_the_simulations_begin: Option<WhereTheSimulationsBegin>,
     /// **The scene this reading read, by its own name** — carried whole from
     /// [`crate::reading_script::ThePrintedReading::the_scene_it_read`]. Absent
     /// from a reading taken before 2026-10-03, which reads as not named.
     #[serde(default)]
     pub the_scene_it_read: Option<ArtistsText>,
+}
+
+/// **R4 item 8, *Where the simulations begin*, added 2026-11-08**: the
+/// lowest first frame of anything in the file that depends on earlier
+/// frames, or the reason the reading cannot account for all of it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WhereTheSimulationsBegin {
+    AtFrame(i64),
+    CannotAccount(String),
+}
+
+impl WhereTheSimulationsBegin {
+    /// **The frame `Rendering` L10b raises its start to**, and nothing where
+    /// the reading cannot account or carries no answer.
+    pub fn the_first_frame(answer: Option<&WhereTheSimulationsBegin>) -> Option<i64> {
+        match answer {
+            Some(WhereTheSimulationsBegin::AtFrame(frame)) => Some(*frame),
+            _ => None,
+        }
+    }
 }
 
 /// **Where R4 item 8's names come from: read off 4.5.12, 5.0.1, 5.1.2 and
@@ -2011,6 +2038,7 @@ pub(crate) mod tests {
         let document = TheOneDocument {
             the_baked_caches_on_the_machine: Vec::new(),
             the_scene_holds_a_simulation_not_baked: false,
+            where_the_simulations_begin: None,
             the_scene_it_read: None,
             outputs: TheOutputsHalf {
                 taken_by: TheVersionInHand::of(4, 5),

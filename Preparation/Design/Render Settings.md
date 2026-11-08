@@ -403,3 +403,5 @@ Creator-stated, 2026-11-06. After a read, beside the submission choices, each sc
 The drawing's simulation states show on, off, an earlier requested frame and several scenes. The existing unread state shows no simulation row.
 
 When a first-frame check is on and the range has several frames, the line states both ranges: **Plays frames 101–121 for the check and 101–125 for the job, on every attempt.** Each uses that job’s own first frame and highest playing frame, including its shutter tail. *Words changed 2026-11-06 (was *Check: plays frames 101–121. Job: plays frames 101–125. Every attempt.*): the last words read before the release. No auditor has seen it.*
+
+Where the reading gives the simulations' first frame, the lowest playing frame is raised to it (`Rendering` L10b), so the same line can read **Plays frames 900–1000 before rendering, on every attempt.** Where every frame the job would play comes before it: **Plays nothing: simulations start at frame 900.** Where only the check's would: **Plays frames 900–1000 for the job and nothing for the check, on every attempt.** *Added 2026-11-08, the Creator's twenty-seventh notes, note 6. No auditor has seen it.*

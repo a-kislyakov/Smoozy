@@ -112,6 +112,9 @@ aScreenIsRegistered({
     // queue's does.
     const seam = aButton(null, "seam");
     seam.dataset.seam = "list";
+    // **Dragged, never a Tab stop** (`Design/Whole app`, *Tab lands on the
+    // control itself*; the Creator's twenty-seventh notes, note 1).
+    seam.tabIndex = -1;
     split.appendChild(seam);
     shell.core
       .invoke("the_pane_layout")

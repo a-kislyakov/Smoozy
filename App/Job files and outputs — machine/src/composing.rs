@@ -462,6 +462,7 @@ pub(crate) mod tests {
             errors: std::collections::BTreeMap::new(),
             the_baked_caches_on_the_machine: Vec::new(),
             the_scene_holds_a_simulation_not_baked: false,
+            where_the_simulations_begin: None,
             the_scene_it_read: None,
             the_open_files_path: None,
             the_check_is_written_as_a_picture: false,

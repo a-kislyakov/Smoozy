@@ -172,7 +172,9 @@ mod tests {
     /// adds `tests/the_free_drawing.rs`; all source and test files are counted.
     /// 168 to 169 on 2026-11-03: `src/kept_readings.rs`, `Dependency Upload &
     /// Remap` G17b.
-    const THE_FILE_COUNT: usize = 169;
+    /// 169 to 170 on 2026-11-08: `src/surface/focus.rs`, the browser check of
+    /// where the focus ring lands (the Creator's twenty-seventh notes, note 1).
+    const THE_FILE_COUNT: usize = 170;
 
     /// Whether a word has a clause marker's shape.
     ///

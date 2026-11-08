@@ -445,6 +445,28 @@ mod tests {
         assert_eq!(own.where_it_goes(&map), vec![b"/job/cloth_cache".to_vec()]);
     }
 
+    /// **G6, 2026-11-07: a renamed copy's sent cache still lands for the
+    /// render.** *Keep both* put `cloth.blend` on the machine as
+    /// `cloth (3).blend`, and the check now names its default folder after the
+    /// file on the computer, `//blendcache_cloth/`, which is not the name the
+    /// copy's own reading would give. The map in force holds no destination for
+    /// either name, since the cache records none, so the copy goes to the point
+    /// cache's folder for the caches that record no location whatever the name
+    /// reads — a name with a space and brackets in it too.
+    #[test]
+    fn a_renamed_copys_sent_cache_still_lands_for_the_render() {
+        let map = TheMap {
+            pairs: vec![
+                a_place(AnAddedWritePlace::ThePointCache, Some(b"//cloth_cache/"), b"/job/cloth_cache"),
+                a_place(AnAddedWritePlace::ThePointCache, None, b"/job/pointcache"),
+            ],
+        };
+        for named in [&b"//blendcache_cloth/"[..], b"//blendcache_cloth (3)/"] {
+            let sent = owed(AnAddedWritePlace::ThePointCache, named);
+            assert_eq!(sent.where_it_goes(&map), vec![b"/job/pointcache".to_vec()], "{}", String::from_utf8_lossy(named));
+        }
+    }
+
     /// **The copy's words name the place once, with one *the*** (Rule 9).
     #[test]
     fn the_copys_words_say_the_place_once() {

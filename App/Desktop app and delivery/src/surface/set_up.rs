@@ -203,7 +203,10 @@ pub(crate) mod words {
     pub const SET_UP: &str = "set up";
     pub const CHECKED: &str = "checked";
     pub const STARTED: &str = "started";
-    pub const ON_THE_CLOCK: &str = "on the clock of";
+    /// *set up 6 Aug at 14:02 on RunPod 4090*, the word the desk's two other
+    /// moments use. *(Words changed 2026-11-07, step 13's final words check,
+    /// finding F; was* on the clock of*.)*
+    pub const ON_THE_CLOCK: &str = "on";
 
     // ── What was done to the machine — the card's list
     pub const TELEGRAM_INSTALLED: &str = "Telegram reporting installed";
@@ -3009,10 +3012,24 @@ fn the_acts_ending(
             );
             a_runs_ending(
                 the_answer_about(server, &came),
-                the_card_says_the_ready_actions_ending(came_to) && not_started.is_empty(),
+                the_card_says_the_telegram_placements_ending(came_to) && not_started.is_empty(),
             )
+            .saying("the_telegram_install", Said::Value(Verbatim::new("yes")))
         }
     }
+}
+
+/// **A Telegram *Install* that reached *done* is said by the card's list**, and
+/// nothing else is. The card is drawn from the ready action's record and never
+/// from an *Install*'s own (`Server Setup — machine/src/run.rs`), so a failed
+/// step there is on no step the card shows: its line stands on the card until
+/// the next press, as every other ending's does. *(Added 2026-11-07, the demo's
+/// fault 2: the *Install* borrowed the ready action's test, which counts a
+/// failed step as said, so the card went back to *Telegram reporting not
+/// installed* with no reason.)*
+fn the_card_says_the_telegram_placements_ending(came_to: &crate::setting_up::WhereTheSetUpGot) -> bool {
+    use crate::setting_up::{TheRunsEnding, WhereTheSetUpGot};
+    matches!(came_to, WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. })
 }
 
 /// **A failed install's own sentence is kept for its step**
@@ -4379,6 +4396,19 @@ fn the_render_sentence(record: &TheSetupRecord, a_render_was_running: bool) -> O
 }
 
 /// The queue, told one thing.
+/// **A token saved, or a bot set up: the card's line from a failed Telegram
+/// *Install* goes**, on every server, since the reason it gave may no longer be
+/// true (Rule 8). Only lines marked as an *Install*'s (`the_telegram_install`)
+/// go; every other act's line stays until the next press. *(Added 2026-11-07,
+/// the demo's fault 13.)*
+pub fn the_telegram_install_lines_go(queue: &std::sync::Arc<TheOneQueue>) {
+    the_queue_is_told(queue, the_lines_of_failed_installs_go());
+}
+
+fn the_lines_of_failed_installs_go() -> Event {
+    Event::about(About::TheRun, THE_ANSWER).saying("the_telegram_install_lines_go", Said::Value(Verbatim::new("yes")))
+}
+
 fn the_queue_is_told(queue: &std::sync::Arc<TheOneQueue>, event: Event) {
     let _ = queue.read_then_post::<(), std::convert::Infallible>(|| Ok(()), |_| event.clone());
 }
@@ -8542,6 +8572,18 @@ mod tests {
         assert_eq!(when.reading.on_the_clock, "RunPod 4090");
     }
 
+    /// **Step 13's final words check, finding F**: *set up 6 Aug at 14:02 on
+    /// RunPod 4090*, the word the desk's two other moments use, and never the
+    /// idiom *on the clock of*.
+    #[test]
+    fn step_13_f_the_cards_moment_reads_on_the_server() {
+        let mut reading = a_reading();
+        reading.a_setup_is_running = Some(a_finished_run(WhatTheStepDid::Performed));
+        let when = the_card_from(&reading).when.expect("a moment");
+        assert_eq!(when.reading.on_the_clock, "RunPod 4090");
+        assert_eq!(when.on_the_clock.as_str(), "on");
+    }
+
     /// **Step 10c's sixth pass: the card named its clock by the machine's
     /// installation identity** — *checked … on the clock of ad67db67…*. The
     /// reading the tab draws from now takes the server's name as the list
@@ -10216,6 +10258,97 @@ console.log(JSON.stringify({ before, after, late: versions() }));"#
         let came = what_the_telegram_placement_came_to(&failed);
         assert_eq!(came.said, words::FAILED_TELEGRAM);
         assert_eq!(came.the_machines_own_words.as_deref(), Some("no such folder"));
+    }
+
+    /// **The demo's fault 2: a failed Telegram *Install* says why on the card.**
+    /// The card is drawn from the ready action's record and never from an
+    /// *Install*'s, so only *done* is said by the card; every failure is the
+    /// card's one line, and the line is marked as the *Install*'s so a saved
+    /// token can take it away.
+    #[test]
+    fn after_0_3_0_fault_2_a_failed_telegram_install_says_its_reason_on_the_card() {
+        use crate::setting_up::{ASetUpAct, TheRunsEnding, WhereTheSetUpGot};
+        use smoozy_server_setup::ready_action::Step;
+        let ended = |ending: TheRunsEnding| WhereTheSetUpGot::TheRunEnded { at: Boundary::Started, ending };
+        let not_saved = crate::record::told_record::the_composing_sentences::THE_TOKEN_IS_NOT_STORED;
+        for (failed, the_reason) in [
+            (ended(TheRunsEnding::TheTelegramMaterialWasNotComposed { said: not_saved.to_string() }), not_saved),
+            (
+                ended(TheRunsEnding::AStepFailed { step: Step::TelegramMaterial, said: "no such folder".to_string() }),
+                words::FAILED_TELEGRAM,
+            ),
+        ] {
+            let ending = the_acts_ending("fault-2-install", &ASetUpAct::TheTelegramPlacement, &failed, &[], false, &mut |_| None);
+            let (line, the_card_says_it) = the_line_of(&ending);
+            assert!(!the_card_says_it, "the card would drop the only line saying why: {failed:?}");
+            assert_eq!(line.as_deref().map(plain), Some(plain(Prose::new(the_reason).as_str())), "{failed:?}");
+            assert!(it_says(&delivered(ending), "the_telegram_install"), "the line is not marked as the Install's");
+        }
+        let done = ended(TheRunsEnding::ItReachedDone {
+            a_blender_was_published: false,
+            the_driver_missed_the_optix_bar: false,
+            the_swap_waits: false,
+        });
+        let (_, the_card_says_it) =
+            the_line_of(&the_acts_ending("fault-2-install", &ASetUpAct::TheTelegramPlacement, &done, &[], false, &mut |_| None));
+        assert!(the_card_says_it, "*done* is said by the card's list");
+    }
+
+    /// **The demo's faults 2 and 13 on the page: the failed *Install*'s line is
+    /// drawn on the card, and goes when a token is saved; another act's line
+    /// stays.** Runs `web/set-up.js` under Node, as the tests beside it do.
+    #[test]
+    fn after_0_3_0_fault_13_a_saved_token_takes_the_installs_line_off_the_card_and_leaves_the_rest() {
+        use crate::setting_up::{ASetUpAct, TheRunsEnding, WhereTheSetUpGot};
+        let not_saved = crate::record::told_record::the_composing_sentences::THE_TOKEN_IS_NOT_STORED;
+        let failed = WhereTheSetUpGot::TheRunEnded {
+            at: Boundary::Started,
+            ending: TheRunsEnding::TheTelegramMaterialWasNotComposed { said: not_saved.to_string() },
+        };
+        let install = delivered(the_acts_ending("server-1", &ASetUpAct::TheTelegramPlacement, &failed, &[], false, &mut |_| None));
+        let the_lines_go = delivered(the_lines_of_failed_installs_go());
+        const ANOTHER: &str = "Another act ended.";
+        let tab = the_tab(
+            WhatTheMachineSaid::ASetupRunAndTheMachine(
+                Box::new(the_finished_run_as_read()),
+                Box::new(the_rest_with(None, None, Some(false))),
+            ),
+            "server-1",
+        );
+        let harness = THE_RUN_ON_THE_CARD_HARNESS
+            .split("await import(\"./set-up.js\");")
+            .next()
+            .expect("the harness's opening")
+            .replace("THE_RUNNING", "null")
+            .replace("THE_FINISHED", &serde_json::to_string(&tab).expect("serialises"))
+            .replace("THE_STOPPED", "null")
+            + &r#"await import("./set-up.js");
+const host = anElement("div");
+globalThis.tab.itIsDrawn(host);
+globalThis.tab.itIsShowing("server-1");
+await settle();
+await theReadingLands(finished);
+const [scroll] = host.children;
+const [card] = scroll.children;
+const out = {};
+const step = async (said) => { tell(said); await settle(); await theReadingLands(finished); };
+await step(INSTALL);
+out.failed = theTextOf(card);
+await step(THE_LINES_GO);
+out.saved = theTextOf(card);
+await step({ server: "server-1", the_act_is_not_built_yet: "ANOTHER", close: "Close" });
+await step(THE_LINES_GO);
+out.another = theTextOf(card);
+console.log(JSON.stringify(out));"#
+                .replace("THE_LINES_GO", &serde_json::to_string(&the_lines_go.said).expect("serialises"))
+                .replace("INSTALL", &serde_json::to_string(&install.said).expect("serialises"))
+                .replace("ANOTHER", ANOTHER);
+        let Some(out) = the_set_up_page_run(&harness, "fault-13-the-installs-line") else { return };
+        let drawn = |at: &str| plain(out[at].as_str().unwrap_or_default());
+        let not_saved = plain(Prose::new(not_saved).as_str());
+        assert!(drawn("failed").contains(&not_saved), "the Install's reason is not on the card: {out}");
+        assert!(!drawn("saved").contains(&not_saved), "the saved token left the Install's line: {out}");
+        assert!(drawn("another").contains(&plain(Prose::new(ANOTHER).as_str())), "another act's line went: {out}");
     }
 
     /// **Pressing *Install* runs `Server Setup` G2's dedicated entry point**

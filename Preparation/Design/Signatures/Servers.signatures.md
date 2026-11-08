@@ -54,3 +54,5 @@
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the SSH-tools line, as Keys says it. The last words read before the release. No auditor has seen it.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the five after the check.md`, outside any round — the SSH-tools line, as Keys says it. The check after the last fix. No auditor has seen it.
+
+2026-11-08 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the key already chosen when there is one.md`, outside any round — § Adding a server: where exactly one usable key exists, the Add dialog opens with it chosen (the build runner's ruling under Rule 10). No auditor has seen it.

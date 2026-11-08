@@ -372,11 +372,14 @@ impl AnAttemptWhereTheFileChanged {
     /// **Read off the attempt record and derived from nothing else.**
     ///
     /// Returns nothing where that record does not state that the file changed,
-    /// because the mark exists only for an attempt that found it changed.
+    /// because the mark exists only for an attempt that found it changed —
+    /// **and nothing for a first attempt** (N9a, *Only on a re-run*, the demo's
+    /// fault 12, 2026-11-07): a file replaced between sending and starting left
+    /// no frame finished before it, so none was rendered again.
     pub fn read_from(
         record: &smoozy_job_files::attempts::AttemptRecord,
     ) -> Option<AnAttemptWhereTheFileChanged> {
-        if !record.the_file_changed_before_this_attempt {
+        if !record.the_file_changed_before_this_attempt || record.number <= 1 {
             return None;
         }
         Some(AnAttemptWhereTheFileChanged {
@@ -1941,6 +1944,16 @@ pub(crate) mod tests {
             AnAttemptWhereTheFileChanged::read_from(&an_attempt_record(1, false, true)),
             None
         );
+        // **N9a, only on a re-run** (the demo's fault 12, 2026-11-07): a first
+        // attempt whose file was replaced before it started finished no frame
+        // earlier, so nothing was rendered again and no mark is drawn.
+        for kept in [false, true] {
+            assert_eq!(
+                AnAttemptWhereTheFileChanged::read_from(&an_attempt_record(1, true, kept)),
+                None,
+                "a first attempt drew N9a's mark"
+            );
+        }
         assert_eq!(
             AnAttemptWhereTheFileChanged::read_from(&an_attempt_record(2, true, true)),
             Some(an_attempt(

@@ -36,7 +36,7 @@
 // P9 and P10: nothing here polls and nothing here ticks.
 
 import { whenTold } from "./event-route.js";
-import { theSeamsAreLive } from "./panes.js";
+import { theSeamsAreLive, thePagesAreMarked } from "./panes.js";
 import { aScreenIsRegistered, theCurrentPlaceIs, theRowsFigureIs, THE_HISTORY, THE_QUEUE } from "./the-rail.js";
 import { aTransferIsAskedFor, theFormatBoxIsOpenedFor } from "./transfers.js";
 import { theFailureShape, EXPANDED } from "./the-failure-shape.js";
@@ -133,6 +133,13 @@ export function aPart(into, said, base, plain) {
     wrote = true;
   }
   return wrote;
+}
+
+/// **The separator the application sends as a part of its own**, `·`, with
+/// nothing else in the part.
+const A_SEPARATOR = "·";
+function aSeparatorAlone(said, base) {
+  return said[base + "Lead"] === A_SEPARATOR && !said[base + "Value"] && !said[base + "Trail"];
 }
 
 /// A part where the value is a name rather than a figure, so it takes the
@@ -347,6 +354,9 @@ aScreenIsRegistered({
     // screen's.
     const seam = aButton(null, "seam");
     seam.dataset.seam = "list";
+    // **Dragged, never a Tab stop** (`Design/Whole app`, *Tab lands on the
+    // control itself*; the Creator's twenty-seventh notes, note 1).
+    seam.tabIndex = -1;
     split.appendChild(seam);
 
     list = document.createElement("div");
@@ -555,7 +565,11 @@ function theHead(said) {
   const sub = document.createElement("span");
   sub.className = "qsub";
   aFigureAndItsWord(sub, said.theJobsFigure, said.theJobsWord);
-  sub.appendChild(document.createTextNode(" · "));
+  // **A separator only between two things drawn**, never with nothing after
+  // it (the runner's addition to the twenty-seventh notes' focus brief).
+  if (said.theJobsFigure !== undefined && said.theServersFigure !== undefined) {
+    sub.appendChild(document.createTextNode(" · "));
+  }
   aFigureAndItsWord(sub, said.theServersFigure, said.theServersWord);
   theCountIsDrawn(sub, said);
   head.appendChild(sub);
@@ -652,7 +666,10 @@ function theRowsAreDrawn(said) {
       open.appendChild(value);
     } else {
       aFigureAndItsWord(open, said["line" + line + "Rendering"], said.renderingWord);
-      open.appendChild(document.createTextNode(" · "));
+      // A separator only between two counts drawn, as the heading's above.
+      if (said["line" + line + "Rendering"] !== undefined && said["line" + line + "Waiting"] !== undefined) {
+        open.appendChild(document.createTextNode(" · "));
+      }
       aFigureAndItsWord(open, said["line" + line + "Waiting"], said.waitingWord);
     }
     heading.appendChild(open);
@@ -732,7 +749,6 @@ function aGroupHeading(said, group) {
   // where a member is waiting (`Queue & History` L7). The 38's piece 8.
   const moves = !!said["group" + group + "Grip"];
   grip.className = moves ? "qgrip" : "qgrip nodrag";
-  grip.textContent = "⋮⋮";
   grip.setAttribute("aria-hidden", "true");
   if (moves) {
     grip.title = said.dragTheWholeGroup || "";
@@ -778,7 +794,6 @@ function aSubmittingRow(said, at, extra) {
   if (extra) row.classList.add(extra);
   const grip = document.createElement("span");
   grip.className = "qgrip nodrag";
-  grip.textContent = "⋮⋮";
   grip.setAttribute("aria-hidden", "true");
   row.appendChild(grip);
   const name = document.createElement("span");
@@ -851,7 +866,6 @@ function aNotSubmittedRow(said, at, extra) {
   if (extra) row.classList.add(extra);
   const grip = document.createElement("span");
   grip.className = "qgrip nodrag";
-  grip.textContent = "⋮⋮";
   grip.setAttribute("aria-hidden", "true");
   row.appendChild(grip);
   const name = document.createElement("span");
@@ -905,7 +919,6 @@ function aRow(said, at, extra) {
   const grip = document.createElement("span");
   const moves = !!said["row" + at + "Grip"] && !!job;
   grip.className = moves ? "qgrip" : "qgrip nodrag";
-  grip.textContent = "⋮⋮";
   grip.setAttribute("aria-hidden", "true");
   if (moves) {
     // **Only a waiting row moves** (`Queue & History` L9), and only it offers
@@ -1538,8 +1551,12 @@ export function theEntryIsDrawn(into, said, extra) {
   // notes on the test copy, note 9.
   body.dataset.place = JSON.stringify([(extra.screen || "queue") + "-entry", said.entryJob]);
 
+  // **The preview's seam is dragged and is not a Tab stop**: no key moves it,
+  // and Design promises dragging, not a keyboard route (the Creator's
+  // twenty-seventh notes, notes 1 and 3). The drawing places it in the gap.
   const seam = aButton(null, "seam");
   seam.dataset.seam = "preview";
+  seam.tabIndex = -1;
   body.appendChild(seam);
   shell.core
     .invoke("the_pane_layout")
@@ -1610,6 +1627,10 @@ export function theEntryIsDrawn(into, said, extra) {
   body.appendChild(side);
 
   into.appendChild(body);
+  // **An entry drawn is a moment the page's own width is read** — the page
+  // stacks its columns when it is too narrow for both, whatever the window's
+  // width (`web/panes.js`; the Creator's twenty-seventh notes, notes 4 and 5).
+  thePagesAreMarked();
 }
 
 /// **History's line under the entry's name**: badge, server · file · scene,
@@ -1768,19 +1789,26 @@ function theCheckIsDrawn(said, screen, extra) {
     }
     words.appendChild(sentence);
   }
-  box.appendChild(words);
+  // **The words and the buttons share what is left after the picture**, the
+  // drawing's `.ffr`: a button drops under the words, lined up after the
+  // picture, rather than squeezing them (the Creator's twenty-seventh notes,
+  // note 4).
+  const rest = document.createElement("div");
+  rest.className = "ffr";
+  rest.appendChild(words);
+  box.appendChild(rest);
   if (said.ffBlenderOutput) {
     const open = aButton(said.ffBlenderOutput, "mini");
     open.addEventListener("click", () => {
       if (extra && extra.theChecksWords) extra.theChecksWords(said.ffJob);
       else shell.core.invoke("the_queue", { chosen: theChosenJob, asking: THE_CHECKS_BLENDER_OUTPUT, dropped: said.ffJob });
     });
-    box.appendChild(open);
+    rest.appendChild(open);
   }
   if (said.ffShowInQueue) {
     const show = aButton(said.ffShowInQueue, "mini");
     show.addEventListener("click", () => theCurrentPlaceIs(THE_QUEUE, said.ffShowInQueueJob));
-    box.appendChild(show);
+    rest.appendChild(show);
   }
   return { box, picture, heading: heading.cloneNode(true) };
 }
@@ -1841,10 +1869,34 @@ function theProgressIsDrawn(main, said) {
   label.textContent = said.renderingNow;
   line.appendChild(label);
   const many = howMany(said, "progNowCount");
+  // **A part that is only the separator joins the parts either side of it**,
+  // as the drawing writes *~1m 40s left · Blender's estimate* as one, with a
+  // no-break space on each side: the line wraps between parts, never at the
+  // "·", so it never stands on a line of its own or opens one. One with
+  // nothing drawn before or after it is not drawn (the runner's addition to
+  // the twenty-seventh notes' focus brief, the Creator's screenshot 2).
+  let drawn = null;
+  let joining = false;
   for (let at = 0; at < many; at += 1) {
+    const base = "progNow" + at;
+    if (aSeparatorAlone(said, base)) {
+      if (drawn && at + 1 < many) joining = true;
+      continue;
+    }
+    if (joining) {
+      // A part with nothing in it draws nothing, and the "·" waits for the next.
+      if (!said[base + "Lead"] && !said[base + "Value"] && !said[base + "Trail"]) continue;
+      drawn.appendChild(document.createTextNode(BETWEEN_A_FIGURE_AND_ITS_UNIT + A_SEPARATOR + BETWEEN_A_FIGURE_AND_ITS_UNIT));
+      aPart(drawn, said, base);
+      joining = false;
+      continue;
+    }
     const part = document.createElement("span");
     part.className = at === 0 ? "pv mono" : "pn";
-    if (aPart(part, said, "progNow" + at)) line.appendChild(part);
+    if (aPart(part, said, base)) {
+      line.appendChild(part);
+      drawn = part;
+    }
   }
   now.appendChild(line);
   // **Each bar only where the application sent its percentage** — absent

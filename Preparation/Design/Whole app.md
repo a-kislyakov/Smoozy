@@ -30,8 +30,8 @@ That is a decision about what kind of thing Smoozy is. A page scrolls; software 
 
 **Four steps, in the order of what the user can most afford to lose, and then Smoozy stops.**
 
-1. **The preview column goes first.** It is the one thing on a job's entry that is a glance rather than work, and everything on it is a click away. It moves under the main column rather than vanishing.
-2. **Then the server list folds its hardware under its work column, and the file list drops *Kind*.** Both are the column a user scanning a list reads last. The settings panel drops to two columns here as well, and the entry screen's two cards go one above the other.
+1. **The preview column goes first.** It is the one thing on a job's entry that is a glance rather than work, and everything on it is a click away. It moves under the main column rather than vanishing. A job's page also moves its preview column under the main column when the page itself is too narrow for both, whatever the window's width. *Added 2026-11-07, the Creator's twenty-seventh notes, notes 4 and 5: with the rail and the list dragged wide, a 1,245-pixel window left the page 470 pixels and its main column about 105. Ruled at Design by the build runner under Rule 10; P11 kept, the mark writes nothing. No auditor has seen it.*
+2. **Then the server list folds its hardware under its work column, and the file list drops *Kind*.** The server list also folds by its own width, at the width it has at this step with the rail undragged, whatever the window's. *Added 2026-11-07, the same notes: checked on the places the account named, the server list was the one that squeezed the same way. No auditor has seen it.* Both are the column a user scanning a list reads last. The settings panel drops to two columns here as well, and the entry screen's two cards go one above the other.
 3. **Then the rail narrows, the list narrows with it, the file list drops *Changed*, and Settings' own section list narrows.**
 4. **Then the rail loses its words and keeps every place.** An icon at the top for All servers, badges alone for the servers, icons for Queue, History, Transfers, Keys and Settings, each with its name on hover. The rail and the list narrow again, and the side gutter narrows with them — once, at the last step, for everything at the same moment.
 
@@ -43,11 +43,11 @@ That is a decision about what kind of thing Smoozy is. A page scrolls; software 
 
 **Three rules hold it together, and none of them is optional.**
 
-- **Each pane has a smallest and a largest useful width, and the drag stops at both.** A pane cannot be dragged into uselessness and then have to be hunted for; and past its largest width a pane is only taking room from the thing it sits beside.
+- **Each pane has a smallest and a largest useful width, and the drag stops at both.** A pane cannot be dragged into uselessness and then have to be hunted for; and past its largest width a pane is only taking room from the thing it sits beside. **The pane beside the one dragged keeps its smallest width too**: a job's main column against its preview, and a job's entry against the list, so the dragged pane stops where the one beside it would go under. *Added 2026-11-07, the Creator's twenty-seventh notes, notes 4 and 5. No auditor has seen it.*
 - **The narrowing steps still govern underneath.** A dragged width is the user's own, and each step above re-declares the width it needs, so from that step's width down the step wins and the user's width is set aside — not destroyed. Widen the window again and their width comes back. From the third step down nothing drags at all: the rail and the list have both taken the widths the app declares for them, so there is nothing left on the line that is the user's to move. The badge rail a step further down is the app's decision about what fits rather than the user's, in the same way.
 - **Double-clicking a seam puts it back where it started.** That is the way out of a mess, and it is the only reset there is.
 
-**The rail's width is one width everywhere**, because the rail is on every screen and a rail that changed width between screens would be a moving target. **A list's width is one width for the queue and history both** — they are the same shape of screen, and a user who sets it on one means it on the other.
+**The rail's width is one width everywhere**, because the rail is on every screen and a rail that changed width between screens would be a moving target. Settings' own section list is not the rail and keeps its own width when the rail is dragged. *Added 2026-11-07, the same notes. No auditor has seen it.* **A list's width is one width for the queue and history both** — they are the same shape of screen, and a user who sets it on one means it on the other.
 
 **The widths are remembered between runs**, on the user's own computer, with everything else they have set — one value for each seam, written when a drag ends.
 
@@ -129,6 +129,8 @@ Four menus, and no fifth:
 **Return presses the box's own affirmative control where the box has one**, and never where the affirmative control is a red one. A box whose answer is *Delete* takes no Return.
 
 **And each screen's set is listed in its own document, under that screen's own *Keyboard shortcuts* heading**, so a reader of one screen finds its keys without reading this one, and this document does not carry a second copy of them.
+
+**Tab lands on the control itself.** The focus ring sits on the tick, the radio, the switch or the button, never round the words beside it. Every tick and radio is reached by Tab and pressed by Space; a drag handle is not a Tab stop. *Added 2026-11-08, Creator-stated, the twenty-seventh notes, note 1: "tabbing through controls should land on those controls themselves … should NOT outline the text but only highlight the checkbox." Written on the build runner's ruling; no Specs or Architecture answer says where a ring lands, so it enters here under Rule 10. The drawing does not carry it: the app keeps the rule in a sheet of its own, as with selecting text. No auditor has seen it.*
 
 ## Where things live
 

@@ -392,6 +392,57 @@ pub fn classify(location: &RecordedLocation, stored: StoredSource) -> Form {
 /// folder really called `{blend_name}` (observed at the desk, 2026-11-02).
 pub const A_BAKE_FOLDER_TAKES_TEMPLATES_FROM: (u32, u32) = (5, 3);
 
+/// **G6, added 2026-11-07: a physics cache's default folder is named after the
+/// file on the user's computer where its place there is known (K3), never the
+/// machine's copy's** — the Creator's twenty-seventh notes, note 7. *Keep both*
+/// put `cloth.blend` on the machine as `cloth (3).blend`; the reading, which
+/// names the folder after the copy it opened, read `//blendcache_cloth (3)/`, and
+/// `blendcache_cloth`, beside the original where F27 looks, read *not found*.
+///
+/// **Put right here, as the desktop takes the reading in**, and not in the
+/// check's request: the desktop is the one that knows the file's place on the
+/// computer, a kept reading stays the machine's own, and no server program needs
+/// to change. **Only a physics point cache whose recorded location reads exactly
+/// as the opened copy's default folder** — `//blendcache_`, the copy's name
+/// without its ending (as the reading takes it), and `/` — is renamed, and
+/// before F27's look, the search and K4's key, so the key is the same on every
+/// copy and an answer given by hand carries. **K5's file keeps the copy's name**:
+/// there is no other. The render needs no change (M22c: a sent default folder
+/// goes to the point cache's folder for the caches that record no location,
+/// whatever the name reads).
+pub fn the_default_cache_folders_named_after_the_file_on_the_computer(
+    document: &mut ReadingDocument,
+    opened: &MachineLocation,
+    holding: &crate::record::HoldingFile,
+) {
+    let crate::record::HoldingFile::OnTheUsersComputer(source) = holding else {
+        return;
+    };
+    let the_copys = the_default_cache_folder_of(opened.as_bytes().rsplit(|byte| *byte == SEPARATOR).next().unwrap_or(&[]));
+    let the_computers = the_default_cache_folder_of(source.final_segment());
+    if the_copys == the_computers {
+        return;
+    }
+    for reference in &mut document.references {
+        if reference.kind == Kind::PhysicsPointCache && reference.recorded.as_bytes() == the_copys.as_slice() {
+            reference.recorded = RecordedLocation::as_the_reading_carried_it(&the_computers);
+        }
+    }
+}
+
+/// **The default folder the reading names for a file**: `//blendcache_`, the
+/// name without its ending, and `/` — the ending cut as the reading's own
+/// `os.path.splitext` cuts it, at the last dot that is not one of the name's
+/// leading dots.
+fn the_default_cache_folder_of(name: &[u8]) -> Vec<u8> {
+    let leading = name.iter().take_while(|byte| **byte == b'.').count();
+    let without_its_ending = match name[leading..].iter().rposition(|byte| *byte == b'.') {
+        Some(at) => &name[..leading + at],
+        None => name,
+    };
+    [b"//blendcache_".as_slice(), without_its_ending, b"/"].concat()
+}
+
 /// **G9a: what the render reads where a reference records this.**
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HowTheRenderReadsIt {
@@ -984,6 +1035,59 @@ pub mod tests {
 
     fn recorded(bytes: &[u8]) -> RecordedLocation {
         RecordedLocation::as_the_reading_carried_it(bytes)
+    }
+
+    /// **G6, 2026-11-07: a *Keep both* copy's default cache folder is named
+    /// after the file on the computer**, and nothing else is touched: another
+    /// kind, a cache recording its own folder, a folder below the default one,
+    /// and K5's file, which keeps the copy's name.
+    #[test]
+    fn a_copys_default_cache_folder_takes_the_computers_name_and_nothing_else_moves() {
+        use crate::record::{HoldingFile, MachineKey};
+        let read = |references: Vec<ReadReference>| ReadingDocument {
+            references,
+            flat_list: Vec::new(),
+            weak_references: Vec::new(),
+            observed_stand_ins: Vec::new(),
+        };
+        let mut document = read(vec![
+            a_reference(Kind::PhysicsPointCache, "Cloth", b"//blendcache_cloth (3)/"),
+            a_reference(Kind::PhysicsPointCache, "Own", b"//blendcache_cloth (3)/deeper/"),
+            a_reference(Kind::PhysicsPointCache, "Other", b"//cloth_cache/"),
+            a_reference(Kind::FluidCacheFolder, "Fluid", b"//blendcache_cloth (3)/"),
+        ]);
+        let opened = MachineLocation::composed(b"/home/ubuntu/cloth (3).blend".to_vec());
+        let on_the_computer =
+            HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(b"/Users/a/Desktop/cloth.blend"));
+        let before = document.clone();
+        the_default_cache_folders_named_after_the_file_on_the_computer(&mut document, &opened, &on_the_computer);
+        let now: Vec<&[u8]> = document.references.iter().map(|one| one.recorded.as_bytes()).collect();
+        assert_eq!(
+            now,
+            vec![
+                b"//blendcache_cloth/".as_slice(),
+                b"//blendcache_cloth (3)/deeper/",
+                b"//cloth_cache/",
+                b"//blendcache_cloth (3)/",
+            ]
+        );
+        // **K5: no file on the computer, so the copy's name is all there is.**
+        let mut alone = before.clone();
+        let k5 = HoldingFile::OnTheMachineWithNoKnownLocalOrigin {
+            machine: MachineKey::of(
+                smoozy_state::identities::Identity::issue(smoozy_state::identities::IdentityKind::LocalServer).expect("randomness"),
+                smoozy_state::identities::Identity::issue(smoozy_state::identities::IdentityKind::Installation).expect("randomness"),
+            ),
+            location: opened.clone(),
+        };
+        the_default_cache_folders_named_after_the_file_on_the_computer(&mut alone, &opened, &k5);
+        assert_eq!(alone, before);
+        // **The same name on both sides moves nothing**, and a name with no
+        // ending and with leading dots is cut as the reading cuts it.
+        assert_eq!(the_default_cache_folder_of(b"cloth.blend"), b"//blendcache_cloth/");
+        assert_eq!(the_default_cache_folder_of(b"a.b.blend"), b"//blendcache_a.b/");
+        assert_eq!(the_default_cache_folder_of(b".hidden"), b"//blendcache_.hidden/");
+        assert_eq!(the_default_cache_folder_of(b"plain"), b"//blendcache_plain/");
     }
 
     fn a_reference(kind: Kind, datablock: &str, recorded_bytes: &[u8]) -> ReadReference {

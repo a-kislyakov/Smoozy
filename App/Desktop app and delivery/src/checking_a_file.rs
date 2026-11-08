@@ -640,6 +640,7 @@ pub fn the_rows_of_one_reading(
             size,
             why_it_did_not_go_up: None,
             its_failure_was_cleared: false,
+            its_remap_waits_for_its_linked_files: false,
             the_part_already_up: None,
             row,
         });
@@ -1180,6 +1181,16 @@ where
             .await;
             document
         };
+        // **`Dependency Upload & Remap` G6, 2026-11-07: a physics cache's default
+        // folder named after the file on the computer**, as the reading is taken
+        // in and before anything looks, searches or keys by it. The kept reading
+        // above stays the machine's own.
+        let mut document = document;
+        smoozy_dependencies::check::the_default_cache_folders_named_after_the_file_on_the_computer(
+            &mut document,
+            &file,
+            &holding,
+        );
 
         // **`Dependency Upload & Remap` G17a: these rows land searched through the
         // list as it stands when they land.** A folder added while they were
@@ -1366,14 +1377,36 @@ where
             Err(_) => Vec::new(),
         };
         for (at, row) in libraries.into_iter().rev() {
-            if let Err(why) =
-                crate::the_found_files_sent::a_library_is_fixed(machine, record, sitting, &row, false).await
-            {
-                if let Ok(mut held) = held.lock() {
-                    if let Some(one) = held.sittings.get_mut(key).and_then(|standing| standing.rows.get_mut(at)) {
-                        one.state = RowState::CouldNotBeFixed;
-                        one.state_when_the_check_ran = RowState::CouldNotBeFixed;
-                        one.why_it_did_not_go_up = Some(crate::the_found_files_sent::why_it_did_not_go_up(why));
+            let fixed = crate::the_found_files_sent::a_library_is_fixed(machine, record, sitting, &row, false).await;
+            if let Ok(mut held) = held.lock() {
+                if let Some(standing) = held.sittings.get_mut(key) {
+                    // **`Dependency Upload & Remap` M14a of 2026-11-07: a remap
+                    // that missed a path while a file the library links is
+                    // still to upload waits rather than fails** — the row stays
+                    // on the server, and the round an upload of those files
+                    // starts tries it again (`Dependency Upload & Remap` G14).
+                    // The build runner's ruling 2 on the demo's faults 6 and 8.
+                    let waits = match &fixed {
+                        Ok(()) => false,
+                        Err(why) => {
+                            matches!(
+                                why,
+                                smoozy_dependencies::fixing::WhyItCouldNotBeFixed::TheReportSaysThePairsDidNotAllApply { .. }
+                            ) && crate::surface::the_dependency_check::a_file_it_links_is_still_to_upload(
+                                &standing.rows,
+                                &row,
+                            )
+                        }
+                    };
+                    if let Some(one) = standing.rows.get_mut(at) {
+                        one.its_remap_waits_for_its_linked_files = waits;
+                        if let Err(why) = fixed {
+                            if !waits {
+                                one.state = RowState::CouldNotBeFixed;
+                                one.state_when_the_check_ran = RowState::CouldNotBeFixed;
+                                one.why_it_did_not_go_up = Some(crate::the_found_files_sent::why_it_did_not_go_up(why));
+                            }
+                        }
                     }
                 }
             }
@@ -2923,6 +2956,59 @@ mod tests {
             bake.the_answer().and_then(|answer| answer.resolution.as_ref()).map(|found| found.to.location().as_bytes().to_vec()),
             Some(folder.bytes("project/assets/bakes/T")),
         );
+    }
+
+    /// **`Dependency Upload & Remap` G6, 2026-11-07: a physics cache's default
+    /// folder is named after the file on the user's computer** — the Creator's
+    /// twenty-seventh notes, note 7. *Keep both* put `cloth.blend` on the server as
+    /// `cloth (3).blend`, the check read `//blendcache_cloth (3)/`, and the folder
+    /// beside the original, `blendcache_cloth`, read *not found*. **Found now, and
+    /// keyed the same on every copy**, so an answer given by hand carries to
+    /// `cloth (4).blend`.
+    #[cfg(unix)]
+    #[test]
+    fn a_kept_both_copys_cache_is_named_after_the_file_on_the_computer() {
+        let folder = AFolder::made("keep-both-cache");
+        folder.holds("Desktop/cloth.blend", b"blend");
+        folder.holds("Desktop/blendcache_cloth/cloth_000001_00.bphys", b"bphys");
+        for (copy, default) in [("cloth (3).blend", &b"//blendcache_cloth (3)/"[..]), ("cloth (4).blend", &b"//blendcache_cloth (4)/"[..])] {
+            let mut sitting = a_sitting_of(&folder, "Desktop/cloth.blend");
+            let mut on_the_server = folder.bytes("server/");
+            on_the_server.extend_from_slice(copy.as_bytes());
+            sitting.root = MachineLocation::composed(on_the_server);
+            sitting.file = String::from_utf8(sitting.root.as_bytes().to_vec()).expect("text");
+            let mut machine = AScriptedMachine::default();
+            machine.documents.insert(
+                sitting.root.as_bytes().to_vec(),
+                Some(a_document(vec![a_reference(Kind::PhysicsPointCache, default)])),
+            );
+            let record = a_record(&folder);
+            let held = Mutex::new(WhatTheRunHolds::default());
+            run(the_check_runs(
+                &mut machine,
+                &OverOneConnection(record.connection()),
+                &TheUsersOwnComputer,
+                &held,
+                &sitting,
+                &|| {},
+            ));
+            let held = held.lock().expect("the run");
+            let rows = &held.sittings[&keyed(&sitting.server, &sitting.file)].rows;
+            let cache = rows
+                .iter()
+                .find(|row| row.kind == Kind::PhysicsPointCache)
+                .expect("the cache's row");
+            assert_eq!(
+                cache.the_answer().and_then(|answer| answer.resolution.as_ref()).map(|found| found.to.location().as_bytes().to_vec()),
+                Some(folder.bytes("Desktop/blendcache_cloth")),
+                "{copy}",
+            );
+            assert_eq!(
+                cache.row.references.iter().map(|one| one.as_bytes().to_vec()).collect::<Vec<_>>(),
+                vec![b"//blendcache_cloth/".to_vec()],
+                "{copy}: K4's key is the same on every copy",
+            );
+        }
     }
 
     /// **The whole sitting, on a real record and the user's real disk**:

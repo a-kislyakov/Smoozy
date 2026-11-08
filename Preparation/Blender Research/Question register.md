@@ -45,6 +45,7 @@ The count is of numbers issued, not questions to ask — a retired question keep
 | What actually ran | 6 |
 | What a render demands | 8 |
 | Node setups | 2 |
+| Earlier frames | 9 |
 
 **Sixteen of those numbers were never written into a question sheet, and now never will be.** *(Counted 2026-09-02, topic by topic: each row's issued count against the highest number in that topic's sheet under `Questions/`.)* The table issues **196** numbers; the sheets hold **179** questions. The seventeen not on a sheet are **Add-ons 9**, retired on purpose and never reused, and **sixteen that took a number at the mechanism sweep of 2026-08-30 and were never written up**: The machine 9, Add-ons 15, Reading a file 12 and 13, Dependencies 21, File output nodes 18, Frames 18, 19 and 20, Settings 20 and 21, Reports 15 and 16, Images 11 and 12, and What a render demands 8.
 
@@ -410,3 +411,15 @@ The Creator states that how this node treats its individual outputs has changed 
 2. **What a file linking a node setup from another `.blend` records about the files that setup uses, and how those are reached.** *(**Dependencies 13** asks whether a linked file brings its own references and how deep that goes; this asks it of the case Dependencies never had material for.)*
 
 ---
+
+## Earlier frames
+
+*Added 2026-11-08, Creator-raised: the Creator's twenty-seventh notes, note 6, and the morning talk. Asked of 5.3 alone in the documents; the other supported versions are covered by a desk test on the Mac's own copies of each, as the 5.3 simulation work was. A runner's call (Rule 10), to keep the work lean.*
+
+The Creator: *"The question is can Smoozy detect everything there is to simulate correctly every time and confidently. If it can, why not use it? If, say, a simulation on a 1000-frame animation only starts at frame 900, it would be a terrible idea to play through everything before it 'just in case'."* Ruled the same morning: playing starts at the earliest simulation found, only where Smoozy can account for everything that depends on earlier frames; otherwise from the scene's start (Specs, *Rendering*, *A simulation that was never baked*).
+
+1–5. **Every kind of history-dependent thing, where its start is set, whether a script reads it, and what a frame before it or after a late start shows.** *What breaks:* a kind missed, or a start misread, renders frames frozen or wrong without a word.
+6–7. **Where such a thing can hide from a script.** *What breaks:* exactly the cases that must fall back to the scene's start; a miss here is the silent wrong render above.
+8. **Whether Blender itself answers for the whole file.** *What breaks:* nothing if no; if yes, the reading could lean on it instead of a list of kinds.
+9. **What a bake covers.** *What breaks:* a bake taken for whole when it is not, played too late.
+

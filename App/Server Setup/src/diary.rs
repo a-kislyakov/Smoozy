@@ -186,7 +186,7 @@ impl ActLine {
                 if *the_desired_state_was_set_to_enabled {
                     "the desired state was set to enabled"
                 } else {
-                    "the desired state was not set"
+                    "the desired state was not confirmed"
                 }
                 .to_string(),
             ),

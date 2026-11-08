@@ -1021,3 +1021,82 @@ fn a_real_files_pairs_are_tried_at_the_desk() {
         println!("    {}", line.chars().take(200).collect::<String>());
     }
 }
+
+const A_LIBRARY_WITH_A_BAKED_CLOTH_AND_A_FILE_LINKING_IT: &str = r#"
+import bpy, sys
+args = sys.argv[sys.argv.index("--") + 1:]
+what, out = args[0], args[1]
+bpy.ops.wm.read_factory_settings(use_empty=True)
+scene = bpy.context.scene
+scene.frame_start = 1
+scene.frame_end = 3
+if what == "lib":
+    mesh = bpy.data.meshes.new("M")
+    mesh.from_pydata([(-1, -1, 3), (1, -1, 3), (1, 1, 3), (-1, 1, 3)], [], [(0, 1, 2, 3)])
+    plane = bpy.data.objects.new("Cloth", mesh)
+    scene.collection.objects.link(plane)
+    modifier = plane.modifiers.new("Cloth", "CLOTH")
+    cache = modifier.point_cache
+    cache.frame_start = 1
+    cache.frame_end = 3
+    bpy.ops.wm.save_as_mainfile(filepath=out)
+    cache.use_disk_cache = True
+    with bpy.context.temp_override(point_cache=cache, object=plane, scene=scene):
+        print("SMOOZY-DESK-BAKED", bpy.ops.ptcache.bake(bake=True), flush=True)
+    print("SMOOZY-DESK-MADE", bpy.app.version_string, cache.is_baked, cache.use_disk_cache, repr(cache.filepath), flush=True)
+    bpy.ops.wm.save_as_mainfile(filepath=out)
+else:
+    bpy.ops.wm.save_as_mainfile(filepath=out)
+    with bpy.data.libraries.load(args[2], link=True, relative=True) as (data_from, data_to):
+        data_to.objects = ["Cloth"]
+    scene.collection.objects.link(data_to.objects[0])
+    print("SMOOZY-DESK-MADE", bpy.app.version_string, [one.filepath for one in bpy.data.libraries], flush=True)
+    bpy.ops.wm.save_as_mainfile(filepath=out, relative_remap=True)
+"#;
+
+/// **`Dependency Upload & Remap` G6, the default cache folder's name, on a cloth
+/// on a linked object** — the Creator's twenty-seventh notes, note 7. A library in
+/// `assets/` holds a cloth baked to its default folder, which Blender writes as
+/// `blendcache_L` beside the library; the top file links the object. *Observed at
+/// the desk 2026-11-04 in 5.2.3* (`Job files and outputs` D21b-iii): a linked
+/// cloth reads its cache there. **The top file's reading names no folder after
+/// the top file for it**, which is nowhere; the library's own reading, which G14
+/// runs once the library is on the machine, names `blendcache_L` beside the
+/// library. Run on 5.2 and 5.3 (`SMOOZY_DESK_BLENDER_53` where 5.3 is not at its
+/// usual place).
+#[test]
+#[ignore = "run by hand at the desk with Blender 5.2 and 5.3, one at a time"]
+fn a_cloth_on_a_linked_object_is_named_after_its_library_at_the_desk() {
+    let out = std::env::var("SMOOZY_DESK_OUT").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir().join("smoozy-linked-cloth"));
+    let mut faults = Vec::new();
+    for (named, blender) in the_blenders().into_iter().filter(|(named, _)| *named != "5.4") {
+        println!("{named}:");
+        let here = out.join("linked-cloth").join(named);
+        let _ = std::fs::remove_dir_all(&here);
+        std::fs::create_dir_all(here.join("assets")).expect("a folder");
+        let maker = here.join("make.py");
+        std::fs::write(&maker, A_LIBRARY_WITH_A_BAKED_CLOTH_AND_A_FILE_LINKING_IT).expect("written");
+        let library = here.join("assets").join("L.blend");
+        let said = make(&blender, &maker, "lib", &library, &[]);
+        println!("    {}", said.lines().filter(|line| line.starts_with("SMOOZY-DESK")).collect::<Vec<_>>().join(" | "));
+        let the_cache = here.join("assets").join("blendcache_L");
+        assert!(
+            std::fs::read_dir(&the_cache).map(|mut files| files.next().is_some()).unwrap_or(false),
+            "{named}: the bake wrote {}",
+            the_cache.display()
+        );
+        let top = here.join("T.blend");
+        make(&blender, &maker, "top", &top, &[&library]);
+        let the_top = the_references_of(&blender, &top, &here);
+        let the_library = the_references_of(&blender, &library, &here);
+        println!("    the top file: {the_top:?}");
+        println!("    the library: {the_library:?}");
+        if the_top.iter().any(|(kind, recorded, _)| kind == "PhysicsPointCache" && recorded == "//blendcache_T/") {
+            faults.push(format!("{named}: the top file names the linked cloth's folder after itself: {the_top:?}"));
+        }
+        if !the_library.iter().any(|(kind, recorded, _)| kind == "PhysicsPointCache" && recorded == "//blendcache_L/") {
+            faults.push(format!("{named}: the library's own reading does not name its folder: {the_library:?}"));
+        }
+    }
+    assert!(faults.is_empty(), "{faults:#?}");
+}

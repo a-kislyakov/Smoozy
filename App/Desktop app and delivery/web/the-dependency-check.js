@@ -92,6 +92,7 @@ export async function theCheckIsOpenedOn(server, file) {
   held.file = theBytesOf(file);
   held.said = null;
   held.answer = null;
+  held.installBlender = null;
   if (held.file.length) {
     await shell.core.invoke("the_check_is_started", { server, file: held.file });
   }
@@ -106,6 +107,7 @@ export async function theCheckIsShownOn(server, file) {
   held.file = theBytesOf(file);
   held.said = null;
   held.answer = null;
+  held.installBlender = null;
   thePanelIsOpenedOver(server, THE_DEPENDENCY_CHECK);
   theCheckIsAskedFor(server);
 }
@@ -183,6 +185,9 @@ whenTold(AN_ACT_ON_THIS_PANEL, async (delivery) => {
   // asked for.
   if (!held || (held.said && (said.file || "") !== held.said.file)) return;
   held.answer = said.said || null;
+  // ***Install Blender…*, where the answer is that the server has none** —
+  // the application says when (the demo's fault 4).
+  held.installBlender = said.install_blender || null;
   await theCheckIsAskedFor(said.server);
 });
 
@@ -219,6 +224,38 @@ function theControlIsPressed(server, said, act, row) {
     return;
   }
   theActIsTaken(server, act, row);
+}
+
+/// ***Install Blender…* beside *This server has no Blender.*** — `Design/
+/// Dependency Upload & Remap § When the file could not be read at all`, the
+/// demo's fault 4 (2026-11-07). **The panel folds down as its chevron does,
+/// the Set up tab is shown, and its Blender section is brought into view**, as
+/// Render Settings' *Set it up* goes to the same tab.
+function theSetUpTabIsShownAtItsBlender(server) {
+  thePanelCollapsesAsItsChevronDoes(server);
+  theCurrentTabIs(SET_UP);
+  theBlenderSectionIsBroughtIntoView();
+}
+
+/// **The Set up tab's Blender section, in view** — the second of its two
+/// sections (`Design/Server Setup § Two sections, and no third`). Where the tab
+/// has not drawn it yet, it is brought into view once it is, unless the tab
+/// was left by then.
+function theBlenderSectionIsBroughtIntoView() {
+  const tab = document.querySelector(`[data-tab-host="${SET_UP}"]`);
+  const blender = tab ? tab.querySelectorAll("section.sus")[1] : null;
+  if (!blender) return;
+  const inView = () => blender.scrollIntoView({ block: "start" });
+  if (blender.firstChild) {
+    inView();
+    return;
+  }
+  const drawn = new MutationObserver(() => {
+    if (!blender.firstChild) return;
+    drawn.disconnect();
+    if (!tab.hidden) inView();
+  });
+  drawn.observe(blender, { childList: true });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -318,7 +355,13 @@ function theBodyIsDrawn(server, said, held) {
   // answer to the whole check** — `Design/Dependency Upload & Remap § Above
   // the rows`, since the dependency check's fresh look (2026-10-18).
   if (said.the_summary) statements.appendChild(theSummary(said.the_summary));
-  if (held.answer) statements.appendChild(theAnswer(held.answer));
+  if (held.answer) {
+    const told = statements.appendChild(theAnswer(held.answer));
+    if (held.installBlender) {
+      told.appendChild(document.createTextNode(" "));
+      told.appendChild(aLink(held.installBlender, "install-blender", () => theSetUpTabIsShownAtItsBlender(server)));
+    }
+  }
   for (const one of said.the_statements) {
     const line = document.createElement("p");
     line.dataset.statement = one.which;

@@ -28,11 +28,9 @@
 
 /* A control the keyboard can reach has to show where it is. The boxes, the two
    engine rows and the two device rows are pressed with a key as well as with a
-   pointer, and none of them is a native button. */
-:where(.sheet .box:focus-visible, .sheet .rad:focus-visible) {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+   pointer, and none of them is a native button. **Their ring is on the tick or
+   the dot, in `focus.css`**, not round the whole line (the Creator's
+   twenty-seventh notes, note 1). */
 
 /* **The panel's body is piece 5's `.suscroll` and the drawing's is `.cols`.**
 

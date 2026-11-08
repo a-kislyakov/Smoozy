@@ -112,3 +112,7 @@
 2026-11-06 — GPT-6.1 (Codex) — Conditional cloth preservation and shutter-based playing range, before code.
 
 2026-11-06 — GPT-6.1 (Codex) — Cloth withdrawal and linked simulations on the settings page, within the runner's brief.
+
+2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the downloaded folder's short name.md`, outside any round — N3, the 8-character identity in the output folder written into the plan. No auditor has seen it. (Line added by the build runner, which the builder left out.)
+
+2026-11-08 — Claude Opus 5.5 (Claude Code subagent) — R4 item 8: where the simulations begin, and Sources entry 87. No auditor has seen it.

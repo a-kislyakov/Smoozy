@@ -65,7 +65,7 @@ Colour is reserved. A screen may not use a colour to mean something new.
 
 **Every token carrying a colour is defined for each theme**, with the badge hues named above as the one exception: once for light, once inside `prefers-color-scheme: dark`, and once more under each of the two `:root[data-theme]` blocks, so a viewer's own switch wins over the system. A new colour has to be given all of them, or it will be right in one theme and wrong in the other.
 
-**Everything else is declared once** — the six type steps, the five radii, the two faces, the window's five widths, the gutter and the row gap — because none of them changes with the theme.
+**Everything else is declared once** — the six type steps, the five radii, the two faces, the window's six widths, the gutter and the row gap — because none of them changes with the theme.
 
 **And the theme is declared, not only painted.** Scrollbars, form controls and focus rings are drawn by the operating system rather than by us, and they stay light — inside a dark app — unless the page says which theme it is in. So the light block declares *light dark*, which covers the system's own dark as well, and each of the two `:root[data-theme]` blocks declares the one it is. It is easy to miss, because everything Smoozy draws itself looks correct while the scrollbars give it away. Label: **observed** — see [Sources](Sources/Design%20values.sources.md).
 
@@ -75,7 +75,7 @@ Smoozy itself has no theme switch — it follows the operating system, which the
 
 **Six steps, and no more.** A seventh would be a decision nobody could defend.
 
-**A glyph is not an exception.** A tick, a chevron and a drag handle were each written at a size of their own — nine and ten pixels — on the reasoning that a mark is not type. They are drawn by the type engine at a font size like everything else, so they were a seventh and an eighth step under another name. All of them are `--t-xs` now. The same holds for weight: the file used 400, 550, 600, 620 and 700, plus one 500 and one 640 that nobody had decided. Corrected 2026-09-02.
+**A glyph is not an exception.** A tick, a chevron and a drag handle were each written at a size of their own — nine and ten pixels — on the reasoning that a mark is not type. They are drawn by the type engine at a font size like everything else, so they were a seventh and an eighth step under another name. All of them are `--t-xs` now. **The drag handle has since left the type engine altogether**: it is drawn as a shape (*What is honestly not tokenised yet* below), so it has no type size at all. The same holds for weight: the file used 400, 550, 600, 620 and 700, plus one 500 and one 640 that nobody had decided. Corrected 2026-09-02.
 
 | Token | Used for |
 | --- | --- |
@@ -111,6 +111,7 @@ Five steps, and the step says what kind of thing it is. Anything rounder than a 
 | `--rail-w` | The rail — navigation only, never the server list |
 | `--list-w` | A list sitting beside a detail |
 | `--side-w` | The column holding a preview |
+| `--main-min` | The narrowest a job's main column goes beside its preview |
 
 Those are the load-bearing sizes of the window itself. Everything else sizes itself.
 
@@ -118,13 +119,17 @@ Those are the load-bearing sizes of the window itself. Everything else sizes its
 
 **Four widths and a floor.** The window drops a pane at 1180, another at 1020, narrows the rail at 900, and takes the rail down to badges and icons at 780; below 680 Smoozy says the window is too small rather than folding into a strip. The five numbers live in the mockup with the rest; [Whole app](Whole%20app.md) says what goes at each and why.
 
+**Two pages answer to their own width as well.** A job's page stacks its columns below 534 — two gutters, the gap between the columns, `--main-min` and the preview column's smallest width, 22 + 30 + 280 + 180 + 22 — and the server list folds at 806, the second step's 1020 less the rail's 214. Neither moves anything while the rail and the list are where the drawing puts them. Beside the preview, the main column keeps `--main-min` and the preview gives way; beside the list, the entry keeps `--main-min` and its two gutters and the list gives way.
+
+**`--main-min` is 280, measured.** On the cloth job of the Creator's twenty-seventh notes, the widest line in the main column that must stay whole is *Submitted with* and its legend, 249 pixels, then the first-frame check's heading with the card's padding and picture, 246. 280 rounds that up, and it is the width the main column already had at the first step's edge with nothing dragged — 278. Label: **observed**, in Chrome on the Mac, 2026-11-07, not the Mac's own engine, whose text widths can differ a little; the rounding is there for that.
+
 ## What is honestly not tokenised yet
 
 **Most spacing is literal.** Two distances are named — the gutter and the row gap, both below — and every other padding and gap is written where it is used. There is no spacing scale and there should not be one; **Spacing** below says why.
 
 **The rail's icons are a set of their own, drawn on the same 16-pixel box as the file kinds.** Five places and nine toolbar actions, one weight, no fills. They are not tokenised and do not need to be — an icon is a drawing, not a value.
 
-**Some component-level sizes are literal too** — a badge is a 10px squircle (9px inside running text, and 14px in the rail at the last narrowing step, where the badge is the whole row) at 30% radius, a checkbox 13px, a switch 30 by 17, a progress bar 6px. **A few drawn glyphs are deliberately off the type scale** — a chevron, the tick inside a checkbox, a drag grip, a play mark — because they are marks rather than text. The type scale governs text the user reads, and forcing a tick onto its smallest step makes it a blob rather than a mark. Each is used in few enough places to be findable, and none is a decision anyone would want to change globally.
+**Some component-level sizes are literal too** — a badge is a 10px squircle (9px inside running text, and 14px in the rail at the last narrowing step, where the badge is the whole row) at 30% radius, a checkbox 13px, a switch 30 by 17, a progress bar 6px. **The drag grip is drawn, not typed** — six dots, two columns of three, eight pixels by twelve, in the faintest ink and a step darker on hover, centred on the name's line — on a group's heading, its first line, so a heading that wraps in a wider face keeps it there. As two vertical-dot characters at the smallest text size it read as a stray colon (the Creator's twenty-seventh notes, note 8). The other small marks — a chevron, the tick inside a checkbox — are drawn by the type engine and sit on `--t-xs`, as **Type** says. Each is used in few enough places to be findable, and none is a decision anyone would want to change globally.
 
 **A shadow's black is written where it is used**, at whatever depth that shadow needs. There are seven of them at six depths, so one token would be right for none of them and would need six overrides — which is a second copy of the problem rather than a fix.
 

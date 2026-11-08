@@ -11055,6 +11055,249 @@ export function theRailIsReadAgain() {}"#
         assert_eq!(got, wanted);
     }
 
+    /// **Where exactly one usable key exists, the Add dialog opens with it
+    /// chosen** — `Preparation/Design/Servers.md`, *Adding a server*, the build
+    /// runner's ruling of 2026-11-08 under Rule 10, from the live pass on Vast
+    /// that morning: with one key in the copy, *Add and set up* answered *Key
+    /// is required.* It runs the real `web/servers.js` under Node:
+    ///
+    /// - **One key**: the field reads *Choose a key…* until its check arrives
+    ///   (`Keys` U10a), then the key, and *Add* sends it.
+    /// - **Two keys, one unusable**: nothing is chosen while the other is still
+    ///   being checked; once it reads unusable, the one left is chosen.
+    /// - **Two usable keys, one the tools could not check, or one unusable**:
+    ///   the field stays empty, as before.
+    /// - **A first open**: the list is drawn empty, the pass finds the key, the
+    ///   list is asked for again, and the key is chosen once it reads usable.
+    /// - **A key the user chose is never replaced**: with two usable keys the
+    ///   user picks one, goes to Keys and back, and the list now has the other
+    ///   as its only usable key; the field keeps the user's.
+    ///
+    /// **Before the change** every case opened with *Choose a key…*. Skipped,
+    /// and says so, where no Node is installed.
+    #[test]
+    fn the_add_dialog_opens_with_the_only_usable_key_chosen() {
+        let only = a_named_key("Studio", Some("SHA256:8vBn2QwEBBBB"));
+        let other = a_named_key("Render box", Some("SHA256:Lp0OiUyTCCCC"));
+        let row = a_row();
+        let drawn = the_screen_from(std::slice::from_ref(&row), &[], None, None, &Default::default());
+        let held_for = |key: &smoozy_keys::rows::KeyRow, shows_as: &str, fingerprint: &str| {
+            serde_json::to_value(TheKeyADialogHolds {
+                key: Verbatim::new(key.identifier.as_text()),
+                fingerprint: Verbatim::new(fingerprint),
+                shows_as: Verbatim::new(shows_as),
+            })
+            .expect("it serialises")
+        };
+        let mut held = serde_json::Map::new();
+        held.insert(only.identifier.as_text(), held_for(&only, "Studio", "SHA256:8vBn2QwEBBBB"));
+        held.insert(other.identifier.as_text(), held_for(&other, "Render box", "SHA256:Lp0OiUyTCCCC"));
+        let mut shape = serde_json::Map::new();
+        for (name, text) in the_pairs_of(&a_dialog_keys_verdict("ASK", "KEY", &usable::Verdict::Usable)) {
+            shape.insert(name, serde_json::Value::String(text));
+        }
+        let word = |verdict: usable::Verdict| the_pairs_of(&a_dialog_keys_verdict("", "", &verdict))[2].1.clone();
+        let words_for = serde_json::json!({
+            "usable": word(usable::Verdict::Usable),
+            "unusable": word(usable::Verdict::Unusable(usable::Unusable::FileMissing)),
+            "notChecked": word(usable::Verdict::NotChecked),
+        });
+        let lists = serde_json::json!({
+            "none": the_keys_a_dialog_offers_from(&[]),
+            "one": the_keys_a_dialog_offers_from(std::slice::from_ref(&only)),
+            "two": the_keys_a_dialog_offers_from(&[only.clone(), other.clone()]),
+        });
+        let ids = serde_json::json!({ "only": only.identifier.as_text(), "other": other.identifier.as_text() });
+        let prefix = THE_RENAME_HARNESS
+            .split("const theScreen = THE_SCREEN;")
+            .next()
+            .expect("the harness's document");
+        let harness = format!("{prefix}{THE_ONLY_KEY_SCENARIO}")
+            .replace("THE_SCREEN", &serde_json::to_string(&drawn).expect("the screen serialises"))
+            .replace("THE_ADD_DIALOG", &serde_json::to_string(&the_add_dialog_from(&[])).expect("it serialises"))
+            .replace("THE_LISTS", &lists.to_string())
+            .replace("THE_HELD", &serde_json::Value::Object(held).to_string())
+            .replace("THE_SHAPE", &serde_json::Value::Object(shape).to_string())
+            .replace("THE_WORDS", &words_for.to_string())
+            .replace("THE_IDS", &ids.to_string())
+            .replace("THE_GREW", A_DIALOG_KEYS_LIST_GREW)
+            .replace("THE_KIND", A_DIALOG_KEYS_VERDICT);
+        let folder = std::env::temp_dir().join(format!("smoozy-servers-only-key-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let page = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web/servers.js");
+        std::fs::copy(&page, folder.join("servers.js")).expect("the page is copied");
+        for (name, text) in THE_STAND_INS {
+            let text = match name {
+                "harness.js" => harness.clone(),
+                "the-rail.js" => r#"export const ALL_SERVERS = "serversview";
+export const A_SERVER = "machineview";
+export const KEYS = "keysview";
+export function aScreenIsRegistered(screen) { globalThis.screen = screen; }
+export function theCurrentPlace() { return ALL_SERVERS; }
+export function theCurrentPlaceIs(place, which) { (globalThis.went ||= []).push([place, which]); }
+export function theRailIsReadAgain() {}"#
+                    .to_string(),
+                "keys.js" => r#"export function aServerDialogPicksAKey(context, handBack, withTheNewKeyDialog) {
+  globalThis.handBack = handBack;
+}"#
+                .to_string(),
+                _ => text.to_string(),
+            };
+            std::fs::write(folder.join(name), text).expect("a stand-in is written");
+        }
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the Add dialog's only key was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness answers");
+        let empty = serde_json::json!({ "face": "Choose a key…", "sent": "" });
+        let chosen = serde_json::json!({ "face": "Studio", "sent": only.identifier.as_text() });
+        let wanted = serde_json::json!({
+            "oneBeforeItsCheck": "Choose a key…",
+            "one": chosen,
+            "oneOfTwoWhileTheOtherIsChecked": "Choose a key…",
+            "oneOfTwo": chosen,
+            "twoUsable": empty,
+            "notChecked": empty,
+            "none": empty,
+            "grownBeforeItsCheck": "Choose a key…",
+            "grown": chosen,
+            "kept": { "face": "Render box", "sent": other.identifier.as_text() },
+        });
+        assert_eq!(got, wanted);
+    }
+
+    /// **The scenario for [`the_add_dialog_opens_with_the_only_usable_key_chosen`]**,
+    /// on the rename harness's document.
+    const THE_ONLY_KEY_SCENARIO: &str = r#"const theScreen = THE_SCREEN;
+const theAddDialog = THE_ADD_DIALOG;
+const theLists = THE_LISTS;
+const theHeld = THE_HELD;
+const theShape = THE_SHAPE;
+const theWords = THE_WORDS;
+const ids = THE_IDS;
+let theList = theLists.none;
+let invoked = [];
+window.__TAURI__ = {
+  core: {
+    invoke(command, args) {
+      invoked.push({ command, ...(args || {}) });
+      if (command === "the_all_servers_screen") return Promise.resolve(theScreen);
+      if (command === "the_add_dialog") return Promise.resolve(theAddDialog);
+      if (command === "the_keys_a_dialog_offers") return Promise.resolve(theList);
+      if (command === "the_key_a_dialog_holds") return Promise.resolve(theHeld[args.key] || null);
+      return Promise.resolve(null);
+    },
+  },
+};
+const settle = async () => { for (let at = 0; at < 4; at += 1) await new Promise((done) => setImmediate(done)); };
+const tell = (kind, said) => (globalThis.told.get(kind) || []).forEach((one) => one({ kind, said }));
+await import("./servers.js");
+const host = anElement("div");
+globalThis.screen.itIsDrawn(host);
+await settle();
+const flat = (one) => text(one).replace(/ /g, " ");
+const theBox = () => all(host).find((one) => one.classList && one.classList.contains("mbox")) || null;
+const theFace = () => all(theBox()).find((one) => one.classList && one.classList.contains("pkb")) || null;
+const theKeyList = () => all(theBox()).find((one) => one.classList && one.classList.contains("ddl")) || null;
+const theRowReading = (words) => theKeyList().children.find((one) => one.tag === "button" && flat(one).startsWith(words));
+const theAsks = () => invoked.filter((one) => one.command === "the_keys_a_dialog_offers_are_checked");
+const theLastAsk = () => theAsks()[theAsks().length - 1];
+const verdict = (key, word) => tell("THE_KIND", JSON.parse(
+  JSON.stringify(theShape)
+    .replace("ASK", theLastAsk().ask)
+    .replace("KEY", key)
+    .replace(theWords.usable, theWords[word]),
+));
+const theAddIsOpened = async (list) => {
+  if (theBox()) {
+    fire(theBox(), "keydown", { key: "Escape" });
+    await settle();
+  }
+  theList = list;
+  fire(all(host).find((one) => one.tag === "button" && text(one) === theScreen.add_a_server), "click");
+  await settle();
+};
+const theFaceReads = () => (theFace() ? flat(theFace()) : null);
+const whatAddSends = async () => {
+  const before = invoked.length;
+  fire(all(theBox()).find((one) => one.tag === "button" && text(one) === theAddDialog.add), "click");
+  await settle();
+  const sent = invoked.slice(before).find((one) => one.command === "a_server_is_added");
+  return { face: theFaceReads(), sent: sent ? sent.keyIdentifier : null };
+};
+const out = {};
+
+// One key.
+await theAddIsOpened(theLists.one);
+out.oneBeforeItsCheck = theFaceReads();
+verdict(ids.only, "usable");
+await settle();
+out.one = await whatAddSends();
+
+// Two keys, one unusable: nothing is chosen until the last check is in.
+await theAddIsOpened(theLists.two);
+verdict(ids.only, "usable");
+await settle();
+out.oneOfTwoWhileTheOtherIsChecked = theFaceReads();
+verdict(ids.other, "unusable");
+await settle();
+out.oneOfTwo = await whatAddSends();
+
+// Two usable keys.
+await theAddIsOpened(theLists.two);
+verdict(ids.only, "usable");
+verdict(ids.other, "usable");
+await settle();
+out.twoUsable = await whatAddSends();
+
+// One key the tools could not check.
+await theAddIsOpened(theLists.one);
+verdict(ids.only, "notChecked");
+await settle();
+out.notChecked = await whatAddSends();
+
+// One key, unusable.
+await theAddIsOpened(theLists.one);
+verdict(ids.only, "unusable");
+await settle();
+out.none = await whatAddSends();
+
+// A first open: the list is drawn empty, then the pass finds the key.
+await theAddIsOpened(theLists.none);
+theList = theLists.one;
+tell("THE_GREW", { ask: theLastAsk().ask });
+await settle();
+out.grownBeforeItsCheck = theFaceReads();
+verdict(ids.only, "usable");
+await settle();
+out.grown = await whatAddSends();
+
+// The user's own pick is kept when the list later has one usable key.
+await theAddIsOpened(theLists.two);
+verdict(ids.only, "usable");
+verdict(ids.other, "usable");
+await settle();
+fire(theFace(), "click");
+fire(theRowReading("Render box"), "click");
+await settle();
+fire(theFace(), "click");
+fire(theRowReading("Open Keys"), "click");
+await settle();
+globalThis.handBack(null);
+await settle();
+verdict(ids.only, "usable");
+verdict(ids.other, "notChecked");
+await settle();
+out.kept = await whatAddSends();
+console.log(JSON.stringify(out));
+"#;
+
     /// **The scenario for
     /// [`the_key_dropdown_lists_the_usable_keys_and_a_pick_stays_in_the_dialog`]**,
     /// run on the rename harness's document, whose events bubble as a

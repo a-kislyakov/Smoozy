@@ -92,3 +92,6 @@
   gap: var(--gap, 12px);
   padding: 12px 0;
 }
+/* An empty holder takes no room — the failure holder's band, the same shape
+ * (the Creator's twenty-seventh notes). */
+.machines-own-words:empty { display: none; }

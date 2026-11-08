@@ -351,6 +351,10 @@ mod words {
     // 2. A failure's own reason, in red.
     pub const UPLOAD_FAILED_NO_PERMISSION: &str = "Upload failed: permission denied";
     pub const COULD_NOT_UPDATE_ITS_FILE_PATHS: &str = "Uploaded; remap failed: a path did not update";
+    /// **Not a failure, in the waiting colour** — `Dependency Upload & Remap`
+    /// M14a of 2026-11-07, the build runner's ruling 2 on the demo's faults 6
+    /// and 8.
+    pub const THE_REMAP_WAITS_FOR_ITS_LINKED_FILES: &str = "Uploaded; remap waits for its linked files.";
     pub const COULD_NOT_OPEN_IT_TO_REMAP: &str = "Uploaded; remap failed: Blender could not open it";
     pub const UPLOAD_FAILED_THE_PATH_IS_TOO_LONG: &str = "Upload failed: path too long for the server";
     pub const UPLOAD_FAILED: &str = "Upload failed";
@@ -463,6 +467,10 @@ mod words {
     /// with** — the render settings panel's own sentence for `Render Settings`
     /// B5.
     pub const NO_BLENDER_ON_THIS_SERVER: &str = crate::surface::render_settings::words::NO_BLENDER_ON_THIS_SERVER;
+    /// **The way to a Blender beside it** — `§ When the file could not be read
+    /// at all`, the demo's fault 4 (2026-11-07): the Set up tab's own control
+    /// name, which the press opens that tab at.
+    pub const INSTALL_BLENDER: &str = crate::surface::set_up::words::INSTALL_BLENDER;
     /// **`Dependency Upload & Remap` G2's other two cases, where the server has
     /// Blenders and none resolves for this file** — the render settings
     /// panel's own sentences for `Render Settings` B5's below-the-floor case
@@ -807,6 +815,11 @@ pub struct ACheckedRow {
     pub size: Option<u64>,
     pub why_it_did_not_go_up: Option<WhyItDidNotGoUp>,
     pub its_failure_was_cleared: bool,
+    /// **`Dependency Upload & Remap` M14a of 2026-11-07: a library on the
+    /// server whose remap missed a path while a file it links is still to
+    /// upload.** The row stays on the server and says its remap waits; the
+    /// round an upload starts tries it again.
+    pub its_remap_waits_for_its_linked_files: bool,
     /// **`Dependency Upload & Remap` Q5a: the files and bytes of a set or folder row
     /// Q5 found already up**, which the send will not take.
     pub the_part_already_up: Option<(usize, u64)>,
@@ -830,6 +843,23 @@ pub fn the_real_files(rows: &[ACheckedRow]) -> Vec<Vec<usize>> {
         }
     }
     files
+}
+
+/// **`Dependency Upload & Remap` M14a of 2026-11-07: a row the check found
+/// inside `library` is still to upload** — found on this computer and not
+/// sent. A file missing, ignored or failed is not on its way, so a remap that
+/// misses with only those left is a failure as before.
+pub fn a_file_it_links_is_still_to_upload(rows: &[ACheckedRow], library: &ACheckedRow) -> bool {
+    let Some(ResolvedTo::AWholeLocation(source)) = library
+        .the_answer()
+        .and_then(|answer| answer.resolution.as_ref())
+        .map(|resolution| &resolution.to)
+    else {
+        return false;
+    };
+    let inside = HoldingFile::OnTheUsersComputer(source.clone());
+    rows.iter()
+        .any(|one| one.holding == inside && one.state == RowState::FoundOnYourComputer)
 }
 
 /// **Every figure counts a real file once** (`Dependency Upload & Remap` G11b):
@@ -2353,6 +2383,13 @@ pub fn an_act_said(server: &str, file: &str, said: Option<Prose>) -> Event {
         .saying("server", Said::Value(Verbatim::new(server.to_string())))
         .saying("file", Said::Value(Verbatim::new(file.to_string())));
     match said {
+        // **`§ When the file could not be read at all`: *This server has no
+        // Blender.* comes with *Install Blender…***, which the page draws beside
+        // it and which opens the Set up tab at its Blender section (the demo's
+        // fault 4, 2026-11-07).
+        Some(said) if said == Prose::new(words::NO_BLENDER_ON_THIS_SERVER) => event
+            .saying("said", Said::Prose(said))
+            .saying("install_blender", Said::Prose(Prose::new(words::INSTALL_BLENDER))),
         Some(said) => event.saying("said", Said::Prose(said)),
         None => event,
     }
@@ -3546,7 +3583,8 @@ fn a_row(
     }
     // 1. **A change since the check ran, in the new state's colour** — the
     // row stays in its group (nothing re-sorts under the user's hand).
-    if one.state != one.state_when_the_check_ran {
+    let the_remap_waits = one.its_remap_waits_for_its_linked_files && one.state == RowState::AlreadyOnTheMachine;
+    if one.state != one.state_when_the_check_ran && !the_remap_waits {
         let now = match (one.state_when_the_check_ran, one.state) {
             (RowState::SetAside, RowState::NotFound) => Some((words::MISSING, "bad")),
             (_, RowState::NotFound) => Some((words::FILE_NO_LONGER_FOUND, "bad")),
@@ -3560,6 +3598,12 @@ fn a_row(
         if let Some((said, colour)) = now {
             notes.push(a_note(Words::plain(said), colour, None));
         }
+    }
+    // **`Dependency Upload & Remap` M14a of 2026-11-07: a remap that waits for
+    // its linked files**, in the waiting colour and with no *Retry* — the row
+    // is on the server, and its state's action is none.
+    if the_remap_waits {
+        notes.push(a_note(Words::plain(words::THE_REMAP_WAITS_FOR_ITS_LINKED_FILES), "busy", None));
     }
     // 2. **A failure's own reason, in red** — with a cross among the row's
     // buttons while it stands, without one once its cross was pressed.
@@ -4070,6 +4114,7 @@ mod tests {
             why_it_did_not_go_up: None,
             the_part_already_up: None,
             its_failure_was_cleared: false,
+            its_remap_waits_for_its_linked_files: false,
         }
     }
 
@@ -5644,6 +5689,176 @@ console.log(JSON.stringify({
         assert!(design.contains("*Setup stopped.* and *Finish setup, then check again.*"));
         assert!(the_mockup().contains("<option value=\"chk-unsetup\">"));
     }
+
+    /// **`§ When the file could not be read at all`, the demo's fault 4
+    /// (2026-11-07): *This server has no Blender.* comes with *Install
+    /// Blender…*, and its press folds the panel down and opens the Set up tab
+    /// at its Blender section.** No other sentence carries it. The page runs
+    /// under Node with what it imports standing in; **skipped, and says so,
+    /// where no Node is installed.**
+    ///
+    /// **What it bites on**: the sentence alone with no way to a Blender, the
+    /// control beside every answer, or a press that leaves the panel open, the
+    /// tab where it was, or the Blender section out of view.
+    #[test]
+    fn no_blender_on_the_server_offers_install_blender_at_the_set_up_tab() {
+        use crate::events::{Said, Subject};
+        let no_blender = an_act_said(SERVER, FILE, Some(Prose::new(words::NO_BLENDER_ON_THIS_SERVER)));
+        let expected = Event::about(Subject::TheRun, AN_ACT_ON_THIS_PANEL)
+            .saying("server", Said::Value(Verbatim::new(SERVER)))
+            .saying("file", Said::Value(Verbatim::new(FILE)))
+            .saying("said", Said::Prose(Prose::new(words::NO_BLENDER_ON_THIS_SERVER)))
+            .saying("install_blender", Said::Prose(Prose::new("Install Blender…")));
+        assert_eq!(no_blender, expected);
+        let other = an_act_said(SERVER, FILE, Some(Prose::new(words::NOTHING_TO_MATCH_ON)));
+        assert_eq!(
+            other,
+            Event::about(Subject::TheRun, AN_ACT_ON_THIS_PANEL)
+                .saying("server", Said::Value(Verbatim::new(SERVER)))
+                .saying("file", Said::Value(Verbatim::new(FILE)))
+                .saying("said", Said::Prose(Prose::new(words::NOTHING_TO_MATCH_ON))),
+            "another sentence offers Install Blender…"
+        );
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains("*This server has no Blender.* with *Install Blender…* beside it"));
+
+        // **The page, pressed.**
+        let nothing_held = the_panel(&WhatTheRunHolds::default(), SERVER, FILE, None);
+        let answers = serde_json::json!({
+            "panel": nothing_held,
+            "server": SERVER,
+            "file": FILE,
+            "said": Prose::new(words::NO_BLENDER_ON_THIS_SERVER).as_str(),
+            "install": Prose::new("Install Blender…").as_str(),
+            "other": Prose::new(words::NOTHING_TO_MATCH_ON).as_str(),
+        });
+        let folder = std::env::temp_dir().join(format!("smoozy-check-no-blender-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir_all(&folder).expect("a scratch folder");
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("web/the-dependency-check.js"),
+            folder.join("the-dependency-check.js"),
+        )
+        .expect("the page");
+        for (name, text) in THE_NO_BLENDER_STAND_INS {
+            fs::write(folder.join(name), text).expect("a stand-in");
+        }
+        fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let _ = fs::remove_dir_all(&folder);
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the press on Install Blender… was not run");
+            return;
+        };
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness prints one answer");
+        assert_eq!(
+            got,
+            serde_json::json!({
+                "otherOffers": false,
+                "answer": answers["said"],
+                "control": answers["install"],
+                "went": [["fold", SERVER], ["tab", "setupview"]],
+                "scrolled": ["blender"],
+            })
+        );
+    }
+
+    /// What the page imports, standing in, and a harness that answers the
+    /// panel, tells it an act's answer, and presses *Install Blender…*.
+    const THE_NO_BLENDER_STAND_INS: [(&str, &str); 11] = [
+        ("package.json", r#"{ "type": "module" }"#),
+        ("files.js", "export function theBrowserIsOpenedAt() {}"),
+        ("event-route.js", "export function whenTold(kind, handler) { (globalThis.told ||= new Map()).set(kind, handler); }"),
+        (
+            "a-server.js",
+            "export const THE_DEPENDENCY_CHECK = 'chk'; export const FILES = 'files'; export const SET_UP = 'setupview'; export const panels = []; \
+             export function aPanelIsRegistered(panel) { panels.push(panel); } \
+             export function thePanelIsOpenedOver() {} export function theStripReads() {} \
+             export function theCurrentTabIs(tab) { globalThis.went.push(['tab', tab]); } \
+             export function thePanelCollapsesAsItsChevronDoes(server) { globalThis.went.push(['fold', server]); }",
+        ),
+        (
+            "the-failure-shape.js",
+            "export const EXPANDED = 'e'; export function theFailureShape() { return document.createElement('span'); }",
+        ),
+        (
+            "the-underway-shape.js",
+            "export function theMarkOnARow() { return document.createElement('span'); }",
+        ),
+        ("the-machines-own-words.js", "export function theMachinesOwnWordsFor() {}"),
+        ("transfers.js", "export function aTransferIsAskedFor() {}"),
+        (
+            "settings.js",
+            "export const SEARCH_FOLDERS_SECTION = 's-fo'; export function theSettingsSectionIsOpened() {}",
+        ),
+        ("the-value-drawn.js", "export function theValueIsDrawnInto(node, value) { node.textContent = value; } \
+             export function theValueDrawn(value) { const node = document.createElement('span'); node.textContent = value; return node; }"),
+        (
+            "harness.js",
+            r#"import { readFileSync } from "node:fs";
+function anElement(tag) {
+  const names = new Set(); const listeners = new Map();
+  const e = { tagName: tag.toUpperCase(), children: [], parentNode: null, dataset: {}, hidden: false, text: "", type: "", id: "", title: "", style: {},
+    classList: { add: (...m) => m.forEach((o) => names.add(o)), remove: (...m) => m.forEach((o) => names.delete(o)), contains: (o) => names.has(o), toggle() {} },
+    set className(v) { names.clear(); String(v).split(" ").filter(Boolean).forEach((o) => names.add(o)); }, get className() { return [...names].join(" "); },
+    set textContent(v) { e.children = []; e.text = v == null ? "" : String(v); }, get textContent() { return e.text + e.children.map((o) => o.textContent || o.text || "").join(""); },
+    appendChild(c) { c.parentNode = e; e.children.push(c); return c; }, removeChild(c) { e.children = e.children.filter((o) => o !== c); return c; },
+    replaceChildren(...f) { e.children = []; f.forEach((o) => e.appendChild(o)); }, remove() {}, setAttribute() {}, removeAttribute() {},
+    addEventListener(k, h) { (listeners.get(k) || listeners.set(k, []).get(k)).push(h); },
+    click() { for (const h of listeners.get("click") || []) h({ target: e, preventDefault() {} }); }, focus() {},
+    contains(o) { for (let at = o; at; at = at.parentNode) if (at === e) return true; return false; },
+    get firstChild() { return e.children[0] || null; },
+    get parentElement() { return e.parentNode; }, get childElementCount() { return e.children.filter((o) => o.tagName).length; },
+    closest() { return null; }, querySelector() { return null; }, querySelectorAll() { return []; } };
+  return e;
+}
+const every = (e, into = []) => { into.push(e); for (const c of e.children || []) every(c, into); return into; };
+globalThis.went = []; const scrolled = [];
+// **The Set up tab's host, its two sections drawn**: the card, then Blender.
+const card = anElement("section"); card.appendChild(anElement("h2"));
+const blender = anElement("section"); blender.appendChild(anElement("h2"));
+card.scrollIntoView = () => scrolled.push("card"); blender.scrollIntoView = () => scrolled.push("blender");
+const setUp = anElement("div"); setUp.querySelectorAll = (which) => (which.includes("sus") ? [card, blender] : []);
+globalThis.document = { createElement: anElement, createTextNode: (text) => ({ text, children: [] }), addEventListener() {}, body: anElement("body"), activeElement: null,
+  querySelector: (which) => (which.includes("setupview") ? setUp : null), querySelectorAll: () => [] };
+globalThis.CSS = { escape: (s) => s };
+globalThis.MutationObserver = class { observe() {} disconnect() {} };
+const answers = JSON.parse(readFileSync("answers.json", "utf8"));
+const bytes = [...answers.file].map((c) => c.charCodeAt(0));
+globalThis.window = { __TAURI__: { core: { invoke(command) {
+  if (command === "the_dependency_check_panel") return Promise.resolve(answers.panel);
+  return Promise.resolve(null);
+} } } };
+await import("./the-dependency-check.js");
+const { panels } = await import("./a-server.js");
+const settle = async () => { for (let at = 0; at < 8; at += 1) await new Promise((go) => setImmediate(go)); };
+const sheet = anElement("div"); const head = sheet.appendChild(anElement("div")); const body = sheet.appendChild(anElement("div"));
+const panel = panels[0];
+if (panel.itIsShownOn) { await panel.itIsShownOn(answers.server, bytes); }
+panel.itIsDrawn({ head, body }, answers.server);
+await settle();
+const told = globalThis.told.get("the-dependency-check:an-act");
+const theControl = () => every(body).find((one) => one.dataset && one.dataset.box === "install-blender");
+await told({ said: { server: answers.server, file: answers.file, said: answers.other } });
+await settle();
+const otherOffers = Boolean(theControl());
+await told({ said: { server: answers.server, file: answers.file, said: answers.said, install_blender: answers.install } });
+await settle();
+const answer = every(body).find((one) => one.classList && one.classList.contains("ckanswer"));
+const control = theControl();
+if (control) control.click();
+await settle();
+console.log(JSON.stringify({
+  otherOffers,
+  answer: answer ? answer.text : null,
+  control: control ? control.textContent : null,
+  went: globalThis.went,
+  scrolled,
+}));
+"#,
+        ),
+    ];
 
     /// **Several refused for one reason are said once, above their rows**, and
     /// each row keeps its own reason and its own *Try again*.

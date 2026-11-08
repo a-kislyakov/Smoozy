@@ -2573,6 +2573,13 @@ impl TheReceivingSystemsRules for TheReceivingSystemsRulesHere {
     fn the_longest_component(&self) -> usize {
         THE_LONGEST_COMPONENT
     }
+
+    /// **`Download` P10's dated note of 2026-11-07**: asked only of a job
+    /// folder's old whole-identity name, so a job downloading when the copy
+    /// was updated keeps its folder. A folder that cannot be read answers no.
+    fn a_folder_stands_at(&self, path: &[u8]) -> bool {
+        the_path_of(path).is_dir()
+    }
 }
 
 /// **C5's unit on this system**: UTF-16 code units on Windows and macOS, bytes
@@ -6630,6 +6637,34 @@ mod tests {
     #[test]
     fn an_entrys_kind_that_was_not_carried_is_a_value() {
         assert_eq!(TheEntrysKind::ItWasNotCarried.is_a_folder(), None);
+    }
+
+    /// **`Download` P10's dated note of 2026-11-07, on this computer's own
+    /// disk**: a job whose old whole-identity folder stands at the destination
+    /// keeps landing there; without it, the job takes the 8 characters.
+    #[test]
+    fn a_job_already_downloading_under_its_old_long_name_keeps_that_folder_on_this_disk() {
+        let job = an_identity(IdentityKind::Job);
+        let destination = std::env::temp_dir().join(format!("smoozy-short-name-{}", job.as_text()));
+        let rules = TheReceivingSystemsRulesHere;
+        let short = smoozy_download::fetching::the_job_folders_landing_name_at(
+            &rules,
+            &the_bytes_of(&destination),
+            &job,
+            Some("cloth"),
+        );
+        assert_eq!(short, format!("{} cloth", &job.as_text()[..8]).into_bytes());
+
+        let the_old_folder = destination.join(format!("{} cloth", job.as_text()));
+        std::fs::create_dir_all(&the_old_folder).expect("a scratch folder");
+        let kept = smoozy_download::fetching::the_job_folders_landing_name_at(
+            &rules,
+            &the_bytes_of(&destination),
+            &job,
+            Some("cloth"),
+        );
+        std::fs::remove_dir_all(&destination).expect("the scratch folder goes");
+        assert_eq!(kept, format!("{} cloth", job.as_text()).into_bytes());
     }
 
     // ═══════════════════════════════════════════════════════════════════════
