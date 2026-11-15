@@ -212,7 +212,7 @@ async fn the_desk_machine_stands_renders_a_frame_reboots_and_is_destroyed() {
             Arc::clone(desk.record()),
         );
         let read = tokio::task::spawn_blocking(move || {
-            the_queue_is_read(&server, connection, record.as_ref(), &mut supervisor, &holds, &|| true, false)
+            the_queue_is_read(&server, connection, record.as_ref(), &mut supervisor, &holds, &|| true)
         })
         .await
         .expect("the queue reading ran");

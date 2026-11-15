@@ -77,9 +77,11 @@ use smoozy_server_protocol::subsystem::client::Subsystem;
 use smoozy_server_protocol::subsystem::{extension, Announcement};
 use smoozy_server_protocol::transfers::integrity::Digest;
 use smoozy_server_protocol::transfers::moving::{
-    carry_out, carry_out_a_fresh_file_under_a_publication_gate, DrawsFromTheSharedBudget,
-    KeepsTheRecord, LocalFailure, NobodyIsWatching, TheCallersPublicationGate, TheUsersOwnComputer,
-    Transfer, WatchesTheTransfer, WhatTheGateSaid, THE_ACCOUNTING_PERIOD, THE_CHECKPOINT_INTERVAL,
+    carry_on_under_a_publication_gate_asking_the_machine, carry_out,
+    carry_out_a_fresh_file_under_a_publication_gate, DrawsFromTheSharedBudget, KeepsTheRecord,
+    LocalFailure, NobodyIsWatching, TheCallersPublicationGate, TheMachineDigestsAStagedPart,
+    TheUsersOwnComputer, Transfer, WatchesTheTransfer, WhatTheGateSaid, THE_ACCOUNTING_PERIOD,
+    THE_CHECKPOINT_INTERVAL,
 };
 use smoozy_server_protocol::transfers::publication::{
     Intent, PublicationPreState, WhatTheFinalObjectReadsAs,
@@ -1163,6 +1165,227 @@ async fn an_interrupted_upload_resumes_from_its_verified_checkpoint() {
     assert_eq!(the_time_of(&destination), a_time_long_ago());
 }
 
+// ------------------------------------------- S12b: the machine checks the part
+
+/// **What the machine's own program answers in these tests**, and every ask
+/// made of it. The machine here is this computer's own folder, so the stand-in
+/// digests the bytes the part held when the first run stopped — which is what
+/// Smoozy's program on a server reads from its own disk.
+struct AMachineThatDigests {
+    /// What it answers: the part's own bytes, digested to the length asked;
+    /// nothing at all; or a digest of something else.
+    answers: TheMachinesAnswer,
+    the_part_as_it_stood: Vec<u8>,
+    asked: Vec<(Vec<u8>, u64)>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TheMachinesAnswer {
+    TheParts,
+    Nothing,
+    SomethingElse,
+}
+
+impl TheMachineDigestsAStagedPart for AMachineThatDigests {
+    fn the_digest_of_the_first(
+        &mut self,
+        path: &[u8],
+        up_to: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<Digest>> + Send + '_>> {
+        self.asked.push((path.to_vec(), up_to));
+        let answer = match self.answers {
+            TheMachinesAnswer::Nothing => None,
+            TheMachinesAnswer::SomethingElse => Some(Digest::of(b"another file")),
+            TheMachinesAnswer::TheParts => self
+                .the_part_as_it_stood
+                .get(..up_to as usize)
+                .map(Digest::of),
+        };
+        Box::pin(async move { answer })
+    }
+}
+
+/// **One upload cut part-way, as `an_interrupted_upload_resumes_from_its_verified_checkpoint`
+/// cuts it**, and then carried on with the machine asked (S12b). Answers the
+/// record, the ending, the machine's asks, the source's bytes and where it
+/// landed. `before` runs between the two, on the staged part's path.
+async fn an_upload_cut_and_carried_on(
+    named: &str,
+    answers: TheMachinesAnswer,
+    before: impl FnOnce(&Path, &mut TransferRecord),
+) -> Option<(TransferRecord, u32, Ending, Vec<(Vec<u8>, u64)>, Vec<u8>, Vec<u8>)> {
+    let sftp_server = the_machines_own_file_transfer_server()?;
+    let scratch = Scratch::new(named);
+    let key = scratch.a_key("id_ed25519");
+    let machine = a_machine(&key, sftp_server, &scratch).await;
+    let connection = a_connection(&machine, &key).await;
+    let mut subsystem = a_subsystem(&connection).await;
+
+    let bytes = a_file_of(12 * 1024 * 1024);
+    let source = scratch.at("big.blend");
+    std::fs::write(&source, &bytes).expect("written");
+    let destination = scratch.at("machine/big.blend");
+    std::fs::create_dir_all(destination.parent().expect("a folder")).expect("made");
+    let mut record = an_upload(&scratch, &source, &destination, bytes.len() as u64, Digest::of(&bytes));
+    let mut local = APlainDisk;
+    let mut keeper = WritesItDown::default();
+    let mut watcher = NobodyIsWatching;
+    let mut a_cap = ACapThatBites { left: 5 * 1024 * 1024 };
+    let first = tokio::time::timeout(
+        Duration::from_secs(20),
+        carry_out(
+            Transfer {
+                subsystem: &mut subsystem,
+                local: &mut local,
+                budget: &mut a_cap,
+                keeper: &mut keeper,
+                watcher: &mut watcher,
+                inactivity_deadline: Duration::from_secs(30),
+                intent: Intent::ReplaceIntended,
+            },
+            &mut record,
+        ),
+    )
+    .await;
+    assert!(first.is_err(), "the capped run does not finish");
+    drop(subsystem);
+    drop(connection);
+
+    let staged = PathBuf::from(record.staging_path.as_text());
+    let the_part_as_it_stood = std::fs::read(&staged).expect("the part is there");
+    before(&staged, &mut record);
+
+    let connection = a_connection(&machine, &key).await;
+    let mut subsystem = a_subsystem(&connection).await;
+    let mut budget = smoozy_server_protocol::transfers::moving::NoCapIsInForce;
+    let mut asked_of = AMachineThatDigests { answers, the_part_as_it_stood, asked: Vec::new() };
+    let attempt_before = record.attempt;
+    let happened = carry_on_under_a_publication_gate_asking_the_machine(
+        Transfer {
+            subsystem: &mut subsystem,
+            local: &mut local,
+            budget: &mut budget,
+            keeper: &mut keeper,
+            watcher: &mut watcher,
+            inactivity_deadline: Duration::from_secs(30),
+            intent: Intent::ReplaceIntended,
+        },
+        &mut record,
+        &mut LetsItThrough,
+        &mut asked_of,
+    )
+    .await;
+    // **Read before the throwaway folder goes**, and made readable first where
+    // the part was made write-only.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o600));
+    }
+    let landed = std::fs::read(&destination).unwrap_or_default();
+    Some((record, attempt_before, happened.ending, asked_of.asked, bytes, landed))
+}
+
+/// **S12b: an upload carried on has the machine check the part it holds and
+/// reads none of it back.** The staged part is made unreadable to the line
+/// before the carry-on — so a read-back could not happen at all — and the
+/// upload still carries on from its checkpoint, the attempt number unmoved,
+/// and lands whole: the running digest went on from the state the record kept,
+/// and nothing of the part crossed.
+#[cfg(unix)]
+#[tokio::test]
+async fn an_upload_carried_on_has_the_machine_check_the_part_and_reads_none_of_it_back() {
+    let _deadline = TheTestsDeadline::started();
+    a_linux_rule_about_the_rented_machine!("the part is made unreadable with a Unix mode");
+    use std::os::unix::fs::PermissionsExt;
+    let Some((record, attempt_before, ending, asked, bytes, landed)) = an_upload_cut_and_carried_on(
+        "machine-checks",
+        TheMachinesAnswer::TheParts,
+        |staged, record| {
+            assert!(
+                record.checkpoints.iter().all(|checkpoint| checkpoint.running_state.is_some()),
+                "every checkpoint of an upload keeps the running digest's state"
+            );
+            std::fs::set_permissions(staged, std::fs::Permissions::from_mode(0o200)).expect("write-only");
+        },
+    )
+    .await
+    else {
+        println!("SKIPPED: no sftp-server on this computer");
+        return;
+    };
+    assert_eq!(ending, Ending::Published);
+    assert_eq!(record.attempt, attempt_before, "it carried on rather than starting over");
+    assert_eq!(asked.len(), 1, "the machine is asked once");
+    assert_eq!(asked[0].0, record.staging_path.as_bytes());
+    assert!(asked[0].1 >= 4 * 1024 * 1024, "asked up to the checkpoint");
+    assert_eq!(Digest::of(&landed), Digest::of(&bytes));
+}
+
+/// **S12b, an older server: where the machine gives no digest the part is
+/// read back as it always was**, and the upload carries on from its
+/// checkpoint.
+#[tokio::test]
+async fn where_the_machine_gives_no_digest_the_part_is_read_back_as_before() {
+    let _deadline = TheTestsDeadline::started();
+    a_linux_rule_about_the_rented_machine!("the read-back meets the far end's own reader rule");
+    let Some((record, attempt_before, ending, asked, bytes, landed)) =
+        an_upload_cut_and_carried_on("machine-silent", TheMachinesAnswer::Nothing, |_, _| {}).await
+    else {
+        println!("SKIPPED: no sftp-server on this computer");
+        return;
+    };
+    assert_eq!(ending, Ending::Published);
+    assert_eq!(record.attempt, attempt_before);
+    assert_eq!(asked.len(), 1);
+    assert_eq!(Digest::of(&landed), Digest::of(&bytes));
+}
+
+/// **S12b: a part the machine digests to something else is never carried on
+/// from** — S12 step 5, a fresh staging path, and the file lands whole.
+#[tokio::test]
+async fn a_part_the_machine_digests_otherwise_starts_over() {
+    let _deadline = TheTestsDeadline::started();
+    a_linux_rule_about_the_rented_machine!("the second run opens the part the first still holds");
+    let Some((record, attempt_before, ending, asked, bytes, landed)) =
+        an_upload_cut_and_carried_on("machine-differs", TheMachinesAnswer::SomethingElse, |_, _| {}).await
+    else {
+        println!("SKIPPED: no sftp-server on this computer");
+        return;
+    };
+    assert_eq!(ending, Ending::Published);
+    assert_eq!(record.attempt, attempt_before + 1, "it started over");
+    assert_eq!(asked.len(), 1);
+    assert_eq!(Digest::of(&landed), Digest::of(&bytes));
+}
+
+/// **S12b: a checkpoint written before the state was kept is read back**, and
+/// the machine is not asked — a part an older build left carries on as it
+/// always did.
+#[tokio::test]
+async fn a_checkpoint_with_no_state_is_read_back_and_the_machine_is_not_asked() {
+    let _deadline = TheTestsDeadline::started();
+    a_linux_rule_about_the_rented_machine!("the read-back meets the far end's own reader rule");
+    let Some((record, attempt_before, ending, asked, bytes, landed)) = an_upload_cut_and_carried_on(
+        "machine-no-state",
+        TheMachinesAnswer::TheParts,
+        |_, record| {
+            for checkpoint in &mut record.checkpoints {
+                checkpoint.running_state = None;
+            }
+        },
+    )
+    .await
+    else {
+        println!("SKIPPED: no sftp-server on this computer");
+        return;
+    };
+    assert_eq!(ending, Ending::Published);
+    assert_eq!(record.attempt, attempt_before);
+    assert!(asked.is_empty(), "the machine was asked with no state to go on from");
+    assert_eq!(Digest::of(&landed), Digest::of(&bytes));
+}
+
 /// **A gate that lets every publication through** — for a caller that says
 /// its file is fresh (S12a), whose entry point takes
 /// one.
@@ -1630,6 +1853,7 @@ async fn a_download_resume_asks_the_source_gate_and_starts_over_rather_than_carr
     record.checkpoints.push(Checkpoint {
         offset: prefix as u64,
         digest_of_everything_up_to_it: Digest::of(&bytes[..prefix]),
+        running_state: None,
     });
     let the_path_it_would_have_carried_on = staged.clone();
 
@@ -1725,11 +1949,15 @@ async fn a_download_whose_source_ends_short_starts_over_rather_than_stopping() {
         happened.ending,
         Ending::Stopped(StoppedReason::TheSourceChangedUnderIt)
     );
-    // The second attempt met the same short source at the same place, so the
-    // run ends rather than turning for ever — and *interrupted* keeps the
-    // material, which is what it means.
-    assert_eq!(happened.ending, Ending::Interrupted);
-    assert!(Path::new(&record.staging_path.as_text()).exists());
+    // **The fresh attempt takes the file's size again** (S13's paragraph of
+    // 2026-11-12, the Fable review's seventh sitting, fault 1), so it fetches
+    // the megabyte the machine holds and publishes it. *(Until that date the
+    // second attempt read to the old size, met the same short end, and the
+    // run ended *interrupted* — at every later asking too.)*
+    assert_eq!(happened.ending, Ending::Published);
+    assert_eq!(record.total_size_expected, bytes.len() as u64);
+    let landed = std::fs::read(&here).expect("the final name holds it");
+    assert_eq!(Digest::of(&landed), Digest::of(&bytes));
 }
 
 /// **A local failure a reconnection cannot clear is *failed*, not

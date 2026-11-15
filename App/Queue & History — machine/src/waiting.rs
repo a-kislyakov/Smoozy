@@ -122,6 +122,12 @@ pub enum WhatThePredicateGives {
     NotEvaluatedNoReadingWasCarried { ending: HowTheDependencyEnded },
 }
 
+/// **H9's reason in the release's own words**, as the drop is journalled.
+/// One home, since 2026-11-09: the desktop reads it to name no job dropped
+/// behind the user's own cancel (H9 and H11 as changed by the Creator's
+/// twenty-eighth notes, note 16).
+pub const THE_DEPENDENCY_WAS_CANCELLED: &str = "the dependency was cancelled";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WhyDropped {
     /// The dependency's ending, with no frame in its carried reading.

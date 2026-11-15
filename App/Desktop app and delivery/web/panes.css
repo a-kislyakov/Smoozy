@@ -43,6 +43,24 @@
 .toosmall-said { font-size: var(--t-lg); font-weight: 620; color: var(--ink); }
 .toosmall-how { font-size: var(--t-md); color: var(--ink2); }
 
+/* ── 2a. An older Smoozy on a newer record ───────────────────────────────────
+ *
+ * One line under the title bar in place of every screen (Design/Whole app.md,
+ * 2026-11-12; Desktop app and delivery L9). Placed as the floor panel is, so
+ * the window's own buttons and its drag stay. **It sits under every box**
+ * (`.modal` is 40): About, Report a problem and the crash offer open over it
+ * as they open over any screen, with their own way to close. Above them it
+ * hid a box that still held the keyboard (Sol's look, 2026-11-12). */
+.older-copy {
+  position: absolute; inset: var(--title-h) 0 0 0; z-index: 39; display: grid; place-items: center;
+  background: var(--bg); padding: 30px; text-align: center;
+}
+.older-copy-said { max-width: 44ch; font-size: var(--t-lg); font-weight: 620; color: var(--ink); }
+/* L9b: a damaged record's offer of the copy from before the last update, under
+ * the line (the Creator's ruling on 97, 2026-11-14). */
+.older-copy-held { display: grid; justify-items: center; gap: 12px; }
+.older-copy-offer { max-width: 52ch; font-size: var(--t-md); color: var(--ink2); }
+
 /* ── 3. What was here, and where it went ─────────────────────────────────────
  *
  * **Three rules held this file's own proof surface up until 2026-09-13**, when

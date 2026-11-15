@@ -71,6 +71,7 @@ import {
   theControlsFrom,
   EXPANDED,
 } from "./the-failure-shape.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 // The kind, declared beside the service that posts it —
 // `A_RENDERS_WORDS_ARE_STANDING` in `src/surface/the_machines_own_words.rs`. The
@@ -106,7 +107,7 @@ const BOTH_STREAMS = [THE_ORDINARY_STREAMS_KEYS, THE_COMPLAINTS_STREAMS_KEYS];
 
 /// **Build one tab's body.**
 ///
-/// `tab` is `{ name, says, said, saidNext, record, kept, dropped,
+/// `tab` is `{ name, says, said, saidNext, record, parts, kept, dropped,
 /// whyTheRestWent, notShown, asPrinted }`, every string already on one of the
 /// two routes.
 function theTabsBody(tab) {
@@ -147,11 +148,19 @@ function theTabsBody(tab) {
         one.appendChild(said);
         return one;
       };
+      // **Set apart with the drawing's own separator**, as a strip's values
+      // are; they ran together as *1.0 MB kept734.0 MB dropped* (the UI at
+      // every size, B-19).
+      const apart = () => {
+        if (counts.childNodes.length) counts.appendChild(document.createTextNode(" · "));
+      };
       if (tab.kept) counts.appendChild(beside(tab.kept, tab.theKeptWord));
       if (tab.dropped) {
+        apart();
         counts.appendChild(beside(tab.dropped, tab.theDroppedWord));
       }
       if (tab.whyTheRestWent) {
+        apart();
         const why = document.createElement("span");
         why.className = "words-count";
         why.textContent = tab.whyTheRestWent;
@@ -163,11 +172,30 @@ function theTabsBody(tab) {
   }
 
   // The record. **Whole, unedited, in one text node** — M9, and nothing is
-  // taken out of it — M13b.
+  // taken out of it — M13b. **Where it arrives in parts** — a setup's words
+  // act by act, each under the line naming it, and Smoozy's own under theirs
+  // (`Design/Server Setup § The step that failed`, the Creator's twenty-eighth
+  // notes, notes 1 and 7) — **each part's words are one text node, unedited,
+  // and the line before them is the drawing's quieter `.lmark`**, which is
+  // Smoozy's and never a byte of the stream. The line's ending is the record's
+  // own, so what is shown is the record whole and Copy takes it whole.
   if (typeof tab.record === "string") {
     const printed = document.createElement("pre");
     printed.className = "lbody";
-    printed.textContent = tab.record;
+    if (Array.isArray(tab.parts) && tab.parts.length) {
+      for (const part of tab.parts) {
+        if (part.line) {
+          const line = document.createElement("span");
+          line.className = "lmark";
+          line.textContent = part.line;
+          printed.appendChild(line);
+          printed.appendChild(document.createTextNode("\n"));
+        }
+        if (part.words) printed.appendChild(document.createTextNode(part.words));
+      }
+    } else {
+      printed.textContent = tab.record;
+    }
     // **Where what is shown is not every byte as printed** — a line a program
     // rewrote in place, shown in its newest form (`Desktop app and delivery`
     // M13b, from 2026-10-24) — **the words as printed ride beside it, and they
@@ -327,6 +355,15 @@ export function theWordsPanel(parts) {
 
   const bodies = [];
   for (const tab of parts.tabs) bodies.push(theTabsBody(tab));
+  // **A panel drawn again where its reader had scrolled up keeps no end in
+  // that tab**, so neither its first showing nor new words take the reader to
+  // the bottom; the caller puts the words back where they were (UI
+  // consistency, finding 44).
+  const kept = bodies[parts.keepsAPlaceIn];
+  if (kept) {
+    theBodyWasShown.set(kept, true);
+    theEndIsHeld.set(kept, false);
+  }
 
   // **A render has two streams and they are kept apart, so it has two tabs;
   // anything with one stream has none** — Design.
@@ -431,6 +468,17 @@ export function theWordsPanel(parts) {
   box.appendChild(foot);
 
   panel.appendChild(box);
+  // **It opens with the focus inside it, on the panel itself** —
+  // `Design/Whole app`, *Keyboard shortcuts*, *Tab stays inside the box on
+  // top* (the Creator's twenty-eighth notes, note 2). Every screen that opens
+  // it only shows it, so the panel takes the focus when it is shown, wherever
+  // that happens; the first Tab lands on its first control.
+  box.tabIndex = -1;
+  if (typeof MutationObserver === "function") {
+    new MutationObserver(() => {
+      if (!panel.hidden && !panel.contains(document.activeElement)) theFocusMovesTo(box);
+    }).observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+  }
   return panel;
 }
 
@@ -568,6 +616,7 @@ function theMoment(seconds) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
     timeZoneName: "short",
   });
 }

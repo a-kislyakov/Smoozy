@@ -58,6 +58,9 @@ import { theValueIsDrawnInto } from "./the-value-drawn.js";
 // page**, newest for each server, and this tab reads them from there rather
 // than keeping a second copy (the Creator's note 14 on the test copy).
 import { theConnectionFailureOn, theConnectionFailureIsTakenAway } from "./servers.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
+// **Help links** — `Design/Whole app § Help links` (2026-11-13).
+import { theHelpLinkFollows } from "./help-links.js";
 
 const shell = window.__TAURI__;
 
@@ -82,6 +85,11 @@ const INSTALL_TELEGRAM = "install-telegram";
 // `Servers` B6's connect that carries the remembered setup — the action of the
 // card where the connection an add asked for was not made. Added 2026-10-03.
 const CONNECT_AND_SET_UP = "connect-and-set-up";
+// **The card's own *Connect and set up* where no connection stands** — the
+// four questions, scout 4.6.
+const CONNECT_THEN_SET_UP = "connect-then-set-up";
+// ***Install* on the line naming installs never started** (scout 2.14).
+const INSTALL_THE_ONES_NOT_STARTED = "install-the-ones-not-started";
 // **`Server Setup` B7's pick and `Server Setup` B7a's two answers** — the 38's piece 14b.
 const CHOOSE_A_BUILD = "choose-a-build";
 const INSTALL_ANYWAY = "install-anyway";
@@ -96,6 +104,14 @@ const A_CONNECT_NOT_MADE = [
   "the-connection-was-not-made",
   "it-is-not-a-linux-machine",
   "the-passphrase-could-not-be-used",
+  // **A reason the attempt knows** — `A_CONNECT_THAT_WAS_NOT_MADE_SAYS_WHY`
+  // in `src/surface/servers.rs` (2026-11-11, scout 3.1).
+  "the-key-was-refused",
+  "the-host-was-not-found",
+  "the-port-refused",
+  "nothing-answered",
+  "it-timed-out",
+  "the-key-could-not-be-loaded",
 ];
 
 // ── What this module holds ──────────────────────────────────────────────────
@@ -170,6 +186,8 @@ let theActionIsUnderwayOn = null;
 // the user's hand while the server prints — `Design/Server Setup § A long
 // step`. Which drawing is on screen, and nothing durable. Added 2026-10-18.
 let theWindow = null;
+// **The run card's list of steps**, for its figures to be drawn in place.
+let theStepList = null;
 // ***Server output*, opened**: `{ server, panel, records, tabs }`, where
 // `records` holds each stream's printed words and `tabs` its explanatory
 // state, so both live arrivals and an empty stream's ending can be drawn.
@@ -561,8 +579,13 @@ function theCardIsDrawnWhereItChanged(answer) {
   // place, below, and the card is not built again for them.
   const lines = run ? run.the_servers_newest_lines || [] : [];
   const errors = run ? run.which_lines_are_from_the_error_stream || [] : [];
+  // **And a step's figure is left out too** — the download's bytes, the
+  // restart's wait — and drawn into its step in place below: until then the
+  // card was built again about once a second, and *Cancel setup* lost the
+  // keyboard, the window's chosen text went, and a press across the rebuild
+  // did nothing (UI consistency, finding 9).
   const card_now = JSON.stringify([
-    run ? { ...run, the_servers_newest_lines: lines.length > 0, which_lines_are_from_the_error_stream: null } : null,
+    run ? { ...run, the_servers_newest_lines: lines.length > 0, which_lines_are_from_the_error_stream: null, steps: theStepsWithoutTheirFigures(run.steps) } : null,
     stopped,
     run || stopped
       ? null
@@ -580,12 +603,30 @@ function theCardIsDrawnWhereItChanged(answer) {
   ]);
   if (theDrawnCard === card_now) {
     if (theWindow) theWindowsLinesAreDrawnInto(theWindow, lines, errors);
+    if (run) theFiguresAreDrawnInPlace(run.steps);
     return;
   }
   theWindow = null;
   theDrawnCard = card_now;
   if (run || stopped) theRunCardIsDrawn(run || stopped, current);
   else theCardIsDrawn(answer);
+}
+
+/// **A run's steps with each figure reduced to whether it is there**, for the
+/// comparison above (finding 9).
+function theStepsWithoutTheirFigures(steps) {
+  return (steps || []).map((step) => ({ ...step, the_figure: step.the_figure ? true : null }));
+}
+
+/// **Each step's figure, drawn into the figure already on the card** — the
+/// card is not built again for a figure that moved (finding 9).
+function theFiguresAreDrawnInPlace(steps) {
+  if (!theStepList || !theStepList.isConnected) return;
+  const lines = theStepList.children;
+  (steps || []).forEach((step, at) => {
+    const held = lines[at] && Array.from(lines[at].children).find((one) => one.dataset.figure !== undefined);
+    if (held && step.the_figure) held.replaceChildren(...theStepsFigure(step.the_figure).childNodes);
+  });
 }
 
 /// **The application said the ready action is under way on this server**: the
@@ -650,6 +691,8 @@ function theCardIsDrawn(answer) {
   const bold = document.createElement("b");
   bold.textContent = drawn.state;
   words.appendChild(bold);
+  // ***Could not connect*'s Help link**, where the application names it.
+  theHelpLinkFollows(words, answer.the_cards_help);
   state.appendChild(words);
   const grow = document.createElement("span");
   grow.className = "grow";
@@ -678,6 +721,17 @@ function theCardIsDrawn(answer) {
     const line = document.createElement("p");
     line.className = "sunote";
     line.textContent = answer.the_installs_never_begun;
+    // ***Install*, where the line names installs from the list and a
+    // connection stands** — the four questions, scout 2.14.
+    if (answer.install_the_ones_not_started) {
+      line.appendChild(document.createTextNode(" "));
+      const start = document.createElement("button");
+      start.type = "button";
+      start.className = "mini";
+      start.textContent = answer.install_the_ones_not_started;
+      start.addEventListener("click", () => theActIsAskedFor(INSTALL_THE_ONES_NOT_STARTED, answer.server));
+      line.appendChild(start);
+    }
     one.appendChild(line);
   }
 
@@ -741,6 +795,7 @@ function theCardIsDrawn(answer) {
     const and = document.createElement("span");
     and.textContent = warning.and;
     line.appendChild(and);
+    theHelpLinkFollows(line, warning.help);
     one.appendChild(line);
   }
 
@@ -772,6 +827,7 @@ function theCardIsDrawn(answer) {
     const second = document.createElement("span");
     second.textContent = drawn.the_setup_fault.what_to_do;
     line.appendChild(second);
+    theHelpLinkFollows(line, drawn.the_setup_fault.help);
     fix.appendChild(line);
     fix.appendChild(theActionControl(answer, true));
     one.appendChild(fix);
@@ -876,6 +932,16 @@ function theTableIsDrawn(answer) {
     table.appendChild(grid);
   }
 
+  // **On a server not set up, the line stands where *Install Blender* would**
+  // — `Design/Server Setup § Blender`, added 2026-11-12 (the four
+  // questions, scout 4.7): an install there is refused.
+  if (drawn.install_first) {
+    const first = document.createElement("p");
+    first.className = "mnote2";
+    first.textContent = drawn.install_first;
+    table.appendChild(first);
+    return;
+  }
   const install = document.createElement("button");
   install.type = "button";
   install.className = "btn";
@@ -927,6 +993,9 @@ function aBuildRow(answer, build) {
   // **A Blender's folder reads in the order its bytes run** — X9,
   // `web/the-value-drawn.js`, and so does every name below.
   theValueIsDrawnInto(folder, build.folder);
+  // Cut short in its column, so it reads whole on hover; the two builds of
+  // one version differ only at the folder's end (the UI at every size, E-08).
+  folder.title = build.folder || "";
   folder.addEventListener("click", () => theFolderIsOpened(build));
   row.appendChild(folder);
 
@@ -969,8 +1038,15 @@ function aBox() {
   box.className = "mbox";
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-modal", "true");
+  // **A box opens with the focus inside it** — `Design/Whole app`, *Keyboard
+  // shortcuts*, *Tab stays inside the box on top* (the Creator's twenty-eighth
+  // notes, note 2). On the box itself, so the first Tab lands on its first
+  // control and Return or Space presses nothing by accident; a box that asks
+  // for typing moves it on to its field once the field is drawn.
+  box.tabIndex = -1;
   modal.appendChild(box);
   boxes.appendChild(modal);
+  theFocusMovesTo(box);
   return box;
 }
 
@@ -1000,9 +1076,12 @@ function anOfferIsDeclined() {
 }
 
 /// **The offer, answered**: the password the user typed, or nothing. It goes
-/// to the run that asked and nowhere else; nothing here keeps it.
-function theOfferIsAnswered(server, password) {
-  shell.core.invoke("the_admin_access_is_answered", { server, password });
+/// to the run that asked and nowhere else; nothing here keeps it. **The choice
+/// under the field goes with it** — the key the application drew it with — and
+/// the application keeps the password as it says (2026-11-11, the four
+/// questions, scout 1.1).
+function theOfferIsAnswered(server, password, choice = null) {
+  shell.core.invoke("the_admin_access_is_answered", { server, password, choice });
 }
 
 /// A row of controls along the bottom of a box.
@@ -1087,7 +1166,12 @@ function theInstallBoxIsDrawn(box, list, server) {
         mark.className = "fmt";
         mark.setAttribute("role", "checkbox");
         mark.setAttribute("aria-checked", "false");
-        mark.tabIndex = 0;
+        // **A finished release already on this server is not offered** —
+        // `Design/Server Setup § Installing`, changed 2026-11-14: greyed, no
+        // tick box, and it cannot be picked. The application says which.
+        const offered = entry.offered !== false;
+        if (offered) mark.tabIndex = 0;
+        else mark.setAttribute("aria-disabled", "true");
         const bullet = document.createElement("span");
         bullet.className = "cb";
         mark.appendChild(bullet);
@@ -1113,13 +1197,15 @@ function theInstallBoxIsDrawn(box, list, server) {
           bullet.textContent = it ? "✓" : "";
           theButtonCounts();
         };
-        mark.addEventListener("click", pick);
-        mark.addEventListener("keydown", (press) => {
-          if (press.key === " " || press.key === "Enter") {
-            press.preventDefault();
-            pick();
-          }
-        });
+        if (offered) {
+          mark.addEventListener("click", pick);
+          mark.addEventListener("keydown", (press) => {
+            if (press.key === " " || press.key === "Enter") {
+              press.preventDefault();
+              pick();
+            }
+          });
+        }
         marks.push(mark);
         entries.push(entry);
         part.appendChild(mark);
@@ -1127,19 +1213,25 @@ function theInstallBoxIsDrawn(box, list, server) {
       return part;
     };
 
-    box.appendChild(aPart(list.finished));
+    // **Only the versions scroll** (the UI at every size, E-11, in Codex's
+    // narrowed form): with many versions the box kept its count on Install
+    // and its Cancel below the fold. The drawing's `.bulists`.
+    const lists = document.createElement("div");
+    lists.className = "bulists";
+    box.appendChild(lists);
+    lists.appendChild(aPart(list.finished));
 
     if (list.unfinished.length) {
       const rule = document.createElement("div");
       rule.className = "burule";
-      box.appendChild(rule);
+      lists.appendChild(rule);
       // **The heading, with nothing explaining it** — `Design/Server Setup §
       // Installing`, Creator-stated 2026-09-27; the drawing's `h4.buexp`.
       const heading = document.createElement("h4");
       heading.className = "buexp";
       heading.textContent = list.the_heading;
-      box.appendChild(heading);
-      box.appendChild(aPart(list.unfinished));
+      lists.appendChild(heading);
+      lists.appendChild(aPart(list.unfinished));
     }
 
     // **Pointing at a build on your own computer.** The pick is the system's
@@ -1194,7 +1286,18 @@ function theInstallBoxIsDrawn(box, list, server) {
         picked.slice(1).map((entry) => entry.asked)
       );
     });
+    // **Install holds the width of the longest it can read** — one version
+    // named, or every version counted — the drawing's `.holds`, so ticking
+    // never slides Cancel beside it (UI consistency, finding 18). The words
+    // and figures are the ones the button reads; the longer is kept.
+    const every = entries.length;
+    const longest = entries.reduce((was, entry) => (String(entry.version).length > was.length ? String(entry.version) : was), "");
+    const named = [list.install, longest].join(" ");
+    const counted = [list.install, String(every), list.versions].join(" ");
+    install.dataset.held = counted.length > named.length ? counted : named;
+    install.classList.add("holds");
     row.appendChild(install);
+    theButtonCounts();
 
     // **The button counts what is ticked** — *Install 5.2.2* for one, *Install
     // 3 versions* for several, and the plain word for none. The words are the
@@ -1202,6 +1305,9 @@ function theInstallBoxIsDrawn(box, list, server) {
     function theButtonCounts() {
       const picked = theTicked();
       install.textContent = list.install;
+      // **Greyed with nothing ticked** — `Design/Server Setup § Installing`,
+      // added 2026-11-12 (the four questions, scout 2.20).
+      install.disabled = !picked.length;
       if (!picked.length) return;
       install.appendChild(document.createTextNode(" "));
       const named = document.createElement("span");
@@ -1303,16 +1409,48 @@ export function theAdminAccessBoxIsOpened(step, thePasswordCouldNotBeRead, serve
       theStepThatWasRefused: step,
       theSystemWouldNotHandThePasswordBack: Boolean(thePasswordCouldNotBeRead),
     })
-    .then((asked) => theAdminAccessBoxIsDrawn(asked, server));
+    .then((asked) => {
+      // **Only over the server the run is on, while it is the one showing.**
+      // Composing the box reads the password store, which can take seconds;
+      // a user who went to another server meanwhile would have typed that
+      // server's password into this run's box. The offer is declined, as any
+      // offer nobody can see is. Fable's fresh look at the admin password,
+      // finding 3, 2026-11-12.
+      if (server && (server !== current || !host || host.hidden)) {
+        theOfferIsAnswered(server, null);
+        return;
+      }
+      theAdminAccessBoxIsDrawn(asked, server);
+    });
 }
 
 /// The box, with the answer handed in.
 export function theAdminAccessBoxIsDrawn(asked, server) {
+  const box = aBox();
+  // **The run on this server is waiting on this box from here on.**
+  if (server) theOfferStandsFor = server;
+  theAdminAccessBoxIsDrawnInto(box, asked, {
+    // **`Try again` hands the password to the run that is waiting for it**,
+    // which takes the refused step again with it (2026-09-21). Until then it
+    // started the whole setup over and carried nothing.
+    answered(typed, choice) {
+      const waiting = theOfferStandsFor;
+      theOfferStandsFor = null;
+      if (waiting !== null) theOfferIsAnswered(waiting, typed || null, choice);
+    },
+    closes: () => theBoxIsClosed(),
+  });
+}
+
+/// **The admin-access box's contents, drawn into `box`** — one box for every
+/// caller: setup's step and Files' retry (`Design/File Browser`, the paragraph
+/// after the offer's, 2026-11-12). `answered(typed, choice)` takes *Try
+/// again*'s password and choice; `closes()` puts the caller's box away.
+/// **Nothing here keeps the password**: the field is emptied as it is handed
+/// over.
+export function theAdminAccessBoxIsDrawnInto(box, asked, { answered, closes }) {
   {
     {
-      const box = aBox();
-      // **The run on this server is waiting on this box from here on.**
-      if (server) theOfferStandsFor = server;
       let field = null;
       const title = document.createElement("h3");
       title.textContent = asked.title;
@@ -1323,6 +1461,8 @@ export function theAdminAccessBoxIsDrawn(asked, server) {
       const which = document.createElement("p");
       which.className = "msub";
       saidInto(which, asked.which_step);
+      // ***The login password*'s Help link**, for every caller.
+      theHelpLinkFollows(which, asked.help);
       box.appendChild(which);
 
       // **Where the store's standing could not be read, the box says so** and
@@ -1391,9 +1531,9 @@ export function theAdminAccessBoxIsDrawn(asked, server) {
           said.className = "fmw";
           said.textContent = choice.said;
           mark.appendChild(said);
-          const end = document.createElement("span");
-          end.className = "fmc";
-          mark.appendChild(end);
+          // No fourth piece: the drawing's `.fmt.choice3` lays a choice out in
+          // three, and an empty fourth took a line of its own and made every
+          // row taller (the UI at every size, E-15).
           const pick = () => {
             for (const other of marks) {
               const it = other === mark;
@@ -1416,20 +1556,19 @@ export function theAdminAccessBoxIsDrawn(asked, server) {
       }
 
       const row = aRow(box);
-      row.appendChild(aControl(asked.cancel, () => theBoxIsClosed(), true));
-      // **`Try again` hands the password to the run that is waiting for it**,
-      // which takes the refused step again with it (2026-09-21). Until then it
-      // started the whole setup over and carried nothing.
+      row.appendChild(aControl(asked.cancel, () => closes(), true));
       row.appendChild(
         aControl(asked.try_again, () => {
-          const waiting = theOfferStandsFor;
-          theOfferStandsFor = null;
           const typed = field ? field.value : "";
           if (field) field.value = "";
-          if (waiting !== null) theOfferIsAnswered(waiting, typed || null);
-          theBoxIsClosed();
+          const picked = box.querySelector(".fmt.choice3.on");
+          const choice = picked ? picked.dataset.choice : null;
+          answered(typed, choice);
+          closes();
         })
       );
+      // **The caret in its first field**, where it asks for the password.
+      if (field) theFocusMovesTo(field);
     }
   }
 }
@@ -1522,6 +1661,7 @@ function theRunCardIsDrawn(panel, server) {
   if (panel.steps.length) {
     steps = document.createElement("ol");
     steps.className = "steps";
+    theStepList = steps;
     for (const step of panel.steps) {
       const line = document.createElement("li");
       // **The mark is the value the application sent** and is never derived here.
@@ -1543,17 +1683,21 @@ function theRunCardIsDrawn(panel, server) {
       // sets them side by side and joins nothing. Added 2026-10-18, piece U.
       if (step.the_figure) {
         line.appendChild(document.createTextNode(" "));
-        line.appendChild(theStepsFigure(step.the_figure));
+        const figure = theStepsFigure(step.the_figure);
+        figure.dataset.figure = "";
+        line.appendChild(figure);
       }
+      // **The step under way carries the shared underway shape, on the row** —
+      // a setup step is the *on the row* shape. Added 2026-09-27, fix piece 9.
+      // It goes before the step's note, beside the step's name, never alone on
+      // a line under the note (the UI at every size, E-14).
+      if (step.mark === "now") line.appendChild(theMarkOnARow(null));
       if (step.note) {
         const note = document.createElement("span");
         note.className = "stnote";
         note.textContent = step.note;
         line.appendChild(note);
       }
-      // **The step under way carries the shared underway shape, on the row** —
-      // a setup step is the *on the row* shape. Added 2026-09-27, fix piece 9.
-      if (step.mark === "now") line.appendChild(theMarkOnARow(null));
       // **The one failure shape, on the step itself.**
       if (step.the_failure) line.appendChild(theFailedStep(step.the_failure));
       steps.appendChild(line);
@@ -1628,9 +1772,22 @@ function theRunCardIsDrawn(panel, server) {
   row.className = "stgrow";
   if (panel.cancel) {
     const cancel = aControl(panel.cancel, () => theActIsAskedFor(STOP, server), true);
+    // **One width for both its words**: *Cancelling…* held unseen with
+    // *Cancel setup*, and the other way round — the drawing's `.holds` (UI
+    // consistency, finding 45).
+    if (panel.cancel_held) {
+      cancel.dataset.held = panel.cancel_held;
+      cancel.classList.add("holds");
+    }
     // **Pressed, and the run has not reached its boundary yet**: the control
-    // carries the mark and takes no second press.
-    if (panel.the_cancel_was_asked) theMarkOnAControl(cancel, panel.cancel);
+    // reads *Cancelling…* (`panel.cancel` carries it) and takes no second
+    // press. **It keeps its words and carries no turning mark** (`Design/Server
+    // Setup § A long step` as changed 2026-11-12): the card's own state line
+    // already shows the run is going, and a control with no text said nothing.
+    if (panel.the_cancel_was_asked) {
+      cancel.classList.add("asked");
+      cancel.setAttribute("aria-disabled", "true");
+    }
     row.appendChild(cancel);
   }
   // **The card's own act, quiet, while it runs** — pressed, it joins the
@@ -1688,7 +1845,11 @@ function theServersWordsBeside(list, drawn, server) {
   if (!drawn.cancel) {
     open.className = "mini";
     const under = document.createElement("div");
-    under.className = "suout";
+    // **With no steps or list above it, at the card's own text edge** — the
+    // drawing's `.suout.alone` (`Design/Server Setup § The step that failed`,
+    // the Creator's twenty-eighth notes, note 1). It stood 28 px in, at the
+    // steps' edge, on a card that had none.
+    under.className = list ? "suout" : "suout alone";
     under.appendChild(open);
     return list ? [list, under] : [under];
   }
@@ -1765,17 +1926,21 @@ function theServersWordsMoved(server) {
 /// ***Server output*, opened** — the whole of what the run printed, its two
 /// streams apart, with Copy only for the selected stream's printed words
 /// (`Design/Server Setup § A long step`).
-/// The panel is the one every screen opens a machine's words in.
+/// The panel is the one every screen opens a machine's words in. **It opens
+/// on *Errors* where the application says so** — a failure's words are there
+/// (`Design/Server Setup § The step that failed`, 2026-11-09).
 function theServersOutputIsOpened(server) {
   shell.core.invoke("the_servers_output", { server }).then((output) => {
     if (!output || current !== server || !boxes) return;
     theBoxIsClosed();
-    theServersOutputIsDrawn(server, output);
+    theServersOutputIsDrawn(server, output, output.opens_on_the_errors_tab ? 1 : 0);
   });
 }
 
-function theServersOutputIsDrawn(server, output, selected = 0) {
+function theServersOutputIsDrawn(server, output, selected = 0, place = null) {
   const panel = theWordsPanel({
+    // **Where the reader was, kept** (finding 44).
+    keepsAPlaceIn: place === null ? undefined : selected,
     title: output.title,
     subtitle: output.subtitle,
     tabs: output.tabs.map((tab) => ({
@@ -1784,6 +1949,9 @@ function theServersOutputIsDrawn(server, output, selected = 0) {
       said: tab.said,
       saidNext: tab.said_next,
       record: tab.record,
+      // **The record in its parts, each act under the line naming it**
+      // (the twenty-eighth notes, notes 1 and 7).
+      parts: tab.parts,
       notShown: tab.not_shown,
       // **What Copy takes where it differs from what is shown** — every byte
       // as printed (M9), the shown record having each rewritten line in its
@@ -1808,6 +1976,8 @@ function theServersOutputIsDrawn(server, output, selected = 0) {
   // the reader's stream when its first words replace an explanatory sentence.
   const tabs = panel.querySelectorAll(".ltab");
   if (selected > 0 && tabs[selected]) tabs[selected].click();
+  const body = place === null ? null : panel.querySelectorAll(".words-body")[selected];
+  if (body) body.scrollTop = place;
   theServersOutputOpen = { server, panel, records: output.tabs.map((tab) => tab.record || null), tabs: output.tabs };
 }
 
@@ -1828,7 +1998,12 @@ function theServersOutputIsAskedAgain(server) {
     }
     const bodies = Array.from(open.panel.querySelectorAll(".words-body"));
     const fresh = output.tabs.map((tab) => tab.record || null);
-    const added = fresh.every((now, at) => {
+    // **A part begun since — a new act, or a failure's own words — is drawn
+    // with its line**, so the panel is drawn again whole; words added to the
+    // last part are added as ever. A tab's lines, in order.
+    const theLines = (tab) => (tab && Array.isArray(tab.parts) ? tab.parts.map((part) => part.line || "").join("\u0000") + "\u0001" + tab.parts.length : "");
+    const sameParts = output.tabs.every((after, at) => theLines(open.tabs[at]) === theLines(after));
+    const added = sameParts && fresh.every((now, at) => {
       const was = open.records[at];
       const before = open.tabs[at];
       const after = output.tabs[at];
@@ -1839,16 +2014,24 @@ function theServersOutputIsAskedAgain(server) {
     // it** (M13b, the eighteenth notes, piece 2c): where every tab still says
     // what it said and holds words, the words are put in place whole rather
     // than the panel drawn again, so the chosen tab and the place read stay.
-    const rewritten = !added && fresh.every((now, at) => {
+    const rewritten = !added && sameParts && output.tabs.every((tab) => !tab.parts || !tab.parts.length) && fresh.every((now, at) => {
       const before = open.tabs[at];
       const after = output.tabs[at];
       if (!before || before.says !== after.says || before.said !== after.said || before.said_next !== after.said_next || before.not_shown !== after.not_shown) return false;
       return now === open.records[at] || (now !== null && open.records[at] !== null && bodies[at] && bodies[at].querySelector("pre.lbody"));
     });
     if (!added && !rewritten) {
+      // **A reader with words chosen in the panel keeps them**: the panel is
+      // drawn again whole only once nothing in it is chosen, and a reader who
+      // scrolled up keeps their place (UI consistency, finding 44: it jumped
+      // to its bottom whenever a new step started).
+      const chosen = typeof window.getSelection === "function" ? window.getSelection() : null;
+      if (chosen && !chosen.isCollapsed && chosen.anchorNode && open.panel.contains(chosen.anchorNode)) return;
       const selected = bodies.findIndex((body) => !body.hidden);
+      const reading = bodies[selected];
+      const awayFromTheEnd = reading && reading.scrollHeight - reading.scrollTop - reading.clientHeight > 24;
       open.panel.remove();
-      theServersOutputIsDrawn(server, output, selected);
+      theServersOutputIsDrawn(server, output, selected, awayFromTheEnd ? reading.scrollTop : null);
       return;
     }
     fresh.forEach((now, at) => {
@@ -1869,13 +2052,15 @@ function theServersOutputIsAskedAgain(server) {
 }
 
 /// **The last act's own ending, as one line on the card under its state line**
-/// — in the whole-app failure shape where the machine printed words, with them
-/// behind *What the server said*; a plain line otherwise. Nothing where there
-/// is none.
+/// — in the whole-app failure shape where the machine printed words, which are
+/// in *Server output*; a plain line otherwise. Nothing where there is none.
+/// **No control of its own** (`Design/Server Setup § The step that failed`,
+/// the Creator's twenty-eighth notes, note 1): until 2026-11-09 the words were
+/// behind *What the server said* here, and never reached *Server output*.
 function theLastWordIsDrawnInto(one) {
   const word = theLastWords.get(current) || null;
   if (!word) return;
-  if (!word.the_machines_own_words) {
+  if (!word.its_words_are_in_server_output) {
     const line = document.createElement("p");
     line.className = "sunote";
     line.textContent = word.the_act_is_not_built_yet;
@@ -1887,19 +2072,7 @@ function theLastWordIsDrawnInto(one) {
       sentence: word.the_act_is_not_built_yet,
       kind: "ending",
       room: EXPANDED,
-      controls: [{ is: "raw-text", label: word.what_the_server_said, act: "the-words" }],
-      onAct: () => {
-        const panel = theWordsPanel({
-          title: word.what_the_server_said,
-          tabs: [{ name: word.what_the_server_said, record: word.the_machines_own_words }],
-          // **The panel's own *Close*, as the answer carries it** — fault 6 of
-          // the second pass: nothing handed it a word, and it was drawn as an
-          // empty pill.
-          close: word.close,
-        });
-        panel.hidden = false;
-        boxes.appendChild(panel);
-      },
+      controls: [],
     })
   );
 }
@@ -1919,55 +2092,27 @@ function theTableCoverIsTakenAway() {
   theTableCover = null;
 }
 
-/// **The whole-app failure shape, on the step, with the machine's own words
-/// behind the control that names them** — drawn as the shape's own line under
-/// a step (`onAStep`): the dot, the sentence in bold and *What the server said*
-/// as a link at its end, on the sunk ground (`Design/Server Setup § The step
-/// that failed`, the drawing's `su-step` and `su-stepten`). *(Until 2026-10-25
-/// it was the general block with the control as a pill on a line of its own —
-/// the eighteenth notes, note 4.)*
+/// **The whole-app failure shape, on the step** — drawn as the shape's own
+/// line under a step (`onAStep`): the dot and the sentence in bold, on the
+/// sunk ground (`Design/Server Setup § The step that failed`, the drawing's
+/// `su-step` and `su-stepten`). **The machine's own words are in *Server
+/// output*, and the step has no control of its own for them** (2026-11-09,
+/// the Creator's twenty-eighth notes, note 1). *(Until 2026-10-25 it was the
+/// general block with the control as a pill on a line of its own — the
+/// eighteenth notes, note 4; until 2026-11-09 *What the server said* was a
+/// link at its end.)*
 ///
 /// **No cross, and not because the matter is over**: a step that stopped on a
 /// run that changes the machine leaves a condition standing, and only a run can
 /// end it. A cross clears a mark by hand and this is not one.
 function theFailedStep(failed) {
-  // **The control only where there are the server's words to open behind
-  // it** — a step that stopped on this computer has none, and its sentence is
-  // Smoozy's own (the Creator's twelfth notes, note 2).
-  const theWordsAreThere = Boolean(failed.the_output || failed.the_complaint);
   return theFailureShape({
     sentence: failed.said.lead,
     kind: "ending",
     room: EXPANDED,
     onAStep: true,
-    controls: theWordsAreThere
-      ? [{ is: "raw-text", label: failed.what_the_server_said, act: "the-words" }]
-      : [],
-    onAct: () => theMachinesWordsAreShown(failed),
+    controls: [],
   });
-}
-
-/// **The machine's own words, whole and unedited, the two streams apart**, each
-/// tab named for its own stream (must-do 33).
-function theMachinesWordsAreShown(failed) {
-  const tabs = [];
-  if (failed.the_output) {
-    tabs.push({ name: failed.the_output_tab, record: failed.the_output });
-  }
-  if (failed.the_complaint) {
-    tabs.push({
-      name: failed.the_complaint_tab,
-      record: failed.the_complaint,
-    });
-  }
-  if (!tabs.length) return;
-  const panel = theWordsPanel({
-    title: failed.what_the_server_said,
-    tabs,
-    close: failed.close,
-  });
-  panel.hidden = false;
-  boxes.appendChild(panel);
 }
 
 // ── The two warnings before a step that could disturb work ──────────────────
@@ -2011,7 +2156,10 @@ export function theWorkWarningIsDrawn(warning, server, act) {
     one.appendChild(mark);
     list.appendChild(one);
   }
-  box.appendChild(list);
+  // **A box with no job lines draws no list** — the two boxes of the Creator's
+  // rulings of 2026-11-14 on batch 1, as the drawing's `su-other` and
+  // `su-discard` do.
+  if (warning.the_live_jobs.length) box.appendChild(list);
 
   const row = aRow(box);
   row.appendChild(aControl(warning.not_now, () => theBoxIsClosed(), true));
@@ -2129,7 +2277,7 @@ export function theBelowTheFloorWarningIsDrawn(warning, server) {
 function theActIsAskedFor(act, server, version, waiting, path) {
   // **A connect is the next act on that server**, so what the last one that
   // did not happen said goes — here and above the server list.
-  if (act === CONNECT_AND_SET_UP) theConnectionFailureIsTakenAway(server);
+  if (act === CONNECT_AND_SET_UP || act === CONNECT_THEN_SET_UP) theConnectionFailureIsTakenAway(server);
   // **A new act takes the last one's line off the card** — the one way it
   // leaves besides another act's ending replacing it (ruling (a)).
   if (theLastWords.has(server)) {
@@ -2202,7 +2350,9 @@ function saidInto(holder, part) {
 /// bold, because the drawing writes the figure in the note's own weight.
 function theStepsFigure(figure) {
   const note = document.createElement("span");
-  note.className = "stm";
+  // Even-width digits, so a ticking figure keeps its width (UI consistency,
+  // cause 1, finding 8).
+  note.className = "stm tnum";
   const parts = [figure.so_far, figure.of, figure.whole];
   let first = true;
   parts.forEach((part, at) => {
@@ -2258,6 +2408,7 @@ function theMomentsText(seconds) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
     timeZoneName: "short",
   });
 }

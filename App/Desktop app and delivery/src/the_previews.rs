@@ -51,8 +51,15 @@ use smoozy_queue_history::acting::previews::{
     arrange_one_derivatives_fetch, the_fetches_the_read_forward_queues, ADerivativeWasPublished,
     TheLivePreviewsOneFetch, WhatTheLivePreviewDid,
 };
+use smoozy_job_files::main_output::WhereThePictureCameFrom;
 use smoozy_queue_history::previews::ThePublishedPreview;
-use smoozy_server_protocol::requests::THE_PREVIEW_PUBLISHED_EVENT;
+use smoozy_server_protocol::requests::{
+    the_field_of_item, A_PREVIEW_COPY, HOW_MANY_PREVIEW_COPIES_FIELD, IT_IS_PRESENT,
+    ON_THIS_MACHINE_FIELD, THE_COPYS_PLACE_FIELD, THE_MACHINE_CANNOT_SAY, THE_COPYS_VIEW_LAYER_FIELD,
+    THE_COPY_IS_THE_MAIN_ONE_FIELD, THE_JOB_FIELD, THE_PREVIEW_COPIES_REQUEST,
+    THE_PREVIEW_COPYS_SOURCE_FIELD, THE_PREVIEW_PRODUCTION_FIELD, THE_PREVIEW_PUBLISHED_EVENT,
+    THE_PREVIEW_SET_MADE_EVENT,
+};
 use smoozy_server_protocol::transfers::{Ending, TransferRecord};
 use smoozy_state::identities::{Identity, IdentityKind};
 use smoozy_state::lifetimes::{a_pass, FetchedDerivative, SweepMoment};
@@ -62,7 +69,7 @@ use crate::record::job_records::JobRecords;
 use crate::record::previews::{self, AFrameOfTheSet, WhatThePublicationDid};
 use crate::record::RecordFailure;
 use crate::servers::sessions::ThisServersSessions;
-use crate::servers::the_machines_work::{with_the_record, AnEventRead};
+use crate::servers::the_machines_work::{with_the_record, AnEventRead, AsksTheSupervisor};
 use crate::start::Started;
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -84,10 +91,33 @@ pub fn the_published_are_owed(
     server: &Identity,
     events: &[AnEventRead],
 ) -> Result<usize, RecordFailure> {
+    the_published_are_owed_named(connection, server, events, &WhatTheRecordsSaid::new())
+}
+
+/// **[`the_published_are_owed`], with what the machine said of each
+/// production an event left its names to** ([`the_records_the_events_leave_names_to`]).
+///
+/// **The frame's set event is applied as its main copy's event** (`Queue &
+/// History` P3 as changed 2026-11-10, piece J): it says the same words, so
+/// where the main copy's own event was applied it changes nothing (`State,
+/// identity and recovery` E4), and where that event left its names to a
+/// record that had no ending yet, the set event — journalled after the
+/// ending is written — is what owes the main copy.
+///
+/// **A copy whose event left its names to the record takes them from what
+/// the record said**, matched by main mark and place; **where the record
+/// named no such copy, or the machine holds no such record, it owes
+/// nothing**, as a copy whose name could not be carried never did.
+pub fn the_published_are_owed_named(
+    connection: &rusqlite::Connection,
+    server: &Identity,
+    events: &[AnEventRead],
+    named: &WhatTheRecordsSaid,
+) -> Result<usize, RecordFailure> {
     let records = JobRecords::over(connection);
     let mut applied: Vec<ADerivativeWasPublished> = Vec::new();
     let mut saids: Vec<ThePublishedPreview> = Vec::new();
-    for event in events.iter().filter(|event| event.kind == THE_PREVIEW_PUBLISHED_EVENT) {
+    for event in events.iter().filter(|event| the_kind_names_a_copy(&event.kind)) {
         let Some(job) = event
             .about
             .as_deref()
@@ -95,9 +125,21 @@ pub fn the_published_are_owed(
         else {
             continue;
         };
-        let Some(said) = event.says.as_deref().and_then(ThePublishedPreview::read_back) else {
+        let Some(mut said) = event.says.as_deref().and_then(ThePublishedPreview::read_back) else {
             continue;
         };
+        if said.the_names_are_in_the_record {
+            let Some(copy) = (match named.get(&said.operation) {
+                Some(WhatTheRecordSaid::TheCopies(copies)) => {
+                    copies.iter().find(|copy| copy.main == said.main && copy.place == said.place)
+                }
+                _ => None,
+            }) else {
+                continue;
+            };
+            said.view_layer = copy.view_layer.clone();
+            said.source = copy.source.clone();
+        }
         let Some(derivative) = Identity::read_back(IdentityKind::Operation, &said.operation) else {
             continue;
         };
@@ -149,6 +191,128 @@ pub fn the_published_are_owed(
         }
     }
     Ok(owed)
+}
+
+/// **The two kinds that name a copy**: a copy's own event, and the frame's
+/// set event, which says its main copy's words (`Queue & History` P3).
+fn the_kind_names_a_copy(kind: &str) -> bool {
+    kind == THE_PREVIEW_PUBLISHED_EVENT || kind == THE_PREVIEW_SET_MADE_EVENT
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// `Queue & History` P3 and `Queue & History` P10a, as changed 2026-11-10 (piece J): the names an
+// event left to the production's record
+// ════════════════════════════════════════════════════════════════════════════
+
+/// **One copy, as its production's record names it.**
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ACopyTheRecordNames {
+    pub main: bool,
+    pub place: u32,
+    /// `Queue & History` P10a's name, as its bytes, where the record has one.
+    pub view_layer: Option<Vec<u8>>,
+    /// `Job files and outputs` B31a's source, where the record has one.
+    pub source: Option<WhereThePictureCameFrom>,
+}
+
+/// **What the machine said of one production's record.**
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WhatTheRecordSaid {
+    /// **The copies its record holds** — while the production still stands,
+    /// the main copy the early report wrote there; none in a record written
+    /// before that, whose main copy the set event names after the ending.
+    TheCopies(Vec<ACopyTheRecordNames>),
+    /// **No such production of that job, a record whose own field does not
+    /// read back, or a program that does not answer the reading.** The copies
+    /// its events name owe nothing.
+    NothingToName,
+}
+
+/// What the machine said, by each production's operation text.
+pub type WhatTheRecordsSaid = HashMap<String, WhatTheRecordSaid>;
+
+/// **One ask for each production whose copy's event left its names to the
+/// record** — `Queue & History` P3 and `Queue & History` P10a as changed 2026-11-10, the
+/// Creator's twenty-ninth notes, note 11 (piece J): *a preview production's
+/// copies*, a pure reading, once per production however many of its copies
+/// this read names. **Asked outside the record's lend**, since the record is
+/// never held across a request (`Desktop app and delivery` L4).
+///
+/// **Nothing where an ask got nothing that answers it** — the line, most
+/// often — **or where the machine says it could not read its store**, so the
+/// pass moves no cursor past those events and the next pass asks again
+/// (`State, identity and recovery` E3). **Any other answer is final for this
+/// read**: a production it does not hold, a record whose own field does not
+/// read back, or a reading it does not know owes nothing, rather than
+/// stopping every later event behind it.
+pub fn the_records_the_events_leave_names_to(
+    machine: &mut dyn AsksTheSupervisor,
+    events: &[AnEventRead],
+) -> Option<WhatTheRecordsSaid> {
+    use crate::servers::the_machines_work::a_request;
+    use smoozy_server_protocol::asking_the_supervisor::WhatCameBack;
+    let mut said = WhatTheRecordsSaid::new();
+    for event in events.iter().filter(|event| the_kind_names_a_copy(&event.kind)) {
+        let Some(published) = event.says.as_deref().and_then(ThePublishedPreview::read_back) else {
+            continue;
+        };
+        let Some(job) = event.about.as_deref() else {
+            continue;
+        };
+        if !published.the_names_are_in_the_record || said.contains_key(&published.operation) {
+            continue;
+        }
+        let request = a_request(
+            THE_PREVIEW_COPIES_REQUEST,
+            smoozy_server_protocol::framing::Fields::none()
+                .and(THE_JOB_FIELD, job)
+                .and(THE_PREVIEW_PRODUCTION_FIELD, published.operation.as_str()),
+        )?;
+        let answer = match machine.ask(&request) {
+            WhatCameBack::ItAnswered(answered) => answered,
+            _ => return None,
+        };
+        // **A store the machine could not read is asked again** (Sol's fresh
+        // look): moving past its events would lose the copies for good, and
+        // the machine may read it at the next pass.
+        if answer.fields.text(ON_THIS_MACHINE_FIELD) == Some(THE_MACHINE_CANNOT_SAY) {
+            return None;
+        }
+        let what = if answer.the_request_name_it_says_it_does_not_answer().is_some() {
+            WhatTheRecordSaid::NothingToName
+        } else {
+            the_copies_in(&answer.fields)
+        };
+        said.insert(published.operation.clone(), what);
+    }
+    Some(said)
+}
+
+/// **The answer's copies**, or nothing to name where it says the record is
+/// not there or could not be read, or an item does not read whole.
+fn the_copies_in(fields: &smoozy_server_protocol::framing::Fields) -> WhatTheRecordSaid {
+    if fields.text(ON_THIS_MACHINE_FIELD) != Some(IT_IS_PRESENT) {
+        return WhatTheRecordSaid::NothingToName;
+    }
+    let Some(how_many) = fields.text(HOW_MANY_PREVIEW_COPIES_FIELD).and_then(|n| n.parse::<usize>().ok()) else {
+        return WhatTheRecordSaid::NothingToName;
+    };
+    let mut copies = Vec::with_capacity(how_many.min(64));
+    for at in 0..how_many {
+        let item = |field: &str| the_field_of_item(A_PREVIEW_COPY, at, field);
+        let Some(place) = fields.text(&item(THE_COPYS_PLACE_FIELD)).and_then(|n| n.parse().ok()) else {
+            return WhatTheRecordSaid::NothingToName;
+        };
+        copies.push(ACopyTheRecordNames {
+            main: fields.text(&item(THE_COPY_IS_THE_MAIN_ONE_FIELD)).is_some(),
+            place,
+            view_layer: fields.value(&item(THE_COPYS_VIEW_LAYER_FIELD)).map(<[u8]>::to_vec),
+            source: fields
+                .text(&item(THE_PREVIEW_COPYS_SOURCE_FIELD))
+                .and_then(WhereThePictureCameFrom::read_back),
+        });
+    }
+    WhatTheRecordSaid::TheCopies(copies)
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -806,6 +970,7 @@ mod tests {
                     main: true,
                     place: 0,
                     source: None,
+                    the_names_are_in_the_record: false,
                 }
                 .as_says(),
             ),
@@ -830,6 +995,7 @@ mod tests {
                     main: false,
                     place,
                     source: None,
+                    the_names_are_in_the_record: false,
                 }
                 .as_says(),
             ),
@@ -914,6 +1080,7 @@ mod tests {
                     main: true,
                     place: 0,
                     source: Some(WhereThePictureCameFrom::TheOutputPath),
+                    the_names_are_in_the_record: false,
                 }
                 .as_says(),
             ),
@@ -1257,6 +1424,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         check_record.what_the_note_carried.last_frame_figure = Some(1);

@@ -20,3 +20,5 @@
 
 2026-10-30 — GPT-6 (Codex) — Recorded the Creator’s rule to stop cleanly and file the handover.
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent) — Wave 8c of the free-and-open-source work: cut a working-history clause from the sixth rule about working beside other chats.
+2026-11-15 — Claude Opus 5.5 (Claude Code subagent), a builder — *Where the app is built*: every hosted run is scouted first on the Mac (the Creator's word of that day), its four checks and what the Mac cannot build for the other two systems.
+2026-11-15 — Claude Opus 5.5 (Claude Code subagent), a builder — *Where the app is built*: the scout's second check also reads for a script handed to Python on its command line, and a fifth check draws the pages in Windows' and Linux's faces (after hosted run 43746222478).

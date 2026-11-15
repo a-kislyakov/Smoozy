@@ -174,9 +174,10 @@ pub const THE_STATEMENT_THIS_BUILD_CARRIES: Option<ACarriedStatement> = Some(ACa
 });
 
 /// **The greatest update release sequence published when this build was made
-/// — ~~zero, because none has been~~ 2927, Smoozy 0.3.0's.** *(Struck
-/// 2026-11-08: zero held until Smoozy 0.3.0, the first release carrying
-/// `desktop-update`, was published at 2927.)*
+/// — ~~zero, because none has been~~ ~~2927, Smoozy 0.3.0's~~ 2967, Smoozy
+/// 0.3.1's.** *(Struck 2026-11-08: zero held until Smoozy 0.3.0, the first
+/// release carrying `desktop-update`, was published at 2927. Struck again
+/// 2026-11-15: 2927 held until Smoozy 0.3.1 was published at 2967.)*
 ///
 /// It is the floor a copy that remembers nothing is held to, the way the
 /// server package's built-in pair is (`Server protocol and transfers` B9):
@@ -185,13 +186,20 @@ pub const THE_STATEMENT_THIS_BUILD_CARRIES: Option<ACarriedStatement> = Some(ACa
 /// raised by hand to the last published release's own sequence**, never to a
 /// value derived from the build.
 ///
-/// **It is 2927, raised 2026-11-08, before 0.3.1: the release sequence of
+/// ~~**It is 2927, raised 2026-11-08, before 0.3.1: the release sequence of
 /// Smoozy 0.3.0's published `desktop-update`** (`v0.3.0`, from `3413d32d2`),
 /// read off that file at the latest address with `smoozy-release check`, which
-/// verified it through the desktop's own reading at release sequence 2927.
+/// verified it through the desktop's own reading at release sequence 2927.~~
+/// *(Struck 2026-11-15: 2927 was the last published update file's sequence
+/// until Smoozy 0.3.1 was published at 2967.)*
+///
+/// **It is 2967, raised 2026-11-15, before 0.4.0: the release sequence of
+/// Smoozy 0.3.1's published `desktop-update`** (`v0.3.1`, from `61a55174c`),
+/// read off that file at the latest address with `smoozy-release check`, which
+/// verified it through the desktop's own reading at release sequence 2967.
 /// Raised again before the next release's green run, to the last published
 /// update file's own sequence.
-pub const THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE: u64 = 2927;
+pub const THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE: u64 = 2967;
 
 /// One recovery key, as the trust set uses it.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -21,3 +21,7 @@
 2026-11-01 — Claude Opus 5.5 (Claude Code), the build runner, outside any round — step 5a's email line: the working repository now uses the stand-in address too, on the Creator's yes, after GitHub refused a push carrying the personal address. No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the key-ceremony agent holding `Audits/Build/Step 11/Brief — making the update keys.md`, step 7, outside any round — step 4's `--update-row` line is now required for all five rows, the master update keys being in the build; step 3a gains the desktop-update floor (`THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE`): 0 through the first release that carries `desktop-update`, raised from the release after it to the last update-carrying release's own sequence. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Carried the published-release retention rule into the release brief.
+2026-11-15 — Claude Opus 5.5 (Claude Code subagent), a builder — step 1a, *Scout before any hosted run*, on the Creator's word of that day: the scout script runs on the commit a hosted run will build, and anything but a clean ending stops the run. No auditor has seen it.
+2026-11-15 — Claude Opus 5.5 (Claude Code subagent), a builder — step 1a: the scout's five checks, with the command-line reading and the pages drawn in the other systems' faces (after hosted run 43746222478).

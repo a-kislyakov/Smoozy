@@ -132,3 +132,43 @@ X1a, 2026-10-27, Claude Opus 5.5, the nineteenth notes' note 7 design pass. No a
 
 2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.
 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the output window, the re-run mark, and the dependency check.md`, outside any round — E8: Smoozy's own lines not shown; N9a: only on a re-run. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 8, the Queue's dot and the first-frame buttons.md`, outside any round — new L19a, the pair's stop; H4, H8, H9 and H11 carried. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece N1, a frame's pictures from the whole frame.md`, outside any round — P1a whole frames, P1b's follow-up, P3's early main copy and set event (twenty-ninth notes, note 11). No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece N5a, the diary's lines for a reading that stalls.md`, outside any round — §17's gap lines for a stalled reading; the queue-reading bullet carried. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece J, events that fit the journal.md`, outside any round — P3: an event that would not fit E6a's budget leaves the names to the production's record, the desktop reads them once per production and applies the set event as the main copy's; P10a widened to match; L22: the label's rendering cut to fit as written (twenty-ninth notes, note 11). No auditor has seen it.
+
+2026-11-10 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 1, the server's queue after a death or a crash.md`, outside any round — D14a: three acts written in more than one step are finished from the records they left, and a cancel reads the operation records first. No auditor has seen this text.
+
+2026-11-10 — Claude Fable 5.2 (Claude Code subagent), the same sitting as the line above, after Sol's read-only fresh look — D14a: an ending already told is not told again; which hold is the attempt's own; a job released from a hold at its start. No auditor has seen this text.
+
+2026-11-10 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's rulings at the foot of `Audits/Build/Fable review/Sitting 1 — what landed.md` (sitting 1's follow-up), outside any round — A1: the queue reading says where the line is stopped. D14a: the job record is written ended last; the window is closed. No auditor has seen this text.
+
+- 2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the runner's rulings at the foot of `Audits/Build/Fable review/Sitting 5 — what landed.md`, outside any round — §10, the paragraph after N3, gains a dated sentence: the note's ending carries the file names of the paths the remap left unchanged. No auditor has seen this text.
+- 2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's ruling 3 at the foot of `Audits/Build/Fable review/The live pass of the night's fixes — what happened.md` (the full disk), outside any round — A1: the queue reading names the job the line could not start for want of room. No auditor has seen this text.
+
+2026-11-11 — GPT-6.1 (Codex) — Defined the running-again flag from the current render attempt.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code sub-agent) — R5: how long a rendering job has rendered, the four questions batch 6.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, sixth part: N15's build detail: a phone's Resume carries the carry-on mark. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — A5: the offer is composed again by each queue reading while connected; a decline covers the jobs it was shown. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — A5: a job the machine made from a job the local record names is taken in, not offered. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — the paragraph after N3: the missing file names kept at record version 63 and drawn on History's entry. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — B6's addition, *Finishing*. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list, Sol's points.md`, outside any round — B6's addition: the frame in hand. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Kept local jobs unchanged when an endpoint reaches a different installation.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — added C10a (Rough share 1, 42).
+2026-11-14 — Claude Opus 5.5 — A1 names a setup that stopped part-way (Rough share 4, 310).
+2026-11-14 — Claude Opus 5.5 — H7a: Continue anyway on a first-frame check that writes nothing sends the full range (the leftovers of the Rough what-if answers, 459).
+2026-11-14 — Claude Opus 5.5 — A1 carries Telegram's trouble on the reading (when Telegram refuses).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: one quoted sentence reworded (*Smoozy closed during submission.*).
+2026-11-15 — Claude Opus 5.5 — L12a: *stopping* stays until the ending is read (what the what-if live pass found).

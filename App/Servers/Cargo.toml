@@ -30,7 +30,7 @@ smoozy-server-setup-machine = { path = "../Server Setup — machine" }
 tokio = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time", "test-util"] }
 
 # The far end of the integration tests: a real SSH server on the loopback
 # address, so every ordering clause is observed rather than described. Nothing

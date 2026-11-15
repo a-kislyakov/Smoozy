@@ -410,6 +410,10 @@ pub struct TheIdentityReader {
     /// **What the server read at each of this reader's own reads** — Q19's
     /// re-take, watched from inside.
     pub value_at_each_read: Vec<Option<ObservedValue>>,
+    /// **Q19b: the reads taken each time this reader was told the fourth
+    /// branch stood again**, and what it answers when told.
+    pub told_it_stays_silent_after: Vec<usize>,
+    pub does_something_when_told: bool,
 }
 
 impl TheInstallationIdentityRead<AConnection> for TheIdentityReader {
@@ -425,6 +429,11 @@ impl TheInstallationIdentityRead<AConnection> for TheIdentityReader {
             check,
             identity_on_the_machine: self.identity.clone(),
         }
+    }
+
+    async fn the_fourth_branch_stands_again(&mut self, _channel: &mut AConnection) -> bool {
+        self.told_it_stays_silent_after.push(self.reads_taken);
+        self.does_something_when_told
     }
 }
 
@@ -539,6 +548,8 @@ impl TheDesk {
                     reads_taken: 0,
                     standing: standing.clone(),
                     value_at_each_read: Vec::new(),
+                    told_it_stays_silent_after: Vec::new(),
+                    does_something_when_told: false,
                 },
                 publishes: ThePublisher {
                     observed_values: Vec::new(),

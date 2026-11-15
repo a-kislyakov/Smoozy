@@ -48,6 +48,27 @@ pub fn the_frames_owed_a_preview(
         .collect()
 }
 
+/// **P1a's whole frame: the newest frame of the attempt's list whose files
+/// are all written** — the newest frame saved, where the frame in hand has
+/// moved past it, and otherwise the frame before it in the list. Blender
+/// prints one save announcement per file, so a frame still in hand may have
+/// only some of its files; it is whole once the next frame has begun, or at
+/// P1b's ending. Added 2026-11-10, the Creator's twenty-ninth notes, note 11
+/// (the dig's piece 1). A frame in hand the list does not name — announced
+/// and then skipped — has still moved past the newest saved.
+pub fn the_newest_whole_frame(
+    the_attempts_list_in_order: &[i64],
+    newest_frame_saved: Option<i64>,
+    the_frame_in_hand: Option<i64>,
+) -> Option<i64> {
+    let newest = newest_frame_saved?;
+    if the_frame_in_hand != Some(newest) {
+        return Some(newest);
+    }
+    let at = the_attempts_list_in_order.iter().position(|frame| *frame == newest)?;
+    at.checked_sub(1).map(|before| the_attempts_list_in_order[before])
+}
+
 /// **P3: what the event a derivative's production is journalled under says**
 /// — the frame, the operation whose record holds the production, and P10a's
 /// view layer name where `Job files and outputs` B31a recorded one, as the
@@ -59,7 +80,13 @@ pub fn the_frames_owed_a_preview(
 /// the name would carry the event past `State, identity and recovery` E6a's
 /// budget, the event names the record instead** — the operation — and the
 /// name is read from there, never cut short.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+///
+/// **The budget is the written entry's**, measured by
+/// `smoozy_runtime::written_form::the_measure_of_an_entry::words_of_this_kind_fit` — corrected
+/// 2026-11-10, the Creator's twenty-ninth notes, note 11 (piece J). Until then
+/// the words were held to a figure counted before the entry was written, and
+/// on a live pass eleven of twelve came out too long and were refused.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ThePublishedPreview {
     pub frame: i64,
     /// The preview operation whose record holds the derivative's own record.
@@ -88,6 +115,23 @@ pub struct ThePublishedPreview {
     /// from before reads with none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<smoozy_job_files_machine::main_output::WhereThePictureCameFrom>,
+    /// **The copy's View Layer name and its source are left to the
+    /// production's record** — `State, identity and recovery` E6a's *names
+    /// the record that holds the detail rather than copying it in*: set where
+    /// carrying them would take the event past the budget, and then neither is
+    /// carried. The record is [`Self::operation`]'s, and the copy in it is the
+    /// one at [`Self::place`], main or not. **A reader reads both off that
+    /// record** (`Queue & History` P3 and `Queue & History` P10a, as changed 2026-11-10, the
+    /// Creator's twenty-ninth notes, note 11, piece J). **Written only where
+    /// true**, so every other copy's words are what they were; words from
+    /// before read as false, and a desk from before reads the copy as one
+    /// whose name was left out, which it always could.
+    #[serde(default, skip_serializing_if = "it_is_false", rename = "in_record")]
+    pub the_names_are_in_the_record: bool,
+}
+
+fn it_is_false(value: &bool) -> bool {
+    !*value
 }
 
 fn an_event_from_before_names_the_main_copy() -> bool {
@@ -102,28 +146,47 @@ fn it_is_nought(place: &u32) -> bool {
     *place == 0
 }
 
-/// **The part of `State, identity and recovery` E6a's 512-byte budget the
-/// event's words may take**, leaving
-/// the rest for its identity, sequence, moment, kind and subject.
-pub const THE_MOST_THE_WORDS_MAY_TAKE: usize = 300;
+// **A figure of 300 for the words stood here until 2026-11-10 (piece J)**,
+// counted before the entry was written. It was no bound on the entry, whose
+// words are written again escaped, and the words are now measured as the
+// entry is written ([`ThePublishedPreview::as_says`]).
+
+/// **The two kinds these words are journalled under**, the longer last: a
+/// copy's own event, and the frame's set event that says what its main
+/// copy's says (`Queue & History` P3). Words that fit the longer fit both.
+const THE_KINDS_THESE_WORDS_GO_UNDER: [&str; 2] = [
+    smoozy_framing::requests::THE_PREVIEW_PUBLISHED_EVENT,
+    smoozy_framing::requests::THE_PREVIEW_SET_MADE_EVENT,
+];
+
+fn they_fit(words: &str) -> bool {
+    THE_KINDS_THESE_WORDS_GO_UNDER.iter().all(|kind| {
+        smoozy_runtime::written_form::the_measure_of_an_entry::words_of_this_kind_fit(
+            kind,
+            Some(smoozy_state::identities::IdentityKind::Job),
+            words,
+        )
+    })
+}
 
 impl ThePublishedPreview {
-    /// The event's words. **A name that would carry them past the budget is
-    /// left to the record** — a view layer's, or a File Output node's in the
-    /// source; the source's kind is never what makes them too long, so an
-    /// output path is always said.
+    /// The event's words. **Where the View Layer's name or the source would
+    /// carry the entry past `State, identity and recovery` E6a's budget as it
+    /// is written, both are left to the record** and the words say so
+    /// ([`Self::the_names_are_in_the_record`]): the frame, the production, the
+    /// main mark and the place, which every reader keys a copy by. Measured at
+    /// the longer of the two kinds these words go under, at the latest moment
+    /// and the largest sequence a journal gives, so what fits here fits at
+    /// the append.
     pub fn as_says(&self) -> String {
         let whole = serde_json::to_string(self).expect("the words always render");
-        if whole.len() <= THE_MOST_THE_WORDS_MAY_TAKE {
+        if they_fit(&whole) {
             return whole;
         }
-        use smoozy_job_files_machine::main_output::WhereThePictureCameFrom;
         serde_json::to_string(&ThePublishedPreview {
             view_layer: None,
-            source: self
-                .source
-                .clone()
-                .filter(|source| matches!(source, WhereThePictureCameFrom::TheOutputPath)),
+            source: None,
+            the_names_are_in_the_record: true,
             ..self.clone()
         })
         .expect("the words always render")
@@ -240,9 +303,11 @@ mod tests {
             main: true,
             place: 0,
             source: None,
+            the_names_are_in_the_record: false,
         };
         let says = named.as_says();
         assert!(says.contains("\"frame\":147"), "{says}");
+        assert!(!says.contains("in_record"), "a name that fits is carried: {says}");
         // **The main copy's words are what they were** (the Creator's seventh
         // notes, note 4), and an event from before reads as the main copy.
         assert!(!says.contains("main") && !says.contains("place"), "{says}");
@@ -256,8 +321,10 @@ mod tests {
             ..named
         };
         let says = long.as_says();
-        assert!(says.len() <= THE_MOST_THE_WORDS_MAY_TAKE);
-        assert_eq!(ThePublishedPreview::read_back(&says).and_then(|read| read.view_layer), None);
+        assert!(they_fit(&says));
+        let read = ThePublishedPreview::read_back(&says).expect("it reads");
+        assert_eq!(read.view_layer, None);
+        assert!(read.the_names_are_in_the_record, "the words say the record holds the name: {says}");
         assert_eq!(ThePublishedPreview::read_back("frame 1"), None);
     }
 
@@ -277,6 +344,7 @@ mod tests {
             main: true,
             place: 0,
             source: Some(WhereThePictureCameFrom::TheOutputPath),
+            the_names_are_in_the_record: false,
         };
         let says = unnamed.as_says();
         assert!(says.contains(r#""source":"output_path""#), "{says}");
@@ -298,8 +366,10 @@ mod tests {
             ..unnamed
         };
         let says = long.as_says();
-        assert!(says.len() <= THE_MOST_THE_WORDS_MAY_TAKE);
-        assert_eq!(ThePublishedPreview::read_back(&says).and_then(|read| read.source), None);
+        assert!(they_fit(&says));
+        let read = ThePublishedPreview::read_back(&says).expect("it reads");
+        assert_eq!(read.source, None);
+        assert!(read.the_names_are_in_the_record, "{says}");
     }
 
     #[test]

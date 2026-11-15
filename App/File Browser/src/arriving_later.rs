@@ -266,10 +266,11 @@ mod tests {
             out.push((name, without_the_header_list(&text)));
         }
         // Twenty from 2026-10-31, when `picture.rs` brought L29 (the
-        // Creator's seventeenth notes, note 11).
+        // Creator's seventeenth notes, note 11). Twenty-one from 2026-11-12,
+        // when `elevated.rs` brought P6b (the admin password in Files).
         assert_eq!(
             out.len(),
-            20,
+            21,
             "the working files of this crate were not all found"
         );
         out
@@ -440,10 +441,16 @@ mod tests {
         // reached this document; 143 from 2026-10-02, when §1.6 gained L19 to
         // L23 for *Show hidden files* (Row 520); 148 from 2026-10-30, when §1.7
         // gained L24 to L28 for a folder's size; 149 from 2026-10-31, when §1.8
-        // gained L29 for a picture shown in Files. A change to the plan that adds
-        // a clause fails here, which is what sends whoever made it to the list
-        // above.
-        assert_eq!(the_clauses_the_plan_defines().len(), 149);
+        // gained L29 for a picture shown in Files; 150 from 2026-11-12, when
+        // §2.2 gained P6b for how the elevated acts carry their paths; 153
+        // from 2026-11-14, when the leftovers of the Rough what-if answers gave
+        // §7 M3b (a system folder named in the delete box), M6b (a full disk
+        // named after a move or copy refused part-way) and M8a (Skip existing
+        // on a colliding copy) — all three built by that sitting, in the
+        // desktop's Files and this crate's `managing`. A change
+        // to the plan that adds a clause fails here, which is what sends
+        // whoever made it to the list above.
+        assert_eq!(the_clauses_the_plan_defines().len(), 153);
     }
 
     #[test]

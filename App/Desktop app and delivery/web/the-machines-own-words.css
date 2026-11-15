@@ -95,3 +95,12 @@
 /* An empty holder takes no room — the failure holder's band, the same shape
  * (the Creator's twenty-seventh notes). */
 .machines-own-words:empty { display: none; }
+
+/* **The only-part-was-kept notice stays in sight** while the panel opens at
+   the newest line: it is held at the top of the scrolling words (the UI at
+   every size, B-20). */
+.words-body > .lstate {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}

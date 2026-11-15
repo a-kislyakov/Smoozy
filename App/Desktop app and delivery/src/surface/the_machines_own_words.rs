@@ -903,6 +903,11 @@ mod tests {
             folder.join("the-machines-own-words.js"),
         )
         .expect("the page is copied");
+        std::fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("web/the-focus-moves.js"),
+            folder.join("the-focus-moves.js"),
+        )
+        .expect("the one way the focus moves");
         let (output, errors, added) = the_words_the_harness_hands_over();
         std::fs::write(
             folder.join("words.json"),
@@ -1069,8 +1074,11 @@ console.log(JSON.stringify({
             server_output[0].contains("copy: output.copy,"),
             "*Server output* does not hand the panel its *Copy*"
         );
-        the_servers_words.extend(set_up);
-        assert!(the_servers_words.len() >= 3, "the panels behind *What the server said* were not found");
+        // **From 2026-11-09 the Set up card opens no *What the server said*
+        // of its own** (the Creator's twenty-eighth notes, note 1), so the
+        // server row's is the one left; it was three with the card's two.
+        assert!(set_up.is_empty(), "Set up still opens a panel of its own: {set_up:?}");
+        assert!(!the_servers_words.is_empty(), "the panels behind *What the server said* were not found");
         for call in the_servers_words {
             assert!(
                 !call.contains("copy:"),
@@ -1304,6 +1312,7 @@ console.log(JSON.stringify({
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for name in ["the-machines-own-words.js", "the-drawing.css", "the-machines-own-words.css"] {
             std::fs::copy(web.join(name), folder.join(name)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_STAND_INS {
             std::fs::write(folder.join(name), text).expect("a stand-in is written");

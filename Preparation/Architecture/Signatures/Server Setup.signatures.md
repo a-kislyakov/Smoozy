@@ -141,3 +141,54 @@
 2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.
 
 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the token, the Install's reason, and two Set up words.md`, outside any round — §12: a failed Telegram placement writes its act line. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 2, Server output keeps everything.md`, outside any round — Y7a: the words kept until Smoozy disconnects, act by act; Y7e: every raw word a failure carries kept with the act's words, Smoozy's own labelled. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — a setup press during an update, and the flaky layers test.md`, outside any round — Y9a item 11: the line waits behind Smoozy's own update of its program on the server, and its first act begins when the update ends. No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 3, replacing programs on a server.md`, outside any round — S7: a dated paragraph, *how the repair is sent*: the repair operation after apt's refusal over an interrupted dpkg, and the step once more. No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), the same sitting as the line above, after Sol's read-only fresh look — S7, *how the repair is sent*: a validate that fails inside the repair ends it. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's rulings at the foot of `Audits/Build/Fable review/The live pass of the night's fixes — what happened.md` (ruling 1), outside any round — S7: a dated paragraph, the repair after apt's *Unmet dependencies*, and the second command amended to carry `-y`. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), the same work as the line above, after Sol's read-only fresh look — S7: where one refusal holds both sentences, the interrupted one decides. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 1, connecting and setting up.md`, outside any round — R2: the tuple and the release's admission come before the hand-over, so an unsupported processor is refused with nothing touched; R1 item 8 and G2: Telegram's material follows a ready action that reached *done* as G2's own run, and its failure is held as G2a holds an *Install*'s. The build runner's rulings, the four questions, scouts 3.3 and 1.3. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: Build detail under S6.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), builder of the Fable review's sitting 6 follow-up, outside any round — E3, E4 and M3: the password once, to the step itself, under `sudo -k`; no validate; Sources entry *`sudo -k`, for E3 and M3*. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent) — The double-check ideas, Sol's findings 3 and 4: Y9a item 7, the ending and the letting go are one act; E2, an answer that comes after its run ended. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the live pass found.md`, outside any round — S7: a driver act that stops on a file two packages claim is followed by apt's repair with dpkg's overwrite option, and sent once more. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the admin fresh look, logs in Telegram, and the empty screen.md`, outside any round — R7 and E7: the hand-over is sent only where it is owed, and reads what stands at the root's name before it changes anything. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding the same brief, outside any round — E2: a password is kept only once it worked, and a kept one refused in other words is asked for again; E5: the connected period's end takes the password. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding the same brief, outside any round — Y8: whether an admin step on the server ends with its channel or connection is written as unresolved, with a live-pass list. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — S7: dpkg's sentence over a file two packages claim is looked for on the standard output as well as the complaint stream, since apt prints dpkg's words there. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — S4 item 5: the ready action's retained run is taken over after a restart of the app. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — R6a and §13 item 34. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the Telegram fixes, Sol's second check.md`, outside any round — B2: every address of the listing tried in turn, and the failed read's reason kept in the diary. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list, Sol's points.md`, outside any round — R6a changed (items 1 to 4), R1 item 9, §13 item 34; Sources §R6a. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the Telegram fixes, Sol's third check.md` with the runner's added fix, outside any round — R6a item 4: each mark written beside, read back and renamed into place, the saved mark last; an empty saved mark reads as none. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep of the app and the website: quoted screen words only, as listed in `Audits/Build/The word sweep, the app and the website — what landed.md`. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Prevented setup from replacing an incompatible program over unreadable jobs.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — corrected the batch 2 failed-reads and unpacking section.
+2026-11-14 — Claude Opus 5.5 — added the Creator's batch 1 rulings (the press, F1b's way on).
+2026-11-14 — Claude Opus 5.5 — added Y9a item 12 (Rough share 1, 18 and 20).
+2026-11-14 — Claude Opus 5.5 — added R6b (the Creator's ruling on 164, Rough share 2).
+2026-11-14 — Claude Opus 5.5 — added E2b and E4a (Rough share 2, 136 and 137).
+2026-11-14 — Claude Opus 5.5 — added S7d (Rough share 2, 139).
+2026-11-14 — Claude Opus 5.5 — added T5a (Rough share 2, 142 and 143).
+2026-11-14 — Claude Opus 5.5 — added R7c (Rough share 2, 120).
+2026-11-14 — Claude Opus 5.5 — B6a narrowed: a finished release already on the machine is not offered (Rough share 4, the runner's ruling).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: S7d's quoted sentence reworded.

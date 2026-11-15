@@ -36,3 +36,4 @@
 - 2026-08-25 — Claude Opus 5 (Claude Code), design agent — read every marker this document hands the Design stage and closed them. Those already answered now name where the answer lives, rather than being deleted, so the section stays the index it was. **No promise moved and nothing was added.** Decisions-record entry added under Rule 7; no auditor has seen it
 
 - 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — line 161 names the ending *abandoned* where it said *given up* (the ending's display word), with the inline words-changed note. Meaning unchanged. No auditor has seen it. Appended by the build runner.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.

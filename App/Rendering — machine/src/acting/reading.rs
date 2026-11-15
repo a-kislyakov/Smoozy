@@ -197,6 +197,19 @@ pub struct TheReadingOnTheMachine;
 
 impl TakesTheReading for TheReadingOnTheMachine {
     fn take(&self, taking: &TheReadingToTake<'_>) -> Result<ThePrintedReading, String> {
+        take_the_reading_telling(taking, &|_| {})
+    }
+}
+
+/// **R1's one invocation on the machine, telling `started` the process
+/// identifier of the Blender it started, the moment it started it** — so the
+/// render worker can have it recorded for a stop (K4's paragraph of
+/// 2026-11-11). The run itself is unchanged.
+pub fn take_the_reading_telling(
+    taking: &TheReadingToTake<'_>,
+    started_it: &dyn Fn(u32),
+) -> Result<ThePrintedReading, String> {
+    {
         let invocation = TheInvocation {
             the_blender_build_path: taking.the_blender_build_path.to_string(),
             // **R4a: the path crosses as bytes and is never decoded to be
@@ -239,16 +252,63 @@ impl TakesTheReading for TheReadingOnTheMachine {
                     taking.the_blender_build_path
                 )
             })?;
-        let mut answered = Vec::new();
-        started
+        started_it(started.id());
+        // **`Rented-server runtime` M5a's sentence of 2026-11-12: the
+        // Blender's ending is taken first, and its output is read ten seconds
+        // more.** Until then the output was read to its end before the
+        // Blender was looked at, so a process it left behind, holding that
+        // output, kept the reading from ending — and a stop that had ended
+        // the reading's Blender (K4's paragraph of 2026-11-11) ended nothing
+        // the worker was waiting on. The output is read on a thread of its
+        // own, which ends when every process holding it has let go.
+        let mut output = started
             .stdout
             .take()
-            .ok_or_else(|| "the reading's own output was not held".to_string())?
-            .read_to_end(&mut answered)
-            .map_err(|why| format!("the reading's own output could not be read: {why}"))?;
+            .ok_or_else(|| "the reading's own output was not held".to_string())?;
+        // **`None` once the reading has stopped waiting**: the thread then
+        // keeps nothing more and ends at its next read, which lets go of the
+        // output (Sol's look at this fix: it went on reading into memory for
+        // as long as the left-behind process printed).
+        let read_so_far = std::sync::Arc::new(std::sync::Mutex::new(Some(Vec::new())));
+        let (says, hears) = std::sync::mpsc::channel::<Result<(), String>>();
+        {
+            let read_so_far = std::sync::Arc::clone(&read_so_far);
+            std::thread::spawn(move || {
+                let mut some = [0_u8; 64 * 1024];
+                let ended = loop {
+                    match output.read(&mut some) {
+                        Ok(0) => break Ok(()),
+                        Ok(read) => match read_so_far.lock().as_deref_mut() {
+                            Ok(Some(so_far)) => so_far.extend_from_slice(&some[..read]),
+                            _ => break Ok(()),
+                        },
+                        Err(why) if why.kind() == std::io::ErrorKind::Interrupted => {}
+                        Err(why) => break Err(why.to_string()),
+                    }
+                };
+                let _ = says.send(ended);
+            });
+        }
         // **The ending is reaped rather than left**, so the reading leaves no
-        // process behind whatever it answers.
+        // process behind whatever it answers. A reap the system refused says
+        // nothing about the Blender, and the output is then read to its end.
         let ended = started.wait().ok();
+        let the_output_ended = match ended {
+            Some(_) => hears
+                .recv_timeout(HOW_LONG_THE_OUTPUT_IS_READ_AFTER_THE_READINGS_BLENDER_HAS_ENDED)
+                .map_err(|_| {
+                    format!(
+                        "output read timed out {} seconds after Blender exited",
+                        HOW_LONG_THE_OUTPUT_IS_READ_AFTER_THE_READINGS_BLENDER_HAS_ENDED.as_secs()
+                    )
+                })
+                .and_then(|read| read),
+            None => hears
+                .recv()
+                .map_err(|_| "the reading's own output could not be read".to_string())
+                .and_then(|read| read),
+        };
+        let answered = read_so_far.lock().ok().and_then(|mut so_far| so_far.take()).unwrap_or_default();
         // **R18: the throwaway folder goes with the run.**
         remove_the_throwaway_folder(&throwaway);
         // **`Render Settings` Q8's start sentinel, said in the reason**: a
@@ -258,7 +318,7 @@ impl TakesTheReading for TheReadingOnTheMachine {
         let started = smoozy_job_files_machine::reading::the_reading_started_in(&answered);
         the_printed_reading_in(&answered).map_err(|why| {
             format!(
-                "the reading printed no document ({why:?}); {}; the run ended at {}",
+                "the reading printed no document ({why:?}); {}; the run ended at {}{}",
                 if started {
                     "the reading's script started and did not finish"
                 } else {
@@ -267,6 +327,13 @@ impl TakesTheReading for TheReadingOnTheMachine {
                 match ended.and_then(|ended| ended.code()) {
                     Some(status) => status.to_string(),
                     None => "no status".to_string(),
+                },
+                // **What kept the output from being read whole, where
+                // something did** (`Rented-server runtime` M5a's sentence
+                // of 2026-11-12).
+                match &the_output_ended {
+                    Ok(()) => String::new(),
+                    Err(why) => format!("; {why}"),
                 }
             )
         })
@@ -281,10 +348,109 @@ impl TakesTheReading for TheReadingOnTheMachine {
 /// anything this file does.
 pub const THE_READING_LAUNCHES_THE_WAY_THE_RENDER_LAUNCHES: bool = true;
 
+/// **`Rented-server runtime` M5a, carried to the reading on 2026-11-12: how
+/// long the reading goes on reading its Blender's output after that Blender
+/// has ended.** The worker's own figure for a render's streams; ten seconds.
+pub const HOW_LONG_THE_OUTPUT_IS_READ_AFTER_THE_READINGS_BLENDER_HAS_ENDED: std::time::Duration =
+    std::time::Duration::from_secs(10);
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::spellings::THE_BARE_DOUBLE_DASH;
+
+    /// **`Rented-server runtime` M5a's sentence of 2026-11-12 (the
+    /// double-check ideas, idea 5): a reading whose Blender has ended is
+    /// finished though something else holds its output.** A stand-in for
+    /// Blender leaves a process behind that holds its output, and ends — as a
+    /// reading's Blender does when a stop ends it outright. The reading comes
+    /// back about ten seconds later and says the output was still held.
+    /// **It failed before the fix**: the reading read that output to its end,
+    /// so it did not come back while the left-behind process lived, and a
+    /// stopped reading could not end.
+    #[cfg(unix)]
+    #[test]
+    fn double_check_5_a_reading_whose_blender_has_ended_comes_back_though_its_output_is_held() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("smoozy-the-reading-held-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("the folder");
+        let build = root.join("a-stand-in");
+        let left_behind = root.join("left-behind");
+        std::fs::write(
+            &build,
+            format!("#!/bin/sh\nsleep 90 &\necho $! > '{}'\necho started\nexit 0\n", left_behind.display()),
+        )
+        .expect("the stand-in");
+        std::fs::set_permissions(&build, std::fs::Permissions::from_mode(0o755)).expect("runnable");
+        let script = root.join("reading.py").display().to_string();
+        let build = build.display().to_string();
+        let (says, hears) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let answered = take_the_reading_telling(
+                &TheReadingToTake {
+                    the_blender_build_path: &build,
+                    the_blend_path_on_the_machine: "/a.blend",
+                    the_version_it_will_render_by: TheVersionInHand::of(5, 2),
+                    the_frames_the_job_covers: &[1],
+                    the_jobs_scene: None,
+                    the_scripts_path: &script,
+                    the_check_is_written_as_a_picture: false,
+                    the_check_is_marked: false,
+                },
+                &|_| {},
+            );
+            let _ = says.send(answered.map(|_| ()));
+        });
+        let came_back = hears.recv_timeout(HOW_LONG_THE_OUTPUT_IS_READ_AFTER_THE_READINGS_BLENDER_HAS_ENDED * 3);
+        // The left-behind process is ended whatever the reading did.
+        if let Ok(process) = std::fs::read_to_string(&left_behind) {
+            let _ = Command::new("kill").arg(process.trim()).status();
+        }
+        let _ = std::fs::remove_dir_all(&root);
+        let why = came_back
+            .expect("the reading's Blender ended at once; the reading comes back though its output is still held open")
+            .expect_err("a stand-in prints no document");
+        assert!(why.contains("output read timed out"), "the reason says the output read timed out: {why}");
+    }
+
+    /// **K4's paragraph of 2026-11-11: the reading tells which process its
+    /// Blender is, the moment it starts it.** A stand-in that prints no
+    /// document stands where the build's path goes; the reading fails, as it
+    /// must, and the process was told all the same. The Fable review's fifth
+    /// sitting, fault 4.
+    #[cfg(unix)]
+    #[test]
+    fn the_reading_tells_its_blenders_process_as_it_starts_it() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!(
+            "smoozy-the-reading-tells-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&root).expect("the folder");
+        let build = root.join("a-stand-in");
+        std::fs::write(&build, "#!/bin/sh\necho $$\nexit 0\n").expect("the stand-in");
+        std::fs::set_permissions(&build, std::fs::Permissions::from_mode(0o755)).expect("runnable");
+        let script = root.join("reading.py").display().to_string();
+        let told = std::cell::Cell::new(None);
+        let answered = take_the_reading_telling(
+            &TheReadingToTake {
+                the_blender_build_path: &build.display().to_string(),
+                the_blend_path_on_the_machine: "/a.blend",
+                the_version_it_will_render_by: TheVersionInHand::of(5, 2),
+                the_frames_the_job_covers: &[1],
+                the_jobs_scene: None,
+                the_scripts_path: &script,
+                the_check_is_written_as_a_picture: false,
+                the_check_is_marked: false,
+            },
+            &|process| told.set(Some(process)),
+        );
+        assert!(answered.is_err(), "a stand-in prints no document");
+        assert!(told.get().is_some_and(|process| process > 0), "the process was told");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     /// **The line is five things and the file sits before the script, with
     /// L8b's script right before the file** (`Job files and outputs` R18, since

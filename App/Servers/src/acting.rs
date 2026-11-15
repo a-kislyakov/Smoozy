@@ -139,6 +139,16 @@ pub struct TheServerBeingConnectedTo<'a> {
 /// which is [`crate::sequence`] and [`crate::hardware`].
 pub trait TheInstallationIdentityRead<C> {
     fn read(&mut self, channel: &mut C) -> impl Future<Output = TheIdentityRead> + Send;
+
+    /// **Q19b: the re-take's first re-read found the fourth branch again**, and
+    /// the reader is told once on this connection, over the connection step 5
+    /// holds — so `Desktop app and delivery` V3a's repair can be sent from the
+    /// one place that knows which case it met. **Answers whether something was
+    /// done**, and then the next read is taken at once. Nothing by default.
+    /// Added 2026-11-14, the automatic repair.
+    fn the_fourth_branch_stands_again(&mut self, _channel: &mut C) -> impl Future<Output = bool> + Send {
+        async { false }
+    }
 }
 
 /// What step 5 came back with.

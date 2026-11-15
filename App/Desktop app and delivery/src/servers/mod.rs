@@ -83,4 +83,5 @@ pub mod the_endings_posted;
 pub mod the_idle_recheck;
 pub mod the_machines_work;
 pub mod the_queues_own_acts;
+pub mod the_repair;
 pub mod the_words_kept;

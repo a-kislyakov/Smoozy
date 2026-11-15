@@ -48,6 +48,7 @@ import { aScreenIsRegistered, theCurrentPlaceIs, KEYS } from "./the-rail.js";
 import { theFailureShape, EXPANDED } from "./the-failure-shape.js";
 import { theMarkOnAControl, theMarkComesOffAControl } from "./the-underway-shape.js";
 import { theValueIsDrawnInto } from "./the-value-drawn.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 const shell = window.__TAURI__;
 
@@ -348,7 +349,15 @@ function theScreenIsDrawn(said) {
     const row = theRowIsDrawn(said, at, isPicking);
     if (row) screen.list.appendChild(row.root);
   }
-  if (chosen && rows.has(chosen)) rows.get(chosen).root.focus();
+  // **An empty list says so** (the UI at every size, B-28): it was blank
+  // under the header, where All servers says *No servers yet*.
+  if (!many) {
+    const none = document.createElement("p");
+    none.className = "ky-none";
+    none.textContent = said.noKeysYet || "";
+    screen.list.appendChild(none);
+  }
+  if (chosen && rows.has(chosen)) theFocusMovesTo(rows.get(chosen).root);
 }
 
 function theRowIsDrawn(said, at, isPicking) {
@@ -536,12 +545,23 @@ function theUsedByLine(said, at) {
     }
     const badge = said[field("row", at, "UsedBy", which, "Badge")];
     const called = said[field("row", at, "UsedBy", which)];
-    if (badge) line.appendChild(theBadge(badge));
-    const named = document.createElement("span");
-    theValueIsDrawnInto(named, called || "");
-    line.appendChild(named);
+    line.appendChild(aServerNamed(badge, called));
   }
   return line;
+}
+
+/// **A server's badge and its name are one piece**, so a line that wraps never
+/// leaves a badge at the end of one line and its name at the start of the next,
+/// and a long name breaks inside its own piece (the UI at every size, B-24 and
+/// B-27).
+function aServerNamed(badge, called) {
+  const one = document.createElement("span");
+  one.className = "ky-one";
+  if (badge) one.appendChild(theBadge(badge));
+  const named = document.createElement("span");
+  theValueIsDrawnInto(named, called || "");
+  one.appendChild(named);
+  return one;
 }
 
 // ── One key's verdict, arriving behind its row ──────────────────────────────
@@ -595,7 +615,8 @@ function theVerdictIsDrawn(row, said) {
     const note = document.createElement("span");
     note.className = "ky-note";
     note.textContent = row.said.whatAReplacementCosts || "";
-    shape.appendChild(note);
+    // Design/Keys: the replacement cost sits beside the controls (B-23).
+    shape.querySelector(".failure-acts").appendChild(note);
     row.verdictSlot.replaceChildren(shape);
     row.verdictSlot.hidden = false;
     row.verdictSlot.className = "ky-slot";
@@ -660,10 +681,25 @@ function aBox() {
   root.hidden = true;
   const box = document.createElement("div");
   box.className = "mbox";
+  box.tabIndex = -1;
   const heading = document.createElement("h3");
   box.appendChild(heading);
   root.appendChild(box);
   return { root, box, heading };
+}
+
+/// **A box opens with the focus inside it** — `Design/Whole app`, *Keyboard
+/// shortcuts*, *Tab stays inside the box on top* (the Creator's twenty-eighth
+/// notes, note 2): in its first field where it asks for typing, otherwise on
+/// the box itself, so the first Tab lands on its first control. **A box
+/// already holding the focus keeps it where it is**, unless the control that
+/// held it has just been hidden.
+function theBoxIsOpened(box, field) {
+  box.root.hidden = false;
+  const on = document.activeElement;
+  if (on && box.root.contains(on) && !on.closest("[hidden]")) return;
+  const into = field || box.root.querySelector(".mbox");
+  if (into) theFocusMovesTo(into);
 }
 
 // ── Making a key ────────────────────────────────────────────────────────────
@@ -726,11 +762,16 @@ function theNewKeyBox() {
   // and a hidden cell leaves the grid, which puts every cell after it in the
   // wrong column — the label lands where the field goes and the choices land
   // under the labels. Found by looking at it.
+  // **Opened, the link's row goes whole, label and cell together**, so the
+  // pairs stay in their columns and no empty strip is left above *Key type*
+  // (UI consistency, finding 60).
   advOpen.addEventListener("click", () => {
     const open = typesCell.hidden;
     typesCell.hidden = !open;
     typesLabel.hidden = !open;
     advOpen.hidden = open;
+    advLabel.hidden = open;
+    advCell.hidden = open;
   });
 
   form.appendChild(nameLabel);
@@ -828,6 +869,7 @@ function theNewKeyBox() {
     passLabel,
     passField,
     advOpen,
+    advLabel,
     advCell,
     typesLabel,
     typesCell,
@@ -864,6 +906,9 @@ function theNewKeyDialogIsOpened() {
   box.typesCell.hidden = true;
   box.typesLabel.hidden = true;
   box.advOpen.hidden = false;
+  // The link's row comes back whole with it (finding 60; Sol's point 1).
+  box.advLabel.hidden = false;
+  box.advCell.hidden = false;
   // **`Keys` T2a: the dialog draws first and the type control fills in behind
   // it.** Three generations, each its own process, are exactly what P5 keeps
   // off the drawing thread, so the set is asked for here and arrives on the
@@ -874,6 +919,9 @@ function theNewKeyDialogIsOpened() {
   // and the act it was marked for is long over.
   theMakeControlComesBack();
   shell.core.invoke("the_types_the_dialog_may_offer");
+  // **The caret in its first field**, `Design/Whole app`, *A box that asks
+  // for typing opens with the caret in its first field*.
+  theBoxIsOpened(box, box.nameField);
 }
 
 function theKeyIsAskedFor() {
@@ -905,6 +953,19 @@ function theTypesAreDrawn(said) {
   box.nameNote.textContent = said.nameItAfterTheProvider || "";
   box.passLabel.textContent = said.thePassphraseField || "";
   box.passField.placeholder = said.optional || "";
+  // **`Design/Keys` as added 2026-11-11: on Windows no passphrase field**, and
+  // the sentence about the limit in its place; the words come from the
+  // application. The four questions, scout 2.13.
+  const noPassphrase = Boolean(said.thePassphraseCannotBeUsed);
+  box.passField.hidden = noPassphrase;
+  box.passField.value = "";
+  if (!box.passNote) {
+    box.passNote = document.createElement("span");
+    box.passNote.className = "ky-nt";
+    box.passField.parentNode.appendChild(box.passNote);
+  }
+  box.passNote.textContent = said.thePassphraseCannotBeUsed || "";
+  box.passNote.hidden = !noPassphrase;
   box.advOpen.textContent = said.advancedKeyType || "";
   box.typesLabel.textContent = said.keyType || "";
   box.cancel.textContent = said.cancel || "";
@@ -1058,7 +1119,7 @@ function theRefusalIsDrawn(said) {
     controls: [],
   });
   box.body.replaceChildren(shape);
-  box.root.hidden = false;
+  theBoxIsOpened(box);
 }
 
 // **`Design/Keys`: a good key with the wrong fingerprint names both**, because
@@ -1114,7 +1175,7 @@ function theSameNameIsSaid(said) {
   box.saidFingerprint.textContent = said.theOtherFingerprint || "";
   box.saidTail.textContent = said.bothAreKept || "";
   box.done.textContent = said.done || "";
-  box.root.hidden = false;
+  theBoxIsOpened(box);
 }
 
 // ── Taking a key away ───────────────────────────────────────────────────────
@@ -1226,7 +1287,7 @@ function whatTakingAwayCameToIsDrawn(said) {
   box.cancel.hidden = true;
   box.done.textContent = said.done || "";
   box.done.hidden = false;
-  box.root.hidden = false;
+  theBoxIsOpened(box);
 }
 
 function whatTakingAwayCostsIsDrawn(said) {
@@ -1268,10 +1329,7 @@ function whatTakingAwayCostsIsDrawn(said) {
   for (let at = 0; at < many; at += 1) {
     const badge = said[field("usedBy", at, "Badge")];
     const called = said[field("usedBy", at)];
-    if (badge) box.servers.appendChild(theBadge(badge));
-    const named = document.createElement("span");
-    theValueIsDrawnInto(named, called || "");
-    box.servers.appendChild(named);
+    box.servers.appendChild(aServerNamed(badge, called));
   }
   // **One sentence since 2026-11-06** (the last words read before the release):
   // *Only Smoozy's servers are listed.* went, and the list says it.
@@ -1293,7 +1351,7 @@ function whatTakingAwayCostsIsDrawn(said) {
     theValueIsDrawnInto(named, path || "");
     box.files.appendChild(named);
   }
-  box.root.hidden = false;
+  theBoxIsOpened(box);
 }
 
 // ── The answer to the act the user just took ────────────────────────────────
@@ -1366,6 +1424,8 @@ function theMadeKeyIsDrawn(said) {
   box.failed.hidden = true;
   box.made.hidden = false;
   box.done.hidden = false;
+  // *Make it* has just been hidden under the keyboard, so the box takes it.
+  theBoxIsOpened(box);
   box.madeWords.textContent = said.theKeyIsIn || "";
   theValueIsDrawnInto(box.madePath, said.thePath || "");
   box.madePath.classList.add("mono");
@@ -1391,7 +1451,7 @@ function theMadeKeyIsDrawn(said) {
 function theFailedGenerationIsDrawn(said) {
   theMakeControlComesBack();
   const box = screen.boxes.newKey;
-  box.root.hidden = false;
+  theBoxIsOpened(box);
   box.failed.hidden = false;
   box.failed.replaceChildren(
     theFailureShape({
@@ -1411,7 +1471,7 @@ function theFailedGenerationIsDrawn(said) {
 function theRefusedMakeIsDrawn(said) {
   theMakeControlComesBack();
   const box = screen.boxes.newKey;
-  box.root.hidden = false;
+  theBoxIsOpened(box);
   box.form.hidden = false;
   box.acts.hidden = false;
   box.failed.hidden = false;
@@ -1476,7 +1536,7 @@ function theKeyToCopyByHand(said) {
   select.className = "mini";
   select.textContent = said.selectTheWholeKey || "";
   select.addEventListener("click", () => {
-    shown.focus();
+    theFocusMovesTo(shown);
     shown.select();
   });
   holder.appendChild(shown);
@@ -1680,5 +1740,5 @@ whenTold(THE_PASSPHRASE_ASK, (delivery) => {
     box.connect.onclick();
   };
   box.root.hidden = false;
-  box.field.focus();
+  theFocusMovesTo(box.field);
 });

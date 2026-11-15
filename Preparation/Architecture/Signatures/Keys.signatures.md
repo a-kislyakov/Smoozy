@@ -61,3 +61,4 @@
 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the real files found.md`, outside any round — U10a's bullet: a server dialog's list runs the discovery pass. No auditor has seen it.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — residual 6's quotation of Design. The last words read before the release. No auditor has seen it.
+2026-11-14 — Claude Opus 5.5 — S19a: a typed passphrase that did not open the key, and a saved one the store would not give back, are said (the leftovers of the Rough what-if answers, 386, 384).

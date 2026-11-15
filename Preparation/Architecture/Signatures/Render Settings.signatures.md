@@ -101,3 +101,25 @@
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the first-frame form of the playing line. The last words read before the release. No auditor has seen it.
 
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent) — Q2b: the first frame per scene for the page's range. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 13, an output that writes nothing does not shape the job's folder.md`, outside any round — Y1d, the range's frames on a first-frame check. Changed 2026-11-10, the runner's ruling on the Creator's twenty-eighth notes (piece 13, Rule 10). No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece B45, the blend's link and no scene ticked.md`, outside any round — F5: where a reading stands and no scene is ticked, no job is composed; the 2026-10-01 sentence struck. Changed 2026-11-10, the Creator's twenty-ninth notes, note 6. No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's ruling 3 at the foot of `Audits/Build/Fable review/The live pass of the night's fixes — what happened.md` (the full disk), outside any round — B5: a machine whose builds did not answer and whose disk reads full is told apart from one with no Blender. No auditor has seen this text.
+
+2026-11-11 — GPT-6 (Codex) — Planned bounded pre-load cancellation and late-result discard.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — reading the file, past a minute.md`, outside any round — a build detail under Q10: the desktop's wait on a read is bounded per ask, never over the whole read; a read the server says is still running goes on until it lands, Stop, or one ask unanswered for a minute (ending 1). `Server Setup` B1's time limit no longer bounds a read. From the Creator's note 4 on the test copy of 2026-11-12. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the window notes, Sol's points.md`, outside any round — under Q8: a read whose worker went with a restart is answered and read as interrupted, a read Smoozy ended itself (Sol's look at reading the file past a minute, points 2 and 4). No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — Q8's build detail, *ended by Smoozy: yes* on an interrupted read. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the night's live pass found.md`, outside any round — W2 item 1: the kill for a reading's Blender. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, second round.md`, outside any round — Q3 and §13 item 22, narrowed again; Q5's build detail, the read says where its walk is. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — reading at a frame, built from the research.md`, outside any round — Q3, §13 item 22 and Q5: read off the curves; only walked scenes count toward the step line. No auditor has seen it.
+- 2026-11-14 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — drivers and cheap moves, built from the research.md`, outside any round — Q3, §13 item 22 and Q5: drivers followed without a move, and cheap moves. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Required the live setup check at Render.
+2026-11-14 — Claude Opus 5.5 — added A read lost to a moved version, and a Stop after the store (Rough share 1).
+2026-11-14 — Claude Opus 5.5 — V3a: the reading says whether the file's scripts run, and the page says so (the leftovers of the Rough what-if answers, 222, 227).
+2026-11-14 — Claude Opus 5.5 — Q14a: a newer copy still uploading is said on the page (the leftovers of the Rough what-if answers, 185).

@@ -123,3 +123,20 @@
 
 2026-11-06 — GPT-6.1 (Codex) — Cloth withdrawal and linked simulations on the settings page, within the runner's brief.
 2026-11-06 — GPT-6.1 (Codex) — Planned grouped publication and folder confirmation reads, and current-file reading status.
+- 2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 1, two download routes and retries.md`, outside any round — B10b added (a second route and tries again for every read of the releases repository); B8d and B10 narrowed to it. No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 4, the app replacing itself and its record.md`, outside any round — B8d: a build's own release refused only for a sequence below the remembered floor is reported in its own sentence, on the build runner's ruling. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), the fixer holding the runner's brief on `Audits/Build/The four questions/The admin password in Files — Sol's look.md`, outside any round — §1.1: the paths file as the standard-input route reshaped, on the runner's ruling 3. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 7, files that move.md`, outside any round — S13: a download that starts over takes the file's size again. S15: a replace-intended pre-state a run died inside is settled at the next start. C19: a channel on which a request or a reply was cut is not used again. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the live pass found.md`, outside any round — §1.1 item 2: a captured stream read back over the reading channel is taken in pieces of 256 KiB, each one operation. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Added the published-release retention rule.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — the server update's no-response line says how to try again (Rough share 1, 81).
+2026-11-14 — Claude Opus 5.5 — added C21a, the stop's forced mark (the Creator's ruling on 287, Rough share 3).
+2026-11-14 — Claude Opus 5.5 — added S12b: an upload carried on has the server's own program digest the part it holds, with the read-back kept for an older program (the what-if answers 66, 67, 70, 74).

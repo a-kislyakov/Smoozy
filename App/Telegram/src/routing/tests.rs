@@ -27,7 +27,7 @@ mod on_a_simulated_conversation {
     use crate::pacing::{TheSendQueue, Waits};
     use crate::routing::context::{the_owner_finds_the_subject_live, AnActionContextRecord, SENDING_A_FRAME};
     use crate::routing::gather::{AJobAsHeld, ReadsWhatThisMachineHolds, TheProgress};
-    use crate::routing::typed::{A_BUTTON_THAT_EXPIRED, NOT_A_REQUEST, NO_JOB_TO_SEND_A_FRAME_FROM, WHICH_JOB};
+    use crate::routing::typed::{A_BUTTON_THAT_EXPIRED, NOT_A_REQUEST, NO_JOB_TO_SEND_A_FRAME_FROM, TELEGRAM_IS_TOO_SLOW, WHICH_JOB};
     use crate::routing::{TheRouter, WhatTheRouterIsHanded};
     use crate::transport::{ReachesTelegram, TheClient, WhatACallCarries};
     use crate::worker_state::{InMemory, TheTelegramWorkersState};
@@ -67,12 +67,19 @@ mod on_a_simulated_conversation {
         /// message's text with no entity list**, which Telegram's pages do not
         /// promise either way. Unset, they carry it.
         reads_drop_the_marking: bool,
+        /// **Sol's third check: where set, every read of the pin takes this
+        /// long on the machines' clock**, and succeeds.
+        reads_take: Option<(Arc<ItsClock>, Duration)>,
         /// **R16**: the taps each caller was handed and has not yet answered,
         /// and every answer made, by caller and tap.
         taps_owed: HashMap<String, Vec<String>>,
         answered: Vec<(String, String)>,
+        /// **R16 as changed 2026-11-13**: the words each tap was answered with.
+        answer_words: HashMap<String, String>,
         /// **`Telegram` R17 — the bot's command list as Telegram holds it.**
         commands: Value,
+        /// The messages a `deleteMessage` took away, in order.
+        deleted: Vec<i64>,
     }
 
     impl TheConversation {
@@ -89,16 +96,20 @@ mod on_a_simulated_conversation {
                 assert!(owed.is_empty(), "R16: {caller} made a {method} call before answering the taps it was handed: {owed:?}");
                 return;
             }
+            // **R16 as changed 2026-11-13: the tap's identifier and a few
+            // words**, within Telegram's 0-200 characters, and nothing else.
             let carried = fields.as_object().map_or(0, |f| f.len());
+            let text = fields.get("text").and_then(Value::as_str).unwrap_or_default().to_string();
             assert!(
-                carried == 1 && fields.get("callback_query_id").is_some(),
-                "R16: an answer carried more than the tap's identifier: {fields}"
+                carried == 2 && fields.get("callback_query_id").is_some() && !text.is_empty() && text.chars().count() <= 200,
+                "R16: an answer carried other than the tap's identifier and its words: {fields}"
             );
             let id = fields["callback_query_id"].as_str().unwrap_or_default().to_string();
             let Some(at) = owed.iter().position(|o| *o == id) else {
                 panic!("R16: {caller} answered tap {id}, which it was not handed or had already answered");
             };
             owed.remove(at);
+            self.answer_words.insert(id.clone(), text);
             self.answered.push((caller.to_string(), id));
         }
         /// The taps from the proved conversation an ask hands a caller, which
@@ -233,6 +244,11 @@ mod on_a_simulated_conversation {
             "sendMessage" if fields["text"].as_str().is_some_and(|t| t.starts_with(THE_HEAD)) => {
                 assert!(silent, "a machinery message was sent with its notification: {fields}")
             }
+            // R16 as changed 2026-11-13: *Already answered.* alone goes
+            // without a sound.
+            "sendMessage" if fields["text"].as_str().is_some_and(|t| t.ends_with("\nAlready answered.")) => {
+                assert!(silent, "Already answered. was sent with a sound: {fields}")
+            }
             "sendMessage" => assert!(
                 fields.get("disable_notification").is_none(),
                 "a message for the user was sent silently: {fields}"
@@ -249,6 +265,12 @@ mod on_a_simulated_conversation {
             };
             if let Some((clock, took)) = &self.latency {
                 *lock(&clock.0) += *took;
+            }
+            if method == "getChat" {
+                let slow = self.sim.state().reads_take.clone();
+                if let Some((clock, took)) = slow {
+                    *lock(&clock.0) += took;
+                }
             }
             let mut s = self.sim.state();
             s.heard.push((self.name.clone(), method.to_string(), fields.clone()));
@@ -278,7 +300,9 @@ mod on_a_simulated_conversation {
                     if let Some(markup) = fields.get("reply_markup") {
                         s.buttons.insert(id, markup.clone());
                     }
-                    accepted(json!({ "message_id": id }))
+                    // Telegram's clock here is a send's `date`: the newest
+                    // message's (`Telegram` C1d as changed 2026-11-13).
+                    accepted(json!({ "message_id": id, "date": 1_730_000_000 + id, "edit_date": 1_730_000_000 + s.next_message }))
                 }
                 "pinChatMessage" => {
                     if !s.texts.contains_key(&id) {
@@ -335,6 +359,18 @@ mod on_a_simulated_conversation {
                 }
                 "editMessageReplyMarkup" => {
                     s.buttons.insert(id, fields["reply_markup"].clone());
+                    accepted(json!(true))
+                }
+                // A bot's own message, never a pinned one (B18), and only
+                // what the plan lets go once settled (R16 as changed
+                // 2026-11-13).
+                "deleteMessage" => {
+                    assert!(!s.pins.contains(&id), "B18: pinned message {id} was asked to be deleted");
+                    if s.texts.remove(&id).is_none() {
+                        return refused(400, "Bad Request: message to delete not found");
+                    }
+                    s.buttons.remove(&id);
+                    s.deleted.push(id);
                     accepted(json!(true))
                 }
                 _ => accepted(json!(true)),
@@ -439,7 +475,7 @@ mod on_a_simulated_conversation {
             label: format!("Job {}", name.to_uppercase()),
             generation: generation.into(),
             record_directory: true,
-            rendering: Some(TheProgress { frame: 12, of: 40, percent: 30 }),
+            rendering: Some(TheProgress { frame: 12, of: 40, percent: 30, finishing: false }),
             waiting: None,
         }
     }
@@ -729,9 +765,13 @@ mod on_a_simulated_conversation {
         };
         let live = format!("Job {}", others[0].to_uppercase());
         let ended = format!("Job {}", others[1].to_uppercase());
+        // **The two jobs are on two servers, so each choice names its server
+        // after the job** (R13 as changed 2026-11-11, the UI at every size,
+        // T-01); the Stop beside it keeps the job's name alone.
+        let server = |name: &str| format!("Server {}", name.to_uppercase());
         let rows: Vec<Vec<String>> = rows.iter().map(labels).collect();
-        assert!(rows.contains(&vec![live.clone(), format!("Stop {live}")]), "{rows:?}");
-        assert!(rows.contains(&vec![ended.clone()]), "the ended job has no Stop: {rows:?}");
+        assert!(rows.contains(&vec![format!("{live} — {}", server(&others[0])), format!("Stop {live}")]), "{rows:?}");
+        assert!(rows.contains(&vec![format!("{ended} — {}", server(&others[1]))]), "the ended job has no Stop: {rows:?}");
         let records = fleet.member(&holder).store.the_action_contexts_bound_to(question).unwrap();
         assert_eq!(
             records.iter().filter(|record| record.action == crate::job_messages::ASK_TO_STOP_THIS_JOB).count(),
@@ -772,7 +812,10 @@ mod on_a_simulated_conversation {
         fleet.sim.an_update(json!({ "message": { "message_id": 90_012,
             "chat": { "id": CHAT }, "pinned_message": { "message_id": 12, "text": "a pin" } } }));
         for _ in 0..12 { fleet.a_round(); }
-        assert!(fleet.sim.said_to_the_user().is_empty(), "pairing is silent: {:?}", fleet.sim.said_to_the_user());
+        // **R15 as changed 2026-11-13 (problem 6): each `/start` is answered
+        // with the setup's own words**, and nothing else is said.
+        let said: Vec<String> = fleet.sim.said_to_the_user().into_iter().map(|(_, t)| t).collect();
+        assert_eq!(said, vec![crate::walkthrough::HELLO_BACK.to_string(); 4], "{said:?}");
         assert!(fleet.sim.state().confirmed_below > 0, "ignored updates are confirmed");
         fleet.sim.the_user_types(CHAT, "hello");
         for _ in 0..8 { fleet.a_round(); }
@@ -1132,6 +1175,150 @@ mod on_a_simulated_conversation {
         assert_eq!(supervisor.heard().commands.len(), 1, "submitted once");
     }
 
+    /// **Five taps in two seconds** — one read cadence — on one button.
+    fn five_taps(fleet: &AFleet, message: i64, data: &str) -> Vec<String> {
+        (0..5)
+            .map(|_| {
+                let update = fleet.sim.the_user_taps(CHAT, message, data);
+                let s = fleet.sim.state();
+                let tap = s.updates.iter().find(|u| u["update_id"] == json!(update)).unwrap();
+                tap["callback_query"]["id"].as_str().unwrap().to_string()
+            })
+            .collect()
+    }
+
+    /// The words each of these taps was answered with, in order.
+    fn the_answers_to(fleet: &AFleet, taps: &[String]) -> Vec<String> {
+        let s = fleet.sim.state();
+        taps.iter().map(|t| s.answer_words.get(t).cloned().unwrap_or_default()).collect()
+    }
+
+    fn sent_then_already_sent() -> Vec<String> {
+        let mut words = vec!["Sent.".to_string()];
+        words.extend(std::iter::repeat_n("Already sent.".to_string(), 4));
+        words
+    }
+
+    /// **Telegram when things aren't ideal, problem 2 — the Creator's own
+    /// example: five impatient taps, on each kind of button** (`Telegram` R16
+    /// and R4 as changed 2026-11-13, D2). Each tap is answered at once with
+    /// words — *Sent.*, then *Already sent.* — and the four repeats make no
+    /// instruction: one confirmation question, one *Stop sent.* and one stop
+    /// submitted, no *Already answered.*; one frame sent; one stop question
+    /// from *Which job?*; one answer to a button that cannot be read. Before,
+    /// every tap was answered with no words and each was acted on.
+    #[test]
+    fn not_ideal_2_five_taps_in_two_seconds_on_each_kind_of_button_act_once() {
+        // The job's own Stop, then its confirmation, on one machine that
+        // both listens and owns the job.
+        let mut fleet = AFleet::new();
+        let supervisor = AStandInSupervisor::default();
+        fleet.start_with("a", Some(supervisor.clone()));
+        fleet.rounds_until(60, |f| f.holder().is_some()).expect("it holds");
+        *lock(&fleet.member("a").jobs.0) = vec![a_rendering_job("a", "1")];
+        let message = fleet.sim.a_message_from_the_bot("the job's message");
+        let client = TheClient::over(Arc::new(ACaller { name: "a".into(), sim: fleet.sim.clone(), latency: None }));
+        let mut messages = TheJobMessages {
+            conversation: CHAT,
+            store: Box::new(fleet.member("a").store.clone()),
+            queue: Arc::new(TheSendQueue::new(client, Arc::new(NoWaits))),
+            notes: Box::new(|_| {}),
+        };
+        let subject = TheSubject { owning_machine: the_machine("a"), job: Some("job-a".into()), hold: None, generation: "1".into() };
+        let button = messages.a_stop_button(message, &subject, "Server A", "Job A").unwrap();
+        let taps = five_taps(&fleet, message, button["callback_data"].as_str().unwrap());
+        let asked = |f: &AFleet| f.sim.state().texts.values().filter(|t| t.starts_with("Server A\nJob A\nStop this job?")).count();
+        fleet.rounds_until(20, |f| asked(f) == 1).expect("the confirmation was asked");
+        for _ in 0..15 {
+            fleet.a_round();
+        }
+        assert_eq!(the_answers_to(&fleet, &taps), sent_then_already_sent(), "the job's Stop");
+        assert_eq!(asked(&fleet), 1, "one confirmation question");
+        let question = *fleet.sim.state().texts.iter().find(|(_, t)| t.starts_with("Server A\nJob A\nStop this job?")).unwrap().0;
+        let record = fleet
+            .member("a")
+            .store
+            .the_action_contexts_bound_to(question)
+            .unwrap()
+            .into_iter()
+            .find(|r| r.payload["confirmed"] == json!(true))
+            .unwrap();
+        let taps = five_taps(&fleet, question, &record.token);
+        fleet.rounds_until(20, |f| f.said("Server A\nJob A\nStop sent.") >= 1).expect("the stop was said sent");
+        for _ in 0..15 {
+            fleet.a_round();
+        }
+        assert_eq!(the_answers_to(&fleet, &taps), sent_then_already_sent(), "the confirming Stop");
+        assert_eq!(fleet.said("Server A\nJob A\nStop sent."), 1, "Stop sent. once");
+        assert_eq!(fleet.said("Server A\nJob A\nAlready answered."), 0, "no repeat reached the owner");
+        assert_eq!(supervisor.heard().commands.len(), 1, "one stop submitted");
+        // Once the first tap has left hand, one more tap on the confirmation
+        // reaches the owner: *Already answered.*, without a sound (the
+        // stand-in's B24 check), and no second *Stop sent.* (D2).
+        fleet.rounds_until(20, |f| f.sim.the_board_on_top().is_some_and(|b| b.instructions.is_empty())).expect("trimmed");
+        fleet.sim.the_user_taps(CHAT, question, &record.token);
+        fleet.rounds_until(20, |f| f.said("Server A\nJob A\nAlready answered.") == 1).expect("the late tap was answered");
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        assert_eq!(fleet.said("Server A\nJob A\nStop sent."), 1, "Stop sent. once for this stop");
+        assert_eq!(supervisor.heard().commands.len(), 1, "still one stop submitted");
+        // **The Creator's addition of 2026-11-13: nothing in between stays.**
+        // The question became *Stop sent.*, with no buttons and no new
+        // message; once the job's ending is told, it goes.
+        {
+            let s = fleet.sim.state();
+            assert_eq!(s.texts[&question], "Server A\nJob A\nStop sent.", "the question became Stop sent.");
+            assert!(s.buttons.get(&question).is_none_or(|b| b["inline_keyboard"].as_array().is_some_and(Vec::is_empty)));
+            let sent_anew = s.heard.iter().filter(|(_, m, f)| m == "sendMessage" && f["text"] == json!("Server A\nJob A\nStop sent.")).count();
+            assert_eq!(sent_anew, 0, "no new message says Stop sent.");
+        }
+        assert_eq!(messages.the_in_between_messages_go("job-a").unwrap(), 1, "the question goes once the ending is told");
+        assert_eq!(messages.the_in_between_messages_go("job-a").unwrap(), 0, "and only once");
+        assert_eq!(fleet.sim.state().deleted, vec![question]);
+        assert_eq!(fleet.said("Server A\nJob A\nStop sent."), 0, "nothing in between stays");
+
+        // *Which job?*: its frame button and its Stop, two jobs on one server.
+        let (mut fleet, holder) = AFleet::settled(&["a"]);
+        *lock(&fleet.member(&holder).jobs.0) = vec![a_rendering_job("a", "1"), a_rendering_job("b", "1")];
+        fleet.sim.the_user_types(CHAT, "/frame 12");
+        fleet
+            .rounds_until(30, |f| f.sim.state().buttons.values().any(|b| b["inline_keyboard"].as_array().is_some_and(|r| r.len() == 2)))
+            .expect("Which job? was asked");
+        let (question, rows) = {
+            let s = fleet.sim.state();
+            let (id, markup) = s.buttons.iter().next().map(|(id, m)| (*id, m.clone())).unwrap();
+            (id, markup["inline_keyboard"].as_array().unwrap().clone())
+        };
+        let frame_taps = five_taps(&fleet, question, rows[0][0]["callback_data"].as_str().unwrap());
+        let stop_taps = five_taps(&fleet, question, rows[1][1]["callback_data"].as_str().unwrap());
+        fleet.rounds_until(30, |f| lock(&f.acted).len() >= 2).expect("both acted on");
+        for _ in 0..15 {
+            fleet.a_round();
+        }
+        assert_eq!(the_answers_to(&fleet, &frame_taps), sent_then_already_sent(), "a frame button");
+        assert_eq!(the_answers_to(&fleet, &stop_taps), sent_then_already_sent(), "Which job?'s Stop");
+        {
+            let acted = lock(&fleet.acted);
+            assert_eq!(acted.iter().filter(|(_, e)| e.action == SENDING_A_FRAME).count(), 1, "one frame sent: {acted:?}");
+            assert_eq!(
+                acted.iter().filter(|(_, e)| e.action == crate::job_messages::ASK_TO_STOP_THIS_JOB).count(),
+                1,
+                "one stop question: {acted:?}"
+            );
+        }
+
+        // A button that cannot be read.
+        let old = fleet.sim.a_message_from_the_bot("an old message");
+        let taps = five_taps(&fleet, old, "not a token of ours");
+        fleet.rounds_until(10, |f| f.said(A_BUTTON_THAT_EXPIRED) == 1).expect("answered");
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        assert_eq!(the_answers_to(&fleet, &taps), sent_then_already_sent(), "a button that cannot be read");
+        assert_eq!(fleet.said(A_BUTTON_THAT_EXPIRED), 1, "said once, not five times");
+    }
+
     /// **B12, R10 and fix-here item 17 — a gather is answered as soon as every
     /// server asked has replied**, well before its ten-second deadline.
     #[test]
@@ -1277,7 +1464,7 @@ mod on_a_simulated_conversation {
         let subject = TheSubject { owning_machine: the_machine("b"), job: Some("job-b".into()), hold: None, generation: "1".into() };
         let button = messages.a_stop_button(message, &subject, "Server B", "Job B").unwrap();
         let token = button["callback_data"].as_str().unwrap().to_string();
-        let evidence = ATapsEvidence { token: token.clone(), callback: "cb-newer".into(), conversation: CHAT, source_message: message, label: None };
+        let evidence = ATapsEvidence { token: token.clone(), callback: "cb-newer".into(), conversation: CHAT, source_message: message, label: None, pressed_at: None };
         let mut newer = a_taps_resolution(&evidence, 1, &WhatATokenNames::read(&token).unwrap());
         newer.version = THE_PROTOCOL_VERSION + 1;
         let proposal = TheUtterance { machine: "machine-newer".into(), display: "Server NEWER".into(), proposed: vec![newer], ..Default::default() };
@@ -1396,6 +1583,48 @@ mod on_a_simulated_conversation {
         assert!(entry.payload.get("frame").is_none(), "no number rides it: {}", entry.payload);
     }
 
+    /// **Telegram when things aren't ideal, problem 7 (`Telegram` R15 as
+    /// changed 2026-11-13): `/frame -5` sends frame −5** of the one job. It
+    /// failed before: *Unknown request.*
+    #[test]
+    fn not_ideal_7_a_frame_below_zero_is_asked_for() {
+        let (mut fleet, holder) = AFleet::settled(&["a", "b"]);
+        let owner = the_others(&holder, &["a", "b"]).remove(0);
+        *lock(&fleet.member(&owner).jobs.0) = vec![a_rendering_job(&owner, "1")];
+        fleet.sim.the_user_types(CHAT, "/frame -5");
+        fleet.rounds_until(30, |f| !lock(&f.acted).is_empty()).expect("routed to its one job");
+        let entry = the_acted(&fleet)[0].1.clone();
+        assert_eq!(entry.action, SENDING_A_FRAME);
+        assert_eq!(entry.payload["frame"], json!(-5));
+        assert_eq!(fleet.said(NOT_A_REQUEST), 0);
+    }
+
+    /// **Telegram when things aren't ideal, problems 6 and 8 (`Telegram` R15
+    /// and P6a as changed 2026-11-13).** An edited command is answered *Edits
+    /// are ignored. Send it again.* and acted on in no other way; an edit that
+    /// is no command, and a bot's edit, are dismissed with nothing said.
+    /// Before, edits were never asked for, so nothing was said.
+    #[test]
+    fn not_ideal_8_an_edited_command_is_answered_and_not_acted_on() {
+        let (mut fleet, holder) = AFleet::settled(&["a"]);
+        *lock(&fleet.member(&holder).jobs.0) = vec![a_rendering_job(&holder, "1")];
+        fleet.sim.an_update(json!({ "edited_message": { "message_id": 90_020, "chat": { "id": CHAT }, "from": { "is_bot": false },
+            "text": "/frame 120", "date": 1, "edit_date": 2 } }));
+        fleet.sim.an_update(json!({ "edited_message": { "message_id": 90_021, "chat": { "id": CHAT }, "from": { "is_bot": false },
+            "text": "hello there", "date": 1, "edit_date": 2 } }));
+        fleet.sim.an_update(json!({ "edited_message": { "message_id": 90_022, "chat": { "id": CHAT }, "from": { "is_bot": true },
+            "text": "status", "date": 1, "edit_date": 2 } }));
+        fleet.rounds_until(20, |f| f.said(crate::routing::typed::AN_EDIT_IS_IGNORED) == 1).expect("the edit was answered");
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        let said: Vec<String> = fleet.sim.said_to_the_user().into_iter().map(|(_, t)| t).collect();
+        assert_eq!(said, vec![crate::routing::typed::AN_EDIT_IS_IGNORED.to_string()], "{said:?}");
+        assert!(lock(&fleet.acted).is_empty(), "nothing was acted on");
+        let asked = fleet.sim.state().heard.iter().rev().find(|(_, m, _)| m == "getUpdates").map(|(_, _, f)| f["allowed_updates"].clone());
+        assert_eq!(asked, Some(json!(["message", "callback_query", "edited_message"])));
+    }
+
     /// **`Telegram` R1a, widened: `/frame`, `/stop` and `/reporting` sent as
     /// replies to a job's message act on that job, on another server and on
     /// the listening one.**
@@ -1406,7 +1635,7 @@ mod on_a_simulated_conversation {
         for name in [holder.clone(), other.clone()] {
             *lock(&fleet.member(&name).jobs.0) = vec![a_rendering_job(&name, "1")];
         }
-        let on = |fleet: &mut AFleet, name: &str, frame: Option<u64>| {
+        let on = |fleet: &mut AFleet, name: &str, frame: Option<i64>| {
             let message = fleet.sim.a_message_from_the_bot(&format!("a message about job-{name}"));
             let line = ASentMessage {
                 message,
@@ -1516,7 +1745,7 @@ mod on_a_simulated_conversation {
         fleet.sim.the_user_taps(CHAT, message, &buttons[3].1);
         let display = |name: &str| format!("Server {}", name.to_uppercase());
         let reply = format!(
-            "Reporting set to \u{201c}Alerts only\u{201d} for every job and new jobs.\nNot reached: {}. Its jobs keep their choice.\n{} needs a Smoozy update for this.",
+            "Reporting set to \u{201c}Alerts only\u{201d} for every job and new jobs.\nNot reached: {}. Its jobs were not changed.\n{}: not changed. Update Smoozy on this server.",
             display(&gone),
             display(&older)
         );
@@ -1536,10 +1765,47 @@ mod on_a_simulated_conversation {
         // so the second round neither asks it nor names it.
         fleet.sim.the_user_types(CHAT, "/reporting 10");
         let typed = format!(
-            "Reporting set to \u{201c}A picture every 10 minutes\u{201d} for every job and new jobs.\n{} needs a Smoozy update for this.",
+            "Reporting set to \u{201c}A picture every 10 minutes\u{201d} for every job and new jobs.\n{}: not changed. Update Smoozy on this server.",
             display(&older)
         );
         fleet.rounds_until(60, |f| f.said(&typed) == 1).expect("the second reply");
+    }
+
+    /// **Telegram when things aren't ideal, problem 3 (`Telegram` V1d as
+    /// changed 2026-11-13): a choice tapped on an older ask counts from when
+    /// it was tapped.** `/reporting` asks; `/reporting 10` is typed after it;
+    /// then *Everything* is tapped on the older ask. The tap's round carries
+    /// a moment later than the typed one, so it is the newest choice and the
+    /// default. Before, it carried the ask's own date, earlier than the typed
+    /// one, and the default stayed at ten minutes.
+    #[test]
+    fn not_ideal_3_a_choice_tapped_on_an_older_ask_is_the_newest() {
+        let (mut fleet, _) = AFleet::settled(&["a"]);
+        fleet.sim.the_user_types(CHAT, "/reporting");
+        let ask = format!("{}\n{}", crate::routing::THE_PHONES_ASK, crate::routing::FOR_OTHER_MINUTES);
+        fleet.rounds_until(20, |f| f.said(&ask) == 1 && !the_buttons_under(f, &ask).1.is_empty()).expect("the ask");
+        let (message, buttons) = the_buttons_under(&fleet, &ask);
+        let typed_at = 1_730_000_000 + message + 1;
+        fleet.sim.an_update(json!({ "message": { "message_id": 90_003, "chat": { "id": CHAT }, "text": "/reporting 10", "date": typed_at } }));
+        let typed = "Reporting set to \u{201c}A picture every 10 minutes\u{201d} for every job and new jobs.";
+        fleet.rounds_until(60, |f| f.said(typed) == 1).expect("the typed choice was set");
+        // Time passes on Telegram's clock here, which moves with each message.
+        for _ in 0..3 {
+            fleet.sim.a_message_from_the_bot("a later message");
+        }
+        for _ in 0..40 {
+            fleet.a_round();
+        }
+        fleet.sim.the_user_taps(CHAT, message, &buttons[0].1);
+        let tapped = "Reporting set to \u{201c}Everything\u{201d} for every job and new jobs.";
+        fleet.rounds_until(60, |f| f.said(tapped) == 1).expect("the tapped choice was set");
+        let dates: Vec<i64> = the_acted(&fleet)
+            .into_iter()
+            .filter(|(_, e)| e.action == EVERY_LIVE_JOBS_REPORTING && e.payload["value"] == json!("Everything"))
+            .map(|(_, e)| e.payload["date"].as_i64().unwrap())
+            .collect();
+        assert!(!dates.is_empty());
+        assert!(dates.iter().all(|d| *d > typed_at), "the tap is dated after the typed choice: {dates:?}, typed at {typed_at}");
     }
 
     // ------------------------------------------------------------ the twenty-sixth notes, 2026-10-31
@@ -1624,5 +1890,1009 @@ mod on_a_simulated_conversation {
         assert!(!second.contains(&format!("Server {}", upper(&gone))), "the gone server is not named again: {second}");
         assert!(second.contains(&format!("Server {}\nJob {} · frame 12 of 40 · 30%", upper(&slow), upper(&slow))), "{second}");
         assert!(second.contains(&format!("Server {}\nIdle.", upper(&holder))), "{second}");
+    }
+
+
+    // ------------------------------------------------------------ the Creator's notes on the test copy, 2026-11-12: notes 8, 9 and 10
+
+    use crate::routing::typed::{NOT_CHECKED, NO_JOBS_FOUND, THE_PINNED_MESSAGE_IS_FULL};
+
+    /// Sixteen names long enough that the roster and a few requests fill the
+    /// board, as the Creator's pinned message of sixteen servers did.
+    fn sixteen_names() -> Vec<String> {
+        (0..16).map(|at| format!("{at:02}-a-render-box-with-a-longer-name")).collect()
+    }
+
+    fn the_holders_roster(fleet: &AFleet) -> Vec<String> {
+        let holder = fleet.members.iter().find(|m| m.alive && m.listener.is_holding()).expect("one machine holds");
+        holder.listener.the_board_as_last_read().map(|b| b.roster.iter().map(|r| r.machine.clone()).collect()).unwrap_or_default()
+    }
+
+    /// What the bot said, leaving out the filler's own notice: an action to
+    /// a machine that never existed is, rightly, never confirmed.
+    fn said_but_the_filler(fleet: &AFleet) -> Vec<(i64, String)> {
+        fleet.sim.said_to_the_user().into_iter().filter(|(_, t)| !t.contains("An action was not confirmed")).collect()
+    }
+
+    fn the_refusals(fleet: &AFleet) -> usize {
+        fleet.sim.said_to_the_user().iter().filter(|(_, t)| t.contains("not accepted")).count()
+    }
+
+    /// **Note 8, Sol's (a) and (b), and note 10's first row: sixteen
+    /// remembered servers, fourteen of them gone, the two live ones the holder
+    /// and the last listed.** Every server is asked, in groups the board holds;
+    /// one reply, no refusal per request; the gone ones named once and then
+    /// off the roster; a second `/status` names only the two; `/frame` after
+    /// it says there is no job rather than refusing. **Failed before the
+    /// fix**: every request was boarded at once, the ones that did not fit
+    /// each drew *“/status” not accepted*, and their servers read *Did not
+    /// answer.* though never asked.
+    #[test]
+    fn notes_8_sixteen_remembered_servers_fourteen_gone_are_all_asked_and_answered_in_one_reply() {
+        let names = sixteen_names();
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        let (mut fleet, holder) = AFleet::settled(&refs);
+        let roster = the_holders_roster(&fleet);
+        assert_eq!(roster.len(), 16);
+        let last = roster.last().unwrap().trim_start_matches("machine-").to_string();
+        assert_ne!(last, holder);
+        for member in fleet.members.iter_mut() {
+            member.alive = member.name == holder || member.name == last;
+        }
+        for _ in 0..5 {
+            fleet.a_round();
+        }
+        let upper = |name: &str| format!("Server {}", name.to_uppercase());
+        fleet.sim.the_user_types(CHAT, "/status");
+        fleet
+            .rounds_until(300, |f| f.sim.said_to_the_user().iter().any(|(_, t)| t.contains(&format!("{}\nIdle.", upper(&last)))))
+            .unwrap_or_else(|| panic!("the reply: {:?}", fleet.sim.said_to_the_user()));
+        for _ in 0..20 {
+            fleet.a_round();
+        }
+        let said: Vec<String> = fleet.sim.said_to_the_user().into_iter().map(|(_, t)| t).collect();
+        assert_eq!(the_refusals(&fleet), 0, "no refusal per request: {said:?}");
+        let whole = said.join("\n");
+        for name in names.iter().filter(|n| **n != holder && **n != last) {
+            assert_eq!(whole.matches(&format!("{}\nDid not answer.", upper(name))).count(), 1, "{name} named once: {said:?}");
+        }
+        assert!(whole.contains(&format!("{}\nIdle.", upper(&holder))), "{said:?}");
+        assert!(!whole.contains(NOT_CHECKED), "every server was asked: {said:?}");
+        let mut left = the_holders_roster(&fleet);
+        left.sort();
+        let mut live = vec![the_machine(&holder), the_machine(&last)];
+        live.sort();
+        assert_eq!(left, live, "the gone servers are off the roster");
+
+        // The second `/status`: the two, nothing else.
+        let before = said.len();
+        fleet.sim.the_user_types(CHAT, "/status");
+        fleet.rounds_until(60, |f| f.sim.said_to_the_user().len() > before).expect("the second reply");
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        let said = fleet.sim.said_to_the_user();
+        assert_eq!(said.len(), before + 1, "{said:?}");
+        assert!(!said[before].1.contains("Did not answer."), "{}", said[before].1);
+        // And `/frame`: no job, said so.
+        fleet.sim.the_user_types(CHAT, "/frame");
+        fleet.rounds_until(60, |f| f.said(NO_JOB_TO_SEND_A_FRAME_FROM) == 1).unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+        assert_eq!(the_refusals(&fleet), 0);
+    }
+
+    /// Fills the holder's board with one action to a gone machine, leaving
+    /// room for `requests` state requests of this fleet and no more — **and,
+    /// where any, for the command's own record** (R10 as added 2026-11-13),
+    /// which a command writes on the board before its requests.
+    fn fill_the_board_leaving_room_for(fleet: &mut AFleet, holder: &str, requests: usize) {
+        let mut board = fleet.member(holder).listener.the_board_as_last_read().unwrap();
+        if requests > 0 {
+            let request = crate::routing::gather::a_state_request("ask-99999", "", crate::routing::gather::WhatAGatherIsFor::HowIsItGoing, 99999);
+            board.commands.push(crate::board::text::ACommandUnderWay { gather: "ask-99999".into(), update: 99999, action: request.action, payload: request.payload });
+        }
+        let filler = crate::listener::an_action_for("gone", "filler", json!("")).unwrap();
+        fill_the_board_with(fleet, holder, requests, board, filler);
+    }
+
+    /// The same, with the filler given: `board` is what is measured against.
+    fn fill_the_board_with(fleet: &mut AFleet, holder: &str, requests: usize, board: TheBoard, mut filler: AnEntry) {
+        let longest = board.roster.iter().map(|r| r.machine.clone()).max_by_key(|m| m.len()).unwrap();
+        let fits = |filler: &AnEntry, n: usize| {
+            let AnAdmission::Accepted(mut with) = admit(&board, filler, "t+99999") else { return false };
+            for at in 0..n {
+                // A run's request, its identity as long as the routing's own
+                // (R10 as changed 2026-11-13, Sol's second check, point 2).
+                let request = crate::routing::gather::a_state_request_in_a_run("ask-99999", "abcdef", &format!("{longest}{at}"), crate::routing::gather::WhatAGatherIsFor::HowIsItGoing, 99999);
+                match admit(&with, &request, "t+99999") {
+                    AnAdmission::Accepted(next) => with = next,
+                    _ => return false,
+                }
+            }
+            true
+        };
+        let mut size = 0;
+        loop {
+            filler.payload = json!("x".repeat(size + 10));
+            if !fits(&filler, requests) {
+                break;
+            }
+            size += 10;
+        }
+        filler.payload = json!("x".repeat(size));
+        assert!(fits(&filler, requests) && size > 0);
+        let operation = filler.operation.clone();
+        fleet.member(holder).listener.propose(filler);
+        fleet
+            .rounds_until(5, |f| f.members.iter().any(|m| m.listener.is_holding() && m.listener.the_board_as_last_read().is_some_and(|b| b.instructions.iter().any(|e| e.operation == operation))))
+            .expect("the filler was admitted");
+    }
+
+    /// **Note 10, the second row: a full board refusing every request.** The
+    /// command ends once, each server *Not checked.*, the reason said once,
+    /// the update confirmed and the next one heard; no server is taken off.
+    /// **Failed before the fix**: a refusal per request, and no reply at all,
+    /// since a gather none of whose entries reached the board was never
+    /// composed.
+    #[test]
+    fn notes_10_a_board_that_admits_no_request_ends_the_command_once_and_names_every_server_not_checked() {
+        let names = ["a", "b", "c"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        fill_the_board_leaving_room_for(&mut fleet, &holder, 0);
+        let typed = fleet.sim.the_user_types(CHAT, "/status");
+        fleet.rounds_until(30, |f| f.sim.said_to_the_user().iter().any(|(_, t)| t.contains(NOT_CHECKED))).unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        let said = said_but_the_filler(&fleet);
+        assert_eq!(said.len(), 1, "one answer: {said:?}");
+        for name in names {
+            assert!(said[0].1.contains(&format!("Server {}\n{NOT_CHECKED}", name.to_uppercase())), "{said:?}");
+        }
+        assert!(said[0].1.ends_with(THE_PINNED_MESSAGE_IS_FULL), "{said:?}");
+        assert!(fleet.sim.state().confirmed_below > typed, "the update was confirmed");
+        assert_eq!(the_holders_roster(&fleet).len(), 3, "a server never asked is not taken off");
+        fleet.sim.the_user_types(CHAT, "hello");
+        fleet.rounds_until(10, |f| f.said(NOT_A_REQUEST) == 1).expect("a later update is still heard");
+        // `/frame` the same: never *No jobs on your servers.*
+        fleet.sim.the_user_types(CHAT, "/frame");
+        fleet.rounds_until(30, |f| f.sim.said_to_the_user().iter().any(|(_, t)| t.starts_with(NO_JOBS_FOUND))).unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+        assert_eq!(fleet.said(NO_JOB_TO_SEND_A_FRAME_FROM), 0);
+        assert_eq!(the_refusals(&fleet), 0, "{:?}", fleet.sim.said_to_the_user());
+        // **A reply the board cannot hold names its own command**, never *an
+        // action* (found while writing note 10's fourth row).
+        let unknown = fleet.sim.a_message_from_the_bot("a message nobody registered");
+        fleet.sim.the_user_replies_with(unknown, "/stop", None);
+        fleet
+            .rounds_until(30, |f| f.sim.said_to_the_user().iter().any(|(_, t)| t.contains("\u{201c}/stop\u{201d} not accepted")))
+            .unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+    }
+
+    /// **Note 10, the second row's other half: a board with room for one
+    /// request at a time asks every server in turn**, and one reply names all
+    /// three as they are. **Failed before the fix**: two refusals, and two
+    /// servers *Did not answer.* though alive.
+    #[test]
+    fn notes_10_a_board_with_room_for_one_request_asks_every_server_in_turn() {
+        let names = ["a", "b", "c"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        for name in the_others(&holder, &names) {
+            *lock(&fleet.member(&name).jobs.0) = vec![a_rendering_job(&name, "1")];
+        }
+        fill_the_board_leaving_room_for(&mut fleet, &holder, 1);
+        fleet.sim.the_user_types(CHAT, "/status");
+        fleet.rounds_until(80, |f| !f.sim.said_to_the_user().is_empty()).expect("answered");
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        let said = said_but_the_filler(&fleet);
+        assert_eq!(said.len(), 1, "{said:?}");
+        assert_eq!(said[0].1.matches("· frame 12 of 40 · 30%").count(), 2, "{said:?}");
+        assert!(!said[0].1.contains("Did not answer.") && !said[0].1.contains(NOT_CHECKED), "{said:?}");
+    }
+
+    /// **Note 10, the eighth row: `/frame` with no server answering is not
+    /// `/frame` with servers answering and no job.** **Failed before the
+    /// fix**: both said *No jobs on your servers.*
+    #[test]
+    fn notes_10_frame_with_a_server_silent_says_no_jobs_found_and_names_it() {
+        let names = ["a", "b"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        fleet.sim.the_user_types(CHAT, "/frame");
+        fleet.rounds_until(30, |f| f.said(NO_JOB_TO_SEND_A_FRAME_FROM) == 1).expect("all answered: no jobs");
+        let other = the_others(&holder, &names).remove(0);
+        fleet.member(&other).alive = false;
+        fleet.sim.the_user_types(CHAT, "/frame");
+        let expected = format!("{NO_JOBS_FOUND}\nServer {} did not answer.", other.to_uppercase());
+        fleet.rounds_until(30, |f| f.said(&expected) == 1).unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+        assert_eq!(fleet.said(NO_JOB_TO_SEND_A_FRAME_FROM), 1);
+    }
+
+
+    /// **Note 8's last ask, B14's roll call: a roster of gone servers clears
+    /// itself with no step from the user.** Four servers settle; two that do
+    /// not hold are destroyed, and then the holder stops too. The server left
+    /// takes the slot over a board still listing all four; nobody types
+    /// anything. Within a few minutes the roster lists that server alone, and
+    /// nothing was said in the chat. **Failed before the roll call**: the
+    /// roster kept all four for as long as nobody asked anything.
+    #[test]
+    fn notes_8_a_roster_of_gone_servers_clears_itself_once_a_holder_starts_and_nothing_is_said() {
+        let names = ["a", "b", "c", "d"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let others = the_others(&holder, &names);
+        let survivor = others[0].clone();
+        for gone in &others[1..] {
+            fleet.member(gone).alive = false;
+        }
+        fleet.member(&holder).alive = false;
+        fleet.rounds_until(200, |f| f.holder().as_deref() == Some(survivor.as_str())).expect("the survivor holds");
+        assert_eq!(the_holders_roster(&fleet).len(), 4, "the successor copied the roster (B3)");
+        fleet
+            .rounds_until(200, |f| the_holders_roster(f) == vec![the_machine(&survivor)])
+            .unwrap_or_else(|| panic!("the roster: {:?}", the_holders_roster(&fleet)));
+        assert!(fleet.sim.said_to_the_user().is_empty(), "nothing said: {:?}", fleet.sim.said_to_the_user());
+    }
+
+    /// **The roll call at rest**: a holder that has heard from every server
+    /// since it began asks none of them, and nothing is said. *(Narrowed
+    /// 2026-11-13, Sol's look at the Telegram fixes: this checks the roster
+    /// and the chat only. A live server slow to answer is
+    /// `sol_5_a_slow_live_server_that_misses_the_roll_call_stays_listed`'s.)*
+    #[test]
+    fn notes_8_the_roll_call_keeps_every_live_server() {
+        let names = ["a", "b", "c"];
+        let (mut fleet, _) = AFleet::settled(&names);
+        for _ in 0..200 {
+            fleet.a_round();
+        }
+        assert_eq!(the_holders_roster(&fleet).len(), 3);
+        assert!(fleet.sim.said_to_the_user().is_empty(), "{:?}", fleet.sim.said_to_the_user());
+    }
+
+    /// **Note 8: a server removed in the app leaves the pinned message.**
+    /// Its role switched off, a server that does not hold pins one last
+    /// machinery message asking to be taken off, and stops; the holder takes
+    /// it off, and the next `/status` does not name it. **Failed before the
+    /// fix**: nothing took it off, and the next `/status` said it *Did not
+    /// answer.*
+    #[test]
+    fn notes_8_a_server_whose_role_is_switched_off_leaves_the_roster() {
+        let names = ["a", "b", "c"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let removed = the_others(&holder, &names).remove(0);
+        assert!(fleet.member(&removed).listener.say_it_is_leaving(), "the last message was sent");
+        fleet.member(&removed).alive = false;
+        fleet
+            .rounds_until(20, |f| !the_holders_roster(f).contains(&the_machine(&removed)))
+            .unwrap_or_else(|| panic!("the roster: {:?}", the_holders_roster(&fleet)));
+        fleet.sim.the_user_types(CHAT, "/status");
+        fleet.rounds_until(30, |f| !f.sim.said_to_the_user().is_empty()).expect("the reply");
+        let said = fleet.sim.said_to_the_user();
+        assert!(!said[0].1.contains(&format!("Server {}", removed.to_uppercase())), "{said:?}");
+        assert!(!said[0].1.contains("Did not answer."), "{said:?}");
+        assert!(!fleet.member(&holder).listener.say_it_is_leaving(), "a holder takes itself off by its own last edit");
+    }
+
+
+    /// A message from the bot, registered on `name` as about `about`.
+    fn a_message_registered_on(fleet: &mut AFleet, name: &str, about: WhatAMessageIsAbout) -> i64 {
+        let message = fleet.sim.a_message_from_the_bot(&format!("a message of {name}"));
+        let line = ASentMessage { message, conversation: CHAT, about };
+        fleet.member(name).store.register_a_sent_message(line).unwrap();
+        message
+    }
+
+    fn about_the_job_of(name: &str) -> WhatAMessageIsAbout {
+        WhatAMessageIsAbout::AJob { job: format!("job-{name}"), generation: Some("1".into()), frame: None, layer: None }
+    }
+
+    /// **Note 10, the fourth row: a reply to a dead server's own saved
+    /// message, after another server has taken the slot, on a board nearly
+    /// full.** `/frame` falls back to the one live job; `/stop` and
+    /// `/reporting` change nothing and say why; nothing is refused for room.
+    #[test]
+    fn notes_10_a_reply_to_a_dead_servers_message_after_a_hand_over_on_a_nearly_full_board() {
+        let names = ["a", "b", "c"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let others = the_others(&holder, &names);
+        let live = others[0].clone();
+        *lock(&fleet.member(&live).jobs.0) = vec![a_rendering_job(&live, "1")];
+        let message = a_message_registered_on(&mut fleet, &holder, about_the_job_of(&holder));
+        fleet.member(&holder).alive = false;
+        fleet.rounds_until(200, |f| f.holder().is_some()).expect("another server holds");
+        let new_holder = fleet.holder().unwrap();
+        fill_the_board_leaving_room_for(&mut fleet, &new_holder, 2);
+        fleet.sim.the_user_replies_with(message, "/stop", None);
+        fleet.rounds_until(60, |f| f.said(COULD_NOT_TELL_WHICH_JOB) == 1).unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+        fleet.sim.the_user_replies_with(message, "/reporting 10", None);
+        fleet.rounds_until(60, |f| f.said(COULD_NOT_TELL_WHICH_JOB) == 2).unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+        assert!(the_acted(&fleet).is_empty(), "{:?}", the_acted(&fleet));
+        fleet.sim.the_user_replies_with(message, "/frame", None);
+        fleet.rounds_until(120, |f| !lock(&f.acted).is_empty()).unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+        let (owner, entry) = the_acted(&fleet)[0].clone();
+        assert_eq!((owner, entry.action.as_str()), (live.clone(), SENDING_THE_NEWEST_FRAME));
+        assert_eq!(the_refusals(&fleet), 0, "{:?}", fleet.sim.said_to_the_user());
+    }
+
+    /// **Note 10, the fifth row: a reply to the bot's own general answer,
+    /// sent by a server that has since stopped listening, is as no reply.**
+    /// **Failed before the fix**: the line was its sender's alone, nobody
+    /// claimed the reply, and `/stop` answered *Could not tell which job*.
+    #[test]
+    fn notes_10_a_reply_to_a_general_answer_from_a_server_no_longer_listening_is_as_no_reply() {
+        let names = ["a", "b"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let other = the_others(&holder, &names).remove(0);
+        fleet.sim.the_user_types(CHAT, "/stop");
+        fleet.rounds_until(30, |f| f.said(NOTHING_TO_STOP) == 1).expect("answered");
+        let answer = fleet.sim.said_to_the_user().iter().rev().find(|(_, t)| t == NOTHING_TO_STOP).unwrap().0;
+        // The listener stops listening and starts again behind the other.
+        fleet.member(&holder).alive = false;
+        fleet.rounds_until(200, |f| f.holder().as_deref() == Some(other.as_str())).expect("the other holds");
+        fleet.member(&holder).alive = true;
+        fleet.rounds_until(200, |f| f.holder().is_some() && the_holders_roster(f).contains(&the_machine(&holder))).expect("one holds, both listed");
+        *lock(&fleet.member(&holder).jobs.0) = vec![a_rendering_job(&holder, "1")];
+        fleet.sim.the_user_replies_with(answer, "/stop", None);
+        fleet
+            .rounds_until(60, |f| lock(&f.acted).iter().any(|(_, e)| e.action == crate::job_messages::ASK_TO_STOP_THIS_JOB))
+            .unwrap_or_else(|| panic!("{:?} {:?}", fleet.sim.said_to_the_user(), the_acted(&fleet)));
+        let stops: Vec<(String, AnEntry)> = the_acted(&fleet).into_iter().filter(|(_, e)| e.action == crate::job_messages::ASK_TO_STOP_THIS_JOB).collect();
+        assert_eq!(stops.len(), 1, "{:?}", the_acted(&fleet));
+        assert_eq!(stops[0].0, holder);
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        assert_eq!(fleet.said(COULD_NOT_TELL_WHICH_JOB), 0, "{:?}", fleet.sim.said_to_the_user());
+    }
+
+    /// **Note 10, the sixth row: a reply to an idle server's status message
+    /// is as no reply.** **Failed before the fix**: the status message showed
+    /// no job, so the reply resolved to nothing and `/stop` answered *Could
+    /// not tell which job*.
+    #[test]
+    fn notes_10_a_reply_to_an_idle_servers_status_message_is_as_no_reply() {
+        let names = ["a", "b"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let idle = the_others(&holder, &names).remove(0);
+        *lock(&fleet.member(&holder).jobs.0) = vec![a_rendering_job(&holder, "1")];
+        let status = fleet.sim.a_message_from_the_bot("Server idle status");
+        fleet.member(&idle).store.record_the_status_message(status).unwrap();
+        fleet.sim.the_user_replies_with(status, "/stop", None);
+        fleet
+            .rounds_until(60, |f| lock(&f.acted).iter().any(|(_, e)| e.action == crate::job_messages::ASK_TO_STOP_THIS_JOB))
+            .unwrap_or_else(|| panic!("{:?} {:?}", fleet.sim.said_to_the_user(), the_acted(&fleet)));
+        let stops: Vec<(String, AnEntry)> = the_acted(&fleet).into_iter().filter(|(_, e)| e.action == crate::job_messages::ASK_TO_STOP_THIS_JOB).collect();
+        assert_eq!(stops.len(), 1, "{:?}", the_acted(&fleet));
+        assert_eq!(stops[0].0, holder, "the one live job, as with no reply");
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        assert_eq!(fleet.said(COULD_NOT_TELL_WHICH_JOB), 0, "{:?}", fleet.sim.said_to_the_user());
+    }
+
+    /// **Note 10, the seventh row: answers arriving while the listener
+    /// changes, the requests near their deadline.** The holder stops just as
+    /// the replies are pinned; the server that takes over sends one result,
+    /// and no server whose answer came in is taken off the roster.
+    #[test]
+    fn notes_10_answers_arriving_while_the_listener_changes_give_one_result_and_take_nobody_off() {
+        let names = ["a", "b", "c"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let others = the_others(&holder, &names);
+        for name in &others {
+            *lock(&fleet.member(name).jobs.0) = vec![a_rendering_job(name, "1")];
+        }
+        fleet.sim.the_user_types(CHAT, "/status");
+        let board_id = fleet.member(&holder).store.the_board().unwrap().unwrap();
+        let on_the_board = move |f: &AFleet| {
+            let s = f.sim.state();
+            matches!(
+                what_is_pinned(&json!({ "pinned_message": s.the_pinned_message(board_id) })),
+                WhatIsPinned::ABoard { board, .. } if board.instructions.iter().filter(|e| e.kind == AKindOfEntry::StateRequest).count() == 2
+            )
+        };
+        fleet.rounds_until(10, on_the_board).expect("both requests are on the board");
+        fleet.member(&holder).alive = false;
+        fleet.rounds_until(200, |f| f.holder().is_some()).expect("another holds");
+        for _ in 0..40 {
+            fleet.a_round();
+        }
+        let said: Vec<String> = fleet.sim.said_to_the_user().into_iter().map(|(_, t)| t).collect();
+        let with_both = said.iter().filter(|t| others.iter().all(|o| t.contains(&format!("Server {}\nJob {}", o.to_uppercase(), o.to_uppercase())))).count();
+        // **Sol's look at the Telegram fixes: exactly one result, never none**
+        // (R10 as changed 2026-11-13: the next holder runs the command from
+        // its record). Until then this allowed no answer at all.
+        assert_eq!(said.len(), 1, "exactly one result: {said:?}");
+        assert_eq!(with_both, 1, "the result names both answers: {said:?}");
+        let roster = the_holders_roster(&fleet);
+        for name in &others {
+            assert!(roster.contains(&the_machine(name)), "{name} answered and stays: {roster:?}");
+        }
+    }
+
+    /// **Note 10, the last row: a reply to a message whose register line left
+    /// with the 2,000-line bound** takes the full path: `/frame` falls back to
+    /// the one live job, `/stop` changes nothing and says why.
+    #[test]
+    fn notes_10_a_reply_to_a_message_the_register_has_let_go_takes_the_full_path() {
+        let names = ["a", "b"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let owner = the_others(&holder, &names).remove(0);
+        *lock(&fleet.member(&owner).jobs.0) = vec![a_rendering_job(&owner, "1")];
+        let old = a_message_registered_on(&mut fleet, &owner, about_the_job_of(&owner));
+        for at in 0..crate::worker_state::THE_MOST_LINES_THE_REGISTER_HOLDS {
+            let line = ASentMessage { message: 1_000_000 + at as i64, conversation: CHAT, about: about_the_job_of(&owner) };
+            fleet.member(&owner).store.register_a_sent_message(line).unwrap();
+        }
+        assert!(fleet.member(&owner).store.the_sent_message(old).unwrap().is_none(), "the oldest line has left");
+        fleet.sim.the_user_replies_with(old, "/stop", None);
+        fleet.rounds_until(60, |f| f.said(COULD_NOT_TELL_WHICH_JOB) == 1).unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+        assert!(the_acted(&fleet).is_empty());
+        fleet.sim.the_user_replies_with(old, "/frame", None);
+        fleet.rounds_until(60, |f| !lock(&f.acted).is_empty()).unwrap_or_else(|| panic!("{:?}", fleet.sim.said_to_the_user()));
+        assert_eq!(the_acted(&fleet)[0].1.action, SENDING_THE_NEWEST_FRAME);
+    }
+
+    // ------------------------------------------------------------ Sol's look at the Telegram fixes, 2026-11-13
+
+    /// Who sent a message to the user saying exactly `text`.
+    fn who_said(fleet: &AFleet, text: &str) -> Vec<String> {
+        fleet
+            .sim
+            .state()
+            .heard
+            .iter()
+            .filter(|(_, method, fields)| method == "sendMessage" && fields["text"].as_str() == Some(text))
+            .map(|(caller, _, _)| caller.clone())
+            .collect()
+    }
+
+    /// **Sol's point 1: one command gets exactly one complete answer through a
+    /// hand-over, from the listener that holds at the end.** Four servers on a
+    /// board with room for one request at a time, so the command is still
+    /// asking in groups when its listener goes quiet; one server is slow
+    /// across the hand-over, so its reply reaches the next listener late; and
+    /// the old listener comes back and lives on beside it. **Failed before
+    /// the fix**: the groups still to ask and the answers taken in lived only
+    /// in the old listener, so the new one composed what it saw leave of the
+    /// command — a partial answer — or nothing.
+    #[test]
+    fn sol_1_a_hand_over_mid_command_gives_exactly_one_complete_answer() {
+        let names = ["a", "b", "c", "d"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let others = the_others(&holder, &names);
+        for name in &names {
+            *lock(&fleet.member(name).jobs.0) = vec![a_rendering_job(name, "1")];
+        }
+        fill_the_board_leaving_room_for(&mut fleet, &holder, 1);
+        fleet.sim.the_user_types(CHAT, "/status");
+        // The first group asks one server; the holder's own answer is in.
+        let board_of = |f: &AFleet, name: &str| f.members.iter().find(|m| m.name == name).and_then(|m| m.listener.the_board_as_last_read());
+        let asking = |f: &AFleet| -> Option<String> {
+            let board = board_of(f, &holder)?;
+            board.instructions.iter().find(|e| e.kind == AKindOfEntry::StateRequest).and_then(|e| match &e.addressee {
+                crate::board::instructions::TheAddressee::Machine(m) => Some(m.trim_start_matches("machine-").to_string()),
+                _ => None,
+            })
+        };
+        fleet.rounds_until(20, |f| asking(f).is_some_and(|m| m != holder)).expect("a group is being asked");
+        let slow = asking(&fleet).unwrap();
+        // The listener goes quiet, and so does the server being asked.
+        fleet.member(&holder).alive = false;
+        fleet.member(&slow).alive = false;
+        fleet.rounds_until(200, |f| f.holder().is_some()).expect("another server holds");
+        let next = fleet.holder().unwrap();
+        assert!(others.contains(&next) && next != slow);
+        // The old listener lives on beside the new; the slow one answers late.
+        fleet.member(&holder).alive = true;
+        fleet.member(&slow).alive = true;
+        let complete = |text: &str| names.iter().all(|n| text.contains(&format!("Server {}\nJob {}", n.to_uppercase(), n.to_uppercase())));
+        fleet
+            .rounds_until(300, |f| said_but_the_filler(f).iter().any(|(_, t)| complete(t)))
+            .unwrap_or_else(|| panic!("a complete answer: {:?}", said_but_the_filler(&fleet)));
+        for _ in 0..60 {
+            fleet.a_round();
+        }
+        let answers: Vec<String> = said_but_the_filler(&fleet).into_iter().map(|(_, t)| t).filter(|t| t.starts_with("Server ")).collect();
+        assert_eq!(answers.len(), 1, "exactly one answer: {answers:?}");
+        assert!(complete(&answers[0]) && !answers[0].contains("Did not answer.") && !answers[0].contains(NOT_CHECKED), "{answers:?}");
+        let holder_now = fleet.holder().unwrap();
+        assert_eq!(who_said(&fleet, &answers[0]), vec![holder_now], "sent by the listener");
+        assert!(fleet.sim.the_board_on_top().is_some_and(|b| b.commands.is_empty()), "the command is off the board once answered");
+    }
+
+    /// **Sol's point 2: `/reporting 10` sent as a reply to a general answer
+    /// another server sent while it listened** is handled by the listener as
+    /// if typed with no reply, and so is a tap on that server's old ask:
+    /// every server is told, and one reply says so. **Failed before the
+    /// fix**: the old listener started the round on itself, the answers went
+    /// to the new listener, which had no record of the choice, and nothing
+    /// was told or said.
+    #[test]
+    fn sol_2_a_reply_and_a_tap_on_another_servers_general_message_reach_every_server() {
+        let names = ["a", "b"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let other = the_others(&holder, &names).remove(0);
+        fleet.sim.the_user_types(CHAT, "/stop");
+        fleet.rounds_until(30, |f| f.said(NOTHING_TO_STOP) == 1).expect("answered");
+        let answer = fleet.sim.said_to_the_user().iter().rev().find(|(_, t)| t == NOTHING_TO_STOP).unwrap().0;
+        fleet.sim.the_user_types(CHAT, "/reporting");
+        let ask = format!("{}\n{}", crate::routing::THE_PHONES_ASK, crate::routing::FOR_OTHER_MINUTES);
+        fleet.rounds_until(20, |f| f.said(&ask) == 1 && !the_buttons_under(f, &ask).1.is_empty()).expect("the ask");
+        let (message, buttons) = the_buttons_under(&fleet, &ask);
+        // The listener stops listening and starts again behind the other.
+        fleet.member(&holder).alive = false;
+        fleet.rounds_until(200, |f| f.holder().as_deref() == Some(other.as_str())).expect("the other holds");
+        fleet.member(&holder).alive = true;
+        fleet.rounds_until(200, |f| f.holder().is_some() && the_holders_roster(f).contains(&the_machine(&holder))).expect("one holds, both listed");
+        fleet.sim.the_user_replies_with(answer, "/reporting 10", None);
+        let set = "Reporting set to \u{201c}A picture every 10 minutes\u{201d} for every job and new jobs.";
+        fleet.rounds_until(80, |f| f.said(set) == 1).unwrap_or_else(|| panic!("the reply: {:?}", fleet.sim.said_to_the_user()));
+        let told = |f: &AFleet, value: Value| {
+            let mut machines: Vec<String> = the_acted(f).into_iter().filter(|(_, e)| e.action == EVERY_LIVE_JOBS_REPORTING && e.payload["value"] == value).map(|(m, _)| m).collect();
+            machines.sort();
+            machines
+        };
+        let mut both = vec![holder.clone(), other.clone()];
+        both.sort();
+        assert_eq!(told(&fleet, json!({ "APictureEveryFewMinutes": { "minutes": 10 } })), both, "{:?}", the_acted(&fleet));
+        // The tap on the old listener's ask, too.
+        fleet.sim.the_user_taps(CHAT, message, &buttons[3].1);
+        let alerts = "Reporting set to \u{201c}Alerts only\u{201d} for every job and new jobs.";
+        fleet.rounds_until(80, |f| f.said(alerts) == 1).unwrap_or_else(|| panic!("the tap's reply: {:?}", fleet.sim.said_to_the_user()));
+        assert_eq!(told(&fleet, json!("OnlyWhatNeedsAnAnswer")), both, "{:?}", the_acted(&fleet));
+        for _ in 0..20 {
+            fleet.a_round();
+        }
+        assert_eq!(fleet.said(set), 1);
+        assert_eq!(fleet.said(alerts), 1);
+        assert_eq!(fleet.said(COULD_NOT_TELL_WHICH_JOB), 0, "{:?}", fleet.sim.said_to_the_user());
+    }
+
+    /// Thirty finished jobs with long names, as a server that has rendered a
+    /// season of shots holds them.
+    fn a_season_of_finished_jobs(name: &str) -> Vec<AJobAsHeld> {
+        (0..30)
+            .map(|at| AJobAsHeld {
+                job: format!("job-{name}-{at:02}"),
+                label: format!("kitchen_v{at:02}_final_lighting_pass_with_the_long_name"),
+                generation: "1".into(),
+                record_directory: true,
+                rendering: None,
+                waiting: None,
+            })
+            .collect()
+    }
+
+    /// **Sol's point 3: two `/frame` requests read together by a slow server
+    /// are both answered**, its replies said in turn. Each reply carries half
+    /// a machinery message of finished jobs, so the two together pass the
+    /// bound. **Failed before the fix**: nothing at all was said, both
+    /// requests expired, the live server was named as not answering twice and
+    /// taken off.
+    #[test]
+    fn sol_3_two_frame_requests_read_together_are_both_answered() {
+        let names = ["a", "b"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let slow = the_others(&holder, &names).remove(0);
+        *lock(&fleet.member(&slow).jobs.0) = a_season_of_finished_jobs(&slow);
+        fleet.member(&slow).alive = false;
+        fleet.sim.the_user_types(CHAT, "/frame");
+        fleet.sim.the_user_types(CHAT, "/frame");
+        let both_standing = |f: &AFleet| {
+            f.members.iter().find(|m| m.alive && m.listener.is_holding()).and_then(|m| m.listener.the_board_as_last_read()).is_some_and(|b| {
+                b.instructions.iter().filter(|e| e.kind == AKindOfEntry::StateRequest && e.addressee == crate::board::instructions::TheAddressee::Machine(the_machine(&slow))).count() == 2
+            })
+        };
+        fleet.rounds_until(10, both_standing).expect("both requests stand for the slow server");
+        fleet.member(&slow).alive = true;
+        fleet
+            .rounds_until(30, |f| f.sim.said_to_the_user().iter().filter(|(_, t)| t.starts_with(WHICH_JOB)).count() == 2)
+            .unwrap_or_else(|| panic!("both answered: {:?}", fleet.sim.said_to_the_user()));
+        assert!(!fleet.sim.said_to_the_user().iter().any(|(_, t)| t.contains("did not answer")), "{:?}", fleet.sim.said_to_the_user());
+        assert!(the_holders_roster(&fleet).contains(&the_machine(&slow)), "the live server stays");
+    }
+
+    /// The fleet of the roll call's own tests: four servers settle, the
+    /// holder and `gone` stop, and the survivor that takes over holds a board
+    /// still listing all four. Gives back the survivor.
+    fn a_successor_over_a_remembered_roster(fleet: &mut AFleet, holder: &str, names: &[&str], quiet: &[String]) -> String {
+        let others = the_others(holder, names);
+        let survivor = others.iter().find(|o| !quiet.contains(o)).unwrap().clone();
+        for name in quiet {
+            fleet.member(name).alive = false;
+        }
+        fleet.member(holder).alive = false;
+        fleet.rounds_until(200, |f| f.holder().as_deref() == Some(survivor.as_str())).expect("the survivor holds");
+        assert_eq!(the_holders_roster(fleet).len(), 4, "the successor copied the roster (B3)");
+        survivor
+    }
+
+    /// **Sol's point 4: a roll call that finds the board full is not used
+    /// up** — it asks again when there is room, and the gone servers still
+    /// leave; and its name carries its holder. The board is full from the
+    /// moment the survivor holds until an entry with a long deadline leaves.
+    /// **Failed before the fix**: the roll call ended at its first refusal
+    /// and the four stayed listed for good; and its name was the time the
+    /// computer had held, which another computer could repeat.
+    #[test]
+    fn sol_4_a_roll_call_on_a_full_board_asks_again_when_there_is_room() {
+        let names = ["a", "b", "c", "d"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let gone: Vec<String> = the_others(&holder, &names).into_iter().skip(1).collect();
+        let survivor = a_successor_over_a_remembered_roster(&mut fleet, &holder, &names, &gone);
+        let board = fleet.member(&survivor).listener.the_board_as_last_read().unwrap();
+        let mut filler = crate::routing::gather::a_state_request("filler", "machine-never", crate::routing::gather::WhatAGatherIsFor::HowIsItGoing, 1);
+        filler.deadline_seconds = 150;
+        fill_the_board_with(&mut fleet, &survivor, 0, board, filler);
+        let roll = |f: &AFleet| {
+            f.members.iter().find(|m| m.alive && m.listener.is_holding()).and_then(|m| m.listener.the_board_as_last_read()).and_then(|b| {
+                b.instructions.iter().find(|e| e.payload.get("purpose").and_then(Value::as_str) == Some("the roll call")).map(|e| e.payload["gather"].as_str().unwrap_or_default().to_string())
+            })
+        };
+        fleet.rounds_until(250, |f| roll(f).is_some()).unwrap_or_else(|| panic!("the roll call asks once there is room: {:?} {:?}", the_holders_roster(&fleet), fleet.member(&survivor).listener.the_board_as_last_read().map(|b| b.instructions.iter().map(|e| (e.operation.clone(), e.deadline_seconds)).collect::<Vec<_>>())));
+        let name = roll(&fleet).unwrap();
+        assert!(name.contains(&format!("machine{survivor}")), "named by its holder: {name}");
+        fleet
+            .rounds_until(200, |f| the_holders_roster(f) == vec![the_machine(&survivor)])
+            .unwrap_or_else(|| panic!("the roster: {:?}", the_holders_roster(&fleet)));
+        assert!(fleet.sim.said_to_the_user().iter().all(|(_, t)| t.contains("An action was not confirmed")), "nothing said: {:?}", fleet.sim.said_to_the_user());
+    }
+
+    /// **Sol's point 5: a live server that misses the roll call's first ask
+    /// is asked again and stays listed.** It was quiet across the hand-over,
+    /// so the roll call asks it; it misses the first ask and is back for the
+    /// second. **Failed before the fix**: it was taken off the roster at the
+    /// first miss (and put itself back later, at the cost of a pin).
+    #[test]
+    fn sol_5_a_slow_live_server_that_misses_the_roll_call_stays_listed() {
+        let names = ["a", "b", "c", "d"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let others = the_others(&holder, &names);
+        let slow = others[2].clone();
+        let gone = vec![others[1].clone(), slow.clone()];
+        let survivor = a_successor_over_a_remembered_roster(&mut fleet, &holder, &names, &gone);
+        let listed = |f: &AFleet| the_holders_roster(f).contains(&the_machine(&slow));
+        let asked_again = |f: &AFleet| {
+            f.members.iter().find(|m| m.name == survivor).and_then(|m| m.listener.the_board_as_last_read()).is_some_and(|b| {
+                b.instructions.iter().any(|e| e.operation.ends_with("-again") && e.addressee == crate::board::instructions::TheAddressee::Machine(the_machine(&slow)))
+            })
+        };
+        fleet.rounds_until(200, |f| asked_again(f) || !listed(f)).expect("the roll call reached the slow server");
+        assert!(listed(&fleet), "not taken off at the first miss: {:?}", the_holders_roster(&fleet));
+        fleet.member(&slow).alive = true;
+        for _ in 0..40 {
+            fleet.a_round();
+            assert!(listed(&fleet), "the slow server stays listed: {:?}", the_holders_roster(&fleet));
+        }
+        let mut left = the_holders_roster(&fleet);
+        left.sort();
+        let mut live = vec![the_machine(&survivor), the_machine(&slow)];
+        live.sort();
+        assert_eq!(left, live, "the gone one is off");
+    }
+
+    // ------------------------------------------------------------ Sol's second check of the Telegram fixes, 2026-11-13
+
+    /// The answers to a command that start with a server's line, as `/status`
+    /// composes them.
+    fn the_status_answers(fleet: &AFleet) -> Vec<String> {
+        said_but_the_filler(fleet).into_iter().map(|(_, t)| t).filter(|t| t.starts_with("Server ")).collect()
+    }
+
+    /// Whether `name` holds, its board carries a command and no request, and
+    /// nothing has been said: every answer is in and none is composed yet.
+    fn every_answer_is_in_and_none_sent(fleet: &AFleet, name: &str) -> bool {
+        let Some(member) = fleet.members.iter().find(|m| m.name == name && m.listener.is_holding()) else { return false };
+        let Some(board) = member.listener.the_board_as_last_read() else { return false };
+        !board.commands.is_empty()
+            && !board.instructions.iter().any(|e| e.kind == AKindOfEntry::StateRequest)
+            && the_status_answers(fleet).is_empty()
+    }
+
+    /// **Sol's second check, point 1: a listener paused after its last answer
+    /// came in, and resumed after another server has taken over, sends
+    /// nothing.** The new listener runs the command from its record and sends
+    /// the one answer. **Failed before the fix**: the old listener still
+    /// believed it held, composed and sent its answer before it read the
+    /// board, and the new one answered too.
+    #[test]
+    fn sol_second_1_a_listener_paused_after_its_answers_came_in_sends_nothing_once_another_holds() {
+        let names = ["a", "b", "c"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        for name in &names {
+            *lock(&fleet.member(name).jobs.0) = vec![a_rendering_job(name, "1")];
+        }
+        fleet.sim.the_user_types(CHAT, "/status");
+        fleet
+            .rounds_until(30, |f| every_answer_is_in_and_none_sent(f, &holder))
+            .unwrap_or_else(|| panic!("every answer in, none sent: {:?}", fleet.sim.said_to_the_user()));
+        // The listener pauses, another takes over, and the old one resumes.
+        fleet.member(&holder).alive = false;
+        fleet.rounds_until(200, |f| f.holder().is_some()).expect("another server holds");
+        let next = fleet.holder().unwrap();
+        fleet.member(&holder).alive = true;
+        let complete = |text: &str| names.iter().all(|n| text.contains(&format!("Server {}\nJob {}", n.to_uppercase(), n.to_uppercase())));
+        fleet
+            .rounds_until(120, |f| the_status_answers(f).iter().any(|t| complete(t)))
+            .unwrap_or_else(|| panic!("a complete answer: {:?}", the_status_answers(&fleet)));
+        for _ in 0..40 {
+            fleet.a_round();
+        }
+        let answers = the_status_answers(&fleet);
+        assert_eq!(answers.len(), 1, "exactly one answer: {answers:?}");
+        assert_eq!(who_said(&fleet, &answers[0]), vec![next.clone()], "sent by the server that holds");
+        assert_eq!(fleet.holder().as_deref(), Some(next.as_str()));
+    }
+
+    /// Whether `name` holds and its routing has a command whose every answer
+    /// is in and which is not yet answered: what composing takes next.
+    fn a_command_is_ready_to_answer(fleet: &AFleet, name: &str) -> bool {
+        let Some(member) = fleet.members.iter().find(|m| m.name == name && m.listener.is_holding()) else { return false };
+        let Some(board) = member.listener.the_board_as_last_read() else { return false };
+        let routing = member.router.routing();
+        routing.gathers.iter().any(|(gather, g)| {
+            !g.composed
+                && g.left
+                && g.this_group.is_empty()
+                && g.purpose != Some(crate::routing::gather::WhatAGatherIsFor::TheRollCall)
+                && !board.instructions.iter().any(|e| e.operation.starts_with(&format!("{gather}-")))
+        })
+    }
+
+    /// **Sol's second check, point 2: a command handed A → B → A gets one
+    /// complete answer.** Each listener in turn stops the moment every answer
+    /// to its run of the command is in and none is sent, so the command comes
+    /// back to the first listener, which once asked every server and saw
+    /// every request answered. Requires one complete answer, from the
+    /// listener at the end, and the record off the board. **Failed before
+    /// the fix**: the first listener ran the command again under the request
+    /// identities it had already seen answered, so it asked nobody, and
+    /// nothing was ever answered.
+    #[test]
+    fn sol_second_2_a_command_handed_from_a_to_b_and_back_to_a_is_answered_once() {
+        let names = ["a", "b"];
+        let (mut fleet, first) = AFleet::settled(&names);
+        let second = the_others(&first, &names).remove(0);
+        for name in &names {
+            *lock(&fleet.member(name).jobs.0) = vec![a_rendering_job(name, "1")];
+        }
+        fleet.sim.the_user_types(CHAT, "/status");
+        for (from, to) in [(first.clone(), second.clone()), (second.clone(), first.clone())] {
+            fleet
+                .rounds_until(60, |f| a_command_is_ready_to_answer(f, &from))
+                .unwrap_or_else(|| panic!("{from}: every answer in, none sent: {:?}", fleet.sim.said_to_the_user()));
+            assert!(the_status_answers(&fleet).is_empty());
+            fleet.member(&from).alive = false;
+            fleet.rounds_until(200, |f| f.holder().as_deref() == Some(to.as_str())).unwrap_or_else(|| panic!("{to} holds"));
+            fleet.member(&from).alive = true;
+            fleet.rounds_until(10, |f| f.holder().as_deref() == Some(to.as_str())).unwrap_or_else(|| panic!("{from} stood down"));
+        }
+        let complete = |text: &str| names.iter().all(|n| text.contains(&format!("Server {}\nJob {}", n.to_uppercase(), n.to_uppercase())));
+        fleet
+            .rounds_until(120, |f| the_status_answers(f).iter().any(|t| complete(t)))
+            .unwrap_or_else(|| panic!("a complete answer: {:?}", the_status_answers(&fleet)));
+        for _ in 0..40 {
+            fleet.a_round();
+        }
+        let answers = the_status_answers(&fleet);
+        assert_eq!(answers.len(), 1, "exactly one answer: {answers:?}");
+        assert_eq!(who_said(&fleet, &answers[0]), vec![first.clone()], "sent by the listener at the end");
+        assert!(fleet.sim.the_board_on_top().is_some_and(|b| b.commands.is_empty()), "the record is off the board");
+    }
+
+    /// **Sol's second check, point 2's other half: a command a listener has
+    /// answered, whose record comes back to it on the board, is taken off.**
+    /// Each listener in turn sends its answer and stops before its next edit
+    /// can take the record off — the accepted case of two answers — so the
+    /// first listener holds again over a board still carrying the record of
+    /// a command it answered. Requires the record off the board, and no third
+    /// answer. **Failed before the fix**: a command known as answered was
+    /// skipped, and its record stayed on every later board.
+    #[test]
+    fn sol_second_2_an_answered_commands_record_that_comes_back_is_taken_off() {
+        let names = ["a", "b"];
+        let (mut fleet, first) = AFleet::settled(&names);
+        let second = the_others(&first, &names).remove(0);
+        fleet.sim.the_user_types(CHAT, "/status");
+        for (from, to) in [(first.clone(), second.clone()), (second.clone(), first.clone())] {
+            fleet
+                .rounds_until(60, |f| a_command_is_ready_to_answer(f, &from))
+                .unwrap_or_else(|| panic!("{from}: every answer in: {:?}", fleet.sim.said_to_the_user()));
+            // Its answer, and nothing after it: it stops before its turn.
+            let before = the_status_answers(&fleet).len();
+            let member = fleet.member(&from);
+            member.router.before_each_turn(&mut member.listener);
+            assert_eq!(the_status_answers(&fleet).len(), before + 1, "{from} answered");
+            fleet.member(&from).alive = false;
+            fleet.rounds_until(200, |f| f.holder().as_deref() == Some(to.as_str())).unwrap_or_else(|| panic!("{to} holds"));
+            fleet.member(&from).alive = true;
+            fleet.rounds_until(10, |f| f.holder().as_deref() == Some(to.as_str())).unwrap_or_else(|| panic!("{from} stood down"));
+        }
+        let on_top = |f: &AFleet| f.sim.the_board_on_top().map(|b| b.commands.len());
+        fleet.rounds_until(30, |f| on_top(f) == Some(0)).unwrap_or_else(|| panic!("the record is taken off: {:?}", fleet.sim.the_board_on_top().map(|b| b.commands)));
+        for _ in 0..40 {
+            fleet.a_round();
+        }
+        assert_eq!(on_top(&fleet), Some(0));
+        assert_eq!(the_status_answers(&fleet).len(), 2, "no third answer: {:?}", the_status_answers(&fleet));
+    }
+
+    /// **Sol's second check, point 3: an instruction that carries a command
+    /// survives its holder's death before the command is written.** A reply
+    /// `/stop` to an idle server's status message is about no job; that
+    /// server hands it to the listener as an instruction, acts on it and
+    /// acknowledges it at once. The listener's ask takes the acknowledgement
+    /// in before its routing has had a turn — as it does on a real machine,
+    /// where the ask runs beside the turn — and the listener then stops.
+    /// Requires one answer, from the server that takes over. **Failed before
+    /// the fix**: the acknowledgement took the instruction off the board
+    /// before the command's record was on it, so the next listener found
+    /// neither and nobody answered.
+    #[test]
+    fn sol_second_3_a_reply_handed_to_the_listener_survives_its_death_before_the_command_is_written() {
+        let names = ["a", "b", "c"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let idle = the_others(&holder, &names).remove(0);
+        let status = fleet.sim.a_message_from_the_bot("Server idle status");
+        fleet.member(&idle).store.record_the_status_message(status).unwrap();
+        fleet.sim.the_user_replies_with(status, "/stop", None);
+        let carrying = |f: &AFleet| {
+            f.members.iter().find(|m| m.name == holder).and_then(|m| m.listener.the_board_as_last_read()).is_some_and(|b| {
+                b.instructions.iter().any(|e| e.kind == AKindOfEntry::Action && e.action == crate::routing::context::AS_IF_NOT_A_REPLY)
+            })
+        };
+        fleet.rounds_until(30, carrying).expect("the instruction is on the listener's board");
+        // Every other server takes a turn, so the claimant acknowledges.
+        for member in fleet.members.iter_mut().filter(|m| m.name != holder) {
+            member.router.before_each_turn(&mut member.listener);
+            member.listener.a_turn();
+        }
+        // The listener's ask takes the acknowledgement in, with no turn of
+        // its routing first; then the listener stops.
+        {
+            let member = fleet.member(&holder);
+            let ask = member.listener.the_ask_to_make().expect("the listener asks");
+            let got = member.listener.client().get_updates(ask.offset, ask.wait_seconds);
+            member.listener.what_the_ask_brought(ask, got);
+        }
+        fleet.member(&holder).alive = false;
+        fleet.rounds_until(200, |f| f.holder().is_some()).expect("another server holds");
+        let answered = |f: &AFleet| f.sim.said_to_the_user().iter().filter(|(_, t)| t.starts_with(NOTHING_TO_STOP)).count();
+        fleet.rounds_until(120, |f| answered(f) > 0).unwrap_or_else(|| panic!("an answer: {:?}", fleet.sim.said_to_the_user()));
+        for _ in 0..40 {
+            fleet.a_round();
+        }
+        assert_eq!(answered(&fleet), 1, "{:?}", fleet.sim.said_to_the_user());
+        assert_eq!(fleet.said(COULD_NOT_TELL_WHICH_JOB), 0, "{:?}", fleet.sim.said_to_the_user());
+        let board = fleet.sim.the_board_on_top().unwrap();
+        assert!(board.commands.is_empty() && !board.instructions.iter().any(|e| e.action == crate::routing::context::AS_IF_NOT_A_REPLY), "{board:?}");
+    }
+
+    /// **Sol's second check, point 5: a roll call's second ask the board
+    /// cannot hold waits for room.** Two servers; the listener stops and the
+    /// other takes over over a roster of both. Once the roll call's first ask
+    /// to the gone server is on the board, the board is filled to within a
+    /// few characters, so the second ask — longer than the first — does not
+    /// fit when the first leaves; an entry with a long deadline leaves later.
+    /// Requires the gone server off the roster, and nothing said. **Failed
+    /// before the fix**: the second ask was dropped, the roll call was used
+    /// up, and the gone server stayed listed.
+    #[test]
+    fn sol_second_5_a_second_roll_call_ask_that_does_not_fit_waits_for_room() {
+        let names = ["a", "b"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let survivor = the_others(&holder, &names).remove(0);
+        fleet.member(&holder).alive = false;
+        fleet.rounds_until(200, |f| f.holder().as_deref() == Some(survivor.as_str())).expect("the survivor holds");
+        let first_ask = |f: &AFleet| {
+            f.members.iter().find(|m| m.name == survivor).and_then(|m| m.listener.the_board_as_last_read()).is_some_and(|b| {
+                b.instructions.iter().any(|e| e.payload.get("purpose").and_then(Value::as_str) == Some("the roll call") && !e.operation.ends_with("-again"))
+            })
+        };
+        fleet.rounds_until(100, first_ask).expect("the roll call asks the gone server");
+        let board = fleet.member(&survivor).listener.the_board_as_last_read().unwrap();
+        let mut filler = crate::routing::gather::a_state_request("filler", "machine-never", crate::routing::gather::WhatAGatherIsFor::HowIsItGoing, 1);
+        filler.deadline_seconds = 150;
+        fill_the_board_with(&mut fleet, &survivor, 0, board, filler);
+        fleet
+            .rounds_until(250, |f| the_holders_roster(f) == vec![the_machine(&survivor)])
+            .unwrap_or_else(|| panic!("the roster: {:?}", the_holders_roster(&fleet)));
+        assert!(fleet.sim.said_to_the_user().iter().all(|(_, t)| t.contains("An action was not confirmed")), "nothing said: {:?}", fleet.sim.said_to_the_user());
+    }
+
+    /// Thirty queued jobs with ordinary names, as a server given a night's
+    /// shots holds them.
+    fn a_night_of_queued_jobs(name: &str) -> Vec<AJobAsHeld> {
+        (0..30)
+            .map(|at| AJobAsHeld {
+                job: format!("job-{name}-{at:02}"),
+                label: format!("kitchen_v14_shot_{at:02}.blend"),
+                generation: "1".into(),
+                record_directory: true,
+                rendering: None,
+                waiting: Some(crate::routing::gather::AJobWaits::Queued),
+            })
+            .collect()
+    }
+
+    /// **Sol's second check, point 4: one server's answer too big for one
+    /// message arrives in numbered parts.** Thirty queued jobs make one
+    /// reply over Telegram's bound. `/stop` must offer all thirty, the server
+    /// is never named as not answering, and it stays listed; `/status` names
+    /// it as waiting. **Failed before the fix**: the reply was never said,
+    /// its request expired, and the live server was named as not answering
+    /// and taken off.
+    #[test]
+    fn sol_second_4_thirty_queued_jobs_on_one_server_are_answered_in_parts() {
+        let names = ["a", "b"];
+        let (mut fleet, holder) = AFleet::settled(&names);
+        let busy = the_others(&holder, &names).remove(0);
+        *lock(&fleet.member(&busy).jobs.0) = a_night_of_queued_jobs(&busy);
+        fleet.sim.the_user_types(CHAT, "/stop");
+        fleet
+            .rounds_until(40, |f| f.sim.said_to_the_user().iter().any(|(_, t)| t.starts_with(WHICH_JOB) || t.starts_with(NOTHING_TO_STOP)))
+            .unwrap_or_else(|| panic!("an answer: {:?}", fleet.sim.said_to_the_user()));
+        for _ in 0..5 {
+            fleet.a_round();
+        }
+        let said = fleet.sim.said_to_the_user();
+        assert!(!said.iter().any(|(_, t)| t.contains("did not answer") || t.contains("Did not answer")), "{said:?}");
+        let (_, buttons) = the_buttons_under(&fleet, WHICH_JOB);
+        assert_eq!(buttons.len(), 30, "every job offered: {buttons:?}");
+        assert!(the_holders_roster(&fleet).contains(&the_machine(&busy)), "the live server stays listed");
+        fleet.sim.the_user_types(CHAT, "/status");
+        let waiting = format!("Server {}\nkitchen_v14_shot_00.blend\nWaiting.", busy.to_uppercase());
+        fleet
+            .rounds_until(40, |f| f.sim.said_to_the_user().iter().any(|(_, t)| t.contains(&waiting)))
+            .unwrap_or_else(|| panic!("the status: {:?}", fleet.sim.said_to_the_user()));
+    }
+
+    /// **Sol's third check: a listener whose every read of the pin takes nine
+    /// seconds, and succeeds, still answers.** One server, then two; once
+    /// settled, every `getChat` takes nine seconds on the machines' clock,
+    /// within the thirty a read may take. Requires one complete answer to
+    /// `/status`, from the listener, which still holds. **Failed before the
+    /// fix**: no answer at all — each turn's read began nine seconds before
+    /// the eight-second check was made, so the check never held.
+    #[test]
+    fn sol_third_a_listener_whose_reads_each_take_nine_seconds_answers() {
+        for names in [&["a"][..], &["a", "b"][..]] {
+            let (mut fleet, holder) = AFleet::settled(names);
+            for name in names {
+                *lock(&fleet.member(name).jobs.0) = vec![a_rendering_job(name, "1")];
+            }
+            fleet.sim.state().reads_take = Some((fleet.clock.clone(), Duration::from_secs(9)));
+            fleet.sim.the_user_types(CHAT, "/status");
+            let complete = |text: &str| names.iter().all(|n| text.contains(&format!("Server {}\nJob {}", n.to_uppercase(), n.to_uppercase())));
+            fleet
+                .rounds_until(40, |f| the_status_answers(f).iter().any(|t| complete(t)))
+                .unwrap_or_else(|| panic!("{names:?}: a complete answer: {:?}", fleet.sim.said_to_the_user()));
+            for _ in 0..20 {
+                fleet.a_round();
+            }
+            let answers = the_status_answers(&fleet);
+            assert_eq!(answers.len(), 1, "{names:?}: exactly one answer: {answers:?}");
+            assert_eq!(who_said(&fleet, &answers[0]), vec![holder.clone()], "{names:?}: sent by the listener");
+            assert_eq!(fleet.holder().as_deref(), Some(holder.as_str()), "{names:?}: the listener still holds");
+        }
+    }
+
+    /// **Sol's third check, the other half: where reads are so slow that the
+    /// listener can never be sure it alone listens, the command is answered
+    /// as too slow and the listener gives up listening** — never silence. One
+    /// server whose every read takes twenty-five seconds, and succeeds.
+    #[test]
+    fn sol_third_reads_too_slow_to_be_sure_end_in_a_clear_failure() {
+        let (mut fleet, holder) = AFleet::settled(&["a"]);
+        *lock(&fleet.member("a").jobs.0) = vec![a_rendering_job("a", "1")];
+        fleet.sim.state().reads_take = Some((fleet.clock.clone(), Duration::from_secs(25)));
+        fleet.sim.the_user_types(CHAT, "/status");
+        fleet
+            .rounds_until(40, |f| f.said(TELEGRAM_IS_TOO_SLOW) > 0)
+            .unwrap_or_else(|| panic!("a clear failure: {:?}", fleet.sim.said_to_the_user()));
+        assert!(!fleet.member(&holder).listener.is_holding(), "the listener gave up listening");
+        assert_eq!(fleet.said(TELEGRAM_IS_TOO_SLOW), 1, "{:?}", fleet.sim.said_to_the_user());
+        assert!(the_status_answers(&fleet).is_empty(), "{:?}", the_status_answers(&fleet));
     }
 }

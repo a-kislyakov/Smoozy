@@ -174,7 +174,17 @@ mod tests {
     /// Remap` G17b.
     /// 169 to 170 on 2026-11-08: `src/surface/focus.rs`, the browser check of
     /// where the focus ring lands (the Creator's twenty-seventh notes, note 1).
-    const THE_FILE_COUNT: usize = 170;
+    /// 170 to 171 on 2026-11-09: `src/updating/the_box.rs`, the one update
+    /// box on every system (Z33, the twenty-eighth notes, note 4).
+    /// 171 to 172 on 2026-11-11: `src/platform/macos_file_access.rs`,
+    /// the dependency check's slow local reads and macOS attention request.
+    // The UI at every size, second builder: the eight browser regressions
+    // live together in tests/the_ui_at_every_size.rs.
+    /// 173 to 174 on 2026-11-12: `tests/an_act_retried_with_admin_access.rs`,
+    /// the retry with admin access run at the desk (`File Browser` P6b).
+    /// 174 to 175 on 2026-11-14: `src/servers/the_repair.rs`, the automatic
+    /// repair (`Desktop app and delivery` V3a to V3c).
+    const THE_FILE_COUNT: usize = 175;
 
     /// Whether a word has a clause marker's shape.
     ///
@@ -842,7 +852,27 @@ mod tests {
         // the same piece, `crate::updating::checking`.
         // **412 from 2026-11-04**: M32a keeps a setup failure’s reason in
         // the diary before an installation exists.
-        assert_eq!(ours.len(), 412);
+        // **413 from 2026-11-09**, by the twenty-eighth notes' piece 3:
+        // **Z33** (the install is the user's press, on every system). Built in
+        // the same piece, `crate::updating::the_box` and the three routes.
+        // **414 from 2026-11-13**, by the builder of Sol's second check of
+        // the Telegram fixes: **M32b** (Blender's download list that could
+        // not be read keeps its reason in the diary). Built in the same
+        // piece, `crate::surface::set_up::the_list_reason_goes_to_the_diary`.
+        // **415 from 2026-11-14**, batch 2 of the Bad what-if answers:
+        // **L9a** (a damaged record is refused at opening and said in one
+        // line). Built in the same piece, `crate::record` and
+        // `crate::surface::panes`.
+        // **416 from 2026-11-14**, the Rough what-if answers, share 1:
+        // **L9b** (a damaged record goes back to L8's copy, the Creator's
+        // ruling on 97). Built in the same piece, `crate::record`,
+        // `crate::surface::panes` and `crate::the_one_instance`.
+        // **419 from 2026-11-14**, the automatic repair: **V3a**, **V3b** and
+        // **V3c** (V3's trigger met, what it sends and never sends, and what
+        // the row carries). Built in the same piece,
+        // `crate::servers::the_repair`, `crate::servers::installation` and
+        // `crate::servers::a_period`, with `Servers` Q19b's telling.
+        assert_eq!(ours.len(), 419);
     }
 
     /// **A document's name governs the marker immediately after it and no

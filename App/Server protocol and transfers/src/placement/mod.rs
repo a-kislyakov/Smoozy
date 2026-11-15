@@ -77,7 +77,8 @@ pub use claim::{
 pub use performing::{
     ask_for_the_health_answer, ask_the_running_supervisor_to_end, complete_the_rollback,
     place_a_verified_release, what_the_placement_reached, ThePlacementsOutcome,
-    ThePlacementsSurface, WhatThePlacementReached, WhetherTheRunningSupervisorEnded,
+    TheCallerGaveUp, ThePlacementsSurface, WhatThePlacementReached,
+    WhetherTheRunningSupervisorEnded,
     WhyThePlacementCouldNotBeCarriedOut, THE_ENTRY_POINTS_CARRIAGE_SITE,
     THE_FOUR_THINGS_THE_HEALTH_EXCHANGE_ASKS_FOR, THE_HEALTH_ANSWER_REQUEST,
     THE_HEALTH_EXCHANGE_COMMAND,

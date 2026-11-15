@@ -413,12 +413,31 @@ mod on_a_desk_with_a_socket_pair {
             // the command is answered from the script like any other. Added
             // 2026-09-21 with `Server Setup` E2's offer.
             let frame = match frame {
-                Some(carried) if asked.starts_with("sudo -S") => {
-                    self.supervisor
-                        .lock()
-                        .expect("the supervisor")
-                        .carried_on_standard_input
-                        .push((asked.clone(), carried));
+                // `sudo -k -S` from 2026-11-12 (`Server Setup` E3 as changed).
+                Some(carried) if asked.starts_with("sudo -S") || asked.starts_with("sudo -k -S") => {
+                    let mut supervisor = self.supervisor.lock().expect("the supervisor");
+                    supervisor.carried_on_standard_input.push((asked.clone(), carried.clone()));
+                    // **A machine whose elevating command words a wrong
+                    // password its own way** (2026-11-12): any password but
+                    // the one it takes is refused before the step runs, and
+                    // never in `Server Setup` E4's one sentence.
+                    if supervisor
+                        .the_one_password_the_elevating_command_takes
+                        .as_ref()
+                        .is_some_and(|the_one| *the_one != carried)
+                    {
+                        let complaint = if supervisor.a_wrong_one_is_refused_in_e4s_sentence {
+                            format!("Password:\n{}\n", smoozy_security_and_licence::redaction::WRONG_PASSWORD_ENDING)
+                                .into_bytes()
+                        } else {
+                            b"sudo-rs: Authentication failed, try again.\n".to_vec()
+                        };
+                        return Ok(CommandResult {
+                            output: Vec::new(),
+                            complaint,
+                            status: Some(1),
+                        });
+                    }
                     None
                 }
                 other => other,
@@ -577,6 +596,13 @@ mod on_a_desk_with_a_socket_pair {
     /// goes when, what each carries, and what the desktop does with each answer.
     #[derive(Default)]
     struct TheSupervisorHere {
+        /// **The one password this machine's elevating command takes**, where
+        /// the test names one. Added 2026-11-12.
+        the_one_password_the_elevating_command_takes: Option<Vec<u8>>,
+        /// **Whether any other is refused in `Server Setup` E4's own
+        /// wrong-password sentence** rather than in another make's words.
+        /// Added 2026-11-14, the Rough what-if answers, share 2 (137).
+        a_wrong_one_is_refused_in_e4s_sentence: bool,
         /// The run it opened, and the boundary list the desktop sent it.
         run: Option<String>,
         composed: Vec<String>,
@@ -1705,14 +1731,18 @@ mod on_a_desk_with_a_socket_pair {
     }
 
     impl FetchesOneSource for WhatHostingWouldServe {
-        fn fetch(&mut self, source: &str, ceiling: u64) -> Result<Vec<u8>, String> {
+        fn fetch(
+            &mut self,
+            source: &str,
+            ceiling: u64,
+        ) -> Result<Vec<u8>, smoozy_desktop::setting_up::ADownloadThatFailed> {
             self.asked.push((source.to_string(), ceiling));
             match self.table.iter().find(|(named, _)| named == source) {
                 Some((_, bytes)) if bytes.len() as u64 > ceiling => {
-                    Err(format!("{source}: it is longer than the ceiling"))
+                    Err(format!("{source}: it is longer than the ceiling").into())
                 }
                 Some((_, bytes)) => Ok(bytes.clone()),
-                None => Err(format!("{source}: nothing answers there")),
+                None => Err(format!("{source}: nothing answers there").into()),
             }
         }
     }
@@ -1993,7 +2023,7 @@ mod on_a_desk_with_a_socket_pair {
                 smoozy_server_protocol::release::verifying::AVerifiedRelease,
                 Vec<u8>,
             ),
-            String,
+            smoozy_desktop::setting_up::ADownloadThatFailed,
         > {
             the_current_release(
                 &self.root,
@@ -2237,6 +2267,12 @@ mod on_a_desk_with_a_socket_pair {
         carried_on_standard_input: Vec<(String, Vec<u8>)>,
         /// **Every step `Server Setup` E2's offer was made for**, in order.
         the_offers_made: Vec<smoozy_server_setup::ready_action::Step>,
+        /// **The run said the password held for the server stopped working**
+        /// (`Whole app`: *forgotten rather than retried*).
+        the_held_one_was_forgotten: bool,
+        /// **Every password the run said ran a step** (`Server Setup` E2, *a
+        /// password is kept only once it worked*).
+        the_passwords_that_worked: Vec<Vec<u8>>,
         /// **`Server Setup` S2a's desk half**: every failure the desktop wrote
         /// onto the machine, as the run, the step named and the words.
         failures_recorded: Vec<(String, String, String)>,
@@ -2334,6 +2370,12 @@ mod on_a_desk_with_a_socket_pair {
         /// **Each worker step's words, as this machine reports them**
         /// (`Server Setup` Y7a item 2). Added 2026-10-24.
         the_steps_words: Vec<(String, String, String)>,
+        /// **The one password this machine's elevating command takes**; every
+        /// other is refused in words that are not `Server Setup` E4's
+        /// sentence. Added 2026-11-12.
+        the_one_password_the_elevating_command_takes: Option<&'static str>,
+        /// **…or in E4's own sentence, where this is set.** Added 2026-11-14.
+        a_wrong_one_is_refused_in_e4s_sentence: bool,
     }
 
     impl Default for AsThisRunIsAsked {
@@ -2358,6 +2400,8 @@ mod on_a_desk_with_a_socket_pair {
                 the_role_is_refused_with: None,
                 the_words_are_kept_for: None,
                 the_steps_words: Vec::new(),
+                the_one_password_the_elevating_command_takes: None,
+                a_wrong_one_is_refused_in_e4s_sentence: false,
             }
         }
     }
@@ -2373,12 +2417,27 @@ mod on_a_desk_with_a_socket_pair {
         OwedAndTheOfferIsAnsweredWith(&'static str),
         /// A password is owed and nobody answers the offer.
         OwedAndNobodyAnswers,
+        /// **A password is owed and one is already held for this server** —
+        /// *While connected* or *Save* chosen earlier (`Whole app`'s three
+        /// choices, the four questions, scout 1.1). Nobody answers an offer.
+        OwedAndHeldAlready(&'static str),
+        /// **A password is already held for this server, and the offer, where
+        /// one is made, is answered with another** — held first, typed second.
+        /// Added 2026-11-12, Fable's fresh look at the admin password, finding 2.
+        OwedAndHeldAlreadyAndTheOfferIsAnsweredWith(&'static str, &'static str),
     }
 
     /// **`Server Setup` E2's offer, answered at the desk**, with every step
     /// it was made for kept so a test can name which.
     struct TheOfferIsAnsweredHere {
         with: Option<&'static str>,
+        /// **A password already held for this server**, handed to the run at
+        /// its start.
+        held: Option<&'static str>,
+        /// **The run said the held password stopped working.**
+        the_held_one_was_forgotten: Arc<Mutex<bool>>,
+        /// **Every password the run said ran a step**, in order.
+        the_passwords_that_worked: Arc<Mutex<Vec<Vec<u8>>>>,
         made_for: Arc<Mutex<Vec<smoozy_server_setup::ready_action::Step>>>,
         /// **`Server Setup` Y7a: the server whose run's words are kept**, the
         /// Set up tab's own route, where any are. Added 2026-10-24.
@@ -2404,6 +2463,22 @@ mod on_a_desk_with_a_socket_pair {
             self.words_kept_for
                 .as_deref()
                 .map(|server| smoozy_desktop::setting_up::the_words_go_to_the_card(server, || {}))
+        }
+
+        fn the_password_held_here(&mut self) -> Option<smoozy_security_and_licence::plaintext::Origin> {
+            self.held.map(smoozy_security_and_licence::plaintext::Origin::what_the_user_typed)
+        }
+
+        fn the_held_password_stopped_working(&mut self) {
+            *self.the_held_one_was_forgotten.lock().expect("the mark") = true;
+            self.held = None;
+        }
+
+        fn the_password_given_worked(&mut self, password: &smoozy_security_and_licence::plaintext::Origin) {
+            self.the_passwords_that_worked
+                .lock()
+                .expect("the passwords")
+                .push(password.for_a_destination().expose(|bytes| bytes.to_vec()));
         }
     }
 
@@ -2539,6 +2614,12 @@ mod on_a_desk_with_a_socket_pair {
                 ..TheSupervisorHere::default()
             },
         }));
+        supervisor.lock().expect("the supervisor").the_one_password_the_elevating_command_takes =
+            as_asked
+                .the_one_password_the_elevating_command_takes
+                .map(|the_one| the_one.as_bytes().to_vec());
+        supervisor.lock().expect("the supervisor").a_wrong_one_is_refused_in_e4s_sentence =
+            as_asked.a_wrong_one_is_refused_in_e4s_sentence;
         let when_a_command_arrived = Arc::new(Mutex::new(Vec::new()));
         let mut far_end = TheFarEnd {
             sftp_server,
@@ -2632,17 +2713,27 @@ mod on_a_desk_with_a_socket_pair {
                 smoozy_server_setup::elevated::HowElevationIsObtained::Passwordless,
                 None,
             ),
-            TheElevationHere::OwedAndTheOfferIsAnsweredWith(password) => (
+            TheElevationHere::OwedAndTheOfferIsAnsweredWith(password)
+            | TheElevationHere::OwedAndHeldAlreadyAndTheOfferIsAnsweredWith(_, password) => (
                 smoozy_server_setup::elevated::HowElevationIsObtained::APasswordIsOwedAndNoneIsHeld,
                 Some(password),
             ),
-            TheElevationHere::OwedAndNobodyAnswers => (
+            TheElevationHere::OwedAndNobodyAnswers | TheElevationHere::OwedAndHeldAlready(_) => (
                 smoozy_server_setup::elevated::HowElevationIsObtained::APasswordIsOwedAndNoneIsHeld,
                 None,
             ),
         };
+        let the_held_one_was_forgotten = Arc::new(Mutex::new(false));
+        let the_passwords_that_worked = Arc::new(Mutex::new(Vec::new()));
         let mut the_offer = TheOfferIsAnsweredHere {
             with: answered_with,
+            held: match as_asked.elevation {
+                TheElevationHere::OwedAndHeldAlready(password)
+                | TheElevationHere::OwedAndHeldAlreadyAndTheOfferIsAnsweredWith(password, _) => Some(password),
+                _ => None,
+            },
+            the_held_one_was_forgotten: Arc::clone(&the_held_one_was_forgotten),
+            the_passwords_that_worked: Arc::clone(&the_passwords_that_worked),
             made_for: Arc::clone(&the_offers_made),
             words_kept_for: as_asked.the_words_are_kept_for.clone(),
         };
@@ -2772,6 +2863,14 @@ mod on_a_desk_with_a_socket_pair {
             the_offers_made: {
                 let made = the_offers_made.lock().expect("the offers").clone();
                 made
+            },
+            the_held_one_was_forgotten: {
+                let forgotten = *the_held_one_was_forgotten.lock().expect("the mark");
+                forgotten
+            },
+            the_passwords_that_worked: {
+                let worked = the_passwords_that_worked.lock().expect("the passwords").clone();
+                worked
             },
             versions: {
                 let versions = supervisor.lock().expect("the supervisor").versions.clone();
@@ -5031,7 +5130,7 @@ mod on_a_desk_with_a_socket_pair {
         let refusing = || {
             let mut script = a_machine_with_a_card_and_no_driver();
             script.push((
-                "sudo -n systemctl reboot".to_string(),
+                "sudo -k -n systemctl reboot".to_string(),
                 CommandResult {
                     output: Vec::new(),
                     complaint: THE_MACHINES_WORDS.as_bytes().to_vec(),
@@ -5454,7 +5553,7 @@ mod on_a_desk_with_a_socket_pair {
             let paragraph = panel.the_closing_paragraph.expect("the available action is explained");
             assert_eq!(
                 paragraph.the_controls_name,
-                holds_the_machine.then(|| smoozy_desktop::typography::Prose::new("Abandon setup"))
+                holds_the_machine.then(|| smoozy_desktop::typography::Prose::new("End setup"))
             );
         }
     }
@@ -5745,7 +5844,7 @@ mod on_a_desk_with_a_socket_pair {
         let panel = tab
             .the_stopped_setup
             .expect("the tab did not open on the stopped-setup panel");
-        assert!(panel.abandon.is_some(), "*Abandon setup* is not on the panel");
+        assert!(panel.abandon.is_some(), "*End setup* is not on the panel");
         assert!(panel.set_up_again.is_some(), "*Set up again* is not on the panel");
         assert!(panel.cancel.is_none(), "nothing is running to cancel");
     }
@@ -6171,6 +6270,51 @@ mod on_a_desk_with_a_socket_pair {
             "the machine was sent commands after the kind refused: {:?}",
             left.asked
         );
+    }
+
+    /// **A server whose processor no release is built for is told so, before
+    /// anything is placed** — the four questions, scout 3.3, 2026-11-11, and
+    /// `Server Setup` R2 as changed that day: the release is admitted before
+    /// the hand-over, so its tuple match refuses an unsupported processor with
+    /// nothing on the machine touched. **Before the fix** the hand-over made
+    /// Smoozy's folder first, and the refusal was said as a failed signature
+    /// check.
+    #[test]
+    fn a_processor_no_release_is_built_for_is_refused_before_anything_is_touched() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        let scratch = Scratch::new("arm");
+        let an_arm_machine: Vec<(String, CommandResult)> = a_machine_that_answers()
+            .into_iter()
+            .map(|(asked, answer)| {
+                if asked == "uname -m" {
+                    (asked, ended_cleanly("aarch64\n"))
+                } else {
+                    (asked, answer)
+                }
+            })
+            .collect();
+        let left = the_order_is_driven(
+            &scratch,
+            sftp_server,
+            an_arm_machine,
+            an_ubuntu_systemd_machine(),
+            WhatThePlacementReached::Verified,
+            None,
+        );
+        assert_eq!(
+            left.came_to,
+            WhereTheSetUpGot::TheProcessorIsNotSupported { named: "aarch64".to_string() }
+        );
+        // **Nothing was touched**: no record, no root, no placement.
+        assert!(left.writes.is_empty(), "something was recorded");
+        assert!(left.given.is_none(), "a placement was started");
+        assert!(!scratch.at("smoozy").exists(), "a root was made on a server Smoozy cannot run on");
+        // **The card says it plainly**, and never as a signature check.
+        let said = smoozy_desktop::surface::set_up::what_it_came_to(&left.came_to).said;
+        assert!(said.contains("This server's CPU is not supported."), "{said}");
+        assert!(said.contains("Nothing was changed."), "{said}");
+        assert!(!said.contains("signature"), "{said}");
     }
 
     /// **The worldwide pass's fault 2: a refusal reached because the
@@ -7319,25 +7463,22 @@ mod on_a_desk_with_a_socket_pair {
         assert!(desk.settings_draws_the_token_as_stored(), "the record said stored before the run");
         let (_, left) = a_new_server_is_set_up_by(&scratch, sftp_server, &desk);
 
-        // **The card's own shape for a setup that stopped, with the ruled
-        // sentence as its reason** — and the same sentence alone for *Install
-        // it*, whose answer carries no *Setup stopped.*
+        // **The setup reaches *done* and the failure is Telegram's** —
+        // `Server Setup` G2 as changed 2026-11-11 (the four questions, scout
+        // 1.3). Until then the card read *Setup stopped.* with this sentence,
+        // and the server held every job back.
         const THE_SENTENCE: &str =
             "Telegram token no longer saved on this computer. Replace it in Settings.";
-        let said = smoozy_desktop::surface::set_up::what_it_came_to(&left.came_to);
-        assert_eq!(
-            said.said,
-            format!("Setup stopped. {THE_SENTENCE}"),
+        assert!(
+            matches!(left.came_to, WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }),
             "{:?}",
             left.came_to
         );
+        assert_eq!(left.state_at_the_end, None, "the setup left the machine-level state standing");
+        // **Telegram's own line says it**, from what `Server Setup` G2a holds.
         assert_eq!(
-            smoozy_desktop::surface::set_up::what_the_telegram_placement_came_to(&left.came_to).said,
-            THE_SENTENCE
-        );
-        assert_eq!(
-            said.the_machines_own_words, None,
-            "Smoozy's own sentence was put behind *What the server said*"
+            smoozy_desktop::servers::published::what_the_telegram_install_failed_with(&desk.server).as_deref(),
+            Some(THE_SENTENCE)
         );
         assert_eq!(desk.the_stored_fact(), None, "the *token stored* fact was not forgotten");
         assert!(
@@ -7346,7 +7487,7 @@ mod on_a_desk_with_a_socket_pair {
         );
         assert!(!scratch.at("smoozy/package/telegram-token").exists());
         // **`Server Setup` S2a: the step that failed is written onto the
-        // machine**, so its own record says *failed* rather than *cut*.
+        // machine**, on the Telegram placement's own run.
         assert!(
             left.failures_recorded.iter().any(|(_, _, words)| words == THE_SENTENCE),
             "the failed step was not written onto the machine: {:?}",
@@ -7375,20 +7516,24 @@ mod on_a_desk_with_a_socket_pair {
             let (telegram_is_on, left) = a_new_server_is_set_up_by(&scratch, sftp_server, &desk);
             assert!(telegram_is_on);
 
-            let said = smoozy_desktop::surface::set_up::what_it_came_to(&left.came_to);
-            // **On a Mac the sentence says what to do** (the build runner's
-            // ruling 1 of 2026-11-07, the demo's fault 1).
-            assert_eq!(
-                said.said,
-                if cfg!(target_os = "macos") {
-                    "Setup stopped. Could not read the saved Telegram token. If macOS asks to allow Smoozy, allow it, then try again."
-                } else {
-                    "Setup stopped. Could not read the saved Telegram token."
-                },
+            // **The setup reaches *done*; the failure is Telegram's** (`Server Setup` G2 as
+            // changed 2026-11-11, the four questions, scout 1.3). **On a Mac the
+            // sentence says what to do** (the build runner's ruling 1 of
+            // 2026-11-07, the demo's fault 1).
+            assert!(
+                matches!(left.came_to, WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }),
                 "{failure:?}: {:?}",
                 left.came_to
             );
-            assert_eq!(said.the_machines_own_words, None);
+            assert_eq!(
+                smoozy_desktop::servers::published::what_the_telegram_install_failed_with(&desk.server).as_deref(),
+                Some(if cfg!(target_os = "macos") {
+                    "Could not read the saved Telegram token. If macOS asks to allow Smoozy, allow it, then try again."
+                } else {
+                    "Could not read the saved Telegram token."
+                }),
+                "{failure:?}"
+            );
             assert_eq!(desk.the_stored_fact(), Some(7), "{failure:?} forgot the stored fact");
             assert!(desk.settings_draws_the_token_as_stored(), "{failure:?}");
             assert!(!scratch.at("smoozy/package/telegram-token").exists());
@@ -7397,37 +7542,16 @@ mod on_a_desk_with_a_socket_pair {
 
     // ═══════════════════ The Creator's twelfth notes, note 2
 
-    /// **The step that failed, as the Set up tab draws it from the setup read
-    /// back off the machine**: the step's name, with spaces made plain, and
-    /// its failure.
-    fn the_failed_step_read_back(
-        left: WhatTheRunLeft,
-    ) -> (String, smoozy_desktop::surface::set_up::TheFailedStep) {
-        let read = left.the_setup_read_at_the_end.expect("the setup was read back");
-        let tab = smoozy_desktop::surface::set_up::the_tab(
-            smoozy_desktop::surface::set_up::WhatTheMachineSaid::ASetupRunAlone(Box::new(read)),
-            "3060",
-        );
-        let panel = tab.the_stopped_setup.expect("the stopped-setup panel");
-        let mut failed = panel.steps.into_iter().filter(|step| step.the_failure.is_some());
-        let step = failed.next().expect("no step carries the failure");
-        assert!(failed.next().is_none(), "more than one step carries the failure");
-        (
-            step.name.as_str().replace('\u{a0}', " "),
-            step.the_failure.expect("the failure"),
-        )
-    }
-
-    /// **A Telegram step that stopped on this computer reads back as Smoozy's
-    /// own sentence, with nothing behind *What the server said*** —
-    /// `Server Setup` S2a's *"no tool words are claimed for it"* and Rule 8.
+    /// **A Telegram step that stopped on this computer is said as Smoozy's own
+    /// sentence, with no machine words claimed for it** — `Server Setup` S2a's
+    /// *"no tool words are claimed for it"* and Rule 8.
     ///
     /// **Until 2026-10-18 the run panel read *The server could not install
     /// Telegram reporting.*, with Smoozy's sentence behind *What the server
-    /// said***: the composing failure is written onto the machine as the
-    /// failed step's words, and every word read back was drawn as the
-    /// server's. The server did nothing. The Creator's twelfth notes, note 2,
-    /// on the server *3060*.
+    /// said*** (the Creator's twelfth notes, note 2, on the server *3060*).
+    /// **From 2026-11-11 the step is `Server Setup` G2's own run after the setup's *done***
+    /// (the four questions, scout 1.3), so the sentence is held for
+    /// Telegram's line rather than read back off a stopped setup.
     #[test]
     fn a_token_the_store_no_longer_holds_reads_back_as_smoozys_own_sentence() {
         let _deadline = TheTestsDeadline::started();
@@ -7442,33 +7566,35 @@ mod on_a_desk_with_a_socket_pair {
             "the failed step was not written onto the machine: {:?}",
             left.failures_recorded
         );
-
-        let (name, failed) = the_failed_step_read_back(left);
-        assert_eq!(name, "Install Telegram reporting");
+        // **The held sentence is Smoozy's own and alone**: nothing of a
+        // machine's is put beside it.
         assert_eq!(
-            failed.said.lead.as_str().replace('\u{a0}', " "),
-            THE_SENTENCE,
-            "the step's sentence is not Smoozy's own"
+            smoozy_desktop::servers::published::what_the_telegram_install_failed_with(&desk.server).as_deref(),
+            Some(THE_SENTENCE)
         );
-        assert!(
-            failed.the_output.is_none() && failed.the_complaint.is_none(),
-            "Smoozy's own sentence was put behind *What the server said*: {failed:?}"
+        let came = smoozy_desktop::surface::set_up::what_the_telegram_placement_came_to(
+            &WhereTheSetUpGot::TheRunEnded {
+                at: smoozy_server_setup::run::Boundary::Started,
+                ending: TheRunsEnding::TheTelegramMaterialWasNotComposed { said: THE_SENTENCE.to_string() },
+            },
         );
-        assert!(
-            failed.what_the_server_said.is_none(),
-            "*What the server said* is offered with no server words behind it"
-        );
+        assert_eq!(came.said, THE_SENTENCE);
+        assert_eq!(came.the_machines_own_words, None, "machine words were claimed for Smoozy's own sentence");
     }
 
-    /// **A Telegram step the machine refused still reads as the step's own
-    /// sentence, with the machine's words behind *What the server said*** —
-    /// the matching is Smoozy's own closed list of composing sentences and
-    /// nothing wider. Added 2026-10-18, the Creator's twelfth notes, note 2.
+    /// **A Telegram failure at the end of setup no longer holds back
+    /// rendering** — the four questions, scout 1.3, and `Server Setup` R1 item
+    /// 8 and `Server Setup` G2 as changed 2026-11-11. The machine refuses the role's state:
+    /// **the setup still reaches *done*, the machine-level state it set is
+    /// cleared** (so the server's program admits jobs, `Rented-server runtime`
+    /// P2), and the refusal is written onto the Telegram placement's own run
+    /// in the machine's words. **Before the fix** the refusal ended the ready
+    /// action as a failed step, short of *done*, with the state standing.
     #[test]
-    fn a_telegram_step_the_machine_refused_reads_back_with_its_words() {
+    fn a_telegram_failure_after_setup_leaves_the_server_ready_and_its_state_cleared() {
         let _deadline = TheTestsDeadline::started();
         let sftp_server = the_server_or_say_so!();
-        let scratch = Scratch::new("w2-machine-refused");
+        let scratch = Scratch::new("telegram-after-done");
         const THE_MACHINES_WORDS: &str =
             "the role worker could not be started (words written for this test)";
         let left = the_order_is_driven_as(
@@ -7480,34 +7606,38 @@ mod on_a_desk_with_a_socket_pair {
             None,
             AsThisRunIsAsked {
                 telegram_is_on: true,
-                read_the_setup_at_the_end: true,
                 the_role_is_refused_with: Some(THE_MACHINES_WORDS),
                 ..AsThisRunIsAsked::default()
             },
         );
         assert!(
             matches!(
-                &left.came_to,
-                WhereTheSetUpGot::TheRunEnded {
-                    ending: TheRunsEnding::AStepFailed { said, .. },
-                    ..
-                } if said == THE_MACHINES_WORDS
+                left.came_to,
+                WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }
             ),
-            "the refusal did not end the run as a failed step in the machine's words: {:?}",
+            "the setup did not reach done: {:?}",
             left.came_to
         );
-
-        let (name, failed) = the_failed_step_read_back(left);
-        assert_eq!(name, "Install Telegram reporting");
-        assert_eq!(
-            failed.said.lead.as_str().replace('\u{a0}', " "),
-            "Could not install Telegram reporting."
-        );
-        assert_eq!(failed.the_output.as_ref().map(|it| it.as_str()), Some(THE_MACHINES_WORDS));
+        assert_eq!(left.set_by.len(), 1, "the state was set {:?}", left.set_by);
+        assert_eq!(left.cleared_by, left.set_by, "the state the setup set was not cleared");
+        assert_eq!(left.state_at_the_end, None, "the machine-level state still stands");
         assert!(
-            failed.what_the_server_said.is_some(),
-            "the machine's words have no *What the server said* to open them"
+            left.failures_recorded.iter().any(|(_, _, words)| words == THE_MACHINES_WORDS),
+            "the refusal was not written onto the placement's run: {:?}",
+            left.failures_recorded
         );
+        // **The card says the failure on Telegram's own line, in the
+        // placement's words** — never *Setup stopped.*
+        let came = smoozy_desktop::surface::set_up::what_the_telegram_placement_came_to(
+            &WhereTheSetUpGot::TheRunEnded {
+                at: smoozy_server_setup::run::Boundary::Started,
+                ending: TheRunsEnding::AStepFailed {
+                    step: smoozy_server_setup::ready_action::Step::TelegramMaterial,
+                    said: THE_MACHINES_WORDS.to_string(),
+                },
+            },
+        );
+        assert!(!came.said.contains("Setup stopped"), "{}", came.said);
     }
 
     /// **`Server Setup` Y8's stop is the machine's own durable desired state,
@@ -8390,19 +8520,18 @@ mod on_a_desk_with_a_socket_pair {
 
     // ═══════════════════════ The first pass's walls, 2026-09-21: elevation
 
-    /// `Server Setup` M3's probe, as the machine answers it.
-    const THE_ELEVATION_PROBE: &str = "sudo -n true";
+    /// `Server Setup` M3's probe, as the machine answers it — behind `-k`
+    /// from 2026-11-12.
+    const THE_ELEVATION_PROBE: &str = "sudo -k -n true";
     /// `Server Setup` R1 item 3's install, in each of its two elevated forms.
     const THE_TOOL_INSTALL_WITHOUT_A_PASSWORD: &str =
-        "sudo -n apt-get -o DPkg::Lock::Timeout=120 install -y xz-utils";
+        "sudo -k -n apt-get -o DPkg::Lock::Timeout=120 install -y xz-utils";
     const THE_TOOL_INSTALL_WITH_A_PASSWORD: &str =
-        "sudo -S apt-get -o DPkg::Lock::Timeout=120 install -y xz-utils";
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh apt-get -o DPkg::Lock::Timeout=120 install -y xz-utils";
     /// **`Server Setup` S7d's refresh in front of it**, in the password form.
     /// Added 2026-09-22.
     const THE_LIST_REFRESH_WITH_A_PASSWORD: &str =
-        "sudo -S apt-get -o DPkg::Lock::Timeout=120 update";
-    /// `Server Setup` E4's validate form.
-    const THE_VALIDATE: &str = "sudo -S -v";
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh apt-get -o DPkg::Lock::Timeout=120 update";
 
     fn with_the_probe(answered: CommandResult) -> Vec<(String, CommandResult)> {
         let mut script = a_machine_that_answers();
@@ -8509,23 +8638,20 @@ mod on_a_desk_with_a_socket_pair {
             left.the_offers_made,
             vec![smoozy_server_setup::ready_action::Step::Tooling]
         );
-        // **`Server Setup` E3 and E4: the validate first, then the operation,
-        // each carrying the password on standard input and never in the
-        // command.**
+        // **`Server Setup` E3 and E4 as changed 2026-11-12: the password goes
+        // once, to each operation itself, on standard input and never in the
+        // command; no validate is sent.**
         let carried: Vec<&str> = left
             .carried_on_standard_input
             .iter()
             .map(|(command, _)| command.as_str())
             .collect();
         // **`Server Setup` S7d, from 2026-09-22: the lists are refreshed in
-        // front of the install, as an operation of its own under the same
-        // validate-first order.**
+        // front of the install, as an operation of its own.**
         assert_eq!(
             carried,
             vec![
-                THE_VALIDATE,
                 THE_LIST_REFRESH_WITH_A_PASSWORD,
-                THE_VALIDATE,
                 THE_TOOL_INSTALL_WITH_A_PASSWORD
             ]
         );
@@ -8541,6 +8667,232 @@ mod on_a_desk_with_a_socket_pair {
         // by the run, before the install that went out, and cleared at done.
         assert_eq!(left.set_by.len(), 1, "the state was set {:?}", left.set_by);
         assert_eq!(left.state_at_the_end, None);
+        // **`Server Setup` E2, *a password is kept only once it worked*
+        // (2026-11-12): the run says so once, after a step ran behind it.**
+        assert_eq!(
+            left.the_passwords_that_worked,
+            vec![A_MADE_UP_PASSWORD.as_bytes().to_vec()],
+            "the run never said the typed password ran a step"
+        );
+    }
+
+    /// **A password held for this server — *While connected* or *Save* chosen
+    /// earlier — is used, and nobody is asked** — `Preparation/Specs/Whole
+    /// app.md`'s three choices, kept from 2026-11-11 (the four questions, scout
+    /// 1.1). **Before the fix** nothing held a password past the run that was
+    /// given it, so every run asked again.
+    #[test]
+    fn a_password_held_for_the_server_is_used_and_nobody_is_asked() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        let scratch = Scratch::new("held-password-used");
+        const THE_HELD_PASSWORD: &str = "held-for-a-test";
+        let left = the_order_is_driven_as(
+            &scratch,
+            sftp_server,
+            with_the_probe(it_refused()),
+            an_ubuntu_systemd_machine(),
+            WhatThePlacementReached::Verified,
+            None,
+            AsThisRunIsAsked {
+                elevation: TheElevationHere::OwedAndHeldAlready(THE_HELD_PASSWORD),
+                ..AsThisRunIsAsked::default()
+            },
+        );
+        assert!(
+            matches!(left.came_to, WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }),
+            "the run did not reach done: {:?}",
+            left.came_to
+        );
+        assert!(left.the_offers_made.is_empty(), "the user was asked: {:?}", left.the_offers_made);
+        assert!(!left.carried_on_standard_input.is_empty(), "no password went out");
+        for (command, value) in &left.carried_on_standard_input {
+            assert_eq!(value.as_slice(), THE_HELD_PASSWORD.as_bytes());
+            assert!(!command.contains(THE_HELD_PASSWORD), "the password rode a command");
+        }
+        assert!(!left.the_held_one_was_forgotten);
+    }
+
+    /// **A held password that stops working is forgotten rather than tried
+    /// again** — `Whole app`: *"a machine whose login changed asks the user
+    /// again instead of failing quietly against something stale"*. The machine
+    /// answers the first command carrying it with the wrong-password ending
+    /// (`Security and licence` §13 rule 5's one constant): that one command
+    /// goes out, nothing after it, and the run tells the screen to forget it.
+    /// (Until 2026-11-12 the first such command was E4's validate.)
+    #[test]
+    fn a_held_password_that_stops_working_is_forgotten_and_not_tried_again() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        let scratch = Scratch::new("held-password-wrong");
+        let mut script = with_the_probe(it_refused());
+        script.push((
+            THE_LIST_REFRESH_WITH_A_PASSWORD.to_string(),
+            CommandResult {
+                output: Vec::new(),
+                complaint: format!(
+                    "{}\n",
+                    smoozy_security_and_licence::redaction::WRONG_PASSWORD_ENDING
+                )
+                .into_bytes(),
+                status: Some(1),
+            },
+        ));
+        let left = the_order_is_driven_as(
+            &scratch,
+            sftp_server,
+            script,
+            an_ubuntu_systemd_machine(),
+            WhatThePlacementReached::Verified,
+            None,
+            AsThisRunIsAsked {
+                elevation: TheElevationHere::OwedAndHeldAlready("no-longer-the-password"),
+                ..AsThisRunIsAsked::default()
+            },
+        );
+        assert!(left.the_held_one_was_forgotten, "the stale password was kept: {:?}", left.came_to);
+        assert_eq!(left.carried_on_standard_input.len(), 1, "the stale password was tried again");
+        assert!(
+            !matches!(left.came_to, WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }),
+            "a refused password reached done: {:?}",
+            left.came_to
+        );
+    }
+
+    /// **`Server Setup` E2, *a kept one that is refused is asked for again*
+    /// (2026-11-12, Fable's fresh look at the admin password, finding 2).** A
+    /// wrong password was kept for the server. Its elevating command refuses
+    /// it in words that are not E4's one sentence, so nothing establishes it
+    /// is wrong. **Before the fix** the step failed as refused, on every run,
+    /// and the box never came back. Now the offer is made once; the password
+    /// then typed runs the steps, the kept one is forgotten, and the run is
+    /// told the typed one worked.
+    #[test]
+    fn fresh_look_2_a_kept_password_refused_in_other_words_is_asked_for_again() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        let scratch = Scratch::new("fresh-look-2-asked-again");
+        let left = the_order_is_driven_as(
+            &scratch,
+            sftp_server,
+            with_the_probe(it_refused()),
+            an_ubuntu_systemd_machine(),
+            WhatThePlacementReached::Verified,
+            None,
+            AsThisRunIsAsked {
+                elevation: TheElevationHere::OwedAndHeldAlreadyAndTheOfferIsAnsweredWith(
+                    "mistyped-and-kept",
+                    "the-right-one",
+                ),
+                the_one_password_the_elevating_command_takes: Some("the-right-one"),
+                ..AsThisRunIsAsked::default()
+            },
+        );
+        assert_eq!(
+            left.the_offers_made,
+            vec![smoozy_server_setup::ready_action::Step::Tooling],
+            "the box did not come back for a kept password that was refused: {:?}",
+            left.came_to
+        );
+        assert!(
+            matches!(left.came_to, WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }),
+            "the run did not reach done: {:?}",
+            left.came_to
+        );
+        // **The kept one went out once, and never again.**
+        let the_kept_one_went = left
+            .carried_on_standard_input
+            .iter()
+            .filter(|(_, value)| value.as_slice() == b"mistyped-and-kept")
+            .count();
+        assert_eq!(the_kept_one_went, 1, "the refused password was sent again");
+        assert!(left.the_held_one_was_forgotten, "the kept password was not forgotten once another worked");
+        assert_eq!(left.the_passwords_that_worked, vec![b"the-right-one".to_vec()]);
+    }
+
+    /// **The Rough what-if answers, share 2 (137): a saved password the
+    /// server calls wrong in E4's own sentence is forgotten, and the box
+    /// comes back once in the same run.** Before, the run failed and only the
+    /// next *Set up again* asked for the new password.
+    #[test]
+    fn rough_share_2_a_saved_password_called_wrong_is_forgotten_and_asked_for_again() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        let scratch = Scratch::new("rough-2-saved-wrong");
+        let left = the_order_is_driven_as(
+            &scratch,
+            sftp_server,
+            with_the_probe(it_refused()),
+            an_ubuntu_systemd_machine(),
+            WhatThePlacementReached::Verified,
+            None,
+            AsThisRunIsAsked {
+                elevation: TheElevationHere::OwedAndHeldAlreadyAndTheOfferIsAnsweredWith(
+                    "changed-at-the-provider",
+                    "the-new-one",
+                ),
+                the_one_password_the_elevating_command_takes: Some("the-new-one"),
+                a_wrong_one_is_refused_in_e4s_sentence: true,
+                ..AsThisRunIsAsked::default()
+            },
+        );
+        assert!(left.the_held_one_was_forgotten, "the wrong saved password was kept");
+        assert_eq!(
+            left.the_offers_made,
+            vec![smoozy_server_setup::ready_action::Step::Tooling],
+            "the box did not come back for a saved password called wrong: {:?}",
+            left.came_to
+        );
+        assert!(
+            matches!(left.came_to, WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }),
+            "the run did not reach done: {:?}",
+            left.came_to
+        );
+        let the_saved_one_went = left
+            .carried_on_standard_input
+            .iter()
+            .filter(|(_, value)| value.as_slice() == b"changed-at-the-provider")
+            .count();
+        assert_eq!(the_saved_one_went, 1, "the wrong password was sent again");
+        assert_eq!(left.the_passwords_that_worked, vec![b"the-new-one".to_vec()]);
+    }
+
+    /// **And a typed password that is refused the same way is not told as
+    /// working, and nobody is asked twice** (`Server Setup` E6: one offer, no
+    /// loop). The step fails in the machine's own words.
+    #[test]
+    fn fresh_look_2_a_typed_password_that_is_refused_is_never_told_as_working() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        let scratch = Scratch::new("fresh-look-2-typed-refused");
+        let left = the_order_is_driven_as(
+            &scratch,
+            sftp_server,
+            with_the_probe(it_refused()),
+            an_ubuntu_systemd_machine(),
+            WhatThePlacementReached::Verified,
+            None,
+            AsThisRunIsAsked {
+                elevation: TheElevationHere::OwedAndHeldAlreadyAndTheOfferIsAnsweredWith(
+                    "mistyped-and-kept",
+                    "mistyped-again",
+                ),
+                the_one_password_the_elevating_command_takes: Some("the-right-one"),
+                ..AsThisRunIsAsked::default()
+            },
+        );
+        assert_eq!(left.the_offers_made, vec![smoozy_server_setup::ready_action::Step::Tooling]);
+        assert!(left.the_passwords_that_worked.is_empty(), "a refused password was told as working");
+        assert!(!left.the_held_one_was_forgotten, "nothing established the kept one is wrong");
+        assert!(
+            matches!(
+                &left.came_to,
+                WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::AStepFailed { said, .. }, .. }
+                    if said.contains("Authentication failed")
+            ),
+            "the step did not fail in the machine's own words: {:?}",
+            left.came_to
+        );
     }
 
     /// **`Server Setup` E4's fourth bullet: where the offer is declined,
@@ -8875,11 +9227,11 @@ mod on_a_desk_with_a_socket_pair {
             the_managers_package: Some(package),
         };
         let mut script = with_the_probe(ended_cleanly(""));
-        script.push(("sudo -n snap remove blender".to_string(), ended_cleanly("blender removed")));
+        script.push(("sudo -k -n snap remove blender".to_string(), ended_cleanly("blender removed")));
         let scratch = Scratch::new("s12-the-managers-removal");
         let build = a_snap_build_on_the_stand_in(&scratch, true);
         let left = a_removal_is_driven_here(&scratch, sftp_server.clone(), script.clone(), the_snap("blender", build));
-        assert!(left.asked.iter().any(|said| said == "sudo -n snap remove blender"), "{:?}", left.asked);
+        assert!(left.asked.iter().any(|said| said == "sudo -k -n snap remove blender"), "{:?}", left.asked);
         assert!(it_reached_done(&left.came_to), "the manager's removal came to {:?}", left.came_to);
         assert_eq!(
             left.diary,
@@ -8922,7 +9274,7 @@ mod on_a_desk_with_a_socket_pair {
             the_managers_package: Some(package),
         };
         let mut script = with_the_probe(ended_cleanly(""));
-        script.push(("sudo -n snap remove blender".to_string(), ended_cleanly("blender removed")));
+        script.push(("sudo -k -n snap remove blender".to_string(), ended_cleanly("blender removed")));
 
         let scratch = Scratch::new("b15-the-managers-removal");
         let build = a_snap_build_on_the_stand_in(&scratch, true);
@@ -8940,7 +9292,7 @@ mod on_a_desk_with_a_socket_pair {
         );
         let to_the_manager: Vec<&String> =
             left.asked.iter().filter(|said| said.contains("snap") || said.contains("remove")).collect();
-        assert_eq!(to_the_manager, vec!["sudo -n snap remove blender"], "{:?}", left.asked);
+        assert_eq!(to_the_manager, vec!["sudo -k -n snap remove blender"], "{:?}", left.asked);
         assert!(left.steps.contains(&asked::THE_BUILD_IS_REMOVED_STEP.to_string()), "{:?}", left.steps);
         assert!(left.packages.contains(&(
             asked::THE_BUILD_IS_REMOVED_STEP.to_string(),
@@ -9648,7 +10000,6 @@ mod on_a_desk_with_a_socket_pair {
             complaint: b"sudo: a password is required\n".to_vec(),
             status: Some(1),
         });
-        script.push((THE_VALIDATE.to_string(), prompted(b"")));
         script.push((THE_LIST_REFRESH_WITH_A_PASSWORD.to_string(), prompted(b"Reading package lists...\n")));
         script.push((THE_TOOL_INSTALL_WITH_A_PASSWORD.to_string(), prompted(b"Setting up xz-utils ...\n")));
         assert!(smoozy_desktop::setting_up::a_run_begins(
@@ -11160,11 +11511,13 @@ mod on_a_desk_with_a_socket_pair {
         // as changed, the sixteenth notes, note 1), so the readings' own
         // complaint — the package system saying the unpack tool is not there —
         // comes first, in the order printed. Until then this read the
-        // install's complaint alone.
+        // install's complaint alone. **From 2026-11-09 the act's words begin
+        // under the line naming it** (`Server Setup` Y7a as changed, the
+        // twenty-eighth notes, note 7).
         assert_eq!(
             output.tabs[1].record.as_ref().map(|it| it.as_str()),
             Some(
-                "dpkg-query: package 'xz-utils' is not installed and no information is \
+                "Set up this server\ndpkg-query: package 'xz-utils' is not installed and no information is \
                  available\ndebconf: delaying package configuration\n"
             ),
         );
@@ -11505,8 +11858,9 @@ mod on_a_desk_with_a_socket_pair {
             vec![Step::Readings, Step::Done, Step::Readings],
             "each act's words are not under its own steps"
         );
-        // **And the next act the user asks for, with nothing standing, begins
-        // its words afresh** (`Server Setup` Y7a: the words are kept until then).
+        // **And the next act the user asks for, with nothing standing, adds
+        // its words after them** (`Server Setup` Y7a as changed 2026-11-09,
+        // the twenty-eighth notes, note 7: until then it began them afresh).
         let again = s::the_acts_are_taken_from_the_card(
             server,
             vec![ASetUpAct::TheTelegramPlacement],
@@ -11514,7 +11868,9 @@ mod on_a_desk_with_a_socket_pair {
         );
         assert_eq!(again, HowThePressWasTaken::ItBegan);
         s::a_run_in_the_line_ends(server, false);
-        assert_eq!(s::the_words_of_each_step_on(server).map(|steps| steps.len()), Some(0));
+        assert_eq!(s::the_words_of_each_step_on(server).map(|steps| steps.len()), Some(3));
+        s::the_servers_words_go(server);
+        assert_eq!(s::the_words_of_each_step_on(server), None, "disconnecting kept the words");
     }
 
     /// **(b) A run cut mid-step and taken up again adds to the words it had**:

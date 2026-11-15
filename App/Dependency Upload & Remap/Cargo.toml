@@ -72,3 +72,10 @@ libc.workspace = true
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys.workspace = true
+
+# **A paused clock for tests alone**, so a test that waits on the real
+# figures (a minute per ask, a second between asks, half an hour over a
+# contents reading or a fixing) runs at once. The workspace's own pin, as
+# `Server Setup` and `Desktop app and delivery` take it.
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

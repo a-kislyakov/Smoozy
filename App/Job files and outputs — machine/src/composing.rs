@@ -38,7 +38,9 @@
 //! site**, because this plan defines a `P1` of its own and a header list
 //! naming it would resolve to the wrong clause.
 
-use crate::inventory::{compose_the_inventory, the_name_owed_at, WhatIsOwedAt, WhatTheInventoryIs};
+use crate::inventory::{
+    compose_the_inventory, the_destinations_that_write_nothing, the_name_owed_at, WhatIsOwedAt, WhatTheInventoryIs,
+};
 use crate::main_output::{
     what_the_main_output_is, ADestinationTheBeautyReached, ThePicks, WhatTheMainOutputIs,
     WhatTheWalkFound, WhereTheRenderEnters,
@@ -132,30 +134,35 @@ pub fn the_reading_and_everything_derived_from(
     printed: ThePrintedReading,
     against: WhatTheReadingIsComposedAgainst<'_>,
 ) -> Result<TheReadingAndWhatFollows, WhyItIsNoReading> {
-    // **R4 item 2: a file output node's outputs are destinations only where the
-    // node will run**, and the rule lives on
-    // [`crate::reading::GatingConditions::a_file_output_node_will_write`]. The
-    // script records every node's outputs with the gating beside them, so the
-    // filtering happens here, once, **before the map is composed** — a map
-    // composed over a wider set than the inventory reads would leave the
-    // inventory dropping destinations with no pair, which is a count that then
-    // reads as a fact.
-    let mut printed = printed;
-    printed.outputs.destinations = the_destinations_that_will_be_written(&printed.outputs);
+    composed(printed, against, None)
+}
 
-    let reading = the_one_document_from(printed, against.enters_at)?;
+/// **[`the_reading_and_everything_derived_from`], for a reading that stepped
+/// more frames than the job renders** — a first-frame check, whose reading
+/// steps its range job's frames as well as its own (`Render Settings` Y1d).
+/// **P6a's answer reads every frame stepped**, so the check and its range job
+/// decide where the folder sits by the same frames (the runner's ruling of
+/// 2026-11-10); **everything else is composed from `the_jobs_own_frames`
+/// alone**, and the reading kept is cut to them too. Added 2026-11-10, piece 13.
+pub fn the_reading_and_everything_derived_from_its_own_frames(
+    printed: ThePrintedReading,
+    against: WhatTheReadingIsComposedAgainst<'_>,
+    the_jobs_own_frames: &[i64],
+) -> Result<TheReadingAndWhatFollows, WhyItIsNoReading> {
+    composed(printed, against, Some(the_jobs_own_frames))
+}
 
-    // **R4 item 5, 2026-10-04: the job's own choices apply before anything
-    // reads the per-frame set**, so the map, the inventory and the picks are
-    // composed from the set as the job will render it. **The reading that is
-    // kept stays what the file says** — this is a working copy, never written.
-    let as_the_job_renders_it = TheOutputsHalf {
-        per_frame: the_per_frame_set_with_the_jobs_pins(
-            &reading.outputs.per_frame,
-            against.the_jobs_pins,
-        ),
-        ..reading.outputs.clone()
-    };
+fn composed(
+    printed: ThePrintedReading,
+    against: WhatTheReadingIsComposedAgainst<'_>,
+    the_jobs_own_frames: Option<&[i64]>,
+) -> Result<TheReadingAndWhatFollows, WhyItIsNoReading> {
+    let (every_frame_stepped, reading, as_the_job_renders_it) = the_document_and_as_the_job_renders_it(
+        printed,
+        against.enters_at,
+        against.the_jobs_pins,
+        the_jobs_own_frames,
+    )?;
 
     // **N8: the budget is measured against the predicted deepest file path and
     // not against the folder.** *"Checking the folder alone would pass a
@@ -167,13 +174,21 @@ pub fn the_reading_and_everything_derived_from(
         .iter()
         .map(|destination| the_longest_name_it_will_write(&as_the_job_renders_it, destination))
         .collect();
+    // **P6a, 2026-11-10: an output that writes nothing for the job's frames
+    // takes no part in the shared run**, by the count's own recipe over every
+    // frame the reading stepped — the one answer P18's run reads too. For a
+    // first-frame check that is its range's frames and its own (the runner's
+    // ruling); for every other job, its own.
+    let writes_nothing = the_destinations_that_write_nothing(&every_frame_stepped);
     let to_map: Vec<ADestinationToMap<'_>> = as_the_job_renders_it
         .destinations
         .iter()
         .zip(longest.iter())
-        .map(|(destination, longest)| ADestinationToMap {
+        .zip(writes_nothing.iter())
+        .map(|((destination, longest), writes_nothing)| ADestinationToMap {
             destination,
             the_longest_name_it_will_write: longest.clone(),
+            it_writes_nothing_for_the_jobs_frames: *writes_nothing,
         })
         .collect();
     let map = compose_the_map(
@@ -193,6 +208,65 @@ pub fn the_reading_and_everything_derived_from(
         inventory,
         picks,
     })
+}
+
+/// **The reading P6a and P18's run read at render start** (`Job files and
+/// outputs` P6a, P21's second case): the one document, with the job's pins
+/// applied to every frame the reading stepped, exactly as the composition
+/// works it out, so the run the job's folder is placed in and the run the map
+/// removes read one answer. For a first-frame check that is its range's
+/// frames and its own (the runner's ruling of 2026-11-10). Added 2026-11-10,
+/// the Creator's twenty-eighth notes, piece 13.
+pub fn the_reading_as_the_job_renders_it(
+    printed: ThePrintedReading,
+    enters_at: &WhereTheRenderEnters,
+    the_jobs_pins: &[AViewLayerTheJobPins],
+) -> Result<TheOutputsHalf, WhyItIsNoReading> {
+    the_document_and_as_the_job_renders_it(printed, enters_at, the_jobs_pins, None).map(|(every_frame_stepped, _, _)| every_frame_stepped)
+}
+
+/// **The one document and its working copies** — every frame stepped, the
+/// pins applied, for P6a; and the document and its working copy cut to
+/// `the_jobs_own_frames` where they are named, for everything else. The one
+/// arrangement the functions above read.
+fn the_document_and_as_the_job_renders_it(
+    printed: ThePrintedReading,
+    enters_at: &WhereTheRenderEnters,
+    the_jobs_pins: &[AViewLayerTheJobPins],
+    the_jobs_own_frames: Option<&[i64]>,
+) -> Result<(TheOutputsHalf, TheOneDocument, TheOutputsHalf), WhyItIsNoReading> {
+    // **R4 item 2: a file output node's outputs are destinations only where the
+    // node will run**, and the rule lives on
+    // [`crate::reading::GatingConditions::a_file_output_node_will_write`]. The
+    // script records every node's outputs with the gating beside them, so the
+    // filtering happens here, once, **before the map is composed** — a map
+    // composed over a wider set than the inventory reads would leave the
+    // inventory dropping destinations with no pair, which is a count that then
+    // reads as a fact.
+    let mut printed = printed;
+    printed.outputs.destinations = the_destinations_that_will_be_written(&printed.outputs);
+
+    let mut reading = the_one_document_from(printed, enters_at)?;
+    let every_frame_stepped = TheOutputsHalf {
+        per_frame: the_per_frame_set_with_the_jobs_pins(&reading.outputs.per_frame, the_jobs_pins),
+        ..reading.outputs.clone()
+    };
+    if let Some(own) = the_jobs_own_frames {
+        reading.outputs.per_frame.retain(|at| own.contains(&at.frame));
+    }
+
+    // **R4 item 5, 2026-10-04: the job's own choices apply before anything
+    // reads the per-frame set**, so the map, the inventory and the picks are
+    // composed from the set as the job will render it. **The reading that is
+    // kept stays what the file says** — this is a working copy, never written.
+    let as_the_job_renders_it = TheOutputsHalf {
+        per_frame: the_per_frame_set_with_the_jobs_pins(
+            &reading.outputs.per_frame,
+            the_jobs_pins,
+        ),
+        ..reading.outputs.clone()
+    };
+    Ok((every_frame_stepped, reading, as_the_job_renders_it))
 }
 
 /// **The longest name §7's recipes predict for one destination over the frames

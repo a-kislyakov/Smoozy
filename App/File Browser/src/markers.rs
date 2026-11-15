@@ -32,8 +32,8 @@ mod tests {
 
     /// **Every file of this crate, counted exactly.** See
     /// [`every_file_of_this_crate`] for why the number is here rather than a
-    /// floor.
-    const THE_FILE_COUNT: usize = 24;
+    /// floor. 24 to 25 on 2026-11-12: `src/elevated.rs` (P6b).
+    const THE_FILE_COUNT: usize = 25;
 
     /// Whether a word has a clause marker's shape.
     ///

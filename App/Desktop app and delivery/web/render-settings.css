@@ -51,14 +51,6 @@
   gap: 0;
 }
 
-/* **A line that went, keeping its space** — `Design/Whole app § The window`:
-   *a line that can go keeps its space when it goes*. The pick line leaves the
-   header when a Blender is picked, and every field sits below it; the page
-   draws it again with this class so nothing under it moves. */
-:where(.pkline.kept) {
-  visibility: hidden;
-}
-
 /* **A field and its unit, held on one line** — `Design/Whole app §
    Typography`, Creator-stated 2026-09-28: a number and its unit are never
    split across two lines. `.set` wraps, so the resolution field and its *%*
@@ -84,9 +76,16 @@
   margin: 0 0 14px;
   padding: 9px 13px;
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: 0;
   background: var(--bg);
 }
+
+/* **A box that runs the full width of its panel has square corners** —
+   `Design/Whole app § Type and spacing`, the Creator's notes on the test copy
+   of 2026-11-12, note 6. The drawing's `.sheet > .noread` is its rule; here
+   the band sits in piece 5's `.suscroll`, one step further down. The failed
+   read's box above takes the same. */
+[data-panel="set"] .suscroll > .noread { border-radius: 0; }
 
 /* **A submission that went: the server's name in the sentence's own ink** —
    the drawing's `res-sent` draws *Submitted to RunPod 4090.* with no bold, and
@@ -124,3 +123,38 @@
    written here as mechanism.~~ **From 2026-10-19 the drawing draws it**
    (`res-tglist`), so the rule is the drawing's, lifted into
    `web/the-drawing.css`, and its copy here went with piece N. */
+
+/* **A simulation line keeps its scene, its switch and its range on one line**
+   (the UI at every size, D-13): the scene's name takes a column of its own,
+   cut short where it is longer and whole on hover, so the switches of every
+   scene line up and the range never runs out of the foot. */
+[data-box="simulation-row"] > .soname { flex: 0 1 12em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-box="simulation-row"] > :not(.soname) { flex: none; }
+
+/* ══ UI consistency (2026-11-13), what only this page draws. ══ */
+/* **What the read answered sits in the held line under the version row, at
+   the header's left edge**, covering the pick line while it stands, as the
+   read's own line does (findings 15 and 48). */
+.pkline > [data-box="read-answer"] { padding-left: 0; }
+.pkline > [data-box="read-answer"]:not([hidden]) ~ :not(.pkheld) { visibility: hidden; }
+/* **The submission's refusal is cut short on line 2, whole on hover**, as the
+   submitted line is, so it never wraps and moves Render (finding 47). */
+.sfoot .sfl2 > [data-box="submit-answer"] { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* **The job's name is a field like every other on the page**: the field's
+   face and height (finding 30); the drawing's `.sfoot .fake` gives the name
+   ordinary ink. The drawing's is a span; an input needs the face given back. */
+input.fake { font: inherit; font-size: var(--t-md); }
+/* **Telegram's line is the dropdown's height before Telegram is installed**,
+   so Render does not move when the install lands and the dropdown comes
+   (finding 62): the dropdown's line, 1.62 of its 12.5 pixels, its 4-pixel
+   padding and its border. */
+.sftg[data-box="telegram-not-installed"] { min-height: calc(1.62 * var(--t-md) + 10px); }
+/* **The Submitting again band runs the panel's width, square**, as the File
+   not read band does here (UI consistency, the small ones; the drawing's
+   `.sheet > .agnband`, one step further down). */
+[data-panel="set"] .suscroll > .agnband { margin-left: 0; margin-right: 0; border-radius: 0; }
+/* **A greyed field keeps a field's height** (UI consistency, finding 46): it
+   shows no value, as the drawing's greyed rows do, but holds a line of the
+   field's own text unseen, so the rows below do not rise by ten pixels each
+   when several scenes are ticked. */
+span.fld:empty::before { content: "\200B"; }

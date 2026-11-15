@@ -65,17 +65,25 @@
  * height, that bar not existing here. No number: it is the button's own bottom
  * edge. */
 .mnu .mb { top: 100%; }
+/* A window too short for the four menus: the panel is held to the room under
+ * the button (the page sets the height) and scrolls (the UI at every size,
+ * A-02). */
+.mnu .mb .ctx { overflow-y: auto; max-height: var(--mb-max-h, none); }
+.mnu .mb .ctx > * { flex: none; }
 
-/* The Linux update box follows the drawing's shared .modal.top, .mbox, .msub and .mact rules
- * from the-drawing.css. Only the separately supplied version needs a line
- * kept whole, like About's version. No layout number differs from the drawing. */
-.linux-update h3 .selectable { white-space: nowrap; }
+/* The update box (every system's from 2026-11-09) and the Linux rollback box
+ * follow the drawing's shared .modal.top, .mbox, .msub and .mact rules from
+ * the-drawing.css, and the update box takes About's link. Only the separately
+ * supplied version needs a line kept whole, like About's version. No layout
+ * number differs from the drawing. */
+.update-box h3 .selectable { white-space: nowrap; }
 
 /* About's offline licence reader shares its box and keeps long text inside it. */
 .about .mbox { max-height: 100%; min-height: 0; overflow-y: auto; }
 .about .ab-links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 16px; }
 .about .ab-link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; }
 .about .ab-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.about .upd-new { align-self: flex-start; }
 .about .ab-reading { width: min(850px, 100%); }
 .about .ab-text { max-height: calc(100vh - 220px); overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--t-sm); font-family: var(--face-mono); line-height: 1.5; text-align: left; }
 .ax-bad {
@@ -86,3 +94,9 @@
 .ax-bad b { color: var(--ink); font-weight: 600; }
 .ax-bad .fdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 7px; vertical-align: 1px; }
 /* End About styles. */
+/* Help links (Design/Whole app, Help links, 2026-11-13): the drawing's text
+   link after a sentence, and where the browser would not open, the failure
+   shape's dot and words in its place, on the same line. */
+.help-link-holder { white-space: nowrap; }
+.help-link-failed b { color: var(--ink); font-weight: 600; }
+.help-link-failed .fdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-right: 7px; vertical-align: 1px; }

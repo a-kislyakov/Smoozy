@@ -51,6 +51,8 @@
 // without end).
 
 import { whenTold } from "./event-route.js";
+// **Help links** — `Design/Whole app § Help links` (2026-11-13).
+import { theHelpLinkFollows } from "./help-links.js";
 import {
   aScreenIsRegistered,
   ALL_SERVERS,
@@ -71,6 +73,48 @@ import { aServerDialogPicksAKey } from "./keys.js";
 import { theCountdown, theMarkOnAControl, theMarkComesOffAControl } from "./the-underway-shape.js";
 import { theWordsPanel } from "./the-machines-own-words.js";
 import { theValueDrawn, theValueIsDrawnInto } from "./the-value-drawn.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
+
+/// **The key list stays inside the box** (the UI at every size, B-11): no
+/// wider than the box right of the control, a long key name wrapping, and no
+/// lower than what the box shows, scrolling inside it. Two values the
+/// stylesheet reads (`--ddl-max-w`, `--ddl-max-h`), as this file places its
+/// menu (H33). The gap is the list's own 4 pixels, twice.
+function theListStaysInsideTheBox(face, list) {
+  list.style.setProperty("--ddl-max-h", "none");
+  list.style.setProperty("--ddl-max-w", "none");
+  const box = face.closest ? face.closest(".mbox") : null;
+  const edges = box ? box.getBoundingClientRect() : { right: window.innerWidth, bottom: window.innerHeight };
+  const control = face.getBoundingClientRect();
+  list.style.setProperty("--ddl-max-w", `${Math.round(Math.max(edges.right - control.left - 8, control.width))}px`);
+  const room = Math.min(edges.bottom, window.innerHeight) - control.bottom - 8;
+  if (list.getBoundingClientRect().height > room) list.style.setProperty("--ddl-max-h", `${Math.round(Math.max(room, 120))}px`);
+}
+
+/// **An address breaks after its `@` and its `:` before anywhere else**, so a
+/// narrow row never splits the port and makes it read as another port (the
+/// UI at every size, B-03). Each piece is drawn as a value; the break between
+/// them is an element, `<wbr>`, so nothing is put into the text the user
+/// copies.
+function theAddressIsDrawnInto(holder, address) {
+  holder.textContent = "";
+  const text = address == null ? "" : String(address);
+  if (!text) return holder;
+  // Cut after each `@` and `:` by hand: a look-behind in a pattern is not
+  // read by older engines, and one unread pattern stops the whole module.
+  let from = 0;
+  for (let at = 0; at < text.length; at += 1) {
+    if (text[at] !== "@" && text[at] !== ":") continue;
+    if (from) holder.appendChild(document.createElement("wbr"));
+    holder.appendChild(theValueDrawn(text.slice(from, at + 1)));
+    from = at + 1;
+  }
+  if (from < text.length) {
+    if (from) holder.appendChild(document.createElement("wbr"));
+    holder.appendChild(theValueDrawn(text.slice(from)));
+  }
+  return holder;
+}
 
 const shell = window.__TAURI__;
 
@@ -102,6 +146,7 @@ const THE_CHANGED_IDENTITY_WARNING = "servers:the-changed-identity-warning";
 // The failure shape's own kinds, declared in `src/surface/the_failure_shape.rs`.
 const A_FAILURE_IS_STANDING = "presentation:a-failure-is-standing";
 const A_FAILURE_WAS_CLEARED = "presentation:a-failure-was-cleared";
+const A_FAILURE_WAS_NOT_CLEARED = "presentation:a-failure-was-not-cleared";
 
 
 // ── What this screen holds for the life of the run ──────────────────────────
@@ -223,13 +268,16 @@ export function theMomentReads(seconds) {
     at.getFullYear() === now.getFullYear() &&
     at.getMonth() === now.getMonth() &&
     at.getDate() === now.getDate();
-  if (sameDay) return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // **The 24-hour clock, whatever the computer's own style** — `Design/Whole
+  // app § Words`, the Creator's note 5 on the test copy of 2026-11-12.
+  if (sameDay) return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   if (at.getFullYear() === now.getFullYear()) {
     return at.toLocaleString([], {
       day: "numeric",
       month: "short",
       hour: "2-digit",
       minute: "2-digit",
+      hourCycle: "h23",
     });
   }
   return at.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
@@ -268,13 +316,16 @@ aScreenIsRegistered({
     toolsLine.hidden = true;
     host.appendChild(toolsLine);
 
-    // **The connects that did not happen, one line each, above the list.**
-    theConnectsNotMadeHolder = document.createElement("div");
-    host.appendChild(theConnectsNotMadeHolder);
-
     list = document.createElement("div");
     list.className = "svlist";
     host.appendChild(list);
+
+    // **The connects that did not happen, one line each, under the list** —
+    // so a line coming never pushes the rows down under the pointer (UI
+    // consistency, finding 34; until then above it, and every row dropped
+    // about 37 pixels).
+    theConnectsNotMadeHolder = document.createElement("div");
+    host.appendChild(theConnectsNotMadeHolder);
 
     // **Where the list goes when the list could not be read** — L8a, and
     // never the guidance (step 10a round 1, fix-here item 4).
@@ -609,7 +660,7 @@ function aRow(row, screen) {
 
   const address = document.createElement("span");
   address.className = "svaddr mono";
-  theValueIsDrawnInto(address, row.address);
+  theAddressIsDrawnInto(address, row.address);
   main.appendChild(address);
 
   // **The extra line, and there is one of it.** Design: it is *"either a
@@ -617,11 +668,24 @@ function aRow(row, screen) {
   // key"*, and **where both are true the failure takes the line**. **Every
   // standing failure is drawn in it**, each exactly as it would be alone (M7a).
   const failures = failuresByServer.get(row.server);
-  if (failures && failures.size) {
+  // **`Desktop app and delivery` V3c (2026-11-14): the automatic repair's two
+  // lines, and *too new* where V14 refused it, take the place *Smoozy isn't
+  // responding.* would take** — they are about the same silence and say more.
+  // **Only the one failure it names** (`replaces`, V1's condition) gives way;
+  // every other standing failure is still drawn (Sol's look, 2026-11-14).
+  const theLineSaysMore = theUpdateLineSaysMore(row);
+  const replaced = theLineSaysMore ? row.the_update_line.replaces : null;
+  const standing = failures
+    ? Array.from(failures.values()).filter((failure) => !replaced || failure.identityOrMark !== replaced)
+    : [];
+  if (theLineSaysMore) main.appendChild(theUpdateLine(row));
+  if (standing.length) {
     const extra = document.createElement("span");
     extra.className = "svextra";
-    for (const failure of failures.values()) extra.appendChild(theFailureOnTheRow(failure));
+    for (const failure of standing) extra.appendChild(theFailureOnTheRow(failure));
     main.appendChild(extra);
+  } else if (theLineSaysMore) {
+    // Drawn above.
   } else if (row.the_update_line) {
     // **Smoozy on this server older or newer than the app** — `Design/Servers
     // § A row`, after a standing failure and before the key mark, which
@@ -639,6 +703,13 @@ function aRow(row, screen) {
     const extra = document.createElement("span");
     extra.className = "svextra";
     saidInto(extra, row.the_setup_line);
+    main.appendChild(extra);
+  } else if (row.the_telegram_line) {
+    // **`Design/Servers § A row`: Telegram refusing this server's messages**,
+    // the last of the extra lines (`Telegram` F6, 2026-11-14).
+    const extra = document.createElement("span");
+    extra.className = "svextra";
+    saidInto(extra, row.the_telegram_line);
     main.appendChild(extra);
   }
   // **`Security and licence` S34's one sentence, said once**, and drawn
@@ -684,6 +755,16 @@ function aRow(row, screen) {
     theMenuIsOpened(row, screen, more, press);
   });
   return drawn;
+}
+
+/// **Whether the row's update line says more about the same silence than
+/// *Smoozy isn't responding.* does** — the automatic repair's two lines and
+/// *too new* (`Desktop app and delivery` V3c). The row and the server's own
+/// page ask it the same way (`Design/Servers § A row` as added 2026-11-15).
+function theUpdateLineSaysMore(row) {
+  return Boolean(
+    row.the_update_line && ["repairing", "repair-failed", "too-new"].includes(row.the_update_line.which),
+  );
 }
 
 /// **Smoozy on this server older or newer than the app, as the row's extra
@@ -847,6 +928,7 @@ function theWorkColumn(row) {
       theCountdown(row.the_next_attempt.due_at, {
         in: row.the_next_attempt.trying_again_in,
         now: row.the_next_attempt.trying_again_now,
+        unit: row.the_next_attempt.seconds,
       }),
     );
   }
@@ -906,7 +988,41 @@ function theConnectControl(row, screen) {
   const dot = document.createElement("span");
   dot.className = "cdot";
   control.appendChild(dot);
-  control.appendChild(textNode(row.the_connection.label));
+  // **`Design/Servers` as added 2026-11-11: *Connected* and *Reconnecting…*
+  // read *Disconnect* under the pointer or with focus**, the act a press
+  // takes; the words come from the application. The four questions, scout 1.10.
+  // **And the control keeps one width, and *Disconnect* is red** (added
+  // 2026-11-13, the Creator's notes on the test copy of 2026-11-12, note 7):
+  // both labels are laid in one cell, unseen, and the one showing over them —
+  // the drawing's `.cwords` — and the red is the drawing's `.cstop`, the
+  // Queue's *Stop*'s.
+  if (row.the_connection.on_hover) {
+    const words = document.createElement("span");
+    words.className = "cwords";
+    for (const said of [row.the_connection.label, row.the_connection.on_hover]) {
+      const ghost = document.createElement("span");
+      ghost.className = "cghost";
+      ghost.setAttribute("aria-hidden", "true");
+      ghost.textContent = said;
+      words.appendChild(ghost);
+    }
+    const label = document.createElement("span");
+    label.className = "cnow";
+    label.textContent = row.the_connection.label;
+    words.appendChild(label);
+    control.appendChild(words);
+    const reads = (said, stops) => () => {
+      if (control.classList.contains("uway")) return;
+      label.textContent = said;
+      control.classList.toggle("cstop", stops);
+    };
+    control.addEventListener("mouseenter", reads(row.the_connection.on_hover, true));
+    control.addEventListener("mouseleave", reads(row.the_connection.label, false));
+    control.addEventListener("focus", reads(row.the_connection.on_hover, true));
+    control.addEventListener("blur", reads(row.the_connection.label, false));
+  } else {
+    control.appendChild(textNode(row.the_connection.label));
+  }
   if (row.the_connection.unavailable) {
     control.disabled = true;
     control.classList.add("dead");
@@ -945,7 +1061,7 @@ function theConnectControl(row, screen) {
 /// own event and the builder is `web/the-failure-shape.js`'s. The mockup draws
 /// a `.svfail` of its own on the row; that markup is not copied.
 function theFailureOnTheRow(said) {
-  return theFailureShape({
+  const shape = theFailureShape({
     sentence: said.sentence,
     whatToDoAboutIt: said.whatToDoAboutIt,
     kind: said.kind,
@@ -967,6 +1083,17 @@ function theFailureOnTheRow(said) {
       });
     },
   });
+  // **The cross was pressed and the clearing did not land**, so the row says
+  // so beside the failure, which stays (L8a, F-10). The sentence is the
+  // application's, through the typography point. Until the twenty-ninth notes'
+  // piece E only the copy at the window's foot drew it; the foot is gone.
+  if (said.theClearingDidNotLand) {
+    const told = document.createElement("p");
+    told.className = "qf2 failure-refused";
+    told.textContent = said.theClearingDidNotLand;
+    shape.appendChild(told);
+  }
+  return shape;
 }
 
 // ── The five menus ──────────────────────────────────────────────────────────
@@ -992,7 +1119,7 @@ function theMenuIsClosed(restore = false) {
   if (openMenu && openMenu.parentNode) openMenu.parentNode.removeChild(openMenu);
   openMenu = null;
   menuContext = null;
-  if (restore && held) theMenusRow(held)?.focus();
+  if (restore && held) theFocusMovesTo(theMenusRow(held));
 }
 
 function theMenusRow(held) {
@@ -1078,7 +1205,7 @@ function theMenuIsOpened(row, screen, beside, press, rail = false, focused = nul
       key.preventDefault(); key.stopPropagation();
       const at = items.indexOf(document.activeElement);
       const next = key.key === "Home" ? 0 : key.key === "End" ? items.length - 1 : (at + (key.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
-      items[next]?.focus();
+      theFocusMovesTo(items[next]);
     } else if (key.key === "Enter" || key.key === " ") {
       key.preventDefault(); key.stopPropagation();
       if (items.includes(document.activeElement)) document.activeElement.click();
@@ -1088,7 +1215,7 @@ function theMenuIsOpened(row, screen, beside, press, rail = false, focused = nul
   document.addEventListener("mousedown", away, true);
   document.addEventListener("keydown", keys, true);
   const items = Array.from(panel.querySelectorAll('[role="menuitem"]')).filter((one) => !one.disabled);
-  (items.find((one) => one.dataset.act === focused) || items[0])?.focus();
+  theFocusMovesTo(items.find((one) => one.dataset.act === focused) || items[0]);
 }
 
 // The pane takes the list's complete, key-checked reading and its actual control.
@@ -1101,9 +1228,24 @@ export function theConnectionIsDrawnInto(holder, note, server) {
   if (!previous || previous.server !== server) theScreenIsAskedFor();
 }
 
+// **What each holder last drew from, so a reading that changes nothing
+// rebuilds nothing.** The second live pass of 2026-11-12, new fault 8: right
+// after opening, a burst of readings rebuilt *Connect* several times, and a
+// press that landed on the button being replaced did nothing.
+const drawnFrom = new WeakMap();
+
 function theSharedControlsAreDrawn(screen) {
   for (const [holder, { note, server }] of connectionPlaces) {
     const row = screen.rows.find((one) => one.server === server);
+    const from = JSON.stringify([
+      row || null,
+      Array.from(failuresByServer.get(server)?.values() || []),
+      theConnectsNotMade.get(server) || null,
+      screen.the_tools_statement || null,
+      pendingConnections.has(server),
+    ]);
+    if (drawnFrom.get(holder) === from && (holder.childNodes || holder.children || []).length) continue;
+    drawnFrom.set(holder, from);
     holder.replaceChildren(); note.replaceChildren();
     if (!row) { note.hidden = true; continue; }
     const control = theConnectControl(row, screen);
@@ -1111,17 +1253,32 @@ function theSharedControlsAreDrawn(screen) {
     if (screen.the_tools_statement) control.title = screen.the_tools_statement.lead;
     holder.appendChild(control);
     const failures = failuresByServer.get(server);
-    if (failures?.size) {
-      for (const failure of failures.values()) note.appendChild(theFailureOnTheRow(failure));
+    // **The repair's lines and *too new* in the head too, in place of
+    // *Smoozy isn't responding.* and of no other failure** — as on the row
+    // (`Design/Servers § A row` as added 2026-11-15; the what-if live pass,
+    // new fault 2: the head said *isn't responding* through the whole repair).
+    const theLineSaysMore = theUpdateLineSaysMore(row);
+    const replaced = theLineSaysMore ? row.the_update_line.replaces : null;
+    const standing = failures
+      ? Array.from(failures.values()).filter((failure) => !replaced || failure.identityOrMark !== replaced)
+      : [];
+    if (theLineSaysMore) note.appendChild(theUpdateLine(row));
+    if (standing.length) {
+      for (const failure of standing) note.appendChild(theFailureOnTheRow(failure));
+    } else if (theLineSaysMore) {
+      // Drawn above.
     } else if (theConnectsNotMade.has(server)) {
       note.textContent = theConnectsNotMade.get(server).said;
+      // ***Could not connect*'s Help link**, where the application names it.
+      theHelpLinkFollows(note, theConnectsNotMade.get(server).help);
     } else if (screen.the_tools_statement) {
       note.textContent = screen.the_tools_statement.lead;
     } else if (row.the_key_mark) saidInto(note, row.the_key_mark);
     else if (row.the_setup_line) saidInto(note, row.the_setup_line);
+    else if (row.the_telegram_line) saidInto(note, row.the_telegram_line);
     if (row.the_next_attempt) {
       const next = row.the_next_attempt;
-      note.appendChild(theCountdown(next.due_at, { in: next.trying_again_in, now: next.trying_again_now }));
+      note.appendChild(theCountdown(next.due_at, { in: next.trying_again_in, now: next.trying_again_now, unit: next.seconds }));
     }
     note.hidden = !note.childNodes.length;
   }
@@ -1237,7 +1394,7 @@ function theKeysRowTakesTheKeyboard(key) {
     if (theCurrentPlace() !== KEYS) return true;
     const row = document.querySelector(which);
     if (!row) return document.querySelector(".ky-row") !== null;
-    row.focus();
+    theFocusMovesTo(row);
     row.scrollIntoView({ block: "nearest" });
     return true;
   };
@@ -1359,7 +1516,7 @@ const A_CONNECTION_LINE = /^\s*ssh\s/;
 function theDialogIsLabelled(box, heading) {
   heading.id = "svdialog-heading";
   box.setAttribute("aria-labelledby", heading.id);
-  box.focus();
+  theFocusMovesTo(box);
 }
 
 function theDialogIsClosed() {
@@ -1482,7 +1639,7 @@ function aKeyControl(frm, said, held, context, choosesTheOnlyKey = false) {
   list.hidden = true;
   pick.appendChild(list);
 
-  const shown = { key: held.key, fingerprint: held.fingerprint };
+  const shown = { key: held.key, fingerprint: held.fingerprint, showsAs: held.showsAs };
   const theGoneKey = held.gone ? held.key : null;
   // key → { button, offer, verdict, gone } for every row the list draws.
   const rows = new Map();
@@ -1501,6 +1658,7 @@ function aKeyControl(frm, said, held, context, choosesTheOnlyKey = false) {
     }
   };
   const theControlReads = (showsAs) => {
+    shown.showsAs = showsAs;
     face.textContent = "";
     if (showsAs) {
       face.appendChild(theValueDrawn(showsAs));
@@ -1643,14 +1801,15 @@ function aKeyControl(frm, said, held, context, choosesTheOnlyKey = false) {
     if (!offered) return;
     if (theOpenKeyList) theOpenKeyList.shut();
     list.hidden = false;
+    theListStaysInsideTheBox(face, list);
     face.setAttribute("aria-expanded", "true");
     theOpenKeyList = { pick, shut };
     // **The keys reach the list however it was opened**: from the keyboard
     // the picked row takes the focus, from the mouse the control does.
     const reached = theRowsTheKeysReach();
     const first = reached.find((one) => one.classList.contains("hd")) || reached[0];
-    if (byKey && first) first.focus();
-    else face.focus();
+    if (byKey && first) theFocusMovesTo(first);
+    else theFocusMovesTo(face);
   };
   // **A pick closes the list, and the focus goes back to the control**, so
   // Escape still reaches the dialog.
@@ -1658,7 +1817,7 @@ function aKeyControl(frm, said, held, context, choosesTheOnlyKey = false) {
     if (button.classList.contains("off")) return;
     picks += 1;
     shut();
-    face.focus();
+    theFocusMovesTo(face);
     if (button === opens) {
       theKeysScreenIsOpened(false);
       return;
@@ -1674,7 +1833,7 @@ function aKeyControl(frm, said, held, context, choosesTheOnlyKey = false) {
     if (press.key === "Escape" && open) {
       press.preventDefault();
       shut();
-      face.focus();
+      theFocusMovesTo(face);
     } else if (press.key === "ArrowDown" || press.key === "ArrowUp") {
       press.preventDefault();
       if (!open) {
@@ -1684,7 +1843,7 @@ function aKeyControl(frm, said, held, context, choosesTheOnlyKey = false) {
       const reached = theRowsTheKeysReach();
       const at = reached.indexOf(document.activeElement);
       const next = at < 0 ? 0 : at + (press.key === "ArrowDown" ? 1 : -1);
-      if (reached[next]) reached[next].focus();
+      if (reached[next]) theFocusMovesTo(reached[next]);
     } else if (press.key === "Enter" && open) {
       const at = theRowsTheKeysReach().indexOf(document.activeElement);
       if (at < 0) return;
@@ -1765,10 +1924,17 @@ function theKeyIsReadAgain(shown, key, theControlReads) {
   });
 }
 
+/// **What the Add dialog held when its guide link was pressed**, given back
+/// once at the next opening — `Design/Servers`, the guidance bullet, added
+/// 2026-11-12 (the four questions, scout 4.11).
+let theAddDialogKept = null;
+
 /// **The Add dialog** — `sv-add`, and its three refusal readings `sv-blank`,
 /// `sv-port` and `sv-dupname`.
 function theAddDialogIsOpened() {
   shell.core.invoke("the_add_dialog").then((said) => {
+    const kept = theAddDialogKept;
+    theAddDialogKept = null;
     const box = aDialog();
     const heading = document.createElement("h3");
     heading.textContent = said.heading;
@@ -1783,6 +1949,17 @@ function theAddDialogIsOpened() {
     opens.className = "lnkb";
     opens.textContent = said.the_guidance_again;
     opens.addEventListener("click", () => {
+      // **What was typed is kept for the next opening** (scout 4.11).
+      theAddDialogKept = {
+        host: host.value,
+        port: port.value,
+        username: username.value,
+        name: name.value,
+        picked,
+        key: { key: key.key || "", fingerprint: key.fingerprint || "", showsAs: key.showsAs || "" },
+        ready: ready.on(),
+        blender: blender.on(),
+      };
       theDialogIsClosed();
       if (lastDrawn) {
         theGuidanceIsDrawn(lastDrawn.guidance);
@@ -1794,7 +1971,7 @@ function theAddDialogIsOpened() {
 
     const frm = document.createElement("div");
     frm.className = "frm";
-    const host = aField(frm, said.host, "", true);
+    const host = aField(frm, said.host, kept ? kept.host : "", true);
     host.placeholder = said.host_placeholder;
     // **The line under Host for a pasted connection line**, in the form's grey
     // and never in red, since nothing the user typed is wrong — `sv-paste`.
@@ -1802,11 +1979,13 @@ function theAddDialogIsOpened() {
     const pasted = aRefusalUnder(frm);
     pasted.className = "mnote2 svpasted";
     const hostRefusal = aRefusalUnder(frm);
-    const port = aField(frm, said.port, said.the_port_starts_at, false);
+    const port = aField(frm, said.port, kept ? kept.port : said.the_port_starts_at, false);
     port.classList.add(THE_PORTS_OWN_CLASS);
     thePortPutsTheStandardBack(port, said.the_port_starts_at);
     const portRefusal = aRefusalUnder(frm);
-    const username = aField(frm, said.username, "", true);
+    const username = aField(frm, said.username, kept ? kept.username : "", true);
+    // **The two usual usernames, as an example** (scout 2.12).
+    username.placeholder = said.username_placeholder;
     const usernameRefusal = aRefusalUnder(frm);
 
     // **`Keys` U11: the Add dialog hands over its own fields as they stand**,
@@ -1815,7 +1994,7 @@ function theAddDialogIsOpened() {
     const key = aKeyControl(
       frm,
       said,
-      { key: "", fingerprint: "", showsAs: "" },
+      kept ? kept.key : { key: "", fingerprint: "", showsAs: "" },
       () => ({
         label: name ? name.value : "",
         username: username.value,
@@ -1833,6 +2012,7 @@ function theAddDialogIsOpened() {
     nameHolder.className = "fld wide svnamefield";
     name = document.createElement("input");
     name.type = "text";
+    if (kept) name.value = kept.name;
     nameHolder.appendChild(name);
     const optional = document.createElement("em");
     optional.textContent = said.optional;
@@ -1850,7 +2030,7 @@ function theAddDialogIsOpened() {
     nameHolder.addEventListener("mousedown", (press) => {
       if (press.target === name) return;
       press.preventDefault();
-      name.focus();
+      theFocusMovesTo(name);
     });
     frm.appendChild(nameHolder);
 
@@ -1861,7 +2041,7 @@ function theAddDialogIsOpened() {
     group.className = "swgroup";
     const swatches = document.createElement("span");
     swatches.className = "swatches";
-    let picked = said.picked_for_you;
+    let picked = kept && kept.picked ? kept.picked : said.picked_for_you;
     for (const badge of said.the_eight) {
       const one = document.createElement("button");
       one.type = "button";
@@ -1974,12 +2154,27 @@ function theAddDialogIsOpened() {
     add.type = "button";
     add.className = "btn";
     add.textContent = said.add;
+    // **Add holds the width of *Add and set up***, the drawing's `.holds`, so
+    // ticking a box changes its words and Cancel beside it stays put (UI
+    // consistency, finding 18).
+    add.dataset.held = said.add_and_set_up;
+    add.classList.add("holds");
     const theLabel = () => {
       add.textContent = ready.on() || blender.on() ? said.add_and_set_up : said.add;
     };
     ready.box.addEventListener("click", theLabel);
     blender.box.addEventListener("click", theLabel);
+    // **The ticks as they were before the guide** (scout 4.11).
+    if (kept && kept.ready) ready.tick();
+    if (kept && kept.blender) blender.tick();
+    theLabel();
+    // `Design/Servers`: one outstanding save per Add dialog.
+    let adding = false;
     add.addEventListener("click", () => {
+      if (adding) return;
+      adding = true;
+      add.disabled = true;
+      const answered = () => { adding = false; add.disabled = false; };
       shell.core.invoke("a_server_is_added", {
         host: host.value,
         // **The port travels as the text the user typed.** A number here would
@@ -1997,7 +2192,7 @@ function theAddDialogIsOpened() {
         // round 1, fix-here item 13).
         getReady: ready.on(),
         installBlender: blender.on(),
-      });
+      }).then(answered, answered);
     });
     row.appendChild(add);
     box.appendChild(row);
@@ -2016,7 +2211,7 @@ function theAddDialogIsOpened() {
     // **The caret starts in Host, the first field, so the user types at
     // once** — `Design/Whole app` (the Creator's third notes, note 1). Escape
     // still closes the box: the key reaches the box from the field.
-    host.focus();
+    theFocusMovesTo(host);
   });
 }
 
@@ -2038,7 +2233,7 @@ function aTickBox(label) {
   // **Space ticks it**, as a tick box does (`Design/Whole app`, *Tab lands on
   // the control itself*; the Creator's twenty-seventh notes, note 1).
   theKeysTick(box, toggle);
-  return { box, on: () => box.classList.contains("on") };
+  return { box, on: () => box.classList.contains("on"), tick: toggle };
 }
 
 /// **Space or Return presses a tick or a choice that is not a native control**,
@@ -2224,7 +2419,7 @@ function theNameFieldHasTheKeys() {
 /// caret was after a redraw.
 function theNameFieldTakesTheKeys(selected) {
   if (!renaming || !renaming.field) return;
-  renaming.field.focus();
+  theFocusMovesTo(renaming.field);
   if (selected) renaming.field.select();
 }
 
@@ -2622,6 +2817,13 @@ export function theStopAndClearEndingIsShown(server, endings, which, name, words
     said.appendChild(line);
     box.appendChild(said);
   }
+  // **`Servers` W40b: the server still bills** — *Remove anyway* forgets a
+  // server whose work may still be running, and nothing in Smoozy names it
+  // afterwards (the Rough what-if answers, share 2, 129).
+  const bills = document.createElement("p");
+  bills.className = "mnote2 svbills";
+  bills.textContent = words.stillBills;
+  box.appendChild(bills);
   const row = document.createElement("div");
   row.className = "mrow";
   const grow = document.createElement("span");
@@ -2703,6 +2905,7 @@ function theOwedEndingIsShown(screen) {
     stoppingWorkOn: boxes.stopping_work_on,
     tryAgain: boxes.try_again,
     removeAnyway: boxes.remove_anyway,
+    stillBills: boxes.still_bills,
   });
 }
 
@@ -2912,15 +3115,23 @@ function theEditWarningIsDrawn(warning, said) {
   warning.appendChild(textNode(BETWEEN_A_FIGURE_AND_ITS_UNIT));
   warning.appendChild(textNode(said.theEditWarningHaveNotEnded || ""));
   const named = Number(said.theEditWarningNamedCount || 0);
+  // **Commas between the names, *and* before the last, a full stop after it**
+  // — the application's words, so one can tell where each name ends (the UI
+  // at every size, B-13).
+  const comma = said.theEditWarningComma || "";
+  const and = said.theEditWarningAnd || "";
   for (let at = 0; at < named; at += 1) {
     // **The key is read out of the event before anything is drawn**, so no
     // statement that puts something on the page carries a written word.
     const theName = said[`theEditWarningNamed${at}`] || "";
+    if (at > 0 && at === named - 1) warning.appendChild(textNode(" " + and));
+    else if (at > 0) warning.appendChild(textNode(comma));
     warning.appendChild(textNode(" "));
     const one = document.createElement("b");
     theValueIsDrawnInto(one, theName);
     warning.appendChild(one);
   }
+  if (named) warning.appendChild(textNode(said.theEditWarningFullStop || ""));
   warning.appendChild(textNode(" "));
   warning.appendChild(textNode(said.theEditWarningWhatBecomesOfThem || ""));
 }
@@ -2981,7 +3192,8 @@ function theActWasNotTaken(said) {
   if (!told) {
     told = document.createElement("div");
     told.className = "sv-notool svnotyet";
-    host.insertBefore(told, list);
+    // Under the list, as a connect that did not happen is (finding 34).
+    host.insertBefore(told, theConnectsNotMadeHolder);
   }
   told.textContent = said.said;
   told.hidden = false;
@@ -2997,6 +3209,14 @@ const A_CONNECT_NOT_MADE = [
   "the-connection-was-not-made",
   "it-is-not-a-linux-machine",
   "the-passphrase-could-not-be-used",
+  // **A reason the attempt knows** — `A_CONNECT_THAT_WAS_NOT_MADE_SAYS_WHY`
+  // in `src/surface/servers.rs` (2026-11-11, scout 3.1).
+  "the-key-was-refused",
+  "the-host-was-not-found",
+  "the-port-refused",
+  "nothing-answered",
+  "it-timed-out",
+  "the-key-could-not-be-loaded",
 ];
 
 // **The acts on a row that end what a connect that did not happen said** —
@@ -3023,11 +3243,29 @@ function theConnectsNotMadeAreDrawn() {
       theValueIsDrawnInto(named, said.couldNotConnectToNamed);
       line.appendChild(named);
       // A full stop is punctuation and not a word, as for *Another server is
-      // already called …* above.
-      line.appendChild(textNode("."));
+      // already called …* above. **A reason the attempt knows follows the
+      // name after a colon** — *Could not connect to Hyperstack: host not
+      // found.* (2026-11-11, scout 3.1).
+      if (said.because) {
+        line.appendChild(textNode(": "));
+        line.appendChild(textNode(said.because));
+      } else {
+        line.appendChild(textNode("."));
+      }
     } else {
+      // **The server is named before the sentence** where the application
+      // sends it (the UI at every size, B-14). The colon is punctuation, as
+      // the full stop above is.
+      if (said.theServerItWasAbout) {
+        const named = document.createElement("b");
+        theValueIsDrawnInto(named, said.theServerItWasAbout);
+        line.appendChild(named);
+        line.appendChild(textNode(": "));
+      }
       line.appendChild(textNode(said.said));
     }
+    // ***Could not connect*'s Help link**, where the application names it.
+    theHelpLinkFollows(line, said.help);
     theConnectsNotMadeHolder.appendChild(line);
   }
 }
@@ -3073,6 +3311,20 @@ whenTold(A_FAILURE_WAS_CLEARED, (delivery) => {
   if (!held) return;
   held.delete(said.key);
   if (!held.size) failuresByServer.delete(said.subject);
+  theRowIsDrawnAgain(said.subject);
+  if (lastDrawn) theSharedControlsAreDrawn(lastDrawn);
+});
+
+// **A clearing that did not land stays on its row and says so** — the
+// application posts its own sentence, and the failure it was about keeps its
+// place. A fresh reading of what stands replaces the line, as it replaces the
+// failure.
+whenTold(A_FAILURE_WAS_NOT_CLEARED, (delivery) => {
+  const said = delivery.said || {};
+  const held = said.subject && failuresByServer.get(said.subject);
+  const failure = held && held.get(said.key);
+  if (!failure) return;
+  held.set(said.key, { ...failure, theClearingDidNotLand: said.sentence || "" });
   theRowIsDrawnAgain(said.subject);
   if (lastDrawn) theSharedControlsAreDrawn(lastDrawn);
 });

@@ -75,3 +75,23 @@
 - 2026-10-30 — Claude Opus 5.5 (Claude Code subagent), the plan writer holding `Audits/Build/Step 10c/Brief — the twenty-third notes, note 2, plan and drawing pass.md`, outside any round — new §1.7, L24 to L28: a folder's size counted on request by the machine program, links not followed, unreadable folders give a lower bound, the figure held beside the listing and dropped on the next reading, the act not offered on an older package (the Creator's twenty-third note 2). No auditor has seen it.
 - 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the twenty-fourth notes, note 2, plan and drawing pass.md`, outside any round — new §1.8, L29: a picture read whole into memory for the viewer (the seventeenth notes, note 11). No auditor has seen it.
 - 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — L8 names 5.3. No auditor has seen it.
+- 2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 12, what the live pass found.md`, outside any round — U6: the stop reaches N3's landing folders. No auditor has seen it.
+- 2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), the builder holding `Audits/Build/The four questions/Brief — the admin password in Files.md`, outside any round — new P6b: how the elevated acts carry their paths, and the safer-side rules where the plan was silent. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, sixth part: H3a's build detail: the pointer's place on a drop; its source added to the sources file. No auditor has seen it.
+- 2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), the fixer holding the runner's brief on `Audits/Build/The four questions/The admin password in Files — Sol's look.md`, outside any round — P6b and P5 changed after Sol's look: one opened folder per act, the password once under `sudo -k`, one act at a time with its own mark, a new folder handed to the login. No auditor has seen it.
+- 2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), the fixer holding the runner's brief on `Audits/Build/The four questions/The admin password in Files — Sol's look.md`, outside any round — P6b after Sol's second look: two marks, the probe under `sudo -k`, no password where it passes, the hand-over only of an empty folder of root's. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 7, files that move.md`, outside any round — U8: a part is carried on only at the size it was arranged at, and a start-over takes the size as it now stands. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the admin fresh look, logs in Telegram, and the empty screen.md`, outside any round — P6b: the elevated delete stays on one file system; a typed password is sent where the act has just shown it needs one. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — U8: a *Remove* that cleared every staging path marks the request *removed by the user*, and its row goes. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — L17's build detail, a new connection starts the readings fresh. No auditor has seen it.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned upload refusal and disk-full reporting.
+2026-11-14 — Claude Opus 5.5 — added Smoozy's own files and the login's keys (batch 2).
+2026-11-14 — Claude Opus 5.5 — added *An upload's source unreadable at the failure* (Rough share 2, 188).
+2026-11-14 — Claude Opus 5.5 — M3b (a system folder named in the delete box), M6b (a full disk named after a move or copy refused part-way), M8a (Skip existing on a colliding copy): the leftovers of the Rough what-if answers, 181, 449, 176.
+2026-11-14 — Claude Opus 5.5 — K10a (an upload carried on reads nothing it already sent; a taken-up part that changed says so) and M3c (the system-folder line beside Retry with admin access): uploads carry on, and the runner's ruling on 181.

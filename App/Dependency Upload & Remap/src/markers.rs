@@ -683,13 +683,17 @@ mod tests {
     ///
     /// **186 the same day**, a job pressed during a send: **A9e**, **G14a**, **Q5a**
     /// and **M14a**.
+    ///
+    /// **187 from 2026-11-09**, the twenty-eighth notes, note 11: **G14b**, linked
+    /// files first and read as they land inside one send. Built the same day by
+    /// that note's piece 11 (`App/Desktop app and delivery/src/the_found_files_sent.rs`).
     #[test]
-    fn the_plan_defines_one_hundred_and_eighty_six_distinct_clauses() {
+    fn the_plan_defines_one_hundred_and_eighty_seven_distinct_clauses() {
         let plan =
             fs::read_to_string(the_architecture_folder().join(format!("{THIS_PLANS_NAME}.md")))
                 .expect("the plan is readable");
         let defined: HashSet<String> = the_clauses_defined_by(&plan).into_iter().collect();
-        assert_eq!(defined.len(), 186, "{:?}", {
+        assert_eq!(defined.len(), 187, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

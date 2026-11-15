@@ -196,7 +196,7 @@ pub const THE_SEAMS: [Seam; 3] = [
         smallest: 150,
         largest: 340,
         from_right: false,
-        label: "Resize the rail",
+        label: "Resize the sidebar",
     },
     Seam {
         key: "list",
@@ -295,6 +295,27 @@ pub struct ThePaneLayout {
     /// **The words are Design's and are owed** (§24), the same as the floor
     /// panel's above; what is fixed here is that the user is told at all.
     pub the_widths_could_not_be_read: Prose,
+    /// **The one line an older Smoozy shows on a newer record** —
+    /// `Desktop app and delivery` L9, *where it says so* (2026-11-12): named
+    /// only where the start refused the record as newer than this copy, and
+    /// then the page draws it in place of every screen.
+    pub this_copy_is_older: Option<Prose>,
+    /// **The one line a damaged record shows** — `Desktop app and delivery`
+    /// L9a (batch 2 of the Bad what-if answers, 97): named only where the
+    /// start refused the record as damaged, and drawn as the line above is.
+    pub the_saved_data_is_damaged: Option<Prose>,
+    /// **What a damaged record offers, where L8's copy is there** —
+    /// `Desktop app and delivery` L9b, the Creator's ruling on 97 (2026-11-14):
+    /// go back to the copy kept from before the last update. Named only beside
+    /// [`Self::the_saved_data_is_damaged`], and only where the copy stands.
+    pub the_copy_can_be_restored: Option<TheCopyOffer>,
+}
+
+/// **L9b's offer**: one sentence saying what it costs, and the button.
+#[derive(serde::Serialize, Clone, Debug, PartialEq)]
+pub struct TheCopyOffer {
+    pub said: Prose,
+    pub control: Prose,
 }
 
 /// **The shape of the seams, the words of the floor, and whatever widths this
@@ -328,8 +349,107 @@ pub fn the_pane_layout(started: State<'_, Mutex<Started>>) -> ThePaneLayout {
         // would not answer rather than the fresh-installation one.
         return the_layout_that_could_not_be_read();
     };
-    the_pane_layout_from(started.record.as_ref().map(|record| record.connection()))
+    let mut layout = the_pane_layout_for(
+        started.record.as_ref().map(|record| record.connection()),
+        started.the_record_is_newer_than_this_copy,
+        started.the_record_is_damaged,
+    );
+    // **L9b: the copy is looked for when the line is drawn**, never cached.
+    let the_copy_is_there = crate::platform::locations::resolve(crate::platform::locations::Location::LocalRecord)
+        .is_ok_and(|path| crate::record::migrations::the_copy_is_there(&path));
+    the_copy_is_offered_where(&mut layout, the_copy_is_there);
+    layout
 }
+
+/// **L9b: a damaged record offers L8's copy, and only where it stands.**
+pub fn the_copy_is_offered_where(layout: &mut ThePaneLayout, the_copy_is_there: bool) {
+    if layout.the_saved_data_is_damaged.is_some() && the_copy_is_there {
+        layout.the_copy_can_be_restored = Some(TheCopyOffer {
+            said: Prose::new(THE_COPY_CAN_BE_RESTORED),
+            control: Prose::new(RESTORE_THE_COPY),
+        });
+    }
+}
+
+/// **L9b's act**: the damaged record set aside, L8's copy put in its place,
+/// and this copy of Smoozy opened again on it. **Only a start that refused the
+/// record as damaged may ask**, so a running record is never replaced. An
+/// answer is the one sentence the line shows; on success this process ends
+/// and the answer is never read.
+#[tauri::command]
+pub async fn the_copy_before_the_last_update_is_restored<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Prose {
+    use tauri::Manager as _;
+    let damaged = app
+        .try_state::<Mutex<Started>>()
+        .is_some_and(|started| started.lock().is_ok_and(|started| started.the_record_is_damaged && started.record.is_none()));
+    if !damaged {
+        return Prose::new(THE_COPY_COULD_NOT_BE_RESTORED);
+    }
+    // **Off the interface thread**: the system's launcher is waited on.
+    let reopened = tauri::async_runtime::spawn_blocking(|| {
+        let path = crate::platform::locations::resolve(crate::platform::locations::Location::LocalRecord)
+            .map_err(|_| THE_COPY_COULD_NOT_BE_RESTORED)?;
+        crate::record::the_damaged_record_is_set_aside_for_the_copy(&path).map_err(|_| THE_COPY_COULD_NOT_BE_RESTORED)?;
+        crate::the_one_instance::this_copy_is_opened_again().map_err(|_| THE_COPY_IS_RESTORED_OPEN_AGAIN)
+    })
+    .await
+    .unwrap_or(Err(THE_COPY_COULD_NOT_BE_RESTORED));
+    match reopened {
+        Ok(()) => {
+            app.exit(0);
+            Prose::new(THE_COPY_IS_RESTORED_OPEN_AGAIN)
+        }
+        Err(said) => Prose::new(said),
+    }
+}
+
+/// **The answer, with both refusals the window says in a line of its own** —
+/// L9's newer record and L9a's damaged one.
+pub fn the_pane_layout_for(
+    record: Option<&rusqlite::Connection>,
+    the_record_is_newer_than_this_copy: bool,
+    the_record_is_damaged: bool,
+) -> ThePaneLayout {
+    let mut layout = the_pane_layout_where(record, the_record_is_newer_than_this_copy);
+    if the_record_is_damaged {
+        layout.the_saved_data_is_damaged = Some(Prose::new(THE_SAVED_DATA_IS_DAMAGED));
+    }
+    layout
+}
+
+/// **The answer, with whether the start refused the record as newer than this
+/// copy** — `Desktop app and delivery` L9, *where it says so* (2026-11-12).
+pub fn the_pane_layout_where(
+    record: Option<&rusqlite::Connection>,
+    the_record_is_newer_than_this_copy: bool,
+) -> ThePaneLayout {
+    let mut layout = the_pane_layout_from(record);
+    if the_record_is_newer_than_this_copy {
+        layout.this_copy_is_older = Some(Prose::new(THIS_SMOOZY_IS_OLDER_THAN_ONE_USED_HERE));
+    }
+    layout
+}
+
+/// **The one line an older Smoozy shows on a newer record** — the runner's
+/// ruling of 2026-11-11 (`Audits/Build/Fable review/Sitting 4 — what
+/// landed.md`), `Desktop app and delivery` L9, *where it says so*. The same
+/// sentence `Server protocol and transfers` B8d's note of that day uses for a
+/// refused release of this copy's own.
+pub const THIS_SMOOZY_IS_OLDER_THAN_ONE_USED_HERE: &str =
+    "Saved data is from a newer version. Install the latest version.";
+
+/// **The one line a damaged record shows** — `Desktop app and delivery` L9a.
+/// It says what is true and offers nothing: what to do about a damaged record
+/// is the Creator's to decide (batch 2 of the Bad what-if answers, 97).
+pub const THE_SAVED_DATA_IS_DAMAGED: &str = "Saved data is damaged and can't be read.";
+
+/// **L9b's words** — `Design/Whole app § A damaged record`, the Creator's
+/// ruling on 97 (2026-11-14).
+pub const THE_COPY_CAN_BE_RESTORED: &str =
+    "A copy from before the last update can be restored. Changes since then will be lost.";
+pub const RESTORE_THE_COPY: &str = "Restore copy";
+pub const THE_COPY_COULD_NOT_BE_RESTORED: &str = "Could not restore the copy.";
+pub const THE_COPY_IS_RESTORED_OPEN_AGAIN: &str = "Copy restored. Restart Smoozy.";
 
 /// The answer itself, with the record handed in — **so the whole of it can be
 /// tested**, which the command cannot be: the shell's own managed state has no
@@ -368,6 +488,9 @@ pub fn the_pane_layout_from(record: Option<&rusqlite::Connection>) -> ThePaneLay
             })
             .collect(),
         floor: the_floor_panel(),
+        this_copy_is_older: None,
+        the_saved_data_is_damaged: None,
+        the_copy_can_be_restored: None,
     }
 }
 
@@ -399,6 +522,9 @@ fn the_layout_that_could_not_be_read() -> ThePaneLayout {
             })
             .collect(),
         floor: the_floor_panel(),
+        this_copy_is_older: None,
+        the_saved_data_is_damaged: None,
+        the_copy_can_be_restored: None,
     }
 }
 
@@ -661,7 +787,10 @@ mod tests {
         // twenty-seventh notes, notes 4 and 5): `.qdetail` drops the same two
         // properties, and its one query is keyed to the mark `web/panes.js`
         // writes onto the page.
-        for gone in ["container-type: inline-size", "container-name: win", "container-type: inline-size", "container-name: entry", "container-type: inline-size", "container-name: servers"] {
+        // **And the settings panel is the third** (the Creator's twenty-eighth
+        // notes, note 17): `.sheet` drops the same two, its one query keyed to
+        // the mark `web/panes.js` writes onto it.
+        for gone in ["container-type: inline-size", "container-name: win", "container-type: inline-size", "container-name: entry", "container-type: inline-size", "container-name: servers", "container-type: inline-size", "container-name: sheet"] {
             let at = mockup
                 .iter()
                 .position(|declaration| declaration == gone)
@@ -673,6 +802,30 @@ mod tests {
                          this test is changed"
                     )
                 });
+            mockup.remove(at);
+        }
+
+        // **The twenty-ninth notes' drawing pass drew ahead of its pieces**
+        // (2026-11-10, `Audits/Build/Twenty-ninth notes/The drawing pass —
+        // what landed.md`). The mockup changed first, as Rule 7 asks, and the
+        // pieces that build it lift each line into the drawing. **A piece
+        // that lifts a line takes it out of this list in the same change**:
+        // a line lifted and left here fails, and so does a line listed and
+        // not drawn, so the list can only shrink to empty.
+        //
+        // Piece F lifted Refresh in the toolbar (note 2) and the board in
+        // Files (note 12) on 2026-11-10 and took their lines out. A second
+        // list, of the path bar's Refresh lines still in the drawing and gone
+        // from the mockup, was theirs alone, and went with them. Part B's
+        // piece 1 lifted the many-folder list's edge (notes 8 and 10) the
+        // same day and took its line out.
+        //
+        // Drawn in the mockup, not yet in the drawing.
+        let drawn: [&str; 0] = [];
+        for drawn in drawn {
+            let at = mockup.iter().position(|declaration| declaration == drawn).unwrap_or_else(|| {
+                panic!("the mockup no longer declares `{drawn}`; take it out of the drawing pass's list")
+            });
             mockup.remove(at);
         }
 
@@ -844,6 +997,49 @@ mod tests {
         assert!(
             std::fs::read_to_string(the_page_folder().join("the-rail.js")).unwrap().contains("thePagesAreMarked();"),
             "showing a screen no longer reads its page's own width"
+        );
+    }
+
+    /// **The render settings body folds to two columns by the panel's own
+    /// width, and the drawing and the page agree** — `Design/Render Settings §
+    /// The body is three columns`, the Creator's twenty-eighth notes, note 17:
+    /// *where only two columns fit, the third column's groups follow the
+    /// second column's content, in the second column.* The one number is three
+    /// of the body's columns at their smallest, the two gaps between them and
+    /// the two gutters, so that below it three no longer fit. **Until then the
+    /// columns fitted themselves and the third went under the first**, and at
+    /// a 1,100-pixel window the outputs sat below twenty View Layers.
+    #[test]
+    fn the_settings_body_folds_by_its_own_width_and_the_drawing_and_the_page_agree() {
+        let mockup = without_comments(&the_mockups_stylesheet());
+        let opens = mockup.find("@container sheet (width < ").expect("the mockup folds the settings body by the panel's own width")
+            + "@container sheet (width < ".len();
+        let at: u32 = mockup[opens..opens + mockup[opens..].find("px)").unwrap()].parse().unwrap();
+        let gutter: u32 = {
+            let from = mockup.find("--gutter:").unwrap() + "--gutter:".len();
+            mockup[from..from + mockup[from..].find(';').unwrap()].trim().trim_end_matches("px").parse().unwrap()
+        };
+        assert!(
+            mockup.contains("grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));\n  gap: 22px 34px;"),
+            "the body's own columns are no longer 268 wide with a gap of 34"
+        );
+        assert_eq!(at, 3 * 268 + 2 * 34 + 2 * gutter, "the body folds at a width that is not three columns, two gaps and two gutters");
+        assert!(
+            the_page_module().contains(&format!("const THE_SETTINGS_BODY_IS_TWO_COLUMNS_BELOW = {{ at: {at}, mark: \"two\" }};")),
+            "web/panes.js folds the settings body at a different width from the mockup's {at}"
+        );
+        let drawing = the_drawing();
+        for rule in [
+            ".sheet[data-narrow~=\"two\"] .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto 1fr; }",
+            ".sheet[data-narrow~=\"two\"] .cols > .col:first-child { grid-row: 1 / span 2; }",
+            ".sheet[data-narrow~=\"two\"] .cols > .col:nth-child(3) { grid-column: 2; }",
+        ] {
+            assert!(drawing.contains(rule), "the drawing has no {rule}");
+        }
+        assert!(!drawing.contains(".app[data-narrow~=\"s2\"] .cols"), "the second step still fits the columns itself");
+        assert!(
+            std::fs::read_to_string(the_page_folder().join("render-settings.js")).unwrap().contains("panes.thePagesAreMarked()"),
+            "a panel just drawn is not measured"
         );
     }
 
@@ -1557,5 +1753,165 @@ mod tests {
              a floor the user cannot reach is a floor that never appears — which \
              is the same failure the container query caused, by a different route"
         );
+    }
+    /// **`Desktop app and delivery` L9, *where it says so* (2026-11-12, the
+    /// double-check ideas, idea 10): an older Smoozy opened on a newer record
+    /// shows one line in place of every screen.** The page itself, run under
+    /// Node against a stand-in window: the application answers that this copy
+    /// is older than its record, and the page draws that one sentence, puts
+    /// the panes away, and draws no failure of its own beside it. **It failed
+    /// before the fix**: nothing was drawn but *Could not load your saved pane
+    /// widths.*, with every screen's own failed read under it. **Skipped, and
+    /// says so, where no Node is installed.**
+    #[test]
+    fn double_check_10_an_older_copy_on_a_newer_record_shows_one_line_and_no_screen() {
+        let folder = std::env::temp_dir().join(format!("smoozy-older-copy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        for file in std::fs::read_dir(the_page_folder()).expect("the page folder is readable") {
+            let path = file.expect("a file of the page").path();
+            if path.extension().and_then(|kind| kind.to_str()) == Some("js") {
+                std::fs::copy(&path, folder.join(path.file_name().expect("it has a name"))).expect("the page is copied");
+            }
+        }
+        std::fs::write(folder.join("package.json"), "{\"type\":\"module\"}").expect("the folder is a module's");
+        let harness = r#"
+const anElement = (tag) => ({
+  tag, className: "", hidden: false, dataset: {}, children: [], textContent: "", style: { setProperty() {} },
+  clientWidth: 1200, attributes: {},
+  setAttribute(name, value) { this.attributes[name] = String(value); },
+  appendChild(child) { this.children.push(child); return child; },
+  append(...more) { this.children.push(...more); },
+  addEventListener() {}, querySelector() { return null; }, querySelectorAll() { return []; },
+  classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+});
+const app = anElement("div"); const pane = anElement("div");
+globalThis.document = {
+  documentElement: { dataset: {} }, body: anElement("body"),
+  querySelector: (what) => (what === ".app" ? app : null), querySelectorAll: () => [],
+  getElementById: (id) => (id === "pane" ? pane : null),
+  createElement: anElement, createElementNS: anElement, createTextNode: (text) => ({ textContent: text }),
+  addEventListener() {},
+};
+const layout = {
+  floor: { said: "Window too narrow.", how: "Make it at least 680 pixels wide." },
+  the_record_would_not_answer: true,
+  the_widths_could_not_be_read: "Could not load your saved pane widths.",
+  this_copy_is_older: "Saved data is from a newer version. Install the latest version.",
+  seams: [],
+};
+globalThis.window = { addEventListener() {}, __TAURI__: {
+  core: { invoke: async (name) => (name === "the_pane_layout" ? layout : null) },
+  event: { listen: async () => () => {} },
+} };
+await import("./panes.js");
+await new Promise((done) => setTimeout(done, 20));
+const texts = (el) => [el.textContent || "", ...(el.children || []).flatMap(texts)].filter(Boolean);
+console.log(JSON.stringify({
+  drawn: app.children.map((child) => ({ is: child.className, hidden: child.hidden, says: texts(child) })),
+  thePanesAreAway: pane.hidden === true,
+  marked: app.dataset.record || null,
+}));
+"#;
+        std::fs::write(folder.join("harness.mjs"), harness).expect("the harness is written");
+        let Ok(ran) = std::process::Command::new("node").arg(folder.join("harness.mjs")).output() else {
+            eprintln!("skipped: no Node on this computer");
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let said: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the page's report");
+        let drawn = said["drawn"].as_array().expect("what the window holds");
+        let the_line: Vec<&serde_json::Value> = drawn.iter().filter(|one| one["is"] == "older-copy").collect();
+        assert_eq!(the_line.len(), 1, "one line is drawn for an older copy: {said}");
+        assert_eq!(the_line[0]["hidden"], false, "{said}");
+        assert_eq!(
+            the_line[0]["says"],
+            serde_json::json!(["Saved data is from a newer version. Install the latest version."]),
+            "the ruled sentence and nothing else: {said}"
+        );
+        assert_eq!(said["thePanesAreAway"], true, "no screen is drawn under the line: {said}");
+        assert!(
+            drawn.iter().all(|one| one["is"] != "panes-unread"),
+            "no failure of the page's own is drawn beside the line: {said}"
+        );
+        assert_eq!(said["marked"], "newer", "{said}");
+    }
+
+    /// **The same clause, the application's half**: the layout names the line
+    /// only where the start refused the record as newer than this copy, and
+    /// the sentence is the one the runner ruled, through the typography point.
+    #[test]
+    fn bad_batch_2_a_damaged_record_is_said_in_a_line_of_its_own() {
+        let ordinary = the_pane_layout_for(None, false, false);
+        assert!(ordinary.the_saved_data_is_damaged.is_none());
+        let damaged = the_pane_layout_for(None, false, true);
+        let said = damaged.the_saved_data_is_damaged.expect("the line is named");
+        assert_eq!(
+            said.as_str().replace('\u{a0}', " ").replace('\u{2019}', "'"),
+            "Saved data is damaged and can't be read."
+        );
+        assert!(damaged.this_copy_is_older.is_none());
+        assert!(damaged.the_record_would_not_answer, "and nothing is written over widths it could not read");
+        let failure = crate::record::RecordFailure::TheRecordIsDamaged { reported: "file is not a database".into() };
+        assert!(crate::start::the_record_is_damaged_in(&failure));
+        assert!(!crate::start::the_record_is_newer_than_this_copy_in(&failure));
+    }
+
+    /// **L9b, the Creator's ruling on 97**: a damaged record offers the copy
+    /// from before the last update, and only where that copy stands; nothing
+    /// else ever offers it.
+    #[test]
+    fn rough_share_1_a_damaged_record_offers_the_copy_where_one_stands() {
+        let plain = |prose: &Prose| prose.as_str().replace('\u{a0}', " ");
+        let mut no_copy = the_pane_layout_for(None, false, true);
+        the_copy_is_offered_where(&mut no_copy, false);
+        assert!(no_copy.the_copy_can_be_restored.is_none());
+        let mut with_a_copy = the_pane_layout_for(None, false, true);
+        the_copy_is_offered_where(&mut with_a_copy, true);
+        let offer = with_a_copy.the_copy_can_be_restored.expect("the copy is offered");
+        assert_eq!(
+            plain(&offer.said),
+            "A copy from before the last update can be restored. Changes since then will be lost."
+        );
+        assert_eq!(plain(&offer.control), "Restore copy");
+        for (newer, damaged) in [(false, false), (true, false)] {
+            let mut layout = the_pane_layout_for(None, newer, damaged);
+            the_copy_is_offered_where(&mut layout, true);
+            assert!(layout.the_copy_can_be_restored.is_none(), "only a damaged record offers it");
+        }
+    }
+
+    #[test]
+    fn double_check_10_the_layout_names_the_line_only_for_a_record_newer_than_this_copy() {
+        let ordinary = the_pane_layout_where(None, false);
+        assert!(ordinary.this_copy_is_older.is_none(), "any other failure to open keeps L8a's per-screen failure");
+        let older = the_pane_layout_where(None, true);
+        let said = older.this_copy_is_older.expect("the line is named");
+        assert_eq!(
+            said.as_str().replace('\u{a0}', " "),
+            "Saved data is from a newer version. Install the latest version."
+        );
+        assert!(older.the_record_would_not_answer, "and nothing is written over widths it could not read");
+    }
+
+    /// **And no update is offered in that state** (the same paragraph): the
+    /// window makes its update check as one that never checks where the start
+    /// refused the record as newer. Read from `main.rs`, which no test can
+    /// run. **It failed before the fix**: the check was made the same for
+    /// every copy, so *Install now* was offered though installing needs the
+    /// record open.
+    #[test]
+    fn double_check_10_a_copy_older_than_its_record_never_checks_for_an_update() {
+        let window = include_str!("../main.rs");
+        assert!(
+            window.contains("TheUpdateCheck::for_this_copy_in_front_of(the_record_is_newer_than_this_copy)"),
+            "the update check is not told that the record is newer than this copy"
+        );
+        use crate::updating::checking::{ThePress, TheReading, TheUpdateCheck};
+        let check = TheUpdateCheck::for_this_copy_in_front_of(true);
+        assert!(check.never_checks());
+        assert_eq!(check.the_user_asks(), ThePress::ThisCopyNeverChecks);
+        assert_eq!(check.the_reading().0, TheReading::ThisBuildCannotUpdate);
     }
 }

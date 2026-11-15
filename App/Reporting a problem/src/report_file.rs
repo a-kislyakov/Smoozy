@@ -367,7 +367,7 @@ struct TheFile<'a> {
 }
 
 const DIARY_HEADING: &str =
-    "\n== App log ==\nEach time names its clock.\n";
+    "\n== App log ==\nTimes say which clock they use.\n";
 
 const LEFT_OUT_WHOLE: &str = "omitted in full to keep this report under 5 MB";
 const UNREACHABLE: &str = "unreachable: could not reach the server when this report was made";
@@ -980,6 +980,41 @@ pub fn the_report_written_line(
         at,
         clock: Clock::ThisComputer,
         text: format!("Report written: {the_file_name} in {the_folder}"),
+        concerning: from_the_failure.to_vec(),
+    }
+}
+
+/// §11's second act, **a report not written** — `Reporting a problem` V8a,
+/// added 2026-11-09 (the Creator's twenty-eighth notes, note 20). It passes
+/// J2a's three tests as the first does: Smoozy's own act, its ending told to
+/// the user on the box, once per press of *Save report*.
+pub const A_REPORT_NOT_WRITTEN: ActTests = A_REPORT_WRITTEN;
+
+/// And J2a's bar does not reach it either.
+pub const A_REPORT_NOT_WRITTEN_IS_NO_ERASURE: ErasingActsAreNotDeclared = A_REPORT_WRITTEN_IS_NO_ERASURE;
+
+/// §11: the *report not written* line, in its fixed form — the act's name, the
+/// moment on the desktop clock, the folder the user chose where one was held,
+/// and **the reason, whole**: the system's own words as the platform file
+/// adapter carried them, or the fixed words naming the step that failed. The
+/// identities are the *report written* line's. **The user's sentence is never
+/// in it.**
+pub fn the_report_not_written_line(
+    run: &Identity,
+    at: SystemTime,
+    the_folder: Option<&str>,
+    the_reason: &str,
+    from_the_failure: &[Identity],
+) -> Line {
+    Line {
+        run: run.clone(),
+        kind: LineKind::Act,
+        at,
+        clock: Clock::ThisComputer,
+        text: match the_folder {
+            Some(the_folder) => format!("Report not written in {the_folder}: {the_reason}"),
+            None => format!("Report not written: {the_reason}"),
+        },
         concerning: from_the_failure.to_vec(),
     }
 }
@@ -1899,5 +1934,31 @@ mod tests {
         assert_eq!(from_a_failure.concerning, vec![condition, subject]);
         // The user's sentence is the report's and never the record's.
         assert!(!from_a_failure.text.contains("frames"));
+    }
+
+    /// **`Reporting a problem` V8a and §11's second act**: the reason whole,
+    /// after the folder where one was held, on the desktop clock.
+    #[test]
+    fn twenty_eighth_20_a_report_not_written_is_declarable_and_its_line_is_the_declared_form() {
+        assert!(A_REPORT_NOT_WRITTEN.is_diary_worthy(A_REPORT_NOT_WRITTEN_IS_NO_ERASURE));
+        let run = an_identity(IdentityKind::Run);
+        let in_a_folder = the_report_not_written_line(
+            &run,
+            made_at(),
+            Some("/Volumes/Work/reports"),
+            "No space left on device (os error 28)",
+            &[],
+        );
+        assert_eq!(in_a_folder.kind, LineKind::Act);
+        assert_eq!(in_a_folder.clock, Clock::ThisComputer);
+        assert_eq!(in_a_folder.at, made_at());
+        assert_eq!(
+            in_a_folder.text,
+            "Report not written in /Volumes/Work/reports: No space left on device (os error 28)"
+        );
+        let job = an_identity(IdentityKind::Job);
+        let no_folder = the_report_not_written_line(&run, made_at(), None, "the sentence is too long", &[job.clone()]);
+        assert_eq!(no_folder.text, "Report not written: the sentence is too long");
+        assert_eq!(no_folder.concerning, vec![job]);
     }
 }

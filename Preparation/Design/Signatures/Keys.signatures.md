@@ -39,3 +39,17 @@
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the SSH-tools line, the passphrase line and the remove box. The last words read before the release. No auditor has seen it.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the five after the check.md`, outside any round — the SSH-tools line no longer asks the user to install, and its settled judgement speaks of *without them*. The check after the last fix. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — B-28: an empty list says *No keys yet.*; B-26: the header's buttons keep one line and the choosing sentence breaks instead. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — On Windows the New key box shows the Windows limit's sentence in place of the passphrase field (scout 2.13). No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — Keys' *Choose a key…* reads *Add existing key…* (scout 3.42); the tools line names OpenSSH (scout 3.43). No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Clarified the missing public key and fingerprint conflict; clarified the reconnect limit.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep of the app and the website: screen words only, as listed in `Audits/Build/The word sweep, the app and the website — what landed.md`. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+2026-11-14 — Claude Opus 5.5 — the two connect endings a passphrase causes are said (the leftovers of the Rough what-if answers, 386, 384).

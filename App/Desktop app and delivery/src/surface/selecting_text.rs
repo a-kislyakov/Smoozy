@@ -154,7 +154,7 @@ fn a_known_job_path_is_marked_even_without_a_connection() {
         !known.contains("fact0OpensFiles"),
         "an offline folder is not a link"
     );
-    entry.facts[0].value = "not known".into();
+    entry.facts[0].value = "unknown".into();
     assert!(
         !says(&entry).contains("fact0IsPath"),
         "unknown is words rather than a path"
@@ -245,9 +245,11 @@ try {
   style(panel.querySelector('.lnone b'), 'none', 'panel explanation');
   style(panel.querySelector('h3'), 'none', 'panel title');
 
-  // The complete sheets override the drawing's address rule in both forms.
-  const address = document.createElement('span'); address.className='rp-addr mono'; address.textContent='report@example.test'; samples.append(address);
-  style(address, 'all', 'whole report address');
+  // The report's address is a mail link from 2026-11-09 (the twenty-eighth
+  // notes, note 6): a click acts on it, so it is not selectable, and its copy
+  // icon carries Copy.
+  const address = document.createElement('button'); address.type='button'; address.className='rp-addr mono'; address.textContent='report@example.test'; samples.append(address);
+  style(address, 'none', 'report address link');
   const field = document.createElement('input'); samples.append(field); style(field,'text','typed field');
   const area = document.createElement('textarea'); samples.append(area); style(area,'text','sentence box');
 

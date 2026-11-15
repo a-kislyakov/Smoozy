@@ -51,3 +51,38 @@
 2026-11-04 — GPT-6.1 (Codex) — narrowed Not started to the disconnected request and kept the question’s existing words. No auditor has seen it.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the stalled download line. The last words read before the release. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 11, linked files go first.md`, outside any round — the dependency check's growing upload: *so far*, the underway mark with megabytes, the sentence, the bar once final; the bar sentence in *Four kinds*. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — the drawing pass.md`, outside any round — note 5: the `.blend`'s name a *Show in Files* link. No auditor has seen it.
+
+2026-11-11 — GPT-6.1 (Codex), second UI builder — Kept download choices and folder readings visible.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — C-29: sizes are written as Files writes them, *0 bytes* and no decimal from ten up. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 2, uploads and transfers.md`, outside any round — every failed upload file has a row with its reason (scout 2.3); an upload's leftover offers *Continue* (4.4); download-folder trouble says where to fix it, Smoozy's own data is not named, the finished download's control reads *Show in Finder* (3.37–3.39); *speed limits*. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — A finished upload's way back is *Show in Files* (scout 2.8). No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — Time left past ninety minutes reads *about 3h 04m left* (scout 2.18). No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Planned Download remaining on a stalled auto-download.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: A file the server refused reads *failed* on its row, one word for one red mark (scout 3.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the live pass found.md`, outside any round — § What a past sitting left behind: an upload's Remove that leaves a part on the server says Could not remove the partial files. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the live pass found.md`, outside any round — § What a past sitting left behind: the leftover of a download started from Files offers Continue before Remove. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — After Remove clears the staged material, the row goes. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, the window.md`, outside any round — uploads and downloads named by what was picked; a dependency upload's name never cut away whole (the Creator's notes 11 and 12 on the test copy of 2026-11-12). No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — corrected the batch 2 blocked-folder and upload-refusal sections.
+2026-11-14 — Claude Opus 5.5 — an upload's file unreadable on this computer (Rough share 2, 188).
+2026-11-14 — Claude Opus 5.5 — an upload's check now runs on the server; *File changed — uploading from the beginning.* (uploads carry on).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: the blocked folder's words reworded.
+2026-11-15 — Claude Opus 5.5 — the runner's rulings on Codex's word check: the blocked folder's words reworded.

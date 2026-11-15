@@ -23,7 +23,8 @@
 //! `Preparation/Design/Mockup/Smoozy.html`'s own state list: `q`, `q-marks`,
 //! `q-catchup`, `q-dropped`, `q-untracked`, `q-part`, `q-stop`, `q-cancel`,
 //! `q-first`, `q-gcancel`, `q-dismiss`, `q-wait`, `q-driver`, `q-fallback`,
-//! `q-fallchosen`, `q-checkjob`, `q-large`, `q-pvmissing`, `q-pvbad`. **Nineteen, and the history's states are
+//! `q-fallchosen`, `q-checkjob`, `q-large`, `q-pvmissing`, `q-pvbad`,
+//! `q-manyfolders`, `q-manyfoldersopen`. **Twenty-one, and the history's states are
 //! [`crate::surface::the_history`]'s.** *(Ten until the Creator's second
 //! notes, piece 4's queue half, added the waiting entry with no folder yet,
 //! and the one or two lines under a folder that fell back; thirteen until
@@ -32,7 +33,9 @@
 //! `Queue & History` H12; fourteen until the Creator's ninth notes, note 3
 //! (built 2026-10-16), which made `q-catchup` the endings counted in the heading and
 //! added `q-dropped`, a job dropped before it rendered, named in one line
-//! under it — `Design/Queue & History § The catch-up notice`.)* The six `t-`
+//! under it — `Design/Queue & History § The catch-up notice`; nineteen
+//! until the Creator's twenty-ninth notes, notes 8 and 10 (built
+//! 2026-11-10), added a job writing into many folders, closed and open.)* The six `t-`
 //! states in the same mockup group are piece 12's and nothing here touches
 //! them.
 //!
@@ -229,6 +232,12 @@ const THE_MOVE_WAS_SENT: &str =
 /// state column carries is the three states that are not readable from
 /// position.** Label: **Creator-stated** (2026-08-13) for the third of them.
 const RENDERING: &str = "Rendering";
+/// **`Queue & History` B6's addition of 2026-11-13**: every sample of the job
+/// counted, Blender finishing the last frame (`Design/Queue & History § A
+/// rendering entry`). The scout's list, item 3.
+const FINISHING: &str = "Finishing";
+// Design/Queue & History, A job run again after an interruption; `Queue & History` R5.
+const RUNNING_AGAIN: &str = "Interrupted. Retrying.";
 const WAITING_ON_YOU: &str = "Needs your answer";
 const NOT_UPDATING: &str = "Not updating";
 /// **A fourth, `Design/Queue & History § The queue list` and *A job held for
@@ -236,6 +245,18 @@ const NOT_UPDATING: &str = "Not updating";
 /// updated** (`Queue & History` H12), in the amber *Needs your answer* uses. The
 /// row's word and the entry's status alike. Held-job piece B, 2026-10-12.
 const WAITING_FOR_DRIVER_UPDATE: &str = "Waiting for driver update";
+/// **A fifth, `Design/Queue & History § The queue list` as added 2026-11-11:
+/// a job the server has taken and cannot start because its disk has no
+/// room** (`Queue & History` A1; `Rented-server runtime` M4a), in the same
+/// amber. It starts by itself when room comes back. The row's word and the
+/// entry's status alike. The build runner's ruling 3 of that date.
+const WAITING_THE_SERVERS_DISK_IS_FULL: &str = "Waiting: the server’s disk is full.";
+/// **A sixth, `Design/Queue & History § The queue list` as added
+/// 2026-11-14: every job of a server whose setup stopped part-way**, which
+/// starts nothing until the setup is finished (`Queue & History` A1 as changed
+/// that day; `Rented-server runtime` P2), in the same amber. The row's word
+/// and the entry's status alike. The Rough what-if answers, share 4 (310).
+const WAITING_THE_SERVERS_SETUP_STOPPED: &str = "Waiting: the server’s setup stopped part-way.";
 /// **`Design/Queue & History`, *A job just submitted is in the queue at
 /// once*: the drawing's own word**, beside the spinner Smoozy already draws.
 /// The Creator's seventh notes, piece Z7.
@@ -251,6 +272,8 @@ const CLEAR_IT: &str = "Clear";
 /// figures are values.
 const RENDERING_WORD: &str = "rendering";
 const WAITING_WORD: &str = "waiting";
+/// **A waiting row's status word** — scout 3.29, 2026-11-11: it had none.
+const WAITING_STATUS: &str = "Waiting";
 const LAST_SEEN: &str = "last seen";
 /// The separator a folded heading's parts carry between them — the drawing's
 /// own middle dot, sent as a word so the page writes none.
@@ -292,6 +315,7 @@ const FILES_ON_THE_SERVER: &str = "Files on the server";
 const FILES_ON_YOUR_COMPUTER: &str = "Files on your computer";
 const STOP: &str = "Stop";
 const CANCEL: &str = "Cancel";
+const RECONNECT: &str = "Reconnect";
 
 /// **`Queue & History` N17: a reach-back is not offered where the machine is gone, and the reason
 /// is stated.** The drawing's own shape for a control that cannot act is the
@@ -356,8 +380,15 @@ const RENDER_ALL: &str = "Render all —";
 /// ***Render all*, where the count is not known** — after a restart (step
 /// 10c's eleventh-pass fix piece 8b). Design's label, less the count.
 const RENDER_ALL_WITH_NO_COUNT: &str = "Render all";
-const CANCEL_IT: &str = "Cancel";
-const CANCELLING_LEAVES_NO_RECORD: &str = "Cancelling leaves no record of this job.";
+/// ***Cancel job*** — `Design/Queue & History § What the job writes`, the
+/// Creator's answer on the twenty-eighth notes, note 16 (was *Cancel*, and
+/// before the second words sweep *Cancel it*): beside a question *Cancel*
+/// alone can read as closing it. **It asks first** ([`the_answers_cancel_box`]).
+const CANCEL_IT: &str = "Cancel job";
+/// **No note under the pair** since the twenty-eighth notes, note 16: it read
+/// *Cancelling leaves no record of this job.*, untrue once the check stays in
+/// History, and the box the answer raises says what stays.
+const CANCELLING_LEAVES_NO_RECORD: &str = "";
 /// **The held entry's status line after *Needs your answer***: *— frame 1
 /// rendered*. The drawing added *, 2 hours 14 minutes ago*; that is the
 /// server's clock against this computer's, which `State, identity and
@@ -380,12 +411,16 @@ const NEEDS_A_NEWER_NVIDIA_DRIVER_FOR_OPTIX: &str = "needs a newer NVIDIA driver
 /// (`Rendering` L23a's bullet of 2026-11-02).
 const NEEDS_A_NEWER_NVIDIA_DRIVER_FOR_CYCLES_GPU: &str = "needs a newer NVIDIA driver for Cycles GPU rendering.";
 /// **What happens next, and the restart**, which the user would otherwise not
-/// expect.
+/// expect. **It names everything the update waits for** — the leftovers of the
+/// Rough what-if answers (144): the job keeps waiting, and nothing forces the
+/// restart, while other jobs or a transfer keep the server busy, and
+/// `Server Setup` R1b counts both. It said *other jobs* alone, so a job
+/// waiting behind an upload had no reason on screen.
 const SMOOZY_WILL_UPDATE_THE_DRIVER: &str =
-    "When the server's other jobs finish, the driver is updated, the server restarts, and this job starts.";
+    "When the server's other jobs and transfers finish, the driver is updated, the server restarts, and this job starts.";
 /// **The box's note** (`Server Setup` §13 item 29: the swap needs Smoozy
 /// connected).
-const THIS_ONLY_HAPPENS_WHILE_CONNECTED: &str = "Requires a connection to the server.";
+const THIS_ONLY_HAPPENS_WHILE_CONNECTED: &str = "Needs a connection to the server.";
 
 const STOP_THIS_JOB: &str = "Stop this job";
 const CARRY_ON_ANYWAY: &str = "Continue anyway";
@@ -439,6 +474,20 @@ const WHAT_THIS_JOB_WRITES: &str = "What this job writes";
 const WRITING_INTO: &str = "Writing into";
 const THE_JOB_FOLDER: &str = "the job folder";
 const A_COMMA: &str = ",";
+/// **The folder line's own words where the job writes into more than three
+/// folders** — `Design/Queue & History § What the job writes`, the drawing's
+/// `q-manyfolders`: *Writing into **26 folders** in home/ubuntu/Render/ and
+/// _OUT/V_012/ — 98 files.* The Creator's twenty-ninth notes, notes 8 and 10.
+const FOLDERS_IN: &str = "in";
+const AND: &str = "and";
+const AND_THE_JOB_FOLDER: &str = "and the job folder";
+const A_PLUS: &str = "+";
+const MORE_FOLDER: &str = "more folder";
+const MORE_FOLDERS: &str = "more folders";
+const FOLDERS: &str = "folders";
+/// **Which of the many-folder line's parts is the count a press opens** —
+/// *26 folders*, straight after *Writing into*.
+const THE_COUNT_IS_PART: usize = 1;
 const A_DASH: &str = "—";
 const NO_FRAME_HAS_AN_ACTIVE_VIEW_LAYER: &str =
     "No frame in the range has an active View Layer, so nothing renders.";
@@ -486,7 +535,7 @@ pub(crate) const THE_SERVERS_FALLBACK_FOLDER_WAS_PASSED_OVER: &str =
     "This server’s fallback folder can’t be used, so the files go to Smoozy’s folder.";
 
 const THE_FILES_VALUE_LEAD: &str = "file:";
-const NOT_KNOWN: &str = "not known";
+const NOT_KNOWN: &str = "unknown";
 
 // ── Blender's own words — Design, *The rest of the entry* ──────────────────
 
@@ -543,10 +592,12 @@ const PART_RENDERING: &str = "rendering";
 const PART_RENDERED: &str = "rendered";
 const PART_AT_FRAME: &str = "frame";
 /// **While the check renders**, the box above the status line: *Frames 1–240
-/// start only after you review this frame. Stopping the check removes them.*
+/// start only after you review this frame.* Its second sentence, *Stopping the
+/// check removes them.*, went with the twenty-eighth notes, note 16: the stop
+/// box says what a stop does ([`the_pairs_stop_box`]).
 const FRAMES_LEAD: &str = "Frames";
 const START_ONLY_AFTER_YOU_REVIEW: &str =
-    "start only after you review this frame. Stopping the check removes them.";
+    "start only after you review this frame.";
 /// **While it waits**, the question in the box beside the picture: *Frame 1
 /// downloaded. Render frames 1–240?* — *downloaded* only where it was
 /// (`Download` R4), *rendered* otherwise. The phone's own question since
@@ -605,7 +656,7 @@ const DOWNLOADED_WORD: &str = "downloaded";
 const ENDED_FINISHED: &str = "finished";
 const ENDED_FAILED: &str = "failed";
 const ENDED_STOPPED: &str = "stopped";
-const ENDED_GIVEN_UP: &str = "abandoned";
+const ENDED_GIVEN_UP: &str = "interrupted";
 /// **The count's hover** — the drawing's own `title`, and Design's words.
 const SINCE_YOU_LAST_OPENED_HISTORY: &str = "Since you last opened History.";
 /// **Design, *Jobs that leave without an entry*: a held job the machine
@@ -627,15 +678,17 @@ const DISMISS: &str = "Dismiss";
 
 // ── Work Smoozy is not tracking — Design, *Work Smoozy is not tracking* ────
 
+// **Scout 3.27, 2026-11-11**: *untracked* is Smoozy's own word, asked of a
+// user before it was explained.
 const IS_RUNNING_WORK_SMOOZY_IS_NOT_TRACKING: &str =
-    "has untracked jobs";
+    "has jobs not in this Queue";
 const IF_YOU_LEAVE_IT: &str =
     "If ignored, new jobs wait behind them.";
-const TRACK_IT: &str = "Track them";
+const TRACK_IT: &str = "Add to Queue";
 /// **`Queue & History` A6's write refused: nothing of the offer was
 /// adopted**, all or nothing. Ruled at this site: Design gives no words for
 /// it. Owed piece 10.
-const THE_WORK_COULD_NOT_BE_TRACKED: &str = "Could not track these jobs. Nothing was changed.";
+const THE_WORK_COULD_NOT_BE_TRACKED: &str = "Could not add these jobs to the Queue. Nothing was changed.";
 const IGNORE: &str = "Ignore";
 /// **Must-do 19: the ending says a cause only where the reading carries one**,
 /// and each cause has its own. `Specs/Queue & History` gives two: a server
@@ -648,8 +701,8 @@ const IGNORE: &str = "Ignore";
 /// stated cause"*), in the banner's own *untracked jobs*. The
 /// 38's piece 15.
 const THE_SERVER_IS_BUSY_WITH: &str = "The server is busy with";
-const JOBS_SMOOZY_IS_NOT_TRACKING: &str = "untracked jobs.";
-const JOB_SMOOZY_IS_NOT_TRACKING: &str = "untracked job.";
+const JOBS_SMOOZY_IS_NOT_TRACKING: &str = "jobs not in this Queue.";
+const JOB_SMOOZY_IS_NOT_TRACKING: &str = "job not in this Queue.";
 const FROM_BEFORE_THIS_SERVER_WAS_REMOVED: &str =
     ", from before this server was removed.";
 const FROM_BEFORE_ITS_ADDRESS_WAS_CHANGED: &str =
@@ -662,10 +715,15 @@ const THE_CONNECTION_DROPPED_PART_WAY: &str =
     "Connection lost during submission.";
 const SUBMITTED_LIST: &str = "Submitted";
 const NOT_SUBMITTED_LIST: &str = "Not submitted";
-const NOT_KNOWN_LIST: &str = "Not known";
+const NOT_KNOWN_LIST: &str = "Unknown";
 const SMOOZY_COULD_NOT_READ_THE_SERVER: &str =
-    "Could not read the server to confirm these.";
+    "Could not confirm these with the server.";
 const SUBMIT_THE_REMAINING_SCENES: &str = "Submit the remaining scenes";
+/// **`Rendering` S11a: the remaining scenes go with the first submission's settings** — what
+/// was handed over when the connection dropped, not the page as it stands
+/// since. Said under the lists so a range changed meanwhile is not read as
+/// used. The Rough what-if answers, share 3, question 462.
+const SENT_WITH_THE_FIRST_SETTINGS: &str = "Uses the settings from the first submission.";
 /// **The part banner's own *Hide*** — the drawing's `#qpart`. It sat in the
 /// catch-up notice's block, which shared it, until that banner went.
 const HIDE: &str = "Hide";
@@ -693,6 +751,11 @@ const THE_WORD_THE: &str = "The";
 const FRAMES_ALREADY_RENDERED_STAY_WITH_NO_COUNT: &str =
     "Frames already rendered stay on the server.";
 const KEEP_RENDERING: &str = "Keep rendering";
+/// **`Rendering` K11a's box** — `Design/Queue & History`, *Force stop*.
+const FORCE_STOP: &str = "Force stop";
+const FORCE_STOP_THIS_JOB_QUESTION: &str = "Force stop this job?";
+const THE_CURRENT_FRAME_IS_LOST: &str = "The current frame is lost.";
+const THE_VIDEO_IS_LOST: &str = "The video is lost.";
 
 const CANCEL_THIS_JOB_QUESTION: &str = "Cancel this job?";
 const NO_FRAMES_ARE_LOST: &str =
@@ -701,6 +764,34 @@ const ITS_SETTINGS_GO_TOO: &str =
     "Its settings are deleted too.";
 const KEEP_THE_JOB: &str = "Keep the job";
 const CANCEL_THE_JOB: &str = "Cancel the job";
+/// **An answer that came after the other device's** — `Queue & History` H4's
+/// loser, told beside the control. Sol's fresh look at the twenty-eighth
+/// notes' piece 8.
+const THIS_JOB_IS_ALREADY_ANSWERED: &str = "Already answered.";
+
+// ── The first-frame pair's boxes — `Design/Queue & History § A first-frame
+// check and its job` and *The entry's controls*, the Creator's twenty-eighth
+// notes, note 16 (`Audits/Build/Twenty-eighth notes/The first-frame check's
+// buttons — the design.md`). Each names the job's own first frame and the
+// range as values.
+
+/// *Frame 1 may not be saved.* — the stop box's own conditional, about the
+/// check's one frame.
+const FRAME_LEAD: &str = "Frame";
+const MAY_NOT_BE_SAVED: &str = "may not be saved.";
+/// *Frames 1–240 will not render.*
+const WILL_NOT_RENDER: &str = "will not render.";
+/// *Frames 1–240 have not started.*, for a range waiting its turn after
+/// *Render all*.
+const HAVE_NOT_STARTED: &str = "have not started.";
+const THEIR_SETTINGS_GO_TOO: &str = "Their settings are deleted too.";
+/// **The same where an older record holds no range.**
+const THE_FULL_RANGE_WILL_NOT_RENDER: &str = "The full range will not render.";
+const THE_FIRST_FRAME_CHECK_STAYS_IN_HISTORY: &str = "The first-frame check stays in History.";
+/// **A group's box where a member's check has rendered**, in place of *None
+/// has started, so no frames are lost*.
+const THE_FIRST_FRAME_CHECKS_STAY_IN_HISTORY: &str =
+    "None has started. Their first-frame checks stay in History; their settings are deleted.";
 
 const CANCEL_ALL_QUESTION_LEAD: &str = "Cancel all";
 const JOBS_QUESTION_TRAIL: &str = "jobs?";
@@ -749,7 +840,18 @@ const THE_STOP_WAS_SENT: &str =
 /// frame*. **No *now***: the second stop meets the same wait, and nothing
 /// Smoozy records says it ends at once. It says nothing of the first stop
 /// (K11).
-const PRESS_STOP_AGAIN: &str = "Press Stop again to end it.";
+// **Batch 3 of the Bad what-if answers, 287: it promises no ending.** It read
+// *Press Stop again to end it.*, and a second stop is the same interrupt as
+// the first: nothing establishes that one Smoozy sends ends a render the first
+// did not.
+// **Rough share 3, the Creator's ruling on 287: struck from the screen.** The
+// slot now holds *Force stop* and the entry says [`PRESS_FORCE_STOP`].
+/// **`Rendering` K11a: what to do once a stop's waiter gave up** —
+/// `Design/Queue & History`, *Force stop*. Rough share 3, 287.
+const PRESS_FORCE_STOP: &str = "Press Force stop.";
+/// **A forced stop Smoozy stopped waiting for**, in the timed-out stop's own
+/// shape.
+const THE_FORCED_STOP_WAS_SENT: &str = "Force stop sent. Timed out waiting for the render to end.";
 /// **The cancel's waiter gave up**: the same shape, claiming no more than it
 /// knows. Ruled at this site.
 const THE_CANCEL_WAS_SENT: &str =
@@ -759,13 +861,17 @@ const THE_RENDER_WAS_NOT_STOPPED: &str = "The render was not stopped.";
 /// **`Queue & History` L1 and L4: *not cancelled***, with the machine's own
 /// words beside it saying why.
 const THE_JOB_WAS_NOT_CANCELLED: &str = "The job was not cancelled.";
+
+/// `Queue & History` L1 and L4; `Design/Queue & History § The entry's controls`.
+/// The server refused the cancel because the waiting job had started.
+const THE_CANCEL_CAME_TOO_LATE: &str = "Could not cancel: the job had started.";
 /// **Nothing reached the machine.**
 const SMOOZY_COULD_NOT_REACH_THE_SERVER: &str =
     "Could not reach the server. Nothing was changed.";
 /// **The machine was reached and did not take it** — an older Smoozy on the
 /// server, or a refusal before anything was recorded. **Never *could not
 /// reach***, which would be false of it (the plan pass's SC-2, for the pair).
-const THE_SERVER_DID_NOT_ACCEPT_IT: &str = "The server rejected this. Nothing was changed.";
+const THE_SERVER_DID_NOT_ACCEPT_IT: &str = "The server refused this. Nothing was changed.";
 /// **`Queue & History` L16 in the group's form.**
 const THE_WAITING_JOBS_COULD_NOT_BE_CANCELLED: &str =
     "The waiting jobs could not be cancelled. The render was not stopped.";
@@ -875,6 +981,10 @@ impl APart {
     }
 }
 
+pub const UNREADABLE_RECORDS_LEAD: &str = "Could not read";
+pub const UNREADABLE_RECORD_TRAIL: &str = "job record on this server.";
+pub const UNREADABLE_RECORDS_TRAIL: &str = "job records on this server.";
+
 /// One server's line in the queue list — Design, *The queue list*: grouped by
 /// server, under a heading carrying that server's badge.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -895,6 +1005,7 @@ pub struct AServersLine {
     pub last_seen: Option<String>,
     pub rendering: u32,
     pub waiting: u32,
+    pub unreadable_job_records: u64,
     /// What the folded heading says — the job's name and how far through it is
     /// (Design: a folded heading still says what is running).
     pub folded: Option<(String, u32)>,
@@ -932,6 +1043,12 @@ pub struct ARowInTheQueue {
     pub name: String,
     /// The second line, in parts. Bounded at three by the drawing.
     pub sub: Vec<APart>,
+    /// **The not-updating row's second line** — `Design/Queue & History § The
+    /// queue list` and the drawing's stale row: *Was rendering frame 88 at
+    /// 11:04. Current status unknown.* The frame in hand when the reading was
+    /// taken, and that moment as seconds, which the page writes as a time.
+    /// Only on a row that was rendering. The four questions, scout 2.7.
+    pub was_rendering: Option<(i64, String)>,
     /// **A first-frame check and its full range are one row**, one line per
     /// part under the name (`Design/Queue & History § A first-frame check and
     /// its job`). Empty on every other row, a legacy check among them.
@@ -1027,6 +1144,11 @@ pub struct TheCheckOnTheEntry {
     /// **The box is the question's**: the picture and heading go inside the
     /// held pair's box, and the side column draws no preview.
     pub in_the_question: bool,
+    /// **The check's frame and the range, as the pair's boxes name them** —
+    /// *Frame 1 may not be saved. Frames 1–240 will not render.* Values,
+    /// never drawn in the box itself. The twenty-eighth notes, note 16.
+    pub first_frame: String,
+    pub the_frames: String,
 }
 
 /// **A row saying *Not submitted.* and why** — the sentence the Render
@@ -1086,6 +1208,11 @@ pub struct AGroupHeading {
     /// it offers one where a member is waiting and could be moved
     /// (`Queue & History` L7). The 38's piece 8.
     pub grip: bool,
+    /// **A member's first-frame check has rendered** — its row is its full
+    /// range's — so the group's box says the checks stay in History rather
+    /// than that none has started and no frames are lost. Not sent on the
+    /// event: only the box reads it. The twenty-eighth notes, note 16.
+    pub a_check_has_rendered: bool,
 }
 
 /// **The catch-up notice — `Queue & History` C2 and `Queue & History` C2a, and
@@ -1138,6 +1265,10 @@ pub struct TheUntrackedWork {
     /// **Which of the spec's two causes left it, where the reading says** —
     /// absent draws no cause at all (must-do 19).
     pub cause: Option<WhyItIsUntracked>,
+    /// **The jobs the banner counts**, by identity, and never shown — what an
+    /// *Ignore* is about (`Queue & History` A5 as amended 2026-11-12: a
+    /// decline covers the jobs it was shown).
+    pub jobs: Vec<smoozy_state::identities::Identity>,
 }
 
 /// `Specs/Queue & History`'s two ways work is left untracked.
@@ -1203,6 +1334,8 @@ pub struct TheJobEntry {
     /// and *Cancel***: while its reading is not updating. Step 10c's *Files on
     /// the server* follow-up.
     pub the_server_is_not_connected: bool,
+    /// `Design/Queue & History`: the server’s Connect action on a stale entry.
+    pub reconnect_server: Option<String>,
     /// **Whether the job has a folder yet** (`Job files and outputs` P21,
     /// `Queue & History` Y8). Where it has none, *Files on the server*, *Download
     /// all* and *Download all to…* are absent, whatever [`Self::reach_backs`]
@@ -1227,6 +1360,11 @@ pub struct TheJobEntry {
     /// **What the job writes — the six statements** (Design, *What the job
     /// writes*).
     pub writes: Vec<AMarkOnTheEntry>,
+    /// **Every folder the job writes into, under the first statement's count**
+    /// — where the job writes into more than three folders, a press on *26
+    /// folders* opens them (`Design/Queue & History § What the job writes`;
+    /// the Creator's twenty-ninth notes, notes 8 and 10). Nothing otherwise.
+    pub every_folder: Option<crate::surface::render_settings::TheWrites>,
     /// **The two that hold the job carry the choice** (Design). Each is a
     /// question with two answers and a note.
     pub held: Vec<TheJobIsHeld>,
@@ -1254,6 +1392,9 @@ pub struct TheJobEntry {
     /// on the job, in the one place the entry's acts live, and no job is ever
     /// both. Absent on a history entry, which has neither.
     pub stop_or_cancel: Option<TheStopOrCancel>,
+    /// **What *Force stop*'s box says is lost**, from the job's own reading of
+    /// what it writes. Rough share 3, 287.
+    pub the_kill_loses: WhatTheKillLoses,
 }
 
 /// ***Writing to* is a link to Files on that folder**, where a folder is
@@ -1291,6 +1432,21 @@ pub enum TheFolderOnTheEntry {
 pub enum TheStopOrCancel {
     Stop,
     Cancel,
+    /// **`Rendering` K11a: *Force stop*, in *Stop*'s slot once a stop's
+    /// waiter gave up** — `Design/Queue & History`, the Creator's ruling on
+    /// the Bad what-if answers' question 287 (Rough share 3).
+    ForceStop,
+}
+
+/// **What the kill loses, as the force stop's box says it** — the entry's
+/// job read as one video file, frames and a video, or frames alone
+/// (`Design/Queue & History`, *Force stop*; `Rendering` K4's video limb).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WhatTheKillLoses {
+    #[default]
+    TheCurrentFrame,
+    TheCurrentFrameAndTheVideo,
+    TheVideo,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -1308,6 +1464,10 @@ pub struct TheProgress {
     /// zero). Both were plain numbers until 2026-10-03, piece 6b, when
     /// nothing filled either.
     pub whole: Option<u32>,
+    /// **The frame in hand has finished sampling** — `Queue & History` B6's
+    /// addition as changed later on 2026-11-13, by the one rule `Telegram` C1
+    /// reads too.
+    pub finishing: bool,
 }
 
 /// **Design, *A rendering entry*, from `Queue & History` R5's figures** — the
@@ -1351,6 +1511,7 @@ pub(crate) fn the_progress_from(
             now: vec![APart::said(SIMULATION_FRAME, frame.to_string(), SIMULATION_OF), APart::value(to.to_string())],
             now_at: None,
             whole: None,
+            finishing: false,
         });
     }
     let mut now = Vec::new();
@@ -1393,8 +1554,41 @@ pub(crate) fn the_progress_from(
         now,
         now_at: as_a_percentage(&first),
         whole: second.as_ref().and_then(the_second_as_a_percentage),
+        finishing: held.the_frame_in_hand_has_finished_sampling(),
     };
     (!progress.now.is_empty() || progress.now_at.is_some() || progress.whole.is_some()).then_some(progress)
+}
+
+/// **The rendering word: *Finishing* once the frame in hand has finished
+/// sampling** (`Queue & History` B6's addition of 2026-11-13, as changed later
+/// that day after Sol's look at the scout's list, point 5: until then it was
+/// the whole-job bar, so every frame but an animation's last said *Rendering*
+/// through its finishing), *Rendering* otherwise.
+fn the_rendering_word(progress: Option<&TheProgress>) -> &'static str {
+    match progress {
+        Some(progress) if progress.finishing => FINISHING,
+        _ => RENDERING,
+    }
+}
+
+/// **Where Blender's own estimate starts among the parts of *Rendering
+/// now*** — its figure, two parts before *Blender's estimate* (the order
+/// [`the_progress_from`] pushes them in).
+fn the_estimate_starts_at(now: &[APart]) -> Option<usize> {
+    now.iter().position(|part| part.lead == BLENDERS_ESTIMATE).and_then(|at| at.checked_sub(2))
+}
+
+/// **The other word a rendering row's state flips to on every frame** —
+/// *Finishing* beside *Rendering* and the other way round — sent beside the
+/// word so the page holds the width of both, and the job's name, its second
+/// line and the time after it stay put as the word flips (UI consistency,
+/// finding 3).
+fn the_word_it_flips_to(word: &str) -> Option<&'static str> {
+    match word {
+        RENDERING => Some(FINISHING),
+        FINISHING => Some(RENDERING),
+        _ => None,
+    }
 }
 
 /// **`Queue & History` R2's one boundary, read off the Blender the job was
@@ -1436,6 +1630,11 @@ pub struct TheJobIsHeld {
     pub first_answer: Vec<APart>,
     pub second_answer: &'static str,
     pub note: &'static str,
+    /// **The second answer asks first** — the first-frame pair's *Cancel
+    /// job*, which raises [`the_answers_cancel_box`] rather than answering
+    /// (`Telegram` A2 and `Queue & History` H4 as changed 2026-11-09, the
+    /// twenty-eighth notes, note 16). The page sends the box's act for it.
+    pub the_second_answer_asks: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -1692,6 +1891,10 @@ pub enum TheActOnAJob {
     StopTheJob,
     CancelTheJob,
     CancelTheGroup,
+    /// **`Rendering` K11a: the slot's *Force stop*, which raises its box**,
+    /// and the box's go-ahead, which reaches the machine. Rough share 3, 287.
+    ForceStop,
+    ForceStopTheJob,
     // Needs the history store.
     SubmitAgain,
     CarryOn,
@@ -1720,7 +1923,7 @@ pub enum TheActOnAJob {
 }
 
 impl TheActOnAJob {
-    pub const ALL: [TheActOnAJob; 25] = [
+    pub const ALL: [TheActOnAJob; 27] = [
         TheActOnAJob::Stop,
         TheActOnAJob::Cancel,
         TheActOnAJob::TrackIt,
@@ -1732,6 +1935,8 @@ impl TheActOnAJob {
         TheActOnAJob::StopTheJob,
         TheActOnAJob::CancelTheJob,
         TheActOnAJob::CancelTheGroup,
+        TheActOnAJob::ForceStop,
+        TheActOnAJob::ForceStopTheJob,
         TheActOnAJob::SubmitAgain,
         TheActOnAJob::CarryOn,
         TheActOnAJob::TheEarlierEntry,
@@ -1762,6 +1967,8 @@ impl TheActOnAJob {
             TheActOnAJob::StopTheJob => "stop-the-job",
             TheActOnAJob::CancelTheJob => "cancel-the-job",
             TheActOnAJob::CancelTheGroup => "cancel-the-group",
+            TheActOnAJob::ForceStop => "force-stop",
+            TheActOnAJob::ForceStopTheJob => "force-stop-the-job",
             TheActOnAJob::SubmitAgain => "submit-again",
             TheActOnAJob::CarryOn => "carry-on",
             TheActOnAJob::TheEarlierEntry => "the-earlier-entry",
@@ -1810,6 +2017,8 @@ impl TheActOnAJob {
             TheActOnAJob::Stop
             | TheActOnAJob::Cancel
             | TheActOnAJob::StopTheJob
+            | TheActOnAJob::ForceStop
+            | TheActOnAJob::ForceStopTheJob
             | TheActOnAJob::CancelTheJob
             | TheActOnAJob::TheHeldJobsFirstAnswer
             | TheActOnAJob::TheHeldJobsSecondAnswer => THIS_JOB_IS_NO_LONGER_IN_THE_QUEUE,
@@ -1950,10 +2159,11 @@ pub(crate) fn where_an_act_on_a_job_goes(act: TheActOnAJob) -> WhereAnActOnAJobG
     use crate::servers::the_machines_work::TheHeldJobsAnswer;
     use crate::servers::the_queues_own_acts::TheQueuesOwnAct;
     match act {
-        TheActOnAJob::Stop | TheActOnAJob::Cancel | TheActOnAJob::CancelAll => {
+        TheActOnAJob::Stop | TheActOnAJob::Cancel | TheActOnAJob::CancelAll | TheActOnAJob::ForceStop => {
             WhereAnActOnAJobGoes::ItsBox
         }
         TheActOnAJob::StopTheJob => WhereAnActOnAJobGoes::ItReachesTheMachine(TheQueuesOwnAct::TheStop),
+        TheActOnAJob::ForceStopTheJob => WhereAnActOnAJobGoes::ItReachesTheMachine(TheQueuesOwnAct::TheForcedStop),
         TheActOnAJob::CancelTheJob => {
             WhereAnActOnAJobGoes::ItReachesTheMachine(TheQueuesOwnAct::TheCancel)
         }
@@ -2152,6 +2362,15 @@ pub fn what_is_held(
         Option<TheProgress>,
         bool,
         Option<ThePair>,
+        // Whether this render is on its second attempt, before Blender starts.
+        bool,
+        // **What the reading names this job as waiting for, in the Queue's
+        // words**: room (`Queue & History` A1 as changed 2026-11-11), or a
+        // setup that stopped part-way (as changed 2026-11-14).
+        Option<&'static str>,
+        // **How long a rendering job has rendered, as the machine worked it
+        // out** (`Queue & History` R5, addition of 2026-11-11).
+        Option<std::time::Duration>,
     )> = Vec::new();
     // **The header's *servers* are the servers whose queue this screen holds a
     // reading of**, whether or not anything is in it. Step 10c's sixth pass
@@ -2178,9 +2397,11 @@ pub fn what_is_held(
             // **`Queue & History` C7: the moment the reading was taken**, as
             // seconds; the page writes it as a time, as History writes its own.
             last_seen: stale.then(|| in_seconds(reading.taken_at())),
+            unreadable_job_records: period.unreadable_job_records,
             ..AServersLine::default()
         };
         let (mut untracked_rendering, mut untracked_waiting) = (0u32, 0u32);
+        let mut untracked_jobs: Vec<smoozy_state::identities::Identity> = Vec::new();
         // **The rendering row first, as the drawing draws it, then the rest in
         // the machine's own order** — the line's (`Queue & History` Q4), which
         // the reading lists first, and a held job after it, having no place in
@@ -2222,6 +2443,7 @@ pub fn what_is_held(
                         QueueState::Rendering { .. } => untracked_rendering += 1,
                         _ => untracked_waiting += 1,
                     }
+                    untracked_jobs.push(job.job.clone());
                 }
                 continue;
             };
@@ -2239,17 +2461,42 @@ pub fn what_is_held(
             // it waits for, in the held amber, and never *Needs your answer*.
             // Held-job piece B.
             let for_the_driver = crate::servers::the_driver_swap::a_hold_for_the_driver(job);
+            // **`Queue & History` A1 as changed 2026-11-11: the job the
+            // machine's line could not start for want of room.**
+            let waits_for_room = period.the_job_waiting_for_room.as_ref() == Some(&job.job);
+            // **`Queue & History` A1 as changed 2026-11-14: a setup that
+            // stopped part-way holds the whole line**, so every job of the
+            // server waits for it. The room the line waits for is said first,
+            // being that job's own.
+            let waits_for = if waits_for_room {
+                Some(WAITING_THE_SERVERS_DISK_IS_FULL)
+            } else if period.the_setup_that_holds_the_line.is_some() {
+                Some(WAITING_THE_SERVERS_SETUP_STOPPED)
+            } else {
+                None
+            };
+            let running_again = job.live.is_running_again();
             let (state, state_is) = match (&job.state, stale) {
                 (_, true) => (Some(NOT_UPDATING), ""),
                 // **`Queue & History` L12a and L2: while Smoozy's own stop or
                 // cancel is in hand the row says so** (step 10c's S3).
-                (_, false) if the_act_in_hand(&held.job) == Some(TheQueuesOwnAct::TheStop) => {
+                (_, false)
+                    if matches!(
+                        the_act_in_hand(&held.job),
+                        Some(TheQueuesOwnAct::TheStop | TheQueuesOwnAct::TheForcedStop)
+                    ) =>
+                {
                     (Some(STOPPING), "run")
                 }
                 (_, false) if the_act_in_hand(&held.job).is_some() => (Some(CANCELLING), ""),
+                (QueueState::Waiting | QueueState::Rendering { .. }, false) if waits_for.is_some() => {
+                    (waits_for, "held")
+                }
+                (QueueState::Rendering { .. }, false) if running_again => (Some(RUNNING_AGAIN), "run"),
                 (QueueState::Rendering { .. }, false) => (Some(RENDERING), "run"),
                 (QueueState::Held { .. }, false) if for_the_driver => (Some(WAITING_FOR_DRIVER_UPDATE), "held"),
                 (QueueState::Held { .. }, false) => (Some(WAITING_ON_YOU), "held"),
+                (QueueState::Waiting, false) => (Some(WAITING_STATUS), ""),
                 _ => (None, ""),
             };
             match job.state {
@@ -2274,6 +2521,9 @@ pub fn what_is_held(
                 };
                 let heading = &mut screen.groups[at];
                 heading.scenes += 1;
+                if the_pair.as_ref().is_some_and(|pair| pair.range == job.job) {
+                    heading.a_check_has_rendered = true;
+                }
                 if matches!(job.state, QueueState::Rendering { .. }) {
                     heading.rendering = Some(
                         held.scene_name
@@ -2303,6 +2553,12 @@ pub fn what_is_held(
                     line.folded = Some((what_the_job_is_called(&held), whole));
                 }
             }
+            // **`Queue & History` B6's addition of 2026-11-13**: the row's
+            // *Rendering* becomes *Finishing* once every sample is counted.
+            let state = match state {
+                Some(RENDERING) => Some(the_rendering_word(progress.as_ref())),
+                other => other,
+            };
             // **`Queue & History` L9 and Design, *The queue list*: only a
             // waiting row offers the grip** — never the rendering one, never a
             // held one, never one whose server is not updating (no move could
@@ -2312,9 +2568,40 @@ pub fn what_is_held(
             if let (true, Some(at)) = (grip, group) {
                 screen.groups[at].grip = true;
             }
+            // **Design, *The queue list*: an ordinary row's second line** —
+            // the scene, the frame count and, while rendering, the frame in
+            // hand, each where known. A pair's row keeps its two lines. The
+            // UI at every size, A-21.
+            let sub = if the_parts.is_empty() {
+                the_rows_second_line(
+                    &held,
+                    matches!(job.state, QueueState::Rendering { .. })
+                        .then(|| the_frame_in_hand(job))
+                        .flatten(),
+                )
+            } else {
+                Vec::new()
+            };
+            // **A row that was rendering when the reading went quiet says so,
+            // and that its status now is unknown** — the drawing's stale row,
+            // in place of the ordinary second line. Scout 2.7.
+            let was_rendering = match (stale, &job.state) {
+                // **The last figures, read past `the_figures_to_draw`**, which
+                // draws none once the break is declared: here they are said in
+                // the past tense, never drawn as live.
+                (true, QueueState::Rendering { .. }) => job
+                    .live
+                    .the_figures()
+                    .and_then(|figures| figures.readings.value().frame_in_hand)
+                    .map(|frame| (frame, in_seconds(reading.taken_at()))),
+                _ => None,
+            };
+            let sub = if was_rendering.is_some() { Vec::new() } else { sub };
             line.rows.push(ARowInTheQueue {
                 job: held.job.as_text(),
                 name: what_the_job_is_called(&held),
+                sub,
+                was_rendering,
                 the_pair: the_parts,
                 state,
                 state_is,
@@ -2332,7 +2619,18 @@ pub fn what_is_held(
                     .unwrap_or_default(),
                 ..ARowInTheQueue::default()
             });
-            entries.push((held, job.state.clone(), stale, job.the_hold.clone(), progress, for_the_driver, the_pair));
+            entries.push((
+                held,
+                job.state.clone(),
+                stale,
+                job.the_hold.clone(),
+                progress,
+                for_the_driver,
+                the_pair,
+                running_again,
+                waits_for,
+                job.live.the_time_rendered(),
+            ));
         }
         if untracked_rendering + untracked_waiting > 0 {
             let next_is_untracked = reading
@@ -2350,10 +2648,11 @@ pub fn what_is_held(
                 rendering: untracked_rendering,
                 waiting: untracked_waiting,
                 cause: None,
+                jobs: untracked_jobs,
             });
         }
         screen.jobs += line.rows.len() as u32;
-        if !line.rows.is_empty() {
+        if !line.rows.is_empty() || line.unreadable_job_records > 0 {
             screen.lines.push(line);
         }
     }
@@ -2427,13 +2726,13 @@ pub fn what_is_held(
                 .iter()
                 .find(|(held, ..)| held.job.as_text() == job)
                 .or_else(|| {
-                    entries.iter().find(|(.., pair)| {
+                    entries.iter().find(|(.., pair, _, _, _)| {
                         pair.as_ref().is_some_and(|pair| pair.check.as_text() == job || pair.range.as_text() == job)
                     })
                 })
         })
         .or_else(|| entries.first());
-    if let Some((held, state, stale, the_hold, progress, for_the_driver, the_pair)) = chosen_one {
+    if let Some((held, state, stale, the_hold, progress, for_the_driver, the_pair, running_again, waits_for, rendered_for)) = chosen_one {
         let beside = crate::surface::the_history::BesideTheRecord::read(connection, &held.job);
         let mut entry = crate::surface::the_history::the_entry_for(held, &beside, false, true).entry;
         the_writing_to_path_opens_files(&mut entry);
@@ -2464,8 +2763,32 @@ pub fn what_is_held(
         }
         let (status, status_is, stop_or_cancel) = match (state, stale) {
             (_, true) => (vec![APart::words(NOT_UPDATING)], "", None),
+            // **`Design/Queue & History § The queue list` as added
+            // 2026-11-11**: the status line says what the job waits for, with
+            // the control its state has.
+            (QueueState::Waiting, false) if waits_for.is_some() => (
+                vec![APart::words(waits_for.unwrap_or_default())],
+                "",
+                Some(TheStopOrCancel::Cancel),
+            ),
+            (QueueState::Rendering { .. }, false) if waits_for.is_some() => (
+                vec![APart::words(waits_for.unwrap_or_default())],
+                "",
+                Some(TheStopOrCancel::Stop),
+            ),
+            (QueueState::Rendering { .. }, false) if *running_again => {
+                (vec![APart::words(RUNNING_AGAIN)], "busy", Some(TheStopOrCancel::Stop))
+            }
+            // **Design, *A rendering entry*: what it is doing, and how long
+            // it has been doing it** — *Rendering · 2h 14m*, the machine's
+            // own figure in History's own form (`Queue & History` R5,
+            // addition of 2026-11-11). The four questions, scout 2.1.
             (QueueState::Rendering { .. }, false) => {
-                (vec![APart::words(RENDERING)], "busy", Some(TheStopOrCancel::Stop))
+                let mut said = vec![APart::words(the_rendering_word(progress.as_ref()))];
+                if let Some(rendered_for) = rendered_for {
+                    said.push(APart::said(A_DOT, crate::surface::the_history::for_how_long(*rendered_for), ""));
+                }
+                (said, "busy", Some(TheStopOrCancel::Stop))
             }
             // **`Queue & History` H12 and the drawing's `q-driver`**: the
             // status line says what it waits for, and *Cancel* sits where
@@ -2498,12 +2821,22 @@ pub fn what_is_held(
                     WhereTheActStands::InHand(_) => None,
                     _ => stop_or_cancel,
                 };
-                // **And the entry says so, where *Stop* is beside it** — never
-                // beside *Not updating*, where nothing is offered.
+                // **`Rendering` K11a: once a stop's waiter gave up, the slot
+                // holds *Force stop*, and the entry says so** — never beside
+                // *Not updating*, where nothing is offered. A forced stop
+                // given up on keeps *Force stop* and adds nothing. The
+                // Creator's ruling on 287 (Rough share 3).
+                let offered = match (&stands, offered) {
+                    (
+                        WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheStop | TheQueuesOwnAct::TheForcedStop),
+                        Some(TheStopOrCancel::Stop),
+                    ) => Some(TheStopOrCancel::ForceStop),
+                    (_, offered) => offered,
+                };
                 if matches!(stands, WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheStop))
-                    && offered == Some(TheStopOrCancel::Stop)
+                    && offered == Some(TheStopOrCancel::ForceStop)
                 {
-                    said.push(APart::words(PRESS_STOP_AGAIN));
+                    said.push(APart::words(PRESS_FORCE_STOP));
                 }
                 (said, is, offered)
             }
@@ -2527,6 +2860,7 @@ pub fn what_is_held(
         // **While the reading is not updating no act reaches the machine**, so
         // *Files on the server* and its link go with *Stop* and *Cancel*.
         entry.the_server_is_not_connected = *stale;
+        entry.reconnect_server = stale.then(|| held.server.local_server.as_text());
         // **Design, *A rendering entry*: the two bars, each with its whole
         // reading above it** — `Queue & History` R5's figures through `bars`.
         // Piece 6b.
@@ -2645,6 +2979,20 @@ pub fn what_is_held(
                 entry.held = conditions.iter().copied().map(the_job_is_held_at_its_start).collect();
             }
         }
+        // **`Design/Queue & History § The entry's controls`: while a job waits
+        // on the user's answer the header's slot is empty** — a first-frame
+        // check's full range, or a job held at the start of its render — and
+        // the question holds the way to end it. A job held for the driver
+        // update has no question and keeps its *Cancel*; a hold this desktop
+        // cannot read as either keeps it too, having nothing else to end the
+        // job by. The Creator's twenty-eighth notes, note 16.
+        if matches!(state, QueueState::Held { .. })
+            && !*for_the_driver
+            && (the_holds_conditions.is_some()
+                || the_saved_first_frame_check_of(connection, &held.job, the_hold.as_ref()).is_some())
+        {
+            entry.stop_or_cancel = None;
+        }
         // **`Queue & History` N9 and `Job files and outputs` H8, H10: the six
         // statements, from the reading the fill-in read** — the two that hold
         // the job said by its pair instead while it is held.
@@ -2663,6 +3011,14 @@ pub fn what_is_held(
                 the_holds_conditions.as_deref().unwrap_or(&[])
             };
             entry.writes = what_the_job_writes(&says, held_by);
+            entry.the_kill_loses = if says.six.its_output_is_a_single_video_file {
+                WhatTheKillLoses::TheVideo
+            } else if says.six.the_render_reaches_frames_and_a_video {
+                WhatTheKillLoses::TheCurrentFrameAndTheVideo
+            } else {
+                WhatTheKillLoses::TheCurrentFrame
+            };
+            entry.every_folder = every_folder_under_the_line(&says);
         }
         screen.entry = Some(entry);
     } else {
@@ -2844,6 +3200,7 @@ pub fn the_job_is_held_at_its_start(condition: smoozy_job_files::holds::WhatHold
         first_answer: vec![APart::words(STOP_THIS_JOB)],
         second_answer: CARRY_ON_ANYWAY,
         note: NOTHING_HAS_RENDERED_YET,
+        the_second_answer_asks: false,
     }
 }
 
@@ -2869,6 +3226,7 @@ pub fn the_job_is_held_for_the_driver(the_jobs_blender: &str) -> TheJobIsHeld {
         first_answer: Vec::new(),
         second_answer: "",
         note: THIS_ONLY_HAPPENS_WHILE_CONNECTED,
+        the_second_answer_asks: false,
     }
 }
 
@@ -2916,6 +3274,64 @@ pub(crate) fn the_answer_the_control_gives(
     }
 }
 
+/// **The folders the job writes into, as the lists write them** — each
+/// ending in `/`, the job's own folder empty and last (`Design/Queue &
+/// History § What the job writes`: *Folders end in `/`*; the drawing's
+/// `q-marks` names the job folder last).
+fn the_folders_as_listed(says: &crate::servers::the_machines_work::WhatTheReadingSays) -> Vec<String> {
+    let mut folders: Vec<String> = says
+        .six
+        .the_folders_it_is_writing_into
+        .iter()
+        .filter(|folder| !folder.is_empty())
+        .map(|folder| {
+            let folder = String::from_utf8_lossy(folder).into_owned();
+            if folder.ends_with('/') { folder } else { format!("{folder}/") }
+        })
+        .collect();
+    if says.six.the_folders_it_is_writing_into.iter().any(|folder| folder.is_empty()) {
+        folders.push(String::new());
+    }
+    folders
+}
+
+/// **Folders named one after another** — *beauty/, mist/ and previews/*, the
+/// drawing's `q-marks`; the job's own folder in words. Where more follow,
+/// the last takes a comma rather than *and*.
+fn the_folders_named(folders: &[String], the_last_takes_and: bool) -> Vec<APart> {
+    let count = folders.len();
+    folders
+        .iter()
+        .enumerate()
+        .map(|(at, folder)| {
+            let and = the_last_takes_and && count > 1 && at == count - 1;
+            let trail = if at + 1 < count && !(the_last_takes_and && at + 2 == count) { A_COMMA } else { "" };
+            match (folder.is_empty(), and) {
+                (true, true) => APart::words(AND_THE_JOB_FOLDER),
+                (true, false) => APart::said(THE_JOB_FOLDER, "", trail),
+                (false, true) => APart::said(AND, folder.clone(), ""),
+                (false, false) => APart::figure(folder.clone(), trail),
+            }
+        })
+        .collect()
+}
+
+/// **Every folder under the many-folder line, for a press on its count to
+/// open** — `Design/Queue & History § What the job writes`: one row per
+/// folder with its count and format, grouped as Render settings groups them.
+/// Only where the line names where the folders sit; never on three or fewer.
+/// **It keeps `Job files and outputs` P11**: the whole set of folders stays
+/// one press away. The Creator's twenty-ninth notes, notes 8 and 10.
+pub(crate) fn every_folder_under_the_line(
+    says: &crate::servers::the_machines_work::WhatTheReadingSays,
+) -> Option<crate::surface::render_settings::TheWrites> {
+    if says.six.it_is_writing_nothing.is_some() {
+        return None;
+    }
+    crate::surface::render_settings::where_the_folders_sit(&the_folders_as_listed(says))?;
+    says.every_folder.clone().filter(|list| !list.rows.is_empty())
+}
+
 /// **The six statements on the entry** — `Design/Queue & History § What the
 /// job writes`, `Job files and outputs` H8, in that order, then `Job files and
 /// outputs` I9a's one line under them. **Each only where it is true**, and the two that hold the job
@@ -2937,14 +3353,22 @@ pub(crate) fn what_the_job_writes(
     let mut writes = Vec::new();
     if six.it_is_writing_nothing.is_none() && !six.the_folders_it_is_writing_into.is_empty() {
         let mut parts = vec![APart::words(WRITING_INTO)];
-        let last = six.the_folders_it_is_writing_into.len() - 1;
-        for (at, folder) in six.the_folders_it_is_writing_into.iter().enumerate() {
-            let trail = if at < last { A_COMMA } else { "" };
-            if folder.is_empty() {
-                parts.push(APart::said(THE_JOB_FOLDER, "", trail));
-            } else {
-                parts.push(APart::figure(String::from_utf8_lossy(folder).into_owned(), trail));
+        let folders = the_folders_as_listed(says);
+        // **More than three: where they sit and how many** — the count, then
+        // the tops (`Design/Queue & History § What the job writes`, the
+        // Creator's twenty-ninth notes, notes 8 and 10). Three or fewer are
+        // listed whole, as before.
+        match crate::surface::render_settings::where_the_folders_sit(&folders) {
+            Some(sits) => {
+                parts.push(APart::figure(folders.len().to_string(), FOLDERS));
+                parts.push(APart::words(FOLDERS_IN));
+                let tops: Vec<String> = sits.tops.into_iter().map(|top| top.folder).collect();
+                parts.extend(the_folders_named(&tops, sits.more == 0));
+                if sits.more > 0 {
+                    parts.push(APart::said(A_PLUS, sits.more.to_string(), if sits.more == 1 { MORE_FOLDER } else { MORE_FOLDERS }));
+                }
             }
+            None => parts.extend(the_folders_named(&folders, true)),
         }
         if let Some(count) = says.how_many_files {
             parts.push(APart::said(
@@ -3279,6 +3703,8 @@ fn the_check_in_the_queue(
     let mut the_check = TheCheckOnTheEntry {
         job: pair.check.as_text(),
         heading: pair.the_heading(),
+        first_frame: pair.first_frame.to_string(),
+        the_frames: pair.the_frames.clone(),
         ..TheCheckOnTheEntry::default()
     };
     if pair.is_the_check(job) {
@@ -3446,13 +3872,21 @@ pub(crate) fn what_the_entry_says_of(stands: &WhereTheActStands) -> (Vec<APart>,
         said
     };
     match stands {
-        WhereTheActStands::InHand(TheQueuesOwnAct::TheStop) => (vec![APart::words(STOPPING)], "busy"),
+        WhereTheActStands::InHand(TheQueuesOwnAct::TheStop | TheQueuesOwnAct::TheForcedStop) => {
+            (vec![APart::words(STOPPING)], "busy")
+        }
         WhereTheActStands::InHand(_) => (vec![APart::words(CANCELLING)], ""),
         WhereTheActStands::NotReached(_) => (vec![APart::words(SMOOZY_COULD_NOT_REACH_THE_SERVER)], ""),
         WhereTheActStands::NotTaken(_, words) => (with_the_machines_words(THE_SERVER_DID_NOT_ACCEPT_IT, words), ""),
         WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheStop) => (vec![APart::words(THE_STOP_WAS_SENT)], ""),
+        WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheForcedStop) => {
+            (vec![APart::words(THE_FORCED_STOP_WAS_SENT)], "")
+        }
         WhereTheActStands::TheWaiterGaveUp(_) => (vec![APart::words(THE_CANCEL_WAS_SENT)], ""),
         WhereTheActStands::TheStopFailed(words) => (with_the_machines_words(THE_RENDER_WAS_NOT_STOPPED, words), ""),
+        WhereTheActStands::NotCancelled(words)
+            if words.as_deref() == Some("it is rendering, and a rendering job is stopped rather than cancelled") =>
+            (vec![APart::words(THE_CANCEL_CAME_TOO_LATE)], ""),
         WhereTheActStands::NotCancelled(words) => (with_the_machines_words(THE_JOB_WAS_NOT_CANCELLED, words), ""),
         WhereTheActStands::TheClearWasRefused => (vec![APart::words(THE_WAITING_JOBS_COULD_NOT_BE_CANCELLED)], ""),
     }
@@ -3483,6 +3917,29 @@ pub(crate) fn what_the_entry_says_of(stands: &WhereTheActStands) -> (Vec<APart>,
 ///   taken, the stop failed, not cancelled, the clear refused — was answered
 ///   before the quiet, and the design keeps only *a stop sent before the line
 ///   went quiet*. **Ruled at this site.**
+/// **Design, *The queue list*: an ordinary row's second line** —
+/// *Interior · 240 frames*, with *· frame 148* while it renders. Each part
+/// only where it is known: the scene the submission named or the read found,
+/// the frames the read counted (none where they cannot be counted), and the
+/// frame in hand from the machine's figures. The UI at every size, A-21.
+fn the_rows_second_line(
+    held: &smoozy_queue_history::record::LocalJobRecord,
+    frame_in_hand: Option<i64>,
+) -> Vec<APart> {
+    let mut said = Vec::new();
+    if let Some(scene) = held.scene_name.as_ref().filter(|scene| !scene.is_empty()) {
+        said.push(APart::value(scene.clone()));
+    }
+    if let Some(asked) = held.the_frames.asked.as_ref().filter(|_| !held.the_frames.they_cannot_be_counted) {
+        let count = asked.how_many();
+        said.push(APart::figure(count.to_string(), if count == 1 { FRAME_WORD } else { FRAMES_WORD }));
+    }
+    if let Some(frame) = frame_in_hand {
+        said.push(APart::said(FRAME_WORD, frame.to_string(), ""));
+    }
+    said
+}
+
 pub(crate) fn what_a_not_updating_entry_says(stands: Option<&WhereTheActStands>) -> Vec<APart> {
     let mut said = vec![APart::words(NOT_UPDATING)];
     if let Some(stands @ (WhereTheActStands::InHand(_) | WhereTheActStands::TheWaiterGaveUp(_))) = stands {
@@ -3613,8 +4070,13 @@ pub fn what_the_servers_are_doing(
                         .is_none_or(|pair| pair.is_the_check(&job.job) || !checks_live.contains(&pair.check.as_text()))
             });
         }
+        // **`Design/Servers § A row` as changed 2026-11-14: nothing renders
+        // while a setup that stopped part-way holds the line**, so a job whose
+        // record still reads rendering is counted as waiting. The Rough
+        // what-if answers, share 4 (310).
         let rendering = live
             .iter()
+            .filter(|_| period.the_setup_that_holds_the_line.is_none())
             .find(|(job, _)| matches!(job.state, QueueState::Rendering { .. }));
         let said = match rendering {
             Some((job, held)) => WhatAServerIsDoing::Rendering {
@@ -3674,6 +4136,15 @@ fn in_seconds(at: std::time::SystemTime) -> String {
 /// record kept beside the line, since the local record is gone, and **that
 /// line is the only place the job is named**, so its *Dismiss* asks first.
 /// No server is named on either (Design).
+/// **Whether a drop's words say its first-frame job was cancelled** — `Queue
+/// & History` H9's reason, which only the user's own act gives (a cancel from
+/// the desk or the phone, or a group's *Cancel all*).
+fn a_drop_behind_the_users_own_cancel(why: &str) -> bool {
+    why.strip_prefix("Telegram off: ")
+        .unwrap_or(why)
+        .starts_with(smoozy_queue_history::waiting::THE_DEPENDENCY_WAS_CANCELLED)
+}
+
 fn the_notice_from(
     connection: &rusqlite::Connection,
     store: &crate::record::job_records::JobRecords<'_>,
@@ -3704,6 +4175,12 @@ fn the_notice_from(
                         how_many[at] += 1;
                     }
                 }
+                // **`Queue & History` H9 and H11 as changed 2026-11-09: a drop
+                // behind a cancel is the user's own act and is named nowhere**
+                // — the twenty-eighth notes, note 16. The machine's drop words
+                // open with its reason (`Rented-server runtime`'s drop entry,
+                // after any *Telegram off:*).
+                ANoticeEntry::HeldJobDropped { why, .. } if a_drop_behind_the_users_own_cancel(why) => {}
                 ANoticeEntry::HeldJobDropped { job, name, .. } => notice.dropped.push(ADroppedJob {
                     job: job.as_text(),
                     name: name.clone(),
@@ -4004,17 +4481,27 @@ pub(crate) fn the_running_words_said(arrived: &crate::servers::the_machines_work
 /// **It is keyed by the server's identifier and never by its name**, which is
 /// what the page draws: two servers may share a name, and a decline of one
 /// must not hide the other's offer.
-fn the_declined_untracked_banner() -> &'static Mutex<Option<String>> {
-    static DECLINED: std::sync::OnceLock<Mutex<Option<String>>> = std::sync::OnceLock::new();
+fn the_declined_untracked_banner() -> &'static Mutex<Option<ADecline>> {
+    static DECLINED: std::sync::OnceLock<Mutex<Option<ADecline>>> = std::sync::OnceLock::new();
     DECLINED.get_or_init(|| Mutex::new(None))
+}
+
+/// **One *Ignore*: the server it was about and the jobs the banner counted
+/// when it was pressed.** `Queue & History` A5 as amended 2026-11-12: a
+/// decline covers the jobs it was shown, so a job that joins the offer later —
+/// the one a phone's *Resume* makes while connected — brings the banner back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ADecline {
+    pub server: String,
+    pub shown: Vec<smoozy_state::identities::Identity>,
 }
 
 /// **The user pressed *Ignore*.** Design, *Work Smoozy is not tracking*: it is
 /// one offer per server, so the decline names the server it was about — by its
 /// local server identifier.
-pub fn the_untracked_banner_is_declined(server: &str) {
+pub fn the_untracked_banner_is_declined(server: &str, shown: Vec<smoozy_state::identities::Identity>) {
     if let Ok(mut declined) = the_declined_untracked_banner().lock() {
-        *declined = Some(server.to_string());
+        *declined = Some(ADecline { server: server.to_string(), shown });
     }
 }
 
@@ -4026,10 +4513,12 @@ pub fn the_untracked_banner_is_declined(server: &str) {
 /// — which is the same split every command in this file already makes, and the
 /// reason is the one the board records: a test that leans on something the
 /// whole process shares is a test that fails when another test runs beside it.
-fn the_decline_is_applied(held: &mut TheQueueOnScreen, declined: &mut Option<String>) {
-    let offered = held.untracked.as_ref().map(|work| work.server_row.clone());
+fn the_decline_is_applied(held: &mut TheQueueOnScreen, declined: &mut Option<ADecline>) {
+    let offered = held.untracked.as_ref().map(|work| (work.server_row.clone(), work.jobs.clone()));
     match (&*declined, offered) {
-        (Some(was), Some(now)) if *was == now => {
+        // **The same server, and no job the decline was not shown.**
+        (Some(was), Some((now, jobs))) if was.server == now && jobs.iter().all(|job| was.shown.contains(job)) => {
+            let was = &was.server;
             held.untracked = None;
             // **`Queue & History` A4: with the banner gone, the waiting entry
             // behind that work says why it waits.** The 38's piece 15.
@@ -4074,8 +4563,8 @@ pub fn a_connected_period_ended(server: &str) {
 }
 
 /// The same, over a decline handed in, so a test can drive it.
-fn the_period_ending_drops_the_decline(declined: &mut Option<String>, server: &str) {
-    if declined.as_deref() == Some(server) {
+fn the_period_ending_drops_the_decline(declined: &mut Option<ADecline>, server: &str) {
+    if declined.as_ref().is_some_and(|was| was.server == server) {
         *declined = None;
     }
 }
@@ -4098,8 +4587,16 @@ pub fn the_untracked_work_is_ignored(
     let Ok(started) = started.lock() else {
         return;
     };
-    the_untracked_banner_is_declined(&server);
     let held = what_is_held(periods.the_machines_work(), started.record.as_ref(), chosen.as_deref());
+    // **The jobs the banner counts as the press lands**, which the decline
+    // covers and no other.
+    let shown = held
+        .untracked
+        .as_ref()
+        .filter(|work| work.server_row == server)
+        .map(|work| work.jobs.clone())
+        .unwrap_or_default();
+    the_untracked_banner_is_declined(&server, shown);
     the_queue_is_posted(&queue, the_queue_as_asked(held, None, None));
 }
 
@@ -4420,7 +4917,9 @@ pub fn an_act_on_a_job<R: tauri::Runtime>(
                 Err(NothingWasSent::ItIsNotRendering) => {
                     an_act_is_answered_with(&queue, act, THIS_JOB_IS_NOT_RENDERING)
                 }
-                Err(NothingWasSent::ItIsNotInTheQueue) => an_act_is_answered(&queue, act),
+                Err(NothingWasSent::ItIsNotInTheQueue | NothingWasSent::TheHoldIsAlreadyAnswered) => {
+                    an_act_is_answered(&queue, act)
+                }
             }
             return;
         }
@@ -4472,6 +4971,9 @@ pub fn an_act_on_a_job<R: tauri::Runtime>(
         WhereAnActOnAJobGoes::ItAnswersTheHold(answer) => {
             match the_held_job_is_answered(&app, job.as_deref(), answer) {
                 Ok(()) => the_queue_is_told_again(&app),
+                Err(crate::servers::the_queues_own_acts::NothingWasSent::TheHoldIsAlreadyAnswered) => {
+                    an_act_is_answered_with(&queue, act, THIS_JOB_IS_ALREADY_ANSWERED)
+                }
                 Err(_) => an_act_is_answered(&queue, act),
             }
             return;
@@ -5111,6 +5613,37 @@ fn where_the_held_jobs_answer_left_it(
 /// removed takes its local record (`Queue & History` L2), one read-forward
 /// pass runs over the same connection, and the three places are drawn again —
 /// the shape step 10c's S3 gave the queue's other acts.
+/// **The hold a press of the held entry's answer is for**, off the readings —
+/// or why nothing is sent: the job gone, or **still in the queue and no longer
+/// held, its hold answered by the other device** (`Queue & History` H4), which
+/// is told as such rather than as a job gone. Sol's fresh look at the
+/// twenty-eighth notes' piece 8: *Cancel job*'s box, left open while the phone
+/// answered *Render all*, said *This job is no longer in the queue*.
+pub(crate) fn the_hold_a_press_answers<'a>(
+    readings: impl IntoIterator<Item = (&'a str, &'a [smoozy_queue_history::readings::AJobAsTheMachineReadsIt])>,
+    job: &smoozy_state::identities::Identity,
+) -> Result<(String, smoozy_state::identities::Identity, Option<String>), crate::servers::the_queues_own_acts::NothingWasSent> {
+    use crate::servers::the_queues_own_acts::NothingWasSent;
+    use smoozy_queue_history::line::QueueState;
+    let mut in_the_queue = false;
+    for (server, jobs) in readings {
+        for read in jobs.iter().filter(|read| &read.job == job) {
+            match &read.state {
+                QueueState::Held { hold } => {
+                    return Ok((
+                        server.to_string(),
+                        hold.clone(),
+                        read.the_hold.as_ref().map(|says| says.reason.clone()),
+                    ))
+                }
+                QueueState::Waiting | QueueState::Rendering { .. } => in_the_queue = true,
+                QueueState::Ended { .. } => {}
+            }
+        }
+    }
+    Err(if in_the_queue { NothingWasSent::TheHoldIsAlreadyAnswered } else { NothingWasSent::ItIsNotInTheQueue })
+}
+
 fn the_held_job_is_answered<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     job: Option<&str>,
@@ -5118,7 +5651,6 @@ fn the_held_job_is_answered<R: tauri::Runtime>(
 ) -> Result<(), crate::servers::the_queues_own_acts::NothingWasSent> {
     use crate::servers::the_machines_work::TheHeldJobsAnswer;
     use crate::servers::the_queues_own_acts::{it_stands, NothingWasSent};
-    use smoozy_queue_history::line::QueueState;
     use smoozy_state::identities::{Identity, IdentityKind};
     let job = job
         .and_then(|text| Identity::read_back(IdentityKind::Job, text))
@@ -5126,21 +5658,13 @@ fn the_held_job_is_answered<R: tauri::Runtime>(
     let periods = crate::surface::servers::the_periods_of(app).ok_or(NothingWasSent::ItIsNotInTheQueue)?;
     // **`Rented-server runtime` U2: the hold identity is the reading's own**,
     // carried with the held job (`Queue & History` A1).
-    let (server, hold, the_reason) = periods
-        .the_machines_work()
-        .every_server()
-        .into_iter()
-        .find_map(|(server, period)| {
-            period.reading.as_ref()?.value().jobs.iter().find_map(|read| match &read.state {
-                QueueState::Held { hold } if read.job == job => Some((
-                    server.clone(),
-                    hold.clone(),
-                    read.the_hold.as_ref().map(|says| says.reason.clone()),
-                )),
-                _ => None,
-            })
-        })
-        .ok_or(NothingWasSent::ItIsNotInTheQueue)?;
+    let every = periods.the_machines_work().every_server();
+    let (server, hold, the_reason) = the_hold_a_press_answers(
+        every
+            .iter()
+            .filter_map(|(server, period)| Some((server.as_str(), period.reading.as_ref()?.value().jobs.as_slice()))),
+        &job,
+    )?;
     // **Which answer the pressed control gives turns on which pair it is**:
     // a job held at the start of its render has *Stop this job* first, the
     // *no* (the 38's piece 10, item 26).
@@ -5239,13 +5763,49 @@ pub(crate) fn the_box_is_raised(
         .as_ref()
         .filter(|entry| job.is_some_and(|job| entry.job == job));
     held.asking = match act {
-        TheActOnAJob::Stop => match the_entry.map(|entry| entry.stop_or_cancel) {
-            Some(Some(TheStopOrCancel::Stop)) => Some(the_stop_box(None)),
+        // **A first-frame check's *Stop* stops the whole job, and its box
+        // says so** — frame 1 and the range by their own numbers. The
+        // twenty-eighth notes, note 16.
+        TheActOnAJob::Stop => match the_entry {
+            Some(entry) if entry.stop_or_cancel == Some(TheStopOrCancel::Stop) => Some(
+                match entry.the_check.as_ref().filter(|check| check.job == entry.job && !check.the_frames.is_empty()) {
+                    Some(check) => the_pairs_stop_box(&check.first_frame, &check.the_frames),
+                    None => the_stop_box(None),
+                },
+            ),
             Some(_) => return Err(THIS_JOB_IS_NOT_RENDERING),
             None => return Err(THIS_JOB_IS_NO_LONGER_IN_THE_QUEUE),
         },
-        TheActOnAJob::Cancel => match the_entry.map(|entry| entry.stop_or_cancel) {
-            Some(Some(TheStopOrCancel::Cancel)) => Some(the_cancel_box()),
+        // **`Rendering` K11a: *Force stop* asks first, saying what the kill
+        // loses.** Rough share 3, 287.
+        TheActOnAJob::ForceStop => match the_entry {
+            Some(entry) if entry.stop_or_cancel == Some(TheStopOrCancel::ForceStop) => {
+                Some(the_force_stop_box(entry.the_kill_loses))
+            }
+            Some(_) => return Err(THIS_JOB_IS_NOT_RENDERING),
+            None => return Err(THIS_JOB_IS_NO_LONGER_IN_THE_QUEUE),
+        },
+        // **The header's *Cancel*, or the first-frame question's *Cancel
+        // job*** — whichever the entry offers; never both (Design, *The
+        // entry's controls*, as changed 2026-11-09). A range waiting its turn
+        // after *Render all* says its check stays in History. The
+        // twenty-eighth notes, note 16.
+        TheActOnAJob::Cancel => match the_entry {
+            Some(entry) if entry.stop_or_cancel == Some(TheStopOrCancel::Cancel) => Some(
+                match entry
+                    .the_check
+                    .as_ref()
+                    .filter(|check| check.job != entry.job && check.you_chose_render_all && !check.the_frames.is_empty())
+                {
+                    Some(check) => the_waiting_ranges_cancel_box(&check.the_frames),
+                    None => the_cancel_box(),
+                },
+            ),
+            Some(entry) if entry.stop_or_cancel.is_none() && entry.held.iter().any(|held| held.the_second_answer_asks) => {
+                Some(the_answers_cancel_box(
+                    entry.the_check.as_ref().map(|check| check.the_frames.as_str()).filter(|frames| !frames.is_empty()),
+                ))
+            }
             _ => return Err(THIS_JOB_IS_NO_LONGER_IN_THE_QUEUE),
         },
         TheActOnAJob::CancelAll => {
@@ -5257,7 +5817,14 @@ pub(crate) fn the_box_is_raised(
                 return Err(THESE_JOBS_ARE_NO_LONGER_IN_THE_QUEUE);
             };
             held.the_group_asked_about = Some(heading.group.clone());
-            Some(the_group_cancel_box(heading.scenes, heading.rendering.as_deref()))
+            let mut asking = the_group_cancel_box(heading.scenes, heading.rendering.as_deref());
+            // **Where a member's first-frame check has rendered**, *None has
+            // started, so no frames are lost* would be untrue (the
+            // twenty-eighth notes, note 16).
+            if heading.a_check_has_rendered && heading.rendering.is_none() {
+                asking.said = vec![vec![APart::words(THE_FIRST_FRAME_CHECKS_STAY_IN_HISTORY)]];
+            }
+            Some(asking)
         }
         _ => return Err(act.answers()),
     };
@@ -5414,6 +5981,71 @@ pub(crate) fn the_parts_are_said(mut event: Event, base: &str, at: usize, tail: 
     )
 }
 
+/// **Every folder under the many-folder line, said for the page** — the
+/// first statement's `write0Fold` names the part a press opens, and the rows
+/// follow flat, in the order Render settings draws them: a group's line
+/// carries its folder count (`…FoldersValue`, `…FoldersWord`) and whether it
+/// starts closed, and each folder under it says which row is its group's line
+/// (`…In`). Then the total and its split by format. `Design/Queue & History §
+/// What the job writes`; the Creator's twenty-ninth notes, notes 8 and 10.
+fn every_folder_is_said(mut event: Event, list: &crate::surface::render_settings::TheWrites) -> Event {
+    const THE_FOLDER_LINE: usize = 0;
+    let key = |tail: String| a_name("write", THE_FOLDER_LINE, &tail);
+    event = event.saying(key("Fold".to_string()), Said::Value(Verbatim::new(THE_COUNT_IS_PART.to_string())));
+    let mut at = 0;
+    let mut a_row = |mut event: Event, row: &crate::surface::render_settings::AWriteRow, under: Option<usize>| -> (Event, usize) {
+        let here = at;
+        at += 1;
+        if !row.place.as_str().is_empty() {
+            event = event.saying(key(format!("Row{here}Place")), Said::Value(row.place.clone()));
+        }
+        if let Some(top) = &row.the_top {
+            event = event.saying(key(format!("Row{here}Top")), Said::Prose(top.clone()));
+        }
+        if let Some(head) = under {
+            event = event.saying(key(format!("Row{here}In")), Said::Value(Verbatim::new(head.to_string())));
+        }
+        if let Some(group) = &row.group {
+            if let Some(folders) = group.folders.values.first() {
+                event = event.saying(key(format!("Row{here}FoldersValue")), Said::Value(folders.clone()));
+            }
+            if let Some(word) = &group.folders.rest {
+                event = event.saying(key(format!("Row{here}FoldersWord")), Said::Prose(word.clone()));
+            }
+            if group.it_starts_closed {
+                event = event.saying(key(format!("Row{here}Closed")), Said::Value(Verbatim::new("yes")));
+            }
+        }
+        for (count, one) in row.counts.iter().enumerate() {
+            event = event
+                .saying(key(format!("Row{here}Count{count}")), Said::Value(one.how_many.clone()))
+                .saying(key(format!("Row{here}Format{count}")), Said::Value(one.format.clone()));
+        }
+        event = event.saying(key(format!("Row{here}CountCount")), Said::Value(Verbatim::new(row.counts.len().to_string())));
+        (event, here)
+    };
+    for row in &list.rows {
+        let (said, head) = a_row(event, row, None);
+        event = said;
+        for one in row.group.iter().flat_map(|group| group.rows.iter()) {
+            event = a_row(event, one, Some(head)).0;
+        }
+    }
+    event = event.saying(key("RowCount".to_string()), Said::Value(Verbatim::new(at.to_string())));
+    if let Some(total) = list.total.values.first() {
+        event = event.saying(key("TotalValue".to_string()), Said::Value(total.clone()));
+    }
+    if let Some(word) = &list.total.rest {
+        event = event.saying(key("TotalWord".to_string()), Said::Prose(word.clone()));
+    }
+    for (at, one) in list.by_format.iter().enumerate() {
+        event = event
+            .saying(key(format!("ByFormat{at}Count")), Said::Value(one.how_many.clone()))
+            .saying(key(format!("ByFormat{at}Format")), Said::Value(one.format.clone()));
+    }
+    event.saying(key("ByFormatCount".to_string()), Said::Value(Verbatim::new(list.by_format.len().to_string())))
+}
+
 /// **What the queue says, in the two routes and never in one string.**
 ///
 /// A6 and X9: prose through the typography point, everything else by the
@@ -5443,6 +6075,9 @@ pub fn the_queue_says(says: &TheQueueOnScreen) -> Event {
         // last seen.** The two words travel whether or not a line carries the
         // reading, because which lines do is the reading's own business.
         .saying("notUpdatingWord", Said::Prose(Prose::new(NOT_UPDATING)))
+        .saying("wasRenderingFrameWord", Said::Prose(Prose::new(WAS_RENDERING_FRAME)))
+        .saying("atWord", Said::Prose(Prose::new(AT_WORD)))
+        .saying("statusUnknownWord", Said::Prose(Prose::new(SMOOZY_DOES_NOT_KNOW_WHAT_IT_IS_DOING_NOW)))
         .saying("lastSeenWord", Said::Prose(Prose::new(LAST_SEEN)))
         .saying("renderingWord", Said::Prose(Prose::new(RENDERING_WORD)))
         .saying("waitingWord", Said::Prose(Prose::new(WAITING_WORD)));
@@ -5552,6 +6187,12 @@ fn the_lines_are_said(mut event: Event, says: &TheQueueOnScreen) -> Event {
                 a_name("line", at, "Rows"),
                 Said::Value(Verbatim::new(line.rows.len().to_string())),
             );
+        if line.unreadable_job_records > 0 {
+            event = the_parts_are_said(event, "line", at, "Unreadable", &[
+                APart::said(UNREADABLE_RECORDS_LEAD, line.unreadable_job_records.to_string(),
+                    if line.unreadable_job_records == 1 { UNREADABLE_RECORD_TRAIL } else { UNREADABLE_RECORDS_TRAIL }),
+            ]);
+        }
         if let Some(badge) = &line.badge {
             event = event.saying(a_name("line", at, "Badge"), Said::Value(Verbatim::new(badge.clone())));
         }
@@ -5588,6 +6229,9 @@ fn the_lines_are_said(mut event: Event, says: &TheQueueOnScreen) -> Event {
             event = the_pair_is_said(event, "row", at_row, &row.the_pair);
             if let Some(state) = row.state {
                 event = event.saying(a_name("row", at_row, "State"), Said::Prose(Prose::new(state)));
+                if let Some(other) = the_word_it_flips_to(state) {
+                    event = event.saying(a_name("row", at_row, "StateHeld"), Said::Prose(Prose::new(other)));
+                }
             }
             // **Each bar where the row has it** (W4): absent stays absent
             // (`Queue & History` R4), and one bar never waits on the other.
@@ -5608,6 +6252,11 @@ fn the_lines_are_said(mut event: Event, says: &TheQueueOnScreen) -> Event {
             }
             if row.not_updating {
                 event = event.saying(a_name("row", at_row, "Stale"), Said::Value(Verbatim::new("yes")));
+            }
+            if let Some((frame, at)) = &row.was_rendering {
+                event = event
+                    .saying(a_name("row", at_row, "WasFrame"), Said::Value(Verbatim::new(frame.to_string())))
+                    .saying(a_name("row", at_row, "WasAt"), Said::Value(Verbatim::new(at.clone())));
             }
             if row.submitting {
                 event = event.saying(a_name("row", at_row, "Submitting"), Said::Value(Verbatim::new("yes")));
@@ -5884,6 +6533,10 @@ fn the_part_is_said(event: Event, part: Option<&ThePartSubmission>) -> Event {
             Said::Prose(Prose::new(SUBMIT_THE_REMAINING_SCENES)),
         )
         .saying(
+            "thePartSettings",
+            Said::Prose(Prose::new(SENT_WITH_THE_FIRST_SETTINGS)),
+        )
+        .saying(
             "thePartServerRow",
             Said::Value(Verbatim::new(part.the_servers_row.clone())),
         )
@@ -5954,12 +6607,17 @@ pub(crate) fn the_entry_is_said(event: Event, entry: Option<&TheJobEntry>) -> Ev
         let (label, act) = match act {
             TheStopOrCancel::Stop => (STOP, TheActOnAJob::Stop),
             TheStopOrCancel::Cancel => (CANCEL, TheActOnAJob::Cancel),
+            TheStopOrCancel::ForceStop => (FORCE_STOP, TheActOnAJob::ForceStop),
         };
         event = event
             .saying("entryStopOrCancel", Said::Prose(Prose::new(label)))
             .saying("entryStopOrCancelAct", Said::Value(Verbatim::new(act.name())));
     }
 
+    if let Some(server) = &entry.reconnect_server {
+        event = event.saying("entryReconnectServer", Said::Value(Verbatim::new(server)))
+            .saying("reconnect", Said::Prose(Prose::new(RECONNECT)));
+    }
     if let Some(badge) = &entry.badge {
         event = event.saying("entryBadge", Said::Value(Verbatim::new(badge.clone())));
     }
@@ -6013,6 +6671,9 @@ pub(crate) fn the_entry_is_said(event: Event, entry: Option<&TheJobEntry>) -> Ev
     for (at, part) in entry.status.iter().enumerate() {
         event = a_part_is_said_under(event, "entryStatus", at, "", part);
     }
+    if let Some(other) = entry.status.first().and_then(|first| the_word_it_flips_to(first.lead)) {
+        event = event.saying("entryStatusHeld", Said::Prose(Prose::new(other)));
+    }
     event = event.saying(
         "entryStatusCount",
         Said::Value(Verbatim::new(entry.status.len().to_string())),
@@ -6036,6 +6697,13 @@ pub(crate) fn the_entry_is_said(event: Event, entry: Option<&TheJobEntry>) -> Ev
         }
         for (at, part) in progress.now.iter().enumerate() {
             event = a_part_is_said_under(event, "progNow", at, "", part);
+        }
+        // **Where Blender's own estimate starts on the line** — its figure,
+        // the dot and *Blender's estimate* — so the page pins it to the line's
+        // right end and holds its room once a job has shown one (UI
+        // consistency, finding 4).
+        if let Some(at) = the_estimate_starts_at(&progress.now) {
+            event = event.saying("progNowEstimateFrom", Said::Value(Verbatim::new(at.to_string())));
         }
     }
 
@@ -6080,17 +6748,32 @@ pub(crate) fn the_entry_is_said(event: Event, entry: Option<&TheJobEntry>) -> Ev
             event = event.saying(a_name("write", at, "Bold"), Said::Value(Verbatim::new(write.bold.to_string())));
         }
     }
+    if let Some(list) = &entry.every_folder {
+        event = every_folder_is_said(event, list);
+    }
     event = event.saying(
         "writeCount",
         Said::Value(Verbatim::new(entry.writes.len().to_string())),
     );
 
     for (at, held) in entry.held.iter().enumerate() {
-        event = event.saying(a_name("held", at, "Note"), Said::Prose(Prose::new(held.note)));
+        // **No note is sent where there is none** — the first-frame pair's
+        // since the twenty-eighth notes, note 16.
+        if !held.note.is_empty() {
+            event = event.saying(a_name("held", at, "Note"), Said::Prose(Prose::new(held.note)));
+        }
         // **A box with no answers sends none** — a job held for the driver
         // update (`Queue & History` H12). Held-job piece B.
         if !held.second_answer.is_empty() {
             event = event.saying(a_name("held", at, "Answer"), Said::Prose(Prose::new(held.second_answer)));
+        }
+        // **The first-frame pair's *Cancel job* raises its box** (the
+        // twenty-eighth notes, note 16): the page sends the act named here.
+        if held.the_second_answer_asks {
+            event = event.saying(
+                a_name("held", at, "AnswerAct"),
+                Said::Value(Verbatim::new(TheActOnAJob::Cancel.name())),
+            );
         }
         event = the_parts_are_said(event, "held", at, "Said", &held.said);
         if !held.second.is_empty() {
@@ -6401,6 +7084,32 @@ pub fn the_stop_box(frames_already_rendered: Option<u32>) -> TheBoxThatAsks {
     }
 }
 
+/// **`Rendering` K11a's box: *Force stop this job?*** — `Design/Queue &
+/// History`, *Force stop*. It says *lost*, not *may not be saved*: the kill
+/// always cuts the frame in hand. A job whose output is one video file loses
+/// the video and keeps no frames. The Creator's ruling on 287 (Rough share 3).
+pub fn the_force_stop_box(loses: WhatTheKillLoses) -> TheBoxThatAsks {
+    let what_stays = vec![APart::words(FRAMES_ALREADY_RENDERED_STAY_WITH_NO_COUNT)];
+    let said = match loses {
+        WhatTheKillLoses::TheCurrentFrame => vec![vec![APart::words(THE_CURRENT_FRAME_IS_LOST)], what_stays],
+        WhatTheKillLoses::TheCurrentFrameAndTheVideo => vec![
+            vec![APart::words(THE_CURRENT_FRAME_IS_LOST), APart::words(THE_VIDEO_IS_LOST)],
+            what_stays,
+        ],
+        WhatTheKillLoses::TheVideo => vec![vec![APart::words(THE_VIDEO_IS_LOST)]],
+    };
+    TheBoxThatAsks {
+        which: "stop",
+        heading: vec![APart::words(FORCE_STOP_THIS_JOB_QUESTION)],
+        said,
+        keep: KEEP_RENDERING,
+        go_ahead: vec![APart::words(FORCE_STOP)],
+        grave: true,
+        go_ahead_act: TheActOnAJob::ForceStopTheJob,
+        per_server: Vec::new(),
+    }
+}
+
 pub fn the_cancel_box() -> TheBoxThatAsks {
     TheBoxThatAsks {
         which: "cancel",
@@ -6414,6 +7123,71 @@ pub fn the_cancel_box() -> TheBoxThatAsks {
         grave: true,
         go_ahead_act: TheActOnAJob::CancelTheJob,
         per_server: Vec::new(),
+    }
+}
+
+/// **The first-frame pair's stop box, while frame 1 renders** — `Design/Queue &
+/// History § A first-frame check and its job`: *Stop this job?* / *Frame 1 may
+/// not be saved. Frames 1–240 will not render.* / *Keep rendering* · *Stop*.
+/// The stop it asks for ends the whole job (`Queue & History` L19a). The
+/// Creator's twenty-eighth notes, note 16.
+pub fn the_pairs_stop_box(first_frame: &str, the_frames: &str) -> TheBoxThatAsks {
+    TheBoxThatAsks {
+        which: "stop",
+        heading: vec![APart::words(STOP_THIS_JOB_QUESTION)],
+        said: vec![vec![
+            APart::said(FRAME_LEAD, first_frame, MAY_NOT_BE_SAVED),
+            APart::said(FRAMES_LEAD, the_frames, WILL_NOT_RENDER),
+        ]],
+        keep: KEEP_RENDERING,
+        go_ahead: vec![APart::words(STOP)],
+        grave: true,
+        go_ahead_act: TheActOnAJob::StopTheJob,
+        per_server: Vec::new(),
+    }
+}
+
+/// **The first-frame question's *Cancel job* asks first** — the cancel box's
+/// shape: *Cancel this job?* / *Frames 1–240 will not render. Their settings
+/// are deleted too. The first-frame check stays in History.* / *Keep the job* ·
+/// *Cancel the job*, the go-ahead being the question's own *no* (`Queue &
+/// History` H4 as changed 2026-11-09). Where the record holds no range — an
+/// older record — the sentence names the full range without its numbers. The
+/// Creator's twenty-eighth notes, note 16, and their answer that it asks.
+pub fn the_answers_cancel_box(the_frames: Option<&str>) -> TheBoxThatAsks {
+    let what_goes = match the_frames {
+        Some(frames) => APart::said(FRAMES_LEAD, frames, WILL_NOT_RENDER),
+        None => APart::words(THE_FULL_RANGE_WILL_NOT_RENDER),
+    };
+    TheBoxThatAsks {
+        which: "cancel",
+        heading: vec![APart::words(CANCEL_THIS_JOB_QUESTION)],
+        said: vec![vec![
+            what_goes,
+            APart::words(THEIR_SETTINGS_GO_TOO),
+            APart::words(THE_FIRST_FRAME_CHECK_STAYS_IN_HISTORY),
+        ]],
+        keep: KEEP_THE_JOB,
+        go_ahead: vec![APart::words(CANCEL_THE_JOB)],
+        grave: true,
+        go_ahead_act: TheActOnAJob::TheHeldJobsSecondAnswer,
+        per_server: Vec::new(),
+    }
+}
+
+/// **A first-frame pair's range waiting its turn after *Render all***: the
+/// header's *Cancel* asks with words true of it — *Frames 1–240 have not
+/// started. Their settings are deleted too. The first-frame check stays in
+/// History.* — where the single box's *It will not appear in History* would
+/// not be. The Creator's twenty-eighth notes, note 16.
+pub fn the_waiting_ranges_cancel_box(the_frames: &str) -> TheBoxThatAsks {
+    TheBoxThatAsks {
+        said: vec![vec![
+            APart::said(FRAMES_LEAD, the_frames, HAVE_NOT_STARTED),
+            APart::words(THEIR_SETTINGS_GO_TOO),
+            APart::words(THE_FIRST_FRAME_CHECK_STAYS_IN_HISTORY),
+        ]],
+        ..the_cancel_box()
     }
 }
 
@@ -6492,6 +7266,7 @@ pub fn the_first_frame_is_held(
         )],
         second_answer: CANCEL_IT,
         note: CANCELLING_LEAVES_NO_RECORD,
+        the_second_answer_asks: true,
     }
 }
 
@@ -6508,6 +7283,7 @@ pub fn the_first_frame_is_held_with_no_count() -> TheJobIsHeld {
         first_answer: vec![APart::words(RENDER_ALL_WITH_NO_COUNT)],
         second_answer: CANCEL_IT,
         note: CANCELLING_LEAVES_NO_RECORD,
+        the_second_answer_asks: true,
     }
 }
 
@@ -6577,14 +7353,14 @@ pub(crate) mod tests {
         use smoozy_state::identities::{Identity, IdentityKind};
         use smoozy_state::observed::{Clock, Reading};
 
-        fn a_record(named: &str) -> crate::record::LocalRecord {
+        pub(super) fn a_record(named: &str) -> crate::record::LocalRecord {
             let path = crate::scratch_folders::a_folder(format!("smoozy-queue-piece-10-{named}-{}", std::process::id()));
             crate::record::LocalRecord::open_at(&path.join("local-record.sqlite3")).unwrap()
         }
 
         /// **One job on one server, in the state given**, as the period holds
         /// its reading.
-        fn the_queue_holds(
+        pub(super) fn the_queue_holds(
             holds: &WhatThisRunHolds,
             server: &Identity,
             job: &Identity,
@@ -6633,6 +7409,7 @@ pub(crate) mod tests {
                 ),
                 job_output_folder: job_output_folder.to_string(),
                 more_than_one_view_layer_at: Default::default(),
+                every_folder: None,
             }
         }
 
@@ -6888,7 +7665,10 @@ pub(crate) mod tests {
             assert_eq!(entry.held[0].said, vec![APart::words(THIS_JOB_WRITES_NO_FILES)]);
             assert_eq!(entry.held[0].first_answer, vec![APart::words(STOP_THIS_JOB)]);
             assert_eq!(entry.held[0].second_answer, CARRY_ON_ANYWAY);
-            assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::Cancel));
+            // **The question holds the way to end the job**, so the header's
+            // slot is empty (the twenty-eighth notes, note 16; until then it
+            // carried *Cancel* beside the question's *Stop this job*).
+            assert_eq!(entry.stop_or_cancel, None);
 
             let both = held_for(the_hold_reason_for(&[
                 WhatHoldsTheJob::ADestinationCannotBeBroughtUnderTheJobsFolder,
@@ -6917,6 +7697,295 @@ pub(crate) mod tests {
                 TheHeldJobsAnswer::RenderAll
             );
             assert_eq!(the_answer_the_control_gives(false, None), TheHeldJobsAnswer::CancelIt);
+        }
+
+        /// **The runner's ruling 3 of 2026-11-11 (`Design/Queue & History`,
+        /// *The queue list*; `Queue & History` A1): a job the server has taken
+        /// and cannot start for lack of room reads *Waiting: the server’s disk
+        /// is full.*** on its row, in the held amber, and on its entry's status
+        /// line, with *Cancel* where *Stop* sits. **Only the job the reading
+        /// names**, and never over *Not updating*. *On the live pass the row
+        /// said nothing: the job read as any waiting job.*
+        #[test]
+        fn a_job_waiting_for_room_says_the_servers_disk_is_full() {
+            let record = a_record("room");
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+            let store = crate::record::job_records::JobRecords::over(record.connection());
+            let made = crate::record::deletions::tests::a_record_in_history(&server, "Kitchen — night");
+            store.write_the_provisional_record(&made).unwrap();
+            let holds = WhatThisRunHolds::default();
+            the_queue_holds(&holds, &server, &made.job, QueueState::Waiting, None);
+            let connection = holds.the_connection_now(&server.as_text()).expect("a connection");
+
+            let plain = what_is_held(&holds, Some(&record), None);
+            assert_eq!(plain.lines[0].rows[0].state, Some(WAITING_STATUS), "an ordinary waiting job says *Waiting* (the four questions, scout 3.29)");
+
+            holds.the_reading_says_the_line_waits_for_room_at(&server.as_text(), connection, Some(made.job.clone()));
+            let screen = what_is_held(&holds, Some(&record), None);
+            let row = &screen.lines[0].rows[0];
+            assert_eq!(
+                (row.state, row.state_is),
+                (Some("Waiting: the server’s disk is full."), "held"),
+                "the row says why the job has not started"
+            );
+            let entry = screen.entry.as_ref().expect("the entry");
+            assert_eq!(entry.status, vec![APart::words("Waiting: the server’s disk is full.")]);
+            assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::Cancel));
+
+            // **Another job's wait is not this one's.**
+            let other = Identity::issue(IdentityKind::Job).unwrap();
+            holds.the_reading_says_the_line_waits_for_room_at(&server.as_text(), connection, Some(other));
+            assert_eq!(what_is_held(&holds, Some(&record), None).lines[0].rows[0].state, Some(WAITING_STATUS));
+
+            // **`Queue & History` C7 comes first**: a reading that is not
+            // updating says so, and nothing of the disk.
+            holds.the_reading_says_the_line_waits_for_room_at(&server.as_text(), connection, Some(made.job.clone()));
+            holds.the_connection_ended(&server.as_text());
+            let stale = what_is_held(&holds, Some(&record), None);
+            assert_eq!(stale.lines[0].rows[0].state, Some(NOT_UPDATING));
+        }
+
+        /// **The Rough what-if answers, share 4 (310): a server whose setup
+        /// stopped part-way starts nothing, and every job of it says why** —
+        /// *Waiting: the server's setup stopped part-way.* on its row and its
+        /// entry, a job whose record still reads rendering among them, and
+        /// the server list's column counts that job as waiting. *Before, the
+        /// rows read* Waiting *and the column* Rendering *with no reason.*
+        #[test]
+        fn rough_share_4_a_setup_that_stopped_part_way_is_why_the_jobs_wait() {
+            let words = "Waiting: the server’s setup stopped part-way.";
+            let record = a_record("setup-stopped");
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+            let store = crate::record::job_records::JobRecords::over(record.connection());
+            let made = crate::record::deletions::tests::a_record_in_history(&server, "Kitchen — night");
+            store.write_the_provisional_record(&made).unwrap();
+            let run = Identity::issue(IdentityKind::Operation).unwrap();
+            for state in [
+                QueueState::Waiting,
+                QueueState::Rendering { operation: Identity::issue(IdentityKind::Operation).unwrap() },
+            ] {
+                let rendering = matches!(state, QueueState::Rendering { .. });
+                let holds = WhatThisRunHolds::default();
+                the_queue_holds(&holds, &server, &made.job, state, None);
+                let connection = holds.the_connection_now(&server.as_text()).expect("a connection");
+                holds.the_reading_says_a_setup_holds_the_line(&server.as_text(), connection, Some(run.clone()));
+                let screen = what_is_held(&holds, Some(&record), None);
+                let row = &screen.lines[0].rows[0];
+                assert_eq!((row.state, row.state_is), (Some(words), "held"), "the row says why");
+                let entry = screen.entry.as_ref().expect("the entry");
+                assert_eq!(entry.status, vec![APart::words(words)]);
+                assert_eq!(
+                    entry.stop_or_cancel,
+                    Some(if rendering { TheStopOrCancel::Stop } else { TheStopOrCancel::Cancel })
+                );
+                assert!(
+                    matches!(
+                        what_the_servers_are_doing(&holds, Some(&record)).get(&server.as_text()),
+                        Some(WhatAServerIsDoing::Waiting { how_many: 1 })
+                    ),
+                    "nothing renders while the setup holds the line"
+                );
+                // **A reading that names no setup takes the words away.**
+                holds.the_reading_says_a_setup_holds_the_line(&server.as_text(), connection, None);
+                assert_ne!(what_is_held(&holds, Some(&record), None).lines[0].rows[0].state, Some(words));
+            }
+        }
+
+        #[test]
+        fn a_job_run_again_says_so_until_its_render_starts() {
+            let record = a_record("running-again");
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+            let store = crate::record::job_records::JobRecords::over(record.connection());
+            let made = crate::record::deletions::tests::a_record_in_history(&server, "Kitchen");
+            store.write_the_provisional_record(&made).unwrap();
+            let holds = WhatThisRunHolds::default();
+            let connection = holds.a_connection_begins(&server.as_text());
+            let show = |again: bool| {
+                holds.a_reading_was_taken(&server.as_text(), connection, Reading::taken(
+                    TheMachinesWorkingState {
+                        jobs: vec![AJobAsTheMachineReadsIt {
+                            job: made.job.clone(),
+                            state: QueueState::Rendering { operation: Identity::issue(IdentityKind::Operation).unwrap() },
+                            live: WhatTheEntryHasLive::read_back(|name| {
+                                (again && name == "running again").then_some("yes")
+                            }),
+                            the_hold: None,
+                        }],
+                        the_admission_point_stands_at: None, notes: Vec::new(),
+                        the_history_copys_count: 0, the_history_copys_entries: Vec::new(),
+                    }, std::time::SystemTime::UNIX_EPOCH, Clock::ThisComputer,
+                ), None);
+                what_is_held(&holds, Some(&record), None)
+            };
+            let screen = show(true);
+            assert_eq!(screen.lines[0].rows[0].state, Some("Interrupted. Retrying."));
+            let entry = screen.entry.unwrap();
+            assert_eq!(entry.status, vec![APart::words("Interrupted. Retrying.")]);
+            assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::Stop));
+            assert_eq!(show(false).lines[0].rows[0].state, Some(RENDERING));
+            show(true);
+            holds.the_connection_ended(&server.as_text());
+            assert_eq!(what_is_held(&holds, Some(&record), None).lines[0].rows[0].state, Some(NOT_UPDATING));
+        }
+
+        /// **Design, *A rendering entry*: the status line says how long the
+        /// job has rendered** — *Rendering · 2h 14m*, from the machine's own
+        /// figure (`Queue & History` R5, addition of 2026-11-11), and plain
+        /// *Rendering* where the server sends none. The four questions,
+        /// scout 2.1.
+        #[test]
+        fn four_questions_2_1_a_rendering_entry_says_how_long_it_has_rendered() {
+            let record = a_record("rendered-for");
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+            let store = crate::record::job_records::JobRecords::over(record.connection());
+            let made = crate::record::deletions::tests::a_record_in_history(&server, "Kitchen");
+            store.write_the_provisional_record(&made).unwrap();
+            let holds = WhatThisRunHolds::default();
+            let connection = holds.a_connection_begins(&server.as_text());
+            let show = |seconds: Option<&'static str>| {
+                holds.a_reading_was_taken(&server.as_text(), connection, Reading::taken(
+                    TheMachinesWorkingState {
+                        jobs: vec![AJobAsTheMachineReadsIt {
+                            job: made.job.clone(),
+                            state: QueueState::Rendering { operation: Identity::issue(IdentityKind::Operation).unwrap() },
+                            live: WhatTheEntryHasLive::read_back(|name| {
+                                (name == "rendered for seconds").then_some(seconds).flatten()
+                            }),
+                            the_hold: None,
+                        }],
+                        the_admission_point_stands_at: None, notes: Vec::new(),
+                        the_history_copys_count: 0, the_history_copys_entries: Vec::new(),
+                    }, std::time::SystemTime::UNIX_EPOCH, Clock::ThisComputer,
+                ), None);
+                what_is_held(&holds, Some(&record), None).entry.expect("the entry").status
+            };
+            assert_eq!(show(Some("8040")), vec![APart::words(RENDERING), APart::said(A_DOT, "2h 14m", "")]);
+            assert_eq!(show(None), vec![APart::words(RENDERING)]);
+        }
+
+        /// **Design, *The queue list*: an ordinary row's second line** is the
+        /// scene and the frame count, and the frame in hand while it renders,
+        /// each where known — *Interior · 240 frames · frame 148*. The UI at
+        /// every size, A-21.
+        #[test]
+        fn a_21_an_ordinary_rows_second_line_says_the_scene_and_the_frames() {
+            let record = a_record("second-line");
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+            let store = crate::record::job_records::JobRecords::over(record.connection());
+            let made = crate::record::deletions::tests::a_record_in_history(&server, "Kitchen");
+            store.write_the_provisional_record(&made).unwrap();
+            // **The scene and the frames arrive with the read**
+            // (`Queue & History` N9), as on a real job.
+            store
+                .the_read_is_filled_in(
+                    &made.job,
+                    &smoozy_queue_history::record::WhatTheReadProduced {
+                        scene_name: Some("Interior".to_string()),
+                        the_frames: smoozy_queue_history::record::TheFramesTheReadFound {
+                            asked: smoozy_queue_history::record::TheFramesAsked::from_the_order(
+                                &(1..=240).collect::<Vec<_>>(),
+                            ),
+                            they_cannot_be_counted: false,
+                        },
+                        ..smoozy_queue_history::record::WhatTheReadProduced::default()
+                    },
+                )
+                .unwrap();
+            let holds = WhatThisRunHolds::default();
+            let connection = holds.a_connection_begins(&server.as_text());
+            let show = |state: QueueState, frame: Option<&'static str>| {
+                holds.a_reading_was_taken(&server.as_text(), connection, Reading::taken(
+                    TheMachinesWorkingState {
+                        jobs: vec![AJobAsTheMachineReadsIt {
+                            job: made.job.clone(),
+                            state: state.clone(),
+                            live: WhatTheEntryHasLive::read_back(|name| match name {
+                                "attempt" => frame.map(|_| "1"),
+                                "figures taken at" => frame.map(|_| "100"),
+                                "figures taken on the clock of" => frame.map(|_| "a machine"),
+                                "frames counted" => frame.map(|_| "147"),
+                                "frame in hand" => frame,
+                                _ => None,
+                            }),
+                            the_hold: None,
+                        }],
+                        the_admission_point_stands_at: None, notes: Vec::new(),
+                        the_history_copys_count: 0, the_history_copys_entries: Vec::new(),
+                    }, std::time::SystemTime::now(), Clock::ThisComputer,
+                ), None);
+                what_is_held(&holds, Some(&record), None).lines[0].rows[0].sub.clone()
+            };
+            assert_eq!(
+                show(QueueState::Waiting, None),
+                vec![APart::value("Interior"), APart::figure("240", FRAMES_WORD)]
+            );
+            let rendering = QueueState::Rendering { operation: Identity::issue(IdentityKind::Operation).unwrap() };
+            assert_eq!(
+                show(rendering, Some("148")),
+                vec![APart::value("Interior"), APart::figure("240", FRAMES_WORD), APart::said(FRAME_WORD, "148", "")]
+            );
+        }
+
+        /// **The four questions, scout 2.7: a row that was rendering when the
+        /// reading went quiet says which frame, and when** — the drawing's
+        /// *Was rendering frame 88 at 11:04. Current status unknown.*, written
+        /// at `WAS_RENDERING_FRAME` and never shown until then.
+        #[test]
+        fn four_questions_2_7_a_row_that_was_rendering_says_so_while_not_updating() {
+            let record = a_record("was-rendering");
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+            let store = crate::record::job_records::JobRecords::over(record.connection());
+            let made = crate::record::deletions::tests::a_record_in_history(&server, "Kitchen");
+            store.write_the_provisional_record(&made).unwrap();
+            // **The scene and the frames arrive with the read**
+            // (`Queue & History` N9), as on a real job.
+            store
+                .the_read_is_filled_in(
+                    &made.job,
+                    &smoozy_queue_history::record::WhatTheReadProduced {
+                        scene_name: Some("Interior".to_string()),
+                        the_frames: smoozy_queue_history::record::TheFramesTheReadFound {
+                            asked: smoozy_queue_history::record::TheFramesAsked::from_the_order(
+                                &(1..=240).collect::<Vec<_>>(),
+                            ),
+                            they_cannot_be_counted: false,
+                        },
+                        ..smoozy_queue_history::record::WhatTheReadProduced::default()
+                    },
+                )
+                .unwrap();
+            let holds = WhatThisRunHolds::default();
+            let connection = holds.a_connection_begins(&server.as_text());
+            let show = |state: QueueState, frame: Option<&'static str>| {
+                holds.a_reading_was_taken(&server.as_text(), connection, Reading::taken(
+                    TheMachinesWorkingState {
+                        jobs: vec![AJobAsTheMachineReadsIt {
+                            job: made.job.clone(),
+                            state: state.clone(),
+                            live: WhatTheEntryHasLive::read_back(|name| match name {
+                                "attempt" => frame.map(|_| "1"),
+                                "figures taken at" => frame.map(|_| "100"),
+                                "figures taken on the clock of" => frame.map(|_| "a machine"),
+                                "frames counted" => frame.map(|_| "147"),
+                                "frame in hand" => frame,
+                                _ => None,
+                            }),
+                            the_hold: None,
+                        }],
+                        the_admission_point_stands_at: None, notes: Vec::new(),
+                        the_history_copys_count: 0, the_history_copys_entries: Vec::new(),
+                    }, std::time::SystemTime::now(), Clock::ThisComputer,
+                ), None);
+                holds.the_connection_ended(&server.as_text());
+                let row = what_is_held(&holds, Some(&record), None).lines[0].rows[0].clone();
+                (row.sub, row.was_rendering.map(|(frame, _)| frame))
+            };
+            let rendering = QueueState::Rendering { operation: Identity::issue(IdentityKind::Operation).unwrap() };
+            assert_eq!(show(rendering, Some("148")), (Vec::new(), Some(148)), "the stale row hides what it was doing");
+            let page = include_str!("../../web/the-queue.js");
+            for wanted in ["\"WasAt\"", "said.wasRenderingFrameWord", "said.atWord", "said.statusUnknownWord"] {
+                assert!(page.contains(wanted), "the page does not draw {wanted}");
+            }
         }
 
         /// **Held-job piece B, `Queue & History` H12 and the drawing's
@@ -6962,6 +8031,13 @@ pub(crate) mod tests {
                 vec![APart::said(THE_JOBS_BLENDER_LEAD, "5.2", NEEDS_A_NEWER_NVIDIA_DRIVER_FOR_OPTIX)]
             );
             assert_eq!(the_box.second, SMOOZY_WILL_UPDATE_THE_DRIVER);
+            // **The leftovers of the Rough what-if answers (144): the box
+            // names everything the update waits for**, transfers too, and the
+            // job keeps waiting — no answer, nothing forcing the restart.
+            assert_eq!(
+                the_box.second,
+                "When the server's other jobs and transfers finish, the driver is updated, the server restarts, and this job starts."
+            );
             assert_eq!(the_box.note, THIS_ONLY_HAPPENS_WHILE_CONNECTED);
             // **From 5.3 the box says what stops there** (`Rendering` L23a's
             // bullet of 2026-11-02), and a later Blender reads the same row.
@@ -7129,6 +8205,27 @@ pub(crate) mod tests {
         }
     }
     use super::*;
+
+    /// **A rendering row's state carries the word it flips to, and Blender's
+    /// estimate where it starts** — UI consistency, findings 3 and 4: the
+    /// page held neither, so the name widened and narrowed on every frame and
+    /// the estimate slid and came and went. Before this the page was sent
+    /// neither.
+    #[test]
+    fn ui3_ui4_the_flip_word_and_where_the_estimate_starts() {
+        assert_eq!(the_word_it_flips_to(RENDERING), Some(FINISHING));
+        assert_eq!(the_word_it_flips_to(FINISHING), Some(RENDERING));
+        assert_eq!(the_word_it_flips_to(WAITING_ON_YOU), None);
+        let now = vec![
+            APart::said(FRAME_HEADING, "148", ""),
+            APart::figure("12/16", SAMPLES_WORD),
+            APart::figure("~1m 40s", LEFT_WORD),
+            APart::words(A_DOT),
+            APart::words(BLENDERS_ESTIMATE),
+        ];
+        assert_eq!(the_estimate_starts_at(&now), Some(2));
+        assert_eq!(the_estimate_starts_at(&now[..2]), None);
+    }
 
     fn a_queue() -> TheQueueOnScreen {
         TheQueueOnScreen {
@@ -7538,6 +8635,7 @@ console.log(JSON.stringify(drawn));
             stale.entry.as_ref().expect("the entry").the_server_is_not_connected,
             "not connected, and Files on the server still offered"
         );
+        assert_eq!(stale.entry.as_ref().unwrap().reconnect_server.as_deref(), Some(server.as_text().as_str()));
         assert!(!the_servers_connected(&holds).contains(&server.as_text()));
 
         holds.the_period_ended(&server.as_text());
@@ -7602,7 +8700,8 @@ console.log(JSON.stringify(drawn));
             what_is_held(&holds, Some(&record), Some(chosen.as_str()))
         };
         let status_after = |mut held: TheQueueOnScreen, declined: Option<String>| {
-            let mut declined = declined;
+            let shown = held.untracked.as_ref().map(|work| work.jobs.clone()).unwrap_or_default();
+            let mut declined = declined.map(|server| ADecline { server, shown });
             the_decline_is_applied(&mut held, &mut declined);
             (held.untracked.is_some(), held.entry.expect("the waiting entry").status)
         };
@@ -7626,14 +8725,14 @@ console.log(JSON.stringify(drawn));
         );
         assert_eq!(
             status_after(behind_a_render(), Some(server.as_text())),
-            (false, vec![APart::said("The server is busy with", "3", "untracked jobs.")])
+            (false, vec![APart::said("The server is busy with", "3", "jobs not in this Queue.")])
         );
         // **One untracked job, next to start**: the count is one, in the
         // singular.
         let behind_one = held_with(vec![job(&one, QueueState::Waiting), job(&mine.job, QueueState::Waiting)], Some(&one));
         assert_eq!(
             status_after(behind_one, Some(server.as_text())),
-            (false, vec![APart::said("The server is busy with", "1", "untracked job.")])
+            (false, vec![APart::said("The server is busy with", "1", "job not in this Queue.")])
         );
         // **Nothing untracked is rendering and mine starts next**: the
         // untracked work is not why it waits, so nothing is said.
@@ -8133,6 +9232,7 @@ console.log(JSON.stringify(drawn));
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         store.the_fill_in(job, &note).expect("the fill-in is written");
@@ -8194,6 +9294,45 @@ console.log(JSON.stringify(drawn));
         );
         drop(record);
         let _ = std::fs::remove_dir_all(&path);
+    }
+
+    #[test]
+    fn bad_batch_2_unreadable_records_are_visible_without_any_readable_job() {
+        use crate::servers::the_machines_work::{AsksTheSupervisor, WhatThisRunHolds};
+        use smoozy_server_protocol::asking_the_supervisor::WhatCameBack;
+        use smoozy_server_protocol::framing::{Answered, Fields, Request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS};
+        use smoozy_server_protocol::requests::*;
+        use smoozy_state::identities::{Identity, IdentityKind};
+        struct Record<'a>(&'a rusqlite::Connection);
+        impl crate::keys::LendsTheRecord for Record<'_> {
+            fn lend(&self, act: &mut dyn FnMut(&rusqlite::Connection)) { act(self.0); }
+            fn write_a_diary_line(&self, _: &smoozy_keys::diary::Act) {}
+        }
+        struct Machine;
+        impl AsksTheSupervisor for Machine {
+            fn ask(&mut self, request: &Request) -> WhatCameBack {
+                WhatCameBack::ItAnswered(Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test")
+                    .carrying(Fields::none().and(HOW_MANY_JOBS_FIELD, "0").and(HOW_MANY_DID_NOT_READ_BACK_FIELD, "2")))
+            }
+        }
+        let area = std::env::temp_dir().join(format!("smoozy-batch-2-empty-queue-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&area);
+        std::fs::create_dir_all(&area).unwrap();
+        let record = crate::record::LocalRecord::open_at(&area.join("record.sqlite3")).unwrap();
+        let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+        let holds = WhatThisRunHolds::default();
+        let connection = holds.a_connection_begins(&server.as_text());
+        crate::servers::the_machines_work::the_queue_is_read(&server, connection,
+            &Record(record.connection()), &mut Machine, &holds, &|| true);
+        let screen = what_is_held(&holds, Some(&record), None);
+        assert_eq!(screen.jobs, 0);
+        assert_eq!(screen.lines.len(), 1);
+        assert_eq!(screen.lines[0].unreadable_job_records, 2);
+        let event = said(&the_queue_says(&screen)).replace("\\u{a0}", " ");
+        assert!(event.contains("Could not read"), "{event}");
+        assert!(event.contains("job records on this server."), "{event}");
+        drop(record);
+        std::fs::remove_dir_all(area).unwrap();
     }
 
     /// **Step 10c's sixth pass: *0 jobs · 0 servers* with a server connected.**
@@ -8766,14 +9905,14 @@ console.log(JSON.stringify(drawn));
             }),
             ..TheQueueOnScreen::default()
         };
-        let drawn = |declined: &mut Option<String>, mut held: TheQueueOnScreen| {
+        let drawn = |declined: &mut Option<ADecline>, mut held: TheQueueOnScreen| {
             the_decline_is_applied(&mut held, declined);
             held.untracked.is_some()
         };
         let mut declined = None;
         // Nothing declined: the offer is drawn.
         assert!(drawn(&mut declined, offer("box-one")));
-        declined = Some("box-one".to_string());
+        declined = Some(ADecline { server: "box-one".to_string(), shown: Vec::new() });
         assert!(!drawn(&mut declined, offer("box-one")));
         // Still declined on the next reading, which is the whole point.
         assert!(!drawn(&mut declined, offer("box-one")));
@@ -8785,10 +9924,28 @@ console.log(JSON.stringify(drawn));
         // **A reading with no offer at all drops the decline**, which is what
         // the end of a connected period produces: `Queue & History` C6 drops
         // the whole period-held reading whole.
-        declined = Some("box-one".to_string());
+        declined = Some(ADecline { server: "box-one".to_string(), shown: Vec::new() });
         assert!(!drawn(&mut declined, TheQueueOnScreen::default()));
         assert_eq!(declined, None);
         assert!(drawn(&mut declined, offer("box-one")));
+
+        // **A decline covers the jobs it was shown** (`Queue & History` A5 as
+        // amended 2026-11-12, the second live pass's fault 2): a job that
+        // joins the offer later — the one a phone's *Resume* makes — brings
+        // the banner back; a shown job that ends does not.
+        use smoozy_state::identities::{Identity, IdentityKind};
+        let (shown, later) = (Identity::issue(IdentityKind::Job).unwrap(), Identity::issue(IdentityKind::Job).unwrap());
+        let with_jobs = |jobs: Vec<Identity>| {
+            let mut held = offer("box-one");
+            held.untracked.as_mut().unwrap().jobs = jobs;
+            held
+        };
+        let mut declined = Some(ADecline { server: "box-one".to_string(), shown: vec![shown.clone()] });
+        assert!(!drawn(&mut declined, with_jobs(vec![shown.clone()])));
+        assert!(drawn(&mut declined, with_jobs(vec![shown.clone(), later.clone()])), "a job it was not shown");
+        assert_eq!(declined, None);
+        let mut declined = Some(ADecline { server: "box-one".to_string(), shown: vec![shown.clone(), later.clone()] });
+        assert!(!drawn(&mut declined, with_jobs(vec![later])), "one of the jobs it was shown has ended");
 
         // **The page's own route is named here and not driven**, the register
         // being one value the whole run shares: a test that set it would decide
@@ -8817,24 +9974,24 @@ console.log(JSON.stringify(drawn));
             }),
             ..TheQueueOnScreen::default()
         };
-        let drawn = |declined: &mut Option<String>, mut held: TheQueueOnScreen| {
+        let drawn = |declined: &mut Option<ADecline>, mut held: TheQueueOnScreen| {
             the_decline_is_applied(&mut held, declined);
             held.untracked.is_some()
         };
 
         // Declined during the first period.
-        let mut declined = Some("row-one".to_string());
+        let mut declined = Some(ADecline { server: "row-one".to_string(), shown: Vec::new() });
         assert!(!drawn(&mut declined, offer("row-one")));
         // **Another server's period ending leaves it standing.**
         the_period_ending_drops_the_decline(&mut declined, "row-two");
-        assert_eq!(declined.as_deref(), Some("row-one"));
+        assert_eq!(declined.as_ref().map(|was| was.server.as_str()), Some("row-one"));
         // **Its own period ends, and no reading is drawn in between** — the
         // next connection's offer is drawn.
         the_period_ending_drops_the_decline(&mut declined, "row-one");
         assert!(drawn(&mut declined, offer("row-one")));
 
         // **Two servers of one name are two offers.**
-        let mut declined = Some("row-one".to_string());
+        let mut declined = Some(ADecline { server: "row-one".to_string(), shown: Vec::new() });
         assert!(drawn(&mut declined, offer("row-two")));
 
         // **The page sends the identifier, and the event carries it.**
@@ -9459,6 +10616,7 @@ console.log(JSON.stringify(drawn));
                 rendering: 1,
                 waiting: 2,
                 cause,
+                jobs: Vec::new(),
             }),
             ..TheQueueOnScreen::default()
         };
@@ -9769,6 +10927,7 @@ console.log(JSON.stringify(drawn));
                 rendering: None,
                 // **Both members wait, so the heading moves the group** (the 38's piece 8).
                 grip: true,
+                a_check_has_rendered: false,
             }]
         );
         assert!(held.lines[0].rows.iter().all(|row| row.group == Some(0)));
@@ -9911,13 +11070,36 @@ console.log(JSON.stringify(drawn));
         it_stands(rendering, Some(WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheStop)));
         let given_up = queue.over(0);
         let entry = given_up.entry.as_ref().unwrap();
-        assert_eq!(entry.status, vec![APart::words(THE_STOP_WAS_SENT), APart::words(PRESS_STOP_AGAIN)]);
+        // **Rough share 3, the Creator's ruling on 287**: it read *Press Stop
+        // again.* beside *Stop*; the slot now holds *Force stop*.
+        assert!(!the_status_line_reads(entry).contains("Press Stop again."));
         assert_eq!(
             the_status_line_reads(entry),
-            "Stop sent. Timed out waiting for the render to end. Press Stop again to end it.",
-            "the entry says what to do, beside the Stop it offers (thirteenth pass)"
+            "Stop sent. Timed out waiting for the render to end. Press Force stop.",
+            "the entry says what to do, beside the act it offers (thirteenth pass; 287)"
         );
-        assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::Stop), "a new stop can be sent");
+        assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::ForceStop), "the render can be ended");
+        let asked = the_box_is_raised(given_up.clone(), TheActOnAJob::ForceStop, Some(rendering.as_str()), None)
+            .expect("Force stop asks first")
+            .asking
+            .expect("a box");
+        assert_eq!(asked.go_ahead_act, TheActOnAJob::ForceStopTheJob);
+        assert_eq!(
+            where_an_act_on_a_job_goes(TheActOnAJob::ForceStopTheJob),
+            WhereAnActOnAJobGoes::ItReachesTheMachine(TheQueuesOwnAct::TheForcedStop)
+        );
+        assert_eq!(
+            the_box_is_raised(given_up.clone(), TheActOnAJob::Stop, Some(rendering.as_str()), None).err(),
+            Some(THIS_JOB_IS_NOT_RENDERING),
+            "no second ordinary stop is offered beside it"
+        );
+
+        it_stands(rendering, Some(WhereTheActStands::InHand(TheQueuesOwnAct::TheForcedStop)));
+        assert_eq!(queue.over(0).entry.unwrap().status, vec![APart::words(STOPPING)]);
+        it_stands(rendering, Some(WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheForcedStop)));
+        let entry = queue.over(0).entry.unwrap();
+        assert_eq!(the_status_line_reads(&entry), "Force stop sent. Timed out waiting for the render to end.");
+        assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::ForceStop));
 
         it_stands(&queue.jobs[1], Some(WhereTheActStands::NotCancelled(Some("it has already ended".to_string()))));
         let entry = queue.over(1).entry.unwrap();
@@ -9940,6 +11122,48 @@ console.log(JSON.stringify(drawn));
         assert_eq!(rows[2].state, Some(WAITING_ON_YOU), "the job outside the group is untouched");
         it_stands(rendering, None);
         it_stands(&queue.jobs[1], None);
+    }
+
+    /// **`Rendering` K11a's box, Rough share 3 (the Creator's ruling on
+    /// 287): it says the frame is lost, and a video job's video.** No such
+    /// box existed before.
+    #[test]
+    fn rough_share_3_the_force_stop_box_says_what_the_kill_loses() {
+        let read = |loses| {
+            the_force_stop_box(loses)
+                .said
+                .iter()
+                .map(|sentence| sentence.iter().map(|part| part.lead).collect::<Vec<_>>().join(" "))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            read(WhatTheKillLoses::TheCurrentFrame),
+            ["The current frame is lost.", "Frames already rendered stay on the server."]
+        );
+        assert_eq!(
+            read(WhatTheKillLoses::TheCurrentFrameAndTheVideo),
+            ["The current frame is lost. The video is lost.", "Frames already rendered stay on the server."]
+        );
+        assert_eq!(read(WhatTheKillLoses::TheVideo), ["The video is lost."]);
+        let the_box = the_force_stop_box(WhatTheKillLoses::TheCurrentFrame);
+        assert_eq!(the_box.heading, vec![APart::words("Force stop this job?")]);
+        assert_eq!(the_box.go_ahead, vec![APart::words("Force stop")]);
+        assert_eq!(the_box.keep, KEEP_RENDERING);
+    }
+
+    #[test]
+    fn thirtieth_a_late_cancel_says_the_job_had_started() {
+        use crate::servers::the_queues_own_acts::{it_stands, WhereTheActStands};
+        let queue = AQueueWithAGroup::made("late-cancel");
+        let job = &queue.jobs[0];
+        it_stands(job, Some(WhereTheActStands::NotCancelled(Some(
+            "it is rendering, and a rendering job is stopped rather than cancelled".to_string(),
+        ))));
+        let entry = queue.over(0).entry.unwrap();
+        assert_eq!(the_status_line_reads(&entry), "Could not cancel: the job had started.");
+        assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::Stop));
+        assert!(queue.over(0).lines[0].rows.iter().any(|row| &row.job == job));
+        it_stands(job, None);
     }
 
     /// **The page hands the group back by its identity**, from the heading's
@@ -10042,6 +11266,7 @@ console.log(JSON.stringify(drawn));
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         store.the_fill_in(&job.job, &note).expect("the fill-in is written");
@@ -10184,12 +11409,13 @@ console.log(JSON.stringify(drawn));
         assert_eq!(entry.stop_or_cancel, None, "a stop cannot reach a server that is not updating");
         assert!(!entry.status.iter().any(|part| part.lead == RENDERING), "never read as still running");
 
-        // **The reading comes back**: K10's sentence, and a new stop can be sent.
+        // **The reading comes back**: K10's sentence, and *Force stop* is
+        // offered (`Rendering` K11a, Rough share 3, 287).
         a_reading_of(&holds, &server, vec![(job.job.clone(), QueueState::Rendering { operation: render.clone() })]);
         let back = what_is_held(&holds, Some(&record), Some(&text));
         let entry = back.entry.as_ref().unwrap();
-        assert_eq!(entry.status, vec![APart::words(THE_STOP_WAS_SENT), APart::words(PRESS_STOP_AGAIN)]);
-        assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::Stop));
+        assert_eq!(entry.status, vec![APart::words(THE_STOP_WAS_SENT), APart::words(PRESS_FORCE_STOP)]);
+        assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::ForceStop));
 
         // **The render ended** — the machine wrote *left stopped* before the
         // cut, and the read-forward learns it.
@@ -10200,6 +11426,7 @@ console.log(JSON.stringify(drawn));
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         store.the_fill_in(&job.job, &note).expect("the fill-in is written");
@@ -10278,7 +11505,11 @@ console.log(JSON.stringify(drawn));
     /// leave without an entry*: the job's name, then that the first frame was
     /// never rendered, and *Dismiss* asks first because this is the only place
     /// the job is named. *(The line was a banner's until the Creator's ninth
-    /// notes, note 3.)*
+    /// notes, note 3.)* **The drop's words here carry no reason, as an older
+    /// program wrote them**, so the line stands; since the twenty-eighth
+    /// notes, note 16, words that open with *the dependency was cancelled* —
+    /// the user's own act — name nothing
+    /// (`twenty_eighth_notes_12_and_16::note_16_a_drop_behind_the_users_own_cancel_is_named_nowhere`).
     #[test]
     fn a_held_job_dropped_behind_a_cancel_is_named_in_the_notice_once() {
         use crate::servers::the_machines_work::{a_read_forward_pass, AsksTheSupervisor, WhatThisRunHolds};
@@ -10581,7 +11812,7 @@ console.log(JSON.stringify(drawn));
         .marks;
         let re_run = marks
             .iter()
-            .find(|mark| mark.said == "Interrupted and re-run")
+            .find(|mark| mark.said == "Interrupted and retried")
             .expect("the entry lost its re-run mark");
         assert_eq!(re_run.parts, vec![APart::said("from frame", "61", "")]);
         drop(store);
@@ -10611,6 +11842,7 @@ console.log(JSON.stringify(drawn));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["the-queue.js", "the-history.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_BOXES_STAND_INS {
             std::fs::write(folder.join(name), text).expect("a stand-in is written");
@@ -10779,6 +12011,7 @@ function anElement(tag) {
       return attributes.has(name) ? attributes.get(name) : undefined;
     },
     addEventListener(kind, handler) { const held = listeners.get(kind) || []; held.push(handler); listeners.set(kind, held); },
+    dispatchEvent(event) { for (const handler of listeners.get(event.type) || []) handler(event); },
     click() { for (const handler of listeners.get("click") || []) handler({ target: element, preventDefault() {} }); },
     focus() { globalThis.document.activeElement = element; },
     querySelector(selector) { return everyUnder(element, aTest(selector), [])[0] || null; },
@@ -11063,6 +12296,7 @@ say("history's clear-all box over a post with no entries", history);
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["the-queue.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_BOXES_STAND_INS {
             std::fs::write(folder.join(name), text).expect("a stand-in is written");
@@ -11092,6 +12326,7 @@ const part = (canGo) => ({{
   thePartServer: "the big box", thePartSubmission: "Flat", thePartControl: "Submit the remaining scenes",
   needsAConnectionTo: "Needs a connection to", aFullStop: ".", hide: "Hide",
   thePartServerRow: "s1", thePartCanGo: canGo, partNotSubmittedCount: "1", partNotSubmitted0: "Garden",
+  thePartSettings: "Uses the settings from the first submission.",
 }});
 const theControl = () => queue.querySelectorAll("button.btn").find((one) => one.text === "Submit the remaining scenes");
 tell("queue:the-queue", part("yes"));
@@ -11099,7 +12334,9 @@ const going = theControl();
 going.click();
 const asked = globalThis.invoked.filter(([command]) => command === "an_act_on_a_job").map(([, args]) => args);
 const why = (control) => (control.parentNode.children.find((one) => one.classList && one.classList.contains("ax-why")) || {{}}).text || "";
-console.log(JSON.stringify({{ disabled: going.disabled === true, asked, why: why(going) }}));
+// **Rough share 3, 462: the banner says which settings go.**
+const settings = queue.querySelectorAll("p.qb2").some((one) => one.text === "Uses the settings from the first submission.");
+console.log(JSON.stringify({{ disabled: going.disabled === true, asked, why: why(going), settings }}));
 tell("queue:the-queue", part(""));
 const waiting = theControl();
 console.log(JSON.stringify({{ disabled: waiting.disabled === true, why: why(waiting) }}));
@@ -11123,6 +12360,7 @@ console.log(JSON.stringify({{ disabled: waiting.disabled === true, why: why(wait
                     "disabled": false,
                     "asked": [{ "act": "submit-the-remaining-scenes", "job": null, "from": null, "group": "s1", "after": null }],
                     "why": "",
+                    "settings": true,
                 }),
                 serde_json::json!({ "disabled": true, "why": "Needs a connection to" }),
             ]
@@ -11183,6 +12421,7 @@ console.log(JSON.stringify({frame:side().querySelector("input").value}));
         }
         for page in pages.iter().chain(real) {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         let shim = THE_BOXES_STAND_INS
             .iter()
@@ -11272,6 +12511,7 @@ sys.exit(ran.returncode)
         }
         for name in ["the-queue.js", "the-history.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(name), folder.join(name)).unwrap();
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         let words = serde_json::json!({
             "frameHeading": FRAME_PREVIEW, "frameWord": FRAME_WORD,
@@ -11332,6 +12572,7 @@ sys.exit(ran.returncode)
         }
         for name in ["the-queue.js", "the-history.js", "the-value-drawn.js", "the-machines-own-words.js", "the-typed-text.js"] {
             std::fs::copy(web.join(name), folder.join(name)).unwrap();
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         let words = serde_json::json!({
             "frameHeading": FRAME_PREVIEW, "frameWord": FRAME_WORD,
@@ -11387,6 +12628,7 @@ sys.exit(ran.returncode)
         }
         for page in ["the-queue.js", "the-value-drawn.js", "the-typed-text.js"] {
             std::fs::copy(web.join(page), folder.join(page)).unwrap();
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         std::fs::write(folder.join("entry.js"), THE_TELEGRAM_ENTRY).unwrap();
         std::fs::write(folder.join("index.html"), page).unwrap();
@@ -11617,6 +12859,7 @@ try {
         // own width marks the entry and how the preview's handle drags.
         for page in ["panes.js", "the-queue.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).unwrap();
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         std::fs::write(folder.join("entry.js"), THE_CLOTH_JOB).unwrap();
         std::fs::write(folder.join("index.html"), THE_JOB_PAGE_IN_ITS_WINDOW).unwrap();
@@ -11756,7 +12999,7 @@ window.__TAURI__ = {core:{invoke(command, args) {
       width: theWidths[key] === undefined ? undefined : Number(theWidths[key])});
     return Promise.resolve({floor:{said:'Smoozy needs a wider window', how:'Make it at least 680 pixels wide.'},
       the_record_would_not_answer:false,
-      seams:[seam('rail','--rail-w',150,340,false,'Resize the rail'), seam('list','--list-w',280,620,false,'Resize the list'),
+      seams:[seam('rail','--rail-w',150,340,false,'Resize the sidebar'), seam('list','--list-w',280,620,false,'Resize the list'),
         seam('preview','--side-w',180,380,true,'Resize the preview')]});
   }
   return Promise.resolve(null);
@@ -12048,6 +13291,7 @@ try {
         }
         for name in ["the-queue.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(name), folder.join(name)).unwrap();
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         let words = serde_json::json!({
             "frameHeading": FRAME_PREVIEW, "frameWord": "Frame",
@@ -12377,7 +13621,7 @@ const look = (host) => {
   const list = dd ? dd.querySelector("span.ddl") : null;
   const latest = group.querySelector("button.mini");
   const gone = group.querySelector("p[data-pvgone]");
-  const alone = group.querySelector("p.sn");
+  const alone = group.querySelector("span.pvone");
   const asked = globalThis.invoked.filter(([command]) => command === "the_preview_picture").map(([, args]) => args);
   return {
     heading: textOf(group.children[0]),
@@ -12556,7 +13800,7 @@ const look = (host) => {
   const dd = group.querySelector("span.pick");
   const list = dd ? dd.querySelector("span.ddl") : null;
   const gone = group.querySelector("p[data-pvgone]");
-  const alone = group.querySelector("p.sn");
+  const alone = group.querySelector("span.pvone");
   const asked = globalThis.invoked.filter(([command]) => command === "the_preview_picture").map(([, args]) => args);
   return {
     frame: words.frameWord + " " + group.querySelector("input").value,
@@ -12763,7 +14007,8 @@ const aRow = (bars) => Object.assign({
   entryJob: "j1", entryName: "Kitchen", renderingNow: "Rendering now", wholeJob: "Whole job",
   progNowCount: "1", progNow0Lead: "Frame", progNow0Value: "1008",
 }, bars);
-const theBars = () => queue.querySelector("span.qbars").children.map((one) => one.className);
+// A row with no bar keeps no empty bar line (the UI at every size, A-21).
+const theBars = () => (queue.querySelector("span.qbars") || { children: [] }).children.map((one) => one.className);
 const theTopBar = () => queue.querySelectorAll("div.bar").filter((one) => !one.classList.contains("whole")).length;
 for (const bars of [
   { row0Renderlet: "0", row0Whole: "60", progNowAt: "0", progWhole: "60" },
@@ -13306,7 +14551,7 @@ console.log(JSON.stringify({ asked, log: shape(kept), beside: kept.children.map(
     /// **The entry reads its folder off the record and never composes one**
     /// (`Job files and outputs` P21, `Queue & History` Y8): a waiting job whose
     /// folder is chosen at render start offers nothing that reaches into it,
-    /// says *The folder is made when the render starts.* and draws no *Writing
+    /// says *The folder is created when the render starts.* and draws no *Writing
     /// to* (the drawing's `q-wait`); once its render has started and the choice
     /// has not arrived, nothing reaches in and nothing is said; and a job with a
     /// folder offers the controls. **Where the folder fell back, *Writing to*
@@ -13346,7 +14591,7 @@ console.log(JSON.stringify({ asked, log: shape(kept), beside: kept.children.map(
         assert!(writing_to(&waiting).is_none(), "a job with no folder writes to nothing");
         let text = event_of(&waiting);
         assert!(text.contains("entryNoFolder"));
-        assert!(text.contains("The folder is made when the render"));
+        assert!(text.contains("The folder is created when the render"));
 
         // **Started, the choice not arrived**: nothing reaches in, nothing said.
         record.the_render_start_has_been_learned = true;
@@ -13354,7 +14599,7 @@ console.log(JSON.stringify({ asked, log: shape(kept), beside: kept.children.map(
         assert_eq!(started.the_folder, TheFolderOnTheEntry::ItHasNotArrived);
         let text = event_of(&started);
         assert!(text.contains("entryNoFolder"));
-        assert!(!text.contains("The folder is made when the render"));
+        assert!(!text.contains("The folder is created when the render"));
 
         // **A job named before 2026-10-04** has its folder, and no line.
         record.the_job_output_folder = Holds::AsEveryJobBeforeItHadIt;
@@ -13466,7 +14711,7 @@ const anEntry = {
 };
 const acts = () => queue.querySelector("div.qdacts").children.map((one) => [shape(one), textOf(one)]);
 tell("queue:the-queue", Object.assign({}, anEntry, {
-  entryNoFolder: "yes", theFolderIsMadeWhenTheRenderStarts: "The folder is made when the render starts.",
+  entryNoFolder: "yes", theFolderIsMadeWhenTheRenderStarts: "The folder is created when the render starts.",
 }));
 console.log(JSON.stringify({ waiting: acts() }));
 tell("queue:the-queue", Object.assign({}, anEntry, { entryNoFolder: "yes" }));
@@ -13503,7 +14748,7 @@ console.log(JSON.stringify({ history: theFact(history) }));
             lines,
             vec![
                 serde_json::json!({ "waiting": [
-                    ["span.mnote2", "The folder is made when the render starts."],
+                    ["span.mnote2", "The folder is created when the render starts."],
                     ["span.agroup", "Files on your computer"],
                     ["button.mini.danger", "Cancel"],
                 ] }),
@@ -13783,6 +15028,63 @@ console.log(JSON.stringify({ plain: drawn(theValue()), asks: pressed() }));
         assert_eq!(drawn(&entry), (true, false), "not connected: neither");
         entry.the_server_is_not_connected = false;
         assert_eq!(drawn(&entry), (false, true), "connected again: both back");
+    }
+
+    #[test]
+    fn third_part_3_20_typing_updates_the_resume_count_and_late_answers_do_not_replace_it() {
+        let Some(lines) = a_page_run("third-part-resume", &["the-queue.js", "the-history.js", "the-value-drawn.js"], &[], r#"
+const pending = [];
+window.__TAURI__.core.invoke = (command, args) => {
+  if (command === "the_resume_count") return new Promise(resolve => pending.push({resolve, from: args.from}));
+  return Promise.resolve(command === "the_pane_layout" ? {seams: []} : null);
+};
+await import("./the-queue.js"); await import("./the-history.js");
+const host = anElement("div"); theRoot.appendChild(host);
+screens.get("historyview").itIsDrawn(host);
+for (const handler of told.get("history:the-history") || []) handler({said: {
+ theHeading: "History", hrowCount: "1", hrow0Job: "j1", hrow0Name: "Kitchen", hrowChosen: "j1",
+ entryJob: "j1", entryName: "Kitchen", renderItAgain: "Render it again", carryOn: "Resume —",
+ carryOnFrom: "60", carryOnFrames: "181", carryOnFramesWord: "frames"
+}});
+const field = host.querySelector("input.fld");
+const textOf = e => (e.textContent ?? e.text ?? "") + (e.children || []).map(textOf).join("");
+const button = host.querySelectorAll("button").find(e => textOf(e).startsWith("Resume"));
+field.value = "100"; field.dispatchEvent({type:"input"});
+field.value = "240"; field.dispatchEvent({type:"input"});
+if (pending.length === 2) {
+ pending[1].resolve({frames:1, unit:"frame", why:null}); await Promise.resolve();
+ pending[0].resolve({frames:141, unit:"frames", why:null}); await Promise.resolve();
+}
+console.log(JSON.stringify({asks:pending.map(e=>e.from), label:textOf(button), disabled:!!button.disabled}));
+"#) else { return; };
+        assert_eq!(lines, vec![serde_json::json!({"asks":["100","240"], "label":"Resume — 1\u{00a0}frame", "disabled":false})]);
+    }
+
+    #[test]
+    fn third_part_2_7_reconnect_on_the_entry_takes_the_servers_connect_action() {
+        let Some(lines) = a_page_run(
+            "third-part-reconnect", &["the-queue.js", "the-value-drawn.js"], &[], r#"
+globalThis.invoked = [];
+window.__TAURI__.core.invoke = (command, args) => {
+  invoked.push([command, args]);
+  return Promise.resolve(command === "the_pane_layout" ? { seams: [] } : null);
+};
+await import("./the-queue.js");
+const queue = anElement("div"); theRoot.appendChild(queue);
+screens.get("queueview").itIsDrawn(queue);
+for (const handler of told.get("queue:the-queue") || []) handler({ said: {
+  theHeading: "Queue", lineCount: "1", line0Server: "s1", line0Name: "Server",
+  rowCount: "1", row0Job: "j1", row0Line: "0", row0Name: "Kitchen",
+  entryJob: "j1", entryName: "Kitchen", entryNotConnected: "yes",
+  entryReconnectServer: "s1", reconnect: "Reconnect"
+}});
+const textOf = e => (e.text || "") + (e.children || []).map(textOf).join("");
+const button = queue.querySelectorAll("button").find(e => textOf(e) === "Reconnect");
+if (button) { button.click(); button.click(); }
+await Promise.resolve(); await Promise.resolve();
+console.log(JSON.stringify({ found: !!button, calls: invoked.filter(e => e[0] === "an_act_that_needs_a_connection") }));
+"#) else { return; };
+        assert_eq!(lines, vec![serde_json::json!({"found": true, "calls": [["an_act_that_needs_a_connection", {"act": "reconnect", "server": "s1"}]]})]);
     }
 
     /// **The same on the page**: `entryNotConnected` leaves *Files on the
@@ -14105,20 +15407,20 @@ console.log(JSON.stringify({
         let group = &drawing[opens..opens + drawing[opens..].find("</optgroup>").expect("it closes")];
         let head = include_str!("the_queue.rs");
         let from = head.find("//! **The mockup state names this file draws**").expect("the head's list");
-        let to = from + head[from..].find("**Nineteen, and").expect("the head says nineteen");
+        let to = from + head[from..].find("**Twenty-one, and").expect("the head says twenty-one");
         let named: Vec<&str> = head[from..to]
             .split('`')
             .skip(1)
             .step_by(2)
             .filter(|name| *name == "q" || name.starts_with("q-"))
             .collect();
-        assert_eq!(named.len(), 19, "the head says nineteen and names {named:?}");
+        assert_eq!(named.len(), 21, "the head says twenty-one and names {named:?}");
         for name in &named {
             assert!(group.contains(&format!("<option value=\"{name}\"")), "the drawing has no state {name}");
         }
         assert!(named.contains(&"q-dropped"), "the head does not name q-dropped");
         assert!(named.contains(&"q-catchup"));
-        for state in ["q-checkjob", "q-large", "q-pvmissing", "q-pvbad"] {assert!(named.contains(&state));}
+        for state in ["q-checkjob", "q-large", "q-pvmissing", "q-pvbad", "q-manyfolders", "q-manyfoldersopen"] {assert!(named.contains(&state));}
         assert!(group.contains("<option value=\"q-catchup\">Jobs that ended, counted in the heading</option>"));
         assert!(group.contains("<option value=\"q-dropped\">A job dropped before it rendered</option>"));
     }
@@ -14153,6 +15455,7 @@ console.log(JSON.stringify({
             the_frames_cannot_be_counted: false,
             job_output_folder: "/smoozy/jobs/kitchen".to_string(),
             more_than_one_view_layer_at: [(1, false), (2, false), (3, true)].into_iter().collect(),
+            every_folder: None,
         };
         let at = |frame: Option<i64>, reading: Option<&WhatTheReadingSays>| {
             let mut report = crate::servers::the_machines_work::tests::a_report_taken_at(10);
@@ -14385,6 +15688,7 @@ console.log(JSON.stringify({
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
             record.what_the_note_carried.last_frame_figure = figure;
@@ -14437,6 +15741,7 @@ console.log(JSON.stringify({
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["a-new-job.js", "a-server.js"] {
             fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in [
             ("package.json", r#"{ "type": "module" }"#),
@@ -14721,7 +16026,11 @@ console.log(JSON.stringify(look()));
                     "footAgain": { "open": true, "up": true },
                     "redrawn": { "open": true, "up": true },
                 }),
-                serde_json::json!({ "row": null }),
+                // **One View Layer is named in the same row, at the dropdown's
+                // height** (UI consistency, finding 32): it was a plain name
+                // with no row, and the switch and Telegram below jumped as
+                // frames of one and of several were stepped through.
+                serde_json::json!({ "row": ["span.sn", "span.pvone"], "label": "View Layer" }),
             ]
         );
         // **The word is the application's**, and the drawing's label is it.
@@ -14878,6 +16187,7 @@ console.log(JSON.stringify({ inTheBox: Boolean(inBox), afterTheControl: inBox ? 
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 });
             };
@@ -14906,7 +16216,7 @@ console.log(JSON.stringify({ inTheBox: Boolean(inBox), afterTheControl: inBox ? 
         }
 
         /// **What the line holds**, in its own order.
-        fn the_line_holds(holds: &WhatThisRunHolds, server: &Identity, jobs: Vec<AJobAsTheMachineReadsIt>) {
+        pub(crate) fn the_line_holds(holds: &WhatThisRunHolds, server: &Identity, jobs: Vec<AJobAsTheMachineReadsIt>) {
             let connection = holds.a_connection_begins(&server.as_text());
             holds.a_reading_was_taken(
                 &server.as_text(),
@@ -14926,16 +16236,16 @@ console.log(JSON.stringify({ inTheBox: Boolean(inBox), afterTheControl: inBox ? 
             );
         }
 
-        fn in_line(job: &Identity, state: QueueState) -> AJobAsTheMachineReadsIt {
+        pub(crate) fn in_line(job: &Identity, state: QueueState) -> AJobAsTheMachineReadsIt {
             AJobAsTheMachineReadsIt { job: job.clone(), state, live: WhatTheEntryHasLive::NoReadings, the_hold: None }
         }
 
-        fn rendering() -> QueueState {
+        pub(crate) fn rendering() -> QueueState {
             QueueState::Rendering { operation: Identity::issue(IdentityKind::Operation).unwrap() }
         }
 
         /// The full range, held behind its check, as the machine's hold names it.
-        fn held_behind(range: &Identity, check: &Identity) -> AJobAsTheMachineReadsIt {
+        pub(crate) fn held_behind(range: &Identity, check: &Identity) -> AJobAsTheMachineReadsIt {
             let instruction = smoozy_rendering::submission::the_hold_instruction(range, check);
             AJobAsTheMachineReadsIt {
                 job: range.clone(),
@@ -14945,7 +16255,7 @@ console.log(JSON.stringify({ inTheBox: Boolean(inBox), afterTheControl: inBox ? 
             }
         }
 
-        fn the_frames() -> String {
+        pub(crate) fn the_frames() -> String {
             the_full_ranges_frames(None, &smoozy_render_settings::frames::parse_the_frame_field("1-240").unwrap())
         }
 
@@ -15156,12 +16466,786 @@ console.log(JSON.stringify({ inTheBox: Boolean(inBox), afterTheControl: inBox ? 
             assert!(screen.entry.unwrap().the_check.is_none());
         }
     }
+
+    /// **The Creator's twenty-eighth notes, notes 12 and 16** —
+    /// `Audits/Build/Twenty-eighth notes/The first-frame check's buttons — the
+    /// design.md`, and `Design/Queue & History § A first-frame check and its
+    /// job`: the buttons speak of the job, *Stop* while frame 1 renders ends
+    /// the whole job and its box says so, no header *Stop* or *Cancel* while
+    /// the answer waits, *Cancel job* asks first, a range waiting its turn
+    /// says the check stays in History, and the pair's part dot sits on the
+    /// small letters' middle, 8 px before its words. **Each asserts the
+    /// words as literals**, so it compiled against the code before the
+    /// change and failed there.
+    pub(crate) mod twenty_eighth_notes_12_and_16 {
+        use super::super::*;
+        use super::nineteenth_note_7::{a_pair, held_behind, in_line, rendering, the_frames, the_line_holds};
+        use crate::servers::the_machines_work::WhatThisRunHolds;
+        use smoozy_queue_history::acting::note::TheOutcomeAsWritten;
+        use smoozy_queue_history::line::QueueState;
+
+        fn words_of(parts: &[APart]) -> String {
+            parts
+                .iter()
+                .filter(|part| !part.is_empty())
+                .map(|part| {
+                    [part.lead, part.value.as_str(), part.trail]
+                        .into_iter()
+                        .filter(|piece| !piece.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        }
+
+        fn the_box(asking: &TheBoxThatAsks) -> (String, Vec<String>, &'static str, String, TheActOnAJob) {
+            (
+                words_of(&asking.heading),
+                asking.said.iter().map(|paragraph| words_of(paragraph)).collect(),
+                asking.keep,
+                words_of(&asking.go_ahead),
+                asking.go_ahead_act,
+            )
+        }
+
+        /// **While frame 1 renders**: the box keeps one sentence, *Stop* is
+        /// in the header, and its box stops the whole job, naming frame 1
+        /// and the range. **It failed before the change**: the box went on
+        /// *Stopping the check removes them.*, and *Stop* raised the single
+        /// job's box, *The current frame may not be saved.*
+        #[test]
+        fn note_16_while_frame_1_renders_stop_stops_the_whole_job_and_says_so() {
+            let pair = a_pair("t28-check-renders", None, None, true, true);
+            let holds = WhatThisRunHolds::default();
+            the_line_holds(&holds, &pair.server, vec![in_line(&pair.check.job, rendering()), held_behind(&pair.range.job, &pair.check.job)]);
+            let screen = what_is_held(&holds, Some(&pair.record), None);
+            let entry = screen.entry.clone().unwrap();
+            assert_eq!(entry.stop_or_cancel, Some(TheStopOrCancel::Stop));
+            assert_eq!(
+                words_of(&entry.the_check.unwrap().said),
+                format!("Frames {} start only after you review this frame.", the_frames())
+            );
+            let raised = the_box_is_raised(screen, TheActOnAJob::Stop, Some(&pair.check.job.as_text()), None).unwrap();
+            assert_eq!(
+                the_box(raised.asking.as_ref().unwrap()),
+                (
+                    "Stop this job?".to_string(),
+                    vec![format!("Frame 1 may not be saved. Frames {} will not render.", the_frames())],
+                    "Keep rendering",
+                    "Stop".to_string(),
+                    TheActOnAJob::StopTheJob,
+                )
+            );
+        }
+
+        /// **While the answer waits**: the header carries no *Stop* or
+        /// *Cancel*; the question's second answer is *Cancel job*, with no
+        /// note under it, and it raises the box rather than acting; the
+        /// box's go-ahead is the answer itself. **It failed before the
+        /// change**: the header carried *Cancel*, the answer read *Cancel*
+        /// with *Cancelling leaves no record of this job.*, and pressed it
+        /// answered at once.
+        #[test]
+        fn note_16_while_the_answer_waits_the_header_is_empty_and_cancel_job_asks_first() {
+            let pair = a_pair("t28-waits", Some(TheOutcomeAsWritten::Finished), None, true, true);
+            let holds = WhatThisRunHolds::default();
+            the_line_holds(&holds, &pair.server, vec![held_behind(&pair.range.job, &pair.check.job)]);
+            let screen = what_is_held(&holds, Some(&pair.record), None);
+            let entry = screen.entry.clone().unwrap();
+            assert_eq!(entry.stop_or_cancel, None, "the question holds the way to end the job");
+            assert_eq!((entry.held[0].second_answer, entry.held[0].note), ("Cancel job", ""));
+            let said = the_queue_says(&screen).as_the_page_reads_it();
+            assert_eq!(said["held0Answer"].as_str().map(|words| words.replace('\u{a0}', " ")).as_deref(), Some("Cancel job"));
+            assert_eq!(said["held0AnswerAct"], "cancel", "the answer raises its box");
+            assert!(said.get("entryStopOrCancel").is_none(), "{said}");
+            let raised = the_box_is_raised(screen, TheActOnAJob::Cancel, Some(&pair.range.job.as_text()), None).unwrap();
+            assert_eq!(
+                the_box(raised.asking.as_ref().unwrap()),
+                (
+                    "Cancel this job?".to_string(),
+                    vec![format!(
+                        "Frames {} will not render. Their settings are deleted too. The first-frame check stays in History.",
+                        the_frames()
+                    )],
+                    "Keep the job",
+                    "Cancel the job".to_string(),
+                    TheActOnAJob::TheHeldJobsSecondAnswer,
+                )
+            );
+        }
+
+        /// **After *Render all*, the range waiting its turn**: the header's
+        /// *Cancel* asks with words true of it — the check stays in History.
+        /// **Before frame 1 starts** the ordinary box stands, both parts
+        /// going. **It failed before the change**: the waiting range's box
+        /// said *It will not appear in History.*
+        #[test]
+        fn note_16_a_range_waiting_its_turn_says_the_check_stays_in_history() {
+            let pair = a_pair("t28-range-waits", Some(TheOutcomeAsWritten::Finished), None, true, true);
+            let holds = WhatThisRunHolds::default();
+            the_line_holds(&holds, &pair.server, vec![in_line(&pair.range.job, QueueState::Waiting)]);
+            let screen = what_is_held(&holds, Some(&pair.record), None);
+            assert_eq!(screen.entry.as_ref().unwrap().stop_or_cancel, Some(TheStopOrCancel::Cancel));
+            let raised = the_box_is_raised(screen, TheActOnAJob::Cancel, Some(&pair.range.job.as_text()), None).unwrap();
+            assert_eq!(
+                the_box(raised.asking.as_ref().unwrap()).1,
+                vec![format!(
+                    "Frames {} have not started. Their settings are deleted too. The first-frame check stays in History.",
+                    the_frames()
+                )]
+            );
+
+            let pair = a_pair("t28-queued", None, None, true, true);
+            let holds = WhatThisRunHolds::default();
+            the_line_holds(&holds, &pair.server, vec![in_line(&pair.check.job, QueueState::Waiting), held_behind(&pair.range.job, &pair.check.job)]);
+            let screen = what_is_held(&holds, Some(&pair.record), None);
+            let raised = the_box_is_raised(screen, TheActOnAJob::Cancel, Some(&pair.check.job.as_text()), None).unwrap();
+            assert_eq!(raised.asking, Some(the_cancel_box()), "nothing has rendered: the ordinary box");
+        }
+
+        /// **The user's own cancel names no dropped job** — a drop whose
+        /// reason is *the dependency was cancelled* is the user's own act
+        /// (`Queue & History` H9 and H11 as changed 2026-11-09); a drop
+        /// behind a check that failed is still named. **It failed before the
+        /// change**: both were named.
+        #[test]
+        fn note_16_a_drop_behind_the_users_own_cancel_is_named_nowhere() {
+            use smoozy_queue_history::catch_up::{ANoticeEntry, NoticeRecord};
+            let pair = a_pair("t28-dropped", None, None, false, true);
+            let failed = smoozy_state::identities::Identity::issue(smoozy_state::identities::IdentityKind::Job).unwrap();
+            crate::record::catch_up_notices::the_notice_is_written(
+                pair.record.connection(),
+                &NoticeRecord {
+                    server: pair.server.clone(),
+                    entries: vec![
+                        ANoticeEntry::HeldJobDropped {
+                            job: pair.range.job.clone(),
+                            name: "Kitchen — final v4".to_string(),
+                            why: "the dependency was cancelled: 240: 1: Kitchen — final v4: the hold's release outcome was written: dropped".to_string(),
+                            sequence: 3,
+                        },
+                        ANoticeEntry::HeldJobDropped {
+                            job: failed.clone(),
+                            name: "Attic".to_string(),
+                            why: "Telegram off: the dependency failed: 10: 1: Attic: the hold's release outcome was written: dropped".to_string(),
+                            sequence: 7,
+                        },
+                    ],
+                    the_account_is_incomplete: false,
+                },
+            )
+            .unwrap();
+            let holds = WhatThisRunHolds::default();
+            let notice = what_is_held(&holds, Some(&pair.record), None).notice.expect("the failed one is named");
+            assert_eq!(notice.dropped.iter().map(|line| line.name.as_str()).collect::<Vec<_>>(), ["Attic"]);
+        }
+
+        /// **Sol's fresh look: an answer pressed after the other device's
+        /// answer won is told so**, not that the job left the queue — the
+        /// range is in the queue, waiting, and no longer held. A job truly
+        /// gone is still *no longer in the queue*. **It failed before the
+        /// fix**: both read as gone.
+        #[test]
+        fn note_16_an_answer_after_the_other_devices_is_told_already_answered() {
+            use crate::servers::the_queues_own_acts::NothingWasSent;
+            let range = smoozy_state::identities::Identity::issue(smoozy_state::identities::IdentityKind::Job).unwrap();
+            let check = smoozy_state::identities::Identity::issue(smoozy_state::identities::IdentityKind::Job).unwrap();
+            let held = vec![held_behind(&range, &check)];
+            let found = the_hold_a_press_answers([("s", held.as_slice())], &range).unwrap();
+            assert_eq!(found.0, "s");
+            let released = vec![in_line(&range, QueueState::Waiting)];
+            assert!(matches!(
+                the_hold_a_press_answers([("s", released.as_slice())], &range),
+                Err(NothingWasSent::TheHoldIsAlreadyAnswered)
+            ));
+            assert!(matches!(
+                the_hold_a_press_answers([("s", &[][..])], &range),
+                Err(NothingWasSent::ItIsNotInTheQueue)
+            ));
+        }
+
+        /// **The page sends the act the application names for the question's
+        /// second answer**, so *Cancel job* raises its box rather than
+        /// answering at once.
+        #[test]
+        fn note_16_the_page_sends_the_act_the_application_names_for_the_second_answer() {
+            let page = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web/the-queue.js")).unwrap();
+            assert!(
+                page.contains("said[\"held\" + at + \"AnswerAct\"] || \"the-held-jobs-second-answer\""),
+                "the second answer's act is the application's"
+            );
+        }
+
+        /// **Note 12, in a real browser: the pair's part dot sits on the
+        /// small letters' middle, 8 px before its words.** Measured on a
+        /// probe that takes the dot's own computed look, since a drawn dot
+        /// has no box of its own to measure. **It failed before the change**:
+        /// 6 px from its words and its middle about a pixel above the
+        /// letters'.
+        #[test]
+        fn note_12_the_waiting_dot_sits_on_the_small_letters_in_a_real_browser() {
+            let pair = a_pair("t28-dot", Some(TheOutcomeAsWritten::Finished), None, true, true);
+            let holds = WhatThisRunHolds::default();
+            the_line_holds(&holds, &pair.server, vec![held_behind(&pair.range.job, &pair.check.job)]);
+            let said = the_queue_says(&what_is_held(&holds, Some(&pair.record), None)).as_the_page_reads_it();
+            let Some(measured) = the_pair_in_a_real_browser("dot", &said, (1245, 780), None, THE_DOT_IS_MEASURED) else {
+                return;
+            };
+            let dots = measured["dots"].as_array().expect("dots");
+            assert!(!dots.is_empty(), "{measured}");
+            for dot in dots {
+                let gap = dot["gap"].as_f64().unwrap();
+                let off = dot["offTheLetters"].as_f64().unwrap();
+                assert!((gap - 8.0).abs() <= 0.5, "8 px before its words: {measured}");
+                assert!(off.abs() <= 0.5, "on the small letters' middle: {measured}");
+            }
+        }
+
+        /// **The dot's own look on a probe**: every part line gets a real
+        /// element with the computed look of its `::before`, in the same
+        /// place, and the drawn one is put away; then the probe's middle is
+        /// read against the middle of the letters' x-height (from the font
+        /// itself) above the words' baseline.
+        const THE_DOT_IS_MEASURED: &str = r#"
+setTimeout(() => {
+  try {
+    const dots = [];
+    const sheet = document.createElement('style');
+    sheet.textContent = '.ffpart.probed::before { display: none; }';
+    document.head.appendChild(sheet);
+    for (const part of document.querySelectorAll('.ffparts .ffpart')) {
+      const look = getComputedStyle(part, '::before');
+      const probe = document.createElement('i');
+      for (const name of ['width','height','border-top-width','border-right-width','border-bottom-width','border-left-width','border-style','box-sizing','position','top','flex-shrink','flex-grow','flex-basis','align-self','border-radius']) {
+        probe.style.setProperty(name, look.getPropertyValue(name));
+      }
+      probe.style.display = 'block';
+      part.classList.add('probed');
+      part.insertBefore(probe, part.firstChild);
+      const words = part.querySelector('.fft');
+      const base = document.createElement('span');
+      base.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline;';
+      words.insertBefore(base, words.firstChild);
+      const font = getComputedStyle(words);
+      const canvas = document.createElement('canvas').getContext('2d');
+      canvas.font = font.fontStyle + ' ' + font.fontWeight + ' ' + font.fontSize + ' ' + font.fontFamily;
+      const xHeight = canvas.measureText('x').actualBoundingBoxAscent;
+      const baseline = base.getBoundingClientRect().top;
+      const dot = probe.getBoundingClientRect(), text = words.getBoundingClientRect();
+      dots.push({gap: text.left - dot.right, offTheLetters: (dot.top + dot.height / 2) - (baseline - xHeight / 2),
+        xHeight, size: dot.width});
+    }
+    document.getElementById('out').textContent = JSON.stringify({dots});
+  } catch (error) { document.getElementById('out').textContent = JSON.stringify({error: String(error.stack || error)}); }
+}, 400);
+"#;
+
+        /// **The pair's entry drawn by the real page from the queue's own
+        /// reading** — `said` is what [`the_queue_says`] composed, so a
+        /// picture or a measurement is of what the application sends. The
+        /// window is the job page's own (`THE_JOB_PAGE_IN_ITS_WINDOW`).
+        fn the_pair_in_a_real_browser(
+            name: &str,
+            said: &serde_json::Value,
+            window: (u32, u32),
+            picture: Option<(&std::path::Path, u32)>,
+            then: &str,
+        ) -> Option<serde_json::Value> {
+            let chrome = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser",
+            ]
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .find(|path| path.exists());
+            let Some(chrome) = chrome else {
+                eprintln!("SKIPPED: no Chrome; the pair's entry was not drawn");
+                return None;
+            };
+            let folder = std::env::temp_dir().join(format!("smoozy-twenty-eighth-pair-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).unwrap();
+            let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+            for (stand_in, text) in super::THE_BOXES_STAND_INS {
+                if stand_in != "harness.js" && stand_in != "panes.js" {
+                    std::fs::write(folder.join(stand_in), text).unwrap();
+                }
+            }
+            for entry in std::fs::read_dir(&web).unwrap() {
+                let path = entry.unwrap().path();
+                if path.extension().and_then(|ext| ext.to_str()) == Some("css") {
+                    std::fs::copy(&path, folder.join(path.file_name().unwrap())).unwrap();
+                }
+            }
+            for page in ["panes.js", "the-queue.js", "the-value-drawn.js"] {
+                std::fs::copy(web.join(page), folder.join(page)).unwrap();
+                std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+            }
+            let entry = format!(
+                "{}\nconst THE_READING = {};\nwindow.theCloth = (more) => Object.assign({{}}, THE_READING, more || {{}});\n{then}",
+                super::THE_CLOTH_JOB,
+                said
+            );
+            std::fs::write(folder.join("entry.js"), entry).unwrap();
+            std::fs::write(folder.join("index.html"), super::THE_JOB_PAGE_IN_ITS_WINDOW).unwrap();
+            let address = folder.join("index.html").to_string_lossy().replace(' ', "%20");
+            let url = format!("file://{address}#rail=214&list=390&preview=286&picture=yes");
+            let mut args = vec![
+                "--headless".to_string(), "--disable-gpu".to_string(), "--no-first-run".to_string(),
+                "--allow-file-access-from-files".to_string(), "--hide-scrollbars".to_string(),
+                "--virtual-time-budget=5000".to_string(), format!("--window-size={},{}", window.0, window.1),
+                format!("--user-data-dir={}", folder.join("profile").display()),
+            ];
+            match picture {
+                Some((file, scale)) => {
+                    args.push(format!("--force-device-scale-factor={scale}"));
+                    args.push(format!("--screenshot={}", file.display()));
+                }
+                None => args.push("--dump-dom".to_string()),
+            }
+            let ran = std::process::Command::new(&chrome).args(&args).arg(&url).output();
+            let _ = std::fs::remove_dir_all(&folder);
+            let ran = ran.expect("the browser starts");
+            assert!(ran.status.success(), "the browser failed ({}):\n{}", ran.status, String::from_utf8_lossy(&ran.stderr));
+            if picture.is_some() {
+                return Some(serde_json::Value::Null);
+            }
+            let page = String::from_utf8_lossy(&ran.stdout);
+            let result = page.split("<pre id=\"out\">").nth(1).and_then(|part| part.split("</pre>").next()).unwrap_or("");
+            let result = result.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"");
+            let measured: serde_json::Value =
+                serde_json::from_str(&result).unwrap_or_else(|error| panic!("no measurement: {error}:\n{page}"));
+            assert!(measured.get("error").is_none(), "{measured}");
+            Some(measured)
+        }
+
+        /// **The pictures for the Creator**, light theme, drawn from the
+        /// queue's own reading in each of the pair's moments, with the box
+        /// each press raises. Made where `SMOOZY_THE_PAIR_PICTURES` names a
+        /// folder, each file ending in `SMOOZY_THE_PAIR_PICTURES_WHEN`
+        /// (*before* or *after*).
+        #[test]
+        fn note_12_and_16_pictures() {
+            let Some(folder) = std::env::var_os("SMOOZY_THE_PAIR_PICTURES") else {
+                return;
+            };
+            let folder = std::path::PathBuf::from(folder);
+            std::fs::create_dir_all(&folder).unwrap();
+            let when = std::env::var("SMOOZY_THE_PAIR_PICTURES_WHEN").unwrap_or_else(|_| "after".to_string());
+            let draw = |file: &str, screen: TheQueueOnScreen, scale: u32, window: (u32, u32)| {
+                let said = the_queue_says(&screen).as_the_page_reads_it();
+                the_pair_in_a_real_browser("picture", &said, window, Some((&folder.join(format!("{file}, {when}.png")), scale)), "");
+            };
+            // **Frame 1 renders**, and Stop pressed.
+            let pair = a_pair("t28-pic-renders", None, None, true, true);
+            let holds = WhatThisRunHolds::default();
+            the_line_holds(&holds, &pair.server, vec![in_line(&pair.check.job, rendering()), held_behind(&pair.range.job, &pair.check.job)]);
+            let screen = what_is_held(&holds, Some(&pair.record), None);
+            draw("1. Frame 1 renders", screen.clone(), 1, (1245, 780));
+            if let Ok(raised) = the_box_is_raised(screen, TheActOnAJob::Stop, Some(&pair.check.job.as_text()), None) {
+                draw("2. Frame 1 renders, Stop pressed", raised, 1, (1245, 780));
+            }
+            // **The answer waits**, and its Cancel pressed — before the
+            // change the header's Cancel was the one that asked.
+            let pair = a_pair("t28-pic-waits", Some(TheOutcomeAsWritten::Finished), None, true, true);
+            let holds = WhatThisRunHolds::default();
+            the_line_holds(&holds, &pair.server, vec![held_behind(&pair.range.job, &pair.check.job)]);
+            let screen = what_is_held(&holds, Some(&pair.record), None);
+            draw("3. The answer waits", screen.clone(), 1, (1245, 780));
+            draw("4. The waiting dot, at twice the size", screen.clone(), 2, (1245, 420));
+            if let Ok(raised) = the_box_is_raised(screen, TheActOnAJob::Cancel, Some(&pair.range.job.as_text()), None) {
+                draw("5. The answer waits, Cancel pressed", raised, 1, (1245, 780));
+            }
+            // **Render all pressed, the range waiting its turn**, Cancel pressed.
+            let pair = a_pair("t28-pic-range-waits", Some(TheOutcomeAsWritten::Finished), None, true, true);
+            let holds = WhatThisRunHolds::default();
+            the_line_holds(&holds, &pair.server, vec![in_line(&pair.range.job, QueueState::Waiting)]);
+            let screen = what_is_held(&holds, Some(&pair.record), None);
+            if let Ok(raised) = the_box_is_raised(screen, TheActOnAJob::Cancel, Some(&pair.range.job.as_text()), None) {
+                draw("6. Frames waiting their turn after Render all, Cancel pressed", raised, 1, (1245, 780));
+            }
+        }
+    }
+    /// **The Creator's twenty-ninth notes, notes 8 and 10: a job writing into
+    /// many folders** — `Design/Queue & History § What the job writes`,
+    /// changed 2026-11-10, and the drawing's `q-manyfolders` and
+    /// `q-manyfoldersopen`. The account is in `Audits/Build/Twenty-ninth notes/`, Part B's piece 1. **Each reads what the
+    /// page is sent**, so it compiled against the code before the change and
+    /// failed there.
+    pub(crate) mod twenty_ninth_notes_8_and_10 {
+        use super::super::*;
+        use super::piece_10::{a_record, the_queue_holds};
+        use crate::servers::the_machines_work::{WhatTheReadingSays, WhatThisRunHolds};
+        use crate::surface::render_settings::tests::twenty_ninth_notes_8_and_10::{the_creators_folders_of, the_creators_list};
+        use smoozy_queue_history::line::QueueState;
+        use smoozy_state::identities::{Identity, IdentityKind};
+
+        const THE_JOBS_FOLDER: &str = "/home/ubuntu/smoozy/jobs/lamps";
+
+        /// **The reading of a made-up job of the Creator's shape**: 26
+        /// folders under `home/ubuntu/Render/` and `_OUT/V_012/`, 98 files.
+        fn the_creators_reading(folders: Vec<String>, files: u64) -> WhatTheReadingSays {
+            WhatTheReadingSays {
+                six: smoozy_job_files::holds::TheSixThings {
+                    the_folders_it_is_writing_into: folders
+                        .iter()
+                        .map(|folder| folder.trim_end_matches('/').as_bytes().to_vec())
+                        .collect(),
+                    it_is_writing_nothing: None,
+                    the_colliding_pairs: Vec::new(),
+                    the_same_picture_reaches_more_than_one_place: false,
+                    where_the_same_picture_is_written: Default::default(),
+                    the_render_reaches_frames_and_a_video: false,
+                    the_tree_is_shared_with: None,
+                    its_output_is_a_single_video_file: false,
+                },
+                how_many_files: Some(files),
+                the_frames_cannot_be_counted: false,
+                job_output_folder: THE_JOBS_FOLDER.to_string(),
+                more_than_one_view_layer_at: Default::default(),
+                every_folder: Some(the_creators_list()),
+            }
+        }
+
+        /// **What the page is sent for the job rendering with that reading
+        /// filled in**, through the same path a real reading takes.
+        fn the_job_page_said(named: &str, says: WhatTheReadingSays) -> serde_json::Value {
+            let record = a_record(named);
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+            let store = crate::record::job_records::JobRecords::over(record.connection());
+            let made = crate::record::deletions::tests::a_record_in_history(&server, "Lamps");
+            store.write_the_provisional_record(&made).unwrap();
+            let holds = WhatThisRunHolds::default();
+            the_queue_holds(&holds, &server, &made.job, QueueState::Rendering { operation: Identity::issue(IdentityKind::Operation).unwrap() }, None);
+            store
+                .the_read_is_filled_in(
+                    &made.job,
+                    &smoozy_queue_history::record::WhatTheReadProduced {
+                        main_output_or_the_jobs_folder: Some(THE_JOBS_FOLDER.to_string()),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            holds.a_reading_was_filled_in(&made.job.as_text(), says);
+            the_queue_says(&what_is_held(&holds, Some(&record), None)).as_the_page_reads_it()
+        }
+
+        /// The folder line's parts, each as *lead|value|trail*.
+        fn the_line(said: &serde_json::Value) -> Vec<String> {
+            let parts = said["write0PartCount"].as_str().unwrap_or("0").parse::<usize>().unwrap();
+            (0..parts)
+                .map(|at| {
+                    let one = |what: &str| said[format!("write0Part{at}{what}")].as_str().unwrap_or_default().replace('\u{a0}', " ");
+                    format!("{}|{}|{}", one("Lead"), one("Value"), one("Trail"))
+                })
+                .collect()
+        }
+
+        /// **More than three folders: the line names where they sit and how
+        /// many, and the count opens every folder.** *Writing into **26
+        /// folders** in home/ubuntu/Render/ and _OUT/V_012/ — 98 files*, the
+        /// count the part a press opens, and under it Render settings' own
+        /// rows: two lone folders, eight groups of three, the total by
+        /// format. **It failed before the change**: the line was *Writing
+        /// into* and all 26 folders, comma-joined, with nothing to press.
+        #[test]
+        fn more_than_three_folders_read_where_they_sit_and_the_count_opens_them() {
+            let said = the_job_page_said("t29-many", the_creators_reading(the_creators_folders_of(None), 98));
+            assert_eq!(
+                the_line(&said),
+                vec![
+                    "Writing into||".to_string(),
+                    "|26|folders".to_string(),
+                    "in||".to_string(),
+                    "|home/ubuntu/Render/|".to_string(),
+                    "and|_OUT/V_012/|".to_string(),
+                    "—|98|files".to_string(),
+                ],
+                "{said}"
+            );
+            assert_eq!(said["write0Part1Binds"], "yes", "the count and its word never part");
+            assert_eq!(said["write0Fold"], "1", "the count is what a press opens: {said}");
+            assert_eq!(said["write0RowCount"], "34", "two lone folders, eight groups and their 24 folders: {said}");
+            assert_eq!(said["write0Row0Place"], "home/ubuntu/Render/");
+            assert_eq!(said["write0Row2Place"], "_OUT/V_012/Cutout/1x1/");
+            assert_eq!(said["write0Row2FoldersValue"], "3");
+            assert_eq!(said["write0Row3Place"], "04. Lamps + Shades/");
+            assert_eq!(said["write0Row3In"], "2", "a group's folder is under its line");
+            assert_eq!(said["write0Row3Count0"], "5");
+            assert_eq!(said["write0Row3Format0"], "PNG");
+            assert_eq!(said["write0TotalValue"], "98");
+            assert_eq!((&said["write0ByFormat0Count"], &said["write0ByFormat0Format"]), (&serde_json::json!("61"), &serde_json::json!("PNG")));
+            assert_eq!(said["write0ByFormatCount"], "2");
+        }
+
+        /// **Three folders or fewer are listed whole**, each ending in `/`,
+        /// the last after *and*, with nothing to press — the drawing's
+        /// `q-marks`. **It failed before the change**: the folders had no
+        /// `/` and were comma-joined to the last.
+        #[test]
+        fn three_folders_or_fewer_are_listed_whole() {
+            let folders = vec!["beauty/".to_string(), "mist/".to_string(), "previews/".to_string()];
+            let said = the_job_page_said("t29-few", the_creators_reading(folders, 720));
+            assert_eq!(
+                the_line(&said),
+                vec!["Writing into||", "|beauty/|,", "|mist/|", "and|previews/|", "—|720|files"],
+                "{said}"
+            );
+            assert!(said.get("write0Fold").is_none(), "nothing to press: {said}");
+        }
+
+        /// **More than three tops name the first three and count the rest**,
+        /// and the job's own folder is named last, in words.
+        #[test]
+        fn more_than_three_tops_name_three_and_count_the_rest() {
+            let folders: Vec<String> = ["", "a/", "b/", "c/x/", "c/y/"].iter().map(|one| one.to_string()).collect();
+            let said = the_job_page_said("t29-tops", the_creators_reading(folders, 10));
+            assert_eq!(
+                the_line(&said),
+                vec!["Writing into||", "|5|folders", "in||", "|a/|,", "|b/|,", "|c/|", "+|1|more folder", "—|10|files"],
+                "{said}"
+            );
+            let folders: Vec<String> = ["", "a/x/", "a/y/", "b/"].iter().map(|one| one.to_string()).collect();
+            let said = the_job_page_said("t29-job-folder", the_creators_reading(folders, 10));
+            assert_eq!(
+                the_line(&said),
+                vec!["Writing into||", "|4|folders", "in||", "|a/|,", "|b/|", "and the job folder||", "—|10|files"],
+                "{said}"
+            );
+        }
+
+        /// **The job page drawn by the real page from what the application
+        /// sends** — the cloth job's page with this job's *What this job
+        /// writes* in place of its own. `then` runs after the page is drawn.
+        fn the_creators_page_in_a_real_browser(
+            name: &str,
+            said: &serde_json::Value,
+            window: (u32, u32),
+            picture: Option<(&std::path::Path, u32)>,
+            then: &str,
+        ) -> Option<serde_json::Value> {
+            let chrome = [
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser",
+            ]
+            .into_iter()
+            .map(std::path::PathBuf::from)
+            .find(|path| path.exists());
+            let Some(chrome) = chrome else {
+                eprintln!("SKIPPED: no Chrome; the job page was not drawn");
+                return None;
+            };
+            let folder = std::env::temp_dir().join(format!("smoozy-twenty-ninth-many-folders-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&folder);
+            std::fs::create_dir_all(&folder).unwrap();
+            let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+            for (stand_in, text) in super::THE_BOXES_STAND_INS {
+                if stand_in != "harness.js" && stand_in != "panes.js" {
+                    std::fs::write(folder.join(stand_in), text).unwrap();
+                }
+            }
+            for entry in std::fs::read_dir(&web).unwrap() {
+                let path = entry.unwrap().path();
+                if path.extension().and_then(|ext| ext.to_str()) == Some("css") {
+                    std::fs::copy(&path, folder.join(path.file_name().unwrap())).unwrap();
+                }
+            }
+            for page in ["panes.js", "the-queue.js", "the-value-drawn.js"] {
+                std::fs::copy(web.join(page), folder.join(page)).unwrap();
+                std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+            }
+            let writes: serde_json::Map<String, serde_json::Value> = said
+                .as_object()
+                .unwrap()
+                .iter()
+                .filter(|(key, _)| key.starts_with("write") || key.as_str() == "whatThisJobWrites")
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect();
+            let entry = format!(
+                "{}\nconst THE_WRITES = {};\nconst theClothAlone = window.theCloth;\n\
+                 window.theCloth = (more) => {{ const said = theClothAlone(); \
+                 for (const key of Object.keys(said)) if (key.startsWith('write')) delete said[key]; \
+                 return Object.assign(said, THE_WRITES, {{entryName: 'Lamps', row0Name: 'Lamps', row1Name: 'Hallway'}}, more || {{}}); }};\n{then}",
+                super::THE_CLOTH_JOB,
+                serde_json::Value::Object(writes)
+            );
+            std::fs::write(folder.join("entry.js"), entry).unwrap();
+            std::fs::write(folder.join("index.html"), super::THE_JOB_PAGE_IN_ITS_WINDOW).unwrap();
+            let address = folder.join("index.html").to_string_lossy().replace(' ', "%20");
+            let url = format!("file://{address}#rail=214&list=390&preview=286&picture=yes");
+            let mut args = vec![
+                "--headless".to_string(), "--disable-gpu".to_string(), "--no-first-run".to_string(),
+                "--allow-file-access-from-files".to_string(), "--hide-scrollbars".to_string(),
+                "--virtual-time-budget=5000".to_string(), format!("--window-size={},{}", window.0, window.1),
+                format!("--user-data-dir={}", folder.join("profile").display()),
+            ];
+            match picture {
+                Some((file, scale)) => {
+                    args.push(format!("--force-device-scale-factor={scale}"));
+                    args.push(format!("--screenshot={}", file.display()));
+                }
+                None => args.push("--dump-dom".to_string()),
+            }
+            let ran = std::process::Command::new(&chrome).args(&args).arg(&url).output();
+            let _ = std::fs::remove_dir_all(&folder);
+            let ran = ran.expect("the browser starts");
+            assert!(ran.status.success(), "the browser failed ({}):\n{}", ran.status, String::from_utf8_lossy(&ran.stderr));
+            if picture.is_some() {
+                return Some(serde_json::Value::Null);
+            }
+            let page = String::from_utf8_lossy(&ran.stdout);
+            let result = page.split("<pre id=\"out\">").nth(1).and_then(|part| part.split("</pre>").next()).unwrap_or("");
+            let result = result.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"");
+            let measured: serde_json::Value =
+                serde_json::from_str(&result).unwrap_or_else(|error| panic!("no measurement: {error}:\n{page}"));
+            assert!(measured.get("error").is_none(), "{measured}");
+            Some(measured)
+        }
+
+        /// **What is read on the drawn page**: the line, the lines it takes,
+        /// the count as a press; then the press, the list under the line, a
+        /// redraw that keeps it open, a group's line closing its group, and a
+        /// second press closing the list — the presses sending nothing to the
+        /// application (the redraw's own asking is the page's, and not
+        /// counted).
+        const THE_LINE_IS_READ: &str = r#"
+setTimeout(() => {
+  try {
+    const out = {};
+    const plain = (text) => text.replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
+    const linesOf = (holder) => {
+      const range = document.createRange(); range.selectNodeContents(holder);
+      return new Set(Array.from(range.getClientRects()).filter((one) => one.width > 0).map((one) => Math.round(one.top))).size;
+    };
+    const line = () => document.querySelector('.jw .jw1');
+    const fold = () => line() && line().querySelector('button.golink');
+    out.line = plain(line().textContent);
+    out.lines = linesOf(line().querySelector('span'));
+    out.fold = fold() ? {said: plain(fold().textContent), expanded: fold().getAttribute('aria-expanded')} : null;
+    out.listAtFirst = Boolean(document.querySelector('.jw .writes'));
+    if (fold()) {
+      const before = asked.length;
+      fold().click();
+      const list = document.querySelector('.jw .writes');
+      out.open = {expanded: fold().getAttribute('aria-expanded'), list: Boolean(list),
+        underTheLine: Boolean(list) && list.previousElementSibling === line(),
+        places: list ? list.querySelectorAll('.p.mono').length : 0, groups: list ? list.querySelectorAll('.wgrp').length : 0,
+        total: list ? plain(list.querySelector('.p.tot').textContent) : null,
+        indent: list ? Math.round(list.getBoundingClientRect().left - line().getBoundingClientRect().left) : null};
+      let sent = asked.length - before;
+      for (const handler of told.get('queue:the-queue') || []) handler({said: theCloth()});
+      const afterTheRedraw = asked.length;
+      out.keptOpen = Boolean(document.querySelector('.jw .writes')) && fold().getAttribute('aria-expanded') === 'true';
+      const placesOpen = document.querySelectorAll('.jw .writes .p.mono').length;
+      document.querySelector('.jw .writes .wgrp').click();
+      out.aGroupCloses = document.querySelectorAll('.jw .writes .p.mono').length === placesOpen - 3
+        && document.querySelector('.jw .writes .wgrp').getAttribute('aria-expanded') === 'false';
+      fold().click();
+      out.closed = !document.querySelector('.jw .writes') && fold().getAttribute('aria-expanded') === 'false';
+      out.sent = sent + asked.length - afterTheRedraw;
+    }
+    document.getElementById('out').textContent = JSON.stringify(out);
+  } catch (error) { document.getElementById('out').textContent = JSON.stringify({error: String(error.stack || error)}); }
+}, 400);
+"#;
+
+        /// **In a real browser**: the line is short, its count is a link-styled
+        /// press, the press opens every folder under the line at its text
+        /// edge, grouped as Render settings groups them, a redraw keeps it
+        /// open, and a second press closes it. **It failed before the
+        /// change**: the line named all 26 folders over many lines, with
+        /// nothing to press. Where `SMOOZY_THE_MANY_FOLDERS_PICTURES` names a
+        /// folder, the page is pictured there, closed and open, each file
+        /// ending in `SMOOZY_THE_MANY_FOLDERS_PICTURES_WHEN`.
+        #[test]
+        fn the_job_pages_line_and_its_list_in_a_real_browser() {
+            let said = the_job_page_said("t29-browser", the_creators_reading(the_creators_folders_of(None), 98));
+            if let Some(folder) = std::env::var_os("SMOOZY_THE_MANY_FOLDERS_PICTURES") {
+                let when = std::env::var("SMOOZY_THE_MANY_FOLDERS_PICTURES_WHEN").unwrap_or_else(|_| "after".to_string());
+                let folder = std::path::PathBuf::from(folder);
+                std::fs::create_dir_all(&folder).unwrap();
+                the_creators_page_in_a_real_browser("picture", &said, (1245, 780),
+                    Some((&folder.join(format!("1. A job writing into many folders, {when}.png")), 1)), "");
+                if when == "after" {
+                    let press = "setTimeout(() => { const fold = document.querySelector('.jw .jw1 button.golink'); if (fold) fold.click(); }, 300);";
+                    the_creators_page_in_a_real_browser("picture-open", &said, (1245, 2000),
+                        Some((&folder.join("2. The same job, its folders listed, after.png"), 1)), press);
+                }
+            }
+            let Some(measured) = the_creators_page_in_a_real_browser("read", &said, (1245, 780), None, THE_LINE_IS_READ) else {
+                return;
+            };
+            assert_eq!(measured["line"], "Writing into 26 folders in home/ubuntu/Render/ and _OUT/V_012/ — 98 files", "{measured}");
+            assert!(measured["lines"].as_u64().unwrap() <= 3, "a short line: {measured}");
+            assert_eq!(measured["fold"], serde_json::json!({"said": "26 folders", "expanded": "false"}), "{measured}");
+            assert_eq!(measured["listAtFirst"], false, "{measured}");
+            assert_eq!(
+                measured["open"],
+                serde_json::json!({"expanded": "true", "list": true, "underTheLine": true, "places": 26, "groups": 8, "total": "98 files", "indent": 13}),
+                "{measured}"
+            );
+            assert_eq!(measured["keptOpen"], true, "{measured}");
+            assert_eq!(measured["aGroupCloses"], true, "{measured}");
+            assert_eq!(measured["closed"], true, "{measured}");
+            assert_eq!(measured["sent"], 0, "nothing is asked of the application: {measured}");
+        }
+    }
 }
 
 
 #[cfg(test)]
 mod wait_count_tests {
     use super::*;
+    /// **`Queue & History` B6's addition of 2026-11-13 (the scout's list,
+    /// item 3): *Finishing* once the whole-job bar is full**, since Blender
+    /// works on the last frame after its last sample — 12 minutes on two live
+    /// passes, with *Rendering* at 100% all the while.
+    #[test]
+    fn a_full_job_bar_reads_finishing_and_nothing_else_does() {
+        use smoozy_queue_history::readings::{AWorkersReport, LiveReadings, SamplePair, TilePair};
+        let report = |held: LiveReadings, finished: Option<u64>, total: Option<u64>| AWorkersReport {
+            attempt: 1,
+            readings: smoozy_state::observed::Reading::taken(
+                held,
+                std::time::SystemTime::UNIX_EPOCH, smoozy_state::observed::Clock::ThisComputer),
+            newest_frame_saved: None, the_plan_total: total, the_units_finished: finished,
+        };
+        let word = |held: LiveReadings, finished, total| {
+            let progress = the_progress_from(&report(held, finished, total), smoozy_queue_history::bars::WhichGrammar::FivePointZeroAndLater, None);
+            the_rendering_word(progress.as_ref())
+        };
+        let sampled = |seen, of| LiveReadings {
+            frame_in_hand: Some(1),
+            samples: Some(SamplePair { seen, of }),
+            ..Default::default()
+        };
+        // **Sol's look at the scout's list, point 5: the frame in hand, not
+        // the whole job.** Frame 1 of 240, every sample counted, the job at
+        // a small part of its plan: *Finishing*.
+        assert_eq!(word(sampled(4096, 4096), Some(4096), Some(240 * 4096)), FINISHING);
+        assert_eq!(word(sampled(4000, 4096), Some(4000), Some(240 * 4096)), RENDERING);
+        // **A wrong plan total says nothing early**: the job's bar full,
+        // the frame still sampling.
+        assert_eq!(word(sampled(100, 4096), Some(3600), Some(3600)), RENDERING);
+        // `Queue & History` R12's mark, and a tiled frame only with every tile and its samples.
+        assert_eq!(word(LiveReadings { stopped_short: true, ..sampled(200, 500) }, None, None), FINISHING);
+        assert_eq!(
+            word(LiveReadings { tiles: Some(TilePair { done: 2, of: 4 }), ..sampled(16, 16) }, None, None),
+            RENDERING
+        );
+        assert_eq!(
+            word(LiveReadings { tiles: Some(TilePair { done: 4, of: 4 }), ..sampled(16, 16) }, None, None),
+            FINISHING
+        );
+        // **A frame started and not yet sampled**, and no figures at all.
+        assert_eq!(word(LiveReadings { frame_in_hand: Some(2), ..Default::default() }, None, None), RENDERING);
+        assert_eq!(the_rendering_word(None), RENDERING);
+        assert_eq!(FINISHING, "Finishing");
+    }
+
     #[test]
     fn wait_count_draws_scene_numbers_without_render_bars() {
         use smoozy_queue_history::readings::{AWorkersReport, LiveReadings};
@@ -15177,5 +17261,24 @@ mod wait_count_tests {
         assert_eq!(progress.now, vec![APart::said("frame", "-2", "of"), APart::value("430")]);
         assert_eq!(progress.now_at, None);
         assert_eq!(progress.whole, None);
+    }
+}
+
+/// **The four questions, batch 3: words a user can't act on** (2026-11-11).
+/// Each line is in the user's words, by `Preparation/Groundwork/Rules.md`
+/// Rule 1 and Rule 9. Written before the words changed, and failed first.
+#[cfg(test)]
+mod the_four_questions_batch_3 {
+    use super::*;
+
+    /// Scouts 3.27 and 3.29.
+    #[test]
+    fn untracked_jobs_are_explained_and_a_waiting_row_says_so() {
+        assert_eq!(IS_RUNNING_WORK_SMOOZY_IS_NOT_TRACKING, "has jobs not in this Queue");
+        assert_eq!(TRACK_IT, "Add to Queue");
+        assert_eq!(JOBS_SMOOZY_IS_NOT_TRACKING, "jobs not in this Queue.");
+        assert_eq!(JOB_SMOOZY_IS_NOT_TRACKING, "job not in this Queue.");
+        assert_eq!(WAITING_STATUS, "Waiting");
+        assert_eq!(ENDED_GIVEN_UP, "interrupted");
     }
 }

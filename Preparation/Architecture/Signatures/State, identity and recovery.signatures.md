@@ -85,3 +85,16 @@
 - 2026-10-26 — GPT-6.1 Sol (Codex) — Carried the free-and-open-source decision into this plan; preserved the former text.
 
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Removed withdrawn paid text or obsolete references in wave 5; the account holds the complete change and check list.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 3, updates by the user's choice and the Dock.md`, outside any round — I4's declined-update mark: a dated note, widened by `Desktop app and delivery` Z33 to the one update box on every system. No auditor has seen it.
+
+2026-11-10 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 1, the server's queue after a death or a crash.md`, outside any round — M1a: a pointer under §6 to `Rented-server runtime` S10a and X9b. No auditor has seen this text.
+
+2026-11-10 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's rulings at the foot of `Audits/Build/Fable review/Sitting 1 — what landed.md` (sitting 1's follow-up), outside any round — §8.3: a fifth row, the machine's line stopped over a record it cannot read, and F12a. No auditor has seen this text.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 2, sending a job and the desk catching up.md`, outside any round — E3: one read-forward pass at a time per server, a cursor never written lower, and never onto a row whose installation changed under the pass. V1 step 2: a record whose submission act is still running is not asked about. No auditor has seen this text.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — Y7a: a machine-made job from a job the local record names is adopted without asking. No auditor has seen this text.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Kept local jobs unchanged when an endpoint reaches a different installation.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.

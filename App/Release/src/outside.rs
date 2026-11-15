@@ -172,6 +172,11 @@ fn what_the_fetch_said(why: WhyTheFetchFailed) -> String {
         WhyTheFetchFailed::TheResumeDidNotLineUp { said } => {
             format!("a partial answer did not start where it was asked to: {said}")
         }
+        // **`Server protocol and transfers` B10b's second route**, which this
+        // check does not take: it reads each source as the manifest names it.
+        WhyTheFetchFailed::TheReleaseListsNoSuchFile { file } => {
+            format!("the release's list of files does not name {file}")
+        }
     }
 }
 

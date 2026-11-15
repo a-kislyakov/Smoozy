@@ -39,7 +39,7 @@
 //!   part already sent is being checked`, `§ A part-sent file that starts over`.
 //! - `§ Along the bottom`, and `§ What this document left open` for the caps'
 //!   link to Settings.
-//! - `Design/Render Settings`'s *Download as it renders* boxes, which are the
+//! - `Design/Render Settings`'s *Download frames as they render* boxes, which are the
 //!   drawing's *Downloading* group.
 //!
 //! **The ten mockup states** are [`THE_STATES_THIS_PIECE_DRAWS`], read out of
@@ -222,9 +222,15 @@ pub(crate) fn the_moves_are_posted(queue: &TheOneQueue, the_run: Option<&TheRuns
 /// drawing pass for the Creator's second notes on the test copy drew `fmt-q`,
 /// the box opened from a queue entry with its folder as a plain line — their
 /// note 16. Nothing here builds that reading yet: it is that map's piece 2.)*
-pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 10] = [
-    "t", "t-stop", "t-stopwait", "t-verify", "t-restart", "t-left", "fmt", "fmtone", "fmtnone",
-    "fmt-q",
+/// *(Twelve from 2026-11-09, when the twenty-eighth notes' piece 11 drew
+/// `t-growing` and `t-grown`, the dependency check's upload while it can still
+/// grow and once its bar is drawn — note 11.)* *(Thirteen from 2026-11-10,
+/// when the twenty-ninth notes' drawing pass drew `fmt-many`, the box on a job
+/// writing into many folders — notes 8 and 10, built by Part B's piece 1 the
+/// same day.)*
+pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 14] = [
+    "t", "t-blocked", "t-stop", "t-stopwait", "t-verify", "t-restart", "t-left", "t-growing", "t-grown", "fmt", "fmtone",
+    "fmtnone", "fmt-q", "fmt-many",
 ];
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -234,11 +240,11 @@ pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 10] = [
 pub(crate) mod words {
     // `§ Where it sits`, `§ Four kinds`, and the caps' link.
     pub const TRANSFERS: &str = "Transfers";
-    pub const NO_CAP_SET: &str = "no cap set";
+    pub const NO_CAP_SET: &str = "no speed limit";
     // **The caps Settings saved, in Settings' own words and figures** — must-do
     // 4 of step 10a round 1 of the queue, history, settings and downloads.
-    pub const NO_UPLOAD_CAP_SET: &str = "no upload cap set";
-    pub const NO_DOWNLOAD_CAP_SET: &str = "no download cap set";
+    pub const NO_UPLOAD_CAP_SET: &str = "no upload limit";
+    pub const NO_DOWNLOAD_CAP_SET: &str = "no download limit";
     /// **Must-do 14: a read that failed is said** — in `Servers`' own words for
     /// the same case, **taken from that screen rather than written again**
     /// (step 10a, the screens round's loose ends, L6). ~~It was a second copy
@@ -285,14 +291,28 @@ pub(crate) mod words {
     pub const MORE: &str = "more";
     pub const DONE: &str = "done";
     pub const DOT: &str = "·";
+    /// **The count of a dependency upload that can still grow** — *1 of 62
+    /// files so far · 20 MB* (`Design/Transfers`, 2026-11-09).
+    pub const SO_FAR: &str = "so far";
 
     // The one control in a request's header.
     pub const TURN_OFF: &str = "Turn off";
     pub const STOP: &str = "Stop";
     pub const OPEN_THE_CHECK: &str = "Open dependency check";
     pub const OPEN_THE_JOB: &str = "Open the job";
-    pub const FILES_ON_YOUR_COMPUTER: &str = "Files on your computer";
+    /// **The finished download's way back, as a button in the system's own
+    /// words** — `Design/Transfers § A request shows the whole`, 2026-11-11
+    /// (the four questions, batch 2, scout 3.39). Named for the old words.
+    #[cfg(target_os = "macos")]
+    pub const FILES_ON_YOUR_COMPUTER: &str = "Show in Finder";
+    #[cfg(target_os = "windows")]
+    pub const FILES_ON_YOUR_COMPUTER: &str = "Show in Explorer";
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    pub const FILES_ON_YOUR_COMPUTER: &str = "Show in folder";
     pub const REMOVE: &str = "Remove";
+    /// **An upload left over, uploaded again with *Skip existing*** —
+    /// `Design/Transfers § What a past sitting left behind`, 2026-11-11.
+    pub const RESUME: &str = "Resume";
 
     // Where it goes.
     pub const FROM: &str = "From";
@@ -300,10 +320,20 @@ pub(crate) mod words {
     pub const INTO: &str = "into";
     pub const OF: &str = "of";
     pub const AND: &str = "and";
+    /// **A format's folders named by where they sit**, in the download box —
+    /// *_OUT/V_012/Studio/ (12 folders)*, *+ 2 more folders* (`Design/Render
+    /// Settings § What it will write`; the Creator's twenty-ninth notes, notes
+    /// 8 and 10).
+    pub const AN_OPENING_BRACKET: &str = "(";
+    pub const FOLDERS_AND_A_CLOSING_BRACKET: &str = "folders)";
+    pub const A_PLUS: &str = "+";
+    pub const MORE_FOLDER: &str = "more folder";
+    pub const MORE_FOLDERS: &str = "more folders";
     pub const ONLY: &str = "only";
     pub const ABOUT: &str = "about";
     pub const MINUTES_LEFT: &str = "minutes left";
     pub const MINUTE_LEFT: &str = "minute left";
+    pub const LEFT: &str = "left";
     pub const EVERYTHING_THIS_JOB_WRITES: &str = "everything this job writes";
     pub const EACH_FILE_KEEPS_ITS_FOLDER: &str = "folder structure kept";
     pub const ENDED_DASH: &str = "ended —";
@@ -319,9 +349,9 @@ pub(crate) mod words {
     /// the Design records. The two transfer faults after the 38's pieces 7
     /// and 9, fault 2.
     pub const FILES_WERE_NOT_DOWNLOADED_THEIR_NAMES: &str =
-        "files not downloaded: names not valid on this computer.";
+        "files not downloaded: names not valid on this computer. Rename them in Files.";
     pub const FILE_WAS_NOT_DOWNLOADED_ITS_NAME: &str =
-        "file not downloaded: name not valid on this computer.";
+        "file not downloaded: name not valid on this computer. Rename it in Files.";
     pub const MAY_BE_INCOMPLETE: &str =
         "downloaded frames may be incomplete — the job stopped while writing them.";
     pub const MAY_BE_INCOMPLETE_ONE: &str =
@@ -337,17 +367,23 @@ pub(crate) mod words {
     pub const RECONNECTING: &str = "Reconnecting…";
     pub const WAITING_FOR_CONNECTION: &str = "Waiting for connection…";
     /// `Design/Transfers § An auto-download is not a request` and `Download` E2b.
-    pub const NOT_DOWNLOADING: &str = "Download stalled. Use Download all on the job.";
+    pub const NOT_DOWNLOADING: &str = "Download stalled.";
+    pub const DOWNLOAD_REMAINING: &str = "Download remaining";
     pub const TRYING_AGAIN_IN: &str = "retrying in";
     pub const TRYING_AGAIN_NOW: &str = "retrying now";
 
     // `Download` D2's four classes, each with its remedy where Smoozy knows one.
+    pub const THE_SERVER_DISK_IS_FULL: &str = "Server disk is full. Free space on the server, then retry.";
+    pub const A_FILE_BLOCKS_THE_FOLDER: &str = "A file exists where this download needs a folder. Move it or choose another folder.";
     pub const THE_FOLDER_IS_FULL: &str = "Download folder is full.";
     pub const FREE_SOME_SPACE: &str = "Free up space to resume.";
-    pub const THE_FOLDER_REFUSES: &str = "Permission denied: cannot write to the download folder.";
-    pub const ALLOW_WRITING: &str = "Allow write access to resume.";
+    pub const THE_FOLDER_REFUSES: &str = "Permission denied: can't write to the download folder.";
+    pub const ALLOW_WRITING: &str = "Allow write access to resume, or choose another folder.";
+    /// **Where the download folder is chosen** — the trouble line's link
+    /// (`Design/Transfers § When a download meets trouble`, 2026-11-11).
+    pub const THE_DOWNLOAD_FOLDER_SETTING: &str = "the-download-folder-setting";
     pub const THE_FOLDER_IS_GONE: &str = "Download folder not found.";
-    pub const MAKE_IT_EXIST: &str = "Restore the folder to resume.";
+    pub const MAKE_IT_EXIST: &str = "Restore the folder to resume, or choose another folder.";
     /// **`Download` D2: no cause is known, so none is named** — *disk write
     /// error* says what failed and nothing behind it.
     pub const THE_DEVICE_FAILED: &str = "Disk write error in the download folder.";
@@ -362,7 +398,6 @@ pub(crate) mod words {
 
     // A file's own row.
     pub const QUEUED: &str = "queued";
-    pub const REFUSED: &str = "refused";
     pub const FAILED: &str = "failed";
     pub const CHANGED: &str = "changed";
     /// **A partial file waiting for its connection, after its figure** — an
@@ -370,13 +405,21 @@ pub(crate) mod words {
     /// download's.
     pub const SENT: &str = "uploaded";
     pub const SENT_DOWN: &str = "downloaded";
-    pub const CANNOT_WRITE_THERE: &str = "Permission denied: cannot write to this folder.";
-    pub const CANNOT_READ_IT_THERE: &str = "Permission denied: cannot read this file.";
+    pub const CANNOT_WRITE_THERE: &str = "Permission denied: can't write to this folder.";
+    pub const CANNOT_READ_IT_THERE: &str = "Permission denied: can't read this file.";
     pub const COULD_NOT_READ_ON_YOUR_COMPUTER: &str = "Could not read this file on your computer.";
     /// **A file Smoozy downloaded but could not put in place on this
     /// computer** — `Design/Transfers § A file that failed`, E2-1, with the
     /// reason behind *Details*. Step 10c's thirteenth-pass fix piece 3.
     pub const DOWNLOAD_FAILED: &str = "Download failed.";
+    /// **An upload file's reasons** — `Design/Transfers § A file that failed`,
+    /// the paragraph of 2026-11-11 (the four questions, batch 2, fix 1).
+    pub const NAME_NOT_VALID_ON_THE_SERVER: &str = "Name not valid on the server.";
+    pub const NAME_TOO_LONG_FOR_THE_SERVER: &str = "Name too long for the server.";
+    pub const PATH_TOO_LONG_FOR_THE_SERVER: &str = "Path too long for the server.";
+    pub const NAME_RESERVED_BY_SMOOZY: &str = "Name reserved by Smoozy.";
+    pub const ITS_FOLDER_WAS_NOT_MADE: &str = "Could not create its folder on the server.";
+    pub const UPLOAD_FAILED: &str = "Upload failed.";
     pub const DETAILS: &str = "Details";
     pub const TRY_AGAIN_WITH_ADMIN_ACCESS: &str = "Retry with admin access";
     pub const TRY_AGAIN: &str = "Retry";
@@ -389,6 +432,9 @@ pub(crate) mod words {
     // the other cause, and *from the beginning* for both.
     pub const UPLOADING_FROM_THE_START: &str =
         "Could not resume — uploading from the beginning.";
+    /// **`File Browser` K10a**: a part a later upload could not carry on
+    /// because the file on this computer changed (uploads carry on).
+    pub const UPLOADING_IT_AGAIN_IT_CHANGED: &str = "File changed — uploading from the beginning.";
     pub const DOWNLOADING_FROM_THE_START: &str =
         "Could not resume — downloading from the beginning.";
     pub const DOWNLOADING_IT_AGAIN_IT_CHANGED: &str =
@@ -423,18 +469,18 @@ pub(crate) mod words {
     pub const NOTHING_IS_DOWNLOADING_NOW: &str = "Nothing downloading now — nothing is discarded.";
     pub const KEEP_UPLOADING: &str = "Keep uploading";
     pub const KEEP_DOWNLOADING: &str = "Keep downloading";
-    pub const STOP_IT: &str = "Stop it";
+    pub const STOP_IT: &str = "Stop";
 
     // The three format boxes.
-    pub const DOWNLOAD_AS_IT_RENDERS: &str = "Download as it renders";
+    pub const DOWNLOAD_AS_IT_RENDERS: &str = "Download frames as they render";
     pub const THESE_ARE_THE_FORMATS: &str = "Formats this job writes, read from the file.";
     pub const FILES_FULL_STOP: &str = "files.";
     pub const FILE_FULL_STOP: &str = "file.";
     pub const THE_REST_STAY: &str = "The rest stay on the server.";
     pub const YOUR_DOWNLOAD_FOLDER: &str = "— your download folder";
-    pub const SOMEWHERE_ELSE: &str = "Somewhere else…";
-    pub const WHERE_DOWNLOADS_GO: &str = "Where downloads go";
-    pub const FIXED_ONCE_SUBMITTED: &str = "The folder is fixed once the job is submitted.";
+    pub const SOMEWHERE_ELSE: &str = "Other…";
+    pub const WHERE_DOWNLOADS_GO: &str = "Download folder";
+    pub const FIXED_ONCE_SUBMITTED: &str = "The folder can't be changed after the job is submitted.";
     pub const FORMATS_CAN_CHANGE_LATER: &str = "Formats can be changed later from the queue.";
     pub const ONE_FORMAT: &str = "This job writes one format.";
     pub const ALL: &str = "All";
@@ -450,7 +496,7 @@ pub(crate) mod words {
     /// The same, where several scenes are ticked.
     pub const READ_ANOTHER_SCENE_SEVERAL_TICKED: &str =
         "Only the active scene was read; the selected scenes’ formats are unknown.";
-    pub const EVERYTHING_DOWNLOADS: &str = "Everything downloads.";
+    pub const EVERYTHING_DOWNLOADS: &str = "All files are downloaded.";
     /// **A narrowing that stands, where the box has no list to show it in** —
     /// the formats in Smoozy's words, joined by [`AND`], then
     /// [`FILES_ARE_DOWNLOADED`]: *EXR and PNG files are downloaded.* (the
@@ -506,6 +552,10 @@ pub(crate) mod words {
     /// **An upload's *Remove* with the server not connected** — the part is on
     /// the machine. The 38's piece 9, item 33.
     pub const NOT_CONNECTED_SO_NOT_REMOVED: &str = "Not removed: server not connected.";
+    /// **An upload's *Remove* that left a part on the server** — a removal
+    /// the server refused, or a path *Remove* may not reach. Until 2026-11-12
+    /// nothing was said (the live pass of that date, new fault 5).
+    pub const THE_PARTIAL_FILES_WERE_NOT_REMOVED: &str = "Could not remove the partial files.";
 
     // **`Download` M6's pre-flight, for the whole-job download a queue or
     // history entry starts** — step 10c piece 10. The four answers are the
@@ -523,11 +573,11 @@ pub(crate) mod words {
     // now, so that sentence would be false here.
     pub const NOTHING_IS_SELECTED: &str = "Select a file or folder to download.";
     pub const THE_JOB_WOULD_NOT_READ: &str =
-        "Could not read Smoozy's database.";
+        "Could not read Smoozy's database. Restart Smoozy, or report a problem.";
     /// **A job whose folder is chosen at render start has none yet**
     /// (`Job files and outputs` P21) — `Design/Queue & History`'s own line for
     /// that wait. The Creator's second notes, piece 4.
-    pub const THE_FOLDER_IS_MADE_WHEN_THE_RENDER_STARTS: &str = "The folder is made when the render starts.";
+    pub const THE_FOLDER_IS_MADE_WHEN_THE_RENDER_STARTS: &str = "The folder is created when the render starts.";
     pub const THE_FOLDER_PANEL_DID_NOT_OPEN: &str = "Could not open the folder picker.";
     pub const THE_REQUEST_IS_NO_LONGER_WAITING: &str =
         "Download not found.";
@@ -536,7 +586,7 @@ pub(crate) mod words {
     pub const NOTHING_PICKED_COULD_BE_READ: &str =
         "Download not started: could not read the selected items on the server.";
     pub const THE_RECORD_WOULD_NOT_TAKE_IT: &str =
-        "Download not started: could not save it to Smoozy's database.";
+        "Download not started: could not save it. Try again, or report a problem.";
     pub const WHERE_THE_DOWNLOAD_GOES: &str = "Download to";
 }
 
@@ -636,8 +686,11 @@ pub enum WhatItIsOf {
     AJob { name: String, job: String },
     /// An upload, named by how many files and into which folder.
     AFolder { folder: String },
-    /// The dependency check's own, named after the `.blend`.
-    ABlend { file: String },
+    /// The dependency check's own, named after the `.blend`. **`growing`: a
+    /// reading it owes can still add files** (`Dependency Upload & Remap` A9c
+    /// and `Dependency Upload & Remap` G14b of 2026-11-09), so its whole is a count *so far* and no byte
+    /// bar is drawn.
+    ABlend { file: String, growing: bool },
     /// **An upload of the user's own Blender build, named by the file the user
     /// picked** — never by the staging folder it goes into, or the name the
     /// machine reads it under (`Design/Server Setup § Pointing at a build on
@@ -653,6 +706,7 @@ pub enum WhatItIsOf {
 /// `Download` D1's four classes, consumed rather than re-derived.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TheDestinationTrouble {
+    AFileBlocksTheFolder,
     TheVolumeIsFull,
     WritingIsRefused,
     TheDestinationIsNoLongerThere,
@@ -695,6 +749,11 @@ pub enum WhereTheRequestStands {
 #[derive(Debug, Clone)]
 pub struct ARequestKnown {
     pub id: String,
+    /// **What the user picked, for an upload or a download**: the first
+    /// thing's name and how many more (`Design/Transfers § A request shows the
+    /// whole`, 2026-11-13). Nothing for any other kind, or where the record
+    /// holds nothing under the destination.
+    pub picked: Option<(String, usize)>,
     pub start: Option<crate::record::transfer_records::TransferStart>,
     pub kind: TheKind,
     pub server: String,
@@ -764,6 +823,11 @@ pub struct ARequestKnown {
     /// **For an auto-download: `Download` E2b, a connection stands and nothing
     /// has moved for a minute.**
     pub nothing_is_moving: bool,
+    /// **The files whose bytes the first figure of `bytes` already holds**, by
+    /// entry — a dependency send's landed files. A file the run's register still
+    /// holds among them is not counted twice
+    /// ([`what_this_run_is_moving`]). Empty for every other request.
+    pub the_files_its_count_holds: Vec<usize>,
     pub stands: WhereTheRequestStands,
     pub files: Vec<AFileKnown>,
 }
@@ -785,6 +849,10 @@ pub enum WhatHappenedToTheFile {
     /// control is absent rather than opening an empty panel. Step 10c's
     /// thirteenth-pass fix piece 3.
     NotPutInPlace { has_details: bool },
+    /// **An upload file that failed for any other reason**, with the reason
+    /// where Smoozy knows one — `Design/Transfers § A file that failed`, the
+    /// paragraph of 2026-11-11 (the four questions, batch 2, fix 1).
+    UploadFailed(crate::uploading::WhyTheUploadFailed),
 }
 
 #[derive(Debug, Clone)]
@@ -838,8 +906,9 @@ pub struct ABar {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ALine {
-    /// `plain`, `amber` (something to notice), `amber2` (work standing still) or
-    /// `bad2` (the user has something to put right).
+    /// `plain`, `amber` (something to notice), `amber2` (work standing still),
+    /// `bad2` (the user has something to put right), or `underway`: plain words
+    /// after the underway mark, where a bar cannot be drawn (2026-11-09).
     pub tone: &'static str,
     pub words: Words,
     pub link: Option<AControl>,
@@ -847,6 +916,8 @@ pub struct ALine {
     pub due_at: Option<Verbatim>,
     pub trying_again_in: Option<Prose>,
     pub trying_again_now: Option<Prose>,
+    /// The unit after the seconds (the UI at every size, C-28 under B-06).
+    pub seconds: Option<Prose>,
     pub cross: Option<Prose>,
 }
 
@@ -859,6 +930,7 @@ impl ALine {
             due_at: None,
             trying_again_in: None,
             trying_again_now: None,
+            seconds: None,
             cross: None,
         }
     }
@@ -879,6 +951,11 @@ pub struct AFileDrawn {
     /// Bytes staged and expected, for `theMarkOnARow`, where the row has a bar.
     pub staged: Option<Verbatim>,
     pub expected: Option<Verbatim>,
+    /// **The two sizes as Files words them**, *12 MB*, beside the bytes the bar
+    /// is drawn from — so a file's figure reads as its request's (UI
+    /// consistency, finding 5; the request's took Files' wording with C-29).
+    pub staged_size: Option<Verbatim>,
+    pub expected_size: Option<Verbatim>,
     pub of: Prose,
     pub tail: Option<Prose>,
     pub note: Option<ALine>,
@@ -900,6 +977,11 @@ pub struct ARequestDrawn {
     /// (`Design/Transfers § The dependency check's own transfers`, the
     /// Creator's fourteenth notes, note 4; the drawing's `.rqlead`).
     pub name_leads: bool,
+    /// **The name's last words say how it ended — *— did not finish*, *—
+    /// Not started* — and keep their width** while the name before them is
+    /// cut short, so a request that did not finish never reads like one that
+    /// did (the UI at every size, C-20).
+    pub name_ends: bool,
     pub count: Words,
     /// **How a finished request ended, as the ending word's class** — the
     /// Creator's seventh notes, note 9 (`Design/Transfers`, *the finished
@@ -908,6 +990,10 @@ pub struct ARequestDrawn {
     /// auto-download only ended.
     pub ending_class: Option<&'static str>,
     pub control: Option<AControl>,
+    /// **A second control after the first** — an upload left over offers
+    /// *Resume*, then *Remove* (`Design/Transfers § What a past sitting left
+    /// behind`, the paragraph of 2026-11-11).
+    pub also: Option<AControl>,
     pub collapsed: bool,
     pub terminal: bool,
     pub started_label: Prose,
@@ -921,6 +1007,18 @@ pub struct ARequestDrawn {
     /// For *Open the check*: the server and the `.blend` the check is of.
     pub server: Verbatim,
     pub the_blend: Option<Verbatim>,
+    /// **The `.blend`'s name is a link into Files** — `Design/Transfers § The
+    /// dependency check's own transfers`, the paragraph of 2026-11-10 (the
+    /// Creator's twenty-ninth notes, note 5): *Show in Files*, as a panel's
+    /// title is (`Design/Whole app § Panels over a server`). The folder and
+    /// the name as bytes, split here by the one function both panels' titles
+    /// use, so the page composes no path (`File Browser` L1a). Only a
+    /// dependency upload has one; the finished one-line row keeps it.
+    pub show_in_files: Option<crate::surface::render_settings::TheFileInFiles>,
+    /// **`Design/Transfers` as added 2026-11-11: where a finished upload's
+    /// *Show in Files* opens** — the folder it went to, chosen in its parent.
+    /// Nothing on every other request. The four questions, scout 2.8.
+    pub the_folder_in_files: Option<crate::surface::render_settings::TheFileInFiles>,
     /// For *Open the job*: the job's own identity, which History chooses by.
     pub job: Option<Verbatim>,
 }
@@ -1105,11 +1203,24 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
             .then(words::DOT)
             .and(request.files_in_the_whole.to_string())
             .then(by_count(request.files_in_the_whole, words::FILE, words::FILES)),
+        // **Named by what was picked** — one name, or the first and how many
+        // more, then where it went (`Design/Transfers § A request shows the
+        // whole`, added 2026-11-13; the Creator's notes on the test copy of
+        // 2026-11-12, note 11). Where nothing picked is known, the count.
         (WhatItIsOf::AFolder { folder }, _) => {
-            let said = Words::after(
-                request.files_in_the_whole.to_string(),
-                by_count(request.files_in_the_whole, words::FILE_INTO, words::FILES_INTO),
-            )
+            let said = match &request.picked {
+                Some((first, 0)) => Words::plain("").and(first.clone()).then(words::INTO),
+                Some((first, more)) => Words::plain("")
+                    .and(first.clone())
+                    .then(words::AND)
+                    .and(more.to_string())
+                    .then(words::MORE)
+                    .then(words::INTO),
+                None => Words::after(
+                    request.files_in_the_whole.to_string(),
+                    by_count(request.files_in_the_whole, words::FILE_INTO, words::FILES_INTO),
+                ),
+            }
             .and(folder.clone());
             if left_over || ended {
                 said.then(ended_words)
@@ -1132,7 +1243,7 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
         }
         // **Named after the `.blend`** — its own name, where `file` is the
         // whole path the way back hands the check.
-        (WhatItIsOf::ABlend { file }, _) => Words::with(
+        (WhatItIsOf::ABlend { file, .. }, _) => Words::with(
             words::FOR,
             file.trim_end_matches('/').rsplit('/').next().unwrap_or(file).to_string(),
         ),
@@ -1140,10 +1251,29 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
 
     // `§ A request shows the whole … Stop sits on the request`, and `Once there
     // is nothing left to stop, that same place carries the way back`.
-    let control = if let WhereTheRequestStands::LeftOver { removable, .. } = request.stands {
-        removable.then(|| a_control(words::REMOVE, "remove"))
+    // **An upload left over offers *Resume*, then *Remove*** —
+    // `Design/Transfers § What a past sitting left behind`, 2026-11-11 (the
+    // four questions, batch 2, fix 2). A dependency check's leftover and a
+    // Blender build's keep *Remove* alone.
+    // **And so does a download from Files** — the same section as changed
+    // 2026-11-12 (the live pass of that date, new fault 4). Its act is its
+    // own, because the page asks a different command for it. A whole job's
+    // download keeps *Remove* alone: its landing folders are the job's.
+    let it_continues = match request.kind {
+        TheKind::Upload if !matches!(request.of, WhatItIsOf::ABuild { .. }) => Some("continue"),
+        TheKind::Download if matches!(request.of, WhatItIsOf::AFolder { .. }) => Some("continue-download"),
+        _ => None,
+    };
+    let (control, mut also) = if let WhereTheRequestStands::LeftOver { removable, .. } = request.stands {
+        let remove = removable.then(|| a_control(words::REMOVE, "remove"));
+        // **Only where something is left to carry on.**
+        if let (Some(act), true) = (it_continues, removable) {
+            (Some(a_control(words::RESUME, act)), remove)
+        } else {
+            (remove, None)
+        }
     } else {
-        match (request.kind, finished || ended || request.the_job_ended) {
+        let control = match (request.kind, finished || ended || request.the_job_ended) {
             (TheKind::AutoDownload, false) => Some(a_control(words::TURN_OFF, "turn-off")),
             (TheKind::AutoDownload, true) => Some(a_control(words::OPEN_THE_JOB, "open-the-job")),
             // **A running dependency upload offers Stop** — `§ A request shows
@@ -1154,12 +1284,33 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
                 words::FILES_ON_YOUR_COMPUTER,
                 "files-on-your-computer",
             )),
+            // **`Design/Transfers` as added 2026-11-11: a finished upload's
+            // way back is *Show in Files***, at the folder it went to. The
+            // four questions, scout 2.8.
+            (TheKind::Upload, true) if matches!(request.of, WhatItIsOf::AFolder { .. }) => Some(a_control(
+                crate::surface::render_settings::words::SHOW_IN_FILES,
+                "show-in-files",
+            )),
             (TheKind::Upload, true) => None,
             (_, false) => Some(a_control(words::STOP, "stop")),
-        }
+        };
+        (control, None)
     };
 
-    let count = if finished && request.kind != TheKind::AutoDownload {
+    // `Download` E2b: recovery keeps Turn off and the arrangement unchanged.
+    if request.kind == TheKind::AutoDownload && request.nothing_is_moving && !terminal
+        && matches!(request.of, WhatItIsOf::AJob { .. }) {
+        also = Some(a_control(words::DOWNLOAD_REMAINING, "download-remaining"));
+    }
+
+    // **`Design/Transfers § The dependency check's own transfers`, 2026-11-09:
+    // while a reading can still add files, no count on the header and no bar** —
+    // a bar over a total that grows would go backwards. The underway mark
+    // stands where the bar would, with the count *so far* and the megabytes.
+    let growing = matches!(request.of, WhatItIsOf::ABlend { growing: true, .. }) && !terminal;
+    let count = if growing {
+        Words::plain("")
+    } else if finished && request.kind != TheKind::AutoDownload {
         Words::plain(words::DONE)
     } else if matches!(request.of, WhatItIsOf::AFolderBeingCounted { .. }) {
         Words::plain(if ended { ended_words } else { words::COUNTING_FILES })
@@ -1171,7 +1322,7 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
 
     // `§ An auto-download … Its bar is drawn in files`; everything else is
     // drawn in bytes over a total known before the first byte moves.
-    let bar = if terminal || waiting_its_turn {
+    let bar = if terminal || waiting_its_turn || growing {
         None
     } else if request.kind == TheKind::AutoDownload {
         Some(ABar {
@@ -1186,6 +1337,19 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
     };
 
     let mut lines = Vec::new();
+    if growing {
+        let mut so_far = Words::plain("")
+            .and(request.files_done.to_string())
+            .then(words::OF)
+            .and(request.files_in_the_whole.to_string())
+            .then(by_count(request.files_in_the_whole, words::FILE, words::FILES))
+            .then(words::SO_FAR);
+        if let Some((staged, _)) = request.bytes {
+            so_far = so_far.then(words::DOT).and(a_size(staged));
+        }
+        lines.push(ALine::plain("underway", so_far));
+        lines.push(ALine::plain("plain", Words::plain(crate::surface::the_dependency_check::LINKED_FILES_GO_FIRST)));
+    }
 
     // `File Browser` U5 and `Download` M11: both directions state the wait.
     // The primary may still be connected while the extra connection is being
@@ -1200,6 +1364,7 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
                 due_at: due.map(|at| Verbatim::new(at.to_string())),
                 trying_again_in: Some(Prose::new(words::TRYING_AGAIN_IN)),
                 trying_again_now: Some(Prose::new(words::TRYING_AGAIN_NOW)),
+                seconds: Some(Prose::new(crate::surface::the_underway_shape::SECONDS)),
                 cross: None,
             },
             None => ALine::plain("amber2", Words::plain(words::WAITING_FOR_CONNECTION)),
@@ -1213,8 +1378,18 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
 
     // `§ When a download meets trouble` — `Download` D2's words, the remedy
     // only where Smoozy knows one.
-    if let Some(trouble) = request.trouble {
+    // `Download`'s blocked-landing-folder rule, and `Download` D1's classes: what this
+    // download last met at its folder this run (the Rough what-if answers,
+    // share 1 — 85, 87, 89 and 90 — where an auto-download's full disk,
+    // unplugged drive or deleted folder had said nothing).
+    let trouble = request.trouble.or_else(|| {
+        (!request.kind.goes_up())
+            .then(|| crate::downloading::the_trouble_this_download_met(&request.id))
+            .flatten()
+    });
+    if let Some(trouble) = trouble {
         let said = match trouble {
+            TheDestinationTrouble::AFileBlocksTheFolder => Words::plain(words::A_FILE_BLOCKS_THE_FOLDER),
             TheDestinationTrouble::TheVolumeIsFull => {
                 Words::plain(words::THE_FOLDER_IS_FULL).then(words::FREE_SOME_SPACE)
             }
@@ -1231,6 +1406,15 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
             }
         };
         let mut line = ALine::plain("bad2", said);
+        // **The fix says where**: *or choose another folder*, with *Settings*
+        // (`Design/Transfers § When a download meets trouble`, 2026-11-11;
+        // the four questions, batch 2, scout 3.37).
+        if matches!(
+            trouble,
+            TheDestinationTrouble::WritingIsRefused | TheDestinationTrouble::TheDestinationIsNoLongerThere | TheDestinationTrouble::AFileBlocksTheFolder
+        ) {
+            line.link = Some(a_control(words::SETTINGS, words::THE_DOWNLOAD_FOLDER_SETTING));
+        }
         line.cross = Some(Prose::new(crate::presentation::the_failure_shape::CLEAR_THIS));
         lines.push(line);
     }
@@ -1300,6 +1484,7 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
             WhatHappenedToTheFile::RefusedByTheServer
                 | WhatHappenedToTheFile::CouldNotBeReadHere
                 | WhatHappenedToTheFile::NotPutInPlace { .. }
+                | WhatHappenedToTheFile::UploadFailed(_)
                 // **And a file that changed while it went up**, whose *Upload
                 // it again* is the user's to press after the request ends
                 // (the 38's piece 9, item 17).
@@ -1334,9 +1519,11 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
         arrow: Verbatim::new(if request.kind.goes_up() { "↑" } else { "↓" }),
         name,
         name_leads: matches!(request.of, WhatItIsOf::ABlend { .. }),
+        name_ends: (left_over || ended) && matches!(request.of, WhatItIsOf::AFolder { .. } | WhatItIsOf::ABuild { .. }),
         count,
         ending_class,
         control,
+        also,
         collapsed,
         terminal,
         started_label: Prose::new(if request.start.is_some() { words::STARTED } else { words::START_TIME_NOT_RECORDED }),
@@ -1367,7 +1554,17 @@ fn a_request_drawn(known: &WhatIsKnown, request: &ARequestKnown) -> ARequestDraw
         },
         server: Verbatim::new(request.server.clone()),
         the_blend: match &request.of {
-            WhatItIsOf::ABlend { file } => Some(Verbatim::new(file.clone())),
+            WhatItIsOf::ABlend { file, .. } => Some(Verbatim::new(file.clone())),
+            _ => None,
+        },
+        show_in_files: match &request.of {
+            WhatItIsOf::ABlend { file, .. } => crate::surface::render_settings::the_file_in_files(file.as_bytes()),
+            _ => None,
+        },
+        the_folder_in_files: match (&request.of, request.kind) {
+            (WhatItIsOf::AFolder { folder }, TheKind::Upload) => {
+                crate::surface::render_settings::the_file_in_files(folder.trim_end_matches('/').as_bytes())
+            }
             _ => None,
         },
         job: match &request.of {
@@ -1454,7 +1651,10 @@ fn the_line_saying_where_it_goes(
     if request.kind == TheKind::Dependencies {
         said = said.then(words::DOT).then(words::EACH_FILE_KEEPS_ITS_FOLDER);
     }
-    if !finished {
+    // **A growing upload says its megabytes on its own line** (`Design/Transfers
+    // § The dependency check's own transfers`, 2026-11-09).
+    let growing = matches!(request.of, WhatItIsOf::ABlend { growing: true, .. });
+    if !finished && !growing {
         if let Some((staged, expected)) = request.bytes {
             said = said
                 .then(words::DOT)
@@ -1464,11 +1664,17 @@ fn the_line_saying_where_it_goes(
         }
         if let Some(seconds) = request.seconds_left {
             let minutes = seconds.div_ceil(60);
-            said = said
-                .then(words::DOT)
-                .then(words::ABOUT)
-                .and(minutes.to_string())
-                .then(by_count(minutes, words::MINUTE_LEFT, words::MINUTES_LEFT));
+            said = said.then(words::DOT).then(words::ABOUT);
+            // **`Design/Transfers` as added 2026-11-11: past ninety minutes,
+            // hours and minutes in History's form** — *about 3h 04m left*.
+            // The four questions, scout 2.18.
+            said = if minutes > 90 {
+                said.and(crate::surface::the_history::for_how_long(std::time::Duration::from_secs(minutes * 60)))
+                    .then(words::LEFT)
+            } else {
+                said.and(minutes.to_string())
+                    .then(by_count(minutes, words::MINUTE_LEFT, words::MINUTES_LEFT))
+            };
         }
     }
     if let WhereTheRequestStands::Finished { at } = &request.stands {
@@ -1481,12 +1687,25 @@ fn the_line_saying_where_it_goes(
 /// off the figure** (`Download` M11a, `Design/Transfers § Waiting for the
 /// connection to come back`).
 fn a_file_drawn(request: &ARequestKnown, file: &AFileKnown) -> AFileDrawn {
+    let mut drawn = a_files_row(request, file);
+    // **Where the row carries a figure, its two sizes in Files' wording** (UI
+    // consistency, finding 5).
+    if drawn.staged.is_some() && drawn.expected.is_some() {
+        drawn.staged_size = Some(Verbatim::new(a_size(file.report.bytes_staged)));
+        drawn.expected_size = Some(Verbatim::new(a_size(file.report.bytes_expected)));
+    }
+    drawn
+}
+
+fn a_files_row(request: &ARequestKnown, file: &AFileKnown) -> AFileDrawn {
     let up = request.kind.goes_up();
     let mut drawn = AFileDrawn {
         path: Verbatim::new(file.path.clone()),
         state: "",
         staged: Some(Verbatim::new(file.report.bytes_staged.to_string())),
         expected: Some(Verbatim::new(file.report.bytes_expected.to_string())),
+        staged_size: None,
+        expected_size: None,
         of: Prose::new(words::OF),
         tail: None,
         note: None,
@@ -1508,7 +1727,10 @@ fn a_file_drawn(request: &ARequestKnown, file: &AFileKnown) -> AFileDrawn {
             drawn.state = "failed";
             drawn.staged = None;
             drawn.expected = None;
-            drawn.tail = Some(Prose::new(words::REFUSED));
+            // ***failed*, as every failed file reads** — `Design/Transfers`,
+            // changed 2026-11-12 (the four questions, scout 3.50); the
+            // sentence below says the reason. It read *refused*.
+            drawn.tail = Some(Prose::new(words::FAILED));
             // **No transfer carries the admin-access offer, in either
             // direction.** `File Browser` P6a: *there is no elevated upload* —
             // the staging sits inside the folder the login cannot write, so
@@ -1587,6 +1809,41 @@ fn a_file_drawn(request: &ARequestKnown, file: &AFileKnown) -> AFileDrawn {
             });
             return drawn;
         }
+        WhatHappenedToTheFile::UploadFailed(why) => {
+            // **`Design/Transfers § A file that failed`, 2026-11-11: the
+            // reason, then *Retry* only where the same file could go**, then
+            // the cross. Nothing the server said is held, so that control is
+            // absent rather than opening an empty panel.
+            use crate::uploading::WhyTheUploadFailed as Why;
+            drawn.state = "failed";
+            drawn.staged = None;
+            drawn.expected = None;
+            drawn.tail = Some(Prose::new(words::FAILED));
+            let mut controls = Vec::new();
+            if why.a_retry_could_help() {
+                controls.push(a_shapes_control("retry", words::TRY_AGAIN, "try-again"));
+            }
+            controls.push(a_shapes_control(
+                "cross",
+                crate::presentation::the_failure_shape::CLEAR_THIS,
+                "clear-a-failure",
+            ));
+            drawn.failure = Some(AFailureDrawn {
+                sentence: Prose::new(match why {
+                    Why::TheNameIsNotValid => words::NAME_NOT_VALID_ON_THE_SERVER,
+                    Why::ServerDiskFull => words::THE_SERVER_DISK_IS_FULL,
+                    Why::TheNameIsTooLong => words::NAME_TOO_LONG_FOR_THE_SERVER,
+                    Why::ThePathIsTooLong => words::PATH_TOO_LONG_FOR_THE_SERVER,
+                    Why::TheNameIsReserved => words::NAME_RESERVED_BY_SMOOZY,
+                    Why::ItsFolderWasNotMade => words::ITS_FOLDER_WAS_NOT_MADE,
+                    // The Rough what-if answers, share 2 (188).
+                    Why::ItCouldNotBeReadHere => words::COULD_NOT_READ_ON_YOUR_COMPUTER,
+                    Why::NoReasonIsKnown => words::UPLOAD_FAILED,
+                }),
+                controls,
+            });
+            return drawn;
+        }
         WhatHappenedToTheFile::ChangedWhileUploading => {
             // `§ A file that changed while it was going up` — amber, *Upload it
             // again*, never *Try again*.
@@ -1644,11 +1901,16 @@ fn a_file_drawn(request: &ARequestKnown, file: &AFileKnown) -> AFileDrawn {
 
 fn the_start_over_words(up: bool, cause: StartOverCause) -> &'static str {
     match (up, cause) {
+        (true, StartOverCause::TheFileChangedOnThisComputer) => words::UPLOADING_IT_AGAIN_IT_CHANGED,
         (true, _) => words::UPLOADING_FROM_THE_START,
         (false, StartOverCause::TheSourceChangedUnderADownload) => {
             words::DOWNLOADING_IT_AGAIN_IT_CHANGED
         }
-        (false, StartOverCause::TheStagedPrefixDidNotVerify) => words::DOWNLOADING_FROM_THE_START,
+        // **A download is never started over for a file on this computer**;
+        // were it named, it would read as a resume that failed.
+        (false, StartOverCause::TheStagedPrefixDidNotVerify | StartOverCause::TheFileChangedOnThisComputer) => {
+            words::DOWNLOADING_FROM_THE_START
+        }
     }
 }
 
@@ -1662,20 +1924,12 @@ fn a_shapes_control(is: &str, label: &str, act: &str) -> AShapesControl {
 
 /// A byte count as the drawing writes one. **Divided by 1024, as the check's own
 /// figures and Files' are**, so one upload does not read *851 MB* on its button and
-/// *892.8 MB* here (the second Sesterce pass).
+/// *892.8 MB* here (the second Sesterce pass). **And written as Files writes
+/// one** (the UI at every size, C-29):
+/// *0 bytes*, *12 MB*, *1.4 TB* — one decimal under ten only. Transfers wrote
+/// *0 B* and kept a decimal on every size, *12.0 MB*, beside Files' *0 bytes*.
 fn a_size(bytes: u64) -> String {
-    const STEPS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
-    let mut left = bytes as f64;
-    let mut at = 0;
-    while left >= 1024.0 && at < STEPS.len() - 1 {
-        left /= 1024.0;
-        at += 1;
-    }
-    if at == 0 {
-        crate::typography::a_figure_with_its_unit(bytes, "B")
-    } else {
-        crate::typography::a_figure_with_its_unit(format!("{left:.1}"), STEPS[at])
-    }
+    crate::surface::files::the_size_of(bytes)
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1883,9 +2137,11 @@ pub struct AFormatKnown {
     /// ([`crate::surface::render_settings::a_format_in_smoozys_words`]).
     pub name: String,
     /// **The folders under the job's folder it is written into**, as `PNG/`,
-    /// each once — never the path the file records. Empty where it is written
-    /// only at the top of the job's folder.
-    pub where_in_the_job: String,
+    /// each once, in the reading's order — never the path the file records.
+    /// Empty where it is written only at the top of the job's folder. **A
+    /// list, not one line**, so the box can name many by where they sit (the
+    /// Creator's twenty-ninth notes, notes 8 and 10).
+    pub where_in_the_job: Vec<String>,
     /// **Whether it is written at the top of the job's folder**, which the box
     /// says in words. The Creator's second notes, piece 2.
     pub at_the_top: bool,
@@ -1901,11 +2157,62 @@ pub struct AFormatDrawn {
     /// Creator's note 16 on their second notes: the box printed
     /// `OPEN_EXR_MULTILAYER`).
     pub said: Verbatim,
+    /// Its folders, each whole, where there are three or fewer. Empty where
+    /// [`AFormatDrawn::the_tops`] names them.
     pub where_in_the_job: Verbatim,
     /// ***top of the job's folder***, where the format is written there.
     pub the_top: Option<Prose>,
+    /// **More than three folders: where they sit** — a top holding one
+    /// written folder whole, a top holding several once with how many, so a
+    /// row is two lines at most and offers no press (`Design/Render Settings
+    /// § What it will write`; the Creator's twenty-ninth notes, notes 8 and
+    /// 10, the drawing's `fmt-many`).
+    pub the_tops: Vec<ATopOfAFormat>,
+    /// *+ 2 more folders*, past the third top.
+    pub more_folders: Option<Words>,
     pub files: Words,
     pub chosen: bool,
+}
+
+/// **One top of a format's folders** — the folder, and *(12 folders)* where
+/// it holds several.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ATopOfAFormat {
+    pub folder: Verbatim,
+    pub folders: Option<Words>,
+}
+
+/// **A format's folders as the box names them**: whole, three or fewer, as
+/// before; more, by where they sit — `Design/Render Settings § What it will
+/// write`, the box's paragraph, by the queue entry's own rule
+/// ([`crate::surface::render_settings::where_the_folders_sit`]).
+fn where_a_format_is_written(folders: &[String]) -> (Verbatim, Vec<ATopOfAFormat>, Option<Words>) {
+    let Some(sits) = crate::surface::render_settings::where_the_folders_sit(folders) else {
+        return (
+            Verbatim::new(folders.join(crate::surface::render_settings::THE_FOLDERS_ARE_LISTED_WITH)),
+            Vec::new(),
+            None,
+        );
+    };
+    let tops = sits
+        .tops
+        .into_iter()
+        .map(|top| ATopOfAFormat {
+            folder: Verbatim::new(top.folder),
+            folders: (top.folders > 1).then(|| {
+                Words::plain(words::AN_OPENING_BRACKET)
+                    .and(top.folders.to_string())
+                    .joined()
+                    .then(words::FOLDERS_AND_A_CLOSING_BRACKET)
+            }),
+        })
+        .collect();
+    let more = (sits.more > 0).then(|| {
+        Words::plain(words::A_PLUS)
+            .and(sits.more.to_string())
+            .then(by_count(sits.more, words::MORE_FOLDER, words::MORE_FOLDERS))
+    });
+    (Verbatim::new(String::new()), tops, more)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -1963,7 +2270,7 @@ impl TheFormatReading {
 
 /// **What downloads, said where the box has no list to show it** — the
 /// runner's ruling of 2026-10-17 on the tenth notes: *the box says what will actually go.*
-/// *Everything downloads.* where no narrowing stands. Where one does, its
+/// *All files are downloaded.* where no narrowing stands. Where one does, its
 /// formats in Smoozy's words — each a value (X7), joined by *and*, as the
 /// strip's summary and the Transfers row name a narrowing — then the box's
 /// own *files are downloaded.*: *EXR and PNG files are downloaded.* A
@@ -1989,7 +2296,7 @@ pub fn what_downloads_without_a_list(chosen: Option<&[Vec<u8>]>) -> Words {
 pub struct TheFormatBox {
     pub heading: Prose,
     /// **The folder is the one the arrangement was switched on with**, offered
-    /// alone and with no *Somewhere else…* — `Download` R1. The queue entry's
+    /// alone and with no *Other…* — `Download` R1. The queue entry's
     /// box with the arrangement on; never Render Settings'. The 38's piece 9.
     pub the_folder_is_fixed: bool,
     /// **`Download` R11's telling, said before a switch-on proceeds** where the
@@ -2058,15 +2365,20 @@ pub fn the_format_box_from(knows: &WhatTheBoxKnows, proposal: &TheProposal) -> T
                 intro: Prose::new(words::THESE_ARE_THE_FORMATS),
                 formats: formats
                     .iter()
-                    .map(|format| AFormatDrawn {
+                    .map(|format| {
+                        let (where_in_the_job, the_tops, more_folders) = where_a_format_is_written(&format.where_in_the_job);
+                        AFormatDrawn {
                         name: Verbatim::new(format.name.clone()),
                         said: Verbatim::new(a_format_in_smoozys_words(format.name.as_bytes())),
-                        where_in_the_job: Verbatim::new(format.where_in_the_job.clone()),
+                        where_in_the_job,
+                        the_tops,
+                        more_folders,
                         the_top: format
                             .at_the_top
                             .then(|| Prose::new(crate::surface::render_settings::words::TOP_OF_THE_JOBS_FOLDER)),
                         files: Words::after(format.files.to_string(), by_count(format.files, words::FILE, words::FILES)),
                         chosen: format.chosen,
+                        }
                     })
                     .collect(),
                 total: Words::plain("")
@@ -2764,12 +3076,91 @@ pub fn the_checks_uploads_in(known: &WhatIsKnown, server: &str, file: &str) -> O
             request.kind == TheKind::Dependencies
                 && request.server == server
                 && request.stands == WhereTheRequestStands::Running
-                && matches!(&request.of, WhatItIsOf::ABlend { file: of } if of == file)
+                && matches!(&request.of, WhatItIsOf::ABlend { file: of, .. } if of == file)
         })
         .fold((0, 0), |(done, whole), request| {
             (done + request.files_done, whole + request.files_in_the_whole)
         });
     (whole > 0).then_some((done, whole))
+}
+
+/// **How far the uploads into one folder of one server have got** — Files'
+/// line above the list, *Uploading 12 of 40 files to kitchen/* with a thin bar
+/// (`Design/File Browser § The list`, the Creator's twenty-eighth notes, note
+/// 10). Files uploaded of files to send, and bytes staged of bytes expected,
+/// over the units whose disposition is to send (`File Browser` U11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TheUploadsInto {
+    pub files_done: usize,
+    pub files_in_the_whole: usize,
+    pub bytes_done: u64,
+    pub bytes_in_the_whole: u64,
+}
+
+/// **This screen's own reading, taken the way [`how_many_are_running_on`]
+/// takes it**, so Files' line and this screen cannot count two ways. `None`
+/// where nothing is going into that folder, or the record could not be read.
+pub fn the_uploads_into_on<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    server: &str,
+    folder: &[u8],
+) -> Option<TheUploadsInto> {
+    use tauri::Manager as _;
+    let the_run = app
+        .try_state::<Arc<TheRunsTransfers>>()
+        .map(|the_run| Arc::clone(the_run.inner()));
+    let started = app.try_state::<Mutex<Started>>()?;
+    let started = started.lock().ok()?;
+    let known = what_is_known_now(
+        &started,
+        &the_run.as_ref().map(|the_run| the_run.what_is_under_way()).unwrap_or_default(),
+        the_run.as_deref(),
+    );
+    if known.the_servers_would_not_read {
+        return None;
+    }
+    the_uploads_into(&known, server, folder)
+}
+
+/// The sum itself, over what is known: **the user's own uploads** (the
+/// *Upload* kind, named by their folder) **into this folder on this server**,
+/// running or waiting ([`is_running_or_waiting`]), added up — several uploads
+/// into one folder are one line.
+pub fn the_uploads_into(known: &WhatIsKnown, server: &str, folder: &[u8]) -> Option<TheUploadsInto> {
+    let wanted = without_a_trailing_slash(folder);
+    let summed = known
+        .requests
+        .iter()
+        .filter(|request| {
+            request.kind == TheKind::Upload
+                && request.server == server
+                && matches!(request.of, WhatItIsOf::AFolder { .. })
+                && is_running_or_waiting(request)
+                && without_a_trailing_slash(request.destination.as_os_str().as_encoded_bytes()) == wanted
+        })
+        .fold(
+            TheUploadsInto { files_done: 0, files_in_the_whole: 0, bytes_done: 0, bytes_in_the_whole: 0 },
+            |sum, request| {
+                let (bytes_done, bytes_in_the_whole) = request.bytes.unwrap_or((0, 0));
+                TheUploadsInto {
+                    files_done: sum.files_done + request.files_done,
+                    files_in_the_whole: sum.files_in_the_whole + request.files_in_the_whole,
+                    bytes_done: sum.bytes_done + bytes_done,
+                    bytes_in_the_whole: sum.bytes_in_the_whole + bytes_in_the_whole,
+                }
+            },
+        );
+    (summed.files_in_the_whole > 0).then_some(summed)
+}
+
+/// **A folder named with a slash on its end is the same folder**, and the
+/// root keeps its one slash.
+fn without_a_trailing_slash(folder: &[u8]) -> &[u8] {
+    let mut end = folder.len();
+    while end > 1 && folder[end - 1] == b'/' {
+        end -= 1;
+    }
+    &folder[..end]
 }
 
 /// The same reading, from the record and what the run is moving, so a test
@@ -2966,6 +3357,7 @@ fn the_counts_are_told(requests: &mut Vec<ARequestKnown>, servers: &[AServerKnow
         let start = requests.iter().find(|one| one.id == id).and_then(|one| one.start);
         requests.retain(|one| one.id != id);
         requests.push(ARequestKnown {
+            picked: None,
             start,
             id,
             kind: TheKind::Download,
@@ -2990,6 +3382,7 @@ fn the_counts_are_told(requests: &mut Vec<ARequestKnown>, servers: &[AServerKnow
             the_arrangement_is_done: false,
             the_whole_was_read: false,
             nothing_is_moving: false,
+            the_files_its_count_holds: Vec::new(),
             stands: WhereTheRequestStands::Running,
             files: Vec::new(),
         });
@@ -3108,7 +3501,7 @@ fn the_requests_the_stores_hold_and_this_runs_undecided(
         .filter(|send| servers.iter().any(|server| server.row == send.server))
         .map(|send| {
             let mut known = a_dependency_send_known(crate::the_found_files_sent::ASend {
-                request: send.request, server: send.server, file: send.blend, files: Vec::new(),
+                request: send.request, server: send.server, file: send.blend, files: Vec::new(), readings: Default::default(),
             });
             known.files_done = send.published;
             known.files_in_the_whole = send.files;
@@ -3125,6 +3518,17 @@ fn the_requests_the_stores_hold_and_this_runs_undecided(
         };
         request.start = crate::record::transfer_records::parent_start(connection, table, key, &request.id).ok().flatten();
     }
+    // **`File Browser` U8 and `Download` M13 as amended 2026-11-12: a request
+    // whose leftover the user removed has no row**, in this sitting or a later
+    // one (the second live pass, new fault 3). Until then the part went and
+    // the row stayed, reading *did not finish* with *Show in Files*.
+    let removed_up = crate::record::upload_requests::the_requests_the_user_removed(connection).unwrap_or_default();
+    let removed_down = crate::record::download_records::the_requests_the_user_removed(connection).unwrap_or_default();
+    requests.retain(|request| match request.kind {
+        TheKind::Upload => !removed_up.contains(&request.id),
+        TheKind::Download => !removed_down.contains(&request.id),
+        _ => true,
+    });
     (requests, undecided)
 }
 
@@ -3188,8 +3592,19 @@ pub(crate) fn what_this_run_is_moving(
         }
         request.stands = WhereTheRequestStands::Running;
         request.waits_for_the_connection = moving.waits_for_the_connection;
+        // **A file the request's own count already holds is not counted again**,
+        // and **a send's file that landed and is not counted yet keeps its
+        // bytes** — so the figure never falls while the upload grows (the
+        // twenty-eighth notes, piece 12).
         if let Some((done, whole)) = request.bytes {
-            let in_flight: u64 = moving.moving.iter().map(|file| file.report.bytes_staged).sum();
+            let counted = |entry: &usize| request.the_files_its_count_holds.contains(entry);
+            let in_flight: u64 = moving
+                .moving
+                .iter()
+                .filter(|file| !counted(&file.entry))
+                .map(|file| file.report.bytes_staged)
+                .chain(moving.landed.iter().filter(|(entry, _)| !counted(entry)).map(|(_, bytes)| *bytes))
+                .sum();
             request.bytes = Some((done.saturating_add(in_flight).min(whole), whole));
         }
         let mut files: Vec<AFileKnown> = moving
@@ -3386,7 +3801,7 @@ fn what_the_servers_row_reads(
 /// failure shape (`File Browser` P1 and `File Browser` P6a; `Design/File Browser`: *a refused
 /// write on an upload surfaces on the transfer row*). **A refusal is known for
 /// this run only** — [`crate::uploading::the_refusals_this_run`] says why — so a
-/// later sitting's row counts the file as failed and draws no row for it.
+/// later sitting's row draws it as *Upload failed.* (2026-11-11).
 fn an_upload_request_known(
     server: &str,
     request: &crate::record::upload_requests::AnUploadRequestCounted,
@@ -3405,7 +3820,10 @@ fn an_upload_request_known(
             } else if request.changed_landings.contains(landing) {
                 WhatHappenedToTheFile::ChangedWhileUploading
             } else {
-                return None;
+                // **Every other failed file has its row too, with its reason
+                // where Smoozy knows one** (`Design/Transfers § A file that
+                // failed`, 2026-11-11; the four questions, batch 2, fix 1).
+                WhatHappenedToTheFile::UploadFailed(crate::uploading::why_this_upload_failed(&request.record, landing))
             };
             Some(AFileKnown {
                 path: String::from_utf8_lossy(landing).into_owned(),
@@ -3429,6 +3847,7 @@ fn an_upload_request_known(
         },
     };
     ARequestKnown {
+        picked: the_picked_shown(request.picked.as_ref()),
         start: None,
         id: request.record.as_text(),
         kind: TheKind::Upload,
@@ -3453,6 +3872,7 @@ fn an_upload_request_known(
         the_arrangement_is_done: false,
         the_whole_was_read: false,
         nothing_is_moving: false,
+        the_files_its_count_holds: Vec::new(),
         // **A refused or failed file means it did not finish** — the one rule
         // a manual download keeps too ([`where_a_request_stands`]). Step 10c's
         // thirteenth-pass fix piece 3b.
@@ -3544,6 +3964,7 @@ fn a_dependency_send_being_counted(send: crate::the_found_files_sent::ASendBeing
         server: send.server,
         file: send.file.clone(),
         files: Vec::new(),
+        readings: Default::default(),
     });
     known.of = WhatItIsOf::AFolderBeingCounted {
         named: send.file.trim_end_matches('/').rsplit('/').next().unwrap_or(&send.file).to_string(),
@@ -3588,11 +4009,12 @@ fn a_dependency_send_known(send: crate::the_found_files_sent::ASend) -> ARequest
         .iter()
         .all(|file| matches!(file.ended, Some(HowItEnded::Published | HowItEnded::Refused | HowItEnded::Failed)));
     ARequestKnown {
+        picked: None,
         start: None,
         id: send.request.as_text(),
         kind: TheKind::Dependencies,
         server: send.server.clone(),
-        of: WhatItIsOf::ABlend { file: send.file.clone() },
+        of: WhatItIsOf::ABlend { file: send.file.clone(), growing: send.readings.it_can_grow() },
         files_done: send.files.iter().filter(published).count(),
         files_in_the_whole: send.files.len(),
         bytes: Some((
@@ -3615,14 +4037,29 @@ fn a_dependency_send_known(send: crate::the_found_files_sent::ASend) -> ARequest
         the_arrangement_is_done: false,
         the_whole_was_read: false,
         nothing_is_moving: false,
+        the_files_its_count_holds: send
+            .files
+            .iter()
+            .enumerate()
+            .filter(|(_, file)| file.ended == Some(HowItEnded::Published))
+            .map(|(at, _)| at)
+            .collect(),
         // **A refused or failed file means it did not finish** —
         // step 10c's thirteenth-pass fix piece 3b.
-        stands: where_a_request_stands(
-            every_file_has_ended,
-            send.files
-                .iter()
-                .any(|file| matches!(file.ended, Some(HowItEnded::Refused | HowItEnded::Failed))),
-        ),
+        // **A send that still owes a reading has not ended** (`Dependency Upload & Remap` G14b): the reading
+        // may add files to it.
+        // **And one whose readings Stop cut did not finish**, though every file
+        // landed (Sol's fresh look, 2026-11-09, finding 7).
+        stands: if every_file_has_ended && send.readings.stopped {
+            WhereTheRequestStands::Ended
+        } else {
+            where_a_request_stands(
+                every_file_has_ended && !send.readings.it_can_grow(),
+                send.files
+                    .iter()
+                    .any(|file| matches!(file.ended, Some(HowItEnded::Refused | HowItEnded::Failed))),
+            )
+        },
         files,
     }
 
@@ -3726,6 +4163,7 @@ fn an_arrangement_known(
     let the_arrangement_is_done =
         the_job_ended && arrangement.owed == 0;
     ARequestKnown {
+        picked: None,
         start: None,
         id: arrangement.job.as_text(),
         kind: TheKind::AutoDownload,
@@ -3767,6 +4205,7 @@ fn an_arrangement_known(
         the_arrangement_is_done,
         the_whole_was_read: false,
         nothing_is_moving: false,
+        the_files_its_count_holds: Vec::new(),
         // **`Download` R11: switching it off ends the arranging of new fetches
         // and removes nothing**, so an arrangement that is off has nothing left
         // to stop.
@@ -3809,6 +4248,12 @@ fn an_arrangement_known(
 /// thirteenth pass a *Replace* whose publication met the old file and refused —
 /// where the record said *failed* and the row said *done*, with no reason
 /// anywhere.
+/// **What the user picked, in the form a row names it** — the first name,
+/// shown with any byte no encoding carries replaced, and how many more.
+fn the_picked_shown(picked: Option<&crate::record::upload_requests::ThePicked>) -> Option<(String, usize)> {
+    picked.map(|picked| (String::from_utf8_lossy(&picked.first).into_owned(), picked.more))
+}
+
 fn a_manual_request_known(
     server: &str,
     request: &crate::record::download_records::AManualRequestCounted,
@@ -3832,6 +4277,7 @@ fn a_manual_request_known(
         })
         .collect();
     ARequestKnown {
+        picked: the_picked_shown(request.picked.as_ref()),
         start: None,
         id,
         kind: TheKind::Download,
@@ -3860,6 +4306,7 @@ fn a_manual_request_known(
         the_arrangement_is_done: false,
         the_whole_was_read: false,
         nothing_is_moving: false,
+        the_files_its_count_holds: Vec::new(),
         // **What the user asked for and did not get never reads *done***:
         // a file that failed, a request stopped at `Download` M6's question,
         // or something on the server it could not read (M4) — `Design/Transfers
@@ -4077,10 +4524,9 @@ pub async fn an_act_on_transfers<R: tauri::Runtime>(
                     // server's own point — and where none is live, it says
                     // so and changes nothing, so the row keeps its *Remove*.
                     Some(found) if found.kind.goes_up() => match the_live_point_of(&app, &found.server) {
-                        Some(point) => {
-                            the_part_on_the_machine_is_removed(&known, &door, the_run, &point, &request).await;
-                            None
-                        }
+                        Some(point) => what_a_remove_that_left_a_part_says(
+                            the_part_on_the_machine_is_removed(&known, &door, the_run, &point, &request).await,
+                        ),
                         None => Some(Prose::new(words::NOT_CONNECTED_SO_NOT_REMOVED)),
                     },
                     _ => {
@@ -4155,6 +4601,20 @@ pub(crate) fn a_stop_is_taken_wherever_the_request_stands(
     let taken = the_stop_is_taken(the_run, act, request, file);
     if !taken && act == TheAct::StopTheRequest {
         a_download_not_yet_decided_is_stopped(known, door, request);
+        crate::uploading::a_test_may_hold_this_moment(crate::uploading::BETWEEN_THE_RUNS_LOOK_AND_THE_HOLDS);
+        // **An upload this run holds before its answer** — its walk under way,
+        // or its question open — is stopped there too (`File Browser` U6; Sol's
+        // fresh look on the twenty-eighth notes, piece 12). A question open is
+        // answered *Stop* at once, so the row ends now.
+        if crate::uploading::an_upload_held_before_its_answer_is_stopped(request) {
+            crate::surface::files::an_upload_waiting_on_its_question_is_stopped(door, request);
+        } else {
+            // **No longer held, so the run's register holds it now**: the hold
+            // passes to the run only once the run holds the request, and it
+            // may have passed since the register was looked at above (Sol's
+            // one look at the fixes after 0.4.0's second try).
+            the_stop_is_taken(the_run, act, request, file);
+        }
     }
 }
 
@@ -4245,6 +4705,18 @@ async fn the_part_on_the_machine_is_removed(
         .collect();
     });
     Some(crate::downloading::an_upload_leftover_is_removed_on_the_machine(door, the_run, point, records).await)
+}
+
+/// **What an upload's *Remove* says where a part is still on the server** —
+/// a removal that did not go through, a path outside the staging folder, or a
+/// record that would not take the write. Nothing where every part went, and
+/// nothing where the row was no leftover. Added 2026-11-12: until then the
+/// result was dropped, three presses did nothing, and nothing was said (the
+/// live pass of that date, new fault 5).
+fn what_a_remove_that_left_a_part_says(came_to: Option<crate::downloading::TheLeftoverRemoved>) -> Option<Prose> {
+    let came_to = came_to?;
+    (came_to.owed + came_to.refused + came_to.not_written > 0)
+        .then(|| Prose::new(words::THE_PARTIAL_FILES_WERE_NOT_REMOVED))
 }
 
 /// **A download's leftover's *Remove*, taken** — the request is found on the
@@ -4895,20 +5367,31 @@ pub async fn a_whole_job_download_is_asked_for<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     job: String,
     to: bool,
+    remaining: Option<bool>,
 ) -> TheDownloadAnswer {
     let Some(job) = Identity::read_back(IdentityKind::Job, &job) else {
         return refused(words::THE_JOB_WOULD_NOT_READ);
     };
-    let is = match what_the_job_is(&app, &job) {
+    let mut is = match what_the_job_is(&app, &job) {
         Ok(is) => is,
         Err(said) => return TheDownloadAnswer::DidNotStart { said },
     };
+    let remaining = remaining.unwrap_or(false);
+    if remaining {
+        use tauri::Manager as _;
+        let saved = app.try_state::<Mutex<Started>>().and_then(|started| {
+            let started = started.lock().ok()?;
+            the_recovery_destination_in(started.record.as_ref()?.connection(), &job)
+        });
+        let Some(saved) = saved else { return refused(words::THE_JOB_WOULD_NOT_READ); };
+        is.destination = saved;
+    }
     let Some(point) = the_live_point_of(&app, &is.server) else {
         return refused(words::THE_SERVER_IS_NOT_CONNECTED);
     };
     // **The destination is settled before the request is composed** — piece 9's
     // ruling, and everything that could refuse this request has answered above.
-    let destination = match the_destination_chosen(&app, to, is.destination.clone()).await {
+    let destination = match the_destination_chosen(&app, to && !remaining, is.destination.clone()).await {
         TheDestination::It(destination) => destination,
         TheDestination::TheUserChoseNoFolder => return TheDownloadAnswer::TheUserChoseNoFolder,
         TheDestination::NoPanelOpened => return refused(words::THE_FOLDER_PANEL_DID_NOT_OPEN),
@@ -4959,6 +5442,7 @@ pub async fn a_whole_job_download_is_asked_for<R: tauri::Runtime>(
         },
         &door,
         &records,
+        remaining,
     )
     .await
 }
@@ -5030,6 +5514,7 @@ pub async fn a_file_download_is_asked_for<R: tauri::Runtime>(
         },
         &door,
         &records,
+        false,
     )
     .await
 }
@@ -5340,6 +5825,7 @@ pub async fn the_formats_are_chosen_for_a_job<R: tauri::Runtime>(
                     how_many: HowMany::One,
                     starting_at: None,
                     title: Prose::new(words::WHERE_THE_DOWNLOAD_GOES),
+                    the_value_after_the_title: None,
                 },
             )
             .await;
@@ -5639,6 +6125,7 @@ pub async fn a_file_is_sent_again<R: tauri::Runtime>(
                 },
                 &door,
                 &records,
+                false,
             )
             .await
         }
@@ -5720,6 +6207,238 @@ fn the_entry_sent_again(
         }
         _ => None,
     }
+}
+
+/// **What the first upload picked**, read back from its entries: each file's
+/// source path, less the part its landing path adds under the folder it went
+/// to, then that part's first name — the file or folder the user picked. Each
+/// once, in the entries' order. An entry whose two paths do not line up names
+/// nothing.
+fn what_the_first_upload_picked<'a>(
+    destination: &[u8],
+    entries: impl Iterator<Item = (&'a [u8], &'a [u8])>,
+) -> Vec<Vec<u8>> {
+    let mut under = destination.strip_suffix(b"/").unwrap_or(destination).to_vec();
+    under.push(b'/');
+    let mut picked: Vec<Vec<u8>> = Vec::new();
+    for (source, landing) in entries {
+        let Some(added) = landing.strip_prefix(under.as_slice()) else {
+            continue;
+        };
+        if added.is_empty() || !source.ends_with(added) {
+            continue;
+        }
+        let first = added.split(|byte| *byte == b'/').next().unwrap_or(added);
+        let mut one = source[..source.len() - added.len()].to_vec();
+        one.extend_from_slice(first);
+        if !picked.contains(&one) {
+            picked.push(one);
+        }
+    }
+    picked
+}
+
+/// **What the first download picked**, read back from its entries the way
+/// [`what_the_first_upload_picked`] reads an upload's: each file's path on the
+/// server, less the part its landing path adds under the folder it came to,
+/// then that part's first name. **The landing path is this computer's**, so
+/// on Windows its separators are read as the server's before the two are
+/// compared. Added 2026-11-12, the live pass's new fault 4.
+fn what_the_first_download_picked<'a>(
+    destination: &[u8],
+    entries: impl Iterator<Item = (&'a [u8], &'a [u8])>,
+) -> Vec<Vec<u8>> {
+    let as_the_server_writes_it = |path: &[u8]| -> Vec<u8> {
+        if cfg!(windows) {
+            path.iter().map(|byte| if *byte == b'\\' { b'/' } else { *byte }).collect()
+        } else {
+            path.to_vec()
+        }
+    };
+    let destination = as_the_server_writes_it(destination);
+    let entries: Vec<(Vec<u8>, Vec<u8>)> = entries
+        .map(|(source, landing)| (source.to_vec(), as_the_server_writes_it(landing)))
+        .collect();
+    what_the_first_upload_picked(
+        &destination,
+        entries.iter().map(|(source, landing)| (source.as_slice(), landing.as_slice())),
+    )
+}
+
+/// **What *Resume* downloads again, from the request's own record**: its
+/// server, the folder it came to, and what the user picked on the server.
+/// Nothing for a whole job's download, whose landing folders are the job's
+/// and not the pick's.
+fn the_download_picked_again(
+    connection: &rusqlite::Connection,
+    found: &ARequestKnown,
+    request: &str,
+) -> Option<(String, Vec<u8>, Vec<Vec<u8>>)> {
+    if found.kind != TheKind::Download || !matches!(found.of, WhatItIsOf::AFolder { .. }) {
+        return None;
+    }
+    let row = Identity::read_back(IdentityKind::LocalServer, &found.server)?;
+    let (destination, picked) = what_continue_downloads_again(connection, &row, request)?;
+    Some((found.server.clone(), destination, picked))
+}
+
+/// **What *Resume* asks for again, read from a download request's own
+/// record** — the folder it came to and what the user picked on the server
+/// (`Design/Transfers § What a past sitting left behind`, 2026-11-12). Public
+/// so a desk test can carry a quit download on by the same reading.
+pub fn what_continue_downloads_again(
+    connection: &rusqlite::Connection,
+    server_row: &Identity,
+    request: &str,
+) -> Option<(Vec<u8>, Vec<Vec<u8>>)> {
+    use smoozy_download::request::KeepsTheRequest as _;
+    let held = crate::record::download_records::DownloadRequests::over(connection)
+        .every_request_for(server_row)
+        .ok()?
+        .into_iter()
+        .find(|one| one.record.as_text() == request)?;
+    let picked = what_the_first_download_picked(
+        &held.destination,
+        held.entries.iter().map(|entry| (entry.source_path.as_slice(), entry.landing_path.as_slice())),
+    );
+    (!picked.is_empty()).then(|| (held.destination.clone(), picked))
+}
+
+/// **What *Resume* sends again, from the request's own record**: its
+/// server, the folder it went to, and what the user picked.
+fn the_upload_picked_again(
+    connection: &rusqlite::Connection,
+    found: &ARequestKnown,
+    request: &str,
+) -> Option<(String, Vec<u8>, Vec<Vec<u8>>)> {
+    use smoozy_file_browser::request::KeepsTheRequest as _;
+    if found.kind != TheKind::Upload || matches!(found.of, WhatItIsOf::ABuild { .. }) {
+        return None;
+    }
+    let row = Identity::read_back(IdentityKind::LocalServer, &found.server)?;
+    let held = crate::record::upload_requests::UploadRequests::over(connection)
+        .every_request_for(&row)
+        .ok()?
+        .into_iter()
+        .find(|one| one.record.as_text() == request)?;
+    let picked = what_the_first_upload_picked(
+        &held.destination,
+        held.entries.iter().map(|entry| (entry.source_path.as_slice(), entry.landing_path.as_slice())),
+    );
+    (!picked.is_empty()).then(|| (found.server.clone(), held.destination.clone(), picked))
+}
+
+/// **An upload left over, continued** — `Design/Transfers § What a past
+/// sitting left behind`, the paragraph of 2026-11-11 (the four questions,
+/// batch 2, fix 2): the same files into the same folder, *Skip existing*
+/// answered, each partial file carried on (`File Browser` U8). **A fresh act
+/// the user started**, so nothing starts by itself (`File Browser` K3).
+#[tauri::command]
+pub async fn an_upload_left_over_is_continued<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    request: String,
+) -> TheDownloadAnswer {
+    use tauri::Manager as _;
+    let the_run = app
+        .try_state::<Arc<TheRunsTransfers>>()
+        .map(|the_run| Arc::clone(the_run.inner()));
+    let held = match app.try_state::<Mutex<Started>>() {
+        Some(started) => match started.lock() {
+            Ok(started) => {
+                let known = what_is_known_now(
+                    &started,
+                    &the_run.as_ref().map(|the_run| the_run.what_is_under_way()).unwrap_or_default(),
+                    the_run.as_deref(),
+                );
+                known.requests.iter().find(|one| one.id == request).and_then(|found| {
+                    let connection = started.record.as_ref()?.connection();
+                    the_upload_picked_again(connection, found, &request)
+                })
+            }
+            Err(_) => return refused(words::THE_RECORD_WOULD_NOT_TAKE_IT),
+        },
+        None => return refused(words::THE_RECORD_WOULD_NOT_TAKE_IT),
+    };
+    let Some((server, destination, picked)) = held else {
+        return refused(words::THE_REQUEST_IS_NO_LONGER_THERE);
+    };
+    match crate::surface::files::an_upload_is_continued(app.clone(), server, destination, picked).await {
+        crate::surface::files::TheUploadGoes::Underway { request } => TheDownloadAnswer::ItStarted { request },
+        crate::surface::files::TheUploadGoes::DidNotStart { said } => TheDownloadAnswer::TheUploadDidNotStart { said },
+        _ => TheDownloadAnswer::TheUserStoppedIt,
+    }
+}
+
+/// **A download from Files left over, continued** — `Design/Transfers § What
+/// a past sitting left behind` as changed 2026-11-12 (the live pass of that
+/// date, new fault 4): the same files and folders from the same server into
+/// the same folder, with *Skip existing* answered, so what already landed is
+/// left and each partial file is carried on from where it stopped (`Download`
+/// M13's third bullet, the take-up a fresh request already makes). **A fresh
+/// act the user started**, so nothing starts by itself (`Download` M13). **No
+/// folder panel opens**: the folder is the request's own.
+#[tauri::command]
+pub async fn a_download_left_over_is_continued<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    request: String,
+) -> TheDownloadAnswer {
+    use tauri::Manager as _;
+    let the_run = app
+        .try_state::<Arc<TheRunsTransfers>>()
+        .map(|the_run| Arc::clone(the_run.inner()));
+    let held = match app.try_state::<Mutex<Started>>() {
+        Some(started) => match started.lock() {
+            Ok(started) => {
+                let known = what_is_known_now(
+                    &started,
+                    &the_run.as_ref().map(|the_run| the_run.what_is_under_way()).unwrap_or_default(),
+                    the_run.as_deref(),
+                );
+                known.requests.iter().find(|one| one.id == request).and_then(|found| {
+                    let connection = started.record.as_ref()?.connection();
+                    the_download_picked_again(connection, found, &request)
+                })
+            }
+            Err(_) => return refused(words::THE_RECORD_WOULD_NOT_TAKE_IT),
+        },
+        None => return refused(words::THE_RECORD_WOULD_NOT_TAKE_IT),
+    };
+    let Some((server, destination, picked)) = held else {
+        return refused(words::THE_REQUEST_IS_NO_LONGER_THERE);
+    };
+    let is = match what_this_server_is(&app, &server) {
+        Ok(is) => is,
+        Err(said) => return TheDownloadAnswer::DidNotStart { said },
+    };
+    let Some(point) = the_live_point_of(&app, &server) else {
+        return refused(words::THE_SERVER_IS_NOT_CONNECTED);
+    };
+    let door = TheApplicationsRecord { app: app.clone() };
+    let records = the_jobs_a_browser_request_reaches(
+        &mut crate::servers::a_period::TheRecordDirectorysReadingRoute { sessions: &point },
+        is.jobs,
+        &picked,
+    )
+    .await;
+    let named = what_the_counting_row_names(&picked);
+    the_request_is_put_to_the_user(
+        &app,
+        point,
+        &server,
+        named,
+        crate::downloading::WhatIsBeingDownloaded {
+            server_row: is.server_row,
+            installation: is.installation,
+            destination,
+            picked,
+            run: is.run,
+        },
+        &door,
+        &records,
+        // *Skip existing*, answered.
+        true,
+    )
+    .await
 }
 
 /// The folder a landing path is in, as bytes.
@@ -5827,6 +6546,7 @@ async fn the_destination_chosen<R: tauri::Runtime>(
                 how_many: crate::picker::HowMany::One,
                 starting_at: None,
                 title: Prose::new(words::WHERE_THE_DOWNLOAD_GOES),
+                the_value_after_the_title: None,
             },
         )
     })
@@ -5870,6 +6590,21 @@ fn the_chosen_folder_is_told(queue: &TheOneQueue, destination: &TheDestination) 
     }
 }
 
+// `Download` E2b and M6: Skip existing answers collisions alone; other warnings stay.
+/// **The answer a recovery gives without asking** — *Download remaining* on a
+/// job and *Resume* on a download left over (`remaining`): *Skip existing*,
+/// where the pre-flight can vouch for every file and refused none. Public so a
+/// desk test can take the same step.
+pub fn the_answer_for_recovery(pre_flight: &WhatThePreFlightHasToSay, remaining: bool) -> Option<CollisionAnswer> {
+    (remaining && pre_flight.cannot_vouch_for == 0 && pre_flight.refusals == 0)
+        .then_some(CollisionAnswer::SkipExisting)
+}
+
+fn the_recovery_destination_in(connection: &rusqlite::Connection, job: &Identity) -> Option<Vec<u8>> {
+    DownloadArrangements::over(connection).the_arrangement_for(job).ok().flatten()
+        .map(|arrangement| arrangement.destination)
+}
+
 /// **The tail both manual downloads share** — `Download` M1's durable record
 /// and M2's walk behind it, M6's question in front of it.
 ///
@@ -5883,6 +6618,7 @@ async fn the_request_is_put_to_the_user<R, J>(
     asked: crate::downloading::WhatIsBeingDownloaded,
     door: &TheApplicationsRecord<R>,
     records: &J,
+    remaining: bool,
 ) -> TheDownloadAnswer
 where
     R: tauri::Runtime,
@@ -5926,6 +6662,13 @@ where
     let id = ready.request.record.as_text();
     if let Some(answer) = what_a_stop_before_its_dispositions_answers(&mut ready, door) {
         return answer;
+    }
+    if let Some(answer) = the_answer_for_recovery(&ready.the_pre_flight, remaining) {
+        if crate::downloading::the_answer_is_applied(&mut ready, door, answer).is_err() {
+            return refused(words::THE_RECORD_WOULD_NOT_TAKE_IT);
+        }
+        the_files_come_down(app.clone(), point, ready);
+        return TheDownloadAnswer::ItStarted { request: Verbatim::new(id) };
     }
     if ready.the_pre_flight.the_request_stops_and_asks() {
         let asking = the_question(&id, &ready.the_pre_flight);
@@ -6136,6 +6879,52 @@ fn the_files_come_down<R: tauri::Runtime>(
 
 #[cfg(test)]
 mod tests {
+    /// **Transfers writes a size as Files does** (the UI at every size, C-29):
+    /// *0 bytes*, not *0 B*, and no decimal from ten up — *12 MB*, not
+    /// *12.0 MB*.
+
+    /// **`File Browser` K10a: a part that starts over because the file on
+    /// this computer changed says so on its row**; one that could not be
+    /// carried on for another reason keeps its words. Uploads carry on.
+    #[test]
+    fn uploads_carry_on_a_changed_file_says_so_on_the_row() {
+        assert_eq!(
+            the_start_over_words(true, StartOverCause::TheFileChangedOnThisComputer),
+            "File changed — uploading from the beginning."
+        );
+        assert_eq!(
+            the_start_over_words(true, StartOverCause::TheStagedPrefixDidNotVerify),
+            "Could not resume — uploading from the beginning."
+        );
+    }
+
+    #[test]
+    fn c29_a_size_reads_as_files_reads_it() {
+        for bytes in [0, 1, 1023, 1024, 9 * 1024 * 1024 + 300_000, 12 * 1024 * 1024, 1024u64.pow(4)] {
+            assert_eq!(super::a_size(bytes), crate::surface::files::the_size_of(bytes), "{bytes} bytes");
+        }
+        assert_eq!(super::a_size(0), "0\u{a0}bytes");
+        assert_eq!(super::a_size(12 * 1024 * 1024), "12\u{a0}MB");
+    }
+
+    /// **A file's figure reads as its request's** — UI consistency, finding 5:
+    /// a file said *12.0 MB* where its request said *12 MB*, because the page
+    /// worded the file's sizes itself. The row now carries both sizes in
+    /// Files' wording, and only where it carries the bytes for a bar.
+    #[test]
+    fn ui5_a_files_figure_is_worded_as_files_words_a_size() {
+        let mut moving = a_file("frame_0001.exr", WhatHappenedToTheFile::Moving);
+        moving.report.bytes_staged = 12 * 1024 * 1024;
+        moving.report.bytes_expected = 3 * 1024 * 1024 * 1024 + 600 * 1024 * 1024;
+        let mut request = a_request(TheKind::Upload, WhatItIsOf::AJob { name: "shot".into(), job: "j".into() });
+        request.files = vec![moving, a_file("frame_0002.exr", WhatHappenedToTheFile::WaitingItsTurn)];
+        let drawn = the_screen_from(&known(vec![request]), None);
+        let files = &drawn.requests[0].files;
+        assert_eq!(files[0].staged_size.as_ref().map(|one| one.as_str()), Some("12\u{a0}MB"));
+        assert_eq!(files[0].expected_size.as_ref().map(|one| one.as_str()), Some("3.6\u{a0}GB"));
+        assert_eq!(files[1].staged_size, None, "a queued file carries no figure");
+    }
+
     /// **A press still counting has a start, the press**: the second Sesterce pass
     /// read *Start time not recorded* on it.
     #[test]
@@ -6451,8 +7240,8 @@ mod tests {
         let job = Identity::issue(IdentityKind::Job).expect("random bytes");
         let row = Identity::issue(IdentityKind::LocalServer).expect("random bytes");
         let formats = vec![
-            AFormatKnown { name: "OPEN_EXR".into(), where_in_the_job: "f_".into(), at_the_top: false, files: 240, chosen: true },
-            AFormatKnown { name: "PNG".into(), where_in_the_job: "p_".into(), at_the_top: false, files: 240, chosen: true },
+            AFormatKnown { name: "OPEN_EXR".into(), where_in_the_job: vec!["f_".into()], at_the_top: false, files: 240, chosen: true },
+            AFormatKnown { name: "PNG".into(), where_in_the_job: vec!["p_".into()], at_the_top: false, files: 240, chosen: true },
         ];
         let a_box = |arrangement: Option<AnArrangement>| a_jobs_box(&row, formats.clone(), arrangement);
         let mut on = AnArrangement::switched_on(job.clone(), row.clone(), b"/Volumes/Work/kitchen".to_vec(), TheNarrowing::Everything);
@@ -6506,11 +7295,11 @@ mod tests {
     /// **The box ruling of 2026-10-17, in the queue's box: with no list, it names the narrowing that
     /// goes on, and Done keeps it.** The queue's box has no list until the
     /// job's reading lands — before the render starts, or with the server not
-    /// connected — and it said *Everything downloads.* while an arrangement
+    /// connected — and it said *Everything downloads.* (now *All files are downloaded.*) while an arrangement
     /// that is on went on downloading only what it was narrowed to; Done then
     /// widened it to everything, which nobody chose. **An arrangement that is
     /// off is reset by the switch-on Done makes** (`Download` R11), so there
-    /// *Everything downloads.* is what Done does and it stays. **A box of one
+    /// *All files are downloaded.* is what Done does and it stays. **A box of one
     /// format narrows nothing** (`Design/Render Settings`): its Done made a
     /// narrowing to no format at all. **Each fails against the box as it
     /// stood.**
@@ -6549,7 +7338,7 @@ mod tests {
         }
 
         // **One format: nothing to narrow.**
-        let one = vec![AFormatKnown { name: "PNG".into(), where_in_the_job: "p_".into(), at_the_top: false, files: 240, chosen: true }];
+        let one = vec![AFormatKnown { name: "PNG".into(), where_in_the_job: vec!["p_".into()], at_the_top: false, files: 240, chosen: true }];
         let read = a_jobs_box(&row, one, Some(on));
         assert_eq!(says(&read).0, "one-format");
         assert_eq!(the_narrowing_chosen(&read, &[]), Some(TheNarrowing::Everything), "Done narrowed it to no format");
@@ -6592,6 +7381,24 @@ mod tests {
         );
         assert!(the_entry_sent_again(record.connection(), &found, "another", b"/Users/artist/x/abc night/f_0002.exr").is_none());
         assert_eq!(the_folder_holding_it(b"/f.exr"), b"/".to_vec());
+        // **A *Remove* that left a part on the server says so** (the live
+        // pass of 2026-11-12, new fault 5).
+        use crate::downloading::TheLeftoverRemoved;
+        assert_eq!(what_a_remove_that_left_a_part_says(None), None);
+        assert_eq!(
+            what_a_remove_that_left_a_part_says(Some(TheLeftoverRemoved { removed: 2, ..Default::default() })),
+            None
+        );
+        for left in [
+            TheLeftoverRemoved { refused: 1, ..Default::default() },
+            TheLeftoverRemoved { removed: 1, owed: 1, ..Default::default() },
+            TheLeftoverRemoved { not_written: 1, ..Default::default() },
+        ] {
+            assert_eq!(
+                what_a_remove_that_left_a_part_says(Some(left)),
+                Some(Prose::new(words::THE_PARTIAL_FILES_WERE_NOT_REMOVED))
+            );
+        }
     }
 
     /// **An upload of the user's own Blender build is named by the file the
@@ -6603,6 +7410,7 @@ mod tests {
     #[test]
     fn a_users_build_going_up_is_named_by_its_own_file() {
         let counted = |failed: bool| crate::record::upload_requests::AnUploadRequestCounted {
+            picked: None,
             changed_landings: Vec::new(),
             record: Identity::issue(crate::record::upload_requests::THE_RECORD_IDENTITY_KIND).expect("random bytes"),
             destination: b"/home/ubuntu/smoozy/staging".to_vec(),
@@ -6650,6 +7458,7 @@ mod tests {
     fn a_changed_upload_is_drawn_with_upload_it_again() {
         let landing = b"/home/ubuntu/kitchen/wood.png".to_vec();
         let request = crate::record::upload_requests::AnUploadRequestCounted {
+            picked: None,
             changed_landings: vec![landing.clone()],
             record: Identity::issue(IdentityKind::Operation).expect("random bytes"),
             destination: b"/home/ubuntu/kitchen".to_vec(),
@@ -7029,7 +7838,7 @@ mod tests {
                 let id = issue(IdentityKind::Operation);
                 let send = ASend { request: id.clone(), server: servers[0].row.clone(), file: "/scene.blend".into(), files: vec![AFileSent {
                     landing: b"/mirror/texture".to_vec(), size: 20, transfer: None, ended: terminal.then_some(HowItEnded::Published),
-                }] };
+                }], readings: Default::default() };
                 crate::record::dependency_records::save_dependency_send(c, &send).unwrap();
                 let start = parent_start(c, "dependency_upload_request", "request", &id.as_text()).unwrap().unwrap();
                 crate::record::dependency_records::save_dependency_send(c, &send).unwrap();
@@ -7131,7 +7940,7 @@ mod tests {
             held.what_the_note_carried.ending = Some(smoozy_queue_history::acting::note::TheEndingOnTheNote {
                 outcome: smoozy_queue_history::acting::note::TheOutcomeAsWritten::Finished,
                 exit_status: None, the_attempt_whose_capture_record_holds_the_words: 1,
-                the_reason_the_machine_recorded: None, no_render_began: false, the_device_line_as_observed: None,
+                the_reason_the_machine_recorded: None, no_render_began: false, the_files_missing: Vec::new(), the_device_line_as_observed: None,
             });
             job = held.job.clone();
             crate::record::job_records::JobRecords::over(c).write_the_provisional_record(&held).unwrap();
@@ -7206,7 +8015,7 @@ mod tests {
         let folder = std::env::temp_dir().join(format!("smoozy-piece3-page-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&folder); std::fs::create_dir_all(&folder).unwrap();
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
-        for page in ["transfers.js", "the-value-drawn.js"] { std::fs::copy(web.join(page), folder.join(page)).unwrap(); }
+        for page in ["transfers.js", "the-value-drawn.js"] { std::fs::copy(web.join(page), folder.join(page)).unwrap(); std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves"); }
         let mut document = "";
         for (name, source) in THE_QUESTIONS_STAND_INS {
             if name == "harness.js" { document = source.split("const answers = JSON.parse").next().unwrap(); }
@@ -7287,7 +8096,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         held.what_the_note_carried.ending = Some(smoozy_queue_history::acting::note::TheEndingOnTheNote {
             outcome: smoozy_queue_history::acting::note::TheOutcomeAsWritten::Finished,
             exit_status: None, the_attempt_whose_capture_record_holds_the_words: 1,
-            the_reason_the_machine_recorded: None, no_render_began: false, the_device_line_as_observed: None,
+            the_reason_the_machine_recorded: None, no_render_began: false, the_files_missing: Vec::new(), the_device_line_as_observed: None,
         });
         let job = held.job.clone();
         crate::record::job_records::JobRecords::over(c).write_the_provisional_record(&held).unwrap();
@@ -7413,6 +8222,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
 
     fn a_request(kind: TheKind, of: WhatItIsOf) -> ARequestKnown {
         ARequestKnown {
+            picked: None,
             start: None,
             id: "one".into(),
             kind,
@@ -7437,13 +8247,113 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
             the_arrangement_is_done: false,
             the_whole_was_read: false,
             nothing_is_moving: false,
+            the_files_its_count_holds: Vec::new(),
             stands: WhereTheRequestStands::Running,
             files: Vec::new(),
         }
     }
 
+    /// **An upload or a download is named by what was picked** — `Design/
+    /// Transfers § A request shows the whole`, added 2026-11-13 (the Creator's
+    /// notes on the test copy of 2026-11-12, note 11: *"it's one file, why not
+    /// name it"*). One thing: its name, then where it went. Several: the first
+    /// and how many more, the figure bound to *more*. A row that knows nothing
+    /// picked keeps the count it had. A dependency upload stays named for its
+    /// `.blend`, and a whole job's download for its job.
+    #[test]
+    fn an_upload_and_a_download_are_named_by_what_was_picked() {
+        let named = |kind: TheKind, picked: Option<(&str, usize)>| {
+            let mut request = a_request(kind, WhatItIsOf::AFolder { folder: "/root".into() });
+            request.picked = picked.map(|(first, more)| (first.to_string(), more));
+            let drawn = a_request_drawn(&known(Vec::new()), &request);
+            (drawn.name.said().replace('\u{a0}', " "), drawn.name.values().iter().map(|one| one.to_string()).collect::<Vec<_>>())
+        };
+        assert_eq!(
+            named(TheKind::Upload, Some(("kitchen_v14.blend", 0))),
+            ("into".to_string(), vec!["kitchen_v14.blend".to_string(), "/root".to_string()])
+        );
+        assert_eq!(
+            named(TheKind::Upload, Some(("textures", 3))),
+            ("and more into".to_string(), vec!["textures".to_string(), "3".to_string(), "/root".to_string()])
+        );
+        assert_eq!(
+            named(TheKind::Download, Some(("renders", 1))),
+            ("and more into".to_string(), vec!["renders".to_string(), "1".to_string(), "/root".to_string()])
+        );
+        assert_eq!(
+            named(TheKind::Upload, None),
+            ("files into".to_string(), vec!["10".to_string(), "/root".to_string()])
+        );
+        // **The figure and *more* are bound**, as every figure and its word are.
+        let mut request = a_request(TheKind::Upload, WhatItIsOf::AFolder { folder: "/root".into() });
+        request.picked = Some(("textures".to_string(), 3));
+        let drawn = a_request_drawn(&known(Vec::new()), &request);
+        let json = serde_json::to_value(&drawn.name).unwrap().to_string();
+        assert!(json.contains("\"binds\":true"), "3 and more are not bound: {json}");
+        // **A left-over upload still says it did not finish**, after the name.
+        let mut left = a_request(TheKind::Upload, WhatItIsOf::AFolder { folder: "/root".into() });
+        left.picked = Some(("kitchen_v14.blend".to_string(), 0));
+        left.stands = WhereTheRequestStands::Ended;
+        assert_eq!(
+            a_request_drawn(&known(Vec::new()), &left).name.said().replace('\u{a0}', " "),
+            format!("into {}", words::DID_NOT_FINISH).replace('\u{a0}', " ")
+        );
+    }
+
     fn known(requests: Vec<ARequestKnown>) -> WhatIsKnown {
         WhatIsKnown { servers: vec![a_server("row", "RunPod 4090")], requests, ..WhatIsKnown::default() }
+    }
+
+    /// **The four questions, scout 3.50: a file the server refused reads
+    /// *failed*, as every failed file does** — `Design/Transfers`, changed
+    /// 2026-11-12. It read *refused*, a second word for the same red mark.
+    #[test]
+    fn fifth_part_3_50_a_refused_file_reads_failed() {
+        let this = include_str!("transfers.rs");
+        let refused = this
+            .split("WhatHappenedToTheFile::RefusedByTheServer => {")
+            .nth(1)
+            .and_then(|rest| rest.split("return drawn;").next())
+            .expect("the refused row");
+        assert!(refused.contains("drawn.tail = Some(Prose::new(words::FAILED));"), "{refused}");
+    }
+
+    /// **`Design/Transfers` as added 2026-11-11: time left past ninety minutes
+    /// reads in hours and minutes**, in History's form; up to ninety, in
+    /// minutes. The four questions, scout 2.18.
+    #[test]
+    fn four_questions_2_18_time_left_past_ninety_minutes_is_in_hours() {
+        let mut upload = a_request(TheKind::Upload, WhatItIsOf::AFolder { folder: "/root/kitchen".into() });
+        upload.seconds_left = Some(184 * 60);
+        let drawn = a_request_drawn(&known(vec![upload.clone()]), &upload).where_it_goes;
+        let said = every_word(&drawn);
+        assert!(drawn.values().contains(&"3h 04m"), "{:?}", drawn.values());
+        assert!(said.ends_with("about left") && !said.contains("minutes"), "{said}");
+        upload.seconds_left = Some(90 * 60);
+        let drawn = a_request_drawn(&known(vec![upload.clone()]), &upload).where_it_goes;
+        assert!(drawn.values().contains(&"90") && every_word(&drawn).contains(words::MINUTES_LEFT), "{:?}", drawn.values());
+    }
+
+    /// **`Design/Transfers` as added 2026-11-11: a finished upload's way back
+    /// is *Show in Files***, opening Files at the folder it went to; a running
+    /// one still offers *Stop*. The four questions, scout 2.8.
+    #[test]
+    fn four_questions_2_8_a_finished_upload_shows_its_folder_in_files() {
+        let mut upload = a_request(TheKind::Upload, WhatItIsOf::AFolder { folder: "/root/kitchen".into() });
+        upload.stands = WhereTheRequestStands::Finished { at: "now".into() };
+        let drawn = a_request_drawn(&known(vec![upload.clone()]), &upload);
+        let control = drawn.control.expect("a finished upload has a way back");
+        assert_eq!(
+            (control.label.as_str(), control.act.as_str()),
+            (Prose::new(crate::surface::render_settings::words::SHOW_IN_FILES).as_str(), "show-in-files")
+        );
+        let there = drawn.the_folder_in_files.expect("the folder it went to");
+        assert_eq!((there.folder.as_slice(), there.name.as_slice()), (&b"/root"[..], &b"kitchen"[..]));
+        upload.stands = WhereTheRequestStands::Running;
+        let running = a_request_drawn(&known(vec![upload.clone()]), &upload);
+        assert_eq!(running.control.map(|control| control.act.as_str().to_string()), Some("stop".to_string()));
+        let page = include_str!("../../web/transfers.js");
+        assert!(page.contains("act === \"show-in-files\""), "the page does not take the way back");
     }
 
     /// **What a server's Files bar counts** — every kind, running or waiting,
@@ -7469,6 +8379,64 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         assert_eq!(the_requests_running_on(&known, "row"), 2);
         assert_eq!(the_requests_running_on(&known, "another row"), 1);
         assert_eq!(the_requests_running_on(&known, "nobody"), 0);
+    }
+
+    /// **Files' line above the list adds up the uploads into the folder it
+    /// shows, and nothing else** — the twenty-eighth notes, note 10: the
+    /// *Upload* kind, on that server, into that folder (a trailing slash on
+    /// either side changes nothing), running or waiting. A download, the
+    /// dependency check's own upload, a Blender build, another folder,
+    /// another server, an ended request and a left-over one are not counted.
+    #[test]
+    fn twenty_eighth_10_the_uploads_into_a_folder_add_up_and_nothing_else_is_counted() {
+        let into = |folder: &str| {
+            let mut one = a_request(TheKind::Upload, WhatItIsOf::AFolder { folder: folder.into() });
+            one.destination = PathBuf::from(folder);
+            one
+        };
+        let mut second = into("/home/ubuntu/kitchen/");
+        second.files_done = 9;
+        second.files_in_the_whole = 30;
+        second.bytes = Some((270, 900));
+        let mut waiting = into("/home/ubuntu/kitchen");
+        waiting.waits_for_the_connection = true;
+        waiting.files_done = 0;
+        waiting.files_in_the_whole = 1;
+        waiting.bytes = Some((0, 5));
+        let mut down = a_request(TheKind::Download, WhatItIsOf::AFolder { folder: "/home/ubuntu/kitchen".into() });
+        down.destination = PathBuf::from("/home/ubuntu/kitchen");
+        let mut checks = a_request(TheKind::Dependencies, WhatItIsOf::ABlend { file: "/home/ubuntu/kitchen/k.blend".into(), growing: false });
+        checks.destination = PathBuf::from("/home/ubuntu/kitchen");
+        let mut build = a_request(TheKind::Upload, WhatItIsOf::ABuild { file: "blender.tar.xz".into() });
+        build.destination = PathBuf::from("/home/ubuntu/kitchen");
+        let mut elsewhere = into("/home/ubuntu/kitchen");
+        elsewhere.server = "another row".into();
+        let mut ended = into("/home/ubuntu/kitchen");
+        ended.stands = WhereTheRequestStands::Ended;
+        let mut left = into("/home/ubuntu/kitchen");
+        left.stands = WhereTheRequestStands::LeftOver { removable: true, by_an_earlier_run: false };
+        let known = known(vec![
+            into("/home/ubuntu/kitchen"),
+            second,
+            waiting,
+            into("/home/ubuntu/kitchen/textures"),
+            down,
+            checks,
+            build,
+            elsewhere,
+            ended,
+            left,
+        ]);
+        assert_eq!(
+            the_uploads_into(&known, "row", b"/home/ubuntu/kitchen"),
+            Some(TheUploadsInto { files_done: 12, files_in_the_whole: 41, bytes_done: 300, bytes_in_the_whole: 1005 })
+        );
+        assert_eq!(
+            the_uploads_into(&known, "row", b"/home/ubuntu/kitchen/textures"),
+            Some(TheUploadsInto { files_done: 3, files_in_the_whole: 10, bytes_done: 30, bytes_in_the_whole: 100 })
+        );
+        assert_eq!(the_uploads_into(&known, "row", b"/home/ubuntu"), None);
+        assert_eq!(the_uploads_into(&known, "nobody", b"/home/ubuntu/kitchen"), None);
     }
 
     /// **An auto-download whose job has ended and whose files are all down is
@@ -7734,6 +8702,199 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
                 "a queue entry's act still answers «{reason}»"
             );
         }
+    }
+
+    /// **The twenty-eighth notes, note 11 (`Design/Transfers § The dependency
+    /// check's own transfers`, 2026-11-09): while a reading the upload owes can
+    /// still add files, no count on the header and no bar** — a bar over a total
+    /// that grows would go backwards — **the underway mark with the count *so
+    /// far* and the megabytes, and the sentence under the header**; the
+    /// destination line carries no bytes. Once nothing more can join by itself,
+    /// the ordinary shape: the count, the bar in bytes, no sentence. And a send
+    /// that still owes a reading is running though every file of it has ended.
+    #[test]
+    fn twenty_eighth_11_a_dependency_upload_that_can_grow_draws_no_bar_and_says_so_far() {
+        use crate::the_found_files_sent::{AFileSent, ASend, HowItEnded, TheSendsReadings};
+        // **A line as the page draws it**, its words and figures in their order.
+        let every_word = |words: &Words| {
+            let mut out = String::new();
+            for (at, piece) in words.pieces.iter().enumerate() {
+                if at > 0 && !piece.joins {
+                    out.push(' ');
+                }
+                if let Some(said) = &piece.said {
+                    out.push_str(said.as_str());
+                }
+                if let Some(value) = &piece.value {
+                    out.push_str(value.as_str());
+                }
+            }
+            out.replace('\u{a0}', " ")
+        };
+        let mut growing = a_request(TheKind::Dependencies, WhatItIsOf::ABlend { file: "/u/kitchen.blend".into(), growing: true });
+        growing.files_done = 1;
+        growing.files_in_the_whole = 62;
+        growing.bytes = Some((20 * 1024 * 1024, 100 * 1024 * 1024));
+        let drawn = a_request_drawn(&known(vec![growing.clone()]), &growing);
+        assert!(drawn.bar.is_none(), "a bar over a total that grows");
+        assert_eq!(every_word(&drawn.count), "");
+        assert_eq!(drawn.lines[0].tone, "underway");
+        // Sizes read as Files reads them, no decimal from ten up (C-29).
+        assert_eq!(every_word(&drawn.lines[0].words), "1 of 62 files so far · 20 MB");
+        assert_eq!(every_word(&drawn.lines[1].words), crate::surface::the_dependency_check::LINKED_FILES_GO_FIRST);
+        assert!(!every_word(&drawn.where_it_goes).contains(" of "), "{}", every_word(&drawn.where_it_goes));
+
+        let mut whole = growing.clone();
+        whole.of = WhatItIsOf::ABlend { file: "/u/kitchen.blend".into(), growing: false };
+        let drawn = a_request_drawn(&known(vec![whole.clone()]), &whole);
+        assert_eq!(drawn.bar, Some(ABar { value: 20 * 1024 * 1024, max: 100 * 1024 * 1024 }));
+        assert_eq!(every_word(&drawn.count), "1 / 62");
+        assert!(drawn.lines.iter().all(|line| line.tone != "underway"));
+
+        let still_reading = a_dependency_send_known(ASend {
+            request: Identity::issue(IdentityKind::Operation).expect("randomness"),
+            server: "row".into(),
+            file: "/u/kitchen.blend".into(),
+            files: vec![AFileSent { landing: b"/m/props.blend".to_vec(), size: 1, transfer: None, ended: Some(HowItEnded::Published) }],
+            readings: TheSendsReadings { owed: 1, linked: 1, read: 0, reading_now: Some(b"/m/props.blend".to_vec()), unknown_for_good: false, stopped: false, joining: Vec::new() },
+        });
+        assert_eq!(still_reading.stands, WhereTheRequestStands::Running);
+        assert!(matches!(still_reading.of, WhatItIsOf::ABlend { growing: true, .. }));
+
+        let page = the_page();
+        assert!(page.contains("const underway = line.tone === \"underway\";"));
+        assert!(page.contains("if (underway) p.appendChild(el(\"span\", \"ckdot\"));"));
+        let design = include_str!("../../../../Preparation/Design/Transfers.md");
+        assert!(design.contains("*1 of 62 files so far · 20 MB*"));
+        let drawing = the_mockup();
+        assert!(drawing.contains("<p class=\"rqs\"><span class=\"ckdot\"></span>1 of 62 files so far &#183; 20&#160;MB</p>"));
+    }
+
+    /// **The pictures of note 11 for the Creator** — the dependency upload in
+    /// Transfers at the design's moments 3, 6 and 8, composed by this screen,
+    /// kept where `SMOOZY_THE_LINKED_TRANSFERS` names a file.
+    #[test]
+    fn twenty_eighth_11_the_transfers_picture_scenes_compose() {
+        const MB: u64 = 1024 * 1024;
+        let a_file = |path: &str, staged: u64, expected: u64| AFileKnown {
+            path: path.to_string(),
+            record_ending: None,
+            report: Report { bytes_staged: staged, bytes_expected: expected, started_over: None, verifying_a_prefix_of: None },
+            happened: WhatHappenedToTheFile::Moving,
+        };
+        let a_scene = |growing: bool, done: usize, whole: usize, bytes: (u64, u64), files: Vec<AFileKnown>| {
+            let mut request = a_request(TheKind::Dependencies, WhatItIsOf::ABlend { file: "/Users/alex/work/kitchen/kitchen.blend".into(), growing });
+            request.files_done = done;
+            request.files_in_the_whole = whole;
+            request.bytes = Some(bytes);
+            request.files = files;
+            request.start = Some(crate::record::transfer_records::TransferStart { started_at_utc: 1_794_233_328_000, start_order: 1 });
+            serde_json::to_value(the_screen_from(&known(vec![request]), None)).expect("it serialises")
+        };
+        let lib = "/root/smoozy/assets/Users/alex/work/kitchen/lib";
+        let tex = "/root/smoozy/assets/Users/alex/work/kitchen/textures";
+        let mut out = serde_json::Map::new();
+        out.insert(
+            "moment-3".into(),
+            a_scene(true, 0, 50, (0, 2_100 * MB), vec![
+                a_file(&format!("{lib}/chair.blend"), 26 * MB, 64 * MB),
+                a_file(&format!("{lib}/dishes.blend"), 12 * MB, 48 * MB),
+                a_file(&format!("{lib}/fridge.blend"), 66 * MB, 120 * MB),
+                a_file(&format!("{lib}/lamp.blend"), 18 * MB, 22 * MB),
+            ]),
+        );
+        out.insert(
+            "moment-6".into(),
+            a_scene(true, 72, 214, (1_200 * MB, 3_400 * MB), vec![
+                a_file(&format!("{lib}/people.blend"), 140 * MB, 210 * MB),
+                a_file(&format!("{lib}/books.blend"), 8 * MB, 38 * MB),
+                a_file(&format!("{tex}/floor_tile.png"), 38 * MB, 64 * MB),
+                a_file(&format!("{tex}/metal_grid.png"), 4 * MB, 18 * MB),
+            ]),
+        );
+        out.insert(
+            "moment-8".into(),
+            a_scene(false, 180, 547, (2_900 * MB, 8_500 * MB), vec![
+                a_file(&format!("{tex}/wall_plaster.png"), 22 * MB, 31 * MB),
+                a_file(&format!("{tex}/wood_oak.png"), 9 * MB, 42 * MB),
+                a_file(&format!("{lib}/tex/book_cover.png"), 1 * MB, 6 * MB),
+                a_file(&format!("{lib}/tex/leaf_normal.png"), 2 * MB, 12 * MB),
+            ]),
+        );
+        if let Some(keep) = std::env::var_os("SMOOZY_THE_LINKED_TRANSFERS") {
+            std::fs::write(keep, serde_json::Value::Object(out).to_string()).expect("the scenes are kept");
+        }
+    }
+
+    /// **The pictures of piece 12 for the Creator, in Transfers** — an upload
+    /// stopped while its folders were made, before (it stayed *In progress*) and
+    /// after (it ends as a stopped upload does); and a growing dependency upload
+    /// at the moment a file has landed and the send has not counted it yet, as
+    /// the old count read it and as it reads now. Kept where
+    /// `SMOOZY_THE_PIECE_12_TRANSFERS` names a file. Each *before* is this screen
+    /// fed what the old code held.
+    #[test]
+    fn twenty_eighth_12_the_transfers_picture_scenes_compose() {
+        const MB: u64 = 1_000_000;
+        let known = |requests: Vec<ARequestKnown>| WhatIsKnown { servers: vec![a_server("row", "Render box")], requests, ..WhatIsKnown::default() };
+        let start = Some(crate::record::transfer_records::TransferStart { started_at_utc: 1_794_272_752_000, start_order: 1 });
+        let mut out = serde_json::Map::new();
+
+        let mut upload = a_request(TheKind::Upload, WhatItIsOf::AFolder { folder: "/root".into() });
+        upload.files_done = 0;
+        upload.files_in_the_whole = 156_557;
+        upload.bytes = Some((0, 18_100 * MB));
+        upload.start = start;
+        upload.stands = WhereTheRequestStands::Running;
+        out.insert("stopped-before".into(), serde_json::to_value(the_screen_from(&known(vec![upload.clone()]), None)).expect("it serialises"));
+        let mut requests = vec![upload];
+        what_this_run_is_moving(&mut requests, &HashMap::new());
+        out.insert("stopped-after".into(), serde_json::to_value(the_screen_from(&known(requests), None)).expect("it serialises"));
+
+        let a_file = |path: &str, staged: u64, expected: u64| AFileKnown {
+            path: path.to_string(),
+            record_ending: None,
+            report: Report { bytes_staged: staged, bytes_expected: expected, started_over: None, verifying_a_prefix_of: None },
+            happened: WhatHappenedToTheFile::Moving,
+        };
+        let tex = "/root/smoozy/assets/Users/alex/work/linked/tex";
+        let mut send = a_request(TheKind::Dependencies, WhatItIsOf::ABlend { file: "/Users/alex/work/linked/main.blend".into(), growing: true });
+        send.files_done = 24;
+        send.files_in_the_whole = 34;
+        send.start = start;
+        send.files = vec![
+            a_file(&format!("{tex}/noise_17.png"), 9_300_000, 9_300_000),
+            a_file(&format!("{tex}/noise_18.png"), 4_100_000, 9_300_000),
+            a_file(&format!("{tex}/noise_19.png"), 2_600_000, 9_300_000),
+        ];
+        // **At the moment noise_16.png has landed**: the old count had let it go
+        // and not counted it yet; the count now holds it.
+        let mut before = send.clone();
+        before.bytes = Some((212_700_000, 316_000_000));
+        out.insert("megabytes-before".into(), serde_json::to_value(the_screen_from(&known(vec![before]), None)).expect("it serialises"));
+        send.bytes = Some((222_000_000, 316_000_000));
+        out.insert("megabytes-after".into(), serde_json::to_value(the_screen_from(&known(vec![send]), None)).expect("it serialises"));
+        if let Some(keep) = std::env::var_os("SMOOZY_THE_PIECE_12_TRANSFERS") {
+            std::fs::write(keep, serde_json::Value::Object(out).to_string()).expect("the scenes are kept");
+        }
+    }
+
+    /// **Sol's fresh look, 2026-11-09, finding 7: a send whose last reading Stop
+    /// cut did not finish**, though every file of it landed — never a green
+    /// *done*.
+    #[test]
+    fn twenty_eighth_11_a_send_whose_reading_was_stopped_did_not_finish() {
+        use crate::the_found_files_sent::{AFileSent, ASend, HowItEnded, TheSendsReadings};
+        let stopped = a_dependency_send_known(ASend {
+            request: Identity::issue(IdentityKind::Operation).expect("randomness"),
+            server: "row".into(),
+            file: "/u/kitchen.blend".into(),
+            files: vec![AFileSent { landing: b"/m/props.blend".to_vec(), size: 1, transfer: None, ended: Some(HowItEnded::Published) }],
+            readings: TheSendsReadings { owed: 0, linked: 1, read: 0, reading_now: None, unknown_for_good: true, stopped: true, joining: Vec::new() },
+        });
+        assert_eq!(stopped.stands, WhereTheRequestStands::Ended);
+        let drawn = a_request_drawn(&known(vec![stopped.clone()]), &stopped);
+        assert_ne!(drawn.ending_class, Some("e-ok"), "a stopped send reads as done");
     }
 
     /// **The ten states are the drawing's own**, read out of its state list.
@@ -8028,6 +9189,66 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
     /// **`Download` E2b: a download that is not moving is never silent.** Until
     /// this *downloading 0 / 2* stood for 38 minutes with nothing said.
     #[test]
+    fn fourth_part_4_5_a_stalled_arrangement_offers_remaining_without_losing_turn_off() {
+        let mut row = a_request(TheKind::AutoDownload, WhatItIsOf::AJob { name: "shot".into(), job: "j".into() });
+        row.nothing_is_moving = true;
+        let screen = the_screen_from(&known(vec![row.clone()]), None);
+        let drawn = &screen.requests[0];
+        assert_eq!(drawn.control.as_ref().unwrap().act.as_str(), "turn-off");
+        let recover = drawn.also.as_ref().expect("the stalled row offers recovery");
+        assert_eq!(recover.label, Prose::new("Download remaining"));
+        assert_eq!(recover.act.as_str(), "download-remaining");
+        assert!(!serde_json::to_string(&drawn.lines).unwrap().contains("Use Download all"));
+        row.nothing_is_moving = false;
+        assert!(the_screen_from(&known(vec![row]), None).requests[0].also.is_none());
+    }
+    #[test]
+    fn fourth_part_4_5_recovery_uses_the_arrangements_saved_destination() {
+        let (folder, record, server) = a_record_with_one_server("fourth-recovery-folder");
+        let job = Identity::issue(IdentityKind::Job).unwrap();
+        let arrangement = smoozy_download::arrangement::AnArrangement::switched_on(job.clone(), server,
+            b"/saved/render-folder".to_vec(), TheNarrowing::Everything);
+        DownloadArrangements::over(record.connection()).write_it_down(&arrangement).unwrap();
+        assert_eq!(the_recovery_destination_in(record.connection(), &job), Some(b"/saved/render-folder".to_vec()));
+        assert!(the_recovery_destination_in(record.connection(), &Identity::issue(IdentityKind::Job).unwrap()).is_none());
+        drop(record);
+        let _ = std::fs::remove_dir_all(folder);
+    }
+    #[test]
+    fn fourth_part_4_5_the_rows_button_asks_once_for_remaining_in_the_saved_folder() {
+        let source = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("web/transfers.js")).unwrap();
+        let function = source.split("function theHeadersControl(").nth(1).unwrap().split("\nfunction aLine(").next().unwrap();
+        let script = format!(r#"
+const assert = require('node:assert/strict');
+let calls = [], refreshes = 0, finish;
+const el = () => ({{ disabled: false, addEventListener(kind, handler) {{this.press = handler;}} }});
+const aDownloadIsAskedFor = (command, args) => {{ calls.push([command,args]); return new Promise(resolve => finish=resolve); }};
+const theScreenIsAskedFor = () => refreshes++;
+const draw = function theHeadersControl({function};
+(async () => {{
+const button = draw({{job:'the-job'}}, {{label:'Download remaining',act:'download-remaining'}});
+const done = button.press(); button.press();
+assert.deepEqual(calls, [['a_whole_job_download_is_asked_for',{{job:'the-job',to:false,remaining:true}}]]);
+assert.equal(button.disabled,true);
+finish(); await done;
+assert.equal(button.disabled,false); assert.equal(refreshes,1);
+}})().catch(error => {{ console.error(error); process.exitCode=1; }});
+"#);
+        let output = std::process::Command::new("node").args(["-e", &script]).output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    #[test]
+    fn fourth_part_4_5_recovery_skips_existing_but_keeps_other_warnings() {
+        use smoozy_download::request::WhatThePreFlightHasToSay;
+        let collision = WhatThePreFlightHasToSay { collisions: 3, ..Default::default() };
+        assert_eq!(the_answer_for_recovery(&collision, true), Some(CollisionAnswer::SkipExisting));
+        assert_eq!(the_answer_for_recovery(&collision, false), None);
+        assert_eq!(the_answer_for_recovery(&WhatThePreFlightHasToSay { cannot_vouch_for: 1, ..collision }, true), None);
+        assert_eq!(the_answer_for_recovery(&WhatThePreFlightHasToSay { refusals: 1, ..collision }, true), None);
+    }
+
+    #[test]
     fn a_download_that_is_not_moving_says_so() {
         let mut row = a_request(TheKind::AutoDownload, WhatItIsOf::AJob { name: "shot".into(), job: "j".into() });
         let said = |row: &ARequestKnown| {
@@ -8035,7 +9256,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         };
         assert!(!said(&row).contains("stalled"));
         row.nothing_is_moving = true;
-        assert!(said(&row).contains("Download stalled."), "{}", said(&row));
+        assert!(said(&row).replace('\u{a0}', " ").contains("Download stalled."), "{}", said(&row));
     }
 
     /// **`Download` N6: an auto-download reads against the job's whole once a
@@ -8107,6 +9328,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
             store.write_the_provisional_record(&job).expect("written");
@@ -8282,6 +9504,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let issue = |kind| Identity::issue(kind).expect("randomness");
         // **As the store counts it**: one file to send, and it failed.
         let request = crate::record::upload_requests::AnUploadRequestCounted {
+            picked: None,
             changed_landings: Vec::new(),
             record: issue(crate::record::upload_requests::THE_RECORD_IDENTITY_KIND),
             destination: b"/".to_vec(),
@@ -8297,7 +9520,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         };
         crate::uploading::the_refusals_this_run().lock().expect("held").insert(
             (request.record.as_text(), b"/cube.blend".to_vec()),
-            "the server said permission was denied".to_string(),
+            "permission denied".to_string(),
         );
         let known_here = known(vec![an_upload_request_known("row", &request)]);
         let screen = the_screen_from(&known_here, None);
@@ -8307,19 +9530,362 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         assert_eq!(drawn.files.len(), 1);
         assert_eq!(drawn.files[0].state, "failed");
         assert_eq!(
-            drawn.files[0].failure.as_ref().expect("the shape").sentence.as_str().replace('\u{a0}', " "),
+            drawn.files[0].failure.as_ref().expect("the shape").sentence.as_str().replace('\u{a0}', " ").replace('’', "'"),
             words::CANNOT_WRITE_THERE
         );
         let said = what_an_act_answers(&known_here, TheAct::WhatTheServerSaid, &request.record.as_text())
             .expect("an answer");
-        assert_eq!(said.as_str().replace('\u{a0}', " "), "The server said permission was denied.");
+        assert_eq!(said.as_str().replace('\u{a0}', " "), "Permission denied.");
+    }
+
+    /// **`Download`'s blocked-landing-folder rule on the row**: a download a
+    /// file blocks says so, with *Settings*; another download into the same
+    /// folder says nothing of it. Batch 2 of the Bad what-if answers, 205.
+    #[test]
+    fn bad_batch_2_a_file_blocking_the_folder_is_said_on_that_download_alone() {
+        let blocked = a_request(TheKind::AutoDownload, WhatItIsOf::AJob { name: "Hallway".into(), job: "job-batch-2-blocked".into() });
+        let mut other = blocked.clone();
+        other.id = "job-batch-2-free".into();
+        let mut blocked = blocked;
+        blocked.id = "job-batch-2-blocked".into();
+        crate::downloading::a_file_blocks_this_download(&blocked.id, true);
+        let drawn = a_request_drawn(&known(vec![blocked.clone(), other.clone()]), &blocked);
+        let line = drawn.lines.iter().find(|line| line.tone == "bad2").expect("the trouble line");
+        assert_eq!(every_word(&line.words), "A file exists where this download needs a folder. Move it or choose another folder.");
+        let link = line.link.as_ref().expect("a way to Settings");
+        assert_eq!((link.label.as_str(), link.act.as_str()), ("Settings", "the-download-folder-setting"));
+        let drawn = a_request_drawn(&known(vec![blocked.clone(), other.clone()]), &other);
+        assert!(drawn.lines.iter().all(|line| line.tone != "bad2"));
+        crate::downloading::a_file_blocks_this_download(&blocked.id, false);
+        let drawn = a_request_drawn(&known(vec![blocked.clone()]), &blocked);
+        assert!(drawn.lines.iter().all(|line| line.tone != "bad2"));
+    }
+
+    /// **An auto-download's full disk is said on its row** — the Rough what-if
+    /// answers, share 1 (85). Until then the row stayed at its count with
+    /// nothing said, though the words were written.
+    #[test]
+    fn rough_share_1_an_auto_downloads_full_disk_is_said_on_its_row() {
+        let mut full = a_request(TheKind::AutoDownload, WhatItIsOf::AJob { name: "Hallway".into(), job: "job-rough-1-full".into() });
+        full.id = "job-rough-1-full".into();
+        crate::downloading::this_download_meets(&full.id, Some(TheDestinationTrouble::TheVolumeIsFull));
+        let drawn = a_request_drawn(&known(vec![full.clone()]), &full);
+        let line = drawn.lines.iter().find(|line| line.tone == "bad2").expect("the trouble line");
+        assert_eq!(every_word(&line.words), "Download folder is full. Free up space to resume.");
+        crate::downloading::this_download_meets(&full.id, None);
+        let drawn = a_request_drawn(&known(vec![full.clone()]), &full);
+        assert!(drawn.lines.iter().all(|line| line.tone != "bad2"));
+    }
+
+    /// **The transfer messages say where to fix the problem** — the four
+    /// questions, batch 2, fix 5 (scout 3.37, 3.38, 3.39). A download folder
+    /// Smoozy may not write to, or that is gone, says *or choose another
+    /// folder* with *Settings*; names this computer cannot take say *Rename
+    /// them in Files.*; record-read failures name *Smoozy's database*; and the finished
+    /// download's control reads as a button, in the system's own words.
+    /// `Design/Transfers § When a download meets trouble` and `§ A request
+    /// shows the whole`, the paragraphs of 2026-11-11.
+    #[test]
+    fn the_transfer_messages_say_where_to_fix_it() {
+        for trouble in [TheDestinationTrouble::WritingIsRefused, TheDestinationTrouble::TheDestinationIsNoLongerThere] {
+            let mut stuck = a_request(TheKind::AutoDownload, WhatItIsOf::AJob { name: "Hallway".into(), job: "job-hallway".into() });
+            stuck.trouble = Some(trouble);
+            let drawn = a_request_drawn(&known(vec![stuck.clone()]), &stuck);
+            let line = drawn.lines.iter().find(|line| line.tone == "bad2").expect("the trouble line");
+            assert!(every_word(&line.words).ends_with("or choose another folder."), "{}", every_word(&line.words));
+            let link = line.link.as_ref().expect("a way to Settings");
+            assert_eq!((link.label.as_str(), link.act.as_str()), ("Settings", "the-download-folder-setting"));
+        }
+        assert!(words::FILES_WERE_NOT_DOWNLOADED_THEIR_NAMES.ends_with("Rename them in Files."));
+        assert!(words::FILE_WAS_NOT_DOWNLOADED_ITS_NAME.ends_with("Rename it in Files."));
+        use crate::surface::files::words as files;
+        for said in [
+            words::THE_JOB_WOULD_NOT_READ,
+            words::THE_RECORD_WOULD_NOT_TAKE_IT,
+            files::THE_RECORD_WOULD_NOT_READ,
+            files::NOTHING_RENAMED_THE_TELLING,
+            files::NOTHING_COPIED_THE_RECORD,
+            files::NOTHING_MOVED_THE_RECORD,
+            files::NOTHING_DELETED_THE_RECORD,
+            files::THE_RECORD_WOULD_NOT_TAKE_IT,
+            files::THE_TELLING_WOULD_NOT_WRITE,
+        ] {
+            assert!(!said.replace('’', "'").contains("Smoozy's data."), "{said}");
+            assert!(said.ends_with("report a problem."), "{said}");
+        }
+        let mut finished = a_request(TheKind::Download, WhatItIsOf::AFolder { folder: "renders/".into() });
+        finished.files_done = 10;
+        finished.stands = WhereTheRequestStands::Finished { at: "13:40".into() };
+        let drawn = a_request_drawn(&known(vec![finished.clone()]), &finished);
+        let control = drawn.control.expect("the way back");
+        assert_eq!(control.act.as_str(), "files-on-your-computer");
+        let expected = if cfg!(target_os = "macos") {
+            "Show in Finder"
+        } else if cfg!(target_os = "windows") {
+            "Show in Explorer"
+        } else {
+            "Show in folder"
+        };
+        assert_eq!(control.label.as_str().replace('\u{a0}', " "), expected);
+    }
+
+    /// **An upload left over offers *Resume*, then *Remove*** — the four
+    /// questions, batch 2, fix 2 (scout 4.4): the row offered only *Remove*,
+    /// and finishing the upload took six steps in Files. `Design/Transfers §
+    /// What a past sitting left behind`, the paragraph of 2026-11-11. A
+    /// dependency check's leftover and a Blender build's keep *Remove* alone.
+    #[test]
+    fn an_upload_left_over_offers_continue_then_remove() {
+        let drawn_controls = |request: &ARequestKnown| {
+            let drawn = a_request_drawn(&known(vec![request.clone()]), request);
+            [drawn.control, drawn.also]
+                .into_iter()
+                .flatten()
+                .map(|control| control.act.as_str().to_string())
+                .collect::<Vec<_>>()
+        };
+        let mut left_over = a_request(TheKind::Upload, WhatItIsOf::AFolder { folder: "kitchen/".into() });
+        left_over.stands = WhereTheRequestStands::LeftOver { removable: true, by_an_earlier_run: true };
+        assert_eq!(drawn_controls(&left_over), vec!["continue", "remove"]);
+        let drawn = a_request_drawn(&known(vec![left_over.clone()]), &left_over);
+        assert_eq!(drawn.control.expect("Resume").label.as_str(), words::RESUME);
+        assert_eq!(words::RESUME, "Resume");
+
+        let mut a_check = a_request(TheKind::Dependencies, WhatItIsOf::AFolder { folder: "kitchen/".into() });
+        a_check.stands = WhereTheRequestStands::LeftOver { removable: true, by_an_earlier_run: true };
+        assert_eq!(drawn_controls(&a_check), vec!["remove"]);
+
+        let mut a_build = a_request(TheKind::Upload, WhatItIsOf::ABuild { file: "blender.tar.xz".into() });
+        a_build.stands = WhereTheRequestStands::LeftOver { removable: true, by_an_earlier_run: true };
+        assert_eq!(drawn_controls(&a_build), vec!["remove"]);
+
+        // **A download from Files left over offers *Resume* too** —
+        // `Design/Transfers § What a past sitting left behind` as changed
+        // 2026-11-12 (the live pass of that date, new fault 4: a 2 GB download
+        // cut by a quit offered *Remove* alone). A whole job's download keeps
+        // *Remove* alone.
+        let mut a_download = a_request(TheKind::Download, WhatItIsOf::AFolder { folder: "/Users/artist/Renders".into() });
+        a_download.stands = WhereTheRequestStands::LeftOver { removable: true, by_an_earlier_run: true };
+        assert_eq!(drawn_controls(&a_download), vec!["continue-download", "remove"]);
+        let drawn = a_request_drawn(&known(vec![a_download.clone()]), &a_download);
+        assert_eq!(drawn.control.expect("Resume").label.as_str(), words::RESUME);
+        a_download.stands = WhereTheRequestStands::LeftOver { removable: false, by_an_earlier_run: true };
+        assert!(drawn_controls(&a_download).is_empty(), "nothing is left to carry on");
+
+        let mut a_jobs = a_request(TheKind::Download, WhatItIsOf::AJob { name: "Hallway".into(), job: "job-hallway".into() });
+        a_jobs.stands = WhereTheRequestStands::LeftOver { removable: true, by_an_earlier_run: true };
+        assert_eq!(drawn_controls(&a_jobs), vec!["remove"]);
+    }
+
+    /// **The pictures of the live pass's leftovers, item 7**, taken where
+    /// `SMOOZY_THE_LEFTOVERS_PICTURES` names a folder, in the light and the
+    /// dark theme, through the real `web/transfers.js` and the application's
+    /// stylesheets, the other screens stood in: *Resume* and *Remove* on a
+    /// download from Files cut by a quit, and *Could not remove the partial
+    /// files.* over an upload leftover that keeps its *Remove*
+    /// (`Design/Transfers § What a past sitting left behind`, 2026-11-12).
+    /// Nothing is measured; without the variable it does nothing.
+    #[test]
+    fn the_leftovers_pictures_are_taken() {
+        let Some(pictures) = std::env::var_os("SMOOZY_THE_LEFTOVERS_PICTURES") else { return };
+        let pictures = std::path::PathBuf::from(pictures);
+        std::fs::create_dir_all(&pictures).expect("the pictures' folder");
+        let a_leftover = |kind: TheKind, of: WhatItIsOf, id: &str, destination: &str, done: usize, whole: usize| {
+            let mut one = a_request(kind, of);
+            one.id = id.into();
+            one.destination = PathBuf::from(destination);
+            one.files_done = done;
+            one.files_in_the_whole = whole;
+            one.bytes = None;
+            one.stands = WhereTheRequestStands::LeftOver { removable: true, by_an_earlier_run: true };
+            one
+        };
+        let download = a_leftover(
+            TheKind::Download,
+            WhatItIsOf::AFolder { folder: "/root/renders/kitchen".into() },
+            "down",
+            "/Users/artist/Downloads/Smoozy",
+            1,
+            2,
+        );
+        let upload = a_leftover(TheKind::Upload, WhatItIsOf::AFolder { folder: "/".into() }, "up", "/", 0, 1);
+        for (scene, name, requests, said) in [
+            ("continue", "Resume on a download cut by a quit", vec![download], ""),
+            ("not-removed", "Could not remove the partial files", vec![upload], words::THE_PARTIAL_FILES_WERE_NOT_REMOVED),
+        ] {
+            let screen = serde_json::to_string(&the_screen_from(&known(requests), None)).expect("it serialises");
+            for theme in ["light", "dark"] {
+                let page = THE_TRANSFERS_PAGE
+                    .replace("THEME", theme)
+                    .replace("SCREEN", &screen)
+                    .replace("SAID", &serde_json::to_string(said).expect("a string"));
+                crate::surface::focus::a_page_with_stand_ins_in_a_real_browser(
+                    &format!("leftovers-{scene}-{theme}"),
+                    &page,
+                    &[],
+                    &THE_TRANSFERS_STAND_INS,
+                    Some(&pictures.join(format!("{name}, after, {theme}.png"))),
+                );
+            }
+        }
+    }
+
+    /// The screens Transfers imports, stood in.
+    const THE_TRANSFERS_STAND_INS: [(&str, &str); 7] = [
+        ("event-route.js", "export function whenTold(kind, handler) { globalThis.told ||= {}; (globalThis.told[kind] ||= []).push(handler); }"),
+        (
+            "the-rail.js",
+            r#"export const A_SERVER = "aserver"; export const TRANSFERS = "transfersview";
+export function aScreenIsRegistered(screen) { globalThis.theScreen = screen; }
+export function theCurrentPlaceIs() {} export function theRowsFigureIs() {}"#,
+        ),
+        ("the-dependency-check.js", "export function theCheckIsShownOn() {}"),
+        ("settings.js", "export const TRANSFERS_SECTION = \"transfers\"; export function theSettingsSectionIsOpened() {}"),
+        ("the-history.js", "export function theHistoryEntryIsOpened() {}"),
+        (
+            "a-server.js",
+            "export const FILES = \"files\"; export function theServerWillOpenOn() {} export function thePanelOverItIsCollapsed() {}",
+        ),
+        ("files.js", "export function theBrowserIsOpenedAt() {}"),
+    ];
+
+    /// The page: Transfers drawn into the window's own host, its screen the
+    /// application's composition, and an act's sentence told as the
+    /// application tells it.
+    const THE_TRANSFERS_PAGE: &str = r#"<!doctype html>
+<html lang="en" data-theme="THEME" data-system="macos"><head><meta charset="utf-8"><link rel="stylesheet" href="smoozy.css">
+<style>html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);} #transfersview{height:100vh;} #out{display:none;}</style></head>
+<body><div id="transfersview"></div><pre id="out"></pre>
+<script>
+const screen = SCREEN;
+window.__TAURI__ = { core: { invoke: async (command) => command === 'the_transfers_screen' ? structuredClone(screen) : null } };
+</script>
+<script type="module">
+import './transfers.js';
+const host = document.getElementById('transfersview');
+globalThis.theScreen.itIsDrawn(host);
+globalThis.theScreen.itIsCurrentNow();
+await new Promise((go) => setTimeout(go, 50));
+const said = SAID;
+if (said) for (const told of globalThis.told['transfers:an-act'] || []) told({ said: { request: 'up', said } });
+</script></body></html>"#;
+
+    /// **What *Resume* downloads again is what the user picked the first
+    /// time**, read back from the request's entries: the file or folder on
+    /// the server, once each. The live pass of 2026-11-12, new fault 4.
+    #[test]
+    fn what_continue_downloads_again_is_what_was_picked() {
+        let picked = what_the_first_download_picked(
+            b"/Users/artist/Renders",
+            [
+                (b"/root/out/big.exr".as_slice(), b"/Users/artist/Renders/big.exr".as_slice()),
+                (b"/root/shots/a/1.png".as_slice(), b"/Users/artist/Renders/shots/a/1.png".as_slice()),
+                (b"/root/shots/b/2.png".as_slice(), b"/Users/artist/Renders/shots/b/2.png".as_slice()),
+                // *Keep both* gave it a new name: it lines up with nothing.
+                (b"/root/out/big.exr".as_slice(), b"/Users/artist/Renders/big (1).exr".as_slice()),
+            ]
+            .into_iter(),
+        );
+        assert_eq!(picked, vec![b"/root/out/big.exr".to_vec(), b"/root/shots".to_vec()]);
+    }
+
+    /// **What *Resume* uploads again is what the user picked the first
+    /// time**, read back from the request's own entries: each file's source
+    /// path, less the part its landing path adds under the folder it went to.
+    #[test]
+    fn continue_picks_again_what_the_first_upload_picked() {
+        let entries = [
+            (&b"/Users/artist/kitchen/scene.blend"[..], &b"/home/ubuntu/kitchen/scene.blend"[..]),
+            (b"/Users/artist/kitchen/tex/wood.png", b"/home/ubuntu/kitchen/tex/wood.png"),
+            (b"/Users/artist/Desktop/notes.txt", b"/home/ubuntu/notes.txt"),
+            (b"/Users/artist/kitchen/tex/bark.png", b"/home/ubuntu/kitchen/tex/bark.png"),
+        ];
+        assert_eq!(
+            what_the_first_upload_picked(b"/home/ubuntu", entries.iter().map(|(from, to)| (*from, *to))),
+            vec![b"/Users/artist/kitchen".to_vec(), b"/Users/artist/Desktop/notes.txt".to_vec()]
+        );
+        // **Into the server's top folder**, whose path ends with its slash.
+        assert_eq!(
+            what_the_first_upload_picked(b"/", [(&b"/Users/a/x.png"[..], &b"/x.png"[..])].into_iter()),
+            vec![b"/Users/a/x.png".to_vec()]
+        );
+    }
+
+    /// **Every upload file that failed has its own row, with its reason where
+    /// Smoozy knows one** — the four questions, batch 2, fix 1 (scout 2.3, as
+    /// Sol narrowed it): Files said *3 files failed to upload*, and Transfers
+    /// drew no row and no reason for any of them but a refusal or a change.
+    /// `Design/Transfers § A file that failed`, the paragraph of 2026-11-11.
+    /// **A name the server cannot take carries no *Retry***: the same name
+    /// fails the same way. **A folder that could not be made, and a failure
+    /// with no known reason, carry *Retry*.**
+    #[test]
+    fn every_failed_upload_file_has_a_row_with_its_reason() {
+        let issue = |kind| Identity::issue(kind).expect("randomness");
+        let long_name = format!("/home/ubuntu/{}.png", "a".repeat(300));
+        let long_path = format!("/home/ubuntu/{}/b.png", vec!["c".repeat(200); 21].join("/"));
+        let not_text = b"/home/ubuntu/\xff\xfe.png".to_vec();
+        let reserved = b"/home/ubuntu/.smoozy-staging".to_vec();
+        let in_a_folder = b"/home/ubuntu/textures/wood.png".to_vec();
+        let unknown = b"/home/ubuntu/scene.blend".to_vec();
+        let request = crate::record::upload_requests::AnUploadRequestCounted {
+            picked: None,
+            changed_landings: Vec::new(),
+            record: issue(crate::record::upload_requests::THE_RECORD_IDENTITY_KIND),
+            destination: b"/home/ubuntu".to_vec(),
+            files_in_the_whole: 6,
+            files_done: 0,
+            bytes_in_the_whole: 600,
+            bytes_done: 0,
+            every_unit_has_ended: true,
+            failed_landings: vec![
+                (long_name.clone().into_bytes(), 100),
+                (long_path.clone().into_bytes(), 100),
+                (not_text.clone(), 100),
+                (reserved.clone(), 100),
+                (in_a_folder.clone(), 100),
+                (unknown.clone(), 100),
+            ],
+            nothing_is_decided: false,
+            stopped_at_the_question: false,
+            opened_by_run: issue(IdentityKind::Run),
+        };
+        crate::uploading::a_folder_was_not_made_for(&request.record, &in_a_folder);
+        let screen = the_screen_from(&known(vec![an_upload_request_known("row", &request)]), None);
+        let drawn = &screen.requests[0];
+        assert!(!drawn.collapsed, "an ended request with failed files collapsed");
+        let rows: Vec<(String, Vec<String>)> = drawn
+            .files
+            .iter()
+            .map(|file| {
+                assert_eq!(file.state, "failed", "{}", file.path.as_str());
+                let failure = file.failure.as_ref().expect("the failure shape");
+                (
+                    failure.sentence.as_str().replace('\u{a0}', " "),
+                    failure.controls.iter().map(|control| control.act.as_str().to_string()).collect(),
+                )
+            })
+            .collect();
+        let no_retry = vec!["clear-a-failure".to_string()];
+        let retry = vec!["try-again".to_string(), "clear-a-failure".to_string()];
+        assert_eq!(
+            rows,
+            vec![
+                ("Name too long for the server.".to_string(), no_retry.clone()),
+                ("Path too long for the server.".to_string(), no_retry.clone()),
+                ("Name not valid on the server.".to_string(), no_retry.clone()),
+                ("Name reserved by Smoozy.".to_string(), no_retry.clone()),
+                ("Could not create its folder on the server.".to_string(), retry.clone()),
+                ("Upload failed.".to_string(), retry),
+            ]
+        );
     }
 
     /// **An upload with a file that failed or was refused does not read
     /// *done*** — Rule 8, `Design/Transfers § A file that failed`: *"A
     /// request with a file that failed never reads done; it reads — did not
     /// finish with its count."* **Whether or not this run holds the server's
-    /// words**: a later sitting draws no row for the file and still counts it
+    /// words**: a later sitting draws the file as *Upload failed.* and still counts it
     /// failed. **A dependency check's send is the same**, its rows being the
     /// same rows. **A request whose every file went up still reads *done***.
     /// Step 10c's thirteenth-pass fix piece 3b: before it, an upload with a
@@ -8330,6 +9896,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let the_count = |count: &Words| format!("{}{}", every_word(count), count.values().concat());
         let issue = |kind| Identity::issue(kind).expect("randomness");
         let counted = |failed: Vec<(Vec<u8>, u64)>| crate::record::upload_requests::AnUploadRequestCounted {
+            picked: None,
             changed_landings: Vec::new(),
             record: issue(crate::record::upload_requests::THE_RECORD_IDENTITY_KIND),
             destination: b"/".to_vec(),
@@ -8348,7 +9915,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let done = counted(Vec::new());
         crate::uploading::the_refusals_this_run().lock().expect("held").insert(
             (refused.record.as_text(), b"/cube.blend".to_vec()),
-            "the server said permission was denied".to_string(),
+            "permission denied".to_string(),
         );
         let screen = the_screen_from(
             &known(vec![
@@ -8359,7 +9926,9 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
             None,
         );
         let requests: Vec<_> = [refused.record.as_text(), unsaid.record.as_text(), done.record.as_text()].into_iter().map(|id| screen.requests.iter().find(|r| r.id.as_str() == id).unwrap()).collect();
-        for (drawn, rows) in [(&requests[0], 1), (&requests[1], 0)] {
+        // **Since 2026-11-11 the unsaid failure has its row too**, as *Upload
+        // failed.* (the four questions, batch 2, fix 1).
+        for (drawn, rows) in [(&requests[0], 1), (&requests[1], 1)] {
             assert_eq!(drawn.tag_class, "up");
             assert_eq!(the_count(&drawn.count), "1 / 2");
             assert!(every_word(&drawn.name).ends_with(words::DID_NOT_FINISH), "{}", every_word(&drawn.name));
@@ -8390,6 +9959,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
             server: row.to_string(),
             file: "/p/scene.blend".to_string(),
             files,
+            readings: Default::default(),
         });
         crate::the_found_files_sent::the_sends_this_run()
             .lock()
@@ -8424,6 +9994,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let issue = |kind| Identity::issue(kind).expect("randomness");
         let asked = |nothing_is_decided: bool, stopped_at_the_question: bool| {
             crate::record::upload_requests::AnUploadRequestCounted {
+            picked: None,
             changed_landings: Vec::new(),
                 record: issue(crate::record::upload_requests::THE_RECORD_IDENTITY_KIND),
                 destination: b"/home/ubuntu".to_vec(),
@@ -8496,6 +10067,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
     fn a_download_with_a_failed_file_reads_did_not_finish_and_draws_the_file() {
         let issue = |kind| Identity::issue(kind).expect("randomness");
         let counted = |failed: Vec<(Vec<u8>, u64)>| crate::record::download_records::AManualRequestCounted {
+            picked: None,
             record: issue(IdentityKind::Operation),
             destination: b"/Users/artist/Downloads".to_vec(),
             files_in_the_whole: 1,
@@ -8577,6 +10149,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
     fn a_manual_downloads_refused_names_are_said_as_not_downloaded() {
         let issue = |kind| Identity::issue(kind).expect("randomness");
         let counted = |cannot_land: usize| crate::record::download_records::AManualRequestCounted {
+            picked: None,
             record: issue(IdentityKind::Operation),
             destination: b"/Users/artist/Downloads".to_vec(),
             files_in_the_whole: 3,
@@ -8602,8 +10175,8 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         );
         let requests: Vec<_> = [two.record.as_text(), one.record.as_text()].into_iter().map(|id| screen.requests.iter().find(|r| r.id.as_str() == id).unwrap()).collect();
         for (drawn, count, said) in [
-            (&requests[0], "2", "files not downloaded: names not valid on this computer."),
-            (&requests[1], "1", "file not downloaded: name not valid on this computer."),
+            (&requests[0], "2", "files not downloaded: names not valid on this computer. Rename them in Files."),
+            (&requests[1], "1", "file not downloaded: name not valid on this computer. Rename it in Files."),
         ] {
             let lines: Vec<String> = drawn
                 .lines
@@ -8644,7 +10217,10 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         assert!(upload_line.contains(words::STILL_USING_SPACE_ON_THE_SERVER));
         assert!(upload_line.contains(words::STOPPED_WHEN_SMOOZY_CLOSED));
         assert!(requests[0].where_it_goes.values().iter().all(|value| !value.contains("B")));
-        assert_eq!(requests[0].control.as_ref().expect("remove").act.as_str(), "remove");
+        // **Since 2026-11-11 an upload's leftover offers *Resume* first**, then
+        // *Remove* (the four questions, batch 2, fix 2).
+        assert_eq!(requests[0].control.as_ref().expect("continue").act.as_str(), "continue");
+        assert_eq!(requests[0].also.as_ref().expect("remove").act.as_str(), "remove");
         assert!(requests[0].bar.is_none());
         assert!(requests[1].where_it_goes.values().contains(&"/Users/artist/Renders"));
         assert!(!every_word(&requests[1].where_it_goes).contains(words::STOPPED_WHEN_SMOOZY_CLOSED));
@@ -8695,8 +10271,8 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let job = Identity::issue(IdentityKind::Job).expect("random bytes");
         let row = Identity::issue(IdentityKind::LocalServer).expect("random bytes");
         let formats = vec![
-            AFormatKnown { name: "OPEN_EXR_MULTILAYER".into(), where_in_the_job: "EXR/".into(), at_the_top: false, files: 2, chosen: true },
-            AFormatKnown { name: "FFMPEG".into(), where_in_the_job: String::new(), at_the_top: true, files: 1, chosen: true },
+            AFormatKnown { name: "OPEN_EXR_MULTILAYER".into(), where_in_the_job: vec!["EXR/".into()], at_the_top: false, files: 2, chosen: true },
+            AFormatKnown { name: "FFMPEG".into(), where_in_the_job: Vec::new(), at_the_top: true, files: 1, chosen: true },
         ];
         let on = AnArrangement::switched_on(job.clone(), row.clone(), b"/Volumes/Work/kitchen".to_vec(), TheNarrowing::Everything);
         let fixed = the_jobs_box_is_composed(&a_jobs_box(&row, formats.clone(), Some(on.clone())));
@@ -8710,7 +10286,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let open = the_jobs_box_is_composed(&a_jobs_box(&row, formats.clone(), Some(off)));
         assert!(open.the_fixed_folder.is_none());
         let said = serde_json::to_string(&open.fixed).expect("it serialises").replace('\u{a0}', " ");
-        assert!(said.contains("fixed once the job is submitted"), "{said}");
+        assert!(said.contains("can’t be changed after the job is submitted"), "{said}");
         assert!(!said.contains("changed later from the queue"), "the queue's box says the queue is ahead: {said}");
 
         let at_render_settings = the_format_box_from(&a_jobs_box(&row, formats, None).knows, &TheProposal::TheSystemNamesNoFolder(String::new()));
@@ -8734,8 +10310,8 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let several = the_format_box_from(
             &WhatTheBoxKnows {
                 formats: Some(vec![
-                    AFormatKnown { name: "OPEN_EXR_MULTILAYER".into(), where_in_the_job: "EXR/".into(), at_the_top: false, files: 2, chosen: true },
-                    AFormatKnown { name: "FFMPEG".into(), where_in_the_job: String::new(), at_the_top: true, files: 1, chosen: true },
+                    AFormatKnown { name: "OPEN_EXR_MULTILAYER".into(), where_in_the_job: vec!["EXR/".into()], at_the_top: false, files: 2, chosen: true },
+                    AFormatKnown { name: "FFMPEG".into(), where_in_the_job: Vec::new(), at_the_top: true, files: 1, chosen: true },
                 ]),
                 files_in_the_job: 3,
                 the_standing_folder: Some(b"/Users/artist/Renders".to_vec()),
@@ -8754,7 +10330,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
             &WhatTheBoxKnows {
                 formats: Some(vec![AFormatKnown {
                     name: "OPEN_EXR_MULTILAYER".into(),
-                    where_in_the_job: "EXR/".into(),
+                    where_in_the_job: vec!["EXR/".into()],
                     at_the_top: false,
                     files: 2,
                     chosen: true,
@@ -8939,7 +10515,9 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
             .split('}')
             .next()
             .expect("the rule closes");
-        assert!(rule.contains("grid-template-columns: 14px minmax(58px, max-content) 1fr auto;"), "{rule}");
+        // The folder column may be narrower than its longest folder name
+        // since the UI at every size (D-14), so a count stays in its row.
+        assert!(rule.contains("grid-template-columns: 14px minmax(58px, max-content) minmax(0, 1fr) auto;"), "{rule}");
         assert!(the_page().contains("el(\"div\", \"fmts\", \"transfers-formats\")"));
     }
 
@@ -8953,8 +10531,8 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let job = Identity::issue(IdentityKind::Job).expect("random bytes");
         let row = Identity::issue(IdentityKind::LocalServer).expect("random bytes");
         let formats = vec![
-            AFormatKnown { name: "OPEN_EXR_MULTILAYER".into(), where_in_the_job: "EXR/".into(), at_the_top: false, files: 2, chosen: true },
-            AFormatKnown { name: "FFMPEG".into(), where_in_the_job: String::new(), at_the_top: true, files: 1, chosen: true },
+            AFormatKnown { name: "OPEN_EXR_MULTILAYER".into(), where_in_the_job: vec!["EXR/".into()], at_the_top: false, files: 2, chosen: true },
+            AFormatKnown { name: "FFMPEG".into(), where_in_the_job: Vec::new(), at_the_top: true, files: 1, chosen: true },
         ];
         let on = AnArrangement::switched_on(job, row.clone(), b"/Volumes/Work/kitchen".to_vec(), TheNarrowing::Everything);
         let the_box = TheFormatAnswer::TheBox(the_jobs_box_is_composed(&a_jobs_box(&row, formats, Some(on))));
@@ -8966,6 +10544,7 @@ bars:r.querySelectorAll("progress.transfers-bar").length, count:r.querySelector(
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["transfers.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_QUESTIONS_STAND_INS {
             let text = if name == "harness.js" { THE_FIXED_FOLDER_HARNESS } else { text };
@@ -9100,8 +10679,8 @@ console.log(JSON.stringify(out));
         let several = the_format_box_from(
             &WhatTheBoxKnows {
                 formats: Some(vec![
-                    AFormatKnown { name: "EXR".into(), where_in_the_job: "beauty/".into(), at_the_top: false, files: 480, chosen: true },
-                    AFormatKnown { name: "JPEG".into(), where_in_the_job: "previews/".into(), at_the_top: false, files: 120, chosen: false },
+                    AFormatKnown { name: "EXR".into(), where_in_the_job: vec!["beauty/".into()], at_the_top: false, files: 480, chosen: true },
+                    AFormatKnown { name: "JPEG".into(), where_in_the_job: vec!["previews/".into()], at_the_top: false, files: 120, chosen: false },
                 ]),
                 files_in_the_job: 600,
                 the_standing_folder: Some("/Users/artist/Renders/kitchen".into()),
@@ -9188,8 +10767,8 @@ console.log(JSON.stringify(out));
             ]
         );
         let formats = vec![
-            AFormatKnown { name: "EXR".into(), where_in_the_job: String::new(), at_the_top: false, files: 480, chosen: true },
-            AFormatKnown { name: "PNG".into(), where_in_the_job: String::new(), at_the_top: false, files: 120, chosen: false },
+            AFormatKnown { name: "EXR".into(), where_in_the_job: Vec::new(), at_the_top: false, files: 480, chosen: true },
+            AFormatKnown { name: "PNG".into(), where_in_the_job: Vec::new(), at_the_top: false, files: 120, chosen: false },
         ];
         assert_eq!(the_files_the_choice_brings(&formats), 480);
     }
@@ -9697,6 +11276,34 @@ console.log(JSON.stringify(out));
         assert!(the_page().contains("saidInto(screen.caps, said.caps)"));
     }
 
+    /// **One word for the speed limit, the same on Settings and Transfers** —
+    /// the four questions, batch 2, fix 6 (scout 3.36): Settings' heading said
+    /// *Speed limits* while its fields, its sentences and Transfers' line said
+    /// *cap*. `Design/Settings § Transfers`, the paragraph of 2026-11-11.
+    #[test]
+    fn the_speed_limit_is_one_word_on_both_screens() {
+        use crate::surface::settings::words as settings;
+        let every = [
+            words::NO_CAP_SET,
+            words::NO_UPLOAD_CAP_SET,
+            words::NO_DOWNLOAD_CAP_SET,
+            settings::NO_CAP,
+            settings::UPLOAD_CAP,
+            settings::DOWNLOAD_CAP,
+            settings::EACH_CAP_IS_A_TOTAL,
+            settings::EMPTY_MEANS_NO_CAP,
+            settings::A_CAP_IS_A_SPEED_ABOVE_NOUGHT,
+        ];
+        for said in every {
+            let lower = said.to_lowercase();
+            assert!(!lower.split(|c: char| !c.is_alphanumeric()).any(|word| word == "cap" || word == "caps"), "{said}");
+            assert!(lower.contains("limit"), "{said}");
+        }
+        assert_eq!(words::NO_CAP_SET, "no speed limit");
+        assert_eq!(settings::UPLOAD_CAP, "Upload limit");
+        assert_eq!(settings::DOWNLOAD_CAP, "Download limit");
+    }
+
     /// **Must-do 2 of step 10b round 1 of *jobs, history and downloads*: the
     /// live speed goes through the one conversion, and a moving channel never
     /// reads *0.0 MB/s*.**
@@ -9763,7 +11370,7 @@ console.log(JSON.stringify(out));
     /// back to the check only once there is nothing left to stop.
     #[test]
     fn a_running_dependency_upload_offers_stop() {
-        let running = a_request(TheKind::Dependencies, WhatItIsOf::ABlend { file: "kitchen.blend".into() });
+        let running = a_request(TheKind::Dependencies, WhatItIsOf::ABlend { file: "kitchen.blend".into(), growing: false });
         let screen = the_screen_from(&known(vec![running.clone()]), None);
         assert_eq!(screen.requests[0].control.as_ref().expect("a control").act.as_str(), "stop");
         let mut done = running;
@@ -9823,7 +11430,7 @@ console.log(JSON.stringify(out));
         }
         let one_format = the_format_box_from(
             &WhatTheBoxKnows {
-                formats: Some(vec![AFormatKnown { name: "EXR".into(), where_in_the_job: String::new(), at_the_top: false, files: 1, chosen: true }]),
+                formats: Some(vec![AFormatKnown { name: "EXR".into(), where_in_the_job: Vec::new(), at_the_top: false, files: 1, chosen: true }]),
                 files_in_the_job: 1,
                 the_standing_folder: None,
                 the_formats_chosen: None,
@@ -9931,8 +11538,10 @@ console.log(JSON.stringify(out));
         let count = every_word(&drawn.count);
         assert_ne!(count, words::DONE, "a download that has not started reads done");
         assert_eq!(drawn.count.values(), vec!["0 / 1"], "the whole is not the enumeration");
-        assert_eq!(every_word(&drawn.name).trim(), words::FILE_INTO);
-        assert_eq!(drawn.name.values()[0], "1");
+        // **Named by what was picked** (`Design/Transfers`, 2026-11-13): it
+        // read *1 file into* until then.
+        assert_eq!(every_word(&drawn.name).trim(), words::INTO);
+        assert_eq!(drawn.name.values()[0], "frame_0001.png");
         assert!(!every_word(&drawn.name).contains(words::DID_NOT_FINISH));
         assert_eq!(drawn.control.as_ref().expect("a control").act.as_str(), "stop");
         assert_eq!(drawn.bar.as_ref().map(|bar| (bar.value, bar.max)), Some((0, 4_096)));
@@ -10008,7 +11617,8 @@ console.log(JSON.stringify(out));
         let whole = before.requests[0].files_in_the_whole;
         assert_eq!(drawn.count.values(), vec![format!("0 / {whole}")]);
         assert!(every_word(&drawn.name).ends_with(words::DID_NOT_FINISH), "{}", every_word(&drawn.name));
-        assert_eq!(drawn.name.values()[0], whole.to_string());
+        // **Named by what was picked** (`Design/Transfers`, 2026-11-13).
+        assert_eq!(drawn.name.values()[0], "frame_0001.png");
         assert_eq!(drawn.control.as_ref().expect("a control").act.as_str(), "files-on-your-computer");
         assert!(after.the_rails_figure.is_none());
 
@@ -10552,6 +12162,7 @@ console.log(JSON.stringify(out));
         let issue = |kind| Identity::issue(kind).expect("randomness");
         let counted = |done: usize, stopped: bool, could_not_be_read: usize| {
             crate::record::download_records::AManualRequestCounted {
+                picked: None,
                 record: issue(IdentityKind::Operation),
                 destination: b"/Users/artist/Downloads".to_vec(),
                 files_in_the_whole: 1,
@@ -10712,6 +12323,75 @@ console.log(JSON.stringify(out));
     /// `web/transfers.js` is loaded under Node beside stand-ins for the modules
     /// it imports and the least of a document it needs. **Skipped, and says so,
     /// where no Node is installed.**
+    /// **Escape on a download's already-there box is *Stop*** — the four
+    /// questions, batch 2, fix 3 (scout 1.12): Escape closed the box with no
+    /// answer, and the download waited for one nobody could give.
+    /// `Design/Whole app § Keyboard shortcuts`, the paragraph of 2026-11-11. **This runs
+    /// the page**, on the question test's own stand-ins.
+    #[test]
+    fn escape_on_the_download_question_answers_stop() {
+        let id = "operation:5f1c0a52-0000-4000-8000-000000000002";
+        let asks = the_question(id, &WhatThePreFlightHasToSay { collisions: 2, cannot_vouch_for: 0, refusals: 0 });
+        let one = |answer: &TheDownloadAnswer| serde_json::to_string(answer).expect("the answer serialises");
+        let answers = format!(r#"{{ "asks": {}, "stopped": {} }}"#, one(&asks), one(&TheDownloadAnswer::TheUserStoppedIt));
+        let folder = std::env::temp_dir().join(format!("smoozy-transfers-escape-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for page in ["transfers.js", "the-value-drawn.js", "the-focus-moves.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+        }
+        for (name, text) in THE_QUESTIONS_STAND_INS {
+            let text = if name == "harness.js" {
+                let document = text.split("const answers = JSON.parse").next().expect("the document");
+                let document = document.replacen(
+                    "focus() {},",
+                    "focus() {},\n    press(kind, event) { for (const handler of listeners.get(kind) || []) handler(event); },",
+                    1,
+                );
+                format!(
+                    "{document}{}",
+                    r#"const answers = JSON.parse(readFileSync("answers.json", "utf8"));
+const sent = [];
+globalThis.window = { __TAURI__: { core: { invoke(command, asked) {
+  if (command === "a_file_download_is_asked_for") return Promise.resolve(answers.asks);
+  if (command === "the_transfers_screen") return new Promise(() => {});
+  sent.push(command + " " + JSON.stringify(asked));
+  return Promise.resolve(answers.stopped);
+} } } };
+const page = await import("./transfers.js");
+const host = anElement("div");
+body.appendChild(host);
+globalThis.screens.get("transfersview").itIsDrawn(host);
+const boxes = () => body.children.filter((one) => one.classList && one.classList.contains("modal"));
+await page.aTransferIsAskedFor("download", "row", ["/home/ubuntu/frame_0001.png"]);
+console.log("boxes before " + boxes().length);
+boxes()[0].press("keydown", { key: "Escape", preventDefault() {}, stopPropagation() {} });
+await new Promise((done) => setTimeout(done, 0));
+for (const one of sent) console.log("sent " + one);
+console.log("boxes after " + boxes().length);
+"#
+                )
+            } else {
+                text.to_string()
+            };
+            std::fs::write(folder.join(name), text).expect("a stand-in is written");
+        }
+        std::fs::write(folder.join("answers.json"), answers).expect("the answers are written");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the download question's page was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        assert_eq!(
+            String::from_utf8_lossy(&ran.stdout).trim(),
+            format!("boxes before 1\nsent the_download_question_was_answered {{\"request\":\"{id}\",\"answer\":\"stop\"}}\nboxes after 0")
+        );
+    }
+
     #[test]
     fn the_download_question_is_drawn_and_answered_from_what_the_application_sends() {
         let id = "operation:5f1c0a52-0000-4000-8000-000000000001";
@@ -10745,6 +12425,7 @@ console.log(JSON.stringify(out));
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["transfers.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_QUESTIONS_STAND_INS {
             std::fs::write(folder.join(name), text).expect("a stand-in is written");
@@ -10825,6 +12506,7 @@ console.log(JSON.stringify(out));
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["transfers.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         // **The question's stand-ins, with the rail and the route counting**,
         // and its document taken whole from its harness.
@@ -10878,7 +12560,9 @@ export function theRowsFigureIs() {}"#,
                 label(words::THE_SERVER_IS_NOT_CONNECTED)
             ),
             "Download all: pressed transfersview · chosen - · answered transfersview · line hidden".to_string(),
-            "Download: pressed transfersview · chosen - · answered transfersview · line hidden".to_string(),
+            // **A plain Download from Files leaves the user where they
+            // pressed** — the four questions, scout 1.9.
+            "Download: pressed nowhere · chosen - · answered nowhere · line hidden".to_string(),
             "a folder told with nothing waiting: went nowhere".to_string(),
         ]
         .join("\n");
@@ -10975,7 +12659,7 @@ console.log("a folder told with nothing waiting: went " + where());
     /// — the shape `src/surface/the_queue.rs`'s page harness uses — with one
     /// thing true to a browser that the page's fault turned on: **text set to
     /// nothing reads as nothing**, as `textContent` does for `undefined`.
-    const THE_QUESTIONS_STAND_INS: [(&str, &str); 9] = [
+    const THE_QUESTIONS_STAND_INS: [(&str, &str); 11] = [
         ("package.json", r#"{ "type": "module" }"#),
         ("event-route.js", r#"export function whenTold() {}"#),
         (
@@ -10983,8 +12667,20 @@ console.log("a folder told with nothing waiting: went " + where());
             r#"export const TRANSFERS = "transfersview";
 export const A_SERVER = "machineview";
 export function aScreenIsRegistered(screen) { globalThis.screens.set(screen.place, screen); }
-export function theCurrentPlaceIs() {}
+export function theCurrentPlaceIs(...args) { (globalThis.calls ||= []).push(["place", ...args]); }
 export function theRowsFigureIs() {}"#,
+        ),
+        // **The `.blend`'s link into Files** (the twenty-ninth notes, note 5):
+        // each call is noted, so a test can read where a press went.
+        (
+            "a-server.js",
+            r#"export const FILES = "files";
+export function thePanelOverItIsCollapsed(...args) { (globalThis.calls ||= []).push(["collapsed", ...args]); }
+export function theServerWillOpenOn(...args) { (globalThis.calls ||= []).push(["opens-on", ...args]); }"#,
+        ),
+        (
+            "files.js",
+            r#"export function theBrowserIsOpenedAt(...args) { (globalThis.calls ||= []).push(["opened-at", ...args]); }"#,
         ),
         (
             "the-failure-shape.js",
@@ -11100,7 +12796,7 @@ for (let at = 0; at < 4; at++) {
   if (!box) { console.log("no box"); break; }
   const row = box.querySelector("div.mrow");
   if (at === 0) {
-    console.log("heading " + box.querySelector("h2").textContent);
+    console.log("heading " + box.querySelector("h3").textContent);
     console.log("buttons " + row.children.map((one) => one.tag === "button" ? one.textContent + "|" + one.className : one.className).join(" · "));
   }
   const pressed = row.querySelectorAll("button")[at];
@@ -11135,8 +12831,10 @@ await page.aTransferIsAskedFor("download", "row", ["/home/ubuntu/frame_0001.png"
   const box = boxes()[0];
   const row = box.querySelector("div.mrow");
   console.log(
-    "nothing there: heading " + (box.querySelector("h2") ? "drawn" : "none") +
-    " · amber " + box.querySelectorAll("p.amber").map((one) => one.textContent).join("|") +
+    "nothing there: heading " + (box.querySelector("h3") ? "drawn" : "none") +
+    // The box's warnings are the drawing's `.mwarn` since the UI at every
+    // size (C-24); the line keeps its name here.
+    " · amber " + box.querySelectorAll("p.mwarn").map((one) => one.textContent).join("|") +
     " · buttons " + row.children.map((one) => one.tag === "button" ? one.textContent + "|" + one.className : one.className).join(" · ")
   );
   const pressed = row.querySelectorAll("button")[0];
@@ -11148,21 +12846,29 @@ await page.aTransferIsAskedFor("download", "row", ["/home/ubuntu/frame_0001.png"
     ];
 
     /// **The Creator's fourteenth notes, note 4, on the page: a dependency
-    /// upload's *For* leads its file's name in its own span.** The request is
-    /// composed here, finished, and handed to `web/transfers.js` under Node
-    /// through the same serialisation the screen's command replies with: the
-    /// name is `span.rqlead` reading *For*, a space, and the file's name in
-    /// the mono face — the drawing's own markup. A job's download, whose name
-    /// starts with its value, takes no lead. `Design/Transfers § The
-    /// dependency check's own transfers`.
+    /// upload's *For* leads its file's name in its own span** — and **since
+    /// their twenty-ninth notes, note 5, the name is a link into Files**
+    /// (`Design/Transfers § The dependency check's own transfers`, the
+    /// paragraph of 2026-11-10; the drawing's `t-growing` and `t-grown`). The
+    /// request is composed here, finished, and handed to `web/transfers.js`
+    /// under Node through the same serialisation the screen's command replies
+    /// with: the name is `span.rqlead` reading *For*, a space, and the file's
+    /// name in the mono face holding a `.golink` button whose hover is *Show
+    /// in Files* — the drawing's own markup. **A press goes to that server's
+    /// place and shows its Files on the `.blend`'s folder with the file
+    /// chosen**: the folder and the name as the application split them, the
+    /// panel over the server collapsed, the server opened on Files. A job's
+    /// download, whose name starts with its value, takes no lead and no link.
     ///
     /// **What it bites on**: *For* in a plain span, which reads as one with
-    /// the name, or a lead put on a name that has none. **Skipped, and says
-    /// so, where no Node is installed.**
+    /// the name; a lead put on a name that has none; the name drawn as plain
+    /// text, or a link that composes its own path or goes nowhere. **It failed
+    /// before the change**: the name was plain text in the mono span, with no
+    /// button to press. **Skipped, and says so, where no Node is installed.**
     #[test]
     fn fourteenth_notes_4_a_dependency_uploads_for_leads_its_files_name_on_the_page() {
         let mut dependencies =
-            a_request(TheKind::Dependencies, WhatItIsOf::ABlend { file: "/home/ubuntu/kitchen_v14.blend".into() });
+            a_request(TheKind::Dependencies, WhatItIsOf::ABlend { file: "/home/ubuntu/kitchen_v14.blend".into(), growing: false });
         dependencies.stands = WhereTheRequestStands::Finished { at: "04:19".into() };
         let mut download = a_request(TheKind::Download, WhatItIsOf::AJob { name: "Hallway — final".into(), job: "j".into() });
         download.id = "two".into();
@@ -11170,6 +12876,14 @@ await page.aTransferIsAskedFor("download", "row", ["/home/ubuntu/frame_0001.png"
         let leads: Vec<(&str, bool)> = screen.requests.iter().map(|one| (one.tag_class, one.name_leads)).collect();
         assert_eq!(leads.iter().filter(|(_, leads)| *leads).collect::<Vec<_>>(), vec![&("dep", true)], "{leads:?}");
         let dep = leads.iter().position(|(class, _)| *class == "dep").expect("the dependency upload");
+        // **The application splits the path, never the page**: the folder and
+        // the name as bytes, with the hover.
+        let there = screen.requests[dep].show_in_files.clone().expect("the dependency upload's name has somewhere to go");
+        assert_eq!(there.folder, b"/home/ubuntu".to_vec());
+        assert_eq!(there.name, b"kitchen_v14.blend".to_vec());
+        let show_in_files = Prose::new(crate::surface::render_settings::words::SHOW_IN_FILES).as_str().to_string();
+        assert_eq!(there.hover.as_str(), show_in_files);
+        assert!(screen.requests[1 - dep].show_in_files.is_none(), "a job's download is not a file on the server");
         let answers = serde_json::to_string(&screen).expect("the screen serialises");
 
         let folder = std::env::temp_dir().join(format!("smoozy-transfers-for-leads-{}", std::process::id()));
@@ -11178,6 +12892,7 @@ await page.aTransferIsAskedFor("download", "row", ["/home/ubuntu/frame_0001.png"
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["transfers.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         let mut the_document = "";
         for (name, text) in THE_QUESTIONS_STAND_INS {
@@ -11198,9 +12913,14 @@ const transfers = globalThis.screens.get("transfersview");
 transfers.itIsDrawn(host);
 transfers.itIsCurrentNow();
 for (let at = 0; at < 8; at += 1) await new Promise((go) => setImmediate(go));
-const names = host.querySelectorAll("span.rqn").map((name) => name.children.map((one) =>
-  one.tag ? one.tag + (one.className ? "." + one.className.split(" ").sort().join(".") : "") + " " + one.textContent : "text " + JSON.stringify(one.text)));
-console.log(JSON.stringify(names));
+const drawn = (one) => one.tag ? one.tag + (one.className ? "." + one.className.split(" ").sort().join(".") : "") + " " + one.textContent : "text " + JSON.stringify(one.text);
+const names = host.querySelectorAll("span.rqn").map((name) => name.children.map(drawn));
+const links = host.querySelectorAll("span.rqn").map((name) => name.querySelectorAll("button.golink").map((link) =>
+  ({ inside: link.parentNode ? drawn(link.parentNode).split(" ")[0] : null, title: link.title, type: link.type, text: link.textContent })));
+globalThis.calls = [];
+const link = host.querySelector("button.golink");
+if (link) link.click();
+console.log(JSON.stringify({ names, links, calls: globalThis.calls }));
 "#;
         std::fs::write(folder.join("harness.js"), format!("{the_document}{body}")).expect("the harness");
         std::fs::write(folder.join("answers.json"), answers).expect("the answers are written");
@@ -11214,21 +12934,358 @@ console.log(JSON.stringify(names));
         let got: serde_json::Value =
             serde_json::from_str(String::from_utf8_lossy(&ran.stdout).trim()).expect("the harness prints one answer");
         let for_ = Prose::new(words::FOR).as_str().to_string();
+        // **What note 4 guarded stands**: *For* leads in its own span, then a
+        // space, then the name in the mono face.
         assert_eq!(
-            got[dep],
-            serde_json::json!([format!("span.rqlead {for_}"), "text \" \"", "span.mono kitchen_v14.blend"])
+            got["names"][dep],
+            serde_json::json!([format!("span.rqlead {for_}"), "text \" \"", "span.mono kitchen_v14.blend"]),
+            "{got}"
         );
-        // **A name that starts with its value takes no lead.**
-        let download = &got[1 - dep];
+        // **Note 5: the name inside the mono span is the link**, with the
+        // hover the application sent.
+        assert_eq!(
+            got["links"][dep],
+            serde_json::json!([{ "inside": "span.mono", "title": show_in_files, "type": "button", "text": "kitchen_v14.blend" }]),
+            "{got}"
+        );
+        // **A name that starts with its value takes no lead and no link.**
+        let download = &got["names"][1 - dep];
         assert_eq!(download[0], "span.mono Hallway — final", "{got}");
         assert!(!download.to_string().contains("rqlead"), "{got}");
+        assert_eq!(got["links"][1 - dep], serde_json::json!([]), "{got}");
+        // **The press: Files on that server, at the folder, the file chosen.**
+        let bytes = |text: &str| serde_json::json!(text.as_bytes());
+        assert_eq!(
+            got["calls"],
+            serde_json::json!([
+                ["opened-at", "row", bytes("/home/ubuntu"), bytes("kitchen_v14.blend")],
+                ["collapsed", "row"],
+                ["opens-on", "row", "files"],
+                ["place", "machineview", "row"],
+            ]),
+            "{got}"
+        );
         // **The drawing draws the same markup.**
         let drawing = std::fs::read_to_string(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Preparation/Design/Mockup/Smoozy.html"),
         )
         .expect("the drawing is readable");
+        // The drawing writes the hover with an ordinary space.
+        let hover_drawn = crate::surface::render_settings::words::SHOW_IN_FILES;
         assert!(drawing.contains(&format!(
-            "<span class=\"rqn\"><span class=\"rqlead\">{for_}</span> <span class=\"mono\">kitchen_v14.blend</span></span>"
+            "<span class=\"rqn rqled\"><span class=\"rqlead\">{for_}</span> <span class=\"mono\"><button type=\"button\" class=\"golink\" data-go=\"browse\" title=\"{hover_drawn}\">kitchen_v14.blend</button></span></span>"
         )));
+    }
+
+    /// **The Creator's twenty-ninth notes, notes 8 and 10: the download box on
+    /// a job writing into many folders** — `Design/Render Settings § What it
+    /// will write`, the box's paragraph of 2026-11-10, and the drawing's
+    /// `fmt-many`. The account is in `Audits/Build/Twenty-ninth notes/`, Part B's piece 1.
+    mod twenty_ninth_notes_8_and_10 {
+        use super::*;
+        use crate::surface::render_settings::tests::twenty_ninth_notes_8_and_10::the_creators_folders_of;
+
+        /// One format of the made-up job of the Creator's shape, as
+        /// `what_the_format_box_knows` hands it over.
+        fn the_creators_format(name: &str, files: usize) -> AFormatKnown {
+            AFormatKnown {
+                name: name.into(),
+                where_in_the_job: the_creators_folders_of(Some(name)),
+                at_the_top: false,
+                files,
+                chosen: name == "PNG",
+            }
+        }
+
+        /// **The box as the queue's job page opens it**, its folder fixed —
+        /// the drawing's `fmt-many`, on `fmt-q`.
+        fn the_creators_box() -> TheFormatBox {
+            let mut the_box = the_format_box_from(
+                &WhatTheBoxKnows {
+                    formats: Some(vec![the_creators_format("JPEG", 37), the_creators_format("PNG", 61)]),
+                    files_in_the_job: 98,
+                    the_standing_folder: Some("~/Renders/kitchen".into()),
+                    the_formats_chosen: Some(vec!["PNG".into()]),
+                    the_folder_chosen_for_this_job: None,
+                },
+                &TheProposal::TheSystemNamesNoFolder(String::new()),
+            );
+            the_box.folders.truncate(1);
+            the_box.the_folder_is_fixed = true;
+            the_box.the_fixed_folder = Some(Words::plain(words::TO).and("~/Renders/kitchen"));
+            the_box.fixed = None;
+            the_box
+        }
+
+        /// **A format's row as the page reads it**: its folders, the
+        /// separator between them, and each count's words — every piece the
+        /// application sends, in order.
+        fn the_row_read(format: &serde_json::Value) -> String {
+            let mut said: Vec<String> = Vec::new();
+            if let Some(top) = format["the_top"].as_str() {
+                said.push(top.to_string());
+            }
+            let joined = format["where_in_the_job"].as_str().unwrap_or_default();
+            if !joined.is_empty() {
+                said.push(joined.to_string());
+            }
+            let pieces = |words: &serde_json::Value| -> String {
+                let mut out = String::new();
+                for piece in words["pieces"].as_array().into_iter().flatten() {
+                    if !out.is_empty() && piece["joins"] != true {
+                        out.push(' ');
+                    }
+                    out.push_str(piece["said"].as_str().or(piece["value"].as_str()).unwrap_or_default());
+                }
+                out
+            };
+            let tops: Vec<String> = format["the_tops"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|top| match top["folders"].is_null() {
+                    true => top["folder"].as_str().unwrap_or_default().to_string(),
+                    false => format!("{} {}", top["folder"].as_str().unwrap_or_default(), pieces(&top["folders"])),
+                })
+                .collect();
+            if !tops.is_empty() {
+                said.push(tops.join(" · "));
+            }
+            if !format["more_folders"].is_null() {
+                said.push(pieces(&format["more_folders"]));
+            }
+            said.join(" · ").replace('\u{a0}', " ")
+        }
+
+        /// **Each format's folders are named by where they sit**: a top
+        /// holding one written folder whole, a top holding several once with
+        /// how many, and nothing to press. **It failed before the change**:
+        /// JPEG's row listed all thirteen folders whole, joined by dots.
+        #[test]
+        fn the_box_names_a_formats_folders_by_where_they_sit() {
+            let the_box = serde_json::to_value(the_creators_box()).expect("the box serialises");
+            let formats = the_box["reading"]["formats"].as_array().expect("several formats");
+            assert_eq!(the_row_read(&formats[0]), "home/ubuntu/Render/ · _OUT/V_012/Studio/ (12 folders)", "{}", formats[0]);
+            assert_eq!(
+                the_row_read(&formats[1]),
+                "home/ubuntu/Render/V_012/PNG/04. Lamps + Shades/ · _OUT/V_012/Cutout/ (12 folders)",
+                "{}",
+                formats[1]
+            );
+            // **Three folders or fewer are listed whole, as before.**
+            let few = the_format_box_from(
+                &WhatTheBoxKnows {
+                    formats: Some(vec![
+                        AFormatKnown { name: "EXR".into(), where_in_the_job: vec!["beauty/".into(), "mist/".into()], at_the_top: true, files: 480, chosen: true },
+                        AFormatKnown { name: "PNG".into(), where_in_the_job: vec!["previews/".into()], at_the_top: false, files: 120, chosen: true },
+                    ]),
+                    files_in_the_job: 600,
+                    the_standing_folder: None,
+                    the_formats_chosen: None,
+                    the_folder_chosen_for_this_job: None,
+                },
+                &TheProposal::TheSystemNamesNoFolder(String::new()),
+            );
+            let few = serde_json::to_value(few).expect("the box serialises");
+            let top = Prose::new(crate::surface::render_settings::words::TOP_OF_THE_JOBS_FOLDER).as_str().replace('\u{a0}', " ");
+            assert_eq!(the_row_read(&few["reading"]["formats"][0]), format!("{top} · beauty/ · mist/"));
+            assert_eq!(the_row_read(&few["reading"]["formats"][1]), "previews/");
+        }
+
+        /// **The box's page, drawn in Chrome**: the box as the application
+        /// sends it, drawn by the real `web/transfers.js` with the
+        /// application's stylesheets, and each format's folders read back
+        /// with the lines they take.
+        const THE_BOX_PAGE: &str = r#"<!doctype html><html data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="smoozy.css">
+<style>html, body { margin:0; height:100%; background: var(--bg); } #out { display:none; }</style>
+</head><body><pre id="out"></pre>
+<script>
+window.__TAURI__ = {core:{invoke:async (command) => {
+  if (command === 'the_menu_bar') return {drawn_by_the_application:false};
+  if (command === 'the_rail') return {opens_at:'nowhere', the_rails_own_name:'Places', the_servers_heading:'Servers', places:[], servers:[]};
+  return null;
+}}, event:{listen:async () => () => {}}};
+</script><script type="module">
+import {theFormatBoxIsDrawn} from './transfers.js';
+const out = document.getElementById('out');
+try {
+  theFormatBoxIsDrawn(THE_BOX, () => {});
+  await new Promise((done) => setTimeout(done, 50));
+  // **A line is a run of pieces that sit side by side**: a piece starts a
+  // new line where its middle is below the line so far. The folders are in
+  // the monospaced face and the words between them are not, so on one line
+  // their tops differ — in Windows' faces by more than a rounding (hosted run
+  // 43746222478 read two lines as three).
+  const linesOf = (holder) => {
+    const range = document.createRange(); range.selectNodeContents(holder);
+    const pieces = Array.from(range.getClientRects()).filter((one) => one.width > 0).sort((a, b) => a.top - b.top);
+    let lines = 0, bottom = -Infinity;
+    for (const piece of pieces) {
+      if ((piece.top + piece.bottom) / 2 >= bottom) { lines += 1; bottom = piece.bottom; }
+      else bottom = Math.max(bottom, piece.bottom);
+    }
+    return lines;
+  };
+  const rows = Array.from(document.querySelectorAll('.transfers-formats .fmt')).map((row) => {
+    const where = row.querySelector('.fmw');
+    return {name: row.querySelector('.fmn').textContent, said: where.textContent.replace(/ /g, ' '), lines: linesOf(where),
+      buttons: row.querySelectorAll('button').length};
+  });
+  out.textContent = JSON.stringify({rows});
+} catch (error) { out.textContent = JSON.stringify({error: String(error.stack || error)}); }
+</script></body></html>"#;
+
+        fn the_box_in_a_real_browser(picture: Option<&Path>) -> Option<serde_json::Value> {
+            let said = serde_json::to_value(TheFormatAnswer::TheBox(the_creators_box())).expect("the box serialises");
+            crate::surface::focus::a_page_with_stand_ins_in_a_real_browser(
+                "many-folders-box",
+                &THE_BOX_PAGE.replace("THE_BOX", &said.to_string()),
+                &[&[("transfers.js", "export { theFormatBoxIsDrawn };")]],
+                &[],
+                picture,
+            )
+        }
+
+        /// **In a real browser, each format's row is two lines at most and
+        /// offers no press.** Where `SMOOZY_THE_MANY_FOLDERS_PICTURES` names a
+        /// folder, the box is pictured there, the file ending in
+        /// `SMOOZY_THE_MANY_FOLDERS_PICTURES_WHEN` (*before* or *after*).
+        /// **It failed before the change**: JPEG's row took four lines and
+        /// PNG's five. A computer with no Chrome skips it.
+        #[test]
+        fn the_box_on_many_folders_is_two_lines_a_format_in_a_real_browser() {
+            if let Some(folder) = std::env::var_os("SMOOZY_THE_MANY_FOLDERS_PICTURES") {
+                let when = std::env::var("SMOOZY_THE_MANY_FOLDERS_PICTURES_WHEN").unwrap_or_else(|_| "after".to_string());
+                let folder = std::path::PathBuf::from(folder);
+                std::fs::create_dir_all(&folder).expect("the pictures' folder");
+                the_box_in_a_real_browser(Some(&folder.join(format!("3. Download frames as they render, on that job, {when}.png"))));
+            }
+            let Some(measured) = the_box_in_a_real_browser(None) else {
+                return;
+            };
+            let rows = measured["rows"].as_array().expect("rows");
+            assert_eq!(rows.len(), 2, "{measured}");
+            for row in rows {
+                assert!(row["lines"].as_u64().unwrap_or(99) <= 2, "two lines at most: {measured}");
+                assert_eq!(row["buttons"], 0, "nothing to press: {measured}");
+            }
+            assert_eq!(rows[0]["said"], "home/ubuntu/Render/ · _OUT/V_012/Studio/ (12 folders)", "{measured}");
+        }
+    }
+
+    /// **The Creator's twenty-ninth notes, note 5, in a real browser: the
+    /// `.blend` a dependency upload is for is a link into Files** —
+    /// `Design/Transfers § The dependency check's own transfers`, the
+    /// paragraph of 2026-11-10, and the drawing's `t-growing` and `t-grown`.
+    /// The account is in `Audits/Build/Twenty-ninth notes/`, Part B's piece
+    /// 4.
+    mod twenty_ninth_notes_5 {
+        use super::*;
+
+        /// **The screen as the drawing's two rows have it**: one upload a
+        /// reading can still grow, and one finished. Made-up names.
+        fn the_two_rows() -> TheTransfersScreen {
+            let mut growing = a_request(
+                TheKind::Dependencies,
+                WhatItIsOf::ABlend { file: "/home/ubuntu/kitchen/kitchen.blend".into(), growing: true },
+            );
+            growing.files_done = 1;
+            growing.files_in_the_whole = 62;
+            growing.bytes = Some((20_000_000, 20_000_000));
+            let mut finished = a_request(
+                TheKind::Dependencies,
+                WhatItIsOf::ABlend { file: "/home/ubuntu/kitchen/kitchen_v14.blend".into(), growing: false },
+            );
+            finished.id = "two".into();
+            finished.files_done = 547;
+            finished.files_in_the_whole = 547;
+            finished.bytes = Some((8_500_000_000, 8_500_000_000));
+            finished.stands = WhereTheRequestStands::Finished { at: "04:19".into() };
+            // **A made-up server name**, for the pictures.
+            let known = WhatIsKnown { servers: vec![a_server("row", "Studio box")], requests: vec![growing, finished], ..WhatIsKnown::default() };
+            the_screen_from(&known, None)
+        }
+
+        /// **The Transfers screen, drawn in Chrome** by the real
+        /// `web/transfers.js` with the application's stylesheets, and each
+        /// name's link read back: where it sits, its hover, and that it is
+        /// drawn as a link.
+        const THE_SCREEN_PAGE: &str = r#"<!doctype html><html data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="smoozy.css">
+<style>html, body { margin:0; height:100%; background: var(--bg); } #out { display:none; } #transfersview { padding: 0 8px; }</style>
+</head><body><pre id="out"></pre><main class="main"><div id="transfersview"></div></main>
+<script>
+window.__TAURI__ = {core:{invoke:async (command) => {
+  if (command === 'the_transfers_screen') return THE_SCREEN;
+  if (command === 'the_menu_bar') return {drawn_by_the_application:false};
+  if (command === 'the_rail') return {opens_at:'nowhere', the_rails_own_name:'Places', the_servers_heading:'Servers', places:[], servers:[]};
+  return null;
+}}, event:{listen:async () => () => {}}};
+</script><script type="module">
+import './transfers.js';
+import { screens } from './the-rail.js';
+const out = document.getElementById('out');
+try {
+  const host = document.getElementById('transfersview');
+  const screen = screens.get('transfersview');
+  screen.itIsDrawn(host);
+  screen.itIsCurrentNow();
+  await new Promise((done) => setTimeout(done, 100));
+  const names = Array.from(host.querySelectorAll('.rqn')).map((name) => {
+    const link = name.querySelector('button.golink');
+    return {
+      said: name.textContent,
+      link: link ? { inside: link.parentElement.className, title: link.title, text: link.textContent,
+        underlined: getComputedStyle(link).textDecorationLine } : null,
+    };
+  });
+  out.textContent = JSON.stringify({names});
+} catch (error) { out.textContent = JSON.stringify({error: String(error.stack || error)}); }
+</script></body></html>"#;
+
+        fn the_screen_in_a_real_browser(picture: Option<&Path>) -> Option<serde_json::Value> {
+            let said = serde_json::to_value(the_two_rows()).expect("the screen serialises");
+            crate::surface::focus::a_page_with_stand_ins_in_a_real_browser(
+                "blends-link",
+                &THE_SCREEN_PAGE.replace("THE_SCREEN", &said.to_string()),
+                &[&[("the-rail.js", "export { screens };")]],
+                &[],
+                picture,
+            )
+        }
+
+        /// **In a real browser, both rows' file names are links into Files,
+        /// inside the mono face, with the hover *Show in Files*; *For* stays
+        /// plain.** Where `SMOOZY_THE_BLENDS_LINK_PICTURES` names a folder,
+        /// the screen is pictured there, the file ending in
+        /// `SMOOZY_THE_BLENDS_LINK_PICTURES_WHEN` (*before* or *after*). **It
+        /// failed before the change**: neither name had a link. A computer
+        /// with no Chrome skips it.
+        #[test]
+        fn the_blends_name_is_a_link_into_files_in_a_real_browser() {
+            if let Some(folder) = std::env::var_os("SMOOZY_THE_BLENDS_LINK_PICTURES") {
+                let when = std::env::var("SMOOZY_THE_BLENDS_LINK_PICTURES_WHEN").unwrap_or_else(|_| "after".to_string());
+                let folder = std::path::PathBuf::from(folder);
+                std::fs::create_dir_all(&folder).expect("the pictures' folder");
+                the_screen_in_a_real_browser(Some(&folder.join(format!("1. Transfers, the dependency rows, {when}.png"))));
+            }
+            let Some(measured) = the_screen_in_a_real_browser(None) else {
+                return;
+            };
+            assert!(measured["error"].is_null(), "{measured}");
+            let names = measured["names"].as_array().expect("names");
+            assert_eq!(names.len(), 2, "{measured}");
+            // Chrome's dump writes the bound space as `&nbsp;`.
+            let show_in_files = Prose::new(crate::surface::render_settings::words::SHOW_IN_FILES).as_str().replace('\u{a0}', "&nbsp;");
+            for (name, file) in names.iter().zip(["kitchen.blend", "kitchen_v14.blend"]) {
+                assert_eq!(
+                    name["link"],
+                    serde_json::json!({ "inside": "mono", "title": show_in_files, "text": file, "underlined": "underline" }),
+                    "{measured}"
+                );
+                assert!(name["said"].as_str().unwrap_or_default().ends_with(file), "{measured}");
+            }
+        }
     }
 }

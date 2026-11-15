@@ -184,6 +184,17 @@ impl Event {
     }
 }
 
+/// **What the page reads off an event, for a test that draws the page from
+/// the application's own composition** — every value the plain string it
+/// serialises as. Test-only; added 2026-11-09 for the twenty-eighth notes'
+/// piece 8, whose pictures are drawn from the queue's real reading.
+#[cfg(test)]
+impl Event {
+    pub(crate) fn as_the_page_reads_it(&self) -> serde_json::Value {
+        serde_json::to_value(&self.said).expect("an event's words serialise")
+    }
+}
+
 /// **One event as the page receives it.**
 ///
 /// The sequence number is the queue's own order, issued when the event is

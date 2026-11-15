@@ -41,6 +41,8 @@
 // ninth-pass fix piece 5.
 
 // Fields typed into whose answer has not gone.
+import { theFocusMovesTo } from "./the-focus-moves.js";
+
 const typedAndNotCommitted = new WeakSet();
 // Fields a redraw took out while they were being typed in.
 const takenOut = new WeakSet();
@@ -154,7 +156,7 @@ export function theTypingIsPutBackInto(field, taken) {
     typedAndNotCommitted.add(field);
     owedAChange.add(field);
   }
-  if (document.activeElement !== field) field.focus({ preventScroll: true });
+  if (document.activeElement !== field) theFocusMovesTo(field, { preventScroll: true });
   if (taken.start !== null && taken.end !== null) {
     const length = field.value.length;
     try {

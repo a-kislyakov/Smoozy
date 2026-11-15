@@ -34,7 +34,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
 use smoozy_desktop::events::{Delivers, Delivery, Said, TheOneQueue};
-use smoozy_desktop::servers::a_period::{what_the_driving_left, WhatTheDrivingLeft};
+use smoozy_desktop::servers::a_period::{
+    what_the_driving_left, WhatTheDrivingLeft, WhyTheConnectionWasNotMade,
+};
 use smoozy_desktop::surface::servers::{
     the_answer_about, what_a_failed_connect_said, what_an_ended_period_says, TheAnswer,
     TheServerItWasAbout,
@@ -276,9 +278,17 @@ fn a_wrong_key_refused_on_loopback_is_answered_naming_its_server() {
     };
     println!("the attempt stopped at: {stopped:?}");
     let left = what_the_driving_left(HowTheDrivingEnded::TheOpeningAttemptStopped(stopped));
-    assert_eq!(left, WhatTheDrivingLeft::TheConnectionWasNotMade);
+    // **The refusal is said as what it is** — 2026-11-11, the four questions,
+    // scout 3.1 (`Design/Server Setup § This server`).
+    assert_eq!(
+        left,
+        WhatTheDrivingLeft::TheConnectionWasNotMadeBecause(WhyTheConnectionWasNotMade::TheKeyWasRefused)
+    );
     let answer = what_an_ended_period_says(left, false, None).expect("something is said");
-    assert_eq!(answer, TheAnswer::TheConnectionWasNotMade);
+    assert_eq!(
+        answer,
+        TheAnswer::TheConnectionWasNotMadeBecause(WhyTheConnectionWasNotMade::TheKeyWasRefused)
+    );
 
     // **The answer names its server**, as the page receives it.
     let page = as_the_page_reads_it(the_answer_about(
@@ -293,12 +303,14 @@ fn a_wrong_key_refused_on_loopback_is_answered_naming_its_server() {
     assert_eq!(said["server"], "server-hyperstack", "the answer names its server: {page}");
     assert_eq!(said["couldNotConnectTo"], Prose::new("Could not connect to").as_str());
     assert_eq!(said["couldNotConnectToNamed"], "Hyperstack");
-    // **The Set up card keeps *this server***, which is the one on screen.
-    assert_eq!(said["said"], Prose::new("Could not connect to this server.").as_str());
+    assert_eq!(said["because"], Prose::new("the server refused the key for this username.").as_str());
+    // **The row and the Set up card say the sentence with its reason.**
+    let sentence = "Could not connect: the server refused the key for this username.";
+    assert_eq!(said["said"], Prose::new(sentence).as_str());
     let what = said["what"].as_str().expect("what it was");
     assert_eq!(
         what_a_failed_connect_said(what),
-        Some("Could not connect to this server."),
+        Some(sentence),
         "the Set up tab, handed the answer back, says the same sentence"
     );
 }

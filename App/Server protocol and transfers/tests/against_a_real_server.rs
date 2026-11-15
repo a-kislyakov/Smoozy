@@ -640,6 +640,29 @@ async fn a_command_begun_runs_beside_another_and_one_given_up_has_its_channel_cl
     machine.shut_down.shutdown("done".into());
 }
 
+#[tokio::test]
+async fn bad_batch_2_a_bounded_command_releases_its_session_and_connection() {
+    let scratch = Scratch::new("bad-batch-2-deadline");
+    let host_key = scratch.a_key("host", "");
+    let client_key = scratch.a_key("client", "");
+    let machine = a_machine(&host_key).await;
+    let mut connection = open(
+        &endpoint(machine.address), credential(&client_key, None), AT_THE_DESK,
+        Box::new(Compares { answer: HostTrust::Proceed, offered: Arc::new(Mutex::new(None)) }),
+    ).await.expect("the local test connection opens");
+    let result = tokio::time::timeout(Duration::from_secs(35),
+        connection.run_one_command(CommandString::constant(RUNS_UNTIL_ITS_CHANNEL_IS_CLOSED).with_reading_limit()))
+        .await.expect("a command must not wait forever").expect("the deadline returns a result");
+    assert_eq!(result.status, None);
+    assert!(String::from_utf8_lossy(&result.complaint).contains("timed out"));
+    let next = connection.run_one_command(CommandString::constant("uname -s")).await.unwrap();
+    assert_eq!(next.output_as_text(), Some("Linux\n"));
+    assert_eq!(machine.saw.closed_by_the_caller.lock().unwrap().len(), 1,
+        "the timed-out command must release its session");
+    connection.tear_down().await;
+    machine.shut_down.shutdown("test completed".to_string());
+}
+
 /// **`Server Setup` Y7a on a real SSH server: a command's two streams are
 /// told as they are printed**, each on its own, while the command is still
 /// running — the reading the desktop's elevated channel makes. Added

@@ -277,6 +277,18 @@ enum WhatThePressDid {
     ItDidNot(String),
 }
 
+/// **The room every failure posted here is drawn in: a list row's.** The
+/// only page that asks is the server list, and it draws each failure on the
+/// server's row (`web/servers.js`, and the same line beside the connect
+/// control on the server's own page). `Room::ACollapsedRow` is Design's row
+/// line — the dot, the words and the cross — with reporting left to *"the
+/// surface the row opens onto"*. **The runner's ruling on the twenty-ninth
+/// notes' piece E, 2026-11-10**: the row follows the drawing and carries no
+/// *Report a problem…*; reporting stays in the Smoozy menu. Until then this
+/// was `Room::Expanded`, for the strip at the window's foot that piece E took
+/// away, and the row drew the report control it was handed.
+const THE_ROOM_IT_IS_DRAWN_IN: Room = Room::ACollapsedRow;
+
 /// Read what stands against the subject, draw each on its own, and post one
 /// event each.
 ///
@@ -344,7 +356,7 @@ pub fn the_failures_are_posted(
                 ),
                 &sentence,
             );
-            if let Some(drawn) = shape.presented(&did_not_answer, None, Room::Expanded) {
+            if let Some(drawn) = shape.presented(&did_not_answer, None, THE_ROOM_IT_IS_DRAWN_IN) {
                 let _ = queue.read_then_post::<Drawn, ()>(
                     || Ok(drawn.clone()),
                     |drawn| the_event_for(about.clone(), drawn, &sentence),
@@ -364,7 +376,7 @@ pub fn the_failures_are_posted(
         let Some(shape) = a_shape(record, &sentence) else {
             continue;
         };
-        let Some(drawn) = shape.presented(record, None, Room::Expanded) else {
+        let Some(drawn) = shape.presented(record, None, THE_ROOM_IT_IS_DRAWN_IN) else {
             continue;
         };
 
@@ -543,9 +555,25 @@ fn the_token_for(what_it_is: WhatItIs) -> &'static str {
 /// gives — *Smoozy isn't responding.* Added 2026-09-27, step 10c's eighth-pass
 /// fix piece 6, out of the seventh pass on RunPod, where a server after a
 /// restart read *Something is not working.* See [`whose_sentence_it_is`].
+///
+/// **And `Servers` N5's connection condition takes the Specs' words**, *Could
+/// not reconnect.* (`Specs/Whole app`: *"what it says is what it knows: it
+/// could not reconnect"*), which `Design/Servers § A row` takes for the row's
+/// line. Added 2026-11-10, the twenty-ninth notes' piece E: on the live pass
+/// of the Creator's file a destroyed server read a bare *Error.* for half an
+/// hour, and the diary held nothing. **So *Error.* stands only for a condition
+/// nobody has given words to, and no condition raised in working code is one.**
 fn the_sentence_for(record: &Standing) -> String {
     if crate::servers::published::is_the_supervisors_condition(record) {
         return crate::surface::servers::words::SMOOZY_ISNT_RESPONDING.to_string();
+    }
+    if crate::servers::published::is_the_connection_condition(record) {
+        return crate::surface::servers::words::COULD_NOT_RECONNECT.to_string();
+    }
+    // **`State, identity and recovery` F12a's condition takes Design's line**
+    // (`Design/Servers § A row`, the build runner's ruling of 2026-11-10).
+    if crate::servers::published::is_the_stopped_lines_condition(record) {
+        return crate::surface::servers::words::THE_QUEUE_IS_STOPPED.to_string();
     }
     match record.kind {
         Kind::Condition => "Error.".to_string(),
@@ -554,11 +582,15 @@ fn the_sentence_for(record: &Standing) -> String {
 }
 
 /// **Whose sentence [`the_sentence_for`] composed** — Design's own, where the
-/// condition has words of Design's, and the plumbing's stand-in everywhere
-/// else. **M32: the capture belongs to whatever composes the sentence the user
+/// condition has words of Design's (the supervisor's, and since piece E the
+/// connection condition's), and the plumbing's stand-in everywhere else.
+/// **M32: the capture belongs to whatever composes the sentence the user
 /// reads**, so only Design's own words spend it.
 fn whose_sentence_it_is<'a>(record: &Standing, sentence: &'a str) -> WhoseSentenceItIs<'a> {
-    if crate::servers::published::is_the_supervisors_condition(record) {
+    if crate::servers::published::is_the_supervisors_condition(record)
+        || crate::servers::published::is_the_connection_condition(record)
+        || crate::servers::published::is_the_stopped_lines_condition(record)
+    {
         WhoseSentenceItIs::TheComposersOwn(sentence)
     } else {
         WhoseSentenceItIs::AStandInThePlumbingComposed(sentence)
@@ -795,6 +827,25 @@ mod tests {
         assert!(a_shape(&record, "Error.").is_none());
     }
 
+    /// **`State, identity and recovery` F12a's condition reads Design's line,
+    /// *Queue stopped: could not read a record on this server.***, and never
+    /// the plumbing's stand-in — the build runner's ruling of 2026-11-10.
+    #[test]
+    fn a_stopped_line_says_design_s_words_and_never_error() {
+        let record = Standing {
+            the_values_it_was_raised_over: vec![
+                crate::servers::published::THE_LINE_IS_STOPPED.to_string()
+            ],
+            ..a_condition_record()
+        };
+        let sentence = the_sentence_for(&record);
+        assert_eq!(sentence, crate::surface::servers::words::THE_QUEUE_IS_STOPPED);
+        assert!(matches!(
+            whose_sentence_it_is(&record, &sentence),
+            WhoseSentenceItIs::TheComposersOwn(_)
+        ));
+    }
+
     /// **F-11: the licence record's ending is keyed on its own member and never
     /// on a minted job identity** — retained legacy subject handling.
     #[test]
@@ -1017,24 +1068,30 @@ mod tests {
     /// reason for existing), so this reads it as text — which is what the
     /// neighbouring piece's own page checks do. Without the kind the application
     /// cannot compose the key, nor refuse a request to clear an ending (F-5 of
-    /// the Gemini catch-up, Area 4).
+    /// the Gemini catch-up, Area 4). **It reads the server row's press** —
+    /// `web/servers.js`'s `theFailureOnTheRow` — since the twenty-ninth notes'
+    /// piece E took the window's foot away, which was the other press.
     #[test]
     fn the_press_hands_the_record_kind_back_to_the_application() {
         let page = std::fs::read_to_string(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("web")
-                .join("the-failure-shape.js"),
+                .join("servers.js"),
         )
         .expect("the page module is readable");
-        let asking = page
+        let the_row = page
+            .split_once("function theFailureOnTheRow(")
+            .expect("the row draws its failures")
+            .1;
+        let asking = the_row
             .split_once("a_failure_was_cleared")
-            .expect("the page asks for a clearing")
+            .expect("the row asks for a clearing")
             .1;
         let asking = &asking[..asking.find("});").expect("the ask is closed")];
         for named in ["kind:", "subjectKind:", "subject:", "identityOrMark:"] {
             assert!(
                 asking.contains(named),
-                "web/the-failure-shape.js does not hand {named} back with the \
+                "web/servers.js does not hand {named} back with the row's \
                  press. **The application composes the key the answering event \
                  carries out of the kind, the subject and the mark**, and a \
                  press missing one of them names a drawing that is not there"
@@ -1355,11 +1412,13 @@ mod tests {
                 _ => None,
             })
             .collect();
+        // **The connection condition takes the Specs' words too, since the
+        // twenty-ninth notes' piece E** — it read *Error.* until then.
         assert_eq!(
             sentences,
             vec![
                 Prose::new(crate::surface::servers::words::SMOOZY_ISNT_RESPONDING),
-                Prose::new("Error."),
+                Prose::new(crate::surface::servers::words::COULD_NOT_RECONNECT),
             ]
         );
         // **Only the subject's own key carries the identity**, for the
@@ -1385,6 +1444,125 @@ mod tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// **A server Smoozy cannot reconnect says *Could not reconnect.*, never
+    /// *Error.*, and the diary gets one line for it** — the twenty-ninth notes'
+    /// piece E, out of the live pass of the Creator's file, where a destroyed
+    /// server read a bare *Error.* at the window's foot for half an hour and the
+    /// diary held nothing. `Specs/Whole app`: *"what it says is what it knows:
+    /// it could not reconnect"*. The words are the Specs', so they are the
+    /// composer's own and M32's capture is spent: one diary line, and none on
+    /// the second asking. **The supervisor's condition still reads *Smoozy
+    /// isn't responding.*** beside it.
+    #[test]
+    fn a_failed_reconnect_says_could_not_reconnect_and_the_diary_gets_one_line() {
+        use crate::events::{Delivers, Delivery};
+        use crate::record::failure_records::ConditionKey;
+        use crate::record::LocalRecord;
+        use crate::typography::Prose;
+        use std::sync::{Arc, Mutex as StdMutex};
+
+        struct WhatThePageGot(Arc<StdMutex<Vec<Delivery>>>);
+        impl Delivers for WhatThePageGot {
+            fn deliver(&self, delivery: &Delivery) {
+                self.0.lock().unwrap().push(delivery.clone());
+            }
+        }
+
+        let mut path = std::env::temp_dir();
+        path.push(format!("smoozy-reconnect-words-{}-{}.sqlite3", std::process::id(), line!()));
+        let _ = std::fs::remove_file(&path);
+        let mut area = std::env::temp_dir();
+        area.push(format!("smoozy-reconnect-diary-{}-{}", std::process::id(), line!()));
+        let _ = std::fs::remove_dir_all(&area);
+        let record = LocalRecord::open_at(&path).expect("the desk can make a record");
+        let server = Identity::issue(IdentityKind::LocalServer).expect("the desk has randomness");
+        let subject = DurableSubject::ServerRow(server.clone());
+        {
+            let mut records = FailureRecords::over(record.connection());
+            records
+                .a_condition_was_raised(
+                    &ConditionKey::over(&subject, crate::servers::published::THE_KIND, None),
+                    &subject,
+                    &["disconnected", "reconnecting"],
+                    true,
+                )
+                .expect("the connection condition is raised");
+            records
+                .a_condition_was_raised(
+                    &ConditionKey::over(
+                        &subject,
+                        crate::servers::published::THE_SUPERVISORS_KIND,
+                        None,
+                    ),
+                    &subject,
+                    &["the supervisor not answering"],
+                    true,
+                )
+                .expect("the supervisor's condition is raised");
+        }
+
+        let queue = TheOneQueue::new();
+        let got = Arc::new(StdMutex::new(Vec::new()));
+        queue.the_page_is_ready(Box::new(WhatThePageGot(got.clone())));
+        let mut started = a_started_holding(record);
+        started.diary = Some(
+            crate::diary_service::DiaryService::open_at(area.clone()).expect("a diary"),
+        );
+        started.run = Some(Identity::issue(IdentityKind::Run).expect("the desk has randomness"));
+
+        // **Asked twice, as the list asks on every connection change.**
+        the_failures_are_posted(&mut started, &queue, &subject);
+        the_failures_are_posted(&mut started, &queue, &subject);
+
+        let delivered = got.lock().unwrap().clone();
+        let sentences: Vec<Prose> = delivered
+            .iter()
+            .filter_map(|one| match one.said.get("sentence") {
+                Some(Said::Prose(sentence)) => Some(sentence.clone()),
+                _ => None,
+            })
+            .collect();
+        let reconnect = Prose::new(crate::surface::servers::words::COULD_NOT_RECONNECT);
+        let responding = Prose::new(crate::surface::servers::words::SMOOZY_ISNT_RESPONDING);
+        assert_eq!(
+            sentences,
+            vec![reconnect.clone(), responding.clone(), reconnect, responding],
+            "a failed reconnect is said in the Specs' words and the supervisor's \
+             condition keeps its own"
+        );
+        assert!(
+            !sentences.iter().any(|one| one.as_str() == "Error."),
+            "a bare *Error.* reached the page: {sentences:?}"
+        );
+        // **The row's line is the drawing's: the words and the cross, and no
+        // *Report a problem…*** — the runner's ruling on piece E, and `Room`'s
+        // own collapsed row, whose reporting *"waits for the surface the row
+        // opens onto"*. Reporting stays in the Smoozy menu.
+        for one in &delivered {
+            let controls: Vec<String> = (0..8)
+                .filter_map(|at| match one.said.get(THE_CONTROLS_OWN_KEYS[at].0) {
+                    Some(Said::Value(value)) => Some(value.as_str().to_string()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(controls, vec!["cross".to_string()], "the row's line carries {controls:?}");
+        }
+
+        let mut held = String::new();
+        for entry in std::fs::read_dir(&area).expect("the diary's area is there").flatten() {
+            held.push_str(&std::fs::read_to_string(entry.path()).unwrap_or_default());
+        }
+        assert_eq!(
+            held.matches(crate::surface::servers::words::COULD_NOT_RECONNECT).count(),
+            1,
+            "the diary should hold one line for the failed reconnect, and holds:\n{held}"
+        );
+
+        drop(started);
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&area);
+    }
+
     /// A start report holding nothing but the record, which is all this file's
     /// own route reads. **The application has no other constructor for one**,
     /// so it is written here rather than reached for.
@@ -1393,6 +1571,8 @@ mod tests {
             the_sweep_left_behind: Vec::new(),
             record: Some(record),
             record_trouble: None,
+            the_record_is_newer_than_this_copy: false,
+            the_record_is_damaged: false,
             diary: None,
             declarations: smoozy_reporting::lines::Declarations::new(),
             what_modules_declare: crate::presentation::declarations::TheDeclarations::default(),
@@ -1402,19 +1582,21 @@ mod tests {
 
         }
     }
-    /// **An empty holder at the window's foot takes no room** — the blank
-    /// band of the Creator's twenty-seventh notes, both screenshots, about 44
-    /// pixels tall under the panes. The failure holder is made the first time
-    /// a failure stands and is never taken away, so once that failure was
-    /// cleared its padding alone stood across the foot. Run in a real browser
-    /// with the application's stylesheets and the real `web/the-failure-shape.js`:
-    /// a failure stands, then is cleared, and the holder takes no height; the
-    /// other two holders of the same shape (a server's output, something
-    /// underway) take none while empty. **It failed before the fix**: 44
-    /// pixels, then 24 and 24. Skipped, and says so, where no Chrome is
-    /// installed.
+    /// **Nothing is drawn at the window's foot, and the empty holders take no
+    /// room** — the blank band of the Creator's twenty-seventh notes, both
+    /// screenshots, about 44 pixels tall under the panes. It was the failure
+    /// holder at the foot, made the first time a failure stood and never taken
+    /// away. **Since the twenty-ninth notes' piece E that holder is gone**: a
+    /// failure shows on the thing that failed (`Specs/Whole app`: *"there is no
+    /// separate place failures are collected"*), so a failure standing adds
+    /// nothing to the window's pane at all. Run in a real browser with the
+    /// application's stylesheets and the real `web/the-failure-shape.js`: a
+    /// failure stands and the pane is unchanged; the other two holders of the
+    /// same shape (a server's output, something underway) take no height while
+    /// empty. **It failed before piece E**: the failure drew a holder at the
+    /// foot. Skipped, and says so, where no Chrome is installed.
     #[test]
-    fn twenty_seventh_an_empty_holder_at_the_windows_foot_takes_no_room_in_a_real_browser() {
+    fn twenty_seventh_nothing_is_drawn_at_the_windows_foot_in_a_real_browser() {
         let chrome = [
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
             "/Applications/Chromium.app/Contents/MacOS/Chromium",
@@ -1452,13 +1634,13 @@ import './the-failure-shape.js';
 const out = document.getElementById('out');
 try {
   const post = (kind, said) => { for (const handler of told.get(kind) || []) handler({said}); };
-  post('presentation:a-failure-is-standing', {key:'k1', sentence:'The connection to 4000ada was lost.', kind:'k', subject:'s1', subjectKind:'server'});
-  const held = document.getElementById('the-failures');
-  const standing = held.getBoundingClientRect().height;
-  post('presentation:a-failure-was-cleared', {key:'k1'});
   const pane = document.getElementById('pane');
+  const before = pane.children.length;
+  post('presentation:a-failure-is-standing', {key:'k1', sentence:'Could not reconnect.', kind:'condition', subject:'s1', subjectKind:'server row'});
+  const foot = document.getElementById('the-failures') !== null || pane.querySelector('.failure') !== null;
+  const added = pane.children.length - before;
   const empty = (name) => { const one = document.createElement('div'); one.className = name; pane.appendChild(one); return one.getBoundingClientRect().height; };
-  out.textContent = JSON.stringify({standing, cleared: held.getBoundingClientRect().height, children: held.children.length,
+  out.textContent = JSON.stringify({foot, added,
     output: empty('machines-own-words'), underway: empty('underway')});
 } catch (error) { out.textContent = JSON.stringify({error: String(error.stack || error)}); }
 </script></body></html>"#).unwrap();
@@ -1476,9 +1658,9 @@ try {
         let result = dom.split("<pre id=\"out\">").nth(1).and_then(|part| part.split("</pre>").next()).unwrap_or("");
         let measured: serde_json::Value = serde_json::from_str(result).unwrap_or_else(|error| panic!("no measurement: {error}:\n{dom}"));
         assert!(measured.get("error").is_none(), "{measured}");
-        assert!(measured["standing"].as_f64().unwrap() > 0.0, "a standing failure is drawn: {measured}");
-        assert_eq!(measured["children"], 0, "the failure was cleared: {measured}");
-        for holder in ["cleared", "output", "underway"] {
+        assert_eq!(measured["foot"], false, "a failure was drawn at the window's foot: {measured}");
+        assert_eq!(measured["added"], 0, "a failure added something to the window's pane: {measured}");
+        for holder in ["output", "underway"] {
             assert_eq!(measured[holder].as_f64(), Some(0.0), "{holder}: an empty holder takes room: {measured}");
         }
     }

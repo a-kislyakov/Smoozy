@@ -537,7 +537,7 @@ impl RunsOneCommandOnTheMachine for TheMachinesOwnTools {
                 it_was_killed_at_its_limit: false,
             };
             match the_feed_would_not_read {
-                Some(why) => Err(format!("{program} was not handed the whole archive: {why}")),
+                Some(why) => Err(format!("{program} did not receive the whole archive: {why}")),
                 None => Ok(went),
             }
         })

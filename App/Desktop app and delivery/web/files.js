@@ -47,8 +47,10 @@
 //
 // The mockup draws every icon as `<use href="#i-folder">` against a `<symbol>`
 // in its own document. **A piece adds nothing to `web/index.html`**, so each
-// shape is made here from the mockup's own path data, unchanged. Thirteen of
-// them: five file kinds and eight toolbar controls.
+// shape is made here from the mockup's own path data, unchanged. Fourteen of
+// them: five file kinds, eight toolbar controls, and Refresh last on the
+// toolbar (the twenty-eighth notes, note 9; moved from the path by the
+// twenty-ninth notes, note 2).
 
 import { whenTold } from "./event-route.js";
 import {
@@ -71,6 +73,7 @@ const THE_CALCULATE_SIZE_ACT = "calculate-size";
 import { theSettingsAreOpenedOn } from "./render-settings.js";
 import { theMarkOverAPane } from "./the-underway-shape.js";
 import { theValueDrawn, theValueIsDrawnInto } from "./the-value-drawn.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 const shell = window.__TAURI__;
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -320,7 +323,34 @@ const THE_FILE_ICONS = {
       { d: "M5.9 4.8h1.3v1.3H5.9z" },
       { d: "M7.2 6.1h1.3v1.3H7.2z" },
     ]),
+  // **The login's home folder: a solid house in place of the folder**, as
+  // Finder and Explorer mark home (`Design/File Browser § The list`, the
+  // Creator, 2026-11-11). The drawing's `#i-home`.
+  home: () =>
+    anIcon([
+      {
+        d: "M7.4 2 1.6 7.1c-.4.4-.1 1 .4 1h.9v5.7c0 .5.4.9.9.9h2.8v-3.9c0-.3.2-.5.5-.5h1.8c.3 0 .5.2.5.5v3.9h2.8c.5 0 .9-.4.9-.9V8.1h.9c.5 0 .8-.6.4-1L8.6 2c-.3-.3-.9-.3-1.2 0z",
+      },
+    ]),
 };
+
+/// **The house the home folder carries**, with the folder's own grey, and its
+/// word on hover over the whole of `element` — a cell's own hover, the whole
+/// of a shortened name, still wins where it has one. `Design/File Browser §
+/// The list`; the word is the application's.
+function theHouseOn(element, word) {
+  const house = THE_FILE_ICONS.home();
+  house.setAttribute("class", "fic");
+  house.classList.add("folder");
+  house.classList.add("home");
+  element.title = word;
+  for (const cell of element.children) {
+    cell.addEventListener("mouseenter", () => {
+      if (!cell.title) cell.title = word;
+    });
+  }
+  return house;
+}
 
 // The eight toolbar shapes, on the same 16px box and one weight.
 const THE_TOOL_ICONS = {
@@ -385,6 +415,17 @@ const THE_TOOL_ICONS = {
         { shape: "rect", x: "5.6", y: "1.8", width: "4.8", height: "2.6", rx: ".8" },
       ],
       { outlined: true, caps: false },
+    ),
+  // **Refresh, last on the toolbar** — the drawing's `#i-refresh` (the
+  // Creator's twenty-eighth notes, note 9; on the path until their
+  // twenty-ninth notes, note 2).
+  refresh: () =>
+    anIcon(
+      [
+        { d: "M13.4 8a5.4 5.4 0 1 1-1.6-3.8" },
+        { d: "M13.6 2.9v3h-3" },
+      ],
+      { outlined: true, weight: 1.4 },
     ),
   trash: () =>
     anIcon(
@@ -452,17 +493,28 @@ aTabIsRegistered({
   itIsShowing(which) {
     // **A picture open over another server's files goes with it.**
     if (theViewer && server !== which) theViewerCloses();
+    // **And so does a password box opened for another server** — `File
+    // Browser` P5 as changed after Sol's look (finding 2): the box belongs to
+    // the server it was opened on.
+    if (theAdminBox && theAdminBox.server !== which) theAdminBoxCloses();
     server = which;
     isShowing = true;
     // **The line belongs to the server it was said on**: arriving at another
     // server clears it, and an ending kept for this one is shown, once.
     if (theLinesServer !== which) theLineIsCleared();
+    // **Another server, or a folder handed over, is a move; otherwise the
+    // folder shown is read again** (Sol's look at the window notes, point 1).
+    let moved = false;
     if (theServerTheyBelongTo !== which) {
       folder = null;
       theChoiceIsLetGo();
       theServerTheyBelongTo = which;
+      moved = true;
     }
-    if (theFolderAskedFor) theFolderAskedForIsTaken();
+    if (theFolderAskedFor) {
+      theFolderAskedForIsTaken();
+      moved = true;
+    }
     // **Said after the folder is settled**, so a kept ending belongs to the
     // folder this showing opens rather than to the last server's (ruling (c)).
     const kept = theEndingsKept.get(which);
@@ -470,7 +522,8 @@ aTabIsRegistered({
       theEndingsKept.delete(which);
       theLineSays(kept.words, kept.act);
     }
-    theBrowserIsAskedFor(folder);
+    if (moved) theBrowserIsAskedFor(folder);
+    else theFolderIsReadAgain();
   },
 
   itIsPutAway() {
@@ -489,7 +542,7 @@ aTabIsRegistered({
 /// is already showing, it asks again so the bar is there now; otherwise it
 /// asks as it shows. The 38's piece 2.
 export function theBrowserIsAskedAgain() {
-  if (host && server) theBrowserIsAskedFor(folder);
+  if (host && server) theFolderIsReadAgain();
 }
 
 /// **The bar's way out**, and the same when the user leaves: nothing was
@@ -535,8 +588,101 @@ function theFolderAskedForIsTaken() {
 
 // ── Asking, and drawing what comes back ─────────────────────────────────────
 
+// **Every reading Files asks for is numbered** — `Design/File Browser § The
+// list`, *Files stays in the folder it shows* (the Creator's notes on the test
+// copy of 2026-11-12, note 1, and Sol's look at the window notes, points 1 to
+// 3). A reading of `/` held up while an upload wrote its progress came back
+// after the user had opened `/root`, and took Files back to `/`; then, with
+// folders compared by name alone, a refresh asked while a move was still out
+// read the folder still drawn and cancelled the move, older rows of one folder
+// replaced newer ones, and an old *nothing listed* emptied Files after the
+// connection came back.
+//
+// **The rule**: an answer is drawn only where no newer one has been drawn and
+// the user has not moved since it was asked. A move (opening a folder, the
+// path, Up, a folder handed over, another server) is numbered and remembered
+// with the folder it asked for; a refresh (an upload ending, the connection
+// back, Files shown again, Refresh, an act done) reads that folder until the
+// move's answer is drawn, and the folder drawn after.
+let theReadings = 0;
+// **The number of the user's last move**, and the folder it asked for (bytes,
+// or nothing for the server's own first folder).
+let theLastMove = 0;
+let theFolderMovedTo = null;
+// **The number of the newest answer drawn**, the tab's or the rows'.
+let theNewestDrawn = 0;
+// **One refresh is out at a time** — Sol's point 2: refreshes asked while one
+// is out are joined into one more, asked when it ends, so a run of them cannot
+// keep putting off the rows. The number of the refresh out, or 0; and whether
+// another is owed.
+let theRefreshOut = 0;
+let aRefreshIsOwed = false;
+// **An admin retry out holds refreshes too**, so a plain reading of the
+// refused folder cannot land over what the retry read (Sol's point 3).
+let theRetryOut = 0;
+
+const itIsStillWanted = (number) => number >= theLastMove && number >= theNewestDrawn;
+const theFolderToReadAgain = () => (theNewestDrawn >= theLastMove ? folder : theFolderMovedTo);
+
+/// **A move**: the user opened a folder, or Files opened on one. Readings
+/// asked before it are dropped as they come back.
 function theBrowserIsAskedFor(where) {
   if (!server) return;
+  theReadings += 1;
+  theLastMove = theReadings;
+  theFolderMovedTo = where || null;
+  theRefreshOut = 0;
+  aRefreshIsOwed = false;
+  theRetryOut = 0;
+  theReadingIsAsked(where || null, theReadings);
+}
+
+/// **A refresh**: the folder Files shows, or is on its way to, is read again.
+/// Joined into the one out, if one is.
+function theFolderIsReadAgain() {
+  if (!server) return;
+  if (theRefreshOut || theRetryOut) {
+    aRefreshIsOwed = true;
+    return;
+  }
+  theReadings += 1;
+  theRefreshOut = theReadings;
+  theReadingIsAsked(theFolderToReadAgain(), theReadings);
+}
+
+/// **A new connection starts Files' readings fresh** (Sol's look at the window
+/// and read points, 2026-11-13): a reading asked over the connection that went
+/// may never be answered, and a refresh queued behind it, or a Refresh held
+/// while it ran, waited for ever. The folder shown, or on its way, is read at
+/// once under a new number, so an answer from the old connection is dropped
+/// when it comes.
+function theReadingsStartFresh() {
+  if (!server) return;
+  const where = theFolderToReadAgain();
+  theReadings += 1;
+  theLastMove = theReadings;
+  theFolderMovedTo = where || null;
+  aRefreshIsOwed = false;
+  theRetryOut = 0;
+  theRefreshOut = theReadings;
+  theRefreshEnds();
+  theReadingIsAsked(where || null, theReadings);
+}
+
+/// **A reading came to its end**, drawn or dropped: the refresh owed, if
+/// any, is asked now.
+function theReadingEnds(number) {
+  if (number === theRefreshOut) theRefreshOut = 0;
+  if (number === theRetryOut) theRetryOut = 0;
+  if (aRefreshIsOwed && !theRefreshOut && !theRetryOut) {
+    aRefreshIsOwed = false;
+    theFolderIsReadAgain();
+    return;
+  }
+  if (!theRefreshOut) theRefreshEnds();
+}
+
+function theReadingIsAsked(where, number) {
   // **A row being typed belongs to the folder it was typed in.**
   if (editing && (!where || !folder || where.join(",") !== folder.join(","))) editing = null;
   // **The application is told the one name where one row is chosen**, and
@@ -547,41 +693,56 @@ function theBrowserIsAskedFor(where) {
   shell.core
     .invoke("the_files_tab", asked)
     .then((answer) => {
-      if (asked.server !== server || change !== theListingChange) return;
+      if (asked.server !== server || change !== theListingChange || !itIsStillWanted(number)) {
+        theReadingEnds(number);
+        return;
+      }
+      theNewestDrawn = number;
       said = answer;
       folder = answer.folder.bytes;
       theLineGoesWithItsFolder(folder);
       theBrowserIsDrawn(answer);
       // **The folder is being read, and the rows follow** — asked off the
       // drawing thread, and drawn only if the user is still where they asked.
-      if (answer.a_reading_follows) theReadingIsAskedFor(asked);
+      if (answer.a_reading_follows) theRowsAreAskedFor(asked, number);
+      else theReadingEnds(number);
+      // **An upload into this folder is said on the line above it** while it
+      // runs, so coming back to the folder mid-upload shows it (the
+      // twenty-eighth notes, note 10).
+      theUploadLineIsAskedFor();
     })
     .catch(() => {
+      const wanted = asked.server === server && itIsStillWanted(number);
+      theReadingEnds(number);
       // **Nothing is drawn here**: the sentence would be the application's (A6,
       // X1) and the application is what did not answer, so there is none to
       // draw and this file may not write one.
-      if (host) host.dataset.files = "failed";
+      if (host && wanted) host.dataset.files = "failed";
     });
 }
 
 /// **The rows, read on the machine** — `File Browser` L1's one reading, on the
 /// connection's reading session. **An answer that arrives after the user went
-/// somewhere else is not drawn**, because it is about a folder they left.
-function theReadingIsAskedFor(asked) {
+/// somewhere else, or after a newer one was drawn, is not drawn.**
+function theRowsAreAskedFor(asked, number) {
   const change = theListingChange;
   shell.core
     .invoke("the_folder_is_read", asked)
     .then((answer) => {
-      if (asked.server !== server || !said || change !== theListingChange) return;
-      if (asked.folder && said.folder.bytes.join(",") !== asked.folder.join(",")) return;
-      said = answer;
-      folder = answer.folder.bytes;
-      theLineGoesWithItsFolder(folder);
-      theBrowserIsDrawn(answer);
-      theTagsAreAskedFor(asked.server, answer.listing);
+      if (asked.server === server && said && change === theListingChange && itIsStillWanted(number)) {
+        theNewestDrawn = number;
+        said = answer;
+        folder = answer.folder.bytes;
+        theLineGoesWithItsFolder(folder);
+        theBrowserIsDrawn(answer);
+        theTagsAreAskedFor(asked.server, answer.listing);
+      }
+      theReadingEnds(number);
     })
     .catch(() => {
-      if (host) host.dataset.files = "failed";
+      const wanted = asked.server === server && itIsStillWanted(number);
+      theReadingEnds(number);
+      if (host && wanted) host.dataset.files = "failed";
     });
 }
 
@@ -645,6 +806,8 @@ function theTagIsDrawnOn(row) {
     if (theRowsNames.get(one) !== wanted) continue;
     const name = one.querySelector(".fname");
     if (!name || name.querySelector(".ver")) return;
+    // Design/File Browser: the tag keeps its width beside a long name (C-03).
+    name.classList.add("fversion");
     // Straight after the name, where `aRow` puts it.
     if (name.firstChild) name.firstChild.after(aTag(row.saved_with));
     else name.appendChild(aTag(row.saved_with));
@@ -718,7 +881,7 @@ function theBarsAreDrawn(answer) {
     out.className = "mini";
     out.textContent = answer.bar.way_out;
     out.addEventListener("click", () => {
-      thePickIsDropped().then(() => theBrowserIsAskedFor(folder));
+      thePickIsDropped().then(() => theFolderIsReadAgain());
     });
     bar.appendChild(out);
   }
@@ -742,6 +905,9 @@ function theCrumbsAreDrawn(answer) {
       // word for it and the page draws whichever it was handed.
       if (part.said) here.textContent = part.said;
       else theValueIsDrawnInto(here, part.shown);
+      // **The home folder's house, before its name** (`Design/File Browser §
+      // The list`).
+      if (part.home) here.prepend(theHouseOn(here, part.home));
       crumbs.appendChild(here);
       return;
     }
@@ -750,9 +916,99 @@ function theCrumbsAreDrawn(answer) {
     step.className = "mini";
     if (part.said) step.textContent = part.said;
     else theValueIsDrawnInto(step, part.shown);
+    if (part.home) step.prepend(theHouseOn(step, part.home));
     step.addEventListener("click", () => theBrowserIsAskedFor(part.folder.bytes));
     crumbs.appendChild(step);
   });
+  // **The path is one line that opens at the folder the user is in** (the UI
+  // at every size, C2): a deep path scrolls rather than taking the list's room.
+  crumbs.scrollLeft = crumbs.scrollWidth;
+  // **The path bar holds the path alone** — Refresh is the toolbar's last
+  // control (`Design/File Browser § The list`, the twenty-ninth notes, note 2).
+}
+
+// ── Refresh, last on the toolbar ────────────────────────────────────────────
+//
+// `Design/File Browser § The list`, the Creator's twenty-ninth notes, note 2:
+// *"A refresh icon sits at the toolbar's right end, after everything else on
+// it, so nothing that comes and goes in the toolbar moves it. Its word on
+// hover is Refresh, opening leftward, inside the window. The path bar holds
+// the path alone."* From the twenty-eighth notes, note 9: *"It reads the
+// folder being shown again, with its free space, exactly as opening it does
+// … While the listing is stale it is unavailable, like every act that needs
+// the server, and while the read runs it takes the underway shape on the
+// control."* **The act is `File
+// Browser` L17's re-read of the folder the browser stands in**, and `File
+// Browser` L27 is why a size counted earlier goes back to a dash: that is what
+// reading the folder again already does.
+
+// **Whether a read Refresh started is still running**, so the control turns
+// and takes no second press until it ends. Let go of when any reading of the
+// folder ends.
+let theRefreshReads = false;
+/// **The Refresh control last drawn**, so its turning can follow a read
+/// without the whole toolbar being drawn again.
+let theRefreshButton = null;
+
+/// **The control**, the drawing's own `.ib`, its word on hover and on
+/// keyboard focus as every icon's is; the underway shape is the drawing's
+/// `.uway`, which hides the `.uwl` shape and turns the `.spin`. **It is the
+/// toolbar's last child**, which is what the drawing's
+/// `.ftools > .ib:last-child .ibl` opens leftward, and its `.spin` is placed
+/// loose (`.ib > .spin`), so the icon stays centred in the hover ground.
+function theRefreshControl(label) {
+  const control = document.createElement("button");
+  control.type = "button";
+  control.className = "ib";
+  control.setAttribute("aria-label", label);
+  control.title = label;
+  const shape = THE_TOOL_ICONS.refresh();
+  shape.classList.add("uwl");
+  control.appendChild(shape);
+  const word = document.createElement("span");
+  word.className = "ibl";
+  word.textContent = label;
+  control.appendChild(word);
+  const turning = document.createElement("i");
+  turning.className = "spin";
+  control.appendChild(turning);
+  if (theRefreshReads) control.classList.add("uway");
+  control.addEventListener("click", () => theFolderIsRefreshed());
+  theRefreshButton = control;
+  return control;
+}
+
+/// **The folder shown is read again, exactly as opening it does** — the same
+/// asking, so the free space is read with it and the rows stay under the
+/// cover while it runs. **Nothing while the listing is stale**, where the
+/// drawing's `.files.offline` already takes the control, and nothing while a
+/// read Refresh started is still running.
+function theFolderIsRefreshed() {
+  if (!host || !server || !said || theRefreshReads) return;
+  if (host.classList.contains("offline")) return;
+  theRefreshReads = true;
+  theRefreshIsDrawn();
+  theFolderIsReadAgain();
+}
+
+/// **The read ended, however it ended**: the control comes back.
+function theRefreshEnds() {
+  if (!theRefreshReads) return;
+  theRefreshReads = false;
+  theRefreshIsDrawn();
+}
+
+function theRefreshIsDrawn() {
+  if (theRefreshButton) theRefreshButton.classList.toggle("uway", theRefreshReads);
+}
+
+/// **⌘R on a Mac, Ctrl+R and F5 elsewhere** — `Design/File Browser §
+/// Keyboard shortcuts`, the twenty-eighth notes, note 9.
+function theKeyRefreshes(press) {
+  const r = typeof press.key === "string" && press.key.toLowerCase() === "r" && !press.shiftKey && !press.altKey;
+  if (onAMac()) return r && press.metaKey && !press.ctrlKey;
+  if (press.key === "F5") return !press.shiftKey && !press.metaKey && !press.ctrlKey && !press.altKey;
+  return r && press.ctrlKey && !press.metaKey;
 }
 
 // ── The toolbar ─────────────────────────────────────────────────────────────
@@ -807,9 +1063,16 @@ function theToolbarIsDrawn(answer) {
   second.className = "tdiv";
   tools.appendChild(second);
   tools.appendChild(aToolControl(toolbar.cut, THE_TOOL_ICONS.cut, () => theCutOrCopyIsTaken("cut")));
-  tools.appendChild(
-    aToolControl(toolbar.copy, THE_TOOL_ICONS.copy, () => theCutOrCopyIsTaken("copy")),
-  );
+  const copy = aToolControl(toolbar.copy, THE_TOOL_ICONS.copy, () => theCutOrCopyIsTaken("copy"));
+  if (toolbar.copy_greyed) {
+    copy.disabled = true;
+    const why = toolbar.copy_greyed.why;
+    if (why) {
+      copy.addEventListener("mouseenter", () => theHoverLineIsShown(copy, [why], "beside"));
+      copy.addEventListener("mouseleave", theHoverLineIsHidden);
+    }
+  }
+  tools.appendChild(copy);
   // **Paste is offered only where the pasteboard's machine is the one being
   // browsed** — `File Browser` M15 — and it is absent rather than greyed
   // anywhere else.
@@ -832,6 +1095,16 @@ function theToolbarIsDrawn(answer) {
     paste.appendChild(word);
     paste.addEventListener("click", () => thePasteIsAsked(folder));
     tools.appendChild(paste);
+  } else {
+    // **Where Paste is not offered its room is kept, empty** — the drawing's
+    // `.ib.held`, nothing seen, pressed or read — so Delete and the two
+    // `.blend` buttons stay where they are as Cut or Copy brings Paste and a
+    // paste takes it away (UI consistency, finding 25). M15 is kept: nothing
+    // is greyed, refused or explained.
+    const room = document.createElement("span");
+    room.className = "ib held";
+    room.setAttribute("aria-hidden", "true");
+    tools.appendChild(room);
   }
   const third = document.createElement("span");
   third.className = "tdiv";
@@ -853,12 +1126,15 @@ function theToolbarIsDrawn(answer) {
   settings.type = "button";
   settings.className = "mini strong";
   settings.textContent = toolbar.render_settings;
+  // Cut short where the toolbar is narrow, so whole on hover (C-01).
+  settings.title = toolbar.render_settings;
   settings.addEventListener("click", () => theSettingsAreOpenedForTheChosen());
   pair.appendChild(settings);
   const check = document.createElement("button");
   check.type = "button";
   check.className = "mini strong";
   check.textContent = toolbar.check_dependencies;
+  check.title = toolbar.check_dependencies;
   check.addEventListener("click", () => theCheckIsOpenedForTheChosen());
   pair.appendChild(check);
   tools.appendChild(pair);
@@ -872,6 +1148,9 @@ function theToolbarIsDrawn(answer) {
     saidInto(note, toolbar.how_many_chosen);
     tools.appendChild(note);
   }
+  // **Refresh is last, after everything that comes and goes**, so it never
+  // moves (`Design/File Browser § The list`, the twenty-ninth notes, note 2).
+  tools.appendChild(theRefreshControl(toolbar.refresh));
 
   // **Files looks unavailable while there is no connection**, marked rather
   // than failing on a click — `File Browser` L15. The drawing's own
@@ -924,7 +1203,7 @@ function theListIsDrawn(answer) {
   if (theSameFolder && theListHoldsRows && answer.listing.is === "being-read") {
     const already = list.querySelector(".fwait");
     if (already) already.remove();
-    list.appendChild(theCoverWhileItIsRead(answer.listing));
+    theCoverStaysOverTheView(list, list.appendChild(theCoverWhileItIsRead(answer.listing)));
     return;
   }
   // **And a reading of the same folder that comes back without rows does not
@@ -941,6 +1220,7 @@ function theListIsDrawn(answer) {
   theKeptPlace = place;
   theListingIsDrawn(answer);
   thePlaceIsKept(list, place);
+  theEditingRowIsBroughtIntoView();
 }
 
 // **Whether the list holds the rows of the folder it shows**, so the same
@@ -989,6 +1269,24 @@ function thePlaceIsKept(within, place) {
 /// drawing's `.ckdot` names an animation, `wksp`, that neither the drawing nor
 /// the page defines, so it stood still, and the eighth and ninth passes saw
 /// words and no mark. Added 2026-09-28, step 10c's ninth-pass fix piece 5.
+/// **The cover sits over the part of the list in view**, wherever the list is
+/// scrolled, and follows a scroll — a value the stylesheet reads, `--fwait-top`,
+/// as the menus are placed (UI consistency, finding 29: a folder read again
+/// was covered at the list's top, out of sight, and the rows in view stayed
+/// clickable).
+function theCoverStaysOverTheView(within, cover) {
+  cover.style.setProperty("--fwait-top", `${within.scrollTop}px`);
+  if (theListsFollowed.has(within)) return;
+  theListsFollowed.add(within);
+  within.addEventListener("scroll", () => {
+    const shown = Array.from(within.children).find((one) => one.classList.contains("fwait"));
+    if (shown) shown.style.setProperty("--fwait-top", `${within.scrollTop}px`);
+  });
+}
+
+/// The lists whose scroll the cover follows, each listened to once.
+const theListsFollowed = new WeakSet();
+
 function theCoverWhileItIsRead(listing) {
   const waiting = theMarkOverAPane();
   waiting.classList.add("fwait");
@@ -1023,14 +1321,14 @@ function theListingIsDrawn(answer) {
       list.appendChild(drawn);
     }
     if (theFieldToTakeTheKeys) {
-      theFieldToTakeTheKeys.focus();
+      theFocusMovesTo(theFieldToTakeTheKeys);
       theFieldToTakeTheKeys.select();
       theFieldToTakeTheKeys = null;
     }
     return;
   }
   if (listing.is === "being-read") {
-    list.appendChild(theCoverWhileItIsRead(listing));
+    theCoverStaysOverTheView(list, list.appendChild(theCoverWhileItIsRead(listing)));
     return;
   }
   // **Every other reading is a sentence and no rows**, which is the honest
@@ -1051,6 +1349,18 @@ function theListingIsDrawn(answer) {
     // **`File Browser` P1's answer, in as many words**, with the folder named
     // as a value where the walk named one.
     saidInto(said, listing.said, "mono");
+    // **A folder refused at a folder above it carries the offer too** —
+    // `File Browser` P5 as changed after Sol's look (finding 8).
+    if (listing.refusal && listing.refusal.the_offer && listing.refusal.retry) {
+      said.appendChild(textNode(" "));
+      const act = document.createElement("button");
+      act.type = "button";
+      act.className = "mini";
+      act.textContent = listing.refusal.the_offer;
+      const retry = listing.refusal.retry;
+      act.addEventListener("click", () => theAdminRetryIsAskedFor(retry, null, null));
+      said.appendChild(act);
+    }
   } else {
     const one = document.createElement("span");
     one.textContent = listing.said;
@@ -1060,7 +1370,11 @@ function theListingIsDrawn(answer) {
   list.appendChild(instead);
 }
 
+/// **The headers last drawn**, whose *Folder* a new folder's row reads.
+let theHeadersShown = null;
+
 function theHeadersAreDrawn(headers) {
+  theHeadersShown = headers;
   const head = document.createElement("div");
   head.className = "frow fhead";
   const spacer = document.createElementNS(SVG_NS, "svg");
@@ -1082,7 +1396,17 @@ function theHeadersAreDrawn(headers) {
     if (extra) for (const one of extra.split(" ")) sort.classList.add(one);
     const on = headers.sorted_by === column;
     if (on) sort.classList.add("on");
-    sort.textContent = on ? `${label} ${headers.reversed ? "▼" : "▲"}` : label;
+    // **The mark is a piece of its own**, which the drawing's `.sortb.r >
+    // .smark` hangs after a right-aligned word, so *Size* and *Changed* stay
+    // where they are when the list is sorted by them (UI consistency,
+    // finding 57).
+    sort.textContent = label;
+    if (on) {
+      const mark = document.createElement("span");
+      mark.className = "smark";
+      mark.textContent = " " + (headers.reversed ? "▼" : "▲");
+      sort.appendChild(mark);
+    }
     sort.addEventListener("click", () => theListIsSortedBy(column));
     head.appendChild(sort);
   };
@@ -1142,7 +1466,8 @@ function theRowsHeldArePutInOrder() {
 /// tag or a refusal beside it.
 function itShowsWholeOnHover(cell, whole) {
   cell.addEventListener("mouseenter", () => {
-    cell.title = cell.scrollWidth > cell.clientWidth ? (whole || cell).textContent : "";
+    const measured = whole && whole.clientWidth ? whole : cell;
+    cell.title = measured.scrollWidth > measured.clientWidth ? (whole || cell).textContent : "";
   });
 }
 
@@ -1162,6 +1487,7 @@ function aRow(row) {
   if (isPressable) element.type = "button";
   if (isChosen(row)) element.setAttribute("aria-current", "true");
 
+  theRowsDrawn.set(element, row);
   const icon = (THE_FILE_ICONS[row.icon] || THE_FILE_ICONS.file)();
   icon.setAttribute("class", "fic");
   icon.classList.add(row.icon);
@@ -1177,10 +1503,25 @@ function aRow(row) {
   } else {
     // A name drawn alone, kept apart from the version tag beside it (X9).
     const shown = theValueDrawn(row.name.shown);
+    shown.className = "fname-text";
     name.appendChild(shown);
     itShowsWholeOnHover(name, shown);
   }
-  if (row.saved_with) name.appendChild(aTag(row.saved_with));
+  if (row.saved_with) {
+    name.classList.add("fversion");
+    name.appendChild(aTag(row.saved_with));
+  }
+  // **The login's home folder also says so, in grey after its name** — the
+  // drawing's `.fhome` (`Design/File Browser § The list`, the Creator's notes
+  // on the test copy of 2026-11-12, note 0: a folder called `home` was taken
+  // for it). The word is the application's.
+  if (row.home && !row.editing) {
+    name.classList.add("fhomed");
+    const home = document.createElement("span");
+    home.className = "fhome";
+    home.textContent = row.home;
+    name.appendChild(home);
+  }
   if (row.editing && row.editing.refused) name.appendChild(aDenial(row.editing.refused, null, null));
   if (row.editing && row.editing.the_listing_saw_it) {
     const hint = document.createElement("span");
@@ -1189,7 +1530,7 @@ function aRow(row) {
     name.appendChild(hint);
   }
   if (row.refusal) {
-    name.appendChild(aDenial(row.refusal.said, row.refusal.the_offer, row.refusal.dismiss));
+    name.appendChild(aDenial(row.refusal.said, row.refusal.the_offer, row.refusal.dismiss, row.refusal.retry));
   }
   element.appendChild(name);
 
@@ -1214,6 +1555,9 @@ function aRow(row) {
   changed.textContent = row.changed ? aCalendarTime(row.changed) : "—";
   itShowsWholeOnHover(changed);
   element.appendChild(changed);
+  // **The login's home folder carries a house in place of the folder**, and
+  // says *Home folder* on hover (`Design/File Browser § The list`).
+  if (row.home) icon.replaceWith(theHouseOn(element, row.home));
 
   if (isPressable) {
     // **One click chooses any row — a folder, a file or a `.blend` — and asks
@@ -1394,7 +1738,7 @@ function theNoteForHowMany(count) {
 /// and a permission refusal is not one; the drawing's own comment on `.deny`
 /// says this shape *"takes the whole-app shape: dot, plain sentence, then the
 /// way out"*, which is what this draws.
-function aDenial(words, offer, dismiss) {
+function aDenial(words, offer, dismiss, retry = null) {
   const deny = document.createElement("span");
   deny.className = "deny";
   const dot = document.createElement("span");
@@ -1407,7 +1751,7 @@ function aDenial(words, offer, dismiss) {
     act.type = "button";
     act.className = "mini";
     act.textContent = offer;
-    act.addEventListener("click", () => anActNeedsAConnection("elevated-retry"));
+    act.addEventListener("click", () => theAdminRetryIsAskedFor(retry, null, null));
     deny.appendChild(act);
   }
   if (dismiss) {
@@ -1417,7 +1761,7 @@ function aDenial(words, offer, dismiss) {
     cross.title = dismiss;
     cross.setAttribute("aria-label", dismiss);
     cross.textContent = "×";
-    cross.addEventListener("click", () => theBrowserIsAskedFor(folder));
+    cross.addEventListener("click", () => theFolderIsReadAgain());
     deny.appendChild(cross);
   }
   return deny;
@@ -1441,6 +1785,7 @@ function aCalendarTime(seconds) {
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
   });
 }
 
@@ -1493,7 +1838,12 @@ function theBottomBarIsDrawn(answer) {
   const theTickHadFocus = Boolean(document.activeElement && bottom.contains(document.activeElement)
     && document.activeElement.classList.contains("fhid"));
   bottom.textContent = "";
-  bottom.appendChild(saidAsText(answer.bottom.uploads_go_to));
+  // **Cut short where the bar is narrow, whole on hover**, so the bar stays
+  // one line and the count and the box keep their place at its end (the UI at
+  // every size, C-02).
+  // **The folder's own name, the whole path on hover** (C-05).
+  const goes = bottom.appendChild(saidAsText(answer.bottom.uploads_go_to));
+  goes.title = answer.bottom.uploads_go_to_whole || goes.textContent;
   const grow = document.createElement("span");
   grow.className = "grow";
   bottom.appendChild(grow);
@@ -1507,7 +1857,7 @@ function theBottomBarIsDrawn(answer) {
   // change width from folder to folder, never move it (`Design/File Browser §
   // The list`; the Creator's note 2 on the test copy).
   const tick = bottom.appendChild(theHiddenFilesBox(answer.bottom.show_hidden_files));
-  if (theTickHadFocus) tick.focus();
+  if (theTickHadFocus) theFocusMovesTo(tick);
   // The last count this server had is drawn at once, so a redraw of the bar
   // does not drop it while the new one is asked for.
   if (theLastCountsServer === server) theCountIsDrawn(theLastCount);
@@ -1578,6 +1928,9 @@ function theCountIsDrawn(count) {
 whenTold(TRANSFERS_MOVED, () => {
   if (!host || host.hidden) return;
   theTransfersAreCounted();
+  // **And the upload's line above the list**, from the same reading (the
+  // twenty-eighth notes, note 10).
+  theUploadLineIsAskedFor();
 });
 
 // ── *Show hidden files* ─────────────────────────────────────────────────────
@@ -1772,9 +2125,18 @@ function theHoverLineIsShown(over, lines, where) {
   });
   host.appendChild(tip);
   const box = over.getBoundingClientRect();
-  const width = tip.getBoundingClientRect().width;
-  const left = where === "beside" ? box.right + 8 : Math.max(8, box.right - width);
-  const top = where === "beside" ? box.top + 3 : box.bottom + 6;
+  // Design/File Browser: hover details stay inside every edge (C-11, C6).
+  const room = tip.getBoundingClientRect();
+  const width = room.width;
+  const height = room.height;
+  const right = window.innerWidth - 8;
+  const bottom = window.innerHeight - 8;
+  let left = where === "beside" ? box.right + 8 : box.right - width;
+  let top = where === "beside" ? box.top + 3 : box.bottom + 6;
+  if (where === "beside" && left + width > right) left = box.left - width - 8;
+  if (where !== "beside" && top + height > bottom) top = box.top - height - 6;
+  left = Math.max(8, Math.min(left, right - width));
+  top = Math.max(8, Math.min(top, bottom - height));
   tip.style.setProperty("--fsz-x", `${Math.round(left)}px`);
   tip.style.setProperty("--fsz-y", `${Math.round(top)}px`);
   theHoverLine = tip;
@@ -1852,6 +2214,14 @@ function theRightClickMenuIsShown(row, press) {
         }
       }
     }
+    if (item.act === "copy" && item.greyed) {
+      control.disabled = true;
+      control.classList.add("off");
+      if (item.greyed.why) {
+        control.addEventListener("mouseenter", () => theHoverLineIsShown(control, [item.greyed.why], "beside"));
+        control.addEventListener("mouseleave", theHoverLineIsHidden);
+      }
+    }
     saidInto(control, item.label);
     control.addEventListener("click", () => {
       // A greyed item does nothing, whatever delivers the press.
@@ -1903,7 +2273,7 @@ function theRightClickMenuIsShown(row, press) {
   document.addEventListener("keydown", escape, true);
   theOpenMenu = { panel, away, escape };
   const first = panel.querySelector("button");
-  if (first) first.focus();
+  if (first) theFocusMovesTo(first);
 }
 
 function theRightClickMenuIsShut() {
@@ -1925,7 +2295,7 @@ function theUploadIsAskedFor(what) {
     .catch(() => {});
 }
 
-function theUploadAskIsDrawn(ask) {
+function theUploadAskIsDrawn(ask, into) {
   if (!ask) return;
   if (ask.is === "nothing-was-chosen") return;
   if (ask.is === "sending-files-up-is-closed") return;
@@ -1935,7 +2305,14 @@ function theUploadAskIsDrawn(ask) {
   }
   // **No confirmation: a pick or a drop starts the upload** —
   // `Design/File Browser § Uploading`, the Creator's note 2 on the test copy.
-  if (ask.is === "go") theUploadIsConfirmed(ask.chosen);
+  // **And the line above the list says so at once**, *Counting files…*, until
+  // the walk answers — `Design/File Browser § The list`, the Creator's
+  // twenty-eighth notes, note 10: *"I'm often very uncertain of whether
+  // something is happening or not."*
+  if (ask.is === "go") {
+    if (ask.counting) theLineSays(ask.counting, "upload-counting");
+    theUploadIsConfirmed(ask.chosen, into);
+  }
 }
 
 /// **H4's fallback, inside the Upload control and never beside it.**
@@ -1976,7 +2353,7 @@ function theKindQuestionIsDrawn(ask) {
   question.appendChild(row);
   holder.appendChild(question);
   const first = question.querySelector("button");
-  if (first) first.focus();
+  if (first) theFocusMovesTo(first);
 }
 
 // ── The shell's own drag and drop ───────────────────────────────────────────
@@ -1989,6 +2366,28 @@ function theKindQuestionIsDrawn(ask) {
 // **Smoozy's own interface must not reach for HTML5 drag and drop**: `main.rs`
 // keeps the shell's handler enabled, and the two are alternatives on Windows.
 
+// **A drop on a folder's row goes into that folder** — `Design/File Browser
+// § Uploading` and `File Browser` H3a's build detail of 2026-11-12 (the four
+// questions, scout 2.19). The shell gives the pointer's place in physical
+// pixels; the page divides by its scale and takes the row there. A folder row
+// with no refusal is the destination; anything else is the folder being
+// browsed. Only *enter* carries the paths, so they are kept for *over*.
+const theRowsDrawn = new WeakMap();
+let theDraggedPaths = [];
+let theDropGoesInto = null;
+
+function theFolderUnder(position) {
+  if (!position || typeof document.elementsFromPoint !== "function") return null;
+  const scale = window.devicePixelRatio || 1;
+  for (let at of document.elementsFromPoint(position.x / scale, position.y / scale)) {
+    while (at && !theRowsDrawn.has(at)) at = at.parentNode;
+    if (!at) continue;
+    const row = theRowsDrawn.get(at);
+    return row.opens && !row.refusal && row.path ? row.path.bytes : null;
+  }
+  return null;
+}
+
 function theShellsOwnDropIsLive() {
   const window_ = shell.webviewWindow && shell.webviewWindow.getCurrentWebviewWindow();
   if (!window_ || !window_.onDragDropEvent) return;
@@ -1997,14 +2396,29 @@ function theShellsOwnDropIsLive() {
       const what = arrived.payload || {};
       if (!host || host.hidden || !folder) return;
       if (what.type === "over" || what.type === "enter") {
-        if (Array.isArray(what.paths) && what.paths.length > 0) theDropZoneIsShown(what.paths);
+        if (aBoxIsOpen()) return;
+        if (Array.isArray(what.paths) && what.paths.length > 0) {
+          theDraggedPaths = what.paths;
+          theDropGoesInto = null;
+        }
+        const into = theFolderUnder(what.position) || folder;
+        if (theDraggedPaths.length > 0 && (!theDropGoesInto || theDropGoesInto.join(",") !== into.join(","))) {
+          theDropGoesInto = into;
+          theDropZoneIsShown(theDraggedPaths, into);
+        }
         return;
       }
       if (what.type === "drop") {
+        const into = theFolderUnder(what.position) || folder;
         theDropZoneIsHidden();
+        // **A drop while a box is open is not taken** — the Rough what-if
+        // answers, share 1 (24): a second drop drew a second overwrite box,
+        // like the first, on top of it, and its check could not see the first
+        // drop's files. The box is answered first; then drop again.
+        if (aBoxIsOpen()) return;
         shell.core
           .invoke("files_were_dropped", { paths: what.paths || [] })
-          .then(theUploadAskIsDrawn)
+          .then((ask) => theUploadAskIsDrawn(ask, into))
           .catch(() => {});
         return;
       }
@@ -2013,9 +2427,15 @@ function theShellsOwnDropIsLive() {
     .catch(() => {});
 }
 
-function theDropZoneIsShown(paths) {
+function aBoxIsOpen() {
+  return Array.from(document.querySelectorAll(".modal")).some(
+    (box) => box.isConnected && !box.closest("[hidden]") && box.getClientRects().length > 0,
+  );
+}
+
+function theDropZoneIsShown(paths, into) {
   shell.core
-    .invoke("what_is_being_dropped", { folder, paths })
+    .invoke("what_is_being_dropped", { folder: into || folder, paths })
     .then((reading) => {
       dropzone.textContent = "";
       const inner = document.createElement("div");
@@ -2035,6 +2455,8 @@ function theDropZoneIsShown(paths) {
 }
 
 function theDropZoneIsHidden() {
+  theDraggedPaths = [];
+  theDropGoesInto = null;
   if (dropzone) dropzone.hidden = true;
 }
 
@@ -2051,21 +2473,27 @@ function aBox(onTop) {
   const close = () => wrap.remove();
   // **Escape closes the thing on top, one layer at a time** — Design's own
   // rule, and `web/a-server.js` steps aside for anything carrying
-  // `role="dialog"`, which is what this carries.
-  wrap.addEventListener("keydown", (press) => {
-    if (press.key !== "Escape") return;
-    press.preventDefault();
-    close();
-  });
-  return {
+  // `role="dialog"`, which is what this carries. **A box something waits on
+  // takes its answer that does nothing instead** — `onEscape`, the
+  // already-there box's *Stop* (`Design/Whole app § Keyboard shortcuts`, 2026-11-11;
+  // the four questions, batch 2, fix 3).
+  const box = {
     body,
     close,
+    onEscape: null,
     raise() {
       boxes.appendChild(wrap);
       const first = body.querySelector("button");
-      if (first) first.focus();
+      if (first) theFocusMovesTo(first);
     },
   };
+  wrap.addEventListener("keydown", (press) => {
+    if (press.key !== "Escape") return;
+    press.preventDefault();
+    if (box.onEscape) box.onEscape();
+    else close();
+  });
+  return box;
 }
 
 function theRowOfAnswers(answers) {
@@ -2150,7 +2578,8 @@ function theDeleteBoxIsDrawn(reading, victims) {
   // live-job warning, the references line and the staging line all still
   // ask.
   const switchedOff = reading.the_permanence_warning_is_switched_off;
-  if (switchedOff && !reading.live_jobs && !reading.other_references && !reading.staged_material) {
+  if (switchedOff && !reading.live_jobs && !reading.other_references && !reading.staged_material
+      && !reading.smoozys_own_files && !reading.the_ssh_keys && !reading.the_system_folder) {
     theDeleteGoes(victims);
     return;
   }
@@ -2159,6 +2588,13 @@ function theDeleteBoxIsDrawn(reading, victims) {
   saidInto(heading, reading.question, "mono");
   box.body.appendChild(heading);
   if (reading.live_jobs) box.body.appendChild(theLiveJobWarning(reading.live_jobs));
+  // **Smoozy's own files and the login's SSH keys**, red, and never switched
+  // off (`Design/File Browser § Smoozy's own files and the login's keys`).
+  if (reading.smoozys_own_files) box.body.appendChild(aWarning(reading.smoozys_own_files, true));
+  if (reading.the_ssh_keys) box.body.appendChild(aWarning(reading.the_ssh_keys, true));
+  // **A system folder among what is deleted**, red and never switched off
+  // (`File Browser` M3b; the leftovers of the Rough what-if answers, 181).
+  if (reading.the_system_folder) box.body.appendChild(aWarning(reading.the_system_folder, true));
   if (reading.other_references) {
     box.body.appendChild(aWarning(reading.other_references, false));
   }
@@ -2289,7 +2725,9 @@ function theLiveJobBoxIsDrawn(reading, carryOn, cancel) {
   const heading = document.createElement("h3");
   saidInto(heading, reading.question, "mono");
   box.body.appendChild(heading);
-  box.body.appendChild(theLiveJobWarning(reading.live_jobs));
+  if (reading.live_jobs) box.body.appendChild(theLiveJobWarning(reading.live_jobs));
+  if (reading.smoozys_own_files) box.body.appendChild(aWarning(reading.smoozys_own_files, true));
+  if (reading.the_ssh_keys) box.body.appendChild(aWarning(reading.the_ssh_keys, true));
   box.body.appendChild(
     theRowOfAnswers([
       {
@@ -2424,6 +2862,7 @@ function anEditingRow(row) {
     editing.refused = null;
     field.className = "fld fedit";
     theHintIsSaid();
+    theEditingRowIsBroughtIntoView();
   });
   field.addEventListener("keydown", (press) => {
     if (press.key === "Enter") {
@@ -2440,19 +2879,43 @@ function anEditingRow(row) {
   theHintIsSaid();
   name.appendChild(hint);
   if (editing.refusal) {
-    name.appendChild(aDenial(editing.refusal.said, editing.refusal.the_offer, editing.refusal.dismiss));
+    name.appendChild(aDenial(editing.refusal.said, editing.refusal.the_offer, editing.refusal.dismiss, editing.refusal.retry));
   }
   element.appendChild(name);
+  // **A row being renamed keeps its Kind, Size and Changed while the name is
+  // typed, and a new folder reads *Folder* with an em dash for the other
+  // two**, as the drawing draws them (UI consistency, finding 28: they went
+  // blank, and a new folder's Kind was empty).
   const kind = document.createElement("span");
   kind.className = "fmeta kind";
-  kind.textContent = row ? row.kind : "";
+  kind.textContent = row ? row.kind : (theHeadersShown && theHeadersShown.a_folder) || "";
   itShowsWholeOnHover(kind);
   element.appendChild(kind);
+  const size = document.createElement("span");
+  size.className = row && row.size ? "fmeta r mono" : "fmeta r";
+  size.textContent = (row && row.size) || "—";
+  element.appendChild(size);
+  const changed = document.createElement("span");
+  changed.className = "fmeta r when";
+  changed.textContent = row && row.changed ? aCalendarTime(row.changed) : "—";
+  element.appendChild(changed);
   // **Selected, so typing replaces it** — once it is on the page, which is
   // the end of the listing's drawing.
   theFieldToTakeTheKeys = field;
   theEditingRow = element;
   return element;
+}
+
+/// Design/File Browser: a new hint or refusal must stay visible (C-10).
+/// Move only this list; the screen and any panel over it keep their place.
+function theEditingRowIsBroughtIntoView() {
+  if (!editing || !theEditingRow || !list || !list.contains(theEditingRow)) return;
+  const row = theEditingRow;
+  const end = row.offsetTop + row.offsetHeight;
+  if (end > list.scrollTop + list.clientHeight) list.scrollTop = end - list.clientHeight;
+  const head = list.querySelector(".fhead");
+  const clear = head ? head.offsetHeight : 0;
+  if (row.offsetTop - clear < list.scrollTop) list.scrollTop = Math.max(0, row.offsetTop - clear);
 }
 
 /// **Return: the name goes.** A new folder goes at once; a rename asks the
@@ -2515,8 +2978,114 @@ function theActIsAnswered(answer) {
     return;
   }
   editing = null;
-  if (answer.said && host && !host.hidden) theLineSays(answer.said, "act");
-  if (folder) theBrowserIsAskedFor(folder);
+  if (answer.is === "refused" && host && !host.hidden) theLineRefuses(answer.refusal);
+  else if (answer.said && host && !host.hidden) theLineSays(answer.said, "act");
+  if (folder) theFolderIsReadAgain();
+}
+
+/// **A refusal said on the line above the list**, in the drawing's own
+/// `.deny`, with the offer beside it where the machine allows one — a delete
+/// refused before anything went (`Design/File Browser`, 2026-11-12).
+function theLineRefuses(refusal) {
+  if (!host || !list) return;
+  theLinesTurn += 1;
+  const told = theLine();
+  told.dataset.act = "act";
+  told.textContent = "";
+  told.appendChild(aDenial(refusal.said, refusal.the_offer, null, refusal.retry));
+  // **A system folder among what the retry would delete**, red, under the
+  // refusal (`File Browser` M3c; the runner's ruling on 181).
+  if (refusal.the_system_folder) told.appendChild(aWarning(refusal.the_system_folder, true));
+  told.hidden = false;
+}
+
+// ── Retry with admin access ─────────────────────────────────────────────────
+//
+// **`File Browser` P5 to `File Browser` P8 and `File Browser` P6b; `Design/File Browser`, the paragraph after
+// the offer's (2026-11-12).** The application decides whether a password is
+// needed; where it is, it hands back Server Setup's own admin-access box, drawn
+// here by set-up.js's own drawing, and the password goes back with the same
+// retry. **Nothing here keeps it**: the box empties its field as it hands it
+// over, and this passes it straight on.
+
+// **The password box open for a retry, and the server it was opened for** —
+// `File Browser` P5 as changed after Sol's look (finding 2).
+let theAdminBox = null;
+
+function theAdminBoxCloses() {
+  if (theAdminBox) theAdminBox.box.close();
+  theAdminBox = null;
+}
+
+export function theAdminRetryIsAskedFor(retry, password, choice, which = server) {
+  // **Only on the server the retry was offered on, while it is the one
+  // showing** — never on another (Sol's finding 2).
+  if (!which || !retry || which !== server || (retry.server && retry.server !== which)) return;
+  // **Numbered as every reading is** (Sol's look at the window notes, point
+  // 3): its folder is drawn only where the user has not moved since and no
+  // newer reading is drawn, and refreshes wait while it is out.
+  theReadings += 1;
+  const number = theReadings;
+  theRetryOut = number;
+  shell.core
+    .invoke("an_act_is_retried_with_admin_access", { server: which, retry, password, choice })
+    .then((answer) => {
+      theAdminRetryIsAnswered(which, retry, answer, number);
+      theReadingEnds(number);
+    })
+    .catch(() => theReadingEnds(number));
+}
+
+function theAdminRetryIsAnswered(which, retry, answer, number) {
+  if (!answer || which !== server) return;
+  if (answer.is === "asks-for-the-password") {
+    // **Setup's box, not a second kind** — loaded when first needed, which is
+    // the module the Set up tab already holds.
+    import("./set-up.js")
+      .then((setUp) => {
+        if (which !== server) return;
+        theAdminBoxCloses();
+        const box = aBox(true);
+        theAdminBox = { box, server: which };
+        setUp.theAdminAccessBoxIsDrawnInto(box.body, answer.asked, {
+          answered: (typed, picked) => theAdminRetryIsAskedFor(retry, typed || null, picked, which),
+          closes: () => {
+            if (theAdminBox && theAdminBox.box === box) theAdminBox = null;
+            box.close();
+          },
+        });
+        box.raise();
+        const field = box.body.querySelector('input[type="password"]');
+        if (field) theFocusMovesTo(field);
+      })
+      .catch(() => {});
+    return;
+  }
+  editing = null;
+  if (answer.is === "the-folder") {
+    // **`File Browser` P8: what elevation could see**, drawn as the folder —
+    // **unless the user has moved since**, or a newer reading is drawn.
+    // **A refresh owed while it was out is met by it**, so a plain reading
+    // of the refused folder does not land over it.
+    if (!itIsStillWanted(number)) return;
+    theNewestDrawn = number;
+    aRefreshIsOwed = false;
+    said = answer.browser;
+    folder = answer.browser.folder.bytes;
+    theLineGoesWithItsFolder(folder);
+    theBrowserIsDrawn(answer.browser);
+    return;
+  }
+  if (answer.is === "said" && host && !host.hidden) theLineSays(answer.said, "act");
+  // **`Design/File Browser`, the retry's *Done* as added 2026-11-12: the
+  // refusal on the line goes with its offer.** Until then a delete refused
+  // part-way kept its first report and offered the retry again after the
+  // retry had deleted everything (the second live pass, new fault 4).
+  if (answer.is === "done" && host) {
+    const told = host.querySelector(".fnotyet");
+    if (told && told.dataset.act === "act") theLineIsTakenAway();
+  }
+  if (folder) theFolderIsReadAgain();
 }
 
 // ── Cut, copy and paste ─────────────────────────────────────────────────────
@@ -2529,7 +3098,7 @@ function theActIsAnswered(answer) {
 /// (the thirteenth notes, note 6), and the folder is read again so Paste shows
 /// its count. **Nothing chosen says so in one line.**
 function theCutOrCopyIsTaken(act) {
-  if (!server || !said) return;
+  if (!server || !said || (act === "copy" && said.toolbar.copy_greyed)) return;
   const paths = theChosenPaths();
   if (paths.length === 0) {
     theLineSays(act === "cut" ? said.toolbar.around_an_act.select_to_cut : said.toolbar.around_an_act.select_to_copy, act);
@@ -2573,12 +3142,12 @@ function thePasteIsAsked(into) {
 // hands over the paths it was given and nothing else; everything that happens
 // to them is the application's.
 
-function theUploadIsConfirmed(chosenPaths) {
+function theUploadIsConfirmed(chosenPaths, into) {
   if (!server || !folder) return;
   shell.core
     .invoke("the_upload_is_confirmed", {
       server,
-      folder,
+      folder: into || folder,
       chosen: (chosenPaths || []).map((path) => path.bytes),
     })
     .then(theUploadGoes)
@@ -2589,20 +3158,93 @@ function theUploadIsConfirmed(chosenPaths) {
 function theUploadGoes(goes) {
   if (!goes) return;
   if (goes.is === "the-question") {
+    // **The walk has ended**, so *Counting files…* has said what it had to.
+    if (theLineIsCounting()) theLineIsTakenAway();
     theAlreadyExistsBox(goes.question, goes.request);
     return;
   }
-  // **An upload under way says nothing above the list** — `Design/File
-  // Browser § The list`: the bottom bar's transfer count says it is running,
-  // and the line says only how it ended. A line left from an earlier answer is
-  // taken away, so it does not read as this one's. The Creator's notes piece 6.
-  if (goes.is === "underway") theLineIsTakenAway();
+  // **An upload under way is said on the line above the list, inside Files** —
+  // `Design/File Browser § The list`, the Creator's twenty-eighth notes, note
+  // 10: *Uploading 12 of 40 files to kitchen/* with a thin bar, read from what
+  // Transfers holds and never counted here, and asked again at every move.
+  // *"Uploading shouldn't automatically switch the user to Transfers."* Until
+  // then it said nothing here while it ran (the Creator's notes piece 6).
+  if (goes.is === "underway") theUploadLineIsAskedFor();
   if (goes.is === "did-not-start") theLineSays(goes.said, "upload");
+  if (goes.is === "nothing-happened" && theLineIsCounting()) theLineIsTakenAway();
+}
+
+// ── The upload, on the line above the list ──────────────────────────────────
+
+// **Every sentence said on the line moves this on**, so an answer about the
+// upload asked before an ending was said is not drawn over that ending.
+let theLinesTurn = 0;
+let askingTheUploadLine = false;
+let askTheUploadLineAgain = false;
+
+function theLineIsCounting() {
+  const told = host && host.querySelector(".fnotyet");
+  return Boolean(told && !told.hidden && told.dataset.act === "upload-counting");
+}
+
+/// **How far the uploads into the folder shown have got**, asked of the
+/// application — the figures are Transfers' own (`File Browser` U11), and
+/// several uploads into the folder come back as one line. One asking at a
+/// time, as the transfer count asks.
+function theUploadLineIsAskedFor() {
+  if (!host || !server || !folder) return;
+  if (askingTheUploadLine) {
+    askTheUploadLineAgain = true;
+    return;
+  }
+  askingTheUploadLine = true;
+  const which = server;
+  const where = folder;
+  const turn = theLinesTurn;
+  shell.core
+    .invoke("the_upload_into_this_folder", { server: which, folder: where })
+    .then((line) => {
+      if (which !== server || !folder || where.join(",") !== folder.join(",")) return;
+      if (turn !== theLinesTurn) return;
+      theUploadLineIsDrawn(line);
+    })
+    .catch(() => {})
+    .finally(() => {
+      askingTheUploadLine = false;
+      if (askTheUploadLineAgain) {
+        askTheUploadLineAgain = false;
+        theUploadLineIsAskedFor();
+      }
+    });
+}
+
+/// **The line, with the bar under it**: the shared underway bar, filled in
+/// bytes. **Nothing going into the folder** takes away a line that said so,
+/// and leaves any other line — the ending, *Counting files…*, an act's answer
+/// — where it is.
+function theUploadLineIsDrawn(line) {
+  if (!host || !list || host.hidden) return;
+  if (!line) {
+    const told = host.querySelector(".fnotyet");
+    if (told && !told.hidden && told.dataset.act === "uploading") theLineIsTakenAway();
+    return;
+  }
+  const told = theLine();
+  told.dataset.act = "uploading";
+  told.textContent = "";
+  saidInto(told, line.said, "mono", true);
+  const bar = document.createElement("progress");
+  bar.className = "underway-bar";
+  bar.max = line.bar.max;
+  bar.value = line.bar.value;
+  told.appendChild(bar);
+  told.hidden = false;
 }
 
 /// **The line above the list**, where an answer is said where the user asked —
 /// the shape piece 3 gave an answer on the server list.
 function theLineIsTakenAway() {
+  theLinesTurn += 1;
   const told = host && host.querySelector(".fnotyet");
   if (told) told.hidden = true;
 }
@@ -2635,6 +3277,7 @@ function theLineGoesWithItsFolder(drawn) {
 
 function theLineSays(words, act) {
   if (!host || !list) return;
+  theLinesTurn += 1;
   const told = theLine();
   told.dataset.act = act || "";
   told.textContent = "";
@@ -2644,6 +3287,7 @@ function theLineSays(words, act) {
 
 /// **Another server's line is not this one's**: it is hidden and emptied.
 function theLineIsCleared() {
+  theLinesTurn += 1;
   theLinesServer = null;
   theLinesFolder = null;
   const told = host && host.querySelector(".fnotyet");
@@ -2744,7 +3388,7 @@ export function theAlreadyExistsBox(question, request, onAnswer) {
     control.type = "button";
     control.className = answer.put_forward ? "btn" : "btn quiet";
     control.textContent = answer.label;
-    control.addEventListener("click", () => {
+    const pressed = () => {
       box.close();
       if (request) {
         // **Stop is an answer too**: the request records it and ends.
@@ -2760,7 +3404,11 @@ export function theAlreadyExistsBox(question, request, onAnswer) {
         if (onAnswer) onAnswer(answer.answer);
         else anActNeedsAConnection(`collision-answer-${answer.answer}`);
       }
-    });
+    };
+    control.addEventListener("click", pressed);
+    // **Escape is *Stop***: an upload is never left waiting on a question
+    // nobody can see (scout 1.12).
+    if (answer.answer === "stop" || answer.answer === "cancel") box.onEscape = pressed;
     row.appendChild(control);
   }
   box.body.appendChild(row);
@@ -2850,7 +3498,7 @@ function theUploadEnded(which, request) {
         return;
       }
       theLineSays(words, "upload");
-      theBrowserIsAskedFor(folder);
+      theFolderIsReadAgain();
     })
     .catch(() => {});
 }
@@ -2866,7 +3514,7 @@ function theUploadEnded(which, request) {
 whenTold(THE_CONNECTION_IS_LENT, (delivery) => {
   const which = (delivery.said || {}).server;
   if (!isShowing || !host || !which || which !== server) return;
-  theBrowserIsAskedFor(folder);
+  theReadingsStartFresh();
 });
 
 
@@ -2925,6 +3573,15 @@ function theKeysAreLive() {
     // **A name being typed is not this screen's to act on**: Backspace and
     // Delete edit the name (step 10c's Files' owed acts piece 3).
     if (aFieldIsBeingTyped(press.target)) return;
+    // **Refresh's keys** — `Design/File Browser § Keyboard shortcuts`, the
+    // twenty-eighth notes, note 9: a reading, the third exception to *nothing
+    // that crosses the wire has a key*. Wherever the focus was left, as ↑ and
+    // ↓ are, and for the same reason: nothing else on the window binds them.
+    if (theKeyRefreshes(press)) {
+      press.preventDefault();
+      theFolderIsRefreshed();
+      return;
+    }
     const held = press.shiftKey || press.metaKey || press.ctrlKey || press.altKey;
     // **↑ and ↓ are the list's wherever the focus was left** — the Creator's
     // third notes on the test copy, note 6 (*"this one does work sometimes"*).
@@ -3185,7 +3842,7 @@ function theViewerOpensOn(row) {
   if (!said || !said.viewer) return;
   if (!theViewer) theViewer = theViewerIsMade(said.viewer);
   theViewerShows(row);
-  theViewer.close.focus();
+  theFocusMovesTo(theViewer.close);
 }
 
 /// **Where the box opens: over the whole window**, as Queue's large preview
@@ -3248,7 +3905,13 @@ function theViewerIsMade(words) {
   box.appendChild(place);
   box.appendChild(step);
   panel.appendChild(box);
-  const made = { panel, title, meta, download, close, picture, say, previous, next, row: null, address: null };
+  const made = { panel, title, meta, download, close, picture, say, previous, next, row: null, address: null, board: null };
+  // **The board's squares stay 8 pixels on screen when the box changes
+  // size** (`Design/File Browser § Looking at a picture`, the twenty-ninth
+  // notes, note 12). The box covers the window, so it changes size when the
+  // window does.
+  made.resized = () => theBoardIsSized(made);
+  if (typeof window.addEventListener === "function") window.addEventListener("resize", made.resized);
   close.addEventListener("click", () => theViewerCloses());
   previous.addEventListener("click", () => theViewerSteps(-1));
   next.addEventListener("click", () => theViewerSteps(1));
@@ -3299,6 +3962,7 @@ function theViewerCloses() {
   if (!theViewer) return;
   theViewersPictureIsLetGo();
   shell.core.invoke("the_picture_is_let_go").catch(() => {});
+  if (typeof window.removeEventListener === "function") window.removeEventListener("resize", theViewer.resized);
   theViewer.panel.remove();
   theViewer = null;
 }
@@ -3318,6 +3982,7 @@ function theViewerSteps(by) {
 function theViewerSays(words, under) {
   theViewer.picture.hidden = true;
   theViewer.picture.replaceChildren();
+  theViewer.board = null;
   theViewer.say.replaceChildren();
   saidInto(theViewer.say, words);
   for (const one of under || []) {
@@ -3337,6 +4002,9 @@ function theViewerShows(row) {
   theChosenFileIsShown();
   theChosenRowIsBroughtIntoView();
   viewer.title.replaceChildren(theValueDrawn(row.name.shown));
+  // A long name is cut short in the title; the whole of it reads on hover
+  // (the UI at every size, C-13).
+  viewer.title.title = viewer.title.textContent;
   // **The top line gives its size**, and its pixel size once it is shown.
   viewer.meta.replaceChildren();
   if (row.size) viewer.meta.appendChild(theValueDrawn(row.size));
@@ -3415,14 +4083,34 @@ function thePictureIsDecoded(row, bytes) {
     svg.setAttribute("viewBox", "0 0 " + width + " " + height);
     svg.setAttribute("role", "img");
     svg.setAttribute("aria-label", row.name.shown);
+    // **The board under it**, drawn by the page and never into the picture:
+    // one rectangle exactly the picture's size, so the space around it stays
+    // plain, under every picture, since an opaque one hides it.
+    const board = theBoardUnder(width, height);
+    svg.appendChild(board.defs);
+    svg.appendChild(board.ground);
     const image = document.createElementNS(SVG_NS, "image");
-    image.setAttribute("href", address);
     image.setAttribute("width", String(width));
     image.setAttribute("height", String(height));
+    // **Shown once the picture itself has loaded, and hidden on its error**,
+    // so a large picture never flashes a bare board. The decode above is a
+    // separate image, so its load is not this one's.
+    image.addEventListener("load", () => {
+      if (theViewer !== viewer || ask !== theViewersAsk) return;
+      theBoardIsSized(viewer);
+      board.ground.removeAttribute("visibility");
+    });
+    image.addEventListener("error", () => {
+      if (theViewer !== viewer || ask !== theViewersAsk) return;
+      board.ground.setAttribute("visibility", "hidden");
+    });
+    image.setAttribute("href", address);
     svg.appendChild(image);
     viewer.picture.replaceChildren(svg);
     viewer.picture.hidden = false;
     viewer.say.hidden = true;
+    viewer.board = { svg, pattern: board.pattern, squares: board.squares, width, height };
+    theBoardIsSized(viewer);
     // *3.9 MB · 1920 × 1080* — two values, side by side.
     viewer.meta.replaceChildren();
     if (row.size) {
@@ -3438,6 +4126,72 @@ function thePictureIsDecoded(row, bytes) {
     theViewerSays(said.viewer.could_not_show);
   };
   decoding.src = address;
+}
+
+/// **How many boards were made**, so each pattern has a name of its own.
+let theBoardsMade = 0;
+
+/// **The grey-and-white board** — `Design/File Browser § Looking at a
+/// picture`, the Creator's twenty-ninth notes, note 12: *"A picture with
+/// transparency is shown over the grey-and-white checkerboard, in 8-pixel
+/// squares, the space around it plain."* A pattern of two squares a side, the
+/// drawing's `.fbvboard` (white) with its `.dk` squares (light grey) in the
+/// top-left and bottom-right, and the one rectangle it fills, hidden until the
+/// picture loads. Its colours are the drawing's, the same in both themes.
+function theBoardUnder(width, height) {
+  theBoardsMade += 1;
+  const named = "fbvchk-" + theBoardsMade;
+  const defs = document.createElementNS(SVG_NS, "defs");
+  const pattern = document.createElementNS(SVG_NS, "pattern");
+  pattern.setAttribute("id", named);
+  pattern.setAttribute("class", "fbvboard");
+  pattern.setAttribute("patternUnits", "userSpaceOnUse");
+  const light = document.createElementNS(SVG_NS, "rect");
+  const first = document.createElementNS(SVG_NS, "rect");
+  first.setAttribute("class", "dk");
+  const second = document.createElementNS(SVG_NS, "rect");
+  second.setAttribute("class", "dk");
+  pattern.appendChild(light);
+  pattern.appendChild(first);
+  pattern.appendChild(second);
+  defs.appendChild(pattern);
+  const ground = document.createElementNS(SVG_NS, "rect");
+  ground.setAttribute("width", String(width));
+  ground.setAttribute("height", String(height));
+  ground.setAttribute("fill", "url(#" + named + ")");
+  ground.setAttribute("visibility", "hidden");
+  const board = { defs, pattern, squares: [light, first, second], ground };
+  theSquaresAre(board, 8);
+  return board;
+}
+
+/// **One square is `side` picture pixels**, the pattern two squares a side.
+function theSquaresAre(board, side) {
+  const [light, first, second] = board.squares;
+  board.pattern.setAttribute("width", String(2 * side));
+  board.pattern.setAttribute("height", String(2 * side));
+  light.setAttribute("width", String(2 * side));
+  light.setAttribute("height", String(2 * side));
+  first.setAttribute("width", String(side));
+  first.setAttribute("height", String(side));
+  second.setAttribute("x", String(side));
+  second.setAttribute("y", String(side));
+  second.setAttribute("width", String(side));
+  second.setAttribute("height", String(side));
+}
+
+/// **8 pixels on screen whatever the picture's size**: the picture is fitted
+/// whole, so it is drawn at the smaller of the two scales its box allows, and
+/// a square is 8 divided by that scale in the picture's own pixels. Worked out
+/// when the picture is drawn, again when it has loaded, and again when the
+/// window changes size; nothing while the box is not laid out.
+function theBoardIsSized(viewer) {
+  const board = viewer && viewer.board;
+  if (!board || typeof board.svg.getBoundingClientRect !== "function") return;
+  const box = board.svg.getBoundingClientRect();
+  const scale = Math.min(box.width / board.width, box.height / board.height);
+  if (!(scale > 0) || !Number.isFinite(scale)) return;
+  theSquaresAre(board, 8 / scale);
 }
 
 /// **The box follows the line**: *Download* greys while it is down, and the

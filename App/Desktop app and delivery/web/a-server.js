@@ -253,6 +253,7 @@ import { aScreenIsRegistered, A_SERVER } from "./the-rail.js";
 import { theMomentReads, theConnectionIsDrawnInto } from "./servers.js";
 import { whenTold } from "./event-route.js";
 import { theValueIsDrawnInto } from "./the-value-drawn.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 const shell = window.__TAURI__;
 
@@ -568,7 +569,9 @@ function theHardwareIsDrawn(drawn) {
     });
   }
   // **What it is rendering**, which is the fourth thing on the drawing's line.
-  for (const part of drawn.the_work || []) one(part);
+  // **The dash is the list's and is not drawn here** (the UI at every size,
+  // B-18): on this one line it read as punctuation.
+  if (!drawn.the_work_is_the_dash) for (const part of drawn.the_work || []) one(part);
   const rental = drawn.the_rental_line || {};
   one(rental.running_for);
   one(rental.the_statement);
@@ -634,6 +637,8 @@ function theShowingTabIsShown(server) {
   }
   const showing = tabs.get(held.tab);
   if (showing && showing.itIsShowing) showing.itIsShowing(server);
+  // A tab's host made while a panel is open is under it too.
+  theScreenUnderAPanelIsMarked();
 }
 
 /// **Go to the other tab.** Section 2 above. It acts on the server that is open.
@@ -720,7 +725,7 @@ export function thePanelIsOpenedOver(server, panel) {
   // panel is told next and may move it wherever it likes.
   if (!parts.wrap.hidden && !parts.wrap.contains(document.activeElement)) {
     const out = parts.wrap.querySelector(".collapse");
-    if (out) out.focus();
+    if (out) theFocusMovesTo(out);
   }
   const registered = panels.get(panel);
   if (registered && registered.itIsShowingAgain) registered.itIsShowingAgain(server);
@@ -809,7 +814,7 @@ function theOpenPanelIsCollapsed(server, focusGoesToTheStrip = true) {
   held.open = null;
   theStripsAreDrawn(server);
   const back = held.strip.get(parts && parts.panel);
-  if (back && focusGoesToTheStrip) back.focus();
+  if (back && focusGoesToTheStrip) theFocusMovesTo(back);
 }
 
 /// **A link from another screen into this server's Files collapses the panel
@@ -964,6 +969,7 @@ if (typeof window.addEventListener === "function") {
 }
 
 function theStripsAreDrawn(server) {
+  theScreenUnderAPanelIsMarked();
   if (theStripPressHeld && theStripPressHeld.server === server) {
     theStripsWaiting.add(server);
     return;
@@ -1000,7 +1006,7 @@ function theStripsAreDrawn(server) {
     held.strips.appendChild(one);
   }
   held.strips.hidden = held.strips.childElementCount === 0 || server !== current;
-  if (focused && held.strip.has(focused)) held.strip.get(focused).focus();
+  if (focused && held.strip.has(focused)) theFocusMovesTo(held.strip.get(focused));
 }
 
 function aStrip(server, panel, reading) {
@@ -1035,6 +1041,9 @@ function aStrip(server, panel, reading) {
     }
     one.appendChild(counting);
   }
+  // **The strip is one line, cut short where it must; the whole of it reads on
+  // hover** (the UI at every size, D-20 and B-17).
+  one.title = Array.from(one.children, (part) => part.textContent).join(" · ");
 
   const open = document.createElement("span");
   open.className = "open";
@@ -1113,6 +1122,7 @@ function theTabIsGoneWithItsServer() {
     for (const parts of held.drawn.values()) parts.wrap.hidden = true;
     if (held.strips) held.strips.hidden = true;
   }
+  theScreenUnderAPanelIsMarked();
 }
 
 /// **A server that has been removed takes its panels with it** — section 7.
@@ -1122,6 +1132,29 @@ function theServerIsForgotten(server) {
   for (const parts of held.drawn.values()) parts.wrap.remove();
   if (held.strips) held.strips.remove();
   servers.delete(server);
+  theScreenUnderAPanelIsMarked();
+}
+
+/// **A panel over a server keeps the screen under it out of Tab's reach** —
+/// `Design/Whole app`, *Keyboard shortcuts*, *Tab stays inside the box on
+/// top*, from the Creator's twenty-eighth notes, note 2. While a panel is
+/// drawn over this screen, everything of the screen but the panels — the head,
+/// its tabs, the tab that is showing, what is said instead — carries
+/// `data-under-a-panel`, and `./the-tab-key.js` steps over it. **The panel's
+/// frame, its strips, the rail and the title bar are not marked**: a panel
+/// does not take the window. Section 5's *a control nobody can see and Tab can
+/// still reach*, said of the strips, is the same fault for the screen, and
+/// this closes it the same way: nothing is measured, the mark follows whether
+/// a panel's frame is shown.
+function theScreenUnderAPanelIsMarked() {
+  if (!host) return;
+  const children = Array.from(host.children || []).filter((one) => one.classList && one.dataset);
+  const covered = children.some((one) => one.classList.contains("sheetwrap") && !one.hidden);
+  for (const one of children) {
+    if (one.classList.contains("sheetwrap") || one.classList.contains("strips")) continue;
+    if (covered) one.dataset.underAPanel = "";
+    else delete one.dataset.underAPanel;
+  }
 }
 
 // ── The one place a value becomes a node ────────────────────────────────────

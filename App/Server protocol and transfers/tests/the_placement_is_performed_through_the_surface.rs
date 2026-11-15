@@ -379,12 +379,23 @@ async fn a_machine_with_its_own_tools(
 struct Scratch(PathBuf);
 
 impl Scratch {
+    /// **A folder no other test has, whatever name it was asked under.** The
+    /// last part is a count kept for the whole test program. *(Until
+    /// 2026-11-11 it was the time since a clock just started, a few dozen
+    /// nanoseconds and often the same twice. Two tests that asked under one
+    /// name then shared a folder: one failed to make its keys over the
+    /// other's, and whichever ended first removed the folder under the
+    /// other.)*
     fn new(name: &str) -> Scratch {
+        static MADE_SO_FAR: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
             "smoozy-placement-{name}-{}-{}",
             std::process::id(),
-            Instant::now().elapsed().as_nanos()
+            MADE_SO_FAR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
+        // What an earlier run under this process number left, if it ended
+        // without tidying.
+        let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).expect("a temporary directory can be made");
         Scratch(path)
     }
@@ -784,7 +795,12 @@ async fn a_rollback_restores_the_registration_and_the_record_that_describes_it()
     let scratch = Scratch::new("rollback");
     let host_key = scratch.a_key("host");
     let user_key = scratch.a_key("user");
-    let machine = a_machine(&host_key, sftp_server, scratch.0.clone()).await;
+    // **G14's start after the restore starts the keeper on a container**, so
+    // the session maker is a stand-in that writes the asking down and starts
+    // nothing: a real one would leave a keeper looping after the test.
+    let tools = a_session_maker_that_starts_nothing(&scratch);
+    let machine =
+        a_machine_with_its_own_tools(&host_key, sftp_server, scratch.0.clone(), Some(tools)).await;
     let mut connection = a_connection(&machine, &user_key).await;
     let mut subsystem = a_subsystem(&connection).await;
 
@@ -920,6 +936,201 @@ async fn a_rollback_restores_the_registration_and_the_record_that_describes_it()
         panic!("the phase record did not read back");
     };
     assert_eq!(after.phase, Phase::RolledBack);
+}
+
+/// **A folder holding a `setsid` that writes down what it was asked to start
+/// and starts nothing**, to go in front of the far end's path. Nothing in it is
+/// Smoozy's.
+fn a_session_maker_that_starts_nothing(scratch: &Scratch) -> PathBuf {
+    let tools = scratch.at("tools");
+    std::fs::create_dir_all(&tools).expect("the tools folder is made");
+    let at = tools.join("setsid");
+    std::fs::write(
+        &at,
+        "#!/bin/sh\n# Stands in for util-linux's setsid, and starts nothing.\n\
+         echo \"setsid $*\" >> \"$HOME/what-setsid-was-asked\"\n",
+    )
+    .expect("the stand-in is written");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&at, std::fs::Permissions::from_mode(0o755))
+            .expect("the mode is set");
+    }
+    tools
+}
+
+/// **`Rented-server runtime` G14's *what runs after the restore*, on a
+/// container: once the pointer is back, the previous program's entry point is
+/// asked for G25's ending and the keeper is started.** Added 2026-11-11, the
+/// Fable review's third sitting.
+///
+/// **The story.** An update's program starts, holds the endpoint and fails the
+/// health exchange: it answers too late, or with the wrong values. The pointer
+/// is renamed back. Until this sitting nothing more was done, so the program
+/// that failed went on running, the keeper waited on it, and the app said the
+/// update had been undone.
+///
+/// **What is not the real thing.** The previous package is a script that
+/// writes down the request it was given. What the machine's own program does
+/// with that request, ending the endpoint's holder where it runs another
+/// program, is proved in its own package.
+#[tokio::test]
+async fn a_rollback_on_a_container_asks_for_the_ending_and_starts_the_keeper() {
+    let _deadline = TheTestsDeadline::started();
+    let sftp_server = the_server_or_say_so!();
+    a_linux_shaped_far_end!();
+    let (scratch, given, area) =
+        a_container_rolled_back_from(Phase::CommittedUnverified, sftp_server).await;
+
+    // **The ending was asked, and of the previous program**: the pointer was
+    // already back when the entry point was run, or this script would never
+    // have been given anything.
+    let what_it_was_given = std::fs::read(&given).unwrap_or_else(|_| {
+        panic!(
+            "the swap was rolled back and nothing asked the previous program to end the one \
+             still running"
+        )
+    });
+    let back = read_one_request(&mut &what_it_was_given[..]).expect("the frame reads");
+    assert_eq!(
+        back.name,
+        smoozy_framing::requests::THE_SUPERVISOR_ENDS_ITSELF_REQUEST
+    );
+
+    // **And the keeper was started**, after the ending. The start is sent to
+    // the background, so its stand-in may write a moment after the command
+    // returned; it is looked for inside a deadline of its own.
+    let looked_from = Instant::now();
+    let mut started = String::new();
+    while looked_from.elapsed() < Duration::from_secs(20) {
+        started = std::fs::read_to_string(scratch.at("what-setsid-was-asked")).unwrap_or_default();
+        if !started.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        started.contains(".smoozy-carriage/keeper"),
+        "what the session maker was asked to start: {started}"
+    );
+    let keeper = std::fs::read_to_string(scratch.at(".smoozy-carriage/keeper"))
+        .expect("the keeper's file was written");
+    assert!(
+        keeper.contains(&format!("{area}/{THE_FIXED_ENTRY_POINT_NAME}")),
+        "the keeper starts what the pointer names: {keeper}"
+    );
+}
+
+/// **A rollback from *committing* puts the previous program in place too.**
+/// Sol's first point, 2026-11-11. The phase alone does not say whether
+/// `Rented-server runtime` G25's ending was performed: a swap taken up again
+/// after its line dropped at *committed, unverified* is written *committing*
+/// once more, with the previous program already ended. So the rollback asks and
+/// starts whatever the phase. Where the previous program is still the one
+/// running, the asking ends nothing.
+#[tokio::test]
+async fn a_rollback_from_committing_puts_the_previous_program_in_place_too() {
+    let _deadline = TheTestsDeadline::started();
+    let sftp_server = the_server_or_say_so!();
+    a_linux_shaped_far_end!();
+    let (_scratch, given, _area) =
+        a_container_rolled_back_from(Phase::Committing, sftp_server).await;
+    assert!(
+        given.exists(),
+        "a swap rolled back from committing asked nothing of the previous program"
+    );
+}
+
+/// A container whose swap stood at `phase` with the pointer naming the new
+/// package, rolled back. Hands back the scratch folder, where the previous
+/// package writes down any request it is given, and the package area.
+async fn a_container_rolled_back_from(
+    phase: Phase,
+    sftp_server: PathBuf,
+) -> (Scratch, PathBuf, String) {
+    let scratch = Scratch::new("rollback-start");
+    let host_key = scratch.a_key("host");
+    let user_key = scratch.a_key("user");
+    let tools = a_session_maker_that_starts_nothing(&scratch);
+    let machine =
+        a_machine_with_its_own_tools(&host_key, sftp_server, scratch.0.clone(), Some(tools)).await;
+    let mut connection = a_connection(&machine, &user_key).await;
+    let mut subsystem = a_subsystem(&connection).await;
+
+    let area_path = scratch.at("package-area");
+    std::fs::create_dir_all(&area_path).expect("the area is made");
+    let area = area_path.to_string_lossy().into_owned();
+
+    // The previous package: the stand-in, which writes down what it is given.
+    let given = scratch.at("what-the-previous-program-was-given");
+    let previous_location = area_path.join("staged-0.0.9");
+    std::fs::write(
+        &previous_location,
+        a_stand_in_adapter(&given, &scratch.at("no-answer-frame")),
+    )
+    .expect("the previous package is there");
+    // This placement's package, which the pointer names.
+    let staging = area_path.join("staged-0.1.0");
+    std::fs::write(&staging, b"#!/bin/sh\nexit 1\n").expect("this placement's package is there");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for at in [&previous_location, &staging] {
+            std::fs::set_permissions(at, std::fs::Permissions::from_mode(0o700))
+                .expect("the mode is set");
+        }
+        std::os::unix::fs::symlink(&staging, area_path.join(THE_FIXED_ENTRY_POINT_NAME))
+            .expect("the pointer is planted");
+    }
+    let previous_location = previous_location.to_string_lossy().into_owned();
+
+    // The registration did not change, so `Rented-server runtime` G9's case
+    // does not arise.
+    let the_registration = b"#!/bin/sh\n# the registration\n".to_vec();
+    let mut record = a_fresh_attempts_first_write(
+        an_identity(IdentityKind::Operation),
+        smoozy_runtime::package::release::VerifiedReleaseDescriptor {
+            manifest_format: "smoozy-server-package-manifest-1".into(),
+            verified_release_sequence: 7,
+            requested_package_version: "0.1.0".into(),
+            manifest_digest: [3; 32],
+            artifact_identity: "linux-x86_64-gnu".into(),
+            artifact_byte_length: 17,
+            artifact_digest: [4; 32],
+        },
+        Some(a_previous_version(&previous_location, &the_registration)),
+        MachineKind::Container,
+        staging.to_string_lossy().into_owned(),
+    );
+    record.phase = phase;
+    write_the_phase_record(&mut subsystem, &area, &record)
+        .await
+        .expect("the phase record is written");
+
+    let mut surface = ThePlacementsSurface::of(&mut subsystem, &mut connection);
+    assert_eq!(
+        complete_the_rollback(&mut surface, &area, &record)
+            .await
+            .expect("the rollback completed"),
+        WhatThePlacementReached::RolledBack
+    );
+    assert_eq!(
+        the_active_pointers_value(&mut subsystem, &area)
+            .await
+            .expect("the pointer reads"),
+        Some(previous_location.clone())
+    );
+
+    // **`Rented-server runtime` G16's condition is still discharged.**
+    let WhatARecordHeld::It(after) = read_the_phase_record(&mut subsystem, &area)
+        .await
+        .expect("the phase record reads")
+    else {
+        panic!("the phase record did not read back");
+    };
+    assert_eq!(after.phase, Phase::RolledBack);
+    (scratch, given, area)
 }
 
 /// **`Rented-server runtime` G12 and G13, run over both of §1.1's mechanisms:
@@ -2891,6 +3102,993 @@ mod the_real_program {
             keepers,
             "a second keeper stayed running beside the first"
         );
+    }
+
+    /// **`Rented-server runtime` G14's *what runs after the restore*, on a
+    /// systemd machine: a swap to a program that ends at once is rolled back,
+    /// and the previous program is running again afterwards.** Added
+    /// 2026-11-11, the Fable review's third sitting.
+    ///
+    /// **The story.** A server runs Smoozy. An update places a program that
+    /// ends as soon as it starts. G25's `restart` has already stopped the
+    /// previous program. The service manager starts the new one a few times and
+    /// then gives up (`systemd.unit(5)`, quoted at
+    /// `smoozy_server_protocol::placement::registration::THE_SUPERVISOR_START_AFTER_A_RESTORE`).
+    /// The health exchange gets no answer, the pointer is renamed back, and
+    /// **until this sitting nothing started the previous program**: the app said
+    /// the update failed and the server was left with no Smoozy program, no
+    /// queue and no Telegram.
+    ///
+    /// **What the stand-in service manager is here.** It starts the unit's line
+    /// once and never again, which is the real one after its start limit is
+    /// hit. So the only thing that can bring the previous program back is the
+    /// rollback's own start.
+    #[tokio::test]
+    async fn a_rollback_on_a_systemd_machine_leaves_the_previous_program_running() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        a_linux_shaped_far_end!();
+        let mut desk = the_desk_or_say_so!(sftp_server);
+
+        // ------------------------------------ the server as it stood before
+        let installation = an_identity(IdentityKind::Installation);
+        let first = an_identity(IdentityKind::Operation);
+        assert_eq!(
+            desk.one_placement(&first, &installation).await,
+            WhatThePlacementReached::Verified,
+            "the first placement did not verify. The supervisor said: {}",
+            desk.machine.what_the_supervisor_said()
+        );
+        let before = desk
+            .asked_now()
+            .await
+            .expect("the first placement's supervisor answers");
+
+        // ------------------------- an update whose program ends as it starts
+        let a_program_that_ends_at_once = b"#!/bin/sh\nexit 1\n".to_vec();
+        let served = desk._keys.at("a-program-that-ends-at-once");
+        std::fs::write(&served, &a_program_that_ends_at_once).expect("the program is written");
+        let release = a_release_at(&a_program_that_ends_at_once, "99.0.0");
+        let (verified, bytes) = verified_and_fetched(&release, &served);
+
+        let WhatARecordHeld::It(the_registration) = within(
+            "the boot-registration record read back".to_string(),
+            HOW_LONG_ONE_READING_IS_GIVEN,
+            read_the_boot_registration_record(&mut desk.subsystem, &desk.area),
+        )
+        .await
+        .expect("the record reads") else {
+            panic!("the first placement left no boot-registration record");
+        };
+        let previous = PreviousVersion {
+            descriptor: smoozy_server_protocol::placement::performing::the_phase_records_descriptor_for(
+                &desk.verified.the_release_descriptors_values(),
+            ),
+            retained_adapter: RetainedAdapter {
+                declared_interval: (1, 1),
+                declared_request_set: Vec::new(),
+            },
+            location: the_staging_location_for(&desk.area, &first),
+            previous_boot_registration_content: the_registration.content.clone(),
+        };
+
+        let second = an_identity(IdentityKind::Operation);
+        let reached = {
+            let mut surface = ThePlacementsSurface::of(&mut desk.subsystem, &mut desk.connection);
+            let placing = place_a_verified_release(
+                &mut surface,
+                WhatThePlacementNeeds {
+                    package_area: desk.area.clone(),
+                    attempt: second.clone(),
+                    owner: an_owner(installation.clone(), Route::SetupPlacement),
+                    installation: installation.clone(),
+                    verified: &verified,
+                    artifact: &bytes,
+                    kind: MachineKind::Systemd,
+                    previous: Some(previous),
+                    the_root_step_on_a_container: None,
+                    accepted_work: Vec::new(),
+                    the_health_exchanges_identity: an_identity(IdentityKind::Operation),
+                    // Short, so the test is: nothing will ever answer.
+                    how_long_the_health_answer_is_waited_for: Duration::from_secs(3),
+                    how_long_the_user_manager_is_waited_for: Duration::from_secs(60),
+                },
+            );
+            within(
+                "the placement of a program that ends at once".to_string(),
+                HOW_LONG_A_PLACEMENT_IS_GIVEN,
+                placing,
+            )
+            .await
+            .expect("the surface carried the transaction")
+            .reached
+        };
+        assert_eq!(reached, WhatThePlacementReached::RolledBack);
+
+        // **G14: the pointer names the previous program again.**
+        assert_eq!(
+            within(
+                "the active pointer read back after the rollback".to_string(),
+                HOW_LONG_ONE_READING_IS_GIVEN,
+                the_active_pointers_value(&mut desk.subsystem, &desk.area),
+            )
+            .await
+            .expect("the pointer reads"),
+            Some(the_staging_location_for(&desk.area, &first))
+        );
+
+        // **And the previous program is running and answers.** A started
+        // program takes a moment to open its endpoint, so it is asked inside a
+        // deadline of its own.
+        let started = Instant::now();
+        let mut after = None;
+        while started.elapsed() < HOW_LONG_ONE_READING_IS_GIVEN {
+            after = desk.asked_now().await;
+            if after.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        let after = after.unwrap_or_else(|| {
+            panic!(
+                "the swap was rolled back and no Smoozy program is running on the server. \
+                 The service manager was asked: {:?}",
+                desk.machine.what_was_asked()
+            )
+        });
+        assert_eq!(after.package_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(after.installation, installation);
+        assert_ne!(
+            after.run, before.run,
+            "the program answering was started after the rollback"
+        );
+        assert_eq!(desk.supervisors_running(), 1);
+
+        // **The start limit is cleared before the start**, in that order, so a
+        // unit the service manager gave up on is startable.
+        let asked = desk.machine.what_was_asked();
+        let cleared = asked
+            .iter()
+            .rposition(|line| line.contains("--user reset-failed smoozy-supervisor.service"))
+            .expect("the unit's start limit was cleared");
+        let restarted = asked
+            .iter()
+            .rposition(|line| line.contains("--user restart smoozy-supervisor.service"))
+            .expect("the unit was restarted");
+        assert!(cleared < restarted, "{asked:?}");
+    }
+
+    /// **`Rented-server runtime` G13 as added 2026-11-12: an entry point that
+    /// does not return is no answer, so a swap to a program that starts and
+    /// never answers is rolled back, and the previous program is running again
+    /// afterwards.** The live pass of 2026-11-12, new fault 2.
+    ///
+    /// **The story.** A server runs Smoozy. An update places a program that
+    /// starts, stays up and answers nothing. The service manager runs it as the
+    /// supervisor. The health exchange's own command runs it too, and it never
+    /// returns. **Until this was built that command was awaited with no limit**:
+    /// the caller's deadline was never looked at, the setup read *Setting up*
+    /// for good, and the server was left with no working Smoozy.
+    #[tokio::test]
+    async fn a_program_that_never_answers_is_rolled_back_on_a_systemd_machine() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        a_linux_shaped_far_end!();
+        let mut desk = the_desk_or_say_so!(sftp_server);
+
+        // ------------------------------------ the server as it stood before
+        let installation = an_identity(IdentityKind::Installation);
+        let first = an_identity(IdentityKind::Operation);
+        assert_eq!(
+            desk.one_placement(&first, &installation).await,
+            WhatThePlacementReached::Verified,
+            "the first placement did not verify. The supervisor said: {}",
+            desk.machine.what_the_supervisor_said()
+        );
+        let before = desk
+            .asked_now()
+            .await
+            .expect("the first placement's supervisor answers");
+
+        // --------------- an update whose program starts and never answers
+        // It stays up, as the supervisor and as the entry point, and says
+        // nothing. Two minutes, so nothing is left running long after the test.
+        let a_program_that_ends_at_once = b"#!/bin/sh\nexec sleep 120\n".to_vec();
+        let served = desk._keys.at("a-program-that-never-answers");
+        std::fs::write(&served, &a_program_that_ends_at_once).expect("the program is written");
+        let release = a_release_at(&a_program_that_ends_at_once, "99.0.0");
+        let (verified, bytes) = verified_and_fetched(&release, &served);
+
+        let WhatARecordHeld::It(the_registration) = within(
+            "the boot-registration record read back".to_string(),
+            HOW_LONG_ONE_READING_IS_GIVEN,
+            read_the_boot_registration_record(&mut desk.subsystem, &desk.area),
+        )
+        .await
+        .expect("the record reads") else {
+            panic!("the first placement left no boot-registration record");
+        };
+        let previous = PreviousVersion {
+            descriptor: smoozy_server_protocol::placement::performing::the_phase_records_descriptor_for(
+                &desk.verified.the_release_descriptors_values(),
+            ),
+            retained_adapter: RetainedAdapter {
+                declared_interval: (1, 1),
+                declared_request_set: Vec::new(),
+            },
+            location: the_staging_location_for(&desk.area, &first),
+            previous_boot_registration_content: the_registration.content.clone(),
+        };
+
+        let second = an_identity(IdentityKind::Operation);
+        let reached = {
+            let mut surface = ThePlacementsSurface::of(&mut desk.subsystem, &mut desk.connection);
+            let placing = place_a_verified_release(
+                &mut surface,
+                WhatThePlacementNeeds {
+                    package_area: desk.area.clone(),
+                    attempt: second.clone(),
+                    owner: an_owner(installation.clone(), Route::SetupPlacement),
+                    installation: installation.clone(),
+                    verified: &verified,
+                    artifact: &bytes,
+                    kind: MachineKind::Systemd,
+                    previous: Some(previous),
+                    the_root_step_on_a_container: None,
+                    accepted_work: Vec::new(),
+                    the_health_exchanges_identity: an_identity(IdentityKind::Operation),
+                    // Short, so the test is: nothing will ever answer.
+                    how_long_the_health_answer_is_waited_for: Duration::from_secs(3),
+                    how_long_the_user_manager_is_waited_for: Duration::from_secs(60),
+                },
+            );
+            // **The exchange is given 3 seconds and one asking at least 30**,
+            // so a placement still running after 90 never ends by itself.
+            within(
+                "the placement of a program that never answers".to_string(),
+                Duration::from_secs(90),
+                placing,
+            )
+            .await
+            .expect("the surface carried the transaction")
+            .reached
+        };
+        assert_eq!(reached, WhatThePlacementReached::RolledBack);
+
+        // **G14: the pointer names the previous program again.**
+        assert_eq!(
+            within(
+                "the active pointer read back after the rollback".to_string(),
+                HOW_LONG_ONE_READING_IS_GIVEN,
+                the_active_pointers_value(&mut desk.subsystem, &desk.area),
+            )
+            .await
+            .expect("the pointer reads"),
+            Some(the_staging_location_for(&desk.area, &first))
+        );
+
+        // **And the previous program is running and answers.** A started
+        // program takes a moment to open its endpoint, so it is asked inside a
+        // deadline of its own.
+        let started = Instant::now();
+        let mut after = None;
+        while started.elapsed() < HOW_LONG_ONE_READING_IS_GIVEN {
+            after = desk.asked_now().await;
+            if after.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        let after = after.unwrap_or_else(|| {
+            panic!(
+                "the swap was rolled back and no Smoozy program is running on the server. \
+                 The service manager was asked: {:?}",
+                desk.machine.what_was_asked()
+            )
+        });
+        assert_eq!(after.package_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(after.installation, installation);
+        assert_ne!(
+            after.run, before.run,
+            "the program answering was started after the rollback"
+        );
+        assert_eq!(desk.supervisors_running(), 1);
+
+        // **The start limit is cleared before the start**, in that order, so a
+        // unit the service manager gave up on is startable.
+        let asked = desk.machine.what_was_asked();
+        let cleared = asked
+            .iter()
+            .rposition(|line| line.contains("--user reset-failed smoozy-supervisor.service"))
+            .expect("the unit's start limit was cleared");
+        let restarted = asked
+            .iter()
+            .rposition(|line| line.contains("--user restart smoozy-supervisor.service"))
+            .expect("the unit was restarted");
+        assert!(cleared < restarted, "{asked:?}");
+    }
+
+
+    /// **`Rented-server runtime` G13 as added 2026-11-12: a caller that stops
+    /// waiting is the *did not answer* branch at once.** *Cancel setup*, pressed
+    /// while a new program that never answers is waited on, ends the wait,
+    /// and the restore puts the previous program back. The live pass of
+    /// 2026-11-12, new fault 2: *Cancel setup* changed nothing.
+    #[tokio::test]
+    async fn a_cancel_while_the_new_program_is_waited_on_rolls_back_at_once() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        a_linux_shaped_far_end!();
+        let mut desk = the_desk_or_say_so!(sftp_server);
+
+        // ------------------------------------ the server as it stood before
+        let installation = an_identity(IdentityKind::Installation);
+        let first = an_identity(IdentityKind::Operation);
+        assert_eq!(
+            desk.one_placement(&first, &installation).await,
+            WhatThePlacementReached::Verified,
+            "the first placement did not verify. The supervisor said: {}",
+            desk.machine.what_the_supervisor_said()
+        );
+        let before = desk
+            .asked_now()
+            .await
+            .expect("the first placement's supervisor answers");
+
+        // --------------- an update whose program starts and never answers
+        // It stays up, as the supervisor and as the entry point, and says
+        // nothing. Two minutes, so nothing is left running long after the test.
+        let a_program_that_ends_at_once = b"#!/bin/sh\nexec sleep 120\n".to_vec();
+        let served = desk._keys.at("a-program-that-never-answers");
+        std::fs::write(&served, &a_program_that_ends_at_once).expect("the program is written");
+        let release = a_release_at(&a_program_that_ends_at_once, "99.0.0");
+        let (verified, bytes) = verified_and_fetched(&release, &served);
+
+        let WhatARecordHeld::It(the_registration) = within(
+            "the boot-registration record read back".to_string(),
+            HOW_LONG_ONE_READING_IS_GIVEN,
+            read_the_boot_registration_record(&mut desk.subsystem, &desk.area),
+        )
+        .await
+        .expect("the record reads") else {
+            panic!("the first placement left no boot-registration record");
+        };
+        let previous = PreviousVersion {
+            descriptor: smoozy_server_protocol::placement::performing::the_phase_records_descriptor_for(
+                &desk.verified.the_release_descriptors_values(),
+            ),
+            retained_adapter: RetainedAdapter {
+                declared_interval: (1, 1),
+                declared_request_set: Vec::new(),
+            },
+            location: the_staging_location_for(&desk.area, &first),
+            previous_boot_registration_content: the_registration.content.clone(),
+        };
+
+        let second = an_identity(IdentityKind::Operation);
+        let reached = {
+            // **Cancel setup, pressed 5 seconds in.**
+            let pressed_at = Instant::now() + Duration::from_secs(5);
+            let mut surface = ThePlacementsSurface::of(&mut desk.subsystem, &mut desk.connection)
+                .giving_up_when(std::sync::Arc::new(move || Instant::now() >= pressed_at));
+            let placing = place_a_verified_release(
+                &mut surface,
+                WhatThePlacementNeeds {
+                    package_area: desk.area.clone(),
+                    attempt: second.clone(),
+                    owner: an_owner(installation.clone(), Route::SetupPlacement),
+                    installation: installation.clone(),
+                    verified: &verified,
+                    artifact: &bytes,
+                    kind: MachineKind::Systemd,
+                    previous: Some(previous),
+                    the_root_step_on_a_container: None,
+                    accepted_work: Vec::new(),
+                    the_health_exchanges_identity: an_identity(IdentityKind::Operation),
+                    // Short, so the test is: nothing will ever answer.
+                    // The setup's own two minutes.
+                    how_long_the_health_answer_is_waited_for: Duration::from_secs(120),
+                    how_long_the_user_manager_is_waited_for: Duration::from_secs(60),
+                },
+            );
+            // **The exchange is given two minutes**, so a placement that ends
+            // inside 60 seconds ended on the cancel.
+            within(
+                "the placement after Cancel setup".to_string(),
+                Duration::from_secs(60),
+                placing,
+            )
+            .await
+            .expect("the surface carried the transaction")
+            .reached
+        };
+        assert_eq!(reached, WhatThePlacementReached::RolledBack);
+
+        // **G14: the pointer names the previous program again.**
+        assert_eq!(
+            within(
+                "the active pointer read back after the rollback".to_string(),
+                HOW_LONG_ONE_READING_IS_GIVEN,
+                the_active_pointers_value(&mut desk.subsystem, &desk.area),
+            )
+            .await
+            .expect("the pointer reads"),
+            Some(the_staging_location_for(&desk.area, &first))
+        );
+
+        // **And the previous program is running and answers.** A started
+        // program takes a moment to open its endpoint, so it is asked inside a
+        // deadline of its own.
+        let started = Instant::now();
+        let mut after = None;
+        while started.elapsed() < HOW_LONG_ONE_READING_IS_GIVEN {
+            after = desk.asked_now().await;
+            if after.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        let after = after.unwrap_or_else(|| {
+            panic!(
+                "the swap was rolled back and no Smoozy program is running on the server. \
+                 The service manager was asked: {:?}",
+                desk.machine.what_was_asked()
+            )
+        });
+        assert_eq!(after.package_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(after.installation, installation);
+        assert_ne!(
+            after.run, before.run,
+            "the program answering was started after the rollback"
+        );
+        assert_eq!(desk.supervisors_running(), 1);
+
+        // **The start limit is cleared before the start**, in that order, so a
+        // unit the service manager gave up on is startable.
+        let asked = desk.machine.what_was_asked();
+        let cleared = asked
+            .iter()
+            .rposition(|line| line.contains("--user reset-failed smoozy-supervisor.service"))
+            .expect("the unit's start limit was cleared");
+        let restarted = asked
+            .iter()
+            .rposition(|line| line.contains("--user restart smoozy-supervisor.service"))
+            .expect("the unit was restarted");
+        assert!(cleared < restarted, "{asked:?}");
+    }
+
+
+
+    /// **`Rented-server runtime` G4's *read off the machine*: a setup that is
+    /// handed no previous version, on a server that is running Smoozy, still
+    /// rolls back to the program that was running.** Added 2026-11-12, the
+    /// night pass's new fault 2.
+    ///
+    /// **The story.** A server is removed from Smoozy and added again. Its
+    /// setup knows of no program there and says so. The new program ends as it
+    /// starts. Until this was built the rollback took the *no previous version*
+    /// branch: it removed the pointer, and the server was left with no Smoozy
+    /// program while the old one's file still sat beside it.
+    ///
+    /// **The installation is not looked at here.** The commit writes the new
+    /// setup's own before the pointer moves, and the rollback does not put the
+    /// old one back; that is as it was.
+    #[tokio::test]
+    async fn a_setup_that_fails_over_a_program_it_was_not_told_of_leaves_that_program_running() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        a_linux_shaped_far_end!();
+        let mut desk = the_desk_or_say_so!(sftp_server);
+
+        // ------------------------------------ the server as it stood before
+        let installation = an_identity(IdentityKind::Installation);
+        let first = an_identity(IdentityKind::Operation);
+        assert_eq!(
+            desk.one_placement(&first, &installation).await,
+            WhatThePlacementReached::Verified,
+            "the first placement did not verify. The supervisor said: {}",
+            desk.machine.what_the_supervisor_said()
+        );
+        let before = desk
+            .asked_now()
+            .await
+            .expect("the first placement's supervisor answers");
+
+        // ------------------------- an update whose program ends as it starts
+        let a_program_that_ends_at_once = b"#!/bin/sh\nexit 1\n".to_vec();
+        let served = desk._keys.at("a-program-that-ends-at-once");
+        std::fs::write(&served, &a_program_that_ends_at_once).expect("the program is written");
+        let release = a_release_at(&a_program_that_ends_at_once, "99.0.0");
+        let (verified, bytes) = verified_and_fetched(&release, &served);
+
+        // **The server was removed from Smoozy and added again**, so this
+        // setup comes with an installation of its own and is told of no
+        // program before it.
+        let the_new_installation = an_identity(IdentityKind::Installation);
+        let second = an_identity(IdentityKind::Operation);
+        let reached = {
+            let mut surface = ThePlacementsSurface::of(&mut desk.subsystem, &mut desk.connection);
+            let placing = place_a_verified_release(
+                &mut surface,
+                WhatThePlacementNeeds {
+                    package_area: desk.area.clone(),
+                    attempt: second.clone(),
+                    owner: an_owner(the_new_installation.clone(), Route::SetupPlacement),
+                    installation: the_new_installation.clone(),
+                    verified: &verified,
+                    artifact: &bytes,
+                    kind: MachineKind::Systemd,
+                    previous: None,
+                    the_root_step_on_a_container: None,
+                    accepted_work: Vec::new(),
+                    the_health_exchanges_identity: an_identity(IdentityKind::Operation),
+                    // Short, so the test is: nothing will ever answer.
+                    how_long_the_health_answer_is_waited_for: Duration::from_secs(3),
+                    how_long_the_user_manager_is_waited_for: Duration::from_secs(60),
+                },
+            );
+            within(
+                "the placement of a program that ends at once".to_string(),
+                HOW_LONG_A_PLACEMENT_IS_GIVEN,
+                placing,
+            )
+            .await
+            .expect("the surface carried the transaction")
+            .reached
+        };
+        assert_eq!(reached, WhatThePlacementReached::RolledBack);
+
+        // **G14: the pointer names the previous program again.**
+        assert_eq!(
+            within(
+                "the active pointer read back after the rollback".to_string(),
+                HOW_LONG_ONE_READING_IS_GIVEN,
+                the_active_pointers_value(&mut desk.subsystem, &desk.area),
+            )
+            .await
+            .expect("the pointer reads"),
+            Some(the_staging_location_for(&desk.area, &first))
+        );
+
+        // **And the previous program is running and answers.** A started
+        // program takes a moment to open its endpoint, so it is asked inside a
+        // deadline of its own.
+        let started = Instant::now();
+        let mut after = None;
+        while started.elapsed() < HOW_LONG_ONE_READING_IS_GIVEN {
+            after = desk.asked_now().await;
+            if after.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        let after = after.unwrap_or_else(|| {
+            panic!(
+                "the swap was rolled back and no Smoozy program is running on the server. \
+                 The service manager was asked: {:?}",
+                desk.machine.what_was_asked()
+            )
+        });
+        assert_eq!(after.package_version, env!("CARGO_PKG_VERSION"));
+        assert_ne!(
+            after.run, before.run,
+            "the program answering was started after the rollback"
+        );
+        assert_eq!(desk.supervisors_running(), 1);
+
+        // **The start limit is cleared before the start**, in that order, so a
+        // unit the service manager gave up on is startable.
+        let asked = desk.machine.what_was_asked();
+        let cleared = asked
+            .iter()
+            .rposition(|line| line.contains("--user reset-failed smoozy-supervisor.service"))
+            .expect("the unit's start limit was cleared");
+        let restarted = asked
+            .iter()
+            .rposition(|line| line.contains("--user restart smoozy-supervisor.service"))
+            .expect("the unit was restarted");
+        assert!(cleared < restarted, "{asked:?}");
+    }
+
+    /// **The same on a container**, where the entry point that is asked to end
+    /// the running supervisor is the new program's too, and it never returns
+    /// either. The live pass of 2026-11-12, new fault 2: the pointer stayed on
+    /// the new program, and a later restart started it.
+    ///
+    /// **What must hold afterwards**: the setup ends, the pointer names the
+    /// previous program again, that program answers, and one supervisor runs.
+    #[tokio::test]
+    async fn a_program_that_never_answers_is_rolled_back_on_a_container() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        a_linux_shaped_far_end!();
+        let mut desk = the_desk_or_say_so!(sftp_server);
+        if std::process::Command::new("perl").arg("-e").arg("1").status().map(|it| !it.success()).unwrap_or(true) {
+            println!("SKIPPED: this desk has no perl to stand in setsid and flock. Unproved here.");
+            return;
+        }
+        std::fs::write(desk.machine.home.join("onstart.sh"), b"#!/bin/sh\n")
+            .expect("the provider's hook");
+
+        let installation = an_identity(IdentityKind::Installation);
+        let first = an_identity(IdentityKind::Operation);
+        assert_eq!(
+            desk.one_placement_on_a_container(&first, &installation).await,
+            WhatThePlacementReached::Verified,
+            "the first placement did not verify. The supervisor said: {}",
+            std::fs::read_to_string(format!("{}/supervisor-words", desk.area)).unwrap_or_default()
+        );
+        desk.asked_now()
+            .await
+            .expect("the first placement's supervisor answers");
+        let keepers = desk.keepers_running();
+
+        // It stays up, as the supervisor and as the entry point, and says
+        // nothing. Two minutes, so nothing is left running long after the test.
+        let a_program_that_never_answers = b"#!/bin/sh\nexec sleep 120\n".to_vec();
+        let served = desk._keys.at("a-program-that-never-answers");
+        std::fs::write(&served, &a_program_that_never_answers).expect("the program is written");
+        let release = a_release_at(&a_program_that_never_answers, "99.0.0");
+        let (verified, bytes) = verified_and_fetched(&release, &served);
+
+        let hook = desk.machine.home.join("onstart.sh").to_string_lossy().into_owned();
+        let copy: &'static str =
+            Box::leak(format!("cp ~/.smoozy-carriage/container-hook {hook}").into_boxed_str());
+        let step = smoozy_server_protocol::placement::TheRootStepOnAContainer {
+            the_hooks_path: hook,
+            the_staging_token_on_the_subsystem: ".smoozy-carriage/container-hook".to_string(),
+            the_copy: smoozy_server_protocol::placement::TheCommandAndItsElevatedForm {
+                plain: smoozy_server_protocol::transport::CommandString::constant(copy),
+                elevated: None,
+            },
+            the_hook_made_readable: None,
+            the_directory_made_traversable: None,
+            the_hook_read: None,
+        };
+        let second = an_identity(IdentityKind::Operation);
+        let reached = {
+            let mut surface = ThePlacementsSurface::of(&mut desk.subsystem, &mut desk.connection);
+            let placing = place_a_verified_release(
+                &mut surface,
+                WhatThePlacementNeeds {
+                    package_area: desk.area.clone(),
+                    attempt: second.clone(),
+                    owner: an_owner(installation.clone(), Route::SetupPlacement),
+                    installation: installation.clone(),
+                    verified: &verified,
+                    artifact: &bytes,
+                    kind: MachineKind::Container,
+                    previous: None,
+                    the_root_step_on_a_container: Some(step),
+                    accepted_work: Vec::new(),
+                    the_health_exchanges_identity: an_identity(IdentityKind::Operation),
+                    how_long_the_health_answer_is_waited_for: Duration::from_secs(3),
+                    how_long_the_user_manager_is_waited_for: Duration::from_secs(60),
+                },
+            );
+            // **The ending is given 45 seconds and one asking of the exchange
+            // 30**, so a placement still running after 150 never ends by itself.
+            within(
+                "the placement of a program that never answers, on a container".to_string(),
+                Duration::from_secs(150),
+                placing,
+            )
+            .await
+            .expect("the surface carried the transaction")
+            .reached
+        };
+        assert_eq!(reached, WhatThePlacementReached::RolledBack);
+        assert_eq!(
+            within(
+                "the active pointer read back after the rollback".to_string(),
+                HOW_LONG_ONE_READING_IS_GIVEN,
+                the_active_pointers_value(&mut desk.subsystem, &desk.area),
+            )
+            .await
+            .expect("the pointer reads"),
+            Some(the_staging_location_for(&desk.area, &first))
+        );
+
+        let started = Instant::now();
+        let mut after = None;
+        while started.elapsed() < HOW_LONG_ONE_READING_IS_GIVEN {
+            after = desk.asked_now().await;
+            if after.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        let after = after.expect(
+            "the swap was rolled back and no Smoozy program answers on the server",
+        );
+        assert_eq!(after.package_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(desk.supervisors_running(), 1);
+        assert_eq!(desk.keepers_running(), keepers, "a second keeper stayed running");
+    }
+
+    /// **The case the test above does not reach: a new program whose entry
+    /// point answers, and whose supervisor stays up without ever opening the
+    /// endpoint.** Added 2026-11-12, the live pass's leftovers, item 2.
+    ///
+    /// **The story.** The new program's entry point ends the running
+    /// supervisor, and the keeper starts the new one. It stays up and opens
+    /// nothing, so the exchange gets no answer and the pointer is put back.
+    /// The rollback asks the previous program's entry point for the ending, and
+    /// until this sitting that ending looked only for the endpoint's holder,
+    /// found none, and ended nothing. The keeper went on waiting on the new
+    /// supervisor, so no Smoozy program answered on the server until it ended
+    /// by itself or the container restarted. `Rented-server runtime` G25, *a
+    /// supervisor that holds no endpoint*.
+    ///
+    /// **The stand-in** runs every role through the real program, with the
+    /// pointer's path as the name it was started by, except the supervisor's,
+    /// where it waits two minutes and opens nothing. It does not replace itself
+    /// with that wait, so it still shows as a supervisor started through the
+    /// pointer, as a real program that hung would.
+    ///
+    /// **What must hold afterwards**: the pointer names the previous program,
+    /// that program answers, and one supervisor and one keeper run.
+    #[tokio::test]
+    async fn a_supervisor_that_holds_no_endpoint_is_ended_by_the_rollback_on_a_container() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        a_linux_shaped_far_end!();
+        let mut desk = the_desk_or_say_so!(sftp_server);
+        if std::process::Command::new("perl").arg("-e").arg("1").status().map(|it| !it.success()).unwrap_or(true) {
+            println!("SKIPPED: this desk has no perl to stand in setsid and flock. Unproved here.");
+            return;
+        }
+        let Some(the_real_program) = the_machines_own_program() else {
+            println!("SKIPPED: the machine's own program is not built beside this test.");
+            return;
+        };
+        std::fs::write(desk.machine.home.join("onstart.sh"), b"#!/bin/sh\n")
+            .expect("the provider's hook");
+
+        let installation = an_identity(IdentityKind::Installation);
+        let first = an_identity(IdentityKind::Operation);
+        assert_eq!(
+            desk.one_placement_on_a_container(&first, &installation).await,
+            WhatThePlacementReached::Verified,
+            "the first placement did not verify. The supervisor said: {}",
+            std::fs::read_to_string(format!("{}/supervisor-words", desk.area)).unwrap_or_default()
+        );
+        desk.asked_now()
+            .await
+            .expect("the first placement's supervisor answers");
+        let keepers = desk.keepers_running();
+
+        let real = the_real_program.to_string_lossy().replace('\'', "'\\''");
+        let stand_in = format!(
+            "#!/bin/sh\n\
+             # Every role but the supervisor's is the real program, started by the pointer's name.\n\
+             if [ \"$1\" = {THE_SUPERVISOR_WORD} ]; then\n\
+               sleep 120 & waited=$!\n\
+               trap 'kill $waited; exit 0' TERM\n\
+               wait $waited; exit 0\n\
+             fi\n\
+             exec perl -e 'exec {{ $ARGV[0] }} @ARGV[1..$#ARGV]' '{real}' \"$0\" \"$@\"\n"
+        )
+        .into_bytes();
+        let served = desk._keys.at("a-supervisor-that-holds-no-endpoint");
+        std::fs::write(&served, &stand_in).expect("the program is written");
+        let release = a_release_at(&stand_in, "99.0.0");
+        let (verified, bytes) = verified_and_fetched(&release, &served);
+
+        let hook = desk.machine.home.join("onstart.sh").to_string_lossy().into_owned();
+        let copy: &'static str =
+            Box::leak(format!("cp ~/.smoozy-carriage/container-hook {hook}").into_boxed_str());
+        let step = smoozy_server_protocol::placement::TheRootStepOnAContainer {
+            the_hooks_path: hook,
+            the_staging_token_on_the_subsystem: ".smoozy-carriage/container-hook".to_string(),
+            the_copy: smoozy_server_protocol::placement::TheCommandAndItsElevatedForm {
+                plain: smoozy_server_protocol::transport::CommandString::constant(copy),
+                elevated: None,
+            },
+            the_hook_made_readable: None,
+            the_directory_made_traversable: None,
+            the_hook_read: None,
+        };
+        let second = an_identity(IdentityKind::Operation);
+        let reached = {
+            let mut surface = ThePlacementsSurface::of(&mut desk.subsystem, &mut desk.connection);
+            let placing = place_a_verified_release(
+                &mut surface,
+                WhatThePlacementNeeds {
+                    package_area: desk.area.clone(),
+                    attempt: second.clone(),
+                    owner: an_owner(installation.clone(), Route::SetupPlacement),
+                    installation: installation.clone(),
+                    verified: &verified,
+                    artifact: &bytes,
+                    kind: MachineKind::Container,
+                    previous: None,
+                    the_root_step_on_a_container: Some(step),
+                    accepted_work: Vec::new(),
+                    the_health_exchanges_identity: an_identity(IdentityKind::Operation),
+                    how_long_the_health_answer_is_waited_for: Duration::from_secs(3),
+                    how_long_the_user_manager_is_waited_for: Duration::from_secs(60),
+                },
+            );
+            within(
+                "the placement of a program whose supervisor holds no endpoint, on a container"
+                    .to_string(),
+                Duration::from_secs(150),
+                placing,
+            )
+            .await
+            .expect("the surface carried the transaction")
+            .reached
+        };
+        assert_eq!(reached, WhatThePlacementReached::RolledBack);
+        assert_eq!(
+            within(
+                "the active pointer read back after the rollback".to_string(),
+                HOW_LONG_ONE_READING_IS_GIVEN,
+                the_active_pointers_value(&mut desk.subsystem, &desk.area),
+            )
+            .await
+            .expect("the pointer reads"),
+            Some(the_staging_location_for(&desk.area, &first))
+        );
+
+        // **Asked until the previous program answers, inside 30 seconds**: the
+        // keeper's own pause stands between the ending and the next start. The
+        // stand-in's supervisor waits 120, so an answer here is the rollback's.
+        let started = Instant::now();
+        let mut after = None;
+        while started.elapsed() < HOW_LONG_ONE_READING_IS_GIVEN {
+            after = desk.asked_now().await;
+            if after.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        let after = after.expect(
+            "the swap was rolled back, the new supervisor is still running without an endpoint, \
+             and no Smoozy program answers on the server",
+        );
+        assert_eq!(after.package_version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(desk.supervisors_running(), 1, "the new supervisor is running beside the old");
+        assert_eq!(desk.keepers_running(), keepers, "a second keeper stayed running");
+    }
+
+    /// **What the machine says is running decides what a rollback restores,
+    /// and not what the request says.** Sol's fourth point, 2026-11-12.
+    ///
+    /// **The story.** The same release is set up again over a running program,
+    /// fails and is rolled back. The record on the server then holds two
+    /// descriptions with one release number, and the app, which tells them
+    /// apart by that number, hands the next update the wrong one: the failed
+    /// attempt's file, long swept. If that update fails too, the pointer was
+    /// restored to a file that is not there.
+    #[tokio::test]
+    async fn a_previous_version_handed_in_wrongly_does_not_decide_what_a_rollback_restores() {
+        let _deadline = TheTestsDeadline::started();
+        let sftp_server = the_server_or_say_so!();
+        a_linux_shaped_far_end!();
+        let mut desk = the_desk_or_say_so!(sftp_server);
+
+        // ------------------------------------ the server as it stood before
+        let installation = an_identity(IdentityKind::Installation);
+        let first = an_identity(IdentityKind::Operation);
+        assert_eq!(
+            desk.one_placement(&first, &installation).await,
+            WhatThePlacementReached::Verified,
+            "the first placement did not verify. The supervisor said: {}",
+            desk.machine.what_the_supervisor_said()
+        );
+        let before = desk
+            .asked_now()
+            .await
+            .expect("the first placement's supervisor answers");
+
+        // ------------------------- an update whose program ends as it starts
+        let a_program_that_ends_at_once = b"#!/bin/sh\nexit 1\n".to_vec();
+        let served = desk._keys.at("a-program-that-ends-at-once");
+        std::fs::write(&served, &a_program_that_ends_at_once).expect("the program is written");
+        let release = a_release_at(&a_program_that_ends_at_once, "99.0.0");
+        let (verified, bytes) = verified_and_fetched(&release, &served);
+
+        // **The server was removed from Smoozy and added again**, so this
+        // setup comes with an installation of its own and is told of no
+        // program before it.
+        let the_new_installation = an_identity(IdentityKind::Installation);
+        let second = an_identity(IdentityKind::Operation);
+        let reached = {
+            let mut surface = ThePlacementsSurface::of(&mut desk.subsystem, &mut desk.connection);
+            let placing = place_a_verified_release(
+                &mut surface,
+                WhatThePlacementNeeds {
+                    package_area: desk.area.clone(),
+                    attempt: second.clone(),
+                    owner: an_owner(the_new_installation.clone(), Route::SetupPlacement),
+                    installation: the_new_installation.clone(),
+                    verified: &verified,
+                    artifact: &bytes,
+                    kind: MachineKind::Systemd,
+                    previous: Some(PreviousVersion {
+                        descriptor: smoozy_server_protocol::placement::performing::the_phase_records_descriptor_for(
+                            &desk.verified.the_release_descriptors_values(),
+                        ),
+                        retained_adapter: RetainedAdapter {
+                            declared_interval: (1, 1),
+                            declared_request_set: Vec::new(),
+                        },
+                        // A file that is not there: an earlier attempt's,
+                        // rolled back and swept.
+                        location: format!("{}/staged-package-long-gone", desk.area),
+                        previous_boot_registration_content: Vec::new(),
+                    }),
+                    the_root_step_on_a_container: None,
+                    accepted_work: Vec::new(),
+                    the_health_exchanges_identity: an_identity(IdentityKind::Operation),
+                    // Short, so the test is: nothing will ever answer.
+                    how_long_the_health_answer_is_waited_for: Duration::from_secs(3),
+                    how_long_the_user_manager_is_waited_for: Duration::from_secs(60),
+                },
+            );
+            within(
+                "the placement of a program that ends at once".to_string(),
+                HOW_LONG_A_PLACEMENT_IS_GIVEN,
+                placing,
+            )
+            .await
+            .expect("the surface carried the transaction")
+            .reached
+        };
+        assert_eq!(reached, WhatThePlacementReached::RolledBack);
+
+        // **G14: the pointer names the previous program again.**
+        assert_eq!(
+            within(
+                "the active pointer read back after the rollback".to_string(),
+                HOW_LONG_ONE_READING_IS_GIVEN,
+                the_active_pointers_value(&mut desk.subsystem, &desk.area),
+            )
+            .await
+            .expect("the pointer reads"),
+            Some(the_staging_location_for(&desk.area, &first))
+        );
+
+        // **And the previous program is running and answers.** A started
+        // program takes a moment to open its endpoint, so it is asked inside a
+        // deadline of its own.
+        let started = Instant::now();
+        let mut after = None;
+        while started.elapsed() < HOW_LONG_ONE_READING_IS_GIVEN {
+            after = desk.asked_now().await;
+            if after.is_some() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        let after = after.unwrap_or_else(|| {
+            panic!(
+                "the swap was rolled back and no Smoozy program is running on the server. \
+                 The service manager was asked: {:?}",
+                desk.machine.what_was_asked()
+            )
+        });
+        assert_eq!(after.package_version, env!("CARGO_PKG_VERSION"));
+        assert_ne!(
+            after.run, before.run,
+            "the program answering was started after the rollback"
+        );
+        assert_eq!(desk.supervisors_running(), 1);
+
+        // **The start limit is cleared before the start**, in that order, so a
+        // unit the service manager gave up on is startable.
+        let asked = desk.machine.what_was_asked();
+        let cleared = asked
+            .iter()
+            .rposition(|line| line.contains("--user reset-failed smoozy-supervisor.service"))
+            .expect("the unit's start limit was cleared");
+        let restarted = asked
+            .iter()
+            .rposition(|line| line.contains("--user restart smoozy-supervisor.service"))
+            .expect("the unit was restarted");
+        assert!(cleared < restarted, "{asked:?}");
     }
 }
 

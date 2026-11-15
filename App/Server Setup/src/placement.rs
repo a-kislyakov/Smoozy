@@ -10,7 +10,7 @@
 //! N11, 1.1, 1.2, 1.3, 2.4. `State, identity and recovery` §1.3 rule 4.
 //! `Server protocol and transfers` 1.1, §7.8, §9.1, S27.
 
-use smoozy_job_files::layout::{Area, TheLayout, WhereThePackageAreaSits, EVERY_AREA};
+use smoozy_job_files::layout::{Area, MachineRoot, TheLayout, WhereThePackageAreaSits, EVERY_AREA};
 use smoozy_job_files::root_choice::{Candidate, WhatIsRecorded, THE_ROOTS_SEGMENT};
 use smoozy_server_protocol::carriage::CarriageSite;
 use smoozy_server_protocol::free_space::FreeSpaceReading;
@@ -383,6 +383,45 @@ pub const THE_ROOTS_CREATION: CommandString =
 pub const THE_CREATION_OF_THE_PACKAGE_AREAS_LOCATION: CommandString =
     CommandString::constant("mkdir ~/.smoozy-carriage/create-package-area/smoozy");
 
+/// **The hand-over's text, once, for a token**, so its three forms cannot
+/// drift: [`crate::elevated::THE_HAND_OVER_OF_THE_ROOT`] and its neighbour put
+/// each prefix in front of it.
+///
+/// **R7, *what already stands at the root's name*. Added 2026-11-12, out of
+/// Fable's fresh look at the admin password (finding 1).** Until then the
+/// `chown -R -H` was sent whatever stood at the root's name: a symbolic link
+/// there was traversed, and another login's directory was taken. The text now
+/// reads first, and ends with words a user can read where it changes nothing:
+///
+/// - `$1` is the owner, `"$(id -u):$(id -g)"`, expanded by the login's own
+///   shell before the elevating command runs (1.1's fourth carriage). `$2` is
+///   the token, expanded by the same shell.
+/// - `readlink "$2"` is the token's target: the root's own path, read on the
+///   machine and never part of the string.
+/// - `[ -L "$d" ]`: that path is itself a link. Nothing is changed.
+/// - `stat -c %u "$d"`: its owner. `0` is a directory R7's elevated create
+///   just made; the login's own number is an earlier run's. Any other owner is
+///   another login's, and nothing is changed.
+/// - Only then `chown -R -H "$1" "$2"`, R7a's command on the token as before.
+///
+/// **Documented** — GNU coreutils manual 9.12, read 2026-11-12: `readlink`
+/// *"outputs the value of the given symbolic links"*; `-L file` *"True if file
+/// exists and is a symbolic link."*; `%u` *"User ID of owner"*.
+macro_rules! the_guarded_hand_over {
+    ($token:literal) => {
+        concat!(
+            "sh -c 'd=\"$(readlink \"$2\")\" && [ -n \"$d\" ] || exit 3; \
+             if [ -L \"$d\" ]; then echo \"$d is a link, not a folder. Nothing was changed.\" >&2; exit 4; fi; \
+             o=\"$(stat -c %u \"$d\")\" || exit 5; \
+             case \"$o\" in 0|\"${1%%:*}\") ;; \
+             *) echo \"$d belongs to another user. Nothing was changed.\" >&2; exit 6 ;; esac; \
+             exec chown -R -H \"$1\" \"$2\"' sh \"$(id -u):$(id -g)\" ",
+            $token
+        )
+    };
+}
+pub(crate) use the_guarded_hand_over;
+
 /// **R7a: how `chown` treats a link is cited rather than assumed, because it
 /// decides whether the carriage works at all.**
 ///
@@ -410,14 +449,17 @@ pub const THE_CREATION_OF_THE_PACKAGE_AREAS_LOCATION: CommandString =
 /// is loud rather than silent** — a mangled substitution names no login the
 /// machine holds, and the real-write landing check below is what proves the
 /// ownership landed.
-pub const THE_RECURSIVE_HAND_OVER: CommandString = CommandString::constant(
-    "chown -R -H \"$(id -u):$(id -g)\" ~/.smoozy-carriage/hand-over-root",
-);
+///
+/// **R7, *what already stands at the root's name* (added 2026-11-12): the
+/// command reads what stands there before it changes anything.** See
+/// [`the_guarded_hand_over`].
+pub const THE_RECURSIVE_HAND_OVER: CommandString =
+    CommandString::constant(the_guarded_hand_over!("~/.smoozy-carriage/hand-over-root"));
 
 /// **The second mount's own hand-over command**, because R7a's carriage is per
 /// mount and the two are never one command.
 pub const THE_RECURSIVE_HAND_OVER_OF_THE_PACKAGE_AREA: CommandString = CommandString::constant(
-    "chown -R -H \"$(id -u):$(id -g)\" ~/.smoozy-carriage/hand-over-package-area",
+    the_guarded_hand_over!("~/.smoozy-carriage/hand-over-package-area"),
 );
 
 /// **R7a, as the question a builder would otherwise get wrong.** A recursive
@@ -460,6 +502,210 @@ pub fn the_blender_area(layout: &TheLayout) -> String {
 /// cleanup, never a forgotten one (its S27's shape). **Nothing here invents a
 /// second sweep** — the link's removal rides that contract.
 pub const THE_LINKS_REMOVAL_IS_THAT_DOCUMENTS_OWED_CLEANUP: bool = true;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R6a — the attached volume, found and offered
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// **R6a: one mount as `/proc/self/mountinfo` names it** — the four fields the
+/// clause turns on, each read from the field that holds it (Linux man-pages
+/// 6.19, `proc_pid_mountinfo(5)`, read 2026-11-13).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AMountAsRead {
+    /// *"major:minor: the value of st_dev for files on this filesystem"*.
+    pub device: String,
+    /// *"mount point: the pathname of the mount point relative to the
+    /// process's root directory"*.
+    pub mount_point: String,
+    /// *"mount options: per-mount options"*, split at the commas.
+    pub per_mount_options: Vec<String>,
+    /// *"filesystem type: the filesystem type in the form "type[.subtype]""*.
+    pub filesystem_type: String,
+    /// *"mount source: filesystem-specific information or "none""* — for a
+    /// disk, the device it is on.
+    pub mount_source: String,
+}
+
+/// **R6a: the reading, line by line.** A line that is not the documented shape
+/// — fewer fields than the six before the optional ones, or no single hyphen
+/// after them with a type behind it — is passed over, never guessed at.
+pub fn the_mounts_as_read(answer: &str) -> Vec<AMountAsRead> {
+    let mut mounts = Vec::new();
+    for line in answer.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 6 {
+            continue;
+        }
+        let Some(separator) = fields.iter().skip(6).position(|field| *field == "-").map(|at| at + 6) else {
+            continue;
+        };
+        let (Some(filesystem_type), Some(mount_source)) = (fields.get(separator + 1), fields.get(separator + 2)) else {
+            continue;
+        };
+        mounts.push(AMountAsRead {
+            device: fields[2].to_string(),
+            mount_point: fields[4].to_string(),
+            per_mount_options: fields[5].split(',').map(str::to_string).collect(),
+            filesystem_type: filesystem_type.to_string(),
+            mount_source: mount_source.to_string(),
+        });
+    }
+    mounts
+}
+
+/// **R6a: the filesystem types held in memory** — `tmpfs` (`tmpfs(5)`), and
+/// `ramfs` and `devtmpfs` (the kernel's `ramfs-rootfs-initramfs.txt` and
+/// `DEVTMPFS`'s help text), read 2026-11-13 (`Server Setup` sources, §R6a).
+pub const THE_FILESYSTEMS_HELD_IN_MEMORY: [&str; 3] = ["tmpfs", "ramfs", "devtmpfs"];
+
+/// **R6a: the system's own folders, never a place for Smoozy's** — this
+/// application's decision of 2026-11-13, so the kernel's own mounts under them
+/// are never measured.
+pub const THE_SYSTEMS_OWN_FOLDERS: [&str; 4] = ["/proc", "/sys", "/dev", "/run"];
+
+/// **R6a's tests on the mounts, before anything is measured**: not under the
+/// system's own folders, not held in memory, not `ro`, no escaped character,
+/// not the home mount's device and not a device already kept. **Until R6a's
+/// change of later on 2026-11-13 the source had to be a device under `/dev/`**,
+/// which kept memory out and every network volume with it. **The home mount is the one with the longest mount point that
+/// is a path prefix of the login's own area**; where none is, nothing is kept,
+/// because a device that cannot be told from the home mount's is never offered.
+pub fn the_mount_points_worth_measuring(mounts: &[AMountAsRead], the_logins_own_area: &str) -> Vec<String> {
+    let holds_the_area = |mount_point: &str| {
+        mount_point == "/"
+            || the_logins_own_area == mount_point
+            || the_logins_own_area.starts_with(&format!("{}/", mount_point.trim_end_matches('/')))
+    };
+    let Some(home) = mounts
+        .iter()
+        .filter(|mount| the_logins_own_area.starts_with('/') && holds_the_area(&mount.mount_point))
+        .max_by_key(|mount| mount.mount_point.len())
+    else {
+        return Vec::new();
+    };
+    let mut kept_devices = vec![home.device.clone()];
+    let mut worth = Vec::new();
+    for mount in mounts {
+        // **R6a's change of later on 2026-11-13, item 3 (Sol's look at the
+        // scout's list, point 3): the source's name is no test**, so a network
+        // volume counts. Memory is kept out by its type — the three the
+        // kernel's own documents name — and the system's own folders are never
+        // a place for Smoozy's, which is this application's decision.
+        let in_memory = THE_FILESYSTEMS_HELD_IN_MEMORY.contains(&mount.filesystem_type.as_str());
+        let the_systems_own = THE_SYSTEMS_OWN_FOLDERS.iter().any(|folder| {
+            mount.mount_point == *folder || mount.mount_point.starts_with(&format!("{folder}/"))
+        });
+        let read_only = mount.per_mount_options.iter().any(|option| option == "ro");
+        let escaped = mount.mount_point.contains('\\');
+        if the_systems_own
+            || in_memory
+            || read_only
+            || escaped
+            || !mount.mount_point.starts_with('/')
+            || kept_devices.contains(&mount.device)
+        {
+            continue;
+        }
+        kept_devices.push(mount.device.clone());
+        worth.push(mount.mount_point.clone());
+    }
+    worth
+}
+
+/// **R6a: one volume as it was measured** — its free space, whether it is a
+/// directory, and whether the login can really write there (R6a's change of
+/// later on 2026-11-13, item 3: the login's own test write landed at the
+/// mount point, or admin access needs no password and R7's hand-over is what
+/// is tried, with the home mount alone where it does not land).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AVolumeMeasured {
+    pub volume: AWritableLocation,
+    pub it_is_a_directory: bool,
+    pub the_login_can_write: bool,
+}
+
+/// **R6a: of the volumes measured, the one offered** — a directory, read at its
+/// own path, with a larger available figure than the home mount's, the largest
+/// of them winning and the first given winning a tie. **Nothing where the home
+/// mount has no figure**, since *larger than* has nothing to be larger than.
+pub fn the_volume_offered(
+    home: &AWritableLocation,
+    measured: Vec<AVolumeMeasured>,
+) -> Option<AWritableLocation> {
+    let home_figure = home.the_reading.as_ref()?.available_bytes;
+    let mut offered: Option<(AWritableLocation, u64)> = None;
+    for AVolumeMeasured { volume, it_is_a_directory, the_login_can_write } in measured {
+        let Some(reading) = volume.the_reading.as_ref() else {
+            continue;
+        };
+        if !it_is_a_directory
+            || !the_login_can_write
+            || reading.the_path_it_was_taken_against != volume.path
+            || reading.available_bytes <= home_figure
+        {
+            continue;
+        }
+        let figure = reading.available_bytes;
+        if offered.as_ref().is_none_or(|(_, so_far)| figure > *so_far) {
+            offered = Some((volume, figure));
+        }
+    }
+    offered.map(|(volume, _)| AWritableLocation {
+        what_it_is: WhatTheLocationIs::AnAttachedVolume,
+        ..volume
+    })
+}
+
+/// **R6a: where the record of the root would be, at a location, on a one-mount
+/// machine** — and so where it is on either arrangement, since L4a's apart
+/// package area sits at that same path.
+pub fn the_record_of_the_root_for(location: &str) -> Option<String> {
+    let root = MachineRoot::chosen(&format!("{}/{}", location.trim_end_matches('/'), THE_ROOTS_SEGMENT)).ok()?;
+    let layout = TheLayout::of(root, WhereThePackageAreaSits::UnderTheRoot);
+    Some(smoozy_server_protocol::placement::records::the_record_at(
+        &layout.area(Area::Package),
+        smoozy_job_files::layout::THE_RECORD_OF_THE_ROOT,
+    ))
+}
+
+/// **R6a's change of later on 2026-11-13, item 1: what the read of the record
+/// of the root at the home location says** — `Ok(None)` only where the record
+/// is not there, which is a first placement; the layout where it names a root
+/// Smoozy may use; **and the reason in words for anything else**, which stops
+/// the setup rather than choosing a disk again over a root that stands (Sol's
+/// look at the scout's list, point 2).
+pub fn what_the_record_of_the_root_says(
+    location: &str,
+    at: &str,
+    read: Result<Vec<u8>, crate::readings::WhatTheMachineSaid>,
+) -> Result<Option<TheLayout>, String> {
+    use crate::readings::WhatTheMachineSaid;
+    let bytes = match read {
+        Ok(bytes) => bytes,
+        Err(WhatTheMachineSaid::ThePathIsNotThere) => return Ok(None),
+        Err(other) => return Err(format!("Could not read {at}: {}.", other.in_words())),
+    };
+    let Ok(recorded) = String::from_utf8(bytes) else {
+        return Err(format!("Could not read {at}: it does not contain a folder path."));
+    };
+    the_layout_a_recorded_root_gives(location, &recorded).map(Some).ok_or_else(|| {
+        format!("Could not read {at}: it names a folder Smoozy can't use, {}.", recorded.trim())
+    })
+}
+
+/// **R6a: a machine that already holds a recorded root keeps it** (L1). The
+/// layout rebuilt from the record found at `location`: the recorded root, and
+/// the package area apart at that location where the recorded root is not the
+/// location's own. **Nothing where the record does not name a root Smoozy may
+/// use**, which is `the_layout_again`'s own refusal.
+pub fn the_layout_a_recorded_root_gives(location: &str, recorded_root: &str) -> Option<TheLayout> {
+    let recorded_root = recorded_root.trim();
+    let own = format!("{}/{}", location.trim_end_matches('/'), THE_ROOTS_SEGMENT);
+    smoozy_job_files::root_choice::the_layout_again(&WhatIsRecorded {
+        root_path: recorded_root.to_string(),
+        the_package_areas_own_location: (recorded_root != own).then_some(own),
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -674,5 +920,191 @@ mod tests {
         let layout = a_layout("/home/smoozy/smoozy", Some("/vol/smoozy"));
         assert_eq!(the_blender_area(&layout), "/home/smoozy/smoozy/blender");
         const { assert!(THE_LINKS_REMOVAL_IS_THAT_DOCUMENTS_OWED_CLEANUP) };
+    }
+
+    // ── R6a, added 2026-11-13 (the scout's list, item 1) ────────────────────
+
+    /// **A reading composed in the documented shape** (`proc_pid_mountinfo(5)`),
+    /// standing for the two disks the live passes saw on one seller's virtual
+    /// machine — 97 GB at `/` and 787 GB at `/ephemeral` — with the memory
+    /// mounts, a read-only mount and the boot partition beside them. The device
+    /// numbers are this test's own.
+    const A_VIRTUAL_MACHINE: &str = "\
+22 1 252:1 / / rw,relatime shared:1 - ext4 /dev/vda1 rw,discard
+23 22 0:5 / /dev rw,nosuid,relatime shared:2 - devtmpfs udev rw,size=61000000k
+24 23 0:24 / /dev/shm rw,nosuid,nodev shared:4 - tmpfs tmpfs rw
+25 22 0:25 / /run rw,nosuid,nodev,noexec shared:5 - tmpfs tmpfs rw,size=12000000k
+26 22 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:12 - proc proc rw
+27 22 252:15 / /boot/efi rw,relatime shared:30 - vfat /dev/vda15 rw
+28 22 252:16 / /ephemeral rw,relatime shared:31 - ext4 /dev/vdb rw
+29 22 7:1 / /snap/core22/1 ro,nodev,relatime shared:32 - squashfs /dev/loop1 ro
+30 22 252:16 / /home/sesterce/again rw,relatime shared:31 - ext4 /dev/vdb rw
+31 22 252:17 / /with\\040space rw,relatime shared:33 - ext4 /dev/vdc rw
+garbled line
+";
+
+    #[test]
+    fn r6a_the_reading_is_read_in_its_documented_fields() {
+        let mounts = the_mounts_as_read(A_VIRTUAL_MACHINE);
+        assert_eq!(mounts.len(), 10, "every line in the documented shape, and the garbled one passed over");
+        assert_eq!(
+            mounts[6],
+            AMountAsRead {
+                device: "252:16".into(),
+                mount_point: "/ephemeral".into(),
+                per_mount_options: vec!["rw".into(), "relatime".into()],
+                filesystem_type: "ext4".into(),
+                mount_source: "/dev/vdb".into(),
+            }
+        );
+        // **The optional fields are any number, and the type is after the
+        // hyphen whatever comes before it.**
+        let none_optional = the_mounts_as_read("36 35 98:0 /mnt1 /mnt2 rw,noatime - ext3 /dev/root rw\n");
+        assert_eq!(none_optional[0].filesystem_type, "ext3");
+        let two_optional = the_mounts_as_read("36 35 98:0 /mnt1 /mnt2 rw shared:1 master:2 - xfs /dev/sdb rw\n");
+        assert_eq!(two_optional[0].filesystem_type, "xfs");
+        assert_eq!(two_optional[0].mount_point, "/mnt2");
+    }
+
+    #[test]
+    fn r6a_only_a_separate_writable_disk_that_is_not_in_memory_is_worth_measuring() {
+        let mounts = the_mounts_as_read(A_VIRTUAL_MACHINE);
+        // `/dev`, `/dev/shm`, `/run` and `/proc` name no device — `/dev`'s
+        // 61 GB is memory; the snap is `ro`; the home mount is `/`; the
+        // second mount of `/dev/vdb` is the same device; the escaped one is
+        // read rather than unescaped. **The boot partition stays here** and is
+        // left to the measuring, where it is not larger than the home mount.
+        assert_eq!(
+            the_mount_points_worth_measuring(&mounts, "/home/sesterce"),
+            vec!["/boot/efi".to_string(), "/ephemeral".to_string()]
+        );
+        // **R6a's change of later on 2026-11-13, item 3 (Sol's look at the
+        // scout's list, point 3): a network volume counts, whatever its source
+        // names, and memory is kept out by its type** — `ramfs` and
+        // `devtmpfs` with `tmpfs` — or by sitting in the system's own folders.
+        let more = the_mounts_as_read(&format!(
+            "{A_VIRTUAL_MACHINE}\
+40 22 0:50 / /mnt/share rw,relatime shared:40 - nfs4 10.0.0.5:/export rw
+41 22 0:51 / /mnt/ram rw,relatime shared:41 - ramfs ramfs rw
+42 22 0:52 / /mnt/devices rw,relatime shared:42 - devtmpfs udev rw
+43 22 0:53 / /sys rw,relatime shared:43 - sysfs sysfs rw
+44 22 0:54 / /workspace rw,relatime shared:44 - fuse.mfs mfs#volume rw
+"
+        ));
+        assert_eq!(
+            the_mount_points_worth_measuring(&more, "/home/sesterce"),
+            vec![
+                "/boot/efi".to_string(),
+                "/ephemeral".to_string(),
+                "/mnt/share".to_string(),
+                "/workspace".to_string()
+            ]
+        );
+        // **A home area on the big disk itself makes the big disk the home
+        // mount**, and nothing on it is offered twice.
+        assert!(!the_mount_points_worth_measuring(&mounts, "/ephemeral/me").contains(&"/ephemeral".to_string()));
+        // **No mount that holds the home area: nothing is offered.**
+        assert!(the_mount_points_worth_measuring(&mounts, "relative/home").is_empty());
+    }
+
+    #[test]
+    fn r6a_the_largest_directory_bigger_than_the_home_mount_is_offered_and_nothing_else() {
+        let gb = 1_000_000_000_u64;
+        let home = a_location("/home/sesterce", WhatTheLocationIs::TheMountTheLoginsHomeAreaSitsOn, Some(83 * gb));
+        let volume = |path: &str, figure: Option<u64>| {
+            a_location(path, WhatTheLocationIs::AnAttachedVolume, figure)
+        };
+        let measured = |path: &str, figure: Option<u64>, it_is_a_directory: bool, the_login_can_write: bool| AVolumeMeasured {
+            volume: volume(path, figure),
+            it_is_a_directory,
+            the_login_can_write,
+        };
+        let offered = the_volume_offered(
+            &home,
+            vec![
+                measured("/boot/efi", Some(gb / 10), true, true),
+                measured("/ephemeral", Some(747 * gb), true, true),
+                measured("/vol2", Some(300 * gb), true, true),
+                // **A single file bound in from the host** — a container's
+                // `/etc/hosts` on a 7 TB disk — is not a directory.
+                measured("/etc/hosts", Some(7_000 * gb), false, true),
+                measured("/unread", None, true, true),
+                // **R6a's change of later on 2026-11-13, item 3: a volume
+                // the login cannot really write to is not offered**, however
+                // large.
+                measured("/readonly-share", Some(9_000 * gb), true, false),
+            ],
+        );
+        assert_eq!(offered.map(|it| it.path), Some("/ephemeral".to_string()));
+
+        // **Nothing bigger: nothing offered**, so a small extra mount never
+        // pulls the package area onto itself.
+        assert_eq!(the_volume_offered(&home, vec![measured("/boot/efi", Some(gb / 10), true, true)]), None);
+        // **A figure read against another path is not this volume's figure.**
+        let mut elsewhere = measured("/ephemeral", Some(747 * gb), true, true);
+        elsewhere.volume.the_reading.as_mut().unwrap().the_path_it_was_taken_against = "/".into();
+        assert_eq!(the_volume_offered(&home, vec![elsewhere]), None);
+        // **No home figure: nothing to be larger than.**
+        let unread_home = a_location("/home/sesterce", WhatTheLocationIs::TheMountTheLoginsHomeAreaSitsOn, None);
+        assert_eq!(the_volume_offered(&unread_home, vec![measured("/ephemeral", Some(747 * gb), true, true)]), None);
+
+        // **And the choice then puts the root on the volume and the package
+        // area apart on the home mount, at the path it has on a one-mount
+        // machine** — so the program's own place does not move.
+        let set = compose_the_candidate_set(&[home.clone(), volume("/ephemeral", Some(747 * gb))]).unwrap();
+        let chosen = smoozy_job_files::root_choice::choose(&set).unwrap();
+        assert_eq!(chosen.layout.root().as_path(), "/ephemeral/smoozy");
+        assert_eq!(chosen.layout.area(Area::Package), "/home/sesterce/smoozy/package");
+        let one_mount = smoozy_job_files::root_choice::choose(&compose_the_candidate_set(&[home]).unwrap()).unwrap();
+        assert_eq!(one_mount.layout.area(Area::Package), chosen.layout.area(Area::Package));
+    }
+
+    #[test]
+    fn r6a_a_recorded_root_is_kept_on_either_arrangement() {
+        // **The record sits at one path on either arrangement.**
+        assert_eq!(
+            the_record_of_the_root_for("/home/sesterce").as_deref(),
+            Some("/home/sesterce/smoozy/package/root")
+        );
+        // **A server set up before R6a**: everything under the home folder.
+        let before = the_layout_a_recorded_root_gives("/home/sesterce", "/home/sesterce/smoozy\n").unwrap();
+        assert_eq!(before, a_layout("/home/sesterce/smoozy", None));
+        // **A server set up with R6a**: the root on the big disk, the package
+        // area apart on the home mount.
+        let after = the_layout_a_recorded_root_gives("/home/sesterce", "/ephemeral/smoozy").unwrap();
+        assert_eq!(after, a_layout("/ephemeral/smoozy", Some("/home/sesterce/smoozy")));
+        // **A record naming a root Smoozy may not use rebuilds nothing.**
+        assert_eq!(the_layout_a_recorded_root_gives("/home/sesterce", "/tmp/smoozy"), None);
+        assert_eq!(the_layout_a_recorded_root_gives("/home/sesterce", ""), None);
+    }
+
+    /// **R6a's change of later on 2026-11-13, item 1 (Sol's look at the
+    /// scout's list, point 2): only a record that is not there is a first
+    /// placement.** Permission denied, a channel gone, bytes that are not
+    /// text and text that names no root Smoozy may use each stop the setup
+    /// with the reason, rather than letting a fresh choice write a second root.
+    #[test]
+    fn r6a_a_record_that_cannot_be_read_stops_and_only_one_not_there_is_a_first_placement() {
+        use crate::readings::WhatTheMachineSaid as Said;
+        let at = "/home/sesterce/smoozy/package/root";
+        let says = |read| what_the_record_of_the_root_says("/home/sesterce", at, read);
+        assert_eq!(says(Err(Said::ThePathIsNotThere)), Ok(None));
+        assert_eq!(
+            says(Ok(b"/ephemeral/smoozy\n".to_vec())),
+            Ok(Some(a_layout("/ephemeral/smoozy", Some("/home/sesterce/smoozy"))))
+        );
+        for refused in [Said::TheLoginMayNot, Said::TheChannelIsGone, Said::ItRefused] {
+            let why = says(Err(refused.clone())).expect_err("an unreadable record stops the setup");
+            assert!(why.starts_with(&format!("Could not read {at}: ")), "{why}");
+            assert!(why.contains(refused.in_words()), "{why}");
+        }
+        assert_eq!(
+            says(Ok(vec![0xff, 0xfe])),
+            Err(format!("Could not read {at}: it does not contain a folder path."))
+        );
+        assert_eq!(
+            says(Ok(b"/tmp/smoozy".to_vec())),
+            Err(format!("Could not read {at}: it names a folder Smoozy can't use, /tmp/smoozy."))
+        );
     }
 }

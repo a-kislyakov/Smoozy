@@ -299,35 +299,47 @@ pub fn the_archive_is_unpacked(
     into: &Path,
     told: &dyn crate::acting::TellsHowFarItHasGot,
 ) -> Result<HowItWent, String> {
-    use std::io::Read;
-    std::fs::create_dir_all(into).map_err(|why| format!("{}: {why}", into.display()))?;
-    let the_archives_size = std::fs::metadata(archive)
-        .map_err(|why| format!("{}: {why}", archive.display()))?
-        .len();
-    let mut file = std::fs::File::open(archive).map_err(|why| format!("{}: {why}", archive.display()))?;
-    let mut first = [0u8; THE_LONGEST_MARK];
-    let mut looked = 0;
-    while looked < first.len() {
-        match file.read(&mut first[looked..]) {
-            Ok(0) => break,
-            Ok(read) => looked += read,
-            Err(why) => return Err(format!("{}: {why}", archive.display())),
+    let result = (|| {
+        use std::io::Read;
+        std::fs::create_dir_all(into).map_err(|why| format!("{}: {why}", into.display()))?;
+        let the_archives_size = std::fs::metadata(archive)
+            .map_err(|why| format!("{}: {why}", archive.display()))?
+            .len();
+        let mut file = std::fs::File::open(archive).map_err(|why| format!("{}: {why}", archive.display()))?;
+        let mut first = [0u8; THE_LONGEST_MARK];
+        let mut looked = 0;
+        while looked < first.len() {
+            match file.read(&mut first[looked..]) {
+                Ok(0) => break,
+                Ok(read) => looked += read,
+                Err(why) => return Err(format!("{}: {why}", archive.display())),
+            }
+        }
+        let mut arguments = vec!["-x"];
+        if let Some(option) = the_unpack_tools_option_for(&first[..looked]) {
+            arguments.push(option);
+        }
+        let into = into.display().to_string();
+        arguments.extend(["-f", "-", "-C", &into]);
+        let mut fed = TheArchiveAsItIsFed {
+            looked_at: std::io::Cursor::new(first[..looked].to_vec()),
+            rest: file,
+            fed: 0,
+            whole: the_archives_size,
+            told,
+        };
+        runner.run_fed(THE_UNPACK_TOOL, &arguments, &mut fed)
+    })();
+    // `Server Setup`’s failed-unpack rule: retain the archive, never the
+    // partly unpacked tree. The caller supplied this run’s own staging path.
+    if !result.as_ref().is_ok_and(HowItWent::it_exited_cleanly) {
+        if let Err(why) = std::fs::remove_dir_all(into) {
+            if why.kind() == std::io::ErrorKind::NotFound { return result; }
+            return Err(format!("{} Could not remove the partial Blender folder: {why}.",
+                result.as_ref().err().cloned().unwrap_or_else(|| "Blender unpack failed.".into())));
         }
     }
-    let mut arguments = vec!["-x"];
-    if let Some(option) = the_unpack_tools_option_for(&first[..looked]) {
-        arguments.push(option);
-    }
-    let into = into.display().to_string();
-    arguments.extend(["-f", "-", "-C", &into]);
-    let mut fed = TheArchiveAsItIsFed {
-        looked_at: std::io::Cursor::new(first[..looked].to_vec()),
-        rest: file,
-        fed: 0,
-        whole: the_archives_size,
-        told,
-    };
-    runner.run_fed(THE_UNPACK_TOOL, &arguments, &mut fed)
+    result
 }
 
 /// **The longest of the marks [`the_unpack_tools_option_for`] reads.**
@@ -985,6 +997,27 @@ mod tests {
 
     fn an_area(named: &str) -> crate::acting::ItsOwnFolder {
         crate::acting::its_own_folder(named)
+    }
+
+    #[test]
+    fn bad_batch_2_a_failed_unpack_removes_only_its_partial_tree() {
+        let area = std::env::temp_dir().join(format!("smoozy-bad-batch-2-unpack-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&area);
+        std::fs::create_dir_all(&area).unwrap();
+        let archive = area.join("build.tar");
+        std::fs::write(&archive, b"archive").unwrap();
+        let into = area.join("this-run-unpacked");
+        std::fs::create_dir_all(&into).unwrap();
+        std::fs::write(into.join("partial"), b"partial build").unwrap();
+        let other = area.join("another-run-unpacked");
+        std::fs::create_dir_all(&other).unwrap();
+        let runner = AStandInForTheMachinesTools::holding(vec![(THE_UNPACK_TOOL, it_went(2, "", "no space left"))]);
+        let result = the_archive_is_unpacked(&runner, &archive, &into, &crate::acting::NobodyIsTold);
+        assert!(!result.unwrap().it_exited_cleanly());
+        assert!(!into.exists(), "a failed unpack keeps filling the disk");
+        assert!(archive.exists(), "the retry archive stays");
+        assert!(other.exists(), "another run is untouched");
+        std::fs::remove_dir_all(area).unwrap();
     }
 
     /// **Y7c: the tool is told the archive's wrapping, read off its first

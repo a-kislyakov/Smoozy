@@ -792,3 +792,43 @@ The `channel-map` named `latest/stable` version **5.2.2**, released `2026-09-15T
 `https://manpages.ubuntu.com/manpages/noble/man8/apt.8.html`, read **2026-11-03**: its page *"only mentions the most used commands and options"* and does not list `-s`. So that `apt` takes `-s` is an **assumption**, labelled where it is used. That it takes `-y` and two `-o` on a glob removal is **observed**, the Sesterce pass's hand repair of 2026-11-02.
 
 **Not covered:** whether a real removal on any other image meets the same file, and what apt prints for a name ending in a hyphen when no such package exists. *Added 2026-11-03; no auditor has seen it.*
+
+## `sudo -k`, for E3 and M3
+
+**Read 2026-11-12, for `File Browser` P6b, and recorded in full in `Sources/File Browser.sources.md`** — `sudo(8)`, `https://www.sudo.ws/docs/man/sudo.man/` ("Sudo Manual (latest)"; the page states no single version): `-k` *"When used in conjunction with a command or an option that may require a password, this option will cause sudo to ignore the user's cached credentials. As a result, sudo will prompt for a password (if one is required by the security policy) and will not update the user's cached credentials."* The same entry records `sudo-rs`'s page: `-k` *"will cause sudo-rs to ignore the user's session record. As a result, authentication will take place if the policy requires it."*
+
+**Clauses:** E3, E4 and M3, as changed 2026-11-12. **Not read again for this document**: the builder of the Fable review's sitting 6 follow-up cites the File Browser reading of the same day. *Added 2026-11-12; no auditor has seen it.*
+
+## `readlink`, `test -L` and `stat`, for R7's *what already stands at the root's name*
+
+GNU coreutils manual 9.12, read **2026-11-12**. `https://www.gnu.org/software/coreutils/manual/html_node/readlink-invocation.html`: *"readlink outputs the value of the given symbolic links. If readlink is invoked with an argument other than the name of a symbolic link, it produces no output and exits with a nonzero exit code."* `https://www.gnu.org/software/coreutils/manual/html_node/File-type-tests.html`, `-L file`: *"True if file exists and is a symbolic link."* `https://www.gnu.org/software/coreutils/manual/html_node/stat-invocation.html`: `-c`, `--format=format`, and among its directives *"%u – User ID of owner"*. Label: **documented**.
+
+**Not covered:** the `[` a rented server's `sh` runs is that shell's own built-in and not coreutils'; `-L` is read here from the coreutils page alone. Nothing was run on a server. *Added 2026-11-12; no auditor has seen it.*
+
+## `sudo-rs`'s wrong-password sentences, for E2's *a kept one that is refused is asked for again*
+
+The `sudo-rs` project's own source, read **2026-11-12** on its `main` branch. `https://raw.githubusercontent.com/trifectatechfoundation/sudo-rs/main/src/sudo/pam.rs`, line 127: `user_warn!("Authentication failed, try again.");`. `https://raw.githubusercontent.com/trifectatechfoundation/sudo-rs/main/src/common/error.rs`, line 122: `"maximum {num} incorrect authentication attempts"`. Label: **documented**. Neither is E4's sentence, *sudo: 1 incorrect password attempt*.
+
+**Not covered:** what a given release of `sudo-rs` prints on a rented server, which was not observed; the branch's text can change. Neither sentence is matched by Smoozy. *Added 2026-11-12; no auditor has seen it.*
+
+## `ssh(1)`, `sshd(8)` and `sshd_config(5)`, for Y8's *whether the step on the machine ends*
+
+OpenBSD's manual pages, read **2026-11-12**. `https://man.openbsd.org/ssh.1`: *"The session terminates when the command or shell on the remote machine exits and all X11 and TCP connections have been closed."* `https://man.openbsd.org/sshd.8`: *"When the user program terminates and all forwarded X11 and other connections have been closed, the server sends command exit status to the client, and both sides exit."* `https://man.openbsd.org/sshd_config.5`, `ClientAliveCountMax`: *"sshd will disconnect the client, terminating the session."* Label: **documented**.
+
+**Not covered, and this is the point of the entry:** none of the three pages says what becomes of a command still running when its channel is closed or its connection is lost. The pages were searched for *hangup*, *SIGHUP*, *killed* and *terminat*; the sentences above are all that bear on it. Nothing was run on a server. *Added 2026-11-12; no auditor has seen it.*
+
+## apt's `dpkgpm.cc`, for S7's *where dpkg's sentence is printed*
+
+apt's own source, read **2026-11-12** on its `main` branch, `https://salsa.debian.org/apt-team/apt/-/raw/main/apt-pkg/deb/dpkgpm.cc`. `StartPtyMagic`: `if (_config->FindB("Dpkg::Use-Pty", true) == false)` (so a pseudo-terminal is the default), and `if (isatty(STDIN_FILENO) == 0)` sets `d->direct_stdin = true`. `SetupSlavePtyMagic`: `if (d->direct_stdin == true) ++i; for (; i < 3; ++i) if (dup2(slaveFd, i) == -1)`, so dpkg's standard output and complaint stream both go to the pseudo-terminal. `DoTerminalPty`: `FileFd::Write(1, term_buf.data(), len);`, so what dpkg printed comes out on apt's standard output. Label: **documented**.
+
+**Not covered:** what an older apt on a given image does, which the source of one branch does not say; whether a server image sets `Dpkg::Use-Pty` false. The second live pass of 2026-11-12 saw only apt's `E:` lines on the complaint stream, which agrees. *Added 2026-11-12; no auditor has seen it.*
+
+## `proc_pid_mountinfo(5)` and `tmpfs(5)`, for R6a's *how the attached volume is found*
+
+Linux man-pages **6.19** (footer 2026-02-08), read **2026-11-13** at `https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html`. Each line of the file is eleven kinds of field, in order: *"mount ID"*, *"parent ID"*, *"major:minor: the value of st_dev for files on this filesystem"*, *"root"*, *"mount point: the pathname of the mount point relative to the process's root directory"*, *"mount options: per-mount options"*, *"optional fields: zero or more fields of the form "tag[:value]""*, *"separator: the end of the optional fields is marked by a single hyphen"*, *"filesystem type"*, *"mount source"*, *"super options"*. The page's example: `36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue`. **Not covered:** how a space or other character in a mount point is written; the page says nothing, so R6a reads a mount point holding a backslash as unreadable and offers nothing for it.
+
+The same release, `https://man7.org/linux/man-pages/man5/tmpfs.5.html`, read the same day: *"The tmpfs facility allows the creation of filesystems whose contents reside in virtual memory"*, mounted as type `tmpfs`. **Not covered:** any other memory-backed filesystem type; R6a's other tests (a larger available figure than the home mount, a directory, writable by the login) are what keep one out.
+
+The Linux kernel's own documentation, read **2026-11-13**, for R6a's change of that day (item 3), the memory filesystems: `https://www.kernel.org/doc/Documentation/filesystems/ramfs-rootfs-initramfs.txt` (Rob Landley, dated October 17, 2005): *"Ramfs is a very simple filesystem that exports Linux's disk caching mechanisms (the page cache and dentry cache)"* and *"A ramfs derivative called tmpfs was created to add size limits, and the ability to write the data to swap space."*; and the help text of `DEVTMPFS` in `drivers/base/Kconfig` (`https://raw.githubusercontent.com/torvalds/linux/master/drivers/base/Kconfig`, the master branch that day): *"This creates a tmpfs/ramfs filesystem instance early at bootup."* **Not covered:** any other filesystem held in memory; R6a's measuring and test write are what keep one out.
+
+**Observed, not documented:** the two disks R6a was written for — `/dev/vda1` 97 GB at `/` and `/dev/vdb` 738 GB and 787 GB at `/ephemeral`, on one seller's virtual machines, in the live passes of 2026-11-11 and 2026-11-12 (`Audits/Build/The four questions/The live pass — what happened.md` and `The second live pass — what happened.md`, *Where the space is*); and a container's host disks showing only as single files bound in (`nvidia-smi`, `/etc/hosts`). *Added 2026-11-13; no auditor has seen it.*

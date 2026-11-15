@@ -24,8 +24,12 @@
 //! the two acts that remove a job with no other trace, and about the
 //! erase's own machine-side units.
 //!
+//! **And the gap lines** (`Reporting a problem` J5): a reading of a server
+//! that stalls past a minute, and its end — [`AGap`]. Added 2026-11-10,
+//! note 11's piece 5a.
+//!
 //! **Markers used in this file that belong to another document, each with the
-//! document it belongs to.** `Reporting a problem` J2, J2a, J3, J4, J4a,
+//! document it belongs to.** `Reporting a problem` J2, J2a, J3, J4, J4a, J5,
 //! U7.
 //!
 //! **`Reporting a problem` R7, `Desktop app and delivery` A7, `Job files and
@@ -42,8 +46,9 @@ use smoozy_state::observed::{Clock, Reading};
 use crate::ending::Ending;
 use crate::stop_and_clear::ThreeResults;
 
-/// **The two kinds this module declares**, and no others.
-pub const DECLARED: [LineKind; 2] = [LineKind::Act, LineKind::Told];
+/// **The three kinds this module declares**, and no others. **The gap lines
+/// joined on 2026-11-10** (note 11's piece 5a, §17's paragraph on them).
+pub const DECLARED: [LineKind; 3] = [LineKind::Act, LineKind::Told, LineKind::Gap];
 
 /// **The three acts.** Each fixed line form carries the act's name, the
 /// moment on the desktop clock stated as that clock (`State, identity and
@@ -238,6 +243,205 @@ impl AJobsEnding {
     }
 }
 
+/// **Why a queue reading was not held** — §17's five whys, in its own words.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhyNotHeld {
+    /// The server answered that it could not.
+    TheServerSaidItCouldNot,
+    /// The request went and nothing that answers it came back.
+    NothingThatAnswersItCameBack,
+    /// The request never reached the server.
+    ItCouldNotBeAsked,
+    /// **C11's rule**: the reading names a job as ended whose ending the read
+    /// forward could not learn first, so the last reading stands.
+    AnEndingItNamesWasNotLearned,
+    /// It was taken on a connection no longer the server's current one, or
+    /// after its period ended.
+    ItWasTakenOnAConnectionNoLongerCurrent,
+}
+
+impl WhyNotHeld {
+    pub fn words(self) -> &'static str {
+        match self {
+            WhyNotHeld::TheServerSaidItCouldNot => "the server answered that it could not",
+            WhyNotHeld::NothingThatAnswersItCameBack => "nothing that answers it came back",
+            WhyNotHeld::ItCouldNotBeAsked => "it could not be asked",
+            WhyNotHeld::AnEndingItNamesWasNotLearned => "an ending it names was not learned",
+            WhyNotHeld::ItWasTakenOnAConnectionNoLongerCurrent => {
+                "it was taken on a connection no longer current"
+            }
+        }
+    }
+}
+
+/// **One read the desk makes of a server**, named in plain words and never by
+/// the request's own name (`Reporting a problem` J3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhichRead {
+    TheReadForward,
+    TheCursorsMove,
+    TheQueueReading,
+    ANoteRead,
+    AJobCheck,
+    ARecordFileRead,
+    TheCommentaryRead,
+    AnotherRequest,
+}
+
+impl WhichRead {
+    pub fn words(self) -> &'static str {
+        match self {
+            WhichRead::TheReadForward => "the read forward",
+            WhichRead::TheCursorsMove => "the cursor's move",
+            WhichRead::TheQueueReading => "reading the queue",
+            WhichRead::ANoteRead => "a note read",
+            WhichRead::AJobCheck => "a job check",
+            WhichRead::ARecordFileRead => "a record-file read",
+            WhichRead::TheCommentaryRead => "the commentary read",
+            WhichRead::AnotherRequest => "another request",
+        }
+    }
+}
+
+/// **Which stretch of reading took over a minute.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhichStretch {
+    /// One pass of `Desktop app and delivery` P10d's sequence.
+    APass,
+    /// A new connection's first reconciliation (`Servers` Q1 step 7).
+    ANewConnectionsFirstReconciliation,
+}
+
+impl WhichStretch {
+    pub fn words(self) -> &'static str {
+        match self {
+            WhichStretch::APass => "a pass",
+            WhichStretch::ANewConnectionsFirstReconciliation => {
+                "a new connection's first reconciliation"
+            }
+        }
+    }
+}
+
+/// **§17's four gap lines** (`Reporting a problem` J5): one when a stall passes
+/// a minute, one when it ends, **never one per reading**. Each is the desk's
+/// own statement on the desk's own clock, so a duration in it is measured on
+/// one clock (`State, identity and recovery` D5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AGap {
+    /// *No queue reading held*: how long since the first one not held, how
+    /// many tries, and why this one was not held.
+    NoQueueReadingHeld {
+        the_servers_label: String,
+        for_seconds: u64,
+        tries: u32,
+        why: WhyNotHeld,
+    },
+    /// *Queue reading held again*: how long since the first one not held, and
+    /// how many tries.
+    AQueueReadingHeldAgain {
+        the_servers_label: String,
+        after_seconds: u64,
+        tries: u32,
+    },
+    /// *Reading took over a minute*: which stretch, how long, and its slowest
+    /// single read with how long that took.
+    ReadingTookOverAMinute {
+        the_servers_label: String,
+        stretch: WhichStretch,
+        seconds: u64,
+        slowest: Option<(WhichRead, u64)>,
+    },
+    /// *Reading back under a minute*: how many stretches in a row took
+    /// longer.
+    ReadingBackUnderAMinute {
+        the_servers_label: String,
+        slow_in_a_row: u32,
+    },
+}
+
+/// **A figure and its unit, joined by the bind mark** — the app's one rule
+/// for the two, kept in the diary too.
+fn with_its_unit(figure: impl std::fmt::Display, unit: &str) -> String {
+    format!("{figure}\u{a0}{unit}")
+}
+
+impl AGap {
+    fn text(&self) -> String {
+        match self {
+            AGap::NoQueueReadingHeld {
+                the_servers_label,
+                for_seconds,
+                tries,
+                why,
+            } => [
+                "no queue reading held".to_string(),
+                the_servers_label.clone(),
+                with_its_unit(for_seconds, "s"),
+                with_its_unit(tries, "tries"),
+                why.words().to_string(),
+            ]
+            .join("\t"),
+            AGap::AQueueReadingHeldAgain {
+                the_servers_label,
+                after_seconds,
+                tries,
+            } => [
+                "queue reading held again".to_string(),
+                the_servers_label.clone(),
+                with_its_unit(after_seconds, "s"),
+                with_its_unit(tries, "tries"),
+            ]
+            .join("\t"),
+            AGap::ReadingTookOverAMinute {
+                the_servers_label,
+                stretch,
+                seconds,
+                slowest,
+            } => {
+                let (read, took) = match slowest {
+                    Some((read, took)) => (
+                        format!("slowest: {}", read.words()),
+                        with_its_unit(took, "s"),
+                    ),
+                    None => (String::new(), String::new()),
+                };
+                [
+                    "reading took over a minute".to_string(),
+                    the_servers_label.clone(),
+                    stretch.words().to_string(),
+                    with_its_unit(seconds, "s"),
+                    read,
+                    took,
+                ]
+                .join("\t")
+            }
+            AGap::ReadingBackUnderAMinute {
+                the_servers_label,
+                slow_in_a_row,
+            } => [
+                "reading back under a minute".to_string(),
+                the_servers_label.clone(),
+                with_its_unit(slow_in_a_row, "slow in a row"),
+            ]
+            .join("\t"),
+        }
+    }
+
+    /// The line, ready for the diary service, at the desk's moment, carrying
+    /// the run identity and the server row.
+    pub fn line(&self, run: Identity, server_row: Identity, at: SystemTime) -> Line {
+        Line {
+            run: run.clone(),
+            kind: LineKind::Gap,
+            at,
+            clock: Clock::ThisComputer,
+            text: self.text(),
+            concerning: vec![run, server_row],
+        }
+    }
+}
+
 /// **What else was tested, and the test each fails** — named so the next
 /// reader is not left to re-derive them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -296,12 +500,70 @@ mod tests {
     }
 
     #[test]
-    fn this_module_declares_act_and_told_lines_and_no_other_kind() {
+    fn this_module_declares_act_told_and_gap_lines_and_no_other_kind() {
         let mut declarations: Declarations<&str> = Declarations::new();
         declarations.module_declares("Queue & History", DECLARED.to_vec());
         assert!(declarations.may_write(&"Queue & History", LineKind::Act));
         assert!(declarations.may_write(&"Queue & History", LineKind::Told));
+        assert!(declarations.may_write(&"Queue & History", LineKind::Gap));
         assert!(!declarations.may_write(&"Queue & History", LineKind::Failure));
+    }
+
+    /// **Note 11's piece 5a: §17's four gap lines, word for word**, each a gap line on
+    /// the desk's clock with the run and the server row and nothing else.
+    #[test]
+    fn n5a_the_four_gap_lines_read_as_section_17_declares_them() {
+        let run = Identity::issue(IdentityKind::Run).unwrap();
+        let row = Identity::issue(IdentityKind::LocalServer).unwrap();
+        let at = SystemTime::UNIX_EPOCH;
+        let label = || "the big box".to_string();
+        let lines = [
+            AGap::NoQueueReadingHeld {
+                the_servers_label: label(),
+                for_seconds: 75,
+                tries: 13,
+                why: WhyNotHeld::NothingThatAnswersItCameBack,
+            },
+            AGap::AQueueReadingHeldAgain {
+                the_servers_label: label(),
+                after_seconds: 190,
+                tries: 31,
+            },
+            AGap::ReadingTookOverAMinute {
+                the_servers_label: label(),
+                stretch: WhichStretch::ANewConnectionsFirstReconciliation,
+                seconds: 140,
+                slowest: Some((WhichRead::ARecordFileRead, 128)),
+            },
+            AGap::ReadingBackUnderAMinute {
+                the_servers_label: label(),
+                slow_in_a_row: 2,
+            },
+        ]
+        .map(|gap| gap.line(run.clone(), row.clone(), at));
+        let texts: Vec<&str> = lines.iter().map(|line| line.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            vec![
+                "no queue reading held\tthe big box\t75\u{a0}s\t13\u{a0}tries\tnothing that answers it came back",
+                "queue reading held again\tthe big box\t190\u{a0}s\t31\u{a0}tries",
+                "reading took over a minute\tthe big box\ta new connection's first reconciliation\t140\u{a0}s\tslowest: a record-file read\t128\u{a0}s",
+                "reading back under a minute\tthe big box\t2\u{a0}slow in a row",
+            ]
+        );
+        for line in &lines {
+            assert_eq!(line.kind, LineKind::Gap);
+            assert_eq!(line.clock, Clock::ThisComputer);
+            assert_eq!(line.concerning, vec![run.clone(), row.clone()]);
+        }
+        let ending_not_learned = AGap::NoQueueReadingHeld {
+            the_servers_label: label(),
+            for_seconds: 61,
+            tries: 2,
+            why: WhyNotHeld::AnEndingItNamesWasNotLearned,
+        }
+        .line(run.clone(), row.clone(), at);
+        assert!(ending_not_learned.text.ends_with("an ending it names was not learned"));
     }
 
     #[test]

@@ -203,6 +203,9 @@ impl Connection {
         &mut self,
         command: CommandString,
     ) -> Result<CommandResult, CommandFailure> {
+        if command.reading_limit().is_some() {
+            return Ok(self.one_command_begun(command, None).await?.to_its_end().await);
+        }
         let mut channel = self.one_exec_request(command).await?;
         // **Nothing is written to the channel on this route**, and the far end
         // is told so at once: a program that reads its input waits for a close
@@ -353,6 +356,7 @@ impl Connection {
             .map_err(|_| CommandFailure::TheRequestDidNotReachTheMachine)?;
         Ok(ACommandUnderWay {
             channel: Some(channel),
+            deadline: command.reading_limit().map(|limit| tokio::time::Instant::now() + limit),
         })
     }
 
@@ -367,16 +371,23 @@ impl Connection {
         &mut self,
         command: CommandString,
     ) -> Result<russh::Channel<client::Msg>, CommandFailure> {
-        let channel = self
-            .handle
-            .channel_open_session()
-            .await
-            .map_err(|_| CommandFailure::NoChannelCouldBeOpened)?;
-        channel
-            .exec(true, command.as_str())
-            .await
-            .map_err(|_| CommandFailure::TheRequestDidNotReachTheMachine)?;
-        Ok(channel)
+        let opening = async {
+            let channel = self
+                .handle
+                .channel_open_session()
+                .await
+                .map_err(|_| CommandFailure::NoChannelCouldBeOpened)?;
+            channel
+                .exec(true, command.as_str())
+                .await
+                .map_err(|_| CommandFailure::TheRequestDidNotReachTheMachine)?;
+            Ok(channel)
+        };
+        match command.reading_limit() {
+            Some(limit) => tokio::time::timeout(limit, opening).await
+                .unwrap_or(Err(CommandFailure::TheRequestDidNotReachTheMachine)),
+            None => opening.await,
+        }
     }
 
     /// **§1.1's second mechanism, opened on this connection** — one
@@ -493,6 +504,26 @@ async fn what_the_command_returned_told_as_it_came(
     result
 }
 
+/// `Server protocol and transfers`’ bounded-command rule. The session is
+/// released before returning, including at a one-session server limit.
+async fn the_bounded_command_result(
+    channel: &mut russh::Channel<client::Msg>,
+    deadline: Option<tokio::time::Instant>,
+    told: &mut (dyn FnMut(TheStream, &[u8]) + Send),
+) -> CommandResult {
+    let Some(deadline) = deadline else {
+        return what_the_command_returned_told_as_it_came(channel, told).await;
+    };
+    match tokio::time::timeout_at(deadline, what_the_command_returned_told_as_it_came(channel, told)).await {
+        Ok(result) => result,
+        Err(_) => {
+            // A channel close is owed even if the remote process never exits.
+            let _ = tokio::time::timeout(std::time::Duration::from_secs(1), channel.close()).await;
+            CommandResult { output: Vec::new(), complaint: b"Server check timed out.".to_vec(), status: None }
+        }
+    }
+}
+
 /// **A command whose request has gone out, and whose result has not yet been
 /// read** — [`Connection::one_command_begun`]'s second half. Added 2026-09-27,
 /// step 10c's eighth-pass fix piece 1.
@@ -506,6 +537,7 @@ async fn what_the_command_returned_told_as_it_came(
 pub struct ACommandUnderWay {
     /// **Present until the command's result has been read whole.**
     channel: Option<russh::Channel<client::Msg>>,
+    deadline: Option<tokio::time::Instant>,
 }
 
 impl ACommandUnderWay {
@@ -513,7 +545,7 @@ impl ACommandUnderWay {
     /// channel's close** — the same reading every route above makes.
     pub async fn to_its_end(mut self) -> CommandResult {
         let result = match self.channel.as_mut() {
-            Some(channel) => what_the_command_returned(channel).await,
+            Some(channel) => the_bounded_command_result(channel, self.deadline, &mut |_, _| {}).await,
             None => CommandResult {
                 output: Vec::new(),
                 complaint: Vec::new(),
@@ -539,7 +571,7 @@ impl ACommandUnderWay {
         mut told: impl FnMut(TheStream, &[u8]) + Send,
     ) -> CommandResult {
         let result = match self.channel.as_mut() {
-            Some(channel) => what_the_command_returned_told_as_it_came(channel, &mut told).await,
+            Some(channel) => the_bounded_command_result(channel, self.deadline, &mut told).await,
             None => CommandResult {
                 output: Vec::new(),
                 complaint: Vec::new(),
@@ -746,13 +778,35 @@ async fn the_socket_to(
     endpoint: &Endpoint,
     config: &client::Config,
 ) -> Result<tokio::net::TcpStream, OpenFailure> {
-    let socket = tokio::net::TcpStream::connect((endpoint.host.as_str(), endpoint.port))
+    // **The name is looked up first, so a name that finds no address is told
+    // as that** rather than as an address that did not answer — the four
+    // questions, scout 3.1, 2026-11-11. The lookup is the system's own answer;
+    // no message is read (§1.3).
+    let addresses: Vec<std::net::SocketAddr> =
+        match tokio::net::lookup_host((endpoint.host.as_str(), endpoint.port)).await {
+            Ok(found) => found.collect(),
+            Err(_) => return Err(OpenFailure::TheHostWasNotFound),
+        };
+    if addresses.is_empty() {
+        return Err(OpenFailure::TheHostWasNotFound);
+    }
+    let socket = tokio::net::TcpStream::connect(&addresses[..])
         .await
-        .map_err(|_| OpenFailure::TheAddressDidNotAnswer)?;
+        .map_err(|failure| the_socket_failure(&failure))?;
     if config.nodelay {
         let _ = socket.set_nodelay(true);
     }
     Ok(socket)
+}
+
+/// **A socket that could not be made, by the error's kind and never its
+/// words** (§1.3): a refusal on the port is said as one, and everything else
+/// is an address that did not answer.
+fn the_socket_failure(failure: &std::io::Error) -> OpenFailure {
+    match failure.kind() {
+        std::io::ErrorKind::ConnectionRefused => OpenFailure::TheConnectionWasRefused,
+        _ => OpenFailure::TheAddressDidNotAnswer,
+    }
 }
 
 /// Which of the three pre-authentication failures this was.
@@ -1057,7 +1111,54 @@ mod tests {
         )
         .await
         .expect_err("no machine is listening on port 0");
-        assert!(matches!(failure, OpenFailure::TheAddressDidNotAnswer));
+        // **Port 0 is refused on some systems and unreachable on others**, and
+        // both answers claim nothing about the machine.
+        assert!(matches!(
+            failure,
+            OpenFailure::TheAddressDidNotAnswer | OpenFailure::TheConnectionWasRefused
+        ));
+    }
+
+    /// **A name that finds no address is said as that** — the four questions,
+    /// scout 3.1, 2026-11-11. `.invalid` is reserved never to resolve, and with
+    /// no network the lookup fails the same way, so this is a desk test.
+    #[tokio::test]
+    async fn a_host_that_is_not_found_is_said_as_that() {
+        let endpoint = Endpoint {
+            host: "no-such-server.invalid".to_string(),
+            port: 22,
+            username: "nobody".to_string(),
+        };
+        let credential = Credential {
+            private_key_file: std::path::PathBuf::from("/nonexistent"),
+            passphrase: None,
+        };
+        let failure = open(&endpoint, credential, K3_AT_ITS_OWN_FIGURES, Box::new(Refuses))
+            .await
+            .expect_err("a reserved name finds no address");
+        assert!(matches!(failure, OpenFailure::TheHostWasNotFound), "{failure:?}");
+    }
+
+    /// **A port nothing listens on is a refused connection, said as that.** A
+    /// listener is opened and closed so its port is known to be free.
+    #[tokio::test]
+    async fn a_port_that_refuses_is_said_as_that() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a free port");
+        let port = listener.local_addr().expect("its address").port();
+        drop(listener);
+        let endpoint = Endpoint {
+            host: "127.0.0.1".to_string(),
+            port,
+            username: "nobody".to_string(),
+        };
+        let credential = Credential {
+            private_key_file: std::path::PathBuf::from("/nonexistent"),
+            passphrase: None,
+        };
+        let failure = open(&endpoint, credential, K3_AT_ITS_OWN_FIGURES, Box::new(Refuses))
+            .await
+            .expect_err("nothing listens on a port just closed");
+        assert!(matches!(failure, OpenFailure::TheConnectionWasRefused), "{failure:?}");
     }
 
     /// **A line that carries nothing either way for the whole window is a

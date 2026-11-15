@@ -1,9 +1,14 @@
-//! **The hold: publication waits while anything is running** — Z31, on the
+//! **What is running, read for the update** — Z31's reading, on the
 //! Creator's ruling of 2026-09-28: *"We need to have Smoozy not update on its
 //! own while jobs are running. The user should be able to override this block,
 //! but by default — updating only happens with no running jobs."* Built at step
-//! 11's Mac update piece. Z32's *install anyway* is the one route past it, and
-//! it is the caller's (`crate::updating::the_mac`), not this file's.
+//! 11's Mac update piece as the hold publication waited on.
+//!
+//! **From 2026-11-09 it holds nothing** (Z33, the Creator's twenty-eighth
+//! notes, note 4): nothing publishes without the user's *Install now*, so
+//! nothing waits. The reading stands, and decides only whether the update box
+//! carries Z32's sentence about running jobs and transfers
+//! (`crate::updating::the_box`).
 //!
 //! **What *running* is, read on this computer alone, at the moment publication
 //! would begin** — Z31's first bullet, item by item:
@@ -135,12 +140,30 @@ pub fn what_is_running(
     })
 }
 
-/// **Whether publication is held now** — yes where anything is running, and
-/// yes where the record would not say (the safe side).
-pub fn publication_is_held(connection: &rusqlite::Connection, moving: &dyn TellsWhatIsMoving) -> bool {
+/// **Whether anything is running now** — yes where anything is, and yes where
+/// the record would not say (the safe side: the box then says what installing
+/// does to running jobs).
+pub fn something_is_running(connection: &rusqlite::Connection, moving: &dyn TellsWhatIsMoving) -> bool {
     match what_is_running(connection, moving) {
         Ok(running) => !running.nothing(),
         Err(_) => true,
+    }
+}
+
+/// **Z31's reading in the running application**: the record through its one
+/// lock and the run's transfers. Running where either cannot be read.
+pub fn something_is_running_here<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> bool {
+    use tauri::Manager;
+    let Some(transfers) = handle.try_state::<std::sync::Arc<TheRunsTransfers>>() else {
+        return true;
+    };
+    let Some(started) = handle.try_state::<std::sync::Mutex<crate::start::Started>>() else {
+        return true;
+    };
+    let started = started.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    match started.record.as_ref() {
+        Some(record) => something_is_running(record.connection(), transfers.inner().as_ref()),
+        None => true,
     }
 }
 
@@ -185,6 +208,7 @@ pub(crate) mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         record
@@ -196,38 +220,38 @@ pub(crate) mod tests {
     /// marked *start never heard* does not; a started job whose server row is
     /// gone still does.
     #[test]
-    fn publication_is_held_while_a_job_has_no_ending() {
+    fn something_is_running_while_a_job_has_no_ending() {
         let connection = a_record_store();
         let store = JobRecords::over(&connection);
         let server = a_server_row(&connection);
-        assert!(!publication_is_held(&connection, &Moving(0)), "nothing at all holds it");
+        assert!(!something_is_running(&connection, &Moving(0)), "nothing at all holds it");
 
         let finished = ended(a_record_in_history(&server, "Kitchen — finished"));
         store.write_the_provisional_record(&finished).unwrap();
-        assert!(!publication_is_held(&connection, &Moving(0)), "a finished job held it");
+        assert!(!something_is_running(&connection, &Moving(0)), "a finished job held it");
 
         let rendering = a_record_in_history(&server, "Kitchen — rendering");
         store.write_the_provisional_record(&rendering).unwrap();
         let running = what_is_running(&connection, &Moving(0)).unwrap();
         assert_eq!(running.jobs, vec![rendering.job.clone()]);
-        assert!(publication_is_held(&connection, &Moving(0)));
+        assert!(something_is_running(&connection, &Moving(0)));
         store.remove(&rendering.job).unwrap();
 
         let mut waiting = a_record_in_history(&server, "Kitchen — waiting in line");
         waiting.the_render_start_has_been_learned = false;
         store.write_the_provisional_record(&waiting).unwrap();
-        assert!(publication_is_held(&connection, &Moving(0)), "a job waiting in line did not hold it");
+        assert!(something_is_running(&connection, &Moving(0)), "a job waiting in line did not hold it");
         store.remove(&waiting.job).unwrap();
 
         let mut unconfirmed = a_record_in_history(&server, "Kitchen — just sent");
         unconfirmed.the_render_start_has_been_learned = false;
         unconfirmed.standing = Standing::Provisional;
         store.write_the_provisional_record(&unconfirmed).unwrap();
-        assert!(publication_is_held(&connection, &Moving(0)), "a job just sent did not hold it");
+        assert!(something_is_running(&connection, &Moving(0)), "a job just sent did not hold it");
         // **Its server is gone**: the record is marked *start never heard*,
         // and nothing could end it, so it no longer holds.
         store.the_server_is_gone(&server).unwrap();
-        assert!(!publication_is_held(&connection, &Moving(0)), "a start-never-heard record held it");
+        assert!(!something_is_running(&connection, &Moving(0)), "a start-never-heard record held it");
 
         // **A started job on a server row that is gone** still counts.
         let gone = Identity::issue(IdentityKind::LocalServer).unwrap();
@@ -239,10 +263,10 @@ pub(crate) mod tests {
     /// **Z31: held while a transfer runs**, in either direction — and a
     /// record that will not answer holds it too.
     #[test]
-    fn publication_is_held_while_a_transfer_runs_and_where_the_record_will_not_say() {
+    fn something_is_running_while_a_transfer_runs_and_where_the_record_will_not_say() {
         let connection = a_record_store();
-        assert!(!publication_is_held(&connection, &Moving(0)));
-        assert!(publication_is_held(&connection, &Moving(1)), "a transfer under way did not hold it");
+        assert!(!something_is_running(&connection, &Moving(0)));
+        assert!(something_is_running(&connection, &Moving(1)), "a transfer under way did not hold it");
         let running = what_is_running(&connection, &Moving(2)).unwrap();
         assert_eq!(running.transfers, 2);
         assert!(!running.nothing());
@@ -257,6 +281,6 @@ pub(crate) mod tests {
         assert_eq!(run.transfers_under_way(), 0);
 
         connection.execute_batch("DROP TABLE job_record").unwrap();
-        assert!(publication_is_held(&connection, &Moving(0)), "an unreadable record let it go");
+        assert!(something_is_running(&connection, &Moving(0)), "an unreadable record let it go");
     }
 }

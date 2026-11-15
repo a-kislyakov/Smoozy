@@ -489,7 +489,7 @@ fn the_watch(client: &TheClient, fleet: &mut TheFleet) {
             label: format!("Desk test job {}", name.to_uppercase()),
             generation: "1".into(),
             record_directory: true,
-            rendering: Some(TheProgress { frame: 12 + at as u64, of: 40, percent: 30 + at as u8 }),
+            rendering: Some(TheProgress { frame: 12 + at as u64, of: 40, percent: 30 + at as u8, finishing: false }),
             waiting: None,
         };
         std::fs::write(fleet.member(name).folder.join("jobs.json"), json!([job]).to_string()).unwrap();

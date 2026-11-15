@@ -616,6 +616,12 @@ pub struct ADestinationToMap<'a> {
     /// no recipe to name (I14) — the budget is then measured against the folder
     /// alone, which is all there is to measure.
     pub the_longest_name_it_will_write: Option<Vec<u8>>,
+    /// **P6a: the destination writes nothing for the job's frames**, as
+    /// [`crate::inventory::the_destinations_that_write_nothing`] answers it over
+    /// the per-frame set as the job renders it, so it takes no part in the
+    /// shared run. **False keeps the rule as it was before 2026-11-10**: every
+    /// render destination takes part.
+    pub it_writes_nothing_for_the_jobs_frames: bool,
 }
 
 /// **P9: the set the map covers is the destination set of R4 item 2 entire**
@@ -656,12 +662,25 @@ pub fn compose_the_map(
             }
         })
         .collect();
-    let the_resolved_ones: Vec<ResolvedFolder> = folders.iter().flatten().cloned().collect();
+    // **P6a: nor does an output that writes nothing for the job's frames**,
+    // where one that writes offers a folder.
+    let writes_nothing: Vec<bool> =
+        destinations.iter().map(|to_map| to_map.it_writes_nothing_for_the_jobs_frames).collect();
+    let taking_part = the_ones_that_take_part(&folders, &writes_nothing);
+    let the_resolved_ones: Vec<ResolvedFolder> = folders
+        .iter()
+        .zip(&taking_part)
+        .filter(|(_, takes_part)| **takes_part)
+        .filter_map(|(folder, _)| folder.clone())
+        .collect();
     let shared_run = the_shared_run(&the_resolved_ones);
 
     let mut new_folders: Vec<Vec<u8>> = Vec::with_capacity(destinations.len());
     let mut places_named_so_far: Vec<AnAddedWritePlace> = Vec::new();
-    for (to_map, folder) in destinations.iter().zip(folders.iter()) {
+    // **P6a: where the run does not start a folder that took no part**, it
+    // keeps the whole of itself, and may need a number to stay its own.
+    let mut kept_whole: Vec<bool> = vec![false; destinations.len()];
+    for (at, (to_map, folder)) in destinations.iter().zip(folders.iter()).enumerate() {
         new_folders.push(match (to_map.destination.as_an_added_write_place(), folder) {
             // **P7a, widened 2026-10-04: an added place's folder is named for
             // its setting, whether or not a location was recorded for it.** A
@@ -673,7 +692,22 @@ pub fn compose_the_map(
                 places_named_so_far.push(place);
                 a_named_folder_under(job_output_folder, place, before + 1)
             }
-            (None, Some(folder)) => the_new_folder(job_output_folder, folder, &shared_run),
+            (None, Some(folder)) if taking_part[at] => the_new_folder(job_output_folder, folder, &shared_run),
+            // **P6a: an output that writes nothing takes P7 all the same** — the
+            // run removed where the run starts its folder, and nothing removed
+            // where it does not, which is where it landed before 2026-11-10.
+            (None, Some(folder)) => {
+                let the_run_starts_it = the_resolved_ones
+                    .first()
+                    .is_some_and(|one| one.anchor == folder.anchor)
+                    && folder.segments.starts_with(&shared_run);
+                if the_run_starts_it {
+                    the_new_folder(job_output_folder, folder, &shared_run)
+                } else {
+                    kept_whole[at] = true;
+                    the_new_folder(job_output_folder, folder, &[])
+                }
+            }
             // **P7b: a folder that opens with no place keeps the whole of what
             // it says under the job's folder.**
             (None, None) => match the_folder_with_no_place_in_the_run(to_map.destination, version) {
@@ -688,6 +722,7 @@ pub fn compose_the_map(
         });
     }
     keep_the_folders_that_held_an_expression_apart(destinations, &mut new_folders, version);
+    keep_the_whole_folders_of_outputs_that_write_nothing_apart(&folders, &kept_whole, &mut new_folders);
 
     let mut pairs = Vec::with_capacity(destinations.len());
     for (to_map, new_folder) in destinations.iter().zip(new_folders) {
@@ -717,16 +752,89 @@ pub fn compose_the_map(
 /// rule. D20's added write places take no part (P9). A destination with no
 /// recorded folder offers nothing. Added 2026-10-04, the Creator's second
 /// notes, piece 4.
+///
+/// **P6a, 2026-11-10: nor does an output that writes nothing for the job's
+/// frames**, by the one answer the map reads
+/// ([`crate::inventory::the_destinations_that_write_nothing`]), over the
+/// per-frame set as the job renders it — so hand this the reading the map is
+/// composed from.
 pub fn the_renders_own_folders_resolved(
-    destinations: &[Destination],
+    reading: &crate::reading::TheOutputsHalf,
     the_folder_the_blend_sits_in: &[u8],
-    version: TheVersionInHand,
 ) -> Vec<ResolvedFolder> {
-    destinations
+    let folders: Vec<Option<ResolvedFolder>> = reading
+        .destinations
         .iter()
-        .filter(|destination| destination.is_one_the_render_asked_for())
-        .filter_map(|destination| the_folder_of(destination, the_folder_the_blend_sits_in, version))
+        .map(|destination| {
+            if destination.is_one_the_render_asked_for() {
+                the_folder_of(destination, the_folder_the_blend_sits_in, reading.taken_by)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let writes_nothing = crate::inventory::the_destinations_that_write_nothing(reading);
+    let taking_part = the_ones_that_take_part(&folders, &writes_nothing);
+    folders
+        .into_iter()
+        .zip(taking_part)
+        .filter(|(_, takes_part)| *takes_part)
+        .filter_map(|(folder, _)| folder)
         .collect()
+}
+
+/// **P6 and P6a: which destinations take part in working out the shared run**
+/// — those with a resolved folder, less those that write nothing for the job's
+/// frames. **Where no destination that writes has a resolved folder**, every
+/// one with a folder takes part, as before P6a: every output writes nothing, or
+/// those that write have no place in the run (P7b). The one rule the map and
+/// P18's run both read.
+fn the_ones_that_take_part(folders: &[Option<ResolvedFolder>], writes_nothing: &[bool]) -> Vec<bool> {
+    let writes_nothing = |at: usize| writes_nothing.get(at).copied().unwrap_or(false);
+    let one_that_writes_offers_a_folder =
+        folders.iter().enumerate().any(|(at, folder)| folder.is_some() && !writes_nothing(at));
+    folders
+        .iter()
+        .enumerate()
+        .map(|(at, folder)| folder.is_some() && (!one_that_writes_offers_a_folder || !writes_nothing(at)))
+        .collect()
+}
+
+/// **P6a and P16: an output that writes nothing, kept whole, never lands on
+/// another destination's folder.** Its whole path may be the same text as what
+/// is left of another's (`/_OUT/a` beside `/home/ubuntu/Render/_OUT/a`), so it
+/// takes a number where its folder is already another's (`_OUT/a-2`), as P7b's
+/// does. **Two that were the same place stay one folder** (P17).
+fn keep_the_whole_folders_of_outputs_that_write_nothing_apart(
+    folders: &[Option<ResolvedFolder>],
+    kept_whole: &[bool],
+    new_folders: &mut [Vec<u8>],
+) {
+    let mut taken: Vec<Vec<u8>> = new_folders
+        .iter()
+        .zip(kept_whole)
+        .filter(|(_, whole)| !**whole)
+        .map(|(folder, _)| folder.clone())
+        .collect();
+    let mut seen: Vec<(&ResolvedFolder, Vec<u8>)> = Vec::new();
+    for (at, folder) in new_folders.iter_mut().enumerate() {
+        let (true, Some(resolved)) = (kept_whole[at], folders[at].as_ref()) else {
+            continue;
+        };
+        if let Some((_, given)) = seen.iter().find(|(one, _)| *one == resolved) {
+            *folder = given.clone();
+            continue;
+        }
+        let mut candidate = folder.clone();
+        let mut number = 2;
+        while taken.contains(&candidate) {
+            candidate = [folder.as_slice(), format!("-{number}").as_bytes()].concat();
+            number += 1;
+        }
+        *folder = candidate.clone();
+        taken.push(candidate.clone());
+        seen.push((resolved, candidate));
+    }
 }
 
 /// **The folder one of the render's own destinations is written as**, split from
@@ -1026,6 +1134,7 @@ mod tests {
             .map(|destination| ADestinationToMap {
                 destination,
                 the_longest_name_it_will_write: Some(b"beauty0010.png".to_vec()),
+                it_writes_nothing_for_the_jobs_frames: false,
             })
             .collect()
     }
@@ -1399,6 +1508,7 @@ mod tests {
         let held = [ADestinationToMap {
             destination: &destinations[0],
             the_longest_name_it_will_write: Some(b"x".repeat(300)),
+            it_writes_nothing_for_the_jobs_frames: false,
         }];
         let map = compose_the_map(
             &held,
@@ -1415,6 +1525,7 @@ mod tests {
         let fitting = vec![ADestinationToMap {
             destination: &destinations[0],
             the_longest_name_it_will_write: Some(b"f_0001.png".to_vec()),
+            it_writes_nothing_for_the_jobs_frames: false,
         }];
         assert!(!compose_the_map(
             &fitting,
@@ -1575,6 +1686,7 @@ mod tests {
             .map(|destination| ADestinationToMap {
                 destination,
                 the_longest_name_it_will_write: None,
+                it_writes_nothing_for_the_jobs_frames: false,
             })
             .collect();
         let map = compose_the_map(
@@ -1629,6 +1741,7 @@ mod tests {
                     DestinationKind::AnAddedWritePlace(_) => None,
                     _ => Some(b"f_0001.png".to_vec()),
                 },
+                it_writes_nothing_for_the_jobs_frames: false,
             })
             .collect();
         let map = compose_the_map(
@@ -1642,5 +1755,104 @@ mod tests {
         // and it is the only folder shown (P11, 2026-10-04).
         assert_eq!(folders, vec![Vec::<u8>::new()]);
         assert_eq!(map.the_folders_of(JOB_FOLDER, |_| true).len(), 6);
+    }
+
+    // ── P6a, 2026-11-10: an output that writes nothing does not shape the run ──
+
+    /// The map, with the destinations at `nothing` writing nothing for the
+    /// job's frames.
+    fn mapped_with(destinations: &[Destination], nothing: &[usize], blend: &[u8]) -> TheMap {
+        let held: Vec<ADestinationToMap<'_>> = destinations
+            .iter()
+            .enumerate()
+            .map(|(at, destination)| ADestinationToMap {
+                destination,
+                the_longest_name_it_will_write: Some(b"f_0001.png".to_vec()),
+                it_writes_nothing_for_the_jobs_frames: nothing.contains(&at),
+            })
+            .collect();
+        compose_the_map(&held, blend, JOB_FOLDER, TheVersionInHand::of(5, 2))
+    }
+
+    /// **P6a, the Creator's screenshot's shape**: frames under `//Render/V_…/PNG`
+    /// from a `.blend` in `/home/ubuntu`, and two nodes at `//../../_OUT/…`
+    /// that climb to `/_OUT/…` and write nothing. The run is
+    /// `/home/ubuntu/Render`, so the folders read `V_A/PNG` and `V_B/PNG`; the
+    /// two keep their whole path under the job's folder, where they landed
+    /// before. Before piece 13 the run was `/` and the frames sat at
+    /// `home/ubuntu/Render/V_A/PNG`.
+    #[test]
+    fn p6a_an_output_that_writes_nothing_takes_no_part_in_the_run() {
+        let destinations = [
+            a_node_output("A", "Image", "//Render/V_A/PNG"),
+            a_node_output("B", "Image", "//Render/V_B/PNG"),
+            a_node_output("Out A", "Image", "//../../_OUT/A"),
+            a_node_output("Out B", "Image", "//../../_OUT/B"),
+        ];
+        let map = mapped_with(&destinations, &[2, 3], b"/home/ubuntu");
+        assert_eq!(
+            the_folders(&map),
+            [
+                format!("{JOB_FOLDER}/V_A/PNG"),
+                format!("{JOB_FOLDER}/V_B/PNG"),
+                format!("{JOB_FOLDER}/_OUT/A"),
+                format!("{JOB_FOLDER}/_OUT/B"),
+            ]
+        );
+        // **Where it sits beside the others, the run takes its part away as
+        // usual** (P7).
+        let beside = [
+            a_node_output("A", "Image", "//Render/V_A/PNG"),
+            a_node_output("B", "Image", "//Render/V_B/PNG"),
+            a_node_output("Spare", "Image", "//Render/spare"),
+        ];
+        let map = mapped_with(&beside, &[2], b"/home/ubuntu");
+        assert_eq!(the_folders(&map)[2], format!("{JOB_FOLDER}/spare"));
+        // **And a path from another computer that writes nothing** shapes
+        // nothing either.
+        let foreign = [a_node_output("A", "Image", "//Render/V_A/PNG"), a_node_output("Mac", "Image", "C:/Renders/x")];
+        let map = mapped_with(&foreign, &[1], b"/home/ubuntu");
+        assert_eq!(the_folders(&map), [JOB_FOLDER.to_string(), format!("{JOB_FOLDER}/C:/Renders/x")]);
+    }
+
+    /// **P6a and P16: kept whole, it never lands on a folder an output that
+    /// writes has**, and takes a number instead; **P17: two that were one place
+    /// stay one folder.**
+    #[test]
+    fn p6a_a_whole_folder_takes_a_number_where_it_is_another_destinations() {
+        let destinations = [
+            a_node_output("A", "Image", "//Render/x"),
+            a_node_output("B", "Image", "//Render/_OUT/A"),
+            a_node_output("Out A", "Image", "//../../_OUT/A"),
+            a_node_output("Out A again", "Image", "//../../_OUT/A/"),
+            a_node_output("Out B", "Image", "//../../_OUT/B"),
+        ];
+        let map = mapped_with(&destinations, &[2, 3, 4], b"/home/ubuntu");
+        assert_eq!(
+            the_folders(&map),
+            [
+                format!("{JOB_FOLDER}/x"),
+                format!("{JOB_FOLDER}/_OUT/A"),
+                format!("{JOB_FOLDER}/_OUT/A-2"),
+                format!("{JOB_FOLDER}/_OUT/A-2"),
+                format!("{JOB_FOLDER}/_OUT/B"),
+            ]
+        );
+    }
+
+    /// **P6a: where no output that writes offers a folder, the run is worked
+    /// out over every output, as before** — here every output writes nothing.
+    #[test]
+    fn p6a_where_every_output_writes_nothing_the_rule_is_as_it_was() {
+        let destinations = [
+            a_node_output("A", "Image", "//Render/V_A/PNG"),
+            a_node_output("Out A", "Image", "//../../_OUT/A"),
+        ];
+        let before = mapped_with(&destinations, &[], b"/home/ubuntu");
+        assert_eq!(
+            the_folders(&before),
+            [format!("{JOB_FOLDER}/home/ubuntu/Render/V_A/PNG"), format!("{JOB_FOLDER}/_OUT/A")]
+        );
+        assert_eq!(mapped_with(&destinations, &[0, 1], b"/home/ubuntu"), before);
     }
 }

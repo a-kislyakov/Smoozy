@@ -9,6 +9,10 @@
 //! menu went with it. **This document builds the integration and adds no item**
 //! (K5).
 //!
+//! **From 2026-11-13 the Smoozy menu carries *Help***, which Design added
+//! beside *Report a problem…* (the website ideas' picks). It is an item and
+//! not a menu: the four stay four.
+//!
 //! ## Where the four go, and it is two arrangements rather than three
 //!
 //! - **macOS: the system's own bar, and that is not optional** (K1, K9). The
@@ -395,6 +399,12 @@ pub fn the_four_menus() -> Vec<Menu> {
                     Keys::none(),
                 )),
                 Entry::ASeparator,
+                // **Help, an item and not a menu** (`Design/Whole app § The
+                // menu bar` and *Help links*, 2026-11-13, the website ideas'
+                // picks): it opens the website's Help page through K25, and
+                // sits first beside *Report a problem…* because it is tried
+                // first. No key is drawn for it, as before (K15).
+                Entry::AnItem(item("smoozy.help", "Help", Act::AGoing, Keys::none())),
                 // **Report a problem lives here and in no other menu**, on the
                 // Creator's ruling of 2026-08-25. It is the reason there is no
                 // Help menu: it was the only thing one would have held.
@@ -657,6 +667,30 @@ mod tests {
             .entries
             .iter()
             .any(|entry| matches!(entry, Entry::AnItem(item) if item.id == "smoozy.report-a-problem")));
+    }
+
+    /// **Help is an item in the Smoozy menu, before *Report a problem…*, and
+    /// not a menu** — `Design/Whole app § The menu bar` and *Help links*,
+    /// 2026-11-13 (the website ideas' picks). The four menus stay four.
+    #[test]
+    fn help_sits_in_smoozys_menu_before_report_a_problem() {
+        let help = the_item("smoozy.help").expect("Help is in the menus");
+        assert_eq!(help.label().as_str(), "Help");
+        assert_eq!(help.act, Act::AGoing);
+        let ids: Vec<&str> = the_four_menus()[0]
+            .entries
+            .iter()
+            .filter_map(|entry| match entry {
+                Entry::AnItem(item) => Some(item.id),
+                Entry::ASeparator => None,
+            })
+            .collect();
+        let at = |id: &str| ids.iter().position(|one| *one == id).expect(id);
+        assert_eq!(at("smoozy.help") + 1, at("smoozy.report-a-problem"), "{ids:?}");
+        for system in ["macos", "windows", "linux"] {
+            assert!(help.is_drawn_on(system), "{system}");
+            assert_eq!(help.keys.on(system), None, "no key is invented for Help on {system}");
+        }
     }
 
     /// **K8 and X5: every label the user reads comes through the typography

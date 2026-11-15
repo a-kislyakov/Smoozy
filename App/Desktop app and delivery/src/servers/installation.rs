@@ -298,10 +298,16 @@ fn what_the_row_supplies(row: &ServerRow) -> WhatTheRowSupplies {
 /// against what the local record remembers for that row and the seam's own
 /// method takes a connection and nothing else. `Servers` `Q1` step 5 runs it on
 /// every primary connection, and that document's Q19 re-takes it alone on the
-/// fourth branch until it settles — **this type counts nothing and holds no
-/// state between reads**, so a re-take is the same call again.
+/// fourth branch until it settles — **this type counts nothing, and the one
+/// thing it holds between reads is what the last read met where it was this
+/// copy's own program silent** (`Desktop app and delivery` V3a, 2026-11-14),
+/// which the next read replaces.
 pub struct TheMachinesInstallationIdentity<H, T = NobodyIsTold> {
     supplies: WhatTheRowSupplies,
+    /// **V3b item 1: this copy's own installation, read equal, its supervisor
+    /// not confirming and no protocol difference explaining it** — the one
+    /// case the automatic repair acts on. Nothing on every other read.
+    our_own_program_is_silent: Option<crate::servers::the_repair::OurOwnProgramIsSilent>,
     /// **The server this reader is for**, so a condition of V13's is raised
     /// against it (`Server protocol and transfers` P3b).
     server: String,
@@ -326,6 +332,7 @@ impl<H> TheMachinesInstallationIdentity<H> {
             the_row_now: None,
             halves,
             told: NobodyIsTold,
+            our_own_program_is_silent: None,
         }
     }
 }
@@ -342,7 +349,14 @@ impl<H, T> TheMachinesInstallationIdentity<H, T> {
             the_row_now: self.the_row_now,
             halves: self.halves,
             told,
+            our_own_program_is_silent: self.our_own_program_is_silent,
         }
+    }
+
+    /// **What the last read met, where it was this copy's own program
+    /// silent** — `Desktop app and delivery` V3b item 1.
+    pub fn our_own_program_is_silent(&self) -> Option<&crate::servers::the_repair::OurOwnProgramIsSilent> {
+        self.our_own_program_is_silent.as_ref()
     }
 
     /// **The same read, taken against the row as the local record holds it at
@@ -386,6 +400,19 @@ pub trait WhatTheSupervisorDid {
     fn it_did_not_answer(&mut self);
     /// The supervisor confirmed the value that was read.
     fn it_answered(&mut self);
+
+    /// **`Desktop app and delivery` V3a: this copy's own program stayed silent
+    /// through the re-take's first re-read** (`Servers` Q19b), and the repair
+    /// may be sent over `sessions`, a point of its own over the connection
+    /// step 5 holds. **Answers whether the repair landed.** Nothing by default.
+    /// Added 2026-11-14, the automatic repair.
+    fn our_own_program_stays_silent(
+        &mut self,
+        _sessions: &ThisServersSessions<ssh::Connection>,
+        _silent: &crate::servers::the_repair::OurOwnProgramIsSilent,
+    ) -> impl Future<Output = bool> + Send {
+        async { false }
+    }
 }
 
 /// **Nobody is told** — a reader composed for a test, or for a caller with no
@@ -439,6 +466,8 @@ where
     /// present-and-different branch either**: that branch is the reading's, and
     /// nothing a supervisor says moves a reading.
     async fn read(&mut self, channel: &mut C) -> TheIdentityRead {
+        // **What the last read met goes with it** (V3a).
+        self.our_own_program_is_silent = None;
         // **The row as the record holds it now**, where the caller can reach
         // it — see [`TheMachinesInstallationIdentity::reading_the_row_as_it_stands`].
         if let Some(row) = self.the_row_now.as_mut().and_then(|now| now()) {
@@ -510,6 +539,10 @@ where
                     crate::servers::published::what_the_server_carries(&self.server),
                     Some(crate::servers::published::WhatSmoozyOnTheServerIs::TooOldAndItsWorkCannotBeControlledFromHere)
                         | Some(crate::servers::published::WhatSmoozyOnTheServerIs::TooNew)
+                        // **`Desktop app and delivery` V3c: a repair that did
+                        // not land ends when the supervisor answers**,
+                        // whatever brought it back.
+                        | Some(crate::servers::published::WhatSmoozyOnTheServerIs::TheRepairFailed { .. })
                 ) {
                     // **The condition ends when it ends**: a program that
                     // answers speaks this build's protocol. Whether it is
@@ -527,7 +560,17 @@ where
                     Some(incompatible) => {
                         crate::servers::published::the_server_carries(&self.server, Some(incompatible));
                     }
-                    None => self.told.it_did_not_answer(),
+                    None => {
+                        self.told.it_did_not_answer();
+                        // **`Desktop app and delivery` V3b item 1: this copy's
+                        // own program, silent** — the one case the repair
+                        // may act on, noted for `Servers` Q19b's telling.
+                        self.our_own_program_is_silent = Some(crate::servers::the_repair::OurOwnProgramIsSilent {
+                            the_package_area: the_package_area.clone(),
+                            installation: on_the_machine.clone(),
+                            held: held.clone().unwrap_or_default(),
+                        });
+                    }
                 }
             }
             answered
@@ -854,6 +897,27 @@ where
     async fn read(&mut self, channel: &mut ssh::Connection) -> TheIdentityRead {
         the_check_through_a_point_of_its_own(self, channel).await
     }
+
+    /// **`Servers` Q19b, met: where the last read was this copy's own program
+    /// silent, the repair is sent through a point of its own** for its whole
+    /// length, as the check's own read is (`Desktop app and delivery` V3a).
+    /// **Where the connection ends part-way, nothing landed.**
+    async fn the_fourth_branch_stands_again(&mut self, channel: &mut ssh::Connection) -> bool {
+        let Some(silent) = self.our_own_program_is_silent.clone() else {
+            return false;
+        };
+        let sessions = ThisServersSessions::<ssh::Connection>::for_one_server();
+        let no_additional: TheAdditionalConnection<ssh::Connection> =
+            std::sync::Arc::new(|| Box::pin(async { None }));
+        let lending = lend_until_it_ends(&sessions, channel, &no_additional);
+        let repaired = self.told.our_own_program_stays_silent(&sessions, &silent);
+        tokio::pin!(lending, repaired);
+        tokio::select! {
+            biased;
+            _ended = &mut lending => false,
+            landed = &mut repaired => landed,
+        }
+    }
 }
 
 /// The lending above, for any connection a point can lend — **so it is driven
@@ -901,7 +965,7 @@ where
 /// is the clause's own:
 ///
 /// - **Only where step 7 has not run.** The period's live connection must have
-///   read the absent branch. *Set up again* on a machine whose period read the
+///   read the absent branch — or, since 2026-11-13, the different one. *Set up again* on a machine whose period read the
 ///   confirmed branch has step 7 and `Desktop app and delivery` P10d's
 ///   sequence running already, and **nothing is re-taken there and no second
 ///   sequence is started beside the first** (`Servers` Q18). A branch read on a
@@ -934,8 +998,10 @@ where
     M: smoozy_servers::readings::CommandChannel + smoozy_servers::readings::TakesAFreeSpaceReading,
     W: smoozy_servers::acting::Wait,
 {
-    let read = what_the_period_read?;
-    if read.check != InstallationCheck::Absent || !read.on_the_connection_that_is_live {
+    // **Absent or different, on the live connection** — the two branches that
+    // read *Not set up* (`Servers` Q19a, the different branch added
+    // 2026-11-13, the scout's list item 2).
+    if !crate::surface::servers::the_live_check_reads_not_set_up(what_the_period_read) {
         return None;
     }
     if !is_live() {
@@ -1845,6 +1911,35 @@ mod tests {
         assert_eq!(waits, 0, "one re-take is not a timer");
     }
 
+    /// **`Servers` Q19a, the different branch (2026-11-13, the scout's list,
+    /// item 2):** a server removed and added again reads *different* on its
+    /// live connection, as a bare one reads *absent*, and a placement that
+    /// commits there is read again at the commit — so the row stops reading
+    /// *Not set up* without a reconnect.
+    #[test]
+    fn at_the_commit_a_different_period_is_read_again_too() {
+        let placed = an_identity();
+        let row = a_row(Some(&placed));
+        let reads = Arc::new(Mutex::new(0));
+        let (got, _) = the_retake(
+            Some(crate::servers::a_period::WhatTheLastConnectionRead {
+                check: InstallationCheck::PresentAndDifferent,
+                a_fresh_reading_was_kept: true,
+                on_the_connection_that_is_live: true,
+            }),
+            &row,
+            TheHalvesInTurn {
+                holds: placed.clone(),
+                answers: vec![WhatTheSupervisorSaid::ItIsRunningUnder(placed.clone())].into(),
+                reads: Arc::clone(&reads),
+            },
+            &|| true,
+        );
+        let (check, _) = got.expect("step 5 is taken again at the commit");
+        assert_eq!(check, InstallationCheck::PresentAndEqualConfirmed);
+        assert_eq!(*reads.lock().expect("the reads"), 1, "one re-take");
+    }
+
     /// **Only where step 7 has not run.** *Set up again* on a period that read
     /// the confirmed branch — step 7 and `Desktop app and delivery` P10d's
     /// sequence already running — re-takes nothing and asks the machine
@@ -1873,7 +1968,7 @@ mod tests {
                 Some(crate::servers::a_period::WhatTheLastConnectionRead {
                     check: InstallationCheck::PresentAndDifferent,
                     a_fresh_reading_was_kept: true,
-                    on_the_connection_that_is_live: true,
+                    on_the_connection_that_is_live: false,
                 }),
                 true,
             ),
@@ -2015,6 +2110,62 @@ mod tests {
         assert_eq!(check, InstallationCheck::PresentAndEqualConfirmed);
         assert_eq!(told, vec!["answered"]);
         assert_eq!(what_the_server_carries(&server), None);
+    }
+
+    /// **`Desktop app and delivery` V3b item 1: only this copy's own program,
+    /// read equal and silent, is noted for the repair** — not another
+    /// installation, not a record that does not read back, not a supervisor
+    /// that answered, not a program of another protocol — and the next read
+    /// replaces what the last one met.
+    #[test]
+    fn the_automatic_repair_is_noted_only_for_this_copys_own_silent_program() {
+        let ours = THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS.0;
+        let placed = an_identity();
+        let mut row = a_row(Some(&placed));
+        row.local_server_identifier = Identity::issue(IdentityKind::LocalServer)
+            .expect("randomness")
+            .as_text();
+        let noted = |found: WhatTheReadFound, says: WhatTheSupervisorSaid, holds: Option<WhatThePackageAreaHolds>| {
+            let halves = TheHalvesThatInspect {
+                halves: TheHalvesAtTheDesk::holding(found).whose_supervisor_says(says),
+                the_package_area_holds: holds,
+            };
+            let mut reading = TheMachinesInstallationIdentity::for_this_server(&row, halves);
+            let mut nothing = ();
+            tauri::async_runtime::block_on(reading.read(&mut nothing));
+            reading.our_own_program_is_silent().cloned()
+        };
+        let silent = noted(
+            WhatTheReadFound::AnIdentity(placed.clone()),
+            WhatTheSupervisorSaid::Nothing,
+            Some(a_program_of(3, (ours, ours))),
+        )
+        .expect("this copy's own program, silent, is noted");
+        assert_eq!(silent.installation, placed);
+        assert_eq!(silent.the_package_area, "/ephemeral/smoozy/package");
+        assert_eq!(silent.held.its_release_sequence, Some(3));
+        // An inspection not taken is noted as not read, and decides nothing.
+        let unread = noted(WhatTheReadFound::AnIdentity(placed.clone()), WhatTheSupervisorSaid::Nothing, None)
+            .expect("noted");
+        assert!(!unread.held.it_was_read);
+        for (found, says, holds) in [
+            (WhatTheReadFound::AnIdentity(an_identity()), WhatTheSupervisorSaid::Nothing, None),
+            (WhatTheReadFound::ARecordThatDoesNotReadBack, WhatTheSupervisorSaid::Nothing, None),
+            (WhatTheReadFound::TheReadCouldNotBeTaken, WhatTheSupervisorSaid::Nothing, None),
+            (
+                WhatTheReadFound::AnIdentity(placed.clone()),
+                WhatTheSupervisorSaid::ItIsRunningUnder(placed.clone()),
+                None,
+            ),
+            (
+                WhatTheReadFound::AnIdentity(placed.clone()),
+                WhatTheSupervisorSaid::Nothing,
+                Some(a_program_of(3, (ours + 1, ours + 1))),
+            ),
+        ] {
+            assert!(noted(found, says, holds).is_none());
+        }
+        crate::servers::published::the_server_carries(&row.local_server_identifier, None);
     }
 
     /// **`Server protocol and transfers` B4's reading, composed**: the active

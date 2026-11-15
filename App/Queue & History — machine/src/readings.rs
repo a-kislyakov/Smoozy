@@ -24,7 +24,10 @@
 //!
 //! **Markers used in this file that belong to another document, each with the
 //! document it belongs to.** `Rented-server runtime` M3, M4, M28, W12, U2.
-//! `Rendering` K13. `Download` H7a.
+//! `Rendering` K13.
+//!
+//! **`Download` H7a is written out at its site**, since this plan defines an
+//! H7a of its own from 2026-11-14.
 
 use std::time::SystemTime;
 
@@ -72,6 +75,30 @@ pub struct LiveReadings {
     /// **R6's last: the count of frames announced or completed**, which is
     /// what the bars consume.
     pub frames_completed: u64,
+}
+
+impl LiveReadings {
+    /// **`Queue & History` B6's addition as changed later on 2026-11-13: the
+    /// frame in hand has finished sampling**, which is when the Queue entry and
+    /// `Telegram` C1's line say *Finishing*. Read off these readings alone:
+    /// R12's mark that sampling on the unit has ended; or, on an untiled
+    /// frame, R11's largest count at its printed total; or, on a tiled one,
+    /// the tiles done at their total with the tile in hand's samples at
+    /// theirs. **Never the whole job's figures**, so every frame's finishing
+    /// is said, and a wrong plan total says nothing early (Sol's look at the
+    /// scout's list, point 5). Each View Layer a line names starts these
+    /// readings over, so on a frame of several layers it can read true
+    /// between two layers.
+    pub fn the_frame_in_hand_has_finished_sampling(&self) -> bool {
+        if self.stopped_short {
+            return true;
+        }
+        let samples_at_their_total = self.samples.is_some_and(|pair| pair.of > 0 && pair.seen >= pair.of);
+        match self.tiles {
+            Some(tiles) => tiles.of > 0 && tiles.done >= tiles.of && samples_at_their_total,
+            None => samples_at_their_total,
+        }
+    }
 }
 
 /// A sample pair as the line printed it: count against total.
@@ -423,8 +450,15 @@ pub enum WhatTheEntryHasLive {
     /// Creator's notes on 0.1.8, piece 6b; until then it held the readings
     /// alone and nothing ever filled it.
     Readings {
+        /// `Queue & History` R5: the second attempt has no render process yet.
+        running_again: bool,
         figures: Option<AWorkersReport>,
         sinks: Option<TheSinksOfARenderingJob>,
+        /// **R5, addition of 2026-11-11: how long the job has rendered**, in
+        /// whole seconds, worked out by the supervisor on the machine's own
+        /// clock. Absent from an older program, or where no started moment
+        /// stands on the machine's clock. The four questions, scout 2.1.
+        rendered_for: Option<u64>,
     },
     /// **An ended job's part while its ending is owed to a full store** —
     /// `Rented-server runtime` S14 and `Rented-server runtime` S14a: the outcome the supervisor
@@ -443,10 +477,31 @@ impl WhatTheEntryHasLive {
     /// `text` answers a field's name with its value. **Nothing where the item
     /// carries neither**, which R4 makes an ordinary entry.
     pub fn read_back<'a>(text: impl Fn(&str) -> Option<&'a str> + Copy) -> WhatTheEntryHasLive {
+        use smoozy_framing::requests::{
+            THE_ANSWER_IS_YES, THE_JOB_HAS_RENDERED_FOR_FIELD, THE_JOB_IS_RUNNING_AGAIN_FIELD,
+        };
+        let running_again = text(THE_JOB_IS_RUNNING_AGAIN_FIELD) == Some(THE_ANSWER_IS_YES);
+        let rendered_for = text(THE_JOB_HAS_RENDERED_FOR_FIELD).and_then(|seconds| seconds.parse::<u64>().ok());
         match (AWorkersReport::read_back(text), TheSinksOfARenderingJob::read_back(text)) {
-            (None, None) => WhatTheEntryHasLive::NoReadings,
-            (figures, sinks) => WhatTheEntryHasLive::Readings { figures, sinks },
+            (None, None) if !running_again && rendered_for.is_none() => WhatTheEntryHasLive::NoReadings,
+            (figures, sinks) => WhatTheEntryHasLive::Readings { running_again, figures, sinks, rendered_for },
         }
+    }
+
+    /// **R5, addition of 2026-11-11: how long the job has rendered**, as the
+    /// machine worked it out. Nothing is subtracted here (N16).
+    pub fn the_time_rendered(&self) -> Option<std::time::Duration> {
+        match self {
+            WhatTheEntryHasLive::Readings { rendered_for, .. } => {
+                rendered_for.map(std::time::Duration::from_secs)
+            }
+            WhatTheEntryHasLive::ItsEndingIsOwed(_) | WhatTheEntryHasLive::NoReadings => None,
+        }
+    }
+
+    /// `Queue & History` R5: temporary status, read anew on every queue reading.
+    pub fn is_running_again(&self) -> bool {
+        matches!(self, Self::Readings { running_again: true, .. })
     }
 
     /// R5's figures, where the machine carried them.
@@ -594,7 +649,7 @@ pub trait Readings {
     /// **N18: the set of landing places for a job's downloaded files**,
     /// composed by `Download` when the control is used and never cached; and
     /// whether any manual entry under the job's output folder published, for
-    /// its H7a's two readings of an empty set.
+    /// `Download` H7a's two readings of an empty set.
     fn the_landing_places(&self, job: &Identity) -> LandingPlaces;
 
     /// The desktop's own clock, for the one figure the entry takes from it
@@ -883,5 +938,34 @@ mod wait_count_tests {
         assert!(read.as_pairs().contains(&("simulation end", "430".into())));
         assert_eq!(read.readings.value().frames_completed, 0);
         assert_eq!(read.readings.value().frame_in_hand, None);
+    }
+}
+
+#[cfg(test)]
+mod the_four_questions_batch_6 {
+    use super::*;
+
+    /// **`Queue & History` R5, addition of 2026-11-11: how long a rendering
+    /// job has rendered rides its part of the queue reading** and reads back
+    /// as a duration; an item without it, or with a figure that does not
+    /// read, has none. The four questions, scout 2.1.
+    #[test]
+    fn a_rendering_job_says_how_long_it_has_rendered() {
+        let item = [
+            (smoozy_framing::requests::THE_JOB_IS_RUNNING_AGAIN_FIELD, "no"),
+            (smoozy_framing::requests::THE_JOB_HAS_RENDERED_FOR_FIELD, "8040"),
+        ];
+        let read = |item: &'static [(&'static str, &'static str)]| {
+            WhatTheEntryHasLive::read_back(move |name| {
+                item.iter().find(|(key, _)| *key == name).map(|(_, value)| *value)
+            })
+        };
+        let item: &'static [(&str, &str)] = Box::leak(Box::new(item));
+        assert_eq!(read(item).the_time_rendered(), Some(std::time::Duration::from_secs(8040)));
+        let none: &'static [(&str, &str)] = &[];
+        assert_eq!(read(none).the_time_rendered(), None);
+        let garbled: &'static [(&str, &str)] =
+            &[(smoozy_framing::requests::THE_JOB_HAS_RENDERED_FOR_FIELD, "soon")];
+        assert_eq!(read(garbled).the_time_rendered(), None);
     }
 }

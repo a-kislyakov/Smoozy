@@ -14,6 +14,7 @@ textarea,
 .ky-away,
 .tg-away,
 .words-away,
+.rp-away,
 .selectable,
 .selectable *,
 .lbody,
@@ -23,9 +24,11 @@ textarea,
   cursor: text;
 }
 
-.rp-addr,
+/* The report's address no longer selects whole: from 2026-11-09 it is a mail
+ * link, which a click acts on, and its copy icon carries Copy (Design/Whole
+ * app, Selecting text; the twenty-eighth notes, note 6). Its pointer is the
+ * drawing's own (`.rp-addr` in the-drawing.css), and the text inside it keeps
+ * that pointer rather than the arrow every element is given above. */
 .rp-addr * {
-  -webkit-user-select: all;
-  user-select: all;
-  cursor: text;
+  cursor: inherit;
 }

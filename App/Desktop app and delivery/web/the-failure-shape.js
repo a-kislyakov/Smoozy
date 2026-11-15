@@ -67,18 +67,17 @@
 // this file's own stylesheet adds is only what one shape needs that eleven
 // per-screen copies did not.
 
-import { whenTold } from "./event-route.js";
 import { theValueIsDrawnInto } from "./the-value-drawn.js";
 
 const shell = window.__TAURI__;
 
-// The kinds, declared beside the service that posts them —
-// `A_FAILURE_IS_STANDING` and `A_FAILURE_WAS_CLEARED` in
-// `src/surface/the_failure_shape.rs`. The two sides have to agree and nothing
-// holds them together, so copy carefully.
-const A_FAILURE_IS_STANDING = "presentation:a-failure-is-standing";
-const A_FAILURE_WAS_CLEARED = "presentation:a-failure-was-cleared";
-const A_FAILURE_WAS_NOT_CLEARED = "presentation:a-failure-was-not-cleared";
+// **This file draws no failure of its own and listens for none.** Until the
+// twenty-ninth notes' piece E it also drew every standing failure the
+// application posted in a strip at the window's foot — piece C's test drawing,
+// which no later piece took over. `Specs/Whole app`: a failure *"appears on the
+// thing that failed"*, and *"there is no separate place failures are
+// collected"*. The one subject that reached the strip, a server row, draws its
+// failures on the row (`web/servers.js`), so the strip went.
 
 // How much room the surface has. The Rust side's `Room`, in the same two
 // values.
@@ -137,6 +136,20 @@ export function theFailureShape(parts) {
   said.appendChild(sentence);
   shape.appendChild(said);
 
+  // **On a box, the cross sits at the top right**, first in the first line
+  // and floated there, as every box that closes has it —
+  // `Design/Whole app § The failure shape`, added 2026-11-13 (the Creator's
+  // note 4 on the test copy of 2026-11-12: *"the closing cross is in the
+  // bottom corner, which is just bonkers"*). Until then it was last in the
+  // control row, alone on a line of its own when nothing else was there. **On
+  // a collapsed row the line is the box, and the cross still ends it.**
+  const theCross = collapsed ? null : (parts.controls || []).find((control) => control.is === "cross");
+  if (theCross) {
+    const cross = aCross(theCross, parts);
+    cross.classList.add("failure-clear-top");
+    said.insertBefore(cross, said.firstChild);
+  }
+
   // The second sentence, indented to the first so the two read as one
   // statement. **Only where Smoozy actually knows**, and never on a collapsed
   // row, which has no room for it.
@@ -179,16 +192,8 @@ export function theFailureShape(parts) {
   // row** — both are decided where the shape is composed.
   for (const control of parts.controls || []) {
     if (control.is === "cross") {
-      const cross = document.createElement("button");
-      cross.type = "button";
-      cross.className = "failure-clear";
-      cross.setAttribute("aria-label", control.label);
-      // A glyph rather than a word: nothing here is prose.
-      cross.textContent = "\u00d7";
-      cross.addEventListener("click", () => {
-        if (parts.onClear) parts.onClear();
-      });
-      acts.appendChild(cross);
+      // Drawn at the top right on a box, above; here only on a row.
+      if (!theCross) acts.appendChild(aCross(control, parts));
       continue;
     }
     if (control.is === "report") {
@@ -222,7 +227,11 @@ export function theFailureShape(parts) {
     }
     const one = document.createElement("button");
     one.type = "button";
-    one.className = control.is === "raw-text" ? "failure-words" : "btn";
+    // **Every control in the shape is the drawing's small button** — its
+    // `.qfail .rdrow .mini`, *Retry* and *Check again* alike — so *Try again*
+    // is never a full-size filled button beside small ones (UI consistency,
+    // finding 40).
+    one.className = control.is === "raw-text" ? "mini failure-words" : "mini";
     one.textContent = control.label;
     one.addEventListener("click", () => {
       if (parts.onAct) parts.onAct(control.act);
@@ -232,6 +241,20 @@ export function theFailureShape(parts) {
 
   if (acts.childElementCount) shape.appendChild(acts);
   return shape;
+}
+
+/// **The cross that clears a failure** — a glyph rather than a word, so
+/// nothing here is prose; its name is the label the application composed.
+function aCross(control, parts) {
+  const cross = document.createElement("button");
+  cross.type = "button";
+  cross.className = "failure-clear";
+  cross.setAttribute("aria-label", control.label);
+  cross.textContent = "\u00d7";
+  cross.addEventListener("click", () => {
+    if (parts.onClear) parts.onClear();
+  });
+  return cross;
 }
 
 /// **Whether the one line under a step holds everything this failure has** —
@@ -325,124 +348,3 @@ export function theControlsFrom(said) {
   }
   return controls;
 }
-
-// ── The plumbing's own drawing, which is this piece's proof ─────────────────
-//
-// **This half is piece C's the-run-began**: it draws whatever the application
-// says is standing, so the shape can be watched end to end. A screen that draws
-// failures of its own uses `theFailureShape` above and does not need this.
-//
-// **A later piece takes this pane.** Nothing else in the application refers to
-// this block.
-
-const drawn = new Map();
-
-function where() {
-  let held = document.getElementById("the-failures");
-  if (held) return held;
-  const pane = document.getElementById("pane");
-  if (!pane) return null;
-  held = document.createElement("div");
-  held.id = "the-failures";
-  held.className = "failures";
-  pane.appendChild(held);
-  return held;
-}
-
-whenTold(A_FAILURE_IS_STANDING, (delivery) => {
-  const held = where();
-  if (!held) return;
-  const said = delivery.said || {};
-  const at = said.at ? Number(said.at) : undefined;
-  const values = [];
-  for (const [name, value] of Object.entries(said)) {
-    if (
-      [
-        "sentence",
-        "whatToDoAboutIt",
-        "kind",
-        "subject",
-        "subjectKind",
-        "identityOrMark",
-        "key",
-        "theSentenceForTheReport",
-        "at",
-        "controlCount",
-      ].includes(name) ||
-      name.startsWith("control")
-    ) {
-      continue;
-    }
-    values.push([name, value]);
-  }
-
-  const shape = theFailureShape({
-    ...said,
-    at,
-    values,
-    controls: theControlsFrom(said),
-    room: EXPANDED,
-    onClear: () => {
-      // A command is the page asking; the answer comes back as an event.
-      //
-      // **The kind goes with it, and it is the record's own** — it came on this
-      // event and is handed straight back. The application composes the key the
-      // answering event carries out of the kind, the subject and the mark, and
-      // **a clearing that did not carry the kind could not name the drawing it
-      // was about**: for a recorded ending it composed an empty key, the lookup
-      // below found nothing, and the drawing never left the screen. Added at
-      // the close of round 1 (C-1).
-      shell.core.invoke("a_failure_was_cleared", {
-        kind: said.kind,
-        subjectKind: said.subjectKind,
-        subject: said.subject,
-        identityOrMark: said.identityOrMark,
-      });
-    },
-    // **No `onReport`: the shape's own *Report a problem…* opens the report
-    // box** with M33's handover — `Reporting a problem` §8's entry point, built
-    // at step 11's piece R4. Until then the handover was parked on the document
-    // with nothing to consume it.
-  });
-
-  // **One drawing per failure, keyed on the presentation key** — Q1's key, which
-  // is the one thing on the event that cannot collide. **Until 2026-09-12 this
-  // was keyed on the failure's own name**, which for a recorded ending is the
-  // owning module's words: two jobs that both ended badly for the same reason
-  // collided on one entry, the second drawing replaced the first, and the first
-  // job's failure left the screen with nothing anywhere saying so. Found at
-  // round 1 of the code audit of what is drawn inside the window (F-5).
-  const already = drawn.get(said.key);
-  if (already) {
-    already.replaceWith(shape);
-  } else {
-    held.appendChild(shape);
-  }
-  drawn.set(said.key, shape);
-});
-
-whenTold(A_FAILURE_WAS_CLEARED, (delivery) => {
-  const said = delivery.said || {};
-  const shape = drawn.get(said.key);
-  if (!shape) return;
-  shape.remove();
-  drawn.delete(said.key);
-});
-
-// **The press did not land, so the drawing stays and the user is told** —
-// L8a, and the rule this round works to: no press of a control here may end in
-// nothing being said. The sentence arrives as prose; nothing is composed on this
-// side.
-whenTold(A_FAILURE_WAS_NOT_CLEARED, (delivery) => {
-  const said = delivery.said || {};
-  const shape = drawn.get(said.key);
-  if (!shape) return;
-  let told = shape.querySelector(".failure-refused");
-  if (!told) {
-    told = document.createElement("p");
-    told.className = "qf2 failure-refused";
-    if (!shape.className.split(" ").includes("failure-row")) told.className = "qf2 failure-refused selectable";
-    shape.appendChild(told);
-  }
-  told.textContent = said.sentence || "";
-});

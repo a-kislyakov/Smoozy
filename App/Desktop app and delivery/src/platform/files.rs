@@ -26,8 +26,10 @@ pub enum Refusal {
     /// `ENOSPC` at open or at write. **No amount is consulted to reach it**
     /// (F5).
     FullVolume,
-    /// `EACCES` at open. **A permission refusal cannot arise at write**,
-    /// because refusal happens at open.
+    /// `EACCES` at open, **or `EPERM` at open** (F4's widening of 2026-11-09:
+    /// a Mac folder kept from apps until the user allows it refuses that way).
+    /// **A permission refusal cannot arise at write**, because refusal happens
+    /// at open.
     PermissionRefused,
     /// **F3: two causes are not claimed apart where the system does not
     /// separate them.** A removed directory and a detached volume both give
@@ -80,7 +82,9 @@ pub enum Where {
 pub fn classify(error: &io::Error, at: Where) -> Refusal {
     match error.raw_os_error() {
         Some(code) if code == libc::ENOSPC => Refusal::FullVolume,
-        Some(code) if code == libc::EACCES && at == Where::Open => Refusal::PermissionRefused,
+        Some(code) if (code == libc::EACCES || code == libc::EPERM) && at == Where::Open => {
+            Refusal::PermissionRefused
+        }
         Some(code) if code == libc::ENOENT => Refusal::DestinationGone,
         Some(code) if code == libc::EIO && at == Where::Write => Refusal::WriteFailedAtTheDevice,
         _ => Refusal::Unclassified,
@@ -525,6 +529,32 @@ pub fn clear_directory(path: &Path) -> Vec<Failure> {
 
 /// Make a directory Smoozy owns, and every level above it that is also
 /// Smoozy's. **A local write, so it is here** (F10).
+/// **Whether the volume holding `path` is mounted read-only** — the system's
+/// own flag on the mount, read where the path stands. False where it cannot
+/// be read, and on a system with no such flag. Added 2026-11-14 for the Mac
+/// update's staging beside the application (the Rough what-if answers, share
+/// 5, 426 and 61): `Refusal` names no read-only class (F4), and this asks the
+/// mount rather than reading a cause into a refusal.
+#[cfg(unix)]
+pub fn the_volume_is_read_only(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `statvfs` writes only into the zeroed struct handed to it, and
+    // the path is a NUL-terminated string that outlives the call.
+    let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(path.as_ptr(), &mut stat) } != 0 {
+        return false;
+    }
+    stat.f_flag & libc::ST_RDONLY != 0
+}
+
+#[cfg(not(unix))]
+pub fn the_volume_is_read_only(_path: &Path) -> bool {
+    false
+}
+
 pub fn ensure_directory(path: &Path) -> Result<(), Failure> {
     std::fs::create_dir_all(path).map_err(|error| Failure::from_error(&error, Where::Open))
 }
@@ -876,6 +906,18 @@ mod tests {
             },
         };
         assert!(!short.wrote_the_file());
+    }
+
+    /// **F4's widening of 2026-11-09: a folder the Mac keeps from apps is a
+    /// permission refusal.** Desktop, Documents and Downloads, before the user
+    /// allows Smoozy in, refuse the open with `EPERM` rather than `EACCES`, and
+    /// the report box's default folder is Downloads. Still only at open.
+    #[cfg(unix)]
+    #[test]
+    fn twenty_eighth_20_a_folder_the_mac_keeps_from_apps_is_a_permission_refusal() {
+        let kept = io::Error::from_raw_os_error(libc::EPERM);
+        assert_eq!(classify(&kept, Where::Open), Refusal::PermissionRefused);
+        assert_eq!(classify(&kept, Where::Write), Refusal::Unclassified);
     }
 
     /// F4 and F7: classification is by symbol, and a permission refusal is only

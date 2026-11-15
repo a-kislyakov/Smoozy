@@ -44,8 +44,9 @@ mod tests {
     /// the thirteenth notes' piece P added `tests/names_with_curly_braces.rs`
     /// and `tests/names_with_curly_braces_at_the_desk.rs`. **27 from
     /// 2026-10-31**, when the live Telegram pass's fault 4 added
-    /// `tests/a_videos_name_at_the_desk.rs`.
-    const THE_FILE_COUNT: usize = 27;
+    /// `tests/a_videos_name_at_the_desk.rs`. **28 from 2026-11-14**, when
+    /// drivers and cheap moves added `tests/drivers_and_cheap_moves_at_the_desk.rs`.
+    const THE_FILE_COUNT: usize = 28;
 
     /// Whether a word has a clause marker's shape.
     ///

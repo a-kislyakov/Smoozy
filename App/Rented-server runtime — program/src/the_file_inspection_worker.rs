@@ -378,6 +378,22 @@ pub enum TheDigest {
     NotDigested,
 }
 
+/// **How much of a sink's end is read for the walk's last step.** A step
+/// line is under fifty bytes and the walk writes at most two a second, so the
+/// last one sits well inside this unless Blender printed more after it.
+const THE_TAIL_THE_WALK_IS_READ_FROM: u64 = 16 * 1024;
+
+/// **The walk's last step in a reading's ordinary sink**, read off its tail.
+fn the_walk_so_far(sink: &str) -> Option<(u64, u64)> {
+    use std::io::{Seek, SeekFrom};
+    let mut file = std::fs::File::open(sink).ok()?;
+    let length = file.metadata().ok()?.len();
+    file.seek(SeekFrom::Start(length.saturating_sub(THE_TAIL_THE_WALK_IS_READ_FROM))).ok()?;
+    let mut tail = Vec::new();
+    file.take(THE_TAIL_THE_WALK_IS_READ_FROM).read_to_end(&mut tail).ok()?;
+    smoozy_job_files_machine::reading::the_walks_last_step_in(&tail)
+}
+
 impl TheFileInspectionKindsOwnField {
     pub fn as_written(&self) -> Vec<u8> {
         serde_json::to_vec(self).expect("the field renders")
@@ -385,6 +401,22 @@ impl TheFileInspectionKindsOwnField {
 
     pub fn read_back(bytes: &[u8]) -> Option<TheFileInspectionKindsOwnField> {
         serde_json::from_slice(bytes).ok()
+    }
+
+    /// **[`Self::as_it_stands`], and for a file's reading still in hand, where
+    /// its walk is** — `Render Settings` Q5's build detail of 2026-11-13 (the
+    /// Creator's notes on the test copy, second round, note 15). The last step
+    /// the walk wrote is read off the tail of the reading's own ordinary sink;
+    /// a sink that will not read, or holds no whole step line, adds nothing.
+    pub fn as_it_stands_with_its_walk(&self) -> Fields {
+        let fields = self.as_it_stands();
+        if self.ending.is_some() || self.which != WhichReading::TheFilesReading {
+            return fields;
+        }
+        match the_walk_so_far(&self.ordinary_sink) {
+            Some((step, steps)) => fields.and(asked::THE_READINGS_WALK_FIELD, format!("{step} {steps}")),
+            None => fields,
+        }
     }
 
     /// **`Server protocol and transfers` C8's answer for a record of this kind,
@@ -899,23 +931,42 @@ pub fn one_reading_telling(
         let ceiling = Arc::clone(&ceiling);
         std::thread::spawn(move || copy_to_its_end(stream, from, sinks.as_ref(), &ceiling))
     };
-    let ordinary = started
-        .stdout
-        .take()
-        .map(|out| copying(Stream::Ordinary, Box::new(out)));
-    let complaints = started
-        .stderr
-        .take()
-        .map(|err| copying(Stream::Complaints, Box::new(err)));
+    // **`Rented-server runtime` M5a, carried to this worker on 2026-11-11:
+    // the ending is taken from the wait, beside the two copies, and each
+    // stream is read ten seconds more.** Until the Fable review's fifth
+    // sitting both streams were read to their end first, so a process the
+    // Blender left behind, holding one, kept the reading from ever ending.
+    let when_it_ended = Arc::new(crate::the_render_worker::WhenTheRenderEnded::default());
+    let ordinary = started.stdout.take().map(|out| {
+        copying(
+            Stream::Ordinary,
+            Box::new(crate::the_render_worker::AStreamReadWhileItsRenderLives {
+                from: out,
+                ended: Arc::clone(&when_it_ended),
+            }),
+        )
+    });
+    let complaints = started.stderr.take().map(|err| {
+        copying(
+            Stream::Complaints,
+            Box::new(crate::the_render_worker::AStreamReadWhileItsRenderLives {
+                from: err,
+                ended: Arc::clone(&when_it_ended),
+            }),
+        )
+    });
+    // **Reaped, so the reading leaves no process behind.** A reap the system
+    // refused says nothing, and both streams are then read to their end.
+    let ended = started.wait().ok();
+    if ended.is_some() {
+        when_it_ended.it_has_ended();
+    }
     let copied = |one: Option<std::thread::JoinHandle<Copied>>| {
         one.and_then(|handle| handle.join().ok())
             .unwrap_or_default()
     };
     let ordinary = copied(ordinary);
     let complaints = copied(complaints);
-    // **Reaped, so the reading leaves no process behind** — and only after
-    // both streams reached their end.
-    let ended = started.wait().ok();
     // **`Job files and outputs` R18's *removed after*.**
     if let Some(throwaway) = &throwaway {
         smoozy_rendering_machine::acting::reading::remove_the_throwaway_folder(throwaway);
@@ -1153,7 +1204,7 @@ pub(crate) fn copy_to_its_end_watching(
             Err(why) => {
                 copied
                     .first_loss
-                    .get_or_insert(format!("the stream could not be read: {why}"));
+                    .get_or_insert(format!("read error: {why}"));
                 return copied;
             }
         };
@@ -1237,6 +1288,66 @@ mod tests {
             field.as_it_stands().text(asked::WHAT_BECAME_OF_IT_FIELD),
             Some(asked::IT_IS_STILL_IN_HAND)
         );
+    }
+
+    /// **`Render Settings` Q5's build detail of 2026-11-13: a file's reading
+    /// still in hand says where its walk is**, read off the tail of its own
+    /// ordinary sink as Blender writes it; the check's reading, a sink with no
+    /// whole step line, and an ended reading say nothing of it.
+    #[test]
+    fn a_files_reading_in_hand_says_where_its_walk_is() {
+        let folder = std::env::temp_dir().join(format!("smoozy-the-walk-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let sink = folder.join("ordinary");
+        let mark = std::str::from_utf8(smoozy_job_files_machine::reading::THE_WALKS_MARK).unwrap();
+        let mut field = TheFileInspectionKindsOwnField {
+            which: WhichReading::TheFilesReading,
+            build: b"/b".to_vec(),
+            blend: b"/kitchen_v14.blend".to_vec(),
+            version: Some("5.3.0".to_string()),
+            ordinary_sink: sink.display().to_string(),
+            complaints_sink: "/c".to_string(),
+            script: "/s.py".to_string(),
+            ending: None,
+            staging: None,
+            pairs: None,
+            range: None,
+            blender: None,
+            stops: Vec::new(),
+            the_interrupt_went_out: false,
+        };
+        let walk = |field: &TheFileInspectionKindsOwnField| {
+            field.as_it_stands_with_its_walk().text(asked::THE_READINGS_WALK_FIELD).map(str::to_string)
+        };
+        assert_eq!(walk(&field), None, "no sink yet");
+        std::fs::write(&sink, "Blender 5.3.0\nRead blend: kitchen_v14.blend\n").unwrap();
+        assert_eq!(walk(&field), None, "nothing moved yet");
+        let mut long = String::from("Blender 5.3.0\n");
+        long.push_str(&"x".repeat(40_000));
+        long.push_str(&format!("\n{mark}1 250\nFra:1 Mem:12M\n{mark}120 250\n{mark}12"));
+        std::fs::write(&sink, long).unwrap();
+        assert_eq!(walk(&field).as_deref(), Some("120 250"));
+        assert_eq!(
+            field.as_it_stands_with_its_walk().text(asked::WHAT_BECAME_OF_IT_FIELD),
+            Some(asked::IT_IS_STILL_IN_HAND)
+        );
+        field.which = WhichReading::TheChecksReading;
+        assert_eq!(walk(&field), None, "the check's reading never walks");
+        field.which = WhichReading::TheFilesReading;
+        field.ending = Some(TheReadingsEnding {
+            a_blender_ran: true,
+            exit_status: Some(0),
+            signal: None,
+            ordinary_retained: 1,
+            complaints_retained: 0,
+            discarded: 0,
+            start_mark_seen: true,
+            ended_by_smoozy: false,
+            words: None,
+            digest: None,
+        });
+        assert_eq!(walk(&field), None, "an ended reading carries its outcome alone");
+        std::fs::remove_dir_all(&folder).unwrap();
     }
 
     /// **A reading whose Blender never ran names no stream**, and one that ran
@@ -1368,6 +1479,83 @@ mod tests {
         // **The script the reading wrote carries the mark as its first act.**
         let script = std::fs::read_to_string(root.join("crashed-reading.py")).expect("written");
         assert!(script.starts_with(&format!("import sys\nsys.stdout.write(\"{started}\")")));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// **`Rented-server runtime` M5a, carried to this worker: a reading whose
+    /// Blender has ended is finished though something else holds its
+    /// streams.** The Fable review's fifth sitting, fault 7.
+    ///
+    /// **The case it bites on**: both streams were read to their end before
+    /// the Blender was reaped, so a process it left behind kept the reading
+    /// from ever ending.
+    #[test]
+    fn a_reading_whose_blender_has_ended_is_finished_though_something_else_holds_its_streams() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!(
+            "smoozy-a-reading-held-open-{}",
+            Identity::issue(IdentityKind::Operation).expect("randomness").as_text()
+        ));
+        std::fs::create_dir_all(&root).expect("the folder");
+        let build = root.join("a-stand-in");
+        let left_behind = root.join("its-process");
+        std::fs::write(
+            &build,
+            format!(
+                "#!/bin/sh\necho 'what the reading printed'\nsleep 90 &\necho $! > '{}'\nexit 0\n",
+                left_behind.display()
+            ),
+        )
+        .expect("the stand-in");
+        std::fs::set_permissions(&build, std::fs::Permissions::from_mode(0o755)).expect("runnable");
+        let at = |name: &str| root.join(name).display().to_string();
+        for sink in ["ordinary", "complaints"] {
+            std::fs::write(at(sink), b"").expect("the sink");
+        }
+        let work = TheReadingsWork {
+            operation: Identity::issue(IdentityKind::Operation).expect("randomness"),
+            run: Identity::issue(IdentityKind::Operation).expect("randomness"),
+            which: WhichReading::TheFilesReading,
+            build: build.display().to_string().into_bytes(),
+            blend: b"/a.blend".to_vec(),
+            version: Some("5.1.2".to_string()),
+            script: at("reading.py"),
+            capture: CaptureRecord {
+                job: Identity::issue(IdentityKind::Job).expect("randomness"),
+                attempt: 1,
+                ordinary_sink: at("ordinary"),
+                complaints_sink: at("complaints"),
+                ceiling: CaptureCeiling::from(u64::MAX),
+            },
+            staging: None,
+            pairs: None,
+            range: None,
+        };
+        let (tells, hears) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tells.send(one_reading(&work));
+        });
+        let heard = hears.recv_timeout(
+            crate::the_render_worker::HOW_LONG_THE_STREAMS_ARE_READ_AFTER_THE_RENDER_HAS_ENDED * 3,
+        );
+        if let Some(process) = std::fs::read_to_string(&left_behind)
+            .ok()
+            .and_then(|written| written.trim().parse::<libc::pid_t>().ok())
+        {
+            // SAFETY: the identifier is the one this test's own stand-in wrote.
+            unsafe { libc::kill(process, libc::SIGKILL) };
+        }
+        let ending = heard.expect("the Blender ended at once; the reading ends though its streams are held");
+        assert_eq!(ending.exit_status, Some(0));
+        assert!(
+            ending.words.as_deref().is_some_and(|words| words.contains("after Blender exited")),
+            "{:?}",
+            ending.words
+        );
+        assert_eq!(
+            std::fs::read_to_string(at("ordinary")).expect("the sink"),
+            "what the reading printed\n"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

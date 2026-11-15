@@ -1257,6 +1257,23 @@ pub const THE_START_MARK_SEEN_FIELD: &str = "start mark seen";
 /// Smoozy ended itself is not diagnosed as any of the three"*.
 /// [`THE_ANSWER_IS_YES`] or [`THE_ANSWER_IS_NO`].
 pub const THE_RUN_WAS_ENDED_BY_SMOOZY_FIELD: &str = "ended by Smoozy";
+/// **Whether the reading was cut short by its worker going** — a restart of
+/// the machine's program, after which nothing starts the reading again.
+/// [`THE_ANSWER_IS_YES`] where it was, and absent otherwise. **Nothing about
+/// the file or its Blender is claimed by it**: `Render Settings` Q8 reads it
+/// as *a read Smoozy ended itself*, never as a Blender that could not open the
+/// file. Added 2026-11-13, after Sol's look at reading the file past a minute,
+/// points 2 and 4.
+pub const THE_READING_WAS_INTERRUPTED_FIELD: &str = "interrupted";
+/// **Where a file's reading is in its walk through the frames** — `Render
+/// Settings` Q5's build detail of 2026-11-13 (the Creator's notes on the test
+/// copy, second round, note 15). Carried beside [`IT_IS_STILL_IN_HAND`] alone,
+/// as two whole numbers with one space between: the step the walk last wrote
+/// and how many steps it has, `120 250`. **Absent** before the walk's first
+/// step, where the reading moves no scene, on the check's reading, and from a
+/// machine program older than the detail; a desktop older than it reads
+/// nothing.
+pub const THE_READINGS_WALK_FIELD: &str = "the reading's walk";
 
 // ------------------------------------------------------------ the queue's own acts
 //
@@ -1298,11 +1315,39 @@ pub const THE_CLEAR_REQUEST: &str = "the line is cleared";
 /// **C6: recorded before it acts.**
 pub const THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST: &str = "the stop paired with a clear";
 
+/// **`Queue & History` L19a: the clear of a first-frame pair, the first half
+/// of its stop.** It removes the pair's waiting and held records — the check
+/// where it has not started, and every job held behind it whose hold is not
+/// released — and nothing else; its stop then takes the check's render alone.
+/// **Carries** [`THE_PAIRED_STOP_FIELD`] and [`THE_FIRST_FRAME_CHECK_FIELD`],
+/// always, and [`THE_RENDER_THE_DESKTOP_LAST_SAW_FIELD`] where the desktop's
+/// reading showed a render.
+///
+/// **A name of its own, not [`THE_CLEAR_REQUEST`] with a field**: a program
+/// older than `Queue & History` L19a reads no such field, and the ordinary clear carried to it
+/// would empty the whole machine. Under this name it refuses by name and
+/// nothing on it changes. Added 2026-11-09, the Creator's twenty-eighth
+/// notes, note 16.
+///
+/// **C6: recorded before it acts.**
+pub const THE_PAIRS_CLEAR_REQUEST: &str = "the first-frame pair is cleared";
+
+/// **`Queue & History` L19a's second half: the stop paired with a pair's
+/// clear**, naming no target; its subject is the check's render, resolved at
+/// the clear's write. **Carries** [`THE_PAIRED_CLEAR_FIELD`] and
+/// [`THE_FIRST_FRAME_CHECK_FIELD`], always, and the same
+/// [`THE_RENDER_THE_DESKTOP_LAST_SAW_FIELD`] its clear carries. A name of its
+/// own for the reason [`THE_PAIRS_CLEAR_REQUEST`] gives.
+///
+/// **C6: recorded before it acts.**
+pub const THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST: &str = "the stop paired with a first-frame pair's clear";
+
 /// **C21: stopping work the machine has taken, its own command with its own
 /// operation identity, naming the target's** — the queue's own *Stop*
 /// (`Queue & History` L10) and the phone's (`Rendering` K5).
 ///
-/// **Carries** [`THE_OPERATION_TO_STOP_FIELD`]. The sequence is
+/// **Carries** [`THE_OPERATION_TO_STOP_FIELD`], and [`THE_STOP_IS_FORCED_FIELD`]
+/// where the user chose *Force stop* (C21a). The sequence is
 /// `Rented-server runtime` X8's and the render kind's own half is `Rendering`
 /// K5; **what this machine stops is a render operation, or a file-inspection
 /// operation it started** — the check's own *Stop* reaching a reading already
@@ -1380,6 +1425,9 @@ pub const THE_PAIRED_CLEAR_FIELD: &str = "the paired clear";
 /// **The group identity** — `Queue & History` L19's clear scoped to one group,
 /// and `Queue & History` L7's block move.
 pub const THE_GROUP_FIELD: &str = "group";
+/// **The first-frame check's job identity** — `Queue & History` L19a's pair,
+/// named by its check.
+pub const THE_FIRST_FRAME_CHECK_FIELD: &str = "the first-frame check";
 /// **The render operation the desktop's period-held reading last showed**, where
 /// it showed one. **Never a target** — `Queue & History` L13 forbids naming
 /// one — and read only so that *where the resolved operation is not the one the
@@ -1387,6 +1435,14 @@ pub const THE_GROUP_FIELD: &str = "group";
 pub const THE_RENDER_THE_DESKTOP_LAST_SAW_FIELD: &str = "the render the desktop last saw";
 /// **C21's target: the operation identity of the work to stop.**
 pub const THE_OPERATION_TO_STOP_FIELD: &str = "the operation to stop";
+/// **C21a: the stop's one mark, *forced*** — optional, its one value
+/// [`IT_IS_FORCED`]. The owning kind's step 4 sends the kill in place of the
+/// interrupt (`Rendering` K11a); a program that predates it reads an ordinary
+/// stop. The Creator's ruling on the Bad what-if answers' question 287, built
+/// with the Rough what-if answers, share 3.
+pub const THE_STOP_IS_FORCED_FIELD: &str = "forced";
+/// [`THE_STOP_IS_FORCED_FIELD`]'s one value.
+pub const IT_IS_FORCED: &str = "yes";
 
 /// **What a clear came to**, on a recorded outcome: [`IT_WAS_CLEARED`] or
 /// [`IT_WAS_NOT_CLEARED`]. **A clear refused part-way is neither**: it is *still
@@ -1941,7 +1997,7 @@ pub fn the_asks_over(paths: &[Vec<u8>]) -> Vec<&[Vec<u8>]> {
 /// **The tests below hold this list to the file's own constants**, so a name
 /// added without an entry fails, and hold each name to one spelling in the
 /// workspace and to the machine program's two lists.
-pub const EVERY_REQUEST_NAMED_HERE: [ARequestNamedHere; 38] = [
+pub const EVERY_REQUEST_NAMED_HERE: [ARequestNamedHere; 41] = [
     ARequestNamedHere {
         name: THE_HEALTH_ANSWER_REQUEST,
         under_c6: UnderC6::APureReading,
@@ -2117,9 +2173,27 @@ pub const EVERY_REQUEST_NAMED_HERE: [ARequestNamedHere; 38] = [
         ],
     },
     ARequestNamedHere {
+        name: THE_PAIRS_CLEAR_REQUEST,
+        under_c6: UnderC6::RecordedBeforeItActs,
+        carries: &[
+            THE_PAIRED_STOP_FIELD,
+            THE_FIRST_FRAME_CHECK_FIELD,
+            THE_RENDER_THE_DESKTOP_LAST_SAW_FIELD,
+        ],
+    },
+    ARequestNamedHere {
+        name: THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST,
+        under_c6: UnderC6::RecordedBeforeItActs,
+        carries: &[
+            THE_PAIRED_CLEAR_FIELD,
+            THE_FIRST_FRAME_CHECK_FIELD,
+            THE_RENDER_THE_DESKTOP_LAST_SAW_FIELD,
+        ],
+    },
+    ARequestNamedHere {
         name: THE_STOP_REQUEST,
         under_c6: UnderC6::RecordedBeforeItActs,
-        carries: &[THE_OPERATION_TO_STOP_FIELD],
+        carries: &[THE_OPERATION_TO_STOP_FIELD, THE_STOP_IS_FORCED_FIELD],
     },
     ARequestNamedHere {
         name: THE_CANCEL_REQUEST,
@@ -2185,6 +2259,11 @@ pub const EVERY_REQUEST_NAMED_HERE: [ARequestNamedHere; 38] = [
         name: THE_FOUR_VALUES_OF_FILES_REQUEST,
         under_c6: UnderC6::APureReading,
         carries: &[THE_PATHS_READ_FIELD],
+    },
+    ARequestNamedHere {
+        name: THE_PREVIEW_COPIES_REQUEST,
+        under_c6: UnderC6::APureReading,
+        carries: &[THE_JOB_FIELD, THE_PREVIEW_PRODUCTION_FIELD],
     },
 ];
 
@@ -2274,6 +2353,69 @@ pub const THE_JOB_THAT_STARTS_NEXT_FIELD: &str = "starts next";
 /// **Records in the store that did not read back**, counted rather than left
 /// out, so a reading that is missing a job says so.
 pub const HOW_MANY_DID_NOT_READ_BACK_FIELD: &str = "records that did not read back";
+/// **Why the machine's line is stopped**, in the machine's own words —
+/// `Queue & History` A1 as changed 2026-11-10: present where the supervisor's
+/// last look at the line could not read its operation records, so the
+/// admission point starts nothing; absent everywhere else, and from a program
+/// older than the field. `State, identity and recovery` F12a's condition is
+/// raised and withdrawn on it.
+pub const THE_LINE_IS_STOPPED_FIELD: &str = "the line is stopped because";
+/// **The job the machine's line could not start for want of room**, by its
+/// identity — `Queue & History` A1 as changed 2026-11-11: present where the
+/// supervisor's last look at the line met `Rented-server runtime` M4a's
+/// refusal at a render's start, the state mount holding less than the
+/// control-state reserve; absent everywhere else, and from a program older
+/// than the field. The job's record stands as it did; the Queue says
+/// *Waiting: the server's disk is full.* on it.
+pub const THE_LINE_WAITS_FOR_ROOM_FIELD: &str = "the line waits for room, at";
+/// **The setup run the machine-level *setup in progress* state stands for,
+/// where no setup worker is admitted** — `Queue & History` A1 as changed
+/// 2026-11-14 (the Rough what-if answers, share 4, 310): a setup cut off
+/// part-way, so the machine starts nothing (`Rented-server runtime` P2).
+/// Absent where the state is clear or cannot be read, while a setup worker is
+/// admitted, and from a program older than the field. The Queue says
+/// *Waiting: the server's setup stopped part-way.* on the server's jobs.
+pub const THE_LINE_WAITS_FOR_A_SETUP_FIELD: &str = "the line waits for a setup, run";
+/// **`Telegram` F6's word for how Telegram is answering this server's bot** —
+/// `Queue & History` A1 as widened 2026-11-14 (when Telegram refuses): one of
+/// [`TheTelegramTrouble`]'s three words, where the role is enabled and the
+/// Telegram worker's store holds one. Absent everywhere else, and from a
+/// program older than the field.
+pub const TELEGRAMS_TROUBLE_HERE_FIELD: &str = "Telegram's trouble here";
+
+/// **`Telegram` F6's three words**, the one spelling the worker's store, the
+/// queue reading and the desktop share.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TheTelegramTrouble {
+    /// A refusal coded 401: the bot's token is rejected.
+    TheTokenIsRejected,
+    /// A refusal coded 403 of a send to the chat: the chat refuses the bot.
+    TheChatRefuses,
+    /// Nothing reached Telegram for `Telegram` F6's three minutes.
+    TelegramIsNotReached,
+}
+
+impl TheTelegramTrouble {
+    /// The word, as written and carried.
+    pub fn the_word(self) -> &'static str {
+        match self {
+            TheTelegramTrouble::TheTokenIsRejected => "the token is rejected",
+            TheTelegramTrouble::TheChatRefuses => "the chat refuses",
+            TheTelegramTrouble::TelegramIsNotReached => "Telegram is not reached",
+        }
+    }
+
+    /// The word read back; anything else is no word at all.
+    pub fn read_back(word: &str) -> Option<TheTelegramTrouble> {
+        [
+            TheTelegramTrouble::TheTokenIsRejected,
+            TheTelegramTrouble::TheChatRefuses,
+            TheTelegramTrouble::TelegramIsNotReached,
+        ]
+        .into_iter()
+        .find(|trouble| trouble.the_word() == word)
+    }
+}
 
 // ------------------------------------------- a rendering job's live figures
 //
@@ -2332,6 +2474,14 @@ pub const THE_PLAN_TOTAL_FIELD: &str = "plan total";
 /// machine. Added
 /// 2026-10-03, the Creator's notes on 0.1.8, piece 6b.
 pub const THE_UNITS_FINISHED_FIELD: &str = "plan units finished";
+/// `Queue & History` R5: the second attempt has no render process yet.
+pub const THE_JOB_IS_RUNNING_AGAIN_FIELD: &str = "running again";
+/// **`Queue & History` R5, addition of 2026-11-11: how long a rendering job
+/// has rendered**, in whole seconds, worked out by the supervisor on the
+/// machine's own clock from `Queue & History` N1's started moment. The four
+/// questions, scout 2.1.
+pub const THE_JOB_HAS_RENDERED_FOR_FIELD: &str = "rendered for seconds";
+
 /// **`Queue & History` R5's *stopping* mark: a stop's interrupt has gone out on
 /// the render**, carried in that job's part of the queue reading only where it
 /// is set, as [`THE_ANSWER_IS_YES`], until the render ends. **It is the
@@ -2389,6 +2539,11 @@ pub const THE_REASON_THE_MACHINE_RECORDED_FIELD: &str = "the reason the machine 
 pub const NO_RENDER_BEGAN_FIELD: &str = "no render began";
 /// The one value [`NO_RENDER_BEGAN_FIELD`] is sent with.
 pub const IT_IS_YES: &str = "yes";
+/// **The file names of the paths the remap left unchanged** (`Rendering` K14c;
+/// the paragraph after `Queue & History` N3), as one JSON list of names.
+/// **Sent only where there is one**, on the worker's report and on the note's
+/// answer alike, and read as none where it is absent. Added 2026-11-11.
+pub const THE_FILES_MISSING_FIELD: &str = "files missing";
 /// **The device line as the render worker observed it at its own loop**
 /// (`Queue & History` E13), verbatim — the line Blender printed, never a
 /// reading of it. **Absent where no line passed.**
@@ -2416,6 +2571,10 @@ pub const THE_FRAME_IT_WAS_GIVEN_UP_AT_FIELD: &str = "given up at frame";
 /// **`Queue & History` N6's last-frame figure**, absent where there is none
 /// (`Queue & History` N7 and `Queue & History` N8).
 pub const THE_LAST_FRAME_FIELD: &str = "last frame";
+/// **The job a machine-made job carries on from**, on the note's answer —
+/// `Queue & History` N15's build detail of 2026-11-12 (the four questions,
+/// batch 4's leftover): a phone's *Resume*. Absent on every other note.
+pub const THE_JOB_IT_CARRIES_ON_FROM_FIELD: &str = "carries on from";
 /// **`Job files and outputs` C27's four sets as the note carries them, by
 /// count** — the files expected, present, absent and present at nothing — and
 /// **absent altogether where the ending carried no statement**, which then
@@ -2514,6 +2673,62 @@ pub const THE_READ_ON_CLOCK_FIELD: &str = "read on the clock of";
 /// journalled"*, about the job, saying the queue state it was written with.
 pub const THE_JOB_RECORD_WRITTEN_EVENT: &str = "a job record was written";
 
+/// **The words between the queue state and the failed job in the event a
+/// machine-made job's record is journalled under** — the smallest mark that
+/// tells a job this machine made for itself, on a phone's *try it again*
+/// (`Telegram` Y1), from one the desktop sent. Added 2026-10-16, the Telegram
+/// worker's piece 5.
+///
+/// **Why the event, and why its words.** The resubmission is told to the phone
+/// off the journal, like every other outcome (`Telegram` F3), so a worker
+/// started after the job was made still tells it. The event is the one every
+/// job's record is journalled under (`Queue & History` Q3), so every reader
+/// that counts the line's moves goes on counting this one. **What it says is
+/// Build's own words** — `State, identity and recovery` E1's *what happened*,
+/// which no plan words for this kind. **The desktop reads the job it was made
+/// from** ([`the_job_a_resubmission_was_made_from`]), and takes the job into
+/// its Queue where it tracks that one (`Queue & History` A5's paragraph of
+/// 2026-11-12); nothing else of these words. **It says the queue state
+/// first, as every such event does**, then this, then the failed job.
+/// Moved here from the server program the same day, so both ends read one
+/// copy of the words.
+/// Nothing in the job record, the note or the manifest carries the fact, and
+/// each of those is a plan's own list.
+pub const SUBMITTED_AGAIN_BY_THIS_MACHINE_FROM: &str = "submitted again by this machine from";
+
+/// **What a machine-made job's event says**: its queue state, the mark, and
+/// the job it was made from.
+pub fn what_a_resubmissions_event_says(state: &str, failed: &smoozy_state::identities::Identity) -> String {
+    format!("{state}: {SUBMITTED_AGAIN_BY_THIS_MACHINE_FROM} {}", failed.as_text())
+}
+
+/// **[`what_a_resubmissions_event_says`], read back**: the job it was made
+/// from, or nothing where the event says anything else — which is what every
+/// job the desktop sent says.
+pub fn the_job_a_resubmission_was_made_from(says: &str) -> Option<smoozy_state::identities::Identity> {
+    if let Some((job, _)) = the_job_and_frame_a_resumption_names(says) {
+        return Some(job);
+    }
+    let (_, after) = says.split_once(&format!(": {SUBMITTED_AGAIN_BY_THIS_MACHINE_FROM} "))?;
+    smoozy_state::identities::Identity::read_back(smoozy_state::identities::IdentityKind::Job, after)
+}
+
+/// **The phone's *Resume*, journalled** (`Telegram` Y4a as changed 2026-11-11,
+/// the four questions, scout 1.5): as [`what_a_resubmissions_event_says`], and
+/// the frame the new job starts at.
+pub const RESUMED_BY_THIS_MACHINE_FROM: &str = "resumed by this machine from";
+
+pub fn what_a_resumptions_event_says(state: &str, failed: &smoozy_state::identities::Identity, from: i64) -> String {
+    format!("{state}: {RESUMED_BY_THIS_MACHINE_FROM} {} at frame {from}", failed.as_text())
+}
+
+/// **[`what_a_resumptions_event_says`], read back**: the job and the frame.
+pub fn the_job_and_frame_a_resumption_names(says: &str) -> Option<(smoozy_state::identities::Identity, i64)> {
+    let (_, after) = says.split_once(&format!(": {RESUMED_BY_THIS_MACHINE_FROM} "))?;
+    let (job, frame) = after.split_once(" at frame ")?;
+    Some((smoozy_state::identities::Identity::read_back(smoozy_state::identities::IdentityKind::Job, job)?, frame.parse().ok()?))
+}
+
 /// **The event a hold's placing is journalled under** — `Rented-server
 /// runtime` U26, about the hold, saying the job it holds.
 pub const THE_HOLD_PLACED_EVENT: &str = "a hold was placed";
@@ -2599,11 +2814,72 @@ pub fn what_a_drop_says(says: &str) -> Option<(String, String)> {
 /// 38's piece 3.
 pub const THE_PREVIEW_PUBLISHED_EVENT: &str = "a preview was published";
 
+/// **The event a frame's whole set of copies is journalled under, once its
+/// production has ended** — `Queue & History` P3's second event, `Telegram`
+/// I2's one trigger. **About the job**, saying what the frame's main copy's
+/// [`THE_PREVIEW_PUBLISHED_EVENT`] says. The main copy's own event is
+/// journalled as soon as that copy is published, before the frame's other
+/// copies exist, so it cannot be the trigger for the frame's album. **The
+/// desktop applies it as nothing**, as any kind it does not read
+/// (`State, identity and recovery` E4). Added 2026-11-10, the Creator's
+/// twenty-ninth notes, note 11 (the dig's piece 2).
+pub const THE_PREVIEW_SET_MADE_EVENT: &str = "a frame's preview set was made";
+
 /// **The event a live job's reporting choice changing is journalled under** —
 /// `Telegram` V1c. **About the job**, saying the new value in
 /// [`THE_REPORTING_CHOICE_FIELD`]'s form. A first-frame pair changed together
 /// journals one event per job. Added 2026-10-30, the twenty-first notes, note 7.
 pub const THE_TELEGRAM_CHOICE_CHANGED_EVENT: &str = "a job's Telegram reporting was changed";
+
+// ---- a preview production's copies, named 2026-11-10 (piece J).
+
+/// **The copies a preview production's record holds** — `Queue & History` P3
+/// and `Queue & History` P10a as changed 2026-11-10, the Creator's twenty-ninth notes, note 11
+/// (piece J). Where a copy's [`THE_PREVIEW_PUBLISHED_EVENT`] leaves its View
+/// Layer's name and its source to the record, because carrying them would take
+/// the entry past `State, identity and recovery` E6a's budget, the desk reads
+/// them here: **once per production**, in the read forward, before it owes the
+/// copy's fetch.
+///
+/// **Carries** [`THE_JOB_FIELD`] and [`THE_PREVIEW_PRODUCTION_FIELD`].
+///
+/// **What comes back**: [`ON_THIS_MACHINE_FIELD`] — [`IT_IS_ABSENT`] where no
+/// preview production of that job is recorded under that identity,
+/// [`THE_MACHINE_CANNOT_SAY`] with [`THE_MACHINES_OWN_WORDS_FIELD`] where the
+/// store could not be read, which the desk asks again — and, where it is
+/// present,
+/// [`HOW_MANY_PREVIEW_COPIES_FIELD`] with one [`A_PREVIEW_COPY`] per copy the
+/// production published. **Before the production has ended, the main copy
+/// alone**, written into its record at the worker's early report; the rest
+/// are written at its ending. A record whose own field does not read back is
+/// present with none. Each item carries
+/// [`THE_COPY_IS_THE_MAIN_ONE_FIELD`], [`THE_COPYS_PLACE_FIELD`], and, where
+/// the record carries them, [`THE_COPYS_VIEW_LAYER_FIELD`] and
+/// [`THE_PREVIEW_COPYS_SOURCE_FIELD`].
+///
+/// **A program older than this refuses it as unknown.** Only a program that
+/// leaves names to the record is ever asked, so nothing is guessed from that
+/// refusal.
+///
+/// **C6: a pure reading.** It registers nothing and changes nothing.
+pub const THE_PREVIEW_COPIES_REQUEST: &str = "a preview production's copies";
+/// The preview production asked about: its operation identity, as the event
+/// names it.
+pub const THE_PREVIEW_PRODUCTION_FIELD: &str = "preview production";
+/// How many copies the production published, as a decimal number.
+pub const HOW_MANY_PREVIEW_COPIES_FIELD: &str = "preview copies";
+/// The item word for one copy ([`the_field_of_item`]).
+pub const A_PREVIEW_COPY: &str = "preview copy";
+/// **Sent only on the frame's main copy**, with [`IT_IS_YES`]; absent on
+/// every other copy.
+pub const THE_COPY_IS_THE_MAIN_ONE_FIELD: &str = "main copy";
+/// Its place in the frame's set, as a decimal number.
+pub const THE_COPYS_PLACE_FIELD: &str = "place in the set";
+/// **The View Layer's name, as its bytes**, where the record carries one.
+pub const THE_COPYS_VIEW_LAYER_FIELD: &str = "view layer";
+/// **Where its picture came from, in its written form** (`Job files and
+/// outputs` B31a), where the record carries it.
+pub const THE_PREVIEW_COPYS_SOURCE_FIELD: &str = "source";
 
 // ---- the setup run's answers, named at step 10c piece 8.
 
@@ -3357,7 +3633,7 @@ mod tests {
         assert!(carries(THE_CLEAR_REQUEST).contains(&THE_PAIRED_STOP_FIELD));
         assert!(carries(THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST).contains(&THE_PAIRED_CLEAR_FIELD));
         assert!(!carries(THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST).contains(&THE_OPERATION_TO_STOP_FIELD));
-        assert_eq!(carries(THE_STOP_REQUEST), &[THE_OPERATION_TO_STOP_FIELD]);
+        assert_eq!(carries(THE_STOP_REQUEST), &[THE_OPERATION_TO_STOP_FIELD, THE_STOP_IS_FORCED_FIELD]);
         for name in [
             THE_CLEAR_REQUEST,
             THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST,

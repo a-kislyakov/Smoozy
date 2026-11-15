@@ -222,6 +222,7 @@ mod tests {
             resolution: None,
             set_aside: false,
             rejected_guess: None,
+            included: false,
             read_as: Vec::new(),
         }
     }

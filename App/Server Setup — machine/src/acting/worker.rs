@@ -1357,15 +1357,36 @@ fn the_words(ordinary: &str, error: &str) -> Option<String> {
     ))
 }
 
+/// The opening of the fetch's words where the checksum file was not read.
+const THE_CHECKSUMS_OPENING: &str = "Could not read the published checksum: ";
+/// The opening of the fetch's words where the archive was not there.
+const THE_ARCHIVES_OPENING: &str = "Download failed: HTTP ";
+/// [`crate::acting::fetching`]'s words for a checksum file that answered
+/// with a status, after [`THE_CHECKSUMS_OPENING`].
+pub(crate) const THE_CHECKSUMS_STATUS: &str = "the checksum file returned HTTP ";
+
+/// **The status blender.org refused the fetch with**, read back from the
+/// fetch's own words ([`the_fetchs_words`]) and from nothing else — Smoozy's
+/// own sentence, composed here, never a tool's printing. `None` for any
+/// other words. `Design/Server Setup § The step that failed`'s one exception
+/// (the night's live pass, fault 4): a 403 there is said with its cause.
+pub fn the_status_the_fetch_was_refused_with(words: &str) -> Option<u16> {
+    let status = match words.strip_prefix(THE_CHECKSUMS_OPENING) {
+        Some(rest) => rest.strip_prefix(THE_CHECKSUMS_STATUS)?,
+        None => words.strip_prefix(THE_ARCHIVES_OPENING)?.strip_suffix('.')?,
+    };
+    status.parse().ok()
+}
+
 /// **The fetch's own refusals, in Smoozy's words**, because each is a
 /// verification of Smoozy's own rather than a tool's printing.
 fn the_fetchs_words(why: &TheFetchDidNot) -> String {
     match why {
         TheFetchDidNot::TheChecksumWasNotPublished { why } => {
-            format!("Could not read the published checksum: {why}")
+            format!("{THE_CHECKSUMS_OPENING}{why}")
         }
         TheFetchDidNot::TheArchiveWasNotThere { status } => format!(
-            "Download failed: HTTP {status}."
+            "{THE_ARCHIVES_OPENING}{status}."
         ),
         TheFetchDidNot::ItWasRefused { why } => why.clone(),
         TheFetchDidNot::TheDigestDidNotMatch {
@@ -1423,6 +1444,28 @@ mod tests {
     use crate::acting::steps::testing::{
         it_went, AStandInForTheMachinesTools, AStandInThatAnswersOnlyForAPathThatIsThere,
     };
+
+    /// **The night's live pass, fault 4: the refusal's status reads back
+    /// from the fetch's own words**, both the checksum file's and the
+    /// archive's, and from nothing else.
+    #[test]
+    fn night_pass_4_the_status_reads_back_from_the_fetchs_own_words() {
+        let checksum = the_fetchs_words(&TheFetchDidNot::TheChecksumWasNotPublished {
+            why: format!("{THE_CHECKSUMS_STATUS}403"),
+        });
+        assert_eq!(checksum, "Could not read the published checksum: the checksum file returned HTTP 403");
+        assert_eq!(the_status_the_fetch_was_refused_with(&checksum), Some(403));
+        let archive = the_fetchs_words(&TheFetchDidNot::TheArchiveWasNotThere { status: 403 });
+        assert_eq!(the_status_the_fetch_was_refused_with(&archive), Some(403));
+        assert_eq!(the_status_the_fetch_was_refused_with("Download failed: HTTP 404."), Some(404));
+        for other in [
+            "Could not read the published checksum: the checksum file is not a single checksum",
+            "a tool printed HTTP 403",
+            "Checksum mismatch: got a, expected b. The download was deleted.",
+        ] {
+            assert_eq!(the_status_the_fetch_was_refused_with(other), None, "{other}");
+        }
+    }
 
     struct NoLineAtAll;
 

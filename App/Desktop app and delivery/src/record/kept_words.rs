@@ -297,6 +297,7 @@ pub(crate) mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         note.attempts = 1;

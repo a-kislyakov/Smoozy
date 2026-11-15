@@ -90,7 +90,21 @@ pub enum AClassOfSend {
     TheHoldersHeartbeat,
     EndingsHoldsAndDrops,
     TheClocksEdit,
+    /// **`Telegram` C1d — a job's own message edited on C2's tick**, beside
+    /// the status message's edit and after it, under C6's superseded rule of
+    /// its own: at most one outstanding, a later one dropped, a flood-refused
+    /// one dropped and carried by the next tick. Added 2026-11-09, the
+    /// twenty-eighth notes, note 18.
+    TheJobsMessagesEdit,
     FramePicturesAndMedia,
+}
+
+impl AClassOfSend {
+    /// **`Telegram` C6's superseded rule**: the clock's edit and a job's
+    /// message's edit show the current state, so a stale one is worth nothing.
+    fn is_superseded(self) -> bool {
+        matches!(self, AClassOfSend::TheClocksEdit | AClassOfSend::TheJobsMessagesEdit)
+    }
 }
 
 /// **One send.** It is called again, unchanged, after a flood refusal, so it
@@ -144,7 +158,8 @@ impl Waits for OnThisComputersClock {
 
 struct Waiting {
     by_class: BTreeMap<AClassOfSend, VecDeque<(ASend, Sender<HowASendEnded>)>>,
-    a_clock_edit_is_outstanding: bool,
+    /// The superseded classes with an edit waiting or in flight.
+    outstanding: std::collections::BTreeSet<AClassOfSend>,
 }
 
 /// **When the holder's next heartbeat falls due**, on the holder's own clock.
@@ -175,6 +190,25 @@ pub struct TheSendQueue {
     before_flood_retry: Mutex<Option<Arc<dyn Fn() -> bool + Send + Sync>>>,
     failure_notes: Mutex<Option<Arc<dyn Fn(&str) + Send + Sync>>>,
     failure_context: Mutex<HashMap<std::thread::ThreadId, String>>,
+    /// **`Telegram` C1d as changed 2026-11-13 — Telegram's clock**: how many
+    /// seconds Telegram's `edit_date` on the last edit it accepted stood
+    /// ahead of this computer's clock when that answer came back; nothing
+    /// until the first.
+    telegrams_lead: Arc<Mutex<Option<i64>>>,
+}
+
+/// **Telegram's own moment in an accepted answer**: an edited Message's
+/// `edit_date`, and nothing else — a Message's `date` is when it was first
+/// sent, which an edit's answer carries too, so it is never read as now.
+fn telegrams_moment_in(result: &Value) -> Option<i64> {
+    result.get("edit_date").and_then(Value::as_i64).filter(|moment| *moment > 0)
+}
+
+fn the_seconds_on_this_computer(at: std::time::SystemTime) -> i64 {
+    match at.duration_since(std::time::UNIX_EPOCH) {
+        Ok(since) => since.as_secs() as i64,
+        Err(before) => -(before.duration().as_secs() as i64),
+    }
 }
 
 impl TheSendQueue {
@@ -184,7 +218,7 @@ impl TheSendQueue {
             waits,
             waiting: Mutex::new(Waiting {
                 by_class: BTreeMap::new(),
-                a_clock_edit_is_outstanding: false,
+                outstanding: std::collections::BTreeSet::new(),
             }),
             the_one_in_flight: Mutex::new(()),
             the_heartbeats_due: Mutex::new(None),
@@ -193,7 +227,27 @@ impl TheSendQueue {
             before_flood_retry: Mutex::new(None),
             failure_notes: Mutex::new(None),
             failure_context: Mutex::new(HashMap::new()),
+            telegrams_lead: Arc::default(),
         }
+    }
+
+    /// **`Telegram` C1d as changed 2026-11-13 — a moment of this computer's,
+    /// on Telegram's clock**: `at` moved by the difference the last accepted
+    /// answer showed. Telegram dated that answer before it arrived, so the
+    /// moment is never later than Telegram's own. Unmoved until the first.
+    pub fn on_telegrams_clock(&self, at: std::time::SystemTime) -> std::time::SystemTime {
+        match *lock(&self.telegrams_lead) {
+            Some(lead) if lead >= 0 => at + Duration::from_secs(lead as u64),
+            Some(lead) => at.checked_sub(Duration::from_secs(lead.unsigned_abs())).unwrap_or(at),
+            None => at,
+        }
+    }
+
+    /// **The same, now, in seconds since 1970** — nothing until Telegram has
+    /// answered once.
+    pub fn now_on_telegrams_clock(&self) -> Option<i64> {
+        let lead = (*lock(&self.telegrams_lead))?;
+        Some(the_seconds_on_this_computer(std::time::SystemTime::now()) + lead)
     }
 
     /// `Telegram` F3a: only calls made through this worker's client can count a try.
@@ -218,8 +272,12 @@ impl TheSendQueue {
         let notes = lock(&self.failure_notes).clone();
         let context = lock(&self.failure_context).get(&std::thread::current().id()).cloned()
             .unwrap_or_else(|| "outside a journal event".into());
+        let telegrams_lead = self.telegrams_lead.clone();
         Box::new(move |client| {
             let result = send(client);
+            if let Some(moment) = result.as_ref().ok().and_then(telegrams_moment_in) {
+                *lock(&telegrams_lead) = Some(moment - the_seconds_on_this_computer(std::time::SystemTime::now()));
+            }
             if let Some(notes) = &notes {
                 match &result {
                     Err(WhyTheCallFailed::NotReached(_)) => notes(&format!("a send was not reached: {context}")),
@@ -290,12 +348,9 @@ impl TheSendQueue {
         let (tell, told) = channel();
         let send = self.noting_failures(send);
         let mut waiting = lock(&self.waiting);
-        if class == AClassOfSend::TheClocksEdit {
-            if waiting.a_clock_edit_is_outstanding {
-                let _ = tell.send(HowASendEnded::DroppedAsSuperseded);
-                return told;
-            }
-            waiting.a_clock_edit_is_outstanding = true;
+        if class.is_superseded() && !waiting.outstanding.insert(class) {
+            let _ = tell.send(HowASendEnded::DroppedAsSuperseded);
+            return told;
         }
         waiting
             .by_class
@@ -328,7 +383,7 @@ impl TheSendQueue {
         let ended = match send(&self.the_client_for(class)) {
             Ok(result) => HowASendEnded::Accepted(result),
             Err(WhyTheCallFailed::Refused(refusal)) => match the_wait_a_refusal_asks_for(&refusal) {
-                Some(_) if class == AClassOfSend::TheClocksEdit => HowASendEnded::DroppedAsSuperseded,
+                Some(_) if class.is_superseded() => HowASendEnded::DroppedAsSuperseded,
                 Some(how_long) if class == AClassOfSend::TheHoldersHeartbeat => {
                     self.waits.wait(how_long);
                     self.see_it_to_its_end(&mut send, false, || self.client.clone())
@@ -345,6 +400,21 @@ impl TheSendQueue {
                     let ended = if ready {
                         let _upload_slot = lock(&self.the_one_upload_in_flight);
                         self.see_it_to_its_end(&mut send, false, || self.client.clone())
+                    } else if class == AClassOfSend::RoutedAnswersAndAcknowledgements {
+                        // **C6a, never dropped (the night's live pass, fault
+                        // 1).** A routed answer is offered inside the
+                        // listener's own turn, which holds the listener while
+                        // it waits for this send, so the renewal can never be
+                        // taken from here and the heartbeat is that turn's
+                        // next act. It is sent again in the serial lane, each
+                        // try bounded by the heartbeat as a first try is.
+                        // Until this, *Which job?* kept no buttons when
+                        // Telegram asked for a wait.
+                        if let Some(notes) = lock(&self.failure_notes).as_ref() {
+                            notes("a flood retry of an answer is sent again in the serial lane; the listener's turn waits on it");
+                        }
+                        let _serial_slot = lock(&self.the_one_in_flight);
+                        self.see_it_to_its_end(&mut send, false, || self.the_client_for(class))
                     } else {
                         if let Some(notes) = lock(&self.failure_notes).as_ref() {
                             notes("a flood retry waits for an unconfirmed heartbeat; it was not sent");
@@ -361,8 +431,8 @@ impl TheSendQueue {
             Err(other) => HowASendEnded::HandedBack(other),
         };
 
-        if class == AClassOfSend::TheClocksEdit {
-            lock(&self.waiting).a_clock_edit_is_outstanding = false;
+        if class.is_superseded() {
+            lock(&self.waiting).outstanding.remove(&class);
         }
         let _ = tell.send(ended);
         drop(the_slot);
@@ -626,6 +696,25 @@ mod tests {
         queue.send_the_next();
         assert!(matches!(third.recv().unwrap(), HowASendEnded::Accepted(_)));
         assert_eq!(the_texts_sent(&service), ["first tick", "third tick"]);
+    }
+
+    /// **`Telegram` C1d — a job's message is edited on the clock's tick beside
+    /// the status message, under C6's superseded rule of its own**: one edit of
+    /// each outstanding, a second job's-message edit dropped, and the status
+    /// message's edit never dropped for it. The twenty-eighth notes, note 18.
+    #[test]
+    fn twenty_eighth_18_a_jobs_message_edit_and_a_clock_edit_are_each_outstanding_once() {
+        let (service, _, queue) = a_queue();
+        let clock = queue.offer(AClassOfSend::TheClocksEdit, a_message("status"));
+        let job = queue.offer(AClassOfSend::TheJobsMessagesEdit, a_message("job"));
+        let again = queue.offer(AClassOfSend::TheJobsMessagesEdit, a_message("job again"));
+        assert_eq!(again.recv().unwrap(), HowASendEnded::DroppedAsSuperseded);
+        let ending = queue.offer(AClassOfSend::EndingsHoldsAndDrops, a_message("ending"));
+        while queue.send_the_next().is_some() {}
+        assert!(matches!(clock.recv().unwrap(), HowASendEnded::Accepted(_)));
+        assert!(matches!(job.recv().unwrap(), HowASendEnded::Accepted(_)));
+        assert!(matches!(ending.recv().unwrap(), HowASendEnded::Accepted(_)));
+        assert_eq!(the_texts_sent(&service), ["ending", "status", "job"], "the job's edit goes after the clock's");
     }
 
     /// **A refusal that is not a flood is handed back**, once, never delivered.
@@ -988,7 +1077,7 @@ mod tests {
 
         set(&clock, 10);
         let ending = queue.offer(AClassOfSend::EndingsHoldsAndDrops, a_message("Kitchen — final failed"));
-        let answer = queue.offer(AClassOfSend::RoutedAnswersAndAcknowledgements, a_message("Nothing was done."));
+        let answer = queue.offer(AClassOfSend::RoutedAnswersAndAcknowledgements, a_message("Nothing was changed."));
         while queue.send_the_next().is_some() {}
         assert!(matches!(answer.recv().unwrap(), HowASendEnded::Accepted(_)));
         assert!(matches!(ending.recv().unwrap(), HowASendEnded::Accepted(_)));

@@ -5,11 +5,18 @@
 //! replacement pieces, which take [`WhatTheCheckFound::ANewerVersion`] from
 //! here. **On a Mac they run on this same sequence from step 11's Mac update
 //! piece** ([`TheUpdatesAct`], `crate::updating::the_mac`): after a check that
-//! found a newer version, and at the user's *Install now* (Z32). **The Linux
+//! found a newer version, and at each answer to the update box. **The Linux
 //! and Windows routes run on it the same way** (step 11's Linux and Windows update pieces:
 //! `crate::updating::the_linux_package`,
 //! `crate::updating::the_windows_side_by_side`). While they run, a press starts
 //! no check (Z27's second bullet).
+//!
+//! **Z33, from 2026-11-09 (the Creator's twenty-eighth notes, note 4): the
+//! install is the user's press, on every system.** A found version leads to
+//! the one update box (`crate::updating::the_box`), once per version; the
+//! box's *Install now* is the only thing that starts a publication, and
+//! nothing restarts the application without it. There is no held form and no
+//! hold: Z31's reading of what is running decides only the box's sentence.
 //!
 //! **What starts a check, and nothing else does (Z26's list of three).** The
 //! application's start; the one repeating check while the application runs
@@ -109,6 +116,9 @@ use super::manifest::{
 };
 use super::trust::{TheCarriedSet, TheUpdateTrustRecord};
 use super::verifying::verify_an_update_file_against;
+use crate::setting_up::ADownloadThatFailed;
+use smoozy_server_protocol::release::composing::WhyTheFetchFailed;
+use smoozy_server_protocol::release::two_routes::{read_by_either_route, TheRealClock, TheRoute, TriesOneAddress};
 use crate::downloading::TheRunsTransfers;
 use crate::events::TheOneQueue;
 use crate::record::update_trust;
@@ -317,6 +327,10 @@ pub enum TheCheckEnded {
     /// check that could not be reached*, and E15's *an update that did not
     /// happen*. Nothing is written.
     CouldNotBeReached,
+    /// **The same, where every try came to no answer** (`Server protocol and
+    /// transfers` B10b), so About says the update service did not respond and
+    /// to try again in a few minutes. Nothing is written.
+    NothingAnswered,
 }
 
 impl TheCheckEnded {
@@ -338,7 +352,7 @@ pub trait ReadsTheUpdateFile: Send + Sync {
         says: &WhatTheRequestSays,
         the_most: u64,
         draw: &mut dyn DrawsFromTheSharedBudget,
-    ) -> Result<Vec<u8>, String>;
+    ) -> Result<Vec<u8>, ADownloadThatFailed>;
 }
 
 /// **Z22 and R19: the update fetch admitted at the one desktop point, under
@@ -408,8 +422,10 @@ pub fn one_check_and_what_it_verified(
     );
     // **R5: the share returns at once**, before anything is verified.
     let _ = draw.the_channel_ended(Instant::now());
-    let Ok(bytes) = read else {
-        return (TheCheckEnded::CouldNotBeReached, None);
+    let bytes = match read {
+        Ok(bytes) => bytes,
+        Err(failed) if failed.nothing_answered => return (TheCheckEnded::NothingAnswered, None),
+        Err(_) => return (TheCheckEnded::CouldNotBeReached, None),
     };
     let Ok(verified) =
         verify_an_update_file_against(carried, remembered, &bytes, row.unwrap_or(""))
@@ -460,9 +476,9 @@ impl ReadsTheUpdateFile for OverHttps {
         says: &WhatTheRequestSays,
         the_most: u64,
         draw: &mut dyn DrawsFromTheSharedBudget,
-    ) -> Result<Vec<u8>, String> {
+    ) -> Result<Vec<u8>, ADownloadThatFailed> {
         if !from.starts_with("https://") {
-            return Err(format!("{from} is not an HTTPS address"));
+            return Err(format!("{from} is not an HTTPS address").into());
         }
         let agent = ureq::Agent::config_builder()
             .tls_config(
@@ -476,7 +492,8 @@ impl ReadsTheUpdateFile for OverHttps {
             .https_only(true)
             .max_redirects(HOW_MANY_TIMES_THE_ADDRESS_MAY_HAND_THE_READ_ON)
             .http_status_as_error(false)
-            // **E11, and the whole of it**: the version and the system.
+            // **E11, and the whole of it**: the version and the system — on
+            // every route `Server protocol and transfers` B10b takes.
             .user_agent(says.as_who_is_asking())
             // Nothing the client would add on its own.
             .accept(ureq::config::AutoHeaderValue::None)
@@ -486,20 +503,55 @@ impl ReadsTheUpdateFile for OverHttps {
             .timeout_recv_body(Some(THE_BOUND_ON_EACH_STAGE))
             .build()
             .new_agent();
-        let mut answer = agent.get(from).call().map_err(|failed| failed.to_string())?;
-        let status = answer.status().as_u16();
-        if status != 200 {
-            return Err(format!("{from} answered {status}"));
+        // **`Server protocol and transfers` B10b: the plain address, then the
+        // API route, then the plain address again**, every try over this one
+        // agent and every byte drawn from the same admitted share (Z22).
+        let mut one_try = OneTryOverHttps { agent: &agent, draw };
+        read_by_either_route(from, the_most, &mut one_try, &mut TheRealClock::from_now())
+            .map_err(|every| crate::setting_up::the_words_when_every_try_failed(&every))
+    }
+}
+
+/// **One try at one address, on the update's agent** — `Server protocol and
+/// transfers` B10b's seam, so the
+/// update says what E11 lets it say on every route.
+struct OneTryOverHttps<'a> {
+    agent: &'a ureq::Agent,
+    draw: &'a mut dyn DrawsFromTheSharedBudget,
+}
+
+impl TriesOneAddress for OneTryOverHttps<'_> {
+    fn try_once(&mut self, address: &str, route: TheRoute, ceiling: u64) -> Result<Vec<u8>, WhyTheFetchFailed> {
+        let mut asking = self.agent.get(address);
+        // **What kind of answer the API route asks for**, and nothing about
+        // who is asking: that is E11's, above.
+        if let Some(kind) = route.what_it_asks_for() {
+            asking = asking.header("Accept", kind);
         }
-        if answer.body().content_length().is_some_and(|coming| coming > the_most) {
-            return Err(format!(
-                "{from} offered more than {}",
-                crate::typography::a_figure_with_its_unit(the_most, "bytes")
-            ));
+        let mut answer = asking
+            .call()
+            .map_err(|failed| WhyTheFetchFailed::ItCouldNotBeReached { said: failed.to_string() })?;
+        match answer.status().as_u16() {
+            200 => {}
+            404 | 410 => return Err(WhyTheFetchFailed::TheSourceHasNoSuchThing),
+            status => return Err(WhyTheFetchFailed::TheSourceAnsweredWith { status }),
+        }
+        if answer.body().content_length().is_some_and(|coming| coming > ceiling) {
+            return Err(WhyTheFetchFailed::ItIsLargerThanTheCeiling { ceiling });
         }
         let mut reading = answer.body_mut().as_reader();
-        read_drawing_from_the_budget(&mut reading, the_most, draw)
+        match read_drawing_from_the_budget_or_why(&mut reading, ceiling, self.draw) {
+            Ok(bytes) => Ok(bytes),
+            Err(WhyTheReadStopped::ItRanPast) => Err(WhyTheFetchFailed::ItIsLargerThanTheCeiling { ceiling }),
+            Err(WhyTheReadStopped::ItStopped(said)) => Err(WhyTheFetchFailed::ItCouldNotBeReached { said }),
+        }
     }
+}
+
+/// Why a budgeted read stopped.
+enum WhyTheReadStopped {
+    ItRanPast,
+    ItStopped(String),
 }
 
 /// **A body read with every byte drawn first** (Z22): a draw of nothing waits
@@ -510,6 +562,21 @@ pub(crate) fn read_drawing_from_the_budget(
     the_most: u64,
     draw: &mut dyn DrawsFromTheSharedBudget,
 ) -> Result<Vec<u8>, String> {
+    read_drawing_from_the_budget_or_why(reading, the_most, draw).map_err(|why| match why {
+        WhyTheReadStopped::ItRanPast => format!(
+            "the answer ran past {}",
+            crate::typography::a_figure_with_its_unit(the_most, "bytes")
+        ),
+        WhyTheReadStopped::ItStopped(said) => said,
+    })
+}
+
+/// The same read, saying which way it stopped.
+fn read_drawing_from_the_budget_or_why(
+    reading: &mut dyn Read,
+    the_most: u64,
+    draw: &mut dyn DrawsFromTheSharedBudget,
+) -> Result<Vec<u8>, WhyTheReadStopped> {
     let mut held = Vec::new();
     let mut chunk = vec![0u8; HOW_MUCH_AT_A_TIME];
     loop {
@@ -526,7 +593,7 @@ pub(crate) fn read_drawing_from_the_budget(
             }
             Err(failed) => {
                 draw.give_back(allowed);
-                return Err(failed.to_string());
+                return Err(WhyTheReadStopped::ItStopped(failed.to_string()));
             }
         };
         if read < allowed {
@@ -536,10 +603,7 @@ pub(crate) fn read_drawing_from_the_budget(
             return Ok(held);
         }
         if held.len() as u64 + read as u64 > the_most {
-            return Err(format!(
-                "the answer ran past {}",
-                crate::typography::a_figure_with_its_unit(the_most, "bytes")
-            ));
+            return Err(WhyTheReadStopped::ItRanPast);
         }
         held.extend_from_slice(&chunk[..read]);
     }
@@ -568,6 +632,10 @@ pub enum WhyItNeverChecks {
     /// **A build that carries no recovery key** (E10b): no update file could
     /// verify against it, so it asks for none.
     ItCarriesNoUpdateKey,
+    /// **A copy older than its record** (`Desktop app and delivery` L9,
+    /// *where it says so*, 2026-11-12): it never opened the record, and
+    /// installing needs the record open (Z6), so it asks for no update.
+    ItIsOlderThanItsRecord,
 }
 
 /// **Whether, and why, a copy never checks.** A test copy is named first, so
@@ -583,8 +651,8 @@ pub fn why_a_copy_never_checks(a_test_copy: bool, carried: &TheCarriedSet) -> Op
     }
 }
 
-/// **What About reads about the check** — Design's five readings, the held
-/// form of the third, and a copy that never checks.
+/// **What About reads about the check** — Design's five readings and a copy
+/// that never checks. *(The third had a held form until 2026-11-09, Z33.)*
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TheReading {
     /// No check has begun in this run. About reads the stored moment alone.
@@ -593,19 +661,77 @@ pub enum TheReading {
     Checking,
     /// The last check in this run completed and found nothing newer.
     UpToDate,
-    /// **The last check in this run found a newer version.** `held` is Z31's:
-    /// whether publication would wait for running jobs and transfers.
-    ANewerVersion { version: String, held: bool },
+    /// **The last check in this run found a newer version**, which waits for
+    /// the user's *Install now* (Z33).
+    ANewerVersion { version: String },
     /// The last check in this run could not be reached.
     CouldNotBeReached,
-    /// A newer update was found, but could not be installed.
-    CouldNotInstall,
+    /// **The last check in this run got no answer** (`Server protocol and
+    /// transfers` B10b).
+    NothingAnswered,
+    /// A newer update was found, but could not be installed, with **the step
+    /// it stopped at** (Design *Updating*; the four questions, Sol's S5).
+    CouldNotInstall(TheStepThatFailed, Option<TheReasonBehind>),
     /// **This copy never checks** (E10a).
     ThisCopyNeverChecks,
     /// **This build carries no recovery key, so it never checks** (E10b):
     /// About says automatic updates aren't available in this version, and
     /// never that the update service could not be reached.
     ThisBuildCannotUpdate,
+}
+
+/// **The step a failed update stopped at**, which About names (Design
+/// *Updating*; the four questions, Sol's S5, 2026-11-11). Each route says
+/// which of its reasons is which.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TheStepThatFailed {
+    /// The new version, or the running one kept for a rollback, did not
+    /// download or could not be written to the disk.
+    Download,
+    /// **What downloaded is not what the release names**: its signature,
+    /// length, digest, row or version, or the system's own check refused it.
+    Verification,
+    /// Everything from the record's writes before publication on.
+    Installation,
+}
+
+/// **The reason behind a failed step, where it is known** — About says it
+/// after the step (Design *Updating*, 2026-11-12; the four questions, batch
+/// 5's leftover). Each belongs to one step. Nothing is said where none is
+/// known.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TheReasonBehind {
+    /// The download: nothing came, in the network's own words.
+    ANetworkError,
+    /// The download: what came could not be written to the disk.
+    TheDiskRefused,
+    /// The verification: its length or digest is not the release's.
+    NotTheReleasedFile,
+    /// The verification: the system's own signature check refused it.
+    TheSystemRefusedIt,
+    /// **The download: the folder Smoozy runs from is on a read-only
+    /// volume**, so nothing can be staged beside it — a disk image, or a copy
+    /// the system runs from a read-only place. Added 2026-11-14, the Rough
+    /// what-if answers, share 5 (426, and 61's update half).
+    ItsFolderIsReadOnly,
+    /// **The download: this login may not write in the folder Smoozy runs
+    /// from.** Added with the one above.
+    NoPermissionForItsFolder,
+}
+
+/// **A failed step and its reason**, in the system's words, and the reason
+/// About says where one is known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AFailedStep {
+    pub step: TheStepThatFailed,
+    pub why: String,
+    pub reason: Option<TheReasonBehind>,
+}
+
+impl AFailedStep {
+    pub fn at(step: TheStepThatFailed) -> impl Fn(String) -> AFailedStep {
+        move |why| AFailedStep { step, why, reason: None }
+    }
 }
 
 /// **What the user's press did** (Z26, Z27).
@@ -625,21 +751,23 @@ pub enum ThePress {
 }
 
 /// **What the sequence asks of the replacement** — step 11's Mac update
-/// piece. Both run on the sequence itself, one at a time, never beside a check.
+/// piece, and from 2026-11-09 the update box on every system (Z33). Each runs
+/// on the sequence itself, one at a time, never beside a check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TheUpdatesAct {
-    /// A completed check found a newer version: fetch, stage, verify, then
-    /// publish unless publication is held (Z31).
+    /// A completed check found a newer version: on Mac and Windows fetched,
+    /// staged and verified, then the box offered where Z10b and Z29 allow it;
+    /// on Linux the box offered at once.
     ANewerVersionWasFound,
-    /// **Z32: the user's *Install now*** — the held publication, now.
-    TheHeldUpdateGoesIn,
-    /// **Linux: the update box was answered *Install*** (Z10, Z10a).
-    TheLinuxInstallWasAccepted,
-    /// **Linux: the update box was dismissed** (Z10b): the mark is written.
-    TheLinuxOfferWasDeclined,
-    /// **Linux: About's *Install…***, the box for the version already found,
+    /// **The update box was answered *Install now*** (Z33): publication, and
+    /// on Linux the package transaction (Z10, Z10a).
+    TheInstallWasAccepted,
+    /// **The update box was dismissed** (Z10b, widened by Z33): the mark is
+    /// written.
+    TheOfferWasDeclined,
+    /// **About's *Install now…***: the box for the version already found,
     /// with no check of its own (Z29's ground, Z26's three triggers).
-    TheLinuxBoxWasAsked,
+    TheBoxWasAsked,
 }
 
 /// The sequence's own state, behind one lock.
@@ -657,14 +785,12 @@ struct TheChecksState {
     the_run_ended: bool,
     /// **Z27's second bullet**: the replacement is running on the sequence.
     an_update_is_under_way: bool,
-    /// **Z32's press**, waiting for the sequence to take it.
-    the_user_installs_anyway: bool,
-    /// **The Linux box on screen**, by the version it offers (Z10b).
-    linux_offer: Option<String>,
-    /// Its answer, waiting for the sequence: `true` is *Install*.
-    linux_answer: Option<bool>,
-    /// About's *Install…*, waiting for the sequence.
-    the_user_opens_the_linux_box: bool,
+    /// **The update box on screen**, by the version it offers (Z10b, Z33).
+    offer: Option<String>,
+    /// Its answer, waiting for the sequence: `true` is *Install now*.
+    answer: Option<bool>,
+    /// About's *Install now…*, waiting for the sequence.
+    the_user_opens_the_box: bool,
     /// A press joined the check under way (Z27), so its completion is the
     /// user's answer and Z29 reads no mark.
     the_user_joined: bool,
@@ -675,9 +801,8 @@ struct TheChecksState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WhatComesNext {
     ACheck { automatic: bool },
-    TheHeldUpdateGoesIn,
-    TheLinuxAnswer(bool),
-    TheLinuxBoxIsAsked,
+    TheAnswer(bool),
+    TheBoxIsAsked,
     NothingUntil(Instant),
     TheRunHasEnded,
 }
@@ -692,14 +817,11 @@ fn what_comes_next(state: &TheChecksState, now: Instant, interval: Duration) -> 
     if !state.the_start_check_was_taken {
         return WhatComesNext::ACheck { automatic: true };
     }
-    if let Some(install) = state.linux_answer {
-        return WhatComesNext::TheLinuxAnswer(install);
+    if let Some(install) = state.answer {
+        return WhatComesNext::TheAnswer(install);
     }
-    if state.the_user_opens_the_linux_box {
-        return WhatComesNext::TheLinuxBoxIsAsked;
-    }
-    if state.the_user_installs_anyway {
-        return WhatComesNext::TheHeldUpdateGoesIn;
+    if state.the_user_opens_the_box {
+        return WhatComesNext::TheBoxIsAsked;
     }
     if state.the_user_asked {
         return WhatComesNext::ACheck { automatic: false };
@@ -717,16 +839,14 @@ fn what_comes_next(state: &TheChecksState, now: Instant, interval: Duration) -> 
 }
 
 /// **The reading a check's ending leaves.**
-fn the_reading_after(ended: &TheCheckEnded, held: &dyn Fn() -> bool) -> TheReading {
+fn the_reading_after(ended: &TheCheckEnded) -> TheReading {
     match ended {
         TheCheckEnded::Completed(WhatTheCheckFound::NothingNewer) => TheReading::UpToDate,
         TheCheckEnded::Completed(WhatTheCheckFound::ANewerVersion { version }) => {
-            TheReading::ANewerVersion {
-                version: version.clone(),
-                held: held(),
-            }
+            TheReading::ANewerVersion { version: version.clone() }
         }
         TheCheckEnded::CouldNotBeReached => TheReading::CouldNotBeReached,
+        TheCheckEnded::NothingAnswered => TheReading::NothingAnswered,
     }
 }
 
@@ -766,7 +886,7 @@ impl TheUpdateCheck {
                 the_last_automatic_ended: None,
                 the_reading: match why {
                     Some(WhyItNeverChecks::ATestCopy) => TheReading::ThisCopyNeverChecks,
-                    Some(WhyItNeverChecks::ItCarriesNoUpdateKey) => {
+                    Some(WhyItNeverChecks::ItCarriesNoUpdateKey | WhyItNeverChecks::ItIsOlderThanItsRecord) => {
                         TheReading::ThisBuildCannotUpdate
                     }
                     None => TheReading::NoneYet,
@@ -774,10 +894,9 @@ impl TheUpdateCheck {
                 the_readings_number: 0,
                 the_run_ended: false,
                 an_update_is_under_way: false,
-                the_user_installs_anyway: false,
-                linux_offer: None,
-                linux_answer: None,
-                the_user_opens_the_linux_box: false,
+                offer: None,
+                answer: None,
+                the_user_opens_the_box: false,
                 the_user_joined: false,
                 the_completed_check_was_user_asked: false,
             }),
@@ -794,6 +913,15 @@ impl TheUpdateCheck {
             why_a_copy_never_checks(this_copy_never_checks(), &TheCarriedSet::this_build()),
             THE_INTERVAL,
         )
+    }
+
+    /// **This copy's, in front of its record** — `Desktop app and delivery`
+    /// L9, *where it says so* (2026-11-12).
+    pub fn for_this_copy_in_front_of(the_record_is_newer_than_this_copy: bool) -> Arc<TheUpdateCheck> {
+        if the_record_is_newer_than_this_copy {
+            return TheUpdateCheck::never_checking_where(Some(WhyItNeverChecks::ItIsOlderThanItsRecord), THE_INTERVAL);
+        }
+        TheUpdateCheck::for_this_copy()
     }
 
     fn state(&self) -> MutexGuard<'_, TheChecksState> {
@@ -841,77 +969,69 @@ impl TheUpdateCheck {
         self.woken.notify_all();
     }
 
-    /// **Z32: the user pressed *Install now*.** It reaches the sequence, which
-    /// hands it to the replacement; **only the held form of the newer-version
-    /// reading carries the button**, so a press while About reads anything
-    /// else does nothing. Whether it was taken.
-    pub fn the_user_installs_anyway(&self) -> bool {
-        let mut state = self.state();
-        let held = matches!(state.the_reading, TheReading::ANewerVersion { held: true, .. });
-        if !held || state.an_update_is_under_way || self.this_copy_never_checks {
-            return false;
-        }
-        state.the_user_installs_anyway = true;
-        self.woken.notify_all();
-        true
-    }
-
-    /// The Linux route also honours a user's press that joined an automatic
-    /// check, so that completion ignores the declined mark on both paths.
+    /// A press that joined an automatic check is honoured too, so that
+    /// completion ignores the declined mark on both paths (Z29).
     pub fn the_completed_check_was_user_asked(&self) -> bool {
         self.state().the_completed_check_was_user_asked
     }
 
-    /// One box at a time. It stays on its offered version until answered.
-    pub fn offer_linux_version(&self, version: &str) -> bool {
+    /// **One box at a time** (Z33). It stays on its offered version until
+    /// answered.
+    pub fn offer_version(&self, version: &str) -> bool {
         let mut state = self.state();
-        if state.linux_offer.is_some() || self.this_copy_never_checks {
+        if state.offer.is_some() || self.this_copy_never_checks {
             return false;
         }
-        state.linux_offer = Some(version.into());
+        state.offer = Some(version.into());
         true
     }
 
-    /// **About's *Install…* on Linux**: taken only from the unheld form of
-    /// the newer-version reading, with no box already open and nothing under
-    /// way. Whether it was taken.
-    pub fn the_user_opens_the_linux_box(&self) -> bool {
+    /// **About's *Install now…***: taken only from the newer-version reading,
+    /// with no box already open and nothing under way. Whether it was taken.
+    pub fn the_user_opens_the_box(&self) -> bool {
         let mut state = self.state();
-        let found = matches!(state.the_reading, TheReading::ANewerVersion { held: false, .. });
+        let found = matches!(state.the_reading, TheReading::ANewerVersion { .. });
         if !found
             || state.an_update_is_under_way
-            || state.linux_offer.is_some()
+            || state.offer.is_some()
             || self.this_copy_never_checks
         {
             return false;
         }
-        state.the_user_opens_the_linux_box = true;
+        state.the_user_opens_the_box = true;
         self.woken.notify_all();
         true
     }
 
-    pub fn has_linux_offer(&self) -> bool {
-        self.state().linux_offer.is_some()
+    /// Whether the box is on screen.
+    pub fn has_offer(&self) -> bool {
+        self.state().offer.is_some()
+    }
+
+    /// **The version the box on screen offers** — what *What's new* opens the
+    /// release page of (Z33, K25), read here and never from the page.
+    pub fn the_offered_version(&self) -> Option<String> {
+        self.state().offer.clone()
     }
 
     /// A stale page cannot install or dismiss a different offered version.
-    pub fn answer_linux_offer(&self, version: &str, install: bool) -> bool {
+    pub fn answer_offer(&self, version: &str, install: bool) -> bool {
         let mut state = self.state();
-        if state.linux_offer.as_deref() != Some(version) || state.linux_answer.is_some() {
+        if state.offer.as_deref() != Some(version) || state.answer.is_some() {
             return false;
         }
-        state.linux_answer = Some(install);
+        state.answer = Some(install);
         self.woken.notify_all();
         true
     }
 
-    /// An orderly quit dismisses an open Linux box too. A process killed
-    /// without a dismissal writes no user's choice.
-    pub fn dismiss_linux_on_quit(&self, record: &rusqlite::Connection) -> Result<(), String> {
+    /// An orderly quit dismisses an open box too (Z10b, on every system from
+    /// Z33). A process killed without a dismissal writes no user's choice.
+    pub fn dismiss_on_quit(&self, record: &rusqlite::Connection) -> Result<(), String> {
         let mut state = self.state();
-        if let Some(version) = state.linux_offer.as_deref() {
-            super::the_linux_package::dismissed(record, version)?;
-            state.linux_offer = None;
+        if let Some(version) = state.offer.as_deref() {
+            super::the_box::dismissed(record, version)?;
+            state.offer = None;
         }
         Ok(())
     }
@@ -922,25 +1042,23 @@ impl TheUpdateCheck {
     /// `one_check` is the act ([`one_check`] over the real wire, in the
     /// running application). `told` hears each reading as it changes — the
     /// start of a check with no ending, and its end with one — and is where the
-    /// moment is written and About is told. `held` is Z31's reading, asked when
-    /// a newer version is found.
+    /// moment is written and About is told.
     pub fn the_sequence_runs(
         &self,
         one_check: &mut dyn FnMut() -> TheCheckEnded,
         told: &mut dyn FnMut(&TheReading, u64, Option<&TheCheckEnded>),
-        held: &dyn Fn() -> bool,
     ) {
-        self.the_sequence_runs_on(one_check, told, held, &mut |_| None)
+        self.the_sequence_runs_on(one_check, told, &mut |_| None)
     }
 
     /// **The same sequence, with the replacement on it** — `goes_on` is asked
-    /// after a check that found a newer version and at Z32's press, and hands
-    /// back the reading About is to show where it changes one.
+    /// after a check that found a newer version and at each answer to the
+    /// update box, and hands back the reading About is to show where it
+    /// changes one.
     pub fn the_sequence_runs_on(
         &self,
         one_check: &mut dyn FnMut() -> TheCheckEnded,
         told: &mut dyn FnMut(&TheReading, u64, Option<&TheCheckEnded>),
-        held: &dyn Fn() -> bool,
         goes_on: &mut dyn FnMut(TheUpdatesAct) -> Option<TheReading>,
     ) {
         if self.this_copy_never_checks {
@@ -953,33 +1071,25 @@ impl TheUpdateCheck {
                     let now = Instant::now();
                     match what_comes_next(&state, now, self.the_interval) {
                         WhatComesNext::TheRunHasEnded => return,
-                        WhatComesNext::TheLinuxAnswer(install) => {
-                            state.linux_answer = None;
-                            state.linux_offer = None;
+                        WhatComesNext::TheAnswer(install) => {
+                            state.answer = None;
+                            state.offer = None;
                             state.an_update_is_under_way = true;
                             drop(state);
                             let act = if install {
-                                TheUpdatesAct::TheLinuxInstallWasAccepted
+                                TheUpdatesAct::TheInstallWasAccepted
                             } else {
-                                TheUpdatesAct::TheLinuxOfferWasDeclined
+                                TheUpdatesAct::TheOfferWasDeclined
                             };
                             let reading = goes_on(act);
                             self.the_update_has_gone_on(reading, told);
                             state = self.state();
                         }
-                        WhatComesNext::TheLinuxBoxIsAsked => {
-                            state.the_user_opens_the_linux_box = false;
+                        WhatComesNext::TheBoxIsAsked => {
+                            state.the_user_opens_the_box = false;
                             state.an_update_is_under_way = true;
                             drop(state);
-                            let reading = goes_on(TheUpdatesAct::TheLinuxBoxWasAsked);
-                            self.the_update_has_gone_on(reading, told);
-                            state = self.state();
-                        }
-                        WhatComesNext::TheHeldUpdateGoesIn => {
-                            state.the_user_installs_anyway = false;
-                            state.an_update_is_under_way = true;
-                            drop(state);
-                            let reading = goes_on(TheUpdatesAct::TheHeldUpdateGoesIn);
+                            let reading = goes_on(TheUpdatesAct::TheBoxWasAsked);
                             self.the_update_has_gone_on(reading, told);
                             state = self.state();
                         }
@@ -1005,7 +1115,7 @@ impl TheUpdateCheck {
             };
             told(&TheReading::Checking, number, None);
             let ended = one_check();
-            let reading = the_reading_after(&ended, held);
+            let reading = the_reading_after(&ended);
             let number = {
                 let mut state = self.state();
                 let now = Instant::now();
@@ -1106,7 +1216,6 @@ pub fn the_sequence_starts<R: tauri::Runtime>(handle: tauri::AppHandle<R>, check
         .name("smoozy update check".into())
         .spawn(move || {
             let checking = handle.clone();
-            let holding = handle.clone();
             let going_on = handle.clone();
             let telling = handle;
             // **What the last check verified, and the Mac route**, kept on this
@@ -1128,33 +1237,38 @@ pub fn the_sequence_starts<R: tauri::Runtime>(handle: tauri::AppHandle<R>, check
                         .map(|_| SystemTime::now());
                     about_is_told_here(&telling, reading, number, completed_at);
                 },
-                &|| super::the_mac::publication_is_held_here(&holding),
+                // **Z33: every act on every system goes to this system's
+                // route**, and only the box's *Install now* publishes.
                 &mut |act| match act {
                     TheUpdatesAct::ANewerVersionWasFound => {
+                        let found = verified.borrow();
                         if cfg!(target_os = "linux") {
-                            linux.found(&going_on, verified.borrow().as_ref(), &check, false, false)
+                            linux.found(&going_on, found.as_ref(), &check, false)
                         } else if cfg!(target_os = "windows") {
-                            windows.a_newer_version_was_found(&going_on, verified.borrow().as_ref())
+                            windows.found(&going_on, found.as_ref(), &check, false)
                         } else {
-                            route.a_newer_version_was_found(&going_on, verified.borrow().as_ref())
+                            route.found(&going_on, found.as_ref(), &check, false)
                         }
                     }
-                    TheUpdatesAct::TheHeldUpdateGoesIn => {
+                    TheUpdatesAct::TheBoxWasAsked => {
                         if cfg!(target_os = "linux") {
-                            linux.held(&going_on, &check)
+                            linux.asked(&going_on, &check)
                         } else if cfg!(target_os = "windows") {
-                            windows.the_held_update_goes_in(&going_on)
+                            windows.asked(&going_on, &check)
                         } else {
-                            route.the_held_update_goes_in(&going_on)
+                            route.asked(&going_on, &check)
                         }
                     }
-                    TheUpdatesAct::TheLinuxInstallWasAccepted => {
-                        linux.answered(&going_on, &check, true)
+                    TheUpdatesAct::TheInstallWasAccepted | TheUpdatesAct::TheOfferWasDeclined => {
+                        let install = act == TheUpdatesAct::TheInstallWasAccepted;
+                        if cfg!(target_os = "linux") {
+                            linux.answered(&going_on, &check, install)
+                        } else if cfg!(target_os = "windows") {
+                            windows.answered(&going_on, &check, install)
+                        } else {
+                            route.answered(&going_on, &check, install)
+                        }
                     }
-                    TheUpdatesAct::TheLinuxOfferWasDeclined => {
-                        linux.answered(&going_on, &check, false)
-                    }
-                    TheUpdatesAct::TheLinuxBoxWasAsked => linux.asked(&going_on, &check),
                 },
             );
         });
@@ -1271,7 +1385,7 @@ mod tests {
             says: &WhatTheRequestSays,
             the_most: u64,
             draw: &mut dyn DrawsFromTheSharedBudget,
-        ) -> Result<Vec<u8>, String> {
+        ) -> Result<Vec<u8>, ADownloadThatFailed> {
             self.asked
                 .asked
                 .lock()
@@ -1291,7 +1405,7 @@ mod tests {
                 }
             }
             let Some(bytes) = self.serves.clone() else {
-                return Err("nothing answered".to_string());
+                return Err("nothing answered".into());
             };
             assert!(bytes.len() as u64 <= the_most);
             let mut reading: &[u8] = &bytes;
@@ -1403,9 +1517,15 @@ mod tests {
         assert!(the_wire.contains(".user_agent(says.as_who_is_asking())"));
         assert!(the_wire.contains(".accept(ureq::config::AutoHeaderValue::None)"));
         assert!(the_wire.contains(".accept_encoding(ureq::config::AutoHeaderValue::None)"));
-        assert!(!the_wire.contains(".header("), "the wire sets a header of its own");
+        // **`Server protocol and transfers` B10b's one header**: the kind of
+        // answer the API route asks for, which says nothing about who is
+        // asking. No other is set.
+        assert_eq!(the_wire.matches(".header(").count(), 1, "the wire sets a header of its own");
+        assert!(the_wire.contains(r#".header("Accept", kind)"#));
+        assert!(the_wire.contains("route.what_it_asks_for()"));
         assert!(!the_wire.contains(".query("), "the wire adds to the address");
-        assert!(the_wire.contains("agent.get(from)"));
+        assert!(the_wire.contains("self.agent.get(address)"));
+        assert!(the_wire.contains("read_by_either_route(from,"));
     }
 
     /// **E10a: the address is the releases repository's fixed latest one, with
@@ -1557,6 +1677,72 @@ mod tests {
         );
     }
 
+    /// **`Server protocol and transfers` B10b: a check whose every try got no
+    /// answer ends as that, and About says the update service did not
+    /// respond** — never *could not be reached*, which keeps its meaning for a
+    /// file that came back and did not verify (E10b).
+    #[test]
+    fn bad_batch_1_a_missing_release_does_not_allow_a_rollback_or_another_source() {
+        let transfers = TheRunsTransfers::for_this_run();
+        let (mut carried, bytes) = an_update_file("0.1.7", 9);
+        let (file, _) = AFileAtTheSeam::serving(Some(bytes.clone()));
+        // A reachable older release is a successful check when it meets trust.
+        assert_eq!(one_check(&file, &transfers, &carried, None, Some(THE_MAC_ROW), &the_mac_asks()),
+            TheCheckEnded::Completed(WhatTheCheckFound::NothingNewer));
+        // A deletion exposing a release below the carried floor is refused.
+        carried.greatest_release_sequence_published = 10;
+        let (file, _) = AFileAtTheSeam::serving(Some(bytes));
+        assert_eq!(one_check(&file, &transfers, &carried, None, Some(THE_MAC_ROW), &the_mac_asks()),
+            TheCheckEnded::CouldNotBeReached);
+        let (missing, asked) = AFileAtTheSeam::serving(None);
+        assert_eq!(one_check(&missing, &transfers, &carried, None, Some(THE_MAC_ROW), &the_mac_asks()),
+            TheCheckEnded::CouldNotBeReached);
+        assert_eq!(asked.asked.lock().unwrap().as_slice(), &[(WHERE_THE_UPDATE_FILE_IS_READ_FROM.to_string(), the_mac_asks())]);
+    }
+
+    #[test]
+    fn a_check_whose_every_try_got_no_answer_says_so() {
+        struct NothingAnswersAtTheSeam;
+        impl ReadsTheUpdateFile for NothingAnswersAtTheSeam {
+            fn read(
+                &self,
+                from: &str,
+                _says: &WhatTheRequestSays,
+                _the_most: u64,
+                _draw: &mut dyn DrawsFromTheSharedBudget,
+            ) -> Result<Vec<u8>, ADownloadThatFailed> {
+                Err(ADownloadThatFailed {
+                    said: format!("{from} returned HTTP 504. Tried 5 times."),
+                    nothing_answered: true,
+                    no_release_is_built_for_it: false,
+                })
+            }
+        }
+        let transfers = TheRunsTransfers::for_this_run();
+        let ended = one_check(
+            &NothingAnswersAtTheSeam,
+            &transfers,
+            &TheCarriedSet::this_build(),
+            None,
+            Some(THE_MAC_ROW),
+            &the_mac_asks(),
+        );
+        assert_eq!(ended, TheCheckEnded::NothingAnswered);
+        assert!(!ended.completed(), "a check nothing answered wrote a moment");
+        assert_eq!(the_reading_after(&ended), TheReading::NothingAnswered);
+    }
+
+    /// **The real wire tries one address the way `Server protocol and
+    /// transfers` B10b asks**: over the one
+    /// agent E11 configures, asking only for a kind of answer on the API route
+    /// and never adding anything about who is asking.
+    #[test]
+    fn the_wire_asks_for_a_kind_of_answer_and_nothing_about_who_is_asking() {
+        assert_eq!(TheRoute::ThePlainAddress.what_it_asks_for(), None);
+        assert_eq!(TheRoute::TheListOfFiles.what_it_asks_for(), Some("application/vnd.github+json"));
+        assert_eq!(TheRoute::TheFileThroughTheApi.what_it_asks_for(), Some("application/octet-stream"));
+    }
+
     /// **E4b's rows, read the way each Linux package reads its own.**
     #[test]
     fn the_row_is_read_as_the_packages_read_it() {
@@ -1606,7 +1792,6 @@ mod tests {
                         &mut |reading, number, ended| {
                             told.lock().unwrap().push((reading.clone(), number, ended.is_some()));
                         },
-                        &|| false,
                     );
                 })
             };
@@ -1736,13 +1921,15 @@ mod tests {
         );
     }
 
-    /// **Z27's second bullet and Z32, on the sequence.** A check finds a
-    /// newer version and the replacement runs on the sequence: a press while
-    /// it runs starts no check at all. The replacement leaves the held form;
-    /// *Install now* is taken only from it, once, and reaches the replacement
-    /// as the held update going in.
+    /// **Z27's second bullet and Z33, on the sequence** (the twenty-eighth
+    /// notes, note 4). A check finds a newer version and the route runs on the
+    /// sequence: a press while it runs starts no check at all. **Nothing
+    /// publishes until the box is answered**: About's *Install now…* opens the
+    /// box only from the newer-version reading and only with no box open; an
+    /// answer for another version is refused; *Install now* reaches the route
+    /// as the install accepted, once, and *Skip this version* as the offer declined.
     #[test]
-    fn the_update_runs_on_the_sequence_and_install_now_goes_past_the_hold_once() {
+    fn twenty_eighth_4_only_the_boxs_answer_reaches_the_route() {
         let check = TheUpdateCheck::new(false, Duration::from_secs(3600));
         let (asked, acts) = mpsc::channel::<TheUpdatesAct>();
         let (answer, answers) = mpsc::channel::<Option<TheReading>>();
@@ -1762,7 +1949,6 @@ mod tests {
                         }
                     },
                     &mut |reading, _, _| told.lock().unwrap().push(reading.clone()),
-                    &|| true,
                     &mut |act| {
                         let _ = asked.send(act);
                         answers.recv_timeout(Duration::from_secs(20)).ok().flatten()
@@ -1770,42 +1956,57 @@ mod tests {
                 );
             })
         };
+        let found = TheReading::ANewerVersion { version: "0.2.0".into() };
         assert_eq!(
             acts.recv_timeout(Duration::from_secs(5)),
             Ok(TheUpdatesAct::ANewerVersionWasFound),
-            "the replacement was not asked after a newer version was found"
+            "the route was not asked after a newer version was found"
         );
         assert_eq!(check.the_user_asks(), ThePress::TheUpdateIsUnderWay, "a press started a check");
-        assert!(!check.the_user_installs_anyway(), "Install now was taken while the update ran");
-        let held = TheReading::ANewerVersion { version: "0.2.0".into(), held: true };
-        answer.send(Some(held.clone())).unwrap();
+        assert!(!check.the_user_opens_the_box(), "the box was asked for while the route ran");
+        // The route offered the box and left the reading as it was.
+        assert!(check.offer_version("0.2.0"));
+        assert!(!check.offer_version("0.2.0"), "a second box beside the first");
+        answer.send(None).unwrap();
+        assert!(!check.answer_offer("0.1.9", true), "an answer for another version was taken");
+        assert!(!check.the_user_opens_the_box(), "About opened a second box over the first");
+        assert_eq!(check.the_offered_version().as_deref(), Some("0.2.0"));
+        // **Later**: declined, and the box is gone.
+        assert!(check.answer_offer("0.2.0", false));
+        assert_eq!(acts.recv_timeout(Duration::from_secs(5)), Ok(TheUpdatesAct::TheOfferWasDeclined));
+        answer.send(None).unwrap();
         let deadline = Instant::now() + Duration::from_secs(5);
-        while told.lock().unwrap().len() < 3 {
-            assert!(Instant::now() < deadline, "the held form was not left");
+        while check.has_offer() {
+            assert!(Instant::now() < deadline, "the declined box stayed");
             std::thread::sleep(Duration::from_millis(5));
         }
-        assert!(check.the_user_installs_anyway(), "Install now was refused on the held form");
-        assert_eq!(acts.recv_timeout(Duration::from_secs(5)), Ok(TheUpdatesAct::TheHeldUpdateGoesIn));
-        answer.send(Some(TheReading::CouldNotInstall)).unwrap();
+        // **About's *Install now…*** opens it again, and *Install now* reaches
+        // the route as the install accepted.
         let deadline = Instant::now() + Duration::from_secs(5);
-        while told.lock().unwrap().len() < 4 {
+        while !check.the_user_opens_the_box() {
+            assert!(Instant::now() < deadline, "About could not open the box from the found reading");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(acts.recv_timeout(Duration::from_secs(5)), Ok(TheUpdatesAct::TheBoxWasAsked));
+        assert!(check.offer_version("0.2.0"));
+        answer.send(None).unwrap();
+        assert!(check.answer_offer("0.2.0", true));
+        assert!(!check.answer_offer("0.2.0", true), "one box took two answers");
+        assert_eq!(acts.recv_timeout(Duration::from_secs(5)), Ok(TheUpdatesAct::TheInstallWasAccepted));
+        answer.send(Some(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None))).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while told.lock().unwrap().len() < 3 {
             assert!(Instant::now() < deadline, "the update that did not happen was not told");
             std::thread::sleep(Duration::from_millis(5));
         }
-        assert!(!check.the_user_installs_anyway(), "Install now was taken off the held form");
+        assert!(!check.the_user_opens_the_box(), "the box was offered off the found reading");
         assert!(
             acts.recv_timeout(Duration::from_millis(300)).is_err(),
-            "the replacement was asked again with nothing asking"
+            "the route was asked again with nothing asking"
         );
-        let told = told.lock().unwrap().clone();
         assert_eq!(
-            told,
-            vec![
-                TheReading::Checking,
-                TheReading::ANewerVersion { version: "0.2.0".into(), held: true },
-                held,
-                TheReading::CouldNotInstall,
-            ]
+            told.lock().unwrap().clone(),
+            vec![TheReading::Checking, found, TheReading::CouldNotInstall(TheStepThatFailed::Installation, None)]
         );
         check.the_run_ends();
         running.join().unwrap();
@@ -1858,12 +2059,11 @@ mod tests {
         assert_eq!(check.the_reading().0, TheReading::ThisBuildCannotUpdate);
         assert_eq!(check.the_user_asks(), ThePress::ThisCopyNeverChecks);
         assert_eq!(check.the_reading().0, TheReading::ThisBuildCannotUpdate);
-        assert!(!check.the_user_installs_anyway());
+        assert!(!check.the_user_opens_the_box());
         let mut told = 0;
         check.the_sequence_runs(
             &mut || panic!("a build with no update key made a check"),
             &mut |_, _, _| told += 1,
-            &|| false,
         );
         assert_eq!(told, 0);
         assert_eq!(check.the_reading().0, TheReading::ThisBuildCannotUpdate);
@@ -1897,7 +2097,11 @@ mod tests {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs"),
         )
         .unwrap();
-        assert!(main.contains("checking::TheUpdateCheck::for_this_copy()"));
+        // **This copy's check, in front of its record** (L9, *where it says
+        // so*, 2026-11-12): the same check, but one that never checks where
+        // the record is newer than this copy.
+        assert!(main.contains("checking::TheUpdateCheck::for_this_copy_in_front_of(the_record_is_newer_than_this_copy)"));
+        assert!(working.contains("        TheUpdateCheck::for_this_copy()\n    }"), "an ordinary copy's check is this copy's own");
         assert!(main.contains("checking::the_sequence_starts("));
     }
 
@@ -1946,7 +2150,7 @@ mod tests {
         the_moment_is_kept_and_about_is_told(
             Some(&record),
             &queue,
-            &TheReading::ANewerVersion { version: "0.1.9".into(), held: false },
+            &TheReading::ANewerVersion { version: "0.1.9".into() },
             6,
             Some(later),
         );

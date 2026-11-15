@@ -131,6 +131,13 @@ pub type ItsOwnFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub trait AStream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send> AStream for T {}
 
+/// **How many bytes of a captured stream one reading takes** — four of the
+/// file session's own reads
+/// (`smoozy_dependencies::acting::checking::ONE_READ_OF_A_STREAM_ASKS_FOR`).
+/// A Build figure: a smaller piece costs an open and a close more often, a
+/// larger one holds the point longer. Added 2026-11-12.
+pub const ONE_READING_OF_A_STREAM_TAKES: u64 = 4 * 64 * 1024;
+
 /// How many times a refusal that came straight after a release is asked again.
 ///
 /// **Not a figure of any plan's.** It bounds the gap between this point letting
@@ -253,11 +260,14 @@ impl AHeldConnection for ssh::Connection {
         command: CommandString,
         frame: Option<Vec<u8>>,
     ) -> Result<CommandResult, NoSession> {
+        // **Erased when let go** (Sol's finding 7): the frame may carry a
+        // password on the elevating command's input.
+        let frame = frame.map(AFrame::from);
         let ran = match frame {
             None => self.run_one_command(command).await,
             Some(frame) => {
                 self.run_one_command_carrying_a_framed_request_on_its_standard_input(
-                    command, &frame,
+                    command, frame.bytes(),
                 )
                 .await
             }
@@ -273,7 +283,8 @@ impl AHeldConnection for ssh::Connection {
         command: CommandString,
         frame: Option<Vec<u8>>,
     ) -> Result<ACommandRunning, NoSession> {
-        match self.one_command_begun(command, frame.as_deref()).await {
+        let frame = frame.map(AFrame::from);
+        match self.one_command_begun(command, frame.as_ref().map(AFrame::bytes)).await {
             Ok(under_way) => Ok(ACommandRunning::to_be_run(async move {
                 Ok(under_way.to_its_end().await)
             })),
@@ -289,7 +300,8 @@ impl AHeldConnection for ssh::Connection {
         frame: Option<Vec<u8>>,
         up: WhereThePiecesGo,
     ) -> Result<ACommandRunning, NoSession> {
-        match self.one_command_begun(command, frame.as_deref()).await {
+        let frame = frame.map(AFrame::from);
+        match self.one_command_begun(command, frame.as_ref().map(AFrame::bytes)).await {
             Ok(under_way) => Ok(ACommandRunning::to_be_run(async move {
                 Ok(under_way
                     .to_its_end_told_as_it_comes(move |stream, bytes| {
@@ -490,9 +502,54 @@ enum AnAsk<C: AHeldConnection> {
     TheWholeConnection(AWholeConnectionAct<C>),
 }
 
+/// **A command's standard-input bytes, erased when let go** — Sol's finding
+/// 7, 2026-11-12. The frame can carry the elevating command's password
+/// (`Server Setup` E3, `File Browser` P6b), so no copy the desktop holds is
+/// freed with the bytes still in it. Copies inside the SSH library are its
+/// own and are not claimed.
+pub struct AFrame(Vec<u8>);
+
+impl AFrame {
+    /// The bytes, for the one write that sends them.
+    pub fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// **A copy for one try**, which whoever takes it erases in turn.
+    pub fn a_copy(&self) -> Vec<u8> {
+        self.0.clone()
+    }
+}
+
+impl From<Vec<u8>> for AFrame {
+    fn from(bytes: Vec<u8>) -> Self {
+        AFrame(bytes)
+    }
+}
+
+impl Drop for AFrame {
+    fn drop(&mut self) {
+        the_bytes_are_erased(&mut self.0);
+    }
+}
+
+/// **Every byte set to nought, then the length to nought**, written so the
+/// compiler may not drop the writes as dead — as `Security and licence`'s own
+/// plaintext erases.
+pub fn the_bytes_are_erased(bytes: &mut Vec<u8>) {
+    for byte in bytes.iter_mut() {
+        // SAFETY: `byte` is a valid, aligned, exclusive reference.
+        unsafe { std::ptr::write_volatile(byte, 0) };
+    }
+    std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
+    bytes.clear();
+}
+
 struct ACommand {
     command: CommandString,
-    frame: Option<Vec<u8>>,
+    /// **Erased when the ask is let go** (Sol's finding 7); each try hands
+    /// the connection a copy, which the real connection erases in turn.
+    frame: Option<AFrame>,
     answer: oneshot::Sender<Result<CommandResult, NotLent>>,
     /// **Where what it prints goes as it prints**, where anyone asked —
     /// `Server Setup` Y7a. Added 2026-10-18.
@@ -741,6 +798,17 @@ pub struct ThisServersSessions<C: AHeldConnection = ssh::Connection> {
     /// the asks after it, so each of those is one command. Added 2026-10-26,
     /// the worldwide pass's setup faults, fault 1. See [`TheLinkAsItStands`].
     the_link_stands: Arc<Mutex<TheLinkAsItStands>>,
+    /// **The login's home folder as the server answered it, and on which
+    /// lending** — read once per connection by [`Self::the_logins_home`], and
+    /// `None` inside where the server gave no answer. `Design/File Browser §
+    /// The list`: the house on the home folder, added 2026-11-12.
+    the_logins_home: Arc<Mutex<Option<(u64, Option<Vec<u8>>)>>>,
+    /// **One act retried with admin access at a time on this server** —
+    /// `File Browser` P6b as changed after Sol's look (finding 1): the paths
+    /// file's token is one per login, so an act holds its turn from writing
+    /// the file until the file is taken away. See
+    /// [`Self::an_elevated_act_takes_its_turn`].
+    one_elevated_act: Arc<tokio::sync::Mutex<()>>,
 }
 
 /// **The entry-point link this point planted, and on which lending.**
@@ -790,6 +858,8 @@ impl<C: AHeldConnection> Clone for ThisServersSessions<C> {
             live: Arc::clone(&self.live),
             one_supervisor_ask: Arc::clone(&self.one_supervisor_ask),
             the_link_stands: Arc::clone(&self.the_link_stands),
+            the_logins_home: Arc::clone(&self.the_logins_home),
+            one_elevated_act: Arc::clone(&self.one_elevated_act),
         }
     }
 }
@@ -807,7 +877,68 @@ impl<C: AHeldConnection> ThisServersSessions<C> {
             live: Arc::new(Mutex::new(None)),
             one_supervisor_ask: Arc::new(tokio::sync::Mutex::new(())),
             the_link_stands: Arc::new(Mutex::new(TheLinkAsItStands::default())),
+            the_logins_home: Arc::new(Mutex::new(None)),
+            one_elevated_act: Arc::new(tokio::sync::Mutex::new(())),
         }
+    }
+
+    /// **This server's turn for one act retried with admin access**, held
+    /// until the guard is dropped — `File Browser` P6b as changed after Sol's
+    /// look (finding 1). A second act waits here for the first to end.
+    pub async fn an_elevated_act_takes_its_turn(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        Arc::clone(&self.one_elevated_act).lock_owned().await
+    }
+
+    /// **The lending that is live, counted from the first.**
+    fn the_lending(&self) -> Option<u64> {
+        self.the_link_stands.lock().map(|stands| stands.lending).ok()
+    }
+
+    /// **The login's home folder, as already read on the live connection** —
+    /// nothing where it has not been read on this connection, or the server
+    /// gave no answer. Reads nothing. `Design/File Browser § The list`.
+    pub fn the_logins_home_as_read(&self) -> Option<Vec<u8>> {
+        let lending = self.the_lending()?;
+        let held = self.the_logins_home.lock().ok()?;
+        match held.as_ref() {
+            Some((on, home)) if *on == lending => home.clone(),
+            _ => None,
+        }
+    }
+
+    /// **The login's home folder, as the server reports it** — the
+    /// file-transfer server's own resolution of `.`, the folder every session
+    /// of this login starts in, which is the reading `Server Setup` R6 takes
+    /// for the login's home area. **Never composed from the login's name.**
+    /// Read once per connection and kept for it, so a folder opened after the
+    /// first costs no extra round trip; nothing where the server gives no
+    /// answer, and that is kept for the connection too. `Design/File Browser §
+    /// The list`: the house on the home folder (the Creator, 2026-11-11).
+    pub async fn the_logins_home(&self) -> Option<Vec<u8>> {
+        let lending = self.the_lending()?;
+        if let Ok(held) = self.the_logins_home.lock() {
+            if let Some((on, home)) = held.as_ref() {
+                if *on == lending {
+                    return home.clone();
+                }
+            }
+        }
+        let read = self
+            .a_reading(true, move |subsystem| Box::pin(async move { subsystem.resolve(b".").await }))
+            .await;
+        let home = match read {
+            Ok(Ok(bytes)) if bytes.first() == Some(&b'/') => Some(bytes),
+            // **The server's own answer, and it gave no folder**: kept, so
+            // the question is not asked again on this connection.
+            Ok(Ok(_)) | Ok(Err(SubsystemFailure::TheServerRefused(_))) => None,
+            // **The reading did not reach an answer**: nothing is kept, so
+            // the next folder opened asks again.
+            Ok(Err(_)) | Err(_) => return None,
+        };
+        if let Ok(mut held) = self.the_logins_home.lock() {
+            *held = Some((lending, home.clone()));
+        }
+        home
     }
 
     /// Whether a connection is live and being lent from.
@@ -872,6 +1003,73 @@ impl<C: AHeldConnection> ThisServersSessions<C> {
         told.await.unwrap_or(Err(NotLent::TheConnectionEnded))
     }
 
+    /// **A captured stream's bytes from `from` up to `to`, read in pieces, each
+    /// piece a reading of its own** — `Server protocol and transfers` §1.1
+    /// item 2 as added 2026-11-12: *"A read of many bytes is many operations"*.
+    ///
+    /// **Why.** The point serves one reading at a time and nothing else while
+    /// it runs. Until 2026-11-12 a stream was read back whole inside one
+    /// reading, so `Queue & History` E9's fetch of an ended job's words held
+    /// every command, reading and transfer seat on the server for as long as
+    /// the stream took, and a submission pressed meanwhile sat on
+    /// *Submitting.* with nothing sent (the live pass of 2026-11-12, new fault
+    /// 3: three submissions of 2 to 3 minutes, two of them just after a job
+    /// ended or a connection began, on a line that read a stream back in
+    /// 46 s). **Read from the code and the pass's times, not seen**: the
+    /// pass's diary was gone.
+    ///
+    /// **Between two pieces the point does whatever waits**: a command first
+    /// (`Server protocol and transfers` T5), then a reading someone is waiting
+    /// on. The handle is opened and closed inside each piece, so none is held
+    /// across two readings.
+    ///
+    /// **A stream that ends before `to` is an error in words**, as it is for
+    /// the one read (`smoozy_dependencies::acting::checking`), so a caller
+    /// that wants the stream whole or not at all still has that.
+    pub async fn a_streams_bytes(
+        &self,
+        someone_is_waiting: bool,
+        path: &[u8],
+        from: u64,
+        to: u64,
+    ) -> Result<Vec<u8>, String> {
+        let mut read = Vec::new();
+        let mut at = from;
+        loop {
+            let up_to = to.min(at.saturating_add(ONE_READING_OF_A_STREAM_TAKES));
+            let the_path = path.to_vec();
+            let piece = self
+                .a_reading(someone_is_waiting, move |subsystem| {
+                    Box::pin(async move {
+                        // **A piece the far end never answers gives the point
+                        // back**, and answers *the channel is gone* so the
+                        // point lets that reading session go, as
+                        // `crate::downloading`'s size read does (Sol's look,
+                        // 2026-11-12).
+                        tokio::time::timeout(
+                            crate::downloading::THE_INACTIVITY_DEADLINE,
+                            smoozy_dependencies::acting::checking::read_a_streams_bytes_over_the_file_session(
+                                subsystem, &the_path, at, up_to,
+                            ),
+                        )
+                        .await
+                        .map_err(|_| SubsystemFailure::TheChannelIsGone)
+                    })
+                })
+                .await;
+            match piece {
+                Ok(Ok(Ok(piece))) => read.extend_from_slice(&piece),
+                Ok(Ok(Err(why))) => return Err(why),
+                Ok(Err(failure)) => return Err(format!("{failure:?}")),
+                Err(not_lent) => return Err(format!("{not_lent:?}")),
+            }
+            at = up_to;
+            if at >= to {
+                return Ok(read);
+            }
+        }
+    }
+
     /// **One command**, with one framed request on its standard input where
     /// `frame` carries one.
     pub async fn a_command(
@@ -905,7 +1103,7 @@ impl<C: AHeldConnection> ThisServersSessions<C> {
         let (answer, told) = oneshot::channel();
         self.ask(AnAsk::ACommand(ACommand {
             command,
-            frame,
+            frame: frame.map(AFrame::from),
             answer,
             up,
         }))?;
@@ -1726,10 +1924,10 @@ impl<C: AHeldConnection> ThePoint<C> {
             let mut tries = 0;
             let begun = loop {
                 let begun = match &ask.up {
-                    None => connection.a_command_begun(ask.command, ask.frame.clone()).await,
+                    None => connection.a_command_begun(ask.command, ask.frame.as_ref().map(AFrame::a_copy)).await,
                     Some(up) => {
                         connection
-                            .a_command_begun_passing_up(ask.command, ask.frame.clone(), up.clone())
+                            .a_command_begun_passing_up(ask.command, ask.frame.as_ref().map(AFrame::a_copy), up.clone())
                             .await
                     }
                 };
@@ -2024,6 +2222,10 @@ pub(crate) mod tests {
         /// default, is never. Added 2026-10-19, the dead-line sweep's two-minute-wait
         /// repair.
         pub(crate) the_supervisor_is_silent_from: AtomicUsize,
+        /// **The file server answers an open with a handle and a read with
+        /// the bytes asked for**, a moment after each read is asked. Off
+        /// unless a test turns it on. Added 2026-11-12.
+        pub(crate) a_stream_is_served: std::sync::atomic::AtomicBool,
         /// The supervisor's commands begun, counted.
         pub(crate) supervisor_asks: AtomicUsize,
         /// **When each was begun**, in order.
@@ -2042,6 +2244,7 @@ pub(crate) mod tests {
                 a_link_stands: std::sync::atomic::AtomicBool::new(false),
                 links_may_land: watch::channel(true).0,
                 goes_silent: watch::channel(false).0,
+                a_stream_is_served: std::sync::atomic::AtomicBool::new(false),
                 the_supervisor_is_silent_from: AtomicUsize::new(0),
                 supervisor_asks: AtomicUsize::new(0),
                 supervisor_asked_at: Mutex::new(Vec::new()),
@@ -2398,8 +2601,21 @@ pub(crate) mod tests {
                 let _ = machine.links_may_land.subscribe().wait_for(|it| *it).await;
                 machine.a_link_stands.store(true, Ordering::SeqCst);
             }
+            let a_stream_is_served = machine.a_stream_is_served.load(Ordering::SeqCst);
+            if a_stream_is_served && kind == 5 {
+                tokio::time::sleep(Duration::from_millis(1)).await;
+                machine.says(format!("{name}: a read was answered"));
+            }
             let (answer_kind, answer): (u8, Vec<u8>) = match kind {
                 1 => (2, 3u32.to_be_bytes().to_vec()),
+                // An open: a handle.
+                3 if a_stream_is_served => (102, [id, 1u32.to_be_bytes().to_vec(), b"h".to_vec()].concat()),
+                // A read: as many bytes as it asked for, its last field.
+                5 if a_stream_is_served => {
+                    let asked = body[body.len() - 4..].to_vec();
+                    let bytes = vec![0u8; u32::from_be_bytes([asked[0], asked[1], asked[2], asked[3]]) as usize];
+                    (103, [id, asked, bytes].concat())
+                }
                 7 | 17 => (105, [id, 0u32.to_be_bytes().to_vec()].concat()),
                 _ => (101, [id, vec![0; 4], vec![0; 4], vec![0; 4]].concat()),
             };
@@ -2598,6 +2814,45 @@ pub(crate) mod tests {
                  asks: {happened:#?}"
             );
         }
+    }
+
+    /// **`Server protocol and transfers` §1.1 item 2 as added 2026-11-12: a
+    /// stream read back is many readings, and a command asked meanwhile goes
+    /// between two of them.** The live pass of 2026-11-12, new fault 3: a
+    /// submission's first command waited behind an ended job's whole captured
+    /// stream.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_command_asked_while_a_stream_is_read_back_goes_between_its_pieces() {
+        let machine = AMachine::with_a_limit_of(4);
+        machine.a_stream_is_served.store(true, Ordering::SeqCst);
+        let point = a_point_lending(&machine, additional_connections_to(&machine, false)).await;
+
+        const PIECES: u64 = 30;
+        let length = PIECES * ONE_READING_OF_A_STREAM_TAKES;
+        let reads_in_all = (length / 65536) as usize;
+        let reading = tokio::spawn({
+            let sessions = point.sessions.clone();
+            async move { sessions.a_streams_bytes(false, b"a sink", 0, length).await }
+        });
+        machine.has_said("a read was answered").await;
+
+        // **The submission's first command, pressed while the stream comes.**
+        let ran = point.sessions.a_command(A_COMMAND, None).await;
+        assert!(ran.is_ok(), "{ran:?}");
+        let answered_by_then = machine
+            .what_happened()
+            .iter()
+            .filter(|it| it.contains("a read was answered"))
+            .count();
+        assert!(
+            answered_by_then < reads_in_all,
+            "the command waited for the whole stream: {answered_by_then} of {reads_in_all} reads \
+             were answered before it ran"
+        );
+
+        let read = reading.await.expect("the read-back did not panic");
+        assert_eq!(read.map(|bytes| bytes.len() as u64), Ok(length), "and the stream came whole");
+        point.ends().await;
     }
 
     /// **`Server protocol and transfers` T5: no reading begins while a command

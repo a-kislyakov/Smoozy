@@ -237,6 +237,10 @@ fn a_failure(job: &str, label: &str, cause: TheCause, ordinary: ACollectionOutco
         disk_free_at_the_ending: None,
         no_render_began: false,
         the_reason_the_machine_recorded: None,
+        // Batch 4's two fields (*Submit again* and *Resume*), which this
+        // file was not given; the four questions, batch 6.
+        frames_asked: 40,
+        resume: None,
     }
 }
 

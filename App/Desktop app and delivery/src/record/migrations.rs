@@ -289,6 +289,22 @@ pub const ALL: &[Migration] = &[
         produces: 60,
         what_it_runs: WhatItRuns::TheseStatements(schema::VERSION_60),
     },
+    Migration {
+        produces: 61,
+        what_it_runs: WhatItRuns::TheseStatements(schema::VERSION_61),
+    },
+    Migration {
+        produces: 62,
+        what_it_runs: WhatItRuns::TheseStatements(schema::VERSION_62),
+    },
+    Migration {
+        produces: 63,
+        what_it_runs: WhatItRuns::TheseStatements(schema::VERSION_63),
+    },
+    Migration {
+        produces: 64,
+        what_it_runs: WhatItRuns::TheseStatements(schema::VERSION_64),
+    },
 ];
 
 /// Free-and-open-source migration. The fixed subject also covers a crash
@@ -340,7 +356,15 @@ pub fn bring_up_to_date(
     // reads — so taking the version as the test would migrate a real user's
     // record with no copy behind it, and a rollback would then meet L9's
     // refusal with nothing to restore.
-    if the_record_was_already_there {
+    //
+    // **While an update is in its probe and a copy is there, none is taken**
+    // (L8, *when it is not taken again*, 2026-11-11, the Fable review's fourth
+    // sitting). Each step is its own transaction, so a start cut short
+    // between two leaves the record between versions, and the next start
+    // took the copy again, over the only record the previous build can read.
+    // Every update route discards a stale copy before it writes Z21a's
+    // record, so a copy beside a standing one is this update's own.
+    if the_record_was_already_there && !(the_copy_is_there(path) && an_update_is_in_its_probe(connection)?) {
         take_the_copy(path)?;
     }
 
@@ -348,6 +372,21 @@ pub fn bring_up_to_date(
         run_one_for_record(connection, migration, the_record_was_already_there)?;
     }
     Ok(())
+}
+
+/// **Whether Z21a's update-in-probe record stands**, asked of a record that
+/// may be older than this binary: the table is there from version 49, and a
+/// record from before it has none.
+fn an_update_is_in_its_probe(connection: &rusqlite::Connection) -> Result<bool, RecordFailure> {
+    let the_table_is_there: bool = connection.query_row(
+        "SELECT count(*) > 0 FROM sqlite_schema WHERE type = 'table' AND name = 'update_in_probe'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !the_table_is_there {
+        return Ok(false);
+    }
+    Ok(connection.query_row("SELECT count(*) > 0 FROM update_in_probe", [], |row| row.get(0))?)
 }
 
 /// **L7: a migration's partition unit is the whole migration.**
@@ -1241,6 +1280,7 @@ mod tests {
                 // and one more from version 55's reporting choice, while
                 // every pre-existing value stays identical.
                 for row in &mut now {
+                    assert_eq!(row.pop(), Some(rusqlite::types::Value::Null), "version 63: no old job names files it went on without");
                     assert_eq!(row.pop(), Some(rusqlite::types::Value::Integer(0)), "version 60: no old job says no render began");
                     // Version 59 appends `Queue & History` E3's two counts, absent too.
                     assert!(row[row.len()-12..].iter().all(|value| *value == rusqlite::types::Value::Null));
@@ -1443,6 +1483,7 @@ mod tests {
         let c = record.connection();
         let mut now = every_row_of(c, "job_record");
         for row in &mut now {
+            assert_eq!(row.pop(), Some(rusqlite::types::Value::Null), "version 63: no old job names files it went on without");
             assert_eq!(row.pop(), Some(rusqlite::types::Value::Integer(0)), "version 60: no old job says no render began");
             // **Version 59's two counts come after it**, also absent.
             assert_eq!(row.split_off(row.len() - 2), [rusqlite::types::Value::Null, rusqlite::types::Value::Null]);
@@ -1537,6 +1578,217 @@ mod tests {
         assert!(!stores.the_ending_walk_is_written_down(&job).unwrap(), "a new start inherited the old walk");
     }
 
+    /// **Version 61 (`Dependency Upload & Remap` K4's included mark, the
+    /// twenty-eighth notes, note 14): a version-60 located answer comes across
+    /// whole and reads as not included**, which is how every earlier answer
+    /// read, so a row no scene uses is left out until the user includes it.
+    #[test]
+    fn version_61_carries_a_version_60_answer_forward_not_included() {
+        use smoozy_dependencies::bytes::StoredLocation;
+        use smoozy_dependencies::record::HoldingFile;
+        let path = scratch("version-61");
+        let rows_before = {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            for migration in ALL.iter().filter(|one| one.produces <= 60) {
+                run_one(&connection, migration).unwrap();
+            }
+            assert_eq!(schema::version_in(&connection).unwrap(), 60);
+            connection
+                .execute(
+                    "INSERT INTO dependency_located_answer (
+                         holding_kind, holding_source_path, holding_machine_location,
+                         holding_server_row, holding_installation, reference, set_aside
+                     ) VALUES ('on-the-users-computer', ?1, x'', '', '', ?2, 0)",
+                    rusqlite::params![b"/Users/alex/kitchen.blend".to_vec(), b"//ref/old.png".to_vec()],
+                )
+                .unwrap();
+            every_row_of(&connection, "dependency_located_answer")
+        };
+        let record = LocalRecord::open_at(&path).expect("the version-60 record opens");
+        assert_eq!(record.schema_version().unwrap(), BINARY_KNOWS);
+        let mut now = every_row_of(record.connection(), "dependency_located_answer");
+        for row in &mut now {
+            assert_eq!(row.pop(), Some(rusqlite::types::Value::Integer(0)), "an old answer arrived included");
+        }
+        assert_eq!(now, rows_before, "the answer did not come across as it was");
+        let answers = crate::record::dependency_records::TheDependencyRecord::over(record.connection())
+            .the_answers_of(&HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(
+                b"/Users/alex/kitchen.blend",
+            )))
+            .expect("the answers read");
+        assert_eq!(answers.len(), 1);
+        assert!(!answers[0].included);
+    }
+
+    /// **Version 62 (the transfer window's *removed by the user* mark, the
+    /// second live pass of 2026-11-12, new fault 3): a version-61 request of
+    /// either direction comes across whole and reads as not removed.**
+    #[test]
+    fn version_62_carries_version_61_requests_forward_not_removed() {
+        let path = scratch("version-62");
+        let (uploads_before, downloads_before) = {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            for migration in ALL.iter().filter(|one| one.produces <= 61) {
+                run_one(&connection, migration).unwrap();
+            }
+            assert_eq!(schema::version_in(&connection).unwrap(), 61);
+            for table in ["upload_request", "download_request"] {
+                connection
+                    .execute(
+                        &format!(
+                            "INSERT INTO {table} (record, server_row, installation, destination, collision_answer, opened_by_run)
+                             VALUES ('r-1', 's-1', NULL, x'2f', NULL, 'run-1')"
+                        ),
+                        [],
+                    )
+                    .unwrap();
+            }
+            (every_row_of(&connection, "upload_request"), every_row_of(&connection, "download_request"))
+        };
+        let record = LocalRecord::open_at(&path).expect("the version-61 record opens");
+        assert_eq!(record.schema_version().unwrap(), BINARY_KNOWS);
+        for (table, before) in [("upload_request", uploads_before), ("download_request", downloads_before)] {
+            let mut now = every_row_of(record.connection(), table);
+            for row in &mut now {
+                assert_eq!(row.pop(), Some(rusqlite::types::Value::Integer(0)), "{table}: an old request arrived removed");
+            }
+            assert_eq!(now, before, "{table}: the request did not come across as it was");
+        }
+    }
+
+    /// **Version 63 carries every job record forward with no missing names**
+    /// (`Rendering` K14c): a record from before it never kept them, and reads
+    /// none. The last three owed, 2026-11-12.
+    #[test]
+    fn version_63_carries_version_62_job_records_forward_with_no_missing_names() {
+        let path = scratch("version-63");
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            for migration in ALL.iter().filter(|one| one.produces <= 62) {
+                run_one(&connection, migration).unwrap();
+            }
+            assert_eq!(schema::version_in(&connection).unwrap(), 62);
+        }
+        let record = LocalRecord::open_at(&path).expect("the version-62 record opens");
+        assert_eq!(record.schema_version().unwrap(), BINARY_KNOWS);
+        assert!(BINARY_KNOWS >= 63);
+        let columns: Vec<String> = record
+            .connection()
+            .prepare("SELECT name FROM pragma_table_info('job_record')")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert!(columns.iter().any(|one| one == "note_files_missing"), "{columns:?}");
+    }
+
+    /// **Version 64 gives every checkpoint a place for the running digest's
+    /// state** (`Server protocol and transfers` S12b), and the checkpoints
+    /// already there come across with none — so a part an older build left is
+    /// checked by reading it back, as it always was.
+    #[test]
+    fn version_64_carries_version_63_checkpoints_forward_with_no_running_state() {
+        let path = scratch("version-64");
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            for migration in ALL.iter().filter(|one| one.produces <= 63) {
+                run_one(&connection, migration).unwrap();
+            }
+            connection
+                .execute(
+                    "INSERT INTO transfer_checkpoint (transfer, offset_into_the_staged_file, digest) VALUES ('transfer-x', 4194304, 'd')",
+                    [],
+                )
+                .unwrap();
+        }
+        let record = LocalRecord::open_at(&path).expect("the version-63 record opens");
+        assert_eq!(record.schema_version().unwrap(), BINARY_KNOWS);
+        assert!(BINARY_KNOWS >= 64);
+        let state: Option<String> = record
+            .connection()
+            .query_row("SELECT running_state FROM transfer_checkpoint WHERE transfer = 'transfer-x'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(state, None);
+    }
+
+    /// A record carried up to `version` by this binary's own steps, as a start
+    /// cut short after that step leaves it.
+    fn a_record_left_at(path: &std::path::Path, version: u32) -> rusqlite::Connection {
+        let connection = rusqlite::Connection::open(path).unwrap();
+        for migration in ALL.iter().filter(|one| one.produces <= version) {
+            run_one(&connection, migration).unwrap();
+        }
+        assert_eq!(schema::version_in(&connection).unwrap(), version);
+        connection
+    }
+
+    fn the_version_in_the_copy(path: &std::path::Path) -> u32 {
+        let copy = rusqlite::Connection::open(copy_beside(path)).unwrap();
+        schema::version_in(&copy).unwrap()
+    }
+
+    /// **L8, the Fable review's fourth sitting, fault 3: a start that finishes
+    /// a half-finished upgrade keeps the copy the first start took.** An
+    /// update is in its probe; the new build's first start took the copy of
+    /// the previous build's record and was cut short part-way through its
+    /// steps (a power cut). The next start finds the record between versions.
+    /// The copy beside it is the only record the previous build can read, and
+    /// it is what a rollback restores, so it is not taken again.
+    #[test]
+    fn a_start_that_finishes_a_half_finished_upgrade_keeps_the_first_copy() {
+        let path = scratch("half-finished-upgrade");
+        // The previous build's record, at its own version, with the update in
+        // its probe: what the first start copied.
+        {
+            let connection = a_record_left_at(&path, BINARY_KNOWS - 3);
+            crate::record::update_trust::an_update_goes_into_probe(
+                &connection,
+                &crate::record::update_trust::TheUpdateInProbe {
+                    release_sequence: 9,
+                    version: "9.9.9".into(),
+                    the_previous_artifact: b"/kept".to_vec(),
+                    the_record_copy: crate::updating::the_probe::path_bytes(&copy_beside(&path)),
+                },
+            )
+            .unwrap();
+        }
+        take_the_copy(&path).unwrap();
+        // The first start, cut short one step in.
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            let next = ALL.iter().find(|one| one.produces == BINARY_KNOWS - 2).unwrap();
+            run_one(&connection, next).unwrap();
+        }
+        assert_eq!(the_version_in_the_copy(&path), BINARY_KNOWS - 3);
+
+        // The next start finishes the upgrade.
+        let record = LocalRecord::open_at(&path).expect("the half-upgraded record opens");
+        assert_eq!(record.schema_version().unwrap(), BINARY_KNOWS);
+        assert_eq!(
+            the_version_in_the_copy(&path),
+            BINARY_KNOWS - 3,
+            "the second start took the copy again, over the one the previous build can read"
+        );
+    }
+
+    /// **And with no update in its probe, a copy left by an earlier upgrade is
+    /// taken again**, as before: nothing restores it, and the record as it
+    /// stands now is the one worth keeping.
+    #[test]
+    fn with_no_update_in_its_probe_an_older_copy_is_taken_again() {
+        let path = scratch("stale-copy");
+        drop(a_record_left_at(&path, BINARY_KNOWS - 3));
+        take_the_copy(&path).unwrap();
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            let next = ALL.iter().find(|one| one.produces == BINARY_KNOWS - 2).unwrap();
+            run_one(&connection, next).unwrap();
+        }
+        drop(LocalRecord::open_at(&path).expect("the record opens"));
+        assert_eq!(the_version_in_the_copy(&path), BINARY_KNOWS - 2);
+    }
+
     /// **Version 59 (`Queue & History` E3, 2026-11-02): a version-58 job record
     /// comes across and holds no count**, so its line stands as it did.
     #[test]
@@ -1622,6 +1874,7 @@ mod tests {
         let c = record.connection();
         let mut now = every_row_of(c, "job_record");
         for row in &mut now {
+            assert_eq!(row.pop(), Some(rusqlite::types::Value::Null), "version 63: no old job names files it went on without");
             assert_eq!(row.pop(), Some(rusqlite::types::Value::Integer(0)), "version 60: no old job says no render began");
             // **Version 59's two counts and version 55's reporting choice come
             // after it**, all absent.

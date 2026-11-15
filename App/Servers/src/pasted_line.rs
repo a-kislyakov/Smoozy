@@ -124,6 +124,43 @@ pub fn the_line_read(pasted: &str) -> Option<WhatTheLineGives> {
     })
 }
 
+/// **PL2a: whether the line reaches its server through another one** — the
+/// jump option, or a `ProxyJump` or `ProxyCommand` setting given with the
+/// option that sets one. The leftovers of the Rough what-if answers (112):
+/// the line's own host was filled and the jump dropped without a word, so
+/// the connection went to a host that only answers through the other. Smoozy
+/// connects to one server directly; the Add dialog says so under Host.
+pub fn the_line_names_a_jump_host(pasted: &str) -> bool {
+    if !is_a_connection_line(pasted) {
+        return false;
+    }
+    let words = the_words(&pasted.trim_start()[3..]);
+    let mut at = 0;
+    while at < words.len() {
+        if let Some(letters) = words[at].strip_prefix('-').filter(|letters| !letters.is_empty()) {
+            for (from, letter) in letters.char_indices() {
+                if !THE_OPTIONS_THAT_TAKE_A_VALUE.contains(letter) {
+                    continue;
+                }
+                let joined = &letters[from + letter.len_utf8()..];
+                let value = if joined.is_empty() {
+                    at += 1;
+                    words.get(at).cloned().unwrap_or_default()
+                } else {
+                    joined.to_string()
+                };
+                let setting = value.trim_start().to_ascii_lowercase();
+                if letter == 'J' || (letter == 'o' && (setting.starts_with("proxyjump") || setting.starts_with("proxycommand"))) {
+                    return true;
+                }
+                break;
+            }
+        }
+        at += 1;
+    }
+    false
+}
+
 /// **The destination, as the manual writes it**: `[user@]hostname`, or
 /// `ssh://[user@]hostname[:port]`. A part that is empty is not there.
 fn the_destination(destination: &str) -> (Option<String>, Option<String>, Option<String>) {
@@ -199,6 +236,31 @@ mod tests {
             port: port.to_string(),
             username: username.map(str::to_string),
         })
+    }
+
+    /// **PL2a, the leftovers of the Rough what-if answers (112): a line that
+    /// reaches its server through another one is told apart**, in each of the
+    /// forms the option takes; a line without one, and an ordinary `-o`
+    /// setting, are not.
+    #[test]
+    fn rough_leftovers_112_a_jump_host_is_told_apart() {
+        for jumps in [
+            "ssh -J bastion@1.2.3.4 root@10.0.0.5",
+            "ssh -Jbastion root@10.0.0.5",
+            "ssh -o ProxyJump=bastion root@10.0.0.5",
+            "ssh -o 'ProxyCommand ssh -W 10.0.0.5:22 bastion' root@10.0.0.5",
+            "ssh root@10.0.0.5 -oProxyJump=bastion",
+        ] {
+            assert!(the_line_names_a_jump_host(jumps), "{jumps}");
+        }
+        for direct in [
+            "ssh -p 1239 ubuntu@1.2.3.4",
+            "ssh -o StrictHostKeyChecking=no root@host",
+            "ssh -i ~/.ssh/J root@host",
+            "not a line -J",
+        ] {
+            assert!(!the_line_names_a_jump_host(direct), "{direct}");
+        }
     }
 
     /// **The map's four lines, piece 15.**

@@ -15,6 +15,9 @@
 //! no name and no rule for composing one is written here or anywhere downstream
 //! of here"*. **So this file contains no address, no repository name and no
 //! rule for making one.** It is handed a source, whole, and it fetches that.
+//! *(Narrowed 2026-11-09, once, by B10b: [`super::two_routes`] writes the two
+//! API forms of a plain releases address, and this file fetches whichever it
+//! is handed.)*
 //! **Nothing here derives a source from a version, a name or a pattern**, which
 //! is B8's prohibition for the artifact applied to the address.
 //!
@@ -60,6 +63,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::composing::{FetchesFromAnExactSourceTheManifestNamed, WhyTheFetchFailed};
+use super::two_routes::{TheRoute, TriesOneAddress};
 use super::verifying::an_https_address;
 
 /// **What a request says about who is asking, and it is a constant.**
@@ -251,6 +255,20 @@ impl AFetchOverHttps {
         already_held: Vec<u8>,
         ceiling: u64,
     ) -> Result<Vec<u8>, WhyTheFetchFailed> {
+        self.continue_a_body_asking_for(source, already_held, ceiling, None)
+    }
+
+    /// **The same read, asking for one kind of answer** — B10b's API route
+    /// asks for the list as JSON and for the file as bytes
+    /// ([`super::two_routes::TheRoute::what_it_asks_for`]). Nothing else
+    /// about the request changes.
+    pub fn continue_a_body_asking_for(
+        &mut self,
+        source: &str,
+        already_held: Vec<u8>,
+        ceiling: u64,
+        asking_for: Option<&str>,
+    ) -> Result<Vec<u8>, WhyTheFetchFailed> {
         // **B8's exact-HTTPS rule, asked of the one function in this workspace
         // that answers it** rather than spelled out a second time here. A
         // second copy of a rule is how the two come to disagree.
@@ -271,6 +289,9 @@ impl AFetchOverHttps {
             }
 
             let mut asking = self.client.get(source);
+            if let Some(kind) = asking_for {
+                asking = asking.header("Accept", kind);
+            }
             if from > 0 {
                 asking = asking.header("Range", format!("bytes={from}-"));
             }
@@ -337,6 +358,14 @@ impl AFetchOverHttps {
                 }
             }
         }
+    }
+}
+
+/// **B10b: one try, on whichever route** — the same client, saying the same
+/// constant name, on every one.
+impl TriesOneAddress for AFetchOverHttps {
+    fn try_once(&mut self, address: &str, route: TheRoute, ceiling: u64) -> Result<Vec<u8>, WhyTheFetchFailed> {
+        self.continue_a_body_asking_for(address, Vec::new(), ceiling, route.what_it_asks_for())
     }
 }
 

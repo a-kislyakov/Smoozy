@@ -1804,6 +1804,8 @@ Since fix piece 7, Transfers reads upload requests, and it shows every one the l
 
 **Added 2026-09-28, from `Audits/Build/Step 10c/The fixes after the ninth pass — what each piece is, which files it owns, and in what order.md`.** **The strip:** it is the failure plumbing's own proof pane (`App/Desktop app and delivery/web/the-failure-shape.js`, *"A later piece takes this pane"*), drawn for every standing failure. `Design/Whole app § Where a failure appears` already says a failure appears on the thing that failed, so the map recommends **no new place: the pane goes** once every failure kind that reaches it has its own row somewhere. What is owed then is a list of the kinds with no row today, made by reading `src/surface/the_failure_shape.rs` against the screens. A new place stays the other ending, and would need `Desktop app and delivery` §16's presentation clauses read first under Rule 10. **E2:** the ninth pass saw the auto-download row read *ended* while its files were still coming, again. Both can wait.
 
+**The strip: CLOSED 2026-11-10, the twenty-ninth notes' piece E**, the way the map recommended — no new place; the strip went. The one subject that reached it, a server row, draws its failures on the row. **E2 stays open.**
+
 **Due:** at the next Design sitting that opens `Whole app` or `Transfers`, and before step 10c closes.
 
 ### The rail's dot can stay green while a job has started rendering
@@ -2368,6 +2370,8 @@ The window's foot (`#the-failures`) is the plumbing's own drawing, and its code 
 **What it costs.** One condition said twice, once in Design's words and once in a stand-in sentence.
 
 **Due:** at the next Design sitting that opens `Whole app`, or at step 13, whichever is first.
+
+**CLOSED 2026-11-10, the twenty-ninth notes' piece E.** The foot is gone; the row is the one place the condition is drawn, and it reads *Could not reconnect.* Account: `Audits/Build/Twenty-ninth notes/Piece E, a failed reconnect — what landed.md`.
 
 ### The speed figure takes 7 to 11 seconds to fall to nothing after a cut
 
@@ -3849,3 +3853,200 @@ The pass's throwaway copy opened to a white window, twice, and Command-R loaded 
 **What it costs.** On Windows, the notification reaches only a user who sees the popup; on Linux, the window may stay behind its page; the last costs nothing until somebody runs a Windows throwaway copy.
 
 **Due:** the first only if a Windows user reports missing notifications, or a desktop Windows is ever at hand; the second and fourth only if a desktop of either system is ever at hand (permanently unresolved on this project's hardware, items 2 and 3); the third only if a Linux user reports it; the last before any agent runs a throwaway copy on Windows.
+
+### Older Macs show no ring after a click and Tab (2026-11-10)
+
+*Added 2026-11-10 by the build runner, from `Audits/Build/Twenty-ninth notes/Piece A1, the ring after a key — what landed.md`.*
+
+Piece A1 shows the focus ring after a key by asking the Mac's engine for it outright. On macOS 11 and 12, and on Ventura or Sonoma without Safari 18.4 or later, the engine ignores that ask, so after a click, a Tab inside a box still shows no ring there, as before the piece. Tab choosing a field's whole text, and Tab reaching every control, hold there too. The fallback Part A names (a page-wide keyboard mark, with every ring copied into `focus.css`) was not built: it keeps a second copy of about 45 rings beside the drawing's.
+
+**What it costs.** A keyboard user on an older Mac loses track of the focus inside boxes after any click.
+
+**Due:** if a user on an older Mac reports it, or when Smoozy's oldest supported Mac is raised past these.
+
+### A journal entry refused for its length is said only in the server's own record (2026-11-10)
+
+*Added 2026-11-10 by a builder holding `Audits/Build/Twenty-ninth notes/Brief — piece J, events that fit the journal.md`.*
+
+When the server's event journal refuses an entry as longer than `State, identity and recovery` E6a's 512 bytes, the supervisor writes one line in its own output and the event is gone. No reader learns of it, and no clause says where such a refusal must show: E6a says only that a kind that would not fit names the record that holds the detail. Piece J made every kind the server journals fit, with a guard test that measures each one, so the refusal is not expected to happen. Nothing is built for a later kind that brings it back.
+
+**What it costs.** If a kind added later breaks the budget and the guard is not run, its events are lost and nobody is told, as History's eleven View Layers were on the live pass of the Creator's file.
+
+**Due:** when `State, identity and recovery` §4 is next opened, or if a refusal line is ever seen in a server's output again.
+
+### Two computers using one server (2026-11-10)
+
+*Added 2026-11-10 by the Fable review's first sitting, holding `Audits/Build/Fable review/Brief — sitting 1, the server's queue after a death or a crash.md`.*
+
+No spec says a server can be used from two computers, or from a fresh install of Smoozy beside an old one, and nothing is built for it. What happens today falls out of other rules. The server lets a setup step start while a job renders, and trusts the one app it knows to keep the two apart; a second computer reading an older state could start a driver change or *Set up again* under the first computer's render. The server also keeps one reading position for one app, so two apps reading at once can each miss news the other took. This is a **want** past *Where Smoozy's job stops*: the plan promises nothing here, so nothing was built. The second sitting of the same review reads the app's half.
+
+**What it costs.** A user who adds one server on two computers can have a render spoiled by the other computer's setup, and neither app says why.
+
+**Due:** when the Creator decides whether two computers on one server is promised, refused with a plain message, or left as it is.
+
+### What the Fable review's first sitting found on the server and left (2026-11-10)
+
+*Added 2026-11-10 by the same sitting. Its account is `Audits/Build/Fable review/Sitting 1 — what landed.md`.*
+
+Four things were read in the code as real and not fixed, each rare and each needing a change the sitting did not make. None is proved by a test.
+
+1. ~~**A job's ending that no event tells.** If the server program dies in the instant after a job's record is marked ended and before the news of it is written, the app learns the ending only from its next full reading of the queue, and a job held behind that one is not dropped. `Queue & History` D14a states this limit.~~ **Closed 2026-11-10**, built as the sitting's follow-up on the runner's ruling: the news is written before the job's record.
+2. **A job put on hold twice.** If a server restarts whole in the moment after a job is put on hold at its start and before its worker has said so, the retry rule starts the job again. It meets the same question and is put on hold a second time, so the user may be asked twice, and the first question is left with no job behind it.
+3. ~~**One unreadable record stops the queue and tells nobody.** `State, identity and recovery` M5 has the server refuse to work past a record it cannot read, by design. The refusal is written only in the server's own output; the app shows a queue that never moves.~~ **Closed 2026-11-10**, the same follow-up: the queue stays stopped, and the server's row now says *Queue stopped: could not read a record on this server.*
+4. **The server's records carry a version number that has never moved.** Every change to their shape so far has been one an older program reads safely. The check that keeps an older program away from newer records only works if the number moves with the first change that is not safe, and nothing but care makes that happen.
+
+**What it costs.** Each needs a fault at one exact moment, or a record damaged on disk. The third is the one a user could sit in front of with no word of explanation.
+
+**Due:** when `Rented-server runtime` §3.3 or `Queue & History` §9 is next opened; the third sooner if a queue is ever seen frozen with jobs waiting and nothing rendering.
+
+### What the Fable review's second sitting found in the app and left (2026-11-11)
+
+*Added 2026-11-11 by the Fable review's second sitting, holding `Audits/Build/Fable review/Brief — sitting 2, sending a job and the desk catching up.md`. Its account is `Audits/Build/Fable review/Sitting 2 — what landed.md`.*
+
+Two things were read in the code and not built. Neither is proved by a test.
+
+1. ~~**A setup step can start while Smoozy is updating its own program on that server.** The update looks once, at its start, to see that no setup step is running. Nothing on the Set up page looks the other way. So *Install Blender*, *Set up again* or *Remove* pressed while the row says *Updating Smoozy on this server…* starts at once, under a program that is being swapped and restarted. The plan already says one act of Smoozy's own runs on a server at a time (`Server Setup` Y9; `Desktop app and delivery` V11 puts the update after any setup). What it does not say is what the user sees when they press during an update: wait its turn, or a plain refusal. That is Design's to answer before this is built.~~ **Closed 2026-11-11** on the build runner's ruling: the press waits its turn in the line and begins when the update ends, and the update looks again before it begins and waits behind a setup step that began meanwhile (`Desktop app and delivery` V11, `Server Setup` Y9a item 11). Its account is `Audits/Build/Fable review/A setup press during an update — what landed.md`.
+2. **The server's reason for refusing a job is not shown.** A job the server refuses is now told truthfully as *Not submitted. The server did not accept the job.* The server's own words for why (a full disk, a file it could not read) reach the app and are not drawn anywhere. Showing them is a want for Design.
+
+**What it costs.** The first can leave a setup step stopped part-way; pressing the step again recovers it, perhaps after a wait. The second costs the user the reason.
+
+**Due:** the first when the Creator or the runner says what a press during an update shows; the second when the Render Settings words are next opened.
+
+### What the Fable review's third sitting found and left (2026-11-11)
+
+*Added 2026-11-11 by the Fable review's third sitting, holding `Audits/Build/Fable review/Brief — sitting 3, replacing programs on a server.md`. Its account is `Audits/Build/Fable review/Sitting 3 — what landed.md`.*
+
+Five things were read in the code and not built. None is proved by a test.
+
+1. **A release older than one this copy has already accepted is told as *The release failed the signature check.*** That is untrue: the signature is good, and the release is refused for its number. The user who meets it reinstalled an older Smoozy by hand after a newer one had set up a server; every Set up then fails with that sentence. The refusal is the plan's own (`Server protocol and transfers` B9). What is missing is a true sentence, and its words are Design's, so the runner's to rule.
+2. **A release's number is typed by hand at the release sitting, and nothing stops one far too high.** A number too low is refused before anything is written. One too high is signed, and every copy that accepts it keeps it as its floor for good. That alone locks nobody out; a later release numbered below it would be refused by every such copy. A want for the release tool and the release runner's brief: take the number from one place, or refuse a jump.
+3. **After a swap is undone, two leftovers are not ended.** On a container, a new program that stays up without ever opening its endpoint is not found by the ending, which looks for the endpoint's holder. On a first setup with no previous program, a new program that stayed up is left running with no pointer. Both are written in `Rented-server runtime` G14, *what this does not reach*.
+4. **The second repair command takes no assent.** `apt-get --fix-broken install` stops at its own question where it has something to change, and the step is sent again all the same. Whether it should carry `-y` is a plan choice (`Server Setup` S7 says *nothing forced*).
+5. **A package system cut in a way that leaves no journal gets no repair**, and apt's sentence in another language is not met. Both are written in `Server Setup` S7, *what this does not reach*.
+
+**What it costs.** The first misleads a user who downgraded by hand. The second costs nothing until a release is numbered wrongly twice. The third leaves a failed program running beside a server said to be put back, in two narrow cases. The fourth and fifth can leave a cut driver install needing a terminal.
+
+**Due:** the first when the runner rules the words; the second at the next release sitting; the rest when a live pass meets one of them.
+
+### What the Fable review's fourth sitting found and left (2026-11-11)
+
+*Added 2026-11-11 by the Fable review's fourth sitting, holding `Audits/Build/Fable review/Brief — sitting 4, the app replacing itself and its record.md`. Its account is `Audits/Build/Fable review/Sitting 4 — what landed.md`.*
+
+Six things were read in the code and not built. None is proved by a test.
+
+1. **An older Smoozy in front of a newer record never says why.** It does not open the record, which is right (`Desktop app and delivery` L9), and each screen shows its own failure to read. L9 also says *and says so*, and nothing does: the reason is kept at the start and never shown. Such a copy also can't update itself, because installing an update needs the record open. What is missing is a sentence and a place for it; the words are Design's, so the runner's to rule. Sitting 3's sentence fits: *This Smoozy is older than one used here before. Install the latest Smoozy.* Whether such a copy should still be able to update itself is a second ruling.
+2. **An ordinary start by hand in the moment the one-copy lock changes hands during an update finishes the update itself, while the real trial start waits behind it.** On a Mac it ends with the new Smoozy running and a second waiting unseen. On Windows the helper waits for as long as that Smoozy runs, then points the shortcut at the old program and starts it in front of a record it can't read. The moment is a fraction of a second. `Desktop app and delivery` Z21a's paragraph of 2026-11-11 names it under *what it does not reach*. A fix is a second lock or a new handing-over.
+3. **On Windows, a helper that dies and a new Smoozy that can't start at all leave the shortcut on a program that won't start**, with the old one still on the computer. The same is accepted on the Mac and Linux (`Desktop app and delivery` §22 item 46); the plan had claimed Windows closed, and now says it is closed only while the helper lives.
+4. **A put-back step that fails is not always finished later.** Where restoring the copy fails on a Mac or on Windows, the old Smoozy is started in front of the upgraded record, refuses it, and so never reaches the code that finishes a put-back. The copy stays beside the record.
+5. **The check that an upgrade loses no protected rows runs only in tests**, and every old record the tests use is made by today's code. No record saved by a shipped release is kept to test against. A want: keep one from each release.
+6. **The new sentence for an older Smoozy can be shown for a forged release file.** The release's number is checked against the remembered floor before its signature is checked (`Server protocol and transfers/src/release/verifying.rs`, `verify_before_download_against`), so a file whose number was altered downward is refused for its number and now reads *This Smoozy is older than one used here before.* It is refused either way. The fix is to check the signature first, which is the release trust code's and `Server protocol and transfers` B9's. Found by Sol's read-only look.
+
+**What it costs.** The first leaves a user who installed an older Smoozy by hand with screens that fail and no reason given. The second and third need two unlikely things at once. The fourth needs a disk that refuses a rename. The fifth costs nothing until an upgrade step is wrong for a record today's code can't make. The sixth shows the wrong one of two refusals, and only for a file somebody altered.
+
+**Due:** the first when the runner rules the words; the second and third when Windows updates are first run on a real computer; the fourth and fifth at the next change to the update route or to an upgrade step; the sixth at the next change to the release checks.
+
+### What the Fable review's fifth sitting found and left (2026-11-11)
+
+*Added 2026-11-11 by the Fable review's fifth sitting, holding `Audits/Build/Fable review/Brief — sitting 5, how a render ends and what it counts.md`. Its account is `Audits/Build/Fable review/Sitting 5 — what landed.md`.*
+
+Four things were read in the code and not built, one want was met, and three questions are owed to Blender research. None is proved by a test.
+
+1. **Stop can't reach Blender while it reads the file at a job's start, and that reading has no limit.** Blender is written down for Stop only when the render itself starts. A Stop pressed before that waits for the reading to end and stops the render as it starts, which on a heavy file is minutes. A reading that never ends can't be stopped at all, and the job reads *rendering* for good. A way that needs no fact about Blender: the worker tells the server program which process the reading is, and a Stop that finds no render yet ends that process outright, a reading writing nothing that can be spoiled. It changes `Rendering` K4, which makes the render the only thing a Stop may end, so it is the runner's to rule.
+2. **A texture or library path Smoozy could not change is told to nobody.** The check that compares the paths Smoozy was to change with what Blender said it changed is built and tested (`Rendering — machine`, `what_the_marker_said_about_the_remap_pairs`) and the render worker never uses it. The render goes on with the texture missing and the job reads finished. The plan says what the check finds and not what the user is told: whether such a job is failed, or finished with a line naming the path, is the runner's or the Creator's.
+3. **An ending the server program writes after two restarts can carry no count though an earlier try wrote frames.** The count is taken against the last try's own reading of the file; a last try that died before it read the file has none. The frames are in the folder and still download. A small fix: fall back to the latest earlier try that has a reading.
+4. **The helpers for *Read the file* and for previews wait on Blender's output the way the render worker did.** A process Blender leaves behind, holding its output, keeps them from ever noticing Blender has ended. `Rented-server runtime` M5a is built for the render worker alone.
+
+**A want, not a fault:** comparing the frames Blender says it saved with the files in the folder, to catch a frame cut short by a full disk. `Job files and outputs` C15 states the limit and builds no rescue.
+
+**Owed to Blender research**, to be put on a question sheet by the Researcher Runner, each written without the answer Smoozy hopes for:
+
+- A collection is placed in a scene only as an instance on another object. Is an object inside that collection among the objects the scene lists as its own when the list is read from Python?
+- Such an object carries a physics simulation that is not baked. When the scene is rendered from a frame after the simulation's first frame, what state is the simulation in on that frame?
+- A File Output node writes a frame whose number is below zero. What is the exact name of the file, with a run of hash marks in the node's file name and without one?
+
+**What it costs.** The first leaves a job nobody can stop, on a server that bills, where a file's reading hangs; otherwise it costs minutes. The second lets a render with a missing texture read as finished. The third costs History a count, never a frame. The fourth needs a file whose scripts leave a process behind. The first two research questions decide whether a job that carries on part-way can render a simulation from its start; the third decides whether a good render through File Output nodes at frames below zero is failed.
+
+**Due:** the first two when the runner rules them; the third and fourth at the next change to how a job ends or to those two helpers; the questions at the next Blender research sitting.
+
+*Added later the same day by the same sitting, from Sol's read-only look. Three narrow things it named and the sitting set aside:* **a wait for Blender that the system refuses, with something still holding Blender's output**, leaves the worker waiting as it did before M5a; **a newer worker under an older server program** would have its ending written down without its count, which can't happen while the server program is replaced only on a server with no job on it (Row 519); and **a count that differs from one already written for the same try** is sent again for good, now showing as ended meanwhile, which needs two workers on one try. **Due:** at the next change to how a render ends, or to when the server program may be replaced.
+
+*Added 2026-11-11 by the same sitting's follow-up, on the runner's rulings at the foot of its account.* **All four of the things above are now built**, each with a test that failed first: Stop ends the reading outright (`Rendering` K4's paragraph of that date); a path the remap left unchanged is named (`Rendering` K14c); an ending is counted against the latest try that read the file (`Rented-server runtime` S13); and the two other helpers read Blender's output as the render worker does (`Rented-server runtime` M5a). **One part of the second is still owed: the desktop's History row.** The names reach the job's note on the server and the phone's finished message says *Missing: <file name>* for each. The desktop reads the note and does not yet keep the names in its record or draw them on the History row; that needs one new column in the job's record and a line on the row, which is a drawn state and so Design's and the drawing's too. **Also left, and small:** a group's one Telegram message does not carry the names; Stop does not reach the short run that asks Blender its version, which loads no file; and a server whose system gives no reading for a new process still makes Stop wait for the render. **Due:** the History row before the next release that carries K14c, so the app and the phone say the same thing; the rest at the next change to those parts.
+
+*Corrected later on 2026-11-11 by the same follow-up.* **Three of the four are built, not four.** The third, counting an ending against the latest try that read the file, was built and taken out again the same day: it made a test of the real server program fail (`a_first_frame_job_stopped_with_no_frame_drops_its_held_job_through_the_real_program`), which holds that a job given up with no reading drops nothing (`Queue & History` H8). With the fix, such a job gets a count from its first try, and the job waiting behind its first-frame check is dropped. Whether that is wanted is the runner's to rule. **And three things Sol's look named in the new fixes are not built:** a reading that leaves a process holding its output still can't be stopped; a Stop that ends a reading which had already printed its whole answer can leave the job waiting on a question though it reads stopped; and a finished message with many long *Missing:* lines can pass Telegram's length limit and not be sent at all. **Due:** before these fixes ship.
+
+### What building the night pass's rulings 1 and 2 left (2026-11-12)
+
+*Added 2026-11-12 by the Fable agent that built them. Its account is `Audits/Build/Fable review/The night pass's faults 1 and 2 — what landed.md`.*
+
+1. **After a swap is undone under a second installation, the old server program runs with the new installation's mark.** The swap writes the new setup's mark before the pointer moves, and the rollback does not put the old one back. So a failed setup of a server that another copy of Smoozy set up leaves that copy reading the server as no longer its own. It was so before; the rulings made the old program run again, which is what shows it. It belongs with *Two computers using one server* above.
+2. **Whether the repair for unmet dependencies needs the swap's own overwrite option** on a server image that carries NVIDIA's package archive. Not added, since `Server Setup` S7 says *nothing forced*. The next live pass shows it: if the repair stops on a file two packages claim, this is why.
+3. **A command with administrator rights outlives a dropped line.** Seen twice on the night pass. Sitting 3's story for an interrupted package tool rested on the opposite. That repair stays, since the package tool can still be cut another way, but its likeliest cause is gone.
+
+4. **Inside the driver step, a refused password does not stop the step's next command**, which sends the password again (`Server Setup` E6 forbids it). Older than this work; found by the read-only second look. The driver step should stop where a password was refused.
+5. **A driver swap whose removal finished before its install was refused is sent again after the repair and stops at once**, since it begins by asking the old driver its version. The next *Set up again* takes the right route, so it costs a second press and a step that ends with no words.
+
+**Due:** the first with the two-computers want; the second, third and fifth at the next live pass; the fourth when the driver step is next opened.
+
+### What building the double-check ideas closed and left (2026-11-12)
+
+*Added 2026-11-12 by the Fable agent that built ideas 10 and 5 of `Audits/Build/What to double-check — ideas, 2026-11-12.md` and Sol's findings on ideas 4, 6, 7 and 9. Its account is `Audits/Build/What to double-check — what landed.md`.*
+
+**Closed, each with a test that failed first:**
+
+- *The fourth sitting's item 1 above.* An older Smoozy opened on a newer record shows one line in place of every screen, and offers no update (`Desktop app and delivery` L9, *where it says so*).
+- *The fifth sitting's three, "due before these fixes ship".* A reading that leaves a process holding its output ends ten seconds after its Blender (`Rented-server runtime` M5a). A stop that lands as the reading ends places no hold (`Rendering` K4's paragraph of this date). **The third was already built**: the *Missing:* lines stop inside Telegram's 4,096 and say how many more (`Telegram` E1a, the UI at every size, T-03); its bound was read again on Telegram's page this day.
+- *Sol's findings 1 to 5 on the double-check ideas*: the saved frame a worker's report names is fetched only once a later frame is in hand (`Download` J6); a store that names no bot drops its instruction outcomes (`Telegram` F3b); a press as a run ends is not lost (`Server Setup` Y9a item 7); a password given after its setup ended is not kept, and the card says so (`Server Setup` E2); the *No longer updated* mark is tried again (`Telegram` C7).
+
+**Left:**
+
+1. **The older-Smoozy line is not in the mockup**, and no picture of it was made. `Design/Whole app` holds its words.
+2. **A box opened from the menu — About, Report a problem — opens over that line**, as over any screen, and closes as usual. Whether *Report a problem* can be sent from such a copy was not tried.
+3. **Under a different bot, an old store's message identities are kept.** Which bot an old store was written under cannot be read from it, so only the instruction outcomes are dropped. The new bot's edits of those messages are refused and each is replaced at its first refused edit. The runner asked for the whole old conversation to be cleared where the bot differs; that would also clear it on every ordinary upgrade.
+4. **The saved list of acts a closed Smoozy never began can be emptied by an ending run just after a new press wrote it.** The ending run now empties it only where no run stands on the server; a press landing between that look and the write still loses the list. The press itself always runs. It costs the *not begun* line after a quit in that same moment. Closing it means one lock around the record's write and the line.
+8. **The first start after an upgrade can repeat an instruction** that was done and not yet ticked off on the pinned board, since an old record's instruction outcomes are dropped (`Telegram` F3b's sentence of this date says the cost).
+9. ***Cancel* on an admin-access box left open from an ended setup can decline a newer setup's offer** on the same server.
+10. **Owed *No longer updated* marks are kept in memory only**, so a restart of the server program loses them, as before.
+5. **Whether every file of a frame is whole before Blender announces the frame's first save** is not on record. `Download` J6 no longer leans on it. A question for Blender research only if the one-frame wait is ever felt.
+6. **The History row's missing names** (the fifth sitting's follow-up) are still owed: the phone says *Missing:* and the app's History row does not.
+7. **Stop still does not reach the short run that asks Blender its version**, as before.
+
+**Due:** the first with the next drawing pass; the sixth before the next release that carries K14c; the rest when a live pass meets one.
+
+### What the Fable review's sixth sitting found in Telegram and left (2026-11-12)
+
+*Added 2026-11-12 by the Fable review's sixth sitting, holding `Audits/Build/Fable review/Brief — sitting 6, Telegram.md`. Its account is `Audits/Build/Fable review/Sitting 6 — what landed.md`.*
+
+Five things were read in the code and not built, and one want was met. None of the five is proved by a test.
+
+1. **A job's message that Telegram takes, whose record the server then can't write, is never changed again.** It reads *Started.* for good, with no progress and no ending line; the job's ending still arrives as its own message. A restart sends a second one. `Telegram` F3c names it as not covered. A fix: keep the message in the worker's memory and try the write again at each tick, as the status message now does, and let the ending's line find it there.
+2. **An old pinned board whose unpin fails once stays pinned for good.** After a hand-over the new holder unpins the old board once and does not look at the answer. The new board sits above it, so nothing meets the old pin again. Each such miss leaves one more pinned message in the chat's pinned list.
+3. **A server that hands over and then dies in the same few seconds can lose a Stop it had just confirmed.** `Telegram` B3 now has the old holder send again what its last board held. A holder that dies before it sees the new board sends nothing, after the phone was told the Stop was sent.
+4. **The one message that says some events were missed can hold every later event.** Where the server's record of events has moved past what the Telegram worker last read, the worker says so once before anything else. If that one message keeps failing to reach Telegram while others get through, nothing after it is sent. `Telegram` F3a's three tries do not cover it.
+5. **An answer to the first-frame question that can't be written onto the question's message is only logged.** Where Telegram refuses that edit for a reason other than a deleted message, the phone is not told the answer was applied.
+
+**A want, not a fault:** a server whose Telegram worker restarts sends a new pinned board, waits about a minute before it listens again, and leaves its old board in the chat. `Telegram` B1 says every hand-over makes a new board, and a restart is a hand-over to itself. The night's live pass saw this as *a second server coordination board* (its new fault 9). Carrying on with its own board would save the message and the minute. It changes B1 and B3, the most delicate rules in the module, so it is the runner's to rule and was not built.
+
+**What it costs.** The first leaves one stale message per failed write. The second leaves stale pins. The third can leave a render going that the user believes is stopping, on a server that bills; it needs a hand-over and a death within seconds of each other. The fourth silences one server's job messages until its worker restarts. The fifth leaves a question's message unchanged after its buttons were pressed.
+
+**Due:** the first and the fifth at the next change to a job's message; the second and the want when the runner rules on the restart's board; the third and fourth at the next live pass with two servers on one bot.
+
+**Update, 2026-11-12, the follow-up (`Audits/Build/Fable review/Sitting 6, the follow-up — what landed.md`):** the runner ruled the want in, and it is built: a restarted server carries on with its own board. All five faults above are built, each with a test, so they leave this list once a live pass has seen them. The third is closed only for a holder that starts again; one that dies and never comes back still loses the Stop, and `Telegram` B3 says so. **One thing found and left:** a server that proposes an instruction can miss seeing it on the board where the holder takes it in, acts on it and removes it between two of that server's reads; it then sends it again each interval, and the holder admits it again and acts on nothing. Extra pins, no lost or doubled act. **Due:** the next live pass with two servers on one bot.
+
+### What the Fable review's seventh sitting found in transfers and left (2026-11-12)
+
+*Added 2026-11-12 by the Fable review's seventh sitting, holding `Audits/Build/Fable review/Brief — sitting 7, files that move.md`. Its account is `Audits/Build/Fable review/Sitting 7 — what landed.md`.*
+
+Three things were read in the code and not built, and two wants are parked.
+
+1. **A reply from the server's file service is read at whatever length it declares.** The desk reads four bytes as a length and makes room for that many, up to 4 GB, with no upper limit (`App/Server protocol and transfers/src/subsystem/client.rs`, `read_one_packet`). Smoozy's own command channel has a limit of 1 MB; this one has none. Only a server that is broken or hostile sends such a length, and the wait for the bytes is bounded, so the cost is memory for up to two minutes. A limit needs the file service's own published maximum, read and dated, before it is written.
+2. **A download whose final name can't be read at a start keeps its mark until it can.** Where Smoozy quit inside a download's last step and the file's own name can't be looked at on the next launch, the record stays *publication pending* and that server's auto-downloads are refused until a launch where it can. Nothing says so. It is rare: the folder has to refuse a reading, not be missing.
+
+3. **A request's bar keeps the size its files were listed at.** Where a download starts a file over and the file has grown, the file's own row shows the new size, but the request's total does not move: its bar can read full while that file is still coming down. It ends right. Found by Sol's look.
+
+**A want, not a fault: a file that changes while one unbroken download reads it.** `Download` J10 states that this is not detected and says no safety net covers it. A frame still being written comes down as it stood, and Files marks such files before the download starts. The download already asks the server for the file's time on the handle it opens, and that answer carries the size too, at no cost. Comparing it with the size the download was arranged at would catch a file that grew or shrank between the listing and the fetch. It changes J10, so it is the runner's to rule.
+
+**A want, not a fault: a retry where the server's file service restarts under a transfer.** The line stays up, the file ends *interrupted* and its row offers *Continue*. The plan carries a file on by itself only where the line went down and came back. Trying once more before ending would save the press.
+
+**What it costs.** The first costs memory on a faulty server. The second leaves auto-download silent on one server until the folder reads again. The third shows a full bar for a while on one request. The two wants cost a damaged file the user was warned about, and one press.
+
+**Due:** the first at the next change to the file service's client; the second with any change to the start's settling; the third at the next change to the Transfers request row; the wants when the runner rules.

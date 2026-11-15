@@ -639,6 +639,38 @@ pub fn it_writes_what_the_reading_cannot_name(reading: &TheOutputsHalf, destinat
         .any(|frame| matches!(the_name_owed_at(reading, destination, frame), WhatIsOwedAt::TheNameIsUnresolved))
 }
 
+/// **P6a: which destinations write nothing for the job's frames**, one answer
+/// per destination of the reading, in its order. Changed 2026-11-10, the
+/// Creator's twenty-eighth notes (their answer of the morning), runner's pick.
+///
+/// **It is the count's own recipe and never a second test**: a render
+/// destination writes nothing where [`the_name_owed_at`] says nothing is owed at
+/// every frame the reading covers — no name, no name it cannot work out (I2),
+/// no name it was not answered (I1). That is a figure of nought with nothing
+/// unresolved, the reading [`crate::inventory`]'s figures give the page's list
+/// (`Design/Render Settings § What it will write`). **Hand it the per-frame set
+/// as the job renders it** — the job's frames, the job's pins applied (R4 item
+/// 5) — which is what both sides compose the map from.
+///
+/// **A video destination is owed its one file** (I20) and always writes; an
+/// added write place is not the render's own and is never one (P7a). A muted
+/// node, or one in a tree the render does not run, is not in the reading at all
+/// (R4 item 2).
+pub fn the_destinations_that_write_nothing(reading: &TheOutputsHalf) -> Vec<bool> {
+    reading
+        .destinations
+        .iter()
+        .map(|destination| {
+            destination.is_one_the_render_asked_for()
+                && !destination.format.as_ref().is_some_and(|format| format.is_video_shaped)
+                && reading
+                    .per_frame
+                    .iter()
+                    .all(|frame| matches!(the_name_owed_at(reading, destination, frame), WhatIsOwedAt::NothingIsOwed))
+        })
+        .collect()
+}
+
 /// **Whether an added write place's mapped folder is its own** — D21f's
 /// condition, read off the map.
 ///
@@ -1091,6 +1123,7 @@ pub(crate) mod tests {
             .map(|destination| ADestinationToMap {
                 destination,
                 the_longest_name_it_will_write: Some(b"placeholder0001.png".to_vec()),
+                it_writes_nothing_for_the_jobs_frames: false,
             })
             .collect();
         compose_the_map(&held, BLEND_SITS_IN, JOB_FOLDER, version)
@@ -1207,6 +1240,45 @@ pub(crate) mod tests {
         assert_eq!(inventory.the_count(), 4);
         assert_eq!(inventory.the_figure_for(0), 3);
         assert_eq!(inventory.the_figure_for(1), 1);
+    }
+
+    /// **P6a: what writes nothing for the job's frames is the count's own
+    /// reading** — a figure of nought, nothing unresolved — read over the
+    /// frames handed in. A video destination is owed its file; an added write
+    /// place is not the render's own.
+    #[test]
+    fn p6a_an_output_writes_nothing_where_the_count_owes_it_nothing_at_every_frame() {
+        use crate::reading::AnAddedWritePlace;
+        let always = a_node_destination("Always", "beauty", "/home/a/out", None);
+        let mut never = a_node_destination("Never", "beauty", "/_OUT/a", None);
+        never.the_view_layers_that_feed_it = vec![text("VL_Never")];
+        let mut sometimes = a_node_destination("Sometimes", "beauty", "/home/a/out2", None);
+        sometimes.the_view_layers_that_feed_it = vec![text("VL_Sometimes")];
+        let mut video = a_destination(DestinationKind::TheRegularOutputPath, "/home/a/v/f_", WhereItComesFrom::TheScenesOutputPath);
+        video.format.as_mut().expect("a format").is_video_shaped = true;
+        video.the_view_layers_that_feed_it = vec![text("VL_Never")];
+        let bake = a_destination(
+            DestinationKind::AnAddedWritePlace(AnAddedWritePlace::TheBakeOutputPath),
+            "//",
+            WhereItComesFrom::AnAddedWritePlaceNamed(AnAddedWritePlace::TheBakeOutputPath),
+        );
+        let version = TheVersionInHand::of(5, 2);
+        let reading = |frames: Vec<AtOneFrame>| {
+            a_reading(vec![always.clone(), never.clone(), sometimes.clone(), video.clone(), bake.clone()], frames, version)
+        };
+        let all = reading(vec![
+            a_frame(10, &["VL_Always", "VL_Sometimes"], None),
+            a_frame(22, &["VL_Always"], None),
+        ]);
+        assert_eq!(the_destinations_that_write_nothing(&all), [false, true, false, false, false]);
+        // **The same as the figures the page's list reads.**
+        let inventory = composed(&all, version);
+        for (at, nothing) in the_destinations_that_write_nothing(&all).into_iter().enumerate().take(3) {
+            assert_eq!(nothing, inventory.the_figure_for(at) == 0 && !it_writes_what_the_reading_cannot_name(&all, &all.destinations[at]), "{at}");
+        }
+        // **The job's frames**: frame 22 alone, and *Sometimes* writes nothing.
+        let later = reading(vec![a_frame(22, &["VL_Always"], None)]);
+        assert_eq!(the_destinations_that_write_nothing(&later), [false, true, true, false, false]);
     }
 
     #[test]

@@ -199,8 +199,8 @@ fn the_five() -> Vec<(&'static str, PathBuf)> {
         ("4.5", "SMOOZY_DESK_BLENDER_45", "/Applications/Blender 4.5.12.app/Contents/MacOS/Blender"),
         ("5.0", "SMOOZY_DESK_BLENDER_50", "/Applications/Blender 5.0.1.app/Contents/MacOS/Blender"),
         ("5.1", "SMOOZY_DESK_BLENDER_51", "/Applications/Blender 5.1.2.app/Contents/MacOS/Blender"),
-        ("5.2", "SMOOZY_DESK_BLENDER_52", "/Applications/Blender.app/Contents/MacOS/Blender"),
-        ("5.3", "SMOOZY_DESK_BLENDER_53", "/Applications/Blender 5.3b.app/Contents/MacOS/Blender"),
+        ("5.2", "SMOOZY_DESK_BLENDER_52", "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender"),
+        ("5.3", "SMOOZY_DESK_BLENDER_53", "/Applications/Blender 5.3.app/Contents/MacOS/Blender"),
     ]
     .into_iter()
     .map(|(named, variable, usual)| {

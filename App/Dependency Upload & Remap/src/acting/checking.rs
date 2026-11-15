@@ -160,9 +160,18 @@ pub enum TheReadingDidNotRun {
     /// store that refused. `Server protocol and transfers` C8's *no record of
     /// that identity*: the work did not happen.
     TheMachineRefusedIt(String),
-    /// The reading passed the desk-side bound on a Blender run without
-    /// ending. **The wait ended, not the run** — see [`super::blender`].
+    /// The operation passed its outer limit without ending — **only the
+    /// contents reading and M14's fixing carry one**,
+    /// [`THE_OUTER_LIMIT_ON_A_CONTENTS_READING_OR_A_FIXING`], over the whole
+    /// operation. **The wait ended, not the run** — see
+    /// [`super::blender`].
     ItPassedTheTimeLimit,
+    /// **One ask went [`THE_LONGEST_AN_ASK_WAITS`] with no answer**: the
+    /// server stopped answering. A reading the server keeps answering is never
+    /// this — `Dependency Upload & Remap` G15's build detail of 2026-11-13, the
+    /// Creator's note 4 on the test copy of 2026-11-12. **The wait ended, not
+    /// the run.**
+    AnAskWentUnanswered,
     /// **`Render Settings` Q8: a read Smoozy ended itself** is none of the
     /// endings that say something about the file, and nothing about the file
     /// is claimed. It is the answer's own field read and never an inference.
@@ -185,6 +194,29 @@ pub enum TheReadingDidNotRun {
 /// chosen so a reading that takes a second is learnt about within one more
 /// and a slow one costs one short request a second.
 pub const BETWEEN_TWO_ASKS_OF_ONE_READING: Duration = Duration::from_secs(1);
+
+/// **The longest one ask of a reading waits for its answer** — `Render
+/// Settings` Q10's build detail and `Dependency Upload & Remap` G15's, both of
+/// 2026-11-13. **A deadline on each ask and never on the whole reading**: the
+/// server answers each ask at once from the operation's record, so a server
+/// that has not answered one in a minute has stopped answering, while a
+/// reading it keeps answering *still in hand* goes on for as long as Blender
+/// takes. A Build figure, a minute, the same as `Servers` K3's slowest
+/// declaration of a broken line. Until that date `Server Setup` B1's minute
+/// bounded the whole reading, and a long read failed at a minute on a server
+/// still answering (the Creator's note 4 on the test copy of 2026-11-12).
+pub const THE_LONGEST_AN_ASK_WAITS: Duration = Duration::from_secs(60);
+
+/// **The outer limit on the contents reading (Q5 route 2) and M14's fixing**
+/// — `Dependency Upload & Remap` G15's build detail as changed 2026-11-13, the
+/// runner's ruling 1 at the foot of `Reading the file, past a minute — what
+/// landed.md`. Each goes on while the server says it is still working, as the
+/// readings do, with [`THE_LONGEST_AN_ASK_WAITS`] on each ask; **and, since no
+/// user can stop either, a server that says *still working* for this long has
+/// them end as not completed.** A Build figure. Until that date both stopped at
+/// `Server Setup` B1's minute over the whole operation, so a large `.blend`
+/// failed its fixing or its contents check on a server still working.
+pub const THE_OUTER_LIMIT_ON_A_CONTENTS_READING_OR_A_FIXING: Duration = Duration::from_secs(30 * 60);
 
 /// **G1: one reading of one `.blend`, by a file-inspection worker on the
 /// machine, returning one document between sentinels.**
@@ -231,12 +263,21 @@ where
     let ended = asked_until_it_ends(
         machine,
         &reading.the_request(),
-        blender::THE_TIME_LIMIT_A_BLENDER_RUN_CARRIES,
+        THE_LONGEST_AN_ASK_WAITS,
+        None,
         BETWEEN_TWO_ASKS_OF_ONE_READING,
         stopped,
     )
     .await?;
-    what_the_ended_reading_left(machine, &ended).await
+    // **Stop is watched while the output is read back too** (Sol's look at
+    // the window and read points, point 1, 2026-11-13): the reading has ended
+    // on the machine, so nothing is sent; the wait ends and nothing about the
+    // file is claimed.
+    tokio::select! {
+        biased;
+        left = what_the_ended_reading_left(machine, &ended) => left,
+        () = until_stopped(stopped) => Err(TheReadingDidNotRun::TheUserStoppedIt),
+    }
 }
 
 /// **`Server protocol and transfers` C21's stop, naming an operation on the
@@ -257,31 +298,54 @@ pub fn the_stop_of(operation: &Identity) -> Option<Request> {
 /// machine says it has a recorded outcome** (`Server protocol and transfers`
 /// C4 and C8) — every file-inspection operation this module drives: the
 /// reading, the contents reading (`Dependency Upload & Remap` Q3) and the
-/// fixing (M14). **The bound is a deadline over the whole operation and the
-/// pace is not one.** Where `stopped` says yes, the stop is sent once and the
-/// wait ends at once ([`TheReadingDidNotRun::TheUserStoppedIt`]).
+/// fixing (M14). **`each_ask` is a deadline on one ask's answer** — an ask
+/// unanswered past it is [`TheReadingDidNotRun::AnAskWentUnanswered`] — and
+/// **`whole`, where one is given, is a deadline over the whole operation**:
+/// the readings carry none and go on while the server answers that they are
+/// still running (G15's build detail, 2026-11-13); the contents reading and
+/// the fixing, which no user can stop, carry
+/// [`THE_OUTER_LIMIT_ON_A_CONTENTS_READING_OR_A_FIXING`]. **The
+/// pace is not a deadline.** Where `stopped` says yes, the stop is sent once
+/// and the wait ends at once ([`TheReadingDidNotRun::TheUserStoppedIt`]).
 pub async fn asked_until_it_ends<M>(
     machine: &mut M,
     request: &Request,
-    bound: Duration,
+    each_ask: Duration,
+    whole: Option<Duration>,
     pace: Duration,
     stopped: &mut (dyn FnMut() -> bool + Send),
 ) -> Result<Answered, TheReadingDidNotRun>
 where
     M: TheMachineAReadingIsAskedOf,
 {
-    let deadline = tokio::time::Instant::now() + bound;
+    let deadline = whole.map(|whole| tokio::time::Instant::now() + whole);
     let mut first = true;
     loop {
         if !first && stopped() {
-            if let Some(stop) = the_stop_of(&request.identity) {
-                let _ = machine.ask(&stop).await;
-            }
-            return Err(TheReadingDidNotRun::TheUserStoppedIt);
+            return Err(the_stop_is_sent(machine, request).await);
         }
         first = false;
-        let answered = match tokio::time::timeout_at(deadline, machine.ask(request)).await {
-            Err(_) => return Err(TheReadingDidNotRun::ItPassedTheTimeLimit),
+        let this_ask = tokio::time::Instant::now() + each_ask;
+        let (wait_until, past_it) = match deadline {
+            Some(deadline) if deadline <= this_ask => {
+                (deadline, TheReadingDidNotRun::ItPassedTheTimeLimit)
+            }
+            _ => (this_ask, TheReadingDidNotRun::AnAskWentUnanswered),
+        };
+        // **Stop is looked for while the ask waits**, so a Stop pressed while
+        // the server does not answer ends the reading at once rather than at
+        // the end of the ask's minute (after Sol's look at reading the file
+        // past a minute, point 3). An answer already in hand is taken first.
+        let came_back = tokio::select! {
+            biased;
+            came_back = tokio::time::timeout_at(wait_until, machine.ask(request)) => Some(came_back),
+            () = until_stopped(stopped) => None,
+        };
+        let Some(came_back) = came_back else {
+            return Err(the_stop_is_sent(machine, request).await);
+        };
+        let answered = match came_back {
+            Err(_) => return Err(past_it),
             Ok(WhatCameBack::ItAnswered(answered)) => answered,
             Ok(WhatCameBack::NothingCorrelatedCameBack) => {
                 return Err(TheReadingDidNotRun::NoAnswerCameBack)
@@ -309,29 +373,66 @@ where
                 ))
             }
         }
-        if tokio::time::Instant::now() + pace >= deadline {
+        if deadline.is_some_and(|deadline| tokio::time::Instant::now() + pace >= deadline) {
             return Err(TheReadingDidNotRun::ItPassedTheTimeLimit);
         }
-        tokio::time::sleep(pace).await;
+        tokio::select! {
+            biased;
+            () = tokio::time::sleep(pace) => {}
+            () = until_stopped(stopped) => return Err(the_stop_is_sent(machine, request).await),
+        }
     }
 }
 
-/// The same, with the bound and the pace handed in.
+/// **How often a wait looks for the user's Stop.** A Build figure, short
+/// enough that Stop reads as at once.
+const HOW_OFTEN_A_WAIT_LOOKS_FOR_STOP: Duration = Duration::from_millis(100);
+
+/// **The longest the stop's own send is waited on** — five seconds, as
+/// `Render Settings`' read waits on its own (`crate` `reading_the_file`'s
+/// Stop), after Sol's look at reading the file past a minute, point 3. The
+/// reading ends here either way: whether the stop reached the server's Blender
+/// is the server's to record, and nothing about the file is claimed.
+pub const THE_LONGEST_A_STOP_IS_WAITED_ON: Duration = Duration::from_secs(5);
+
+/// **Ends when `stopped` says yes**, looking every
+/// [`HOW_OFTEN_A_WAIT_LOOKS_FOR_STOP`].
+async fn until_stopped(stopped: &mut (dyn FnMut() -> bool + Send)) {
+    while !stopped() {
+        tokio::time::sleep(HOW_OFTEN_A_WAIT_LOOKS_FOR_STOP).await;
+    }
+}
+
+/// **`Server protocol and transfers` C21's stop, sent once and waited on
+/// [`THE_LONGEST_A_STOP_IS_WAITED_ON`] at most**, naming the reading's own
+/// operation; the reading ends as stopped by the user.
+async fn the_stop_is_sent<M>(machine: &mut M, request: &Request) -> TheReadingDidNotRun
+where
+    M: TheMachineAReadingIsAskedOf,
+{
+    if let Some(stop) = the_stop_of(&request.identity) {
+        let _ = tokio::time::timeout(THE_LONGEST_A_STOP_IS_WAITED_ON, machine.ask(&stop)).await;
+    }
+    TheReadingDidNotRun::TheUserStoppedIt
+}
+
+/// The same, with the wait on each ask and the pace handed in.
 ///
 /// **Both are parameters so a test can watch the deadline fire** without
-/// waiting a minute, and for no other reason: [`drive_one_reading`] is the one
-/// caller and hands in `Server Setup` B1's one number. **No caller chooses a
-/// bound of its own.**
+/// waiting a minute, and for no other reason: [`drive_one_reading`] hands in
+/// [`THE_LONGEST_AN_ASK_WAITS`]. **The bound is on each ask, never on the
+/// whole reading** (G15's build detail, 2026-11-13).
 pub async fn drive_one_reading_within<M>(
     machine: &mut M,
     reading: &OneReading,
-    bound: Duration,
+    each_ask: Duration,
     pace: Duration,
 ) -> Result<WhatTheReadingLeft, TheReadingDidNotRun>
 where
     M: TheMachineAReadingIsAskedOf,
 {
-    let ended = asked_until_it_ends(machine, &reading.the_request(), bound, pace, &mut || false).await?;
+    let ended =
+        asked_until_it_ends(machine, &reading.the_request(), each_ask, None, pace, &mut || false).await?;
     what_the_ended_reading_left(machine, &ended).await
 }
 
@@ -350,7 +451,12 @@ pub async fn what_the_ended_reading_left<M>(
 where
     M: TheMachineAReadingIsAskedOf,
 {
+    // **A reading the server says was interrupted is Smoozy's ending too** —
+    // its worker went with a restart of the server's Smoozy, and nothing about
+    // the file is claimed (after Sol's look at reading the file past a minute,
+    // point 4).
     if ended.fields.text(asked::THE_RUN_WAS_ENDED_BY_SMOOZY_FIELD) == Some(asked::THE_ANSWER_IS_YES)
+        || ended.fields.text(asked::THE_READING_WAS_INTERRUPTED_FIELD) == Some(asked::THE_ANSWER_IS_YES)
     {
         return Err(TheReadingDidNotRun::SmoozyEndedIt);
     }
@@ -483,7 +589,14 @@ pub fn what_the_streams_left(
         return WhatTheReadingLeft::AFailingStatus;
     }
     match serde_json::from_slice::<ReadingDocument>(framed) {
-        Ok(document) => WhatTheReadingLeft::ASentinelFramedDocument(document),
+        // **A colour name the reading Blender lacks** (*Colour spaces and image
+        // sequences*): Blender says it on either stream as it opens the file,
+        // outside the marks, and the script cannot read it back.
+        Ok(mut document) => {
+            document.colour_names_not_found =
+                crate::check::the_colour_names_not_found(&[ordinary, complaints]);
+            WhatTheReadingLeft::ASentinelFramedDocument(document)
+        }
         Err(_) => WhatTheReadingLeft::NoSentinelFramedDocument,
     }
 }
@@ -587,10 +700,12 @@ mod tests {
                 scenes: Attribution::Established(vec!["Interior".to_string()]),
                 source: Some("FILE".to_string()),
                 the_files_own_text: None,
+                sequence: None,
             }],
             flat_list: Vec::new(),
             weak_references: Vec::new(),
             observed_stand_ins: Vec::new(),
+            colour_names_not_found: Vec::new(),
         }
     }
 
@@ -800,6 +915,233 @@ mod tests {
         let left = drive_one_reading_until_stopped(&mut machine, &one_reading(), &mut || true).await;
         assert_eq!(left, Err(TheReadingDidNotRun::TheUserStoppedIt));
         assert_eq!(machine.asked.len(), 2, "the reading once, then the stop");
+    }
+
+    /// **The contents reading and the fixing go on past a minute while the
+    /// server says it is still working** — `Dependency Upload & Remap` G15's
+    /// build detail as changed 2026-11-13, the runner's ruling 1 at the foot of
+    /// `Reading the file, past a minute — what landed.md`. The server answers
+    /// every ask at once and says *still working* for seventy seconds, then
+    /// gives its ending. On a paused clock, at the real figures. Until then the
+    /// minute was over the whole operation, and both ended as not completed.
+    #[tokio::test(start_paused = true)]
+    async fn the_contents_reading_and_the_fixing_go_on_past_a_minute_while_the_server_is_still_working() {
+        let mut answers = vec![still_in_hand(); 70];
+        answers.push(
+            Fields::none()
+                .and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_HAS_A_RECORDED_OUTCOME)
+                .and(asked::THE_DIGESTS_OUTCOME_FIELD, asked::NOTHING_IS_THERE),
+        );
+        let mut machine = AScriptedMachine::answering(answers);
+        let started = tokio::time::Instant::now();
+        let contents =
+            super::super::machine::the_machine_copys_contents(&mut machine, &at(b"/root/assets/files/a.blend")).await;
+        assert_eq!(contents, crate::readings::MachineContents::NothingThere, "the contents reading");
+        assert!(started.elapsed() >= Duration::from_secs(70), "{:?}", started.elapsed());
+
+        let mut answers = vec![still_in_hand(); 70];
+        answers.push(ended(b"", b"", Some("0")));
+        let mut machine = holding(AScriptedMachine::answering(answers), Vec::new(), Vec::new());
+        let fixing = super::super::fixing_worker::OneFixing::of(
+            &at(b"/root/assets/files/a.blend"),
+            &at(b"/root/assets/fixed/assets/files/a.blend"),
+            &at(b"/root/assets/fixed/assets/files/.s/a.blend.fixing"),
+            &one_reading().with,
+            Vec::new(),
+        )
+        .expect("randomness");
+        let started = tokio::time::Instant::now();
+        let fixed = super::super::fixing_worker::produce_one_fixed_copy(&mut machine, &fixing).await;
+        assert_eq!(fixed, Ok(()), "the fixing");
+        assert!(started.elapsed() >= Duration::from_secs(70), "{:?}", started.elapsed());
+    }
+
+    /// **And both still end at the outer limit**, since no user can stop
+    /// them: a server that says *still working* for ever ends each in its
+    /// thirtieth minute (the last ask that would run past the limit is not
+    /// waited for), never before and never after.
+    #[tokio::test(start_paused = true)]
+    async fn the_contents_reading_and_the_fixing_end_at_thirty_minutes_of_still_working() {
+        let mut machine = AScriptedMachine::answering(vec![still_in_hand()]);
+        let started = tokio::time::Instant::now();
+        let contents =
+            super::super::machine::the_machine_copys_contents(&mut machine, &at(b"/root/assets/files/a.blend")).await;
+        assert_eq!(contents, crate::readings::MachineContents::DidNotComplete);
+        let took = started.elapsed();
+        assert!(took > Duration::from_secs(29 * 60) && took <= Duration::from_secs(30 * 60), "{took:?}");
+
+        let mut machine = AScriptedMachine::answering(vec![still_in_hand()]);
+        let fixing = super::super::fixing_worker::OneFixing::of(
+            &at(b"/root/assets/files/a.blend"),
+            &at(b"/root/assets/fixed/assets/files/a.blend"),
+            &at(b"/root/assets/fixed/assets/files/.s/a.blend.fixing"),
+            &one_reading().with,
+            Vec::new(),
+        )
+        .expect("randomness");
+        let started = tokio::time::Instant::now();
+        let fixed = super::super::fixing_worker::produce_one_fixed_copy(&mut machine, &fixing).await;
+        assert!(fixed.is_err());
+        let took = started.elapsed();
+        assert!(took > Duration::from_secs(29 * 60) && took <= Duration::from_secs(30 * 60), "{took:?}");
+    }
+
+    /// **A reading the server says was interrupted is Smoozy's ending, never a
+    /// failing status** — after Sol's look at reading the file past a minute,
+    /// point 4. Its worker went with a restart of the server's Smoozy: no exit
+    /// status, no start mark, no stream. Read as a failing status, the check's
+    /// root said *This Blender could not open the file*.
+    #[tokio::test]
+    async fn an_interrupted_reading_is_smoozys_ending_and_never_a_failing_status() {
+        let mut machine = AScriptedMachine::answering(vec![Fields::none()
+            .and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_HAS_A_RECORDED_OUTCOME)
+            .and(asked::THE_START_MARK_SEEN_FIELD, asked::THE_ANSWER_IS_NO)
+            .and(asked::THE_RUN_WAS_ENDED_BY_SMOOZY_FIELD, asked::THE_ANSWER_IS_NO)
+            .and(asked::THE_READING_WAS_INTERRUPTED_FIELD, asked::THE_ANSWER_IS_YES)]);
+        let left = drive_one_reading(&mut machine, &one_reading()).await;
+        assert_eq!(left, Err(TheReadingDidNotRun::SmoozyEndedIt));
+    }
+
+    /// **A machine that may never answer**: the reading's asks, the stop, or
+    /// both. Where it answers the reading, it says *still working*.
+    struct AMachineThatMayNotAnswer {
+        asked: Vec<Request>,
+        answers_the_reading: bool,
+        answers_the_stop: bool,
+    }
+
+    impl TheMachineAReadingIsAskedOf for AMachineThatMayNotAnswer {
+        async fn ask(&mut self, request: &Request) -> WhatCameBack {
+            self.asked.push(request.clone());
+            let is_the_stop = request.name == asked::THE_STOP_REQUEST;
+            if (is_the_stop && !self.answers_the_stop) || (!is_the_stop && !self.answers_the_reading) {
+                std::future::pending::<()>().await;
+            }
+            let empty = Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "0.1.7");
+            WhatCameBack::ItAnswered(empty.carrying(still_in_hand()))
+        }
+
+        async fn read_the_stream_back(&mut self, _: &[u8], _: u64) -> Result<Vec<u8>, String> {
+            Err("no stream".to_string())
+        }
+    }
+
+    /// **Stop acts at once, and its own send waits five seconds at most** —
+    /// `Dependency Upload & Remap` G15's build detail as changed 2026-11-13,
+    /// after Sol's look at reading the file past a minute, point 3. Stop was
+    /// read only between asks, so one pressed while an ask went unanswered
+    /// waited out that ask's minute; and the stop's own send was waited on
+    /// with no limit. On a paused clock, at the real figures:
+    /// - Stop pressed two seconds into an ask the server does not answer ends
+    ///   the reading then, and the stop is sent naming it.
+    /// - Stop pressed while the server says *still working*, to a server that
+    ///   never answers the stop: the reading ends five seconds after the stop
+    ///   is sent.
+    #[tokio::test(start_paused = true)]
+    async fn stop_acts_at_once_and_its_own_send_waits_five_seconds_at_most() {
+        let reading = one_reading();
+        let mut machine = AMachineThatMayNotAnswer { asked: Vec::new(), answers_the_reading: false, answers_the_stop: true };
+        let started = tokio::time::Instant::now();
+        let mut stopped = || started.elapsed() >= Duration::from_secs(2);
+        let left = tokio::time::timeout(
+            Duration::from_secs(600),
+            drive_one_reading_until_stopped(&mut machine, &reading, &mut stopped),
+        )
+        .await
+        .expect("the reading ended");
+        assert_eq!(left, Err(TheReadingDidNotRun::TheUserStoppedIt));
+        let took = started.elapsed();
+        assert!(took >= Duration::from_secs(2) && took < Duration::from_secs(3), "Stop waited {took:?}");
+        assert_eq!(machine.asked.last().map(|last| last.name.as_str()), Some(asked::THE_STOP_REQUEST));
+
+        let mut machine = AMachineThatMayNotAnswer { asked: Vec::new(), answers_the_reading: true, answers_the_stop: false };
+        let started = tokio::time::Instant::now();
+        let mut stopped = || started.elapsed() >= Duration::from_millis(1500);
+        let left = tokio::time::timeout(
+            Duration::from_secs(600),
+            drive_one_reading_until_stopped(&mut machine, &reading, &mut stopped),
+        )
+        .await
+        .expect("the stop's own send was waited on with no limit");
+        assert_eq!(left, Err(TheReadingDidNotRun::TheUserStoppedIt));
+        let took = started.elapsed();
+        assert!(took <= Duration::from_secs(8), "the stop's send waited {took:?}");
+    }
+
+    /// **A fixing whose worker ends at 29 minutes 50 seconds, and whose report
+    /// takes 30 seconds to come back.**
+    struct AReportThatComesLate {
+        ends_at: tokio::time::Instant,
+    }
+
+    impl TheMachineAReadingIsAskedOf for AReportThatComesLate {
+        async fn ask(&mut self, request: &Request) -> WhatCameBack {
+            let empty = Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "0.1.7");
+            if tokio::time::Instant::now() < self.ends_at {
+                return WhatCameBack::ItAnswered(empty.carrying(still_in_hand()));
+            }
+            WhatCameBack::ItAnswered(empty.carrying(ended(b"", b"", Some("0"))))
+        }
+
+        async fn read_the_stream_back(&mut self, _: &[u8], _: u64) -> Result<Vec<u8>, String> {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            Ok(Vec::new())
+        }
+    }
+
+    /// **Sol's look at the window and read points, point 3 (the scout's
+    /// list, item 6): one 30-minute deadline covers the rewrite's report
+    /// too.** A worker that ends at 29:50 and whose report takes 30 seconds
+    /// published past the half hour the whole operation is promised.
+    #[tokio::test(start_paused = true)]
+    async fn the_fixings_half_hour_covers_its_report() {
+        let mut machine =
+            AReportThatComesLate { ends_at: tokio::time::Instant::now() + Duration::from_secs(29 * 60 + 50) };
+        let fixing = super::super::fixing_worker::OneFixing::of(
+            &at(b"/root/assets/files/a.blend"),
+            &at(b"/root/assets/fixed/assets/files/a.blend"),
+            &at(b"/root/assets/fixed/assets/files/.s/a.blend.fixing"),
+            &one_reading().with,
+            Vec::new(),
+        )
+        .expect("randomness");
+        let started = tokio::time::Instant::now();
+        let fixed = super::super::fixing_worker::produce_one_fixed_copy(&mut machine, &fixing).await;
+        assert!(fixed.is_err(), "a fixing past its half hour is not published");
+        assert!(started.elapsed() <= Duration::from_secs(30 * 60), "{:?}", started.elapsed());
+    }
+
+    /// **A server that answers the reading's ending and never sends its
+    /// output back.**
+    struct AnOutputThatNeverComes;
+
+    impl TheMachineAReadingIsAskedOf for AnOutputThatNeverComes {
+        async fn ask(&mut self, request: &Request) -> WhatCameBack {
+            let empty = Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "0.1.7");
+            WhatCameBack::ItAnswered(empty.carrying(ended(b"output", b"", Some("0"))))
+        }
+
+        async fn read_the_stream_back(&mut self, _: &[u8], _: u64) -> Result<Vec<u8>, String> {
+            std::future::pending().await
+        }
+    }
+
+    /// **Sol's look at the window and read points, point 1 (the scout's
+    /// list, item 6): Stop ends a reading whose output read is unanswered.**
+    /// After Blender finished, its captured output was read with no eye on
+    /// Stop, so a server that did not send it held the check after Stop.
+    #[tokio::test(start_paused = true)]
+    async fn stop_ends_a_reading_whose_output_never_comes() {
+        let started = tokio::time::Instant::now();
+        let mut stopped = || started.elapsed() >= Duration::from_secs(2);
+        let left = tokio::time::timeout(
+            Duration::from_secs(600),
+            drive_one_reading_until_stopped(&mut AnOutputThatNeverComes, &one_reading(), &mut stopped),
+        )
+        .await
+        .expect("Stop did not end the output read");
+        assert_eq!(left, Err(TheReadingDidNotRun::TheUserStoppedIt));
+        assert!(started.elapsed() < Duration::from_secs(3), "{:?}", started.elapsed());
     }
 
     fn still_in_hand() -> Fields {
@@ -1088,15 +1430,34 @@ mod tests {
         ));
     }
 
-    /// **The bound is a deadline over the whole reading**: a machine that says
-    /// *still in hand* for ever is given up on at the bound, and the call
-    /// returns rather than hanging.
+    /// **The bound is a deadline on each ask** (G15's build detail,
+    /// 2026-11-13): a machine that answered *still in hand* and then stops
+    /// answering is given up on one bound after the ask it left unanswered,
+    /// and the call returns rather than hanging. Until that date this test
+    /// held a machine saying *still in hand* for ever to a bound over the
+    /// whole reading.
     ///
     /// **A short bound and a short pace, because what is under test is the
-    /// deadline and not its length**, which is `Server Setup` B1's.
+    /// deadline and not its length**, which is [`THE_LONGEST_AN_ASK_WAITS`].
     #[tokio::test]
-    async fn a_reading_still_in_hand_for_ever_is_given_up_at_the_bound() {
-        let mut machine = AScriptedMachine::answering(vec![still_in_hand()]);
+    async fn a_reading_whose_machine_stops_answering_is_given_up_at_the_bound() {
+        struct ItStopsAnswering(usize);
+        impl TheMachineAReadingIsAskedOf for ItStopsAnswering {
+            async fn ask(&mut self, request: &Request) -> WhatCameBack {
+                self.0 += 1;
+                if self.0 > 3 {
+                    return std::future::pending().await;
+                }
+                WhatCameBack::ItAnswered(
+                    Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "0.1.7")
+                        .carrying(still_in_hand()),
+                )
+            }
+            async fn read_the_stream_back(&mut self, _: &[u8], _: u64) -> Result<Vec<u8>, String> {
+                Err("no stream".to_string())
+            }
+        }
+        let mut machine = ItStopsAnswering(0);
         assert_eq!(
             drive_one_reading_within(
                 &mut machine,
@@ -1105,9 +1466,35 @@ mod tests {
                 Duration::from_millis(5)
             )
             .await,
-            Err(TheReadingDidNotRun::ItPassedTheTimeLimit)
+            Err(TheReadingDidNotRun::AnAskWentUnanswered)
         );
-        assert!(machine.asked.len() > 1, "it was asked again while it ran");
+        assert_eq!(machine.0, 4, "it was asked again while it ran");
+    }
+
+    /// **The Creator's note 4 on the test copy of 2026-11-12, for the check's
+    /// reading: a reading the machine is still running past the bound lands.**
+    /// The machine answers every ask at once and says *still in hand* for well
+    /// past the bound, then hands back a document. **A short bound and a short
+    /// pace**, as above: what is under test is that the bound is on each ask
+    /// and not on the whole reading.
+    #[tokio::test]
+    async fn a_reading_still_in_hand_past_the_bound_lands_while_the_machine_answers() {
+        let written = serde_json::to_vec(&a_document()).expect("it renders");
+        let (ordinary, complaints) = framed(&written, true);
+        let mut answers = vec![still_in_hand(); 40];
+        answers.push(ended(&ordinary, &complaints, Some("0")));
+        let mut machine = holding(AScriptedMachine::answering(answers), ordinary, complaints);
+        let started = std::time::Instant::now();
+        let left = drive_one_reading_within(
+            &mut machine,
+            &one_reading(),
+            Duration::from_millis(60),
+            Duration::from_millis(5),
+        )
+        .await;
+        assert_eq!(left, Ok(WhatTheReadingLeft::ASentinelFramedDocument(a_document())));
+        assert!(started.elapsed() > Duration::from_millis(60), "{:?}", started.elapsed());
+        assert_eq!(machine.asked.len(), 41);
     }
 
     /// **The read back over a real file session**, served by OpenSSH's own

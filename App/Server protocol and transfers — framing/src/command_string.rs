@@ -21,14 +21,23 @@
 /// reach it: a `String` built at run time is not `'static`, and `Box::leak` is
 /// the only way round, which is a deliberate act a reader can see.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CommandString(&'static str);
+pub struct CommandString(&'static str, bool);
 
 impl CommandString {
     /// The one way to make one. **The argument is a constant in Smoozy's own
     /// binary**, which is what §1.1 means by *"a constant, installation-owned
     /// command"*.
     pub const fn constant(text: &'static str) -> CommandString {
-        CommandString(text)
+        CommandString(text, false)
+    }
+
+    /// A short reading, bounded by the transport as well as its caller.
+    pub const fn with_reading_limit(self) -> Self {
+        Self(self.0, true)
+    }
+
+    pub const fn reading_limit(self) -> Option<std::time::Duration> {
+        if self.1 { Some(std::time::Duration::from_secs(30)) } else { None }
     }
 
     pub fn as_str(self) -> &'static str {

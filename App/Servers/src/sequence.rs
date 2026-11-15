@@ -117,6 +117,13 @@ pub enum WhereItStopped {
     /// connection that could not be made, reported as one, **with no claim about
     /// the machine's identity**.
     TheAddressDidNotAnswer,
+    /// **The host's name found no address**, and **the port refused the
+    /// connection** — the transport's own two answers, carried so a failed
+    /// first connection can say why (`Design/Server Setup § This server`, the
+    /// four questions, scout 3.1, 2026-11-11). Neither claims anything about
+    /// the machine.
+    TheHostWasNotFound,
+    TheConnectionWasRefused,
     TheExchangeDidNotComplete,
     /// **Q6's third path.** The attempt stopped before anything else happened
     /// and **no credential was presented**.
@@ -256,6 +263,8 @@ where
         Err(failure) => {
             return Attempt::ItStopped(match failure {
                 OpenFailure::TheAddressDidNotAnswer => WhereItStopped::TheAddressDidNotAnswer,
+                OpenFailure::TheHostWasNotFound => WhereItStopped::TheHostWasNotFound,
+                OpenFailure::TheConnectionWasRefused => WhereItStopped::TheConnectionWasRefused,
                 OpenFailure::TheExchangeDidNotComplete => WhereItStopped::TheExchangeDidNotComplete,
                 OpenFailure::HostTrustStoppedIt => WhereItStopped::TheIdentityDiffers,
                 OpenFailure::TheKeyCouldNotBeLoaded => WhereItStopped::TheKeyCouldNotBeLoaded,
@@ -295,72 +304,111 @@ where
         });
     }
 
-    // ---- Step 4: the not-Linux check, on the first connection to a server and
-    // before anything else acts on the machine.
-    if attempt.the_first_connection_to_this_server {
-        let outcome = readings::read_the_operating_system(&mut connection).await;
-        if outcome != NotLinuxOutcome::ItNamedLinux {
-            // The sequence is abandoned here, so the connection the opening act
-            // was to make never becomes live — and a connection left open under
-            // an abandoned sequence would be one nothing owns.
+    // `Servers`’ bounded-reading rule: each reading after login — the system
+    // check, every installation inspection (SFTP included) and the hardware
+    // reading — ends within a minute. **The fourth branch's pauses are not
+    // inside that limit**: Q19's re-take goes on until the read settles, as
+    // before.
+    let checked: Result<_, WhereItStopped> = async {
+        // ---- Step 4: the not-Linux check, on the first connection to a server and
+        // before anything else acts on the machine.
+        if attempt.the_first_connection_to_this_server {
+            let outcome =
+                within_the_reading_limit(readings::read_the_operating_system(&mut connection)).await?;
+            if outcome != NotLinuxOutcome::ItNamedLinux {
+                // The sequence is abandoned here, so the connection the opening act
+                // was to make never becomes live — and a connection left open under
+                // an abandoned sequence would be one nothing owns.
+                return Err(WhereItStopped::TheNotLinuxCheck(outcome));
+            }
+        }
+
+        // ---- Step 5: the installation identity and its four branches, with Q19's
+        // re-take on the fourth.
+        let mut read = within_the_reading_limit(half.installation.read(&mut connection)).await?;
+        let mut retake = TheFourthBranchRetake::begun();
+        while !retake.settled(read.check) {
+            // **What ends it, and the list is closed**: the read settling on one of
+            // the other three branches, **the break declaration, there being no
+            // connection left to read on**, and the period ending — which is the
+            // caller dropping this future.
+            if half.opener.ended(&connection).is_some() {
+                return Err(WhereItStopped::TheExchangeDidNotComplete);
+            }
+            // **Q19b: once per connection, after the first re-read, the reader
+            // is told the fourth branch stands again** — never after the first
+            // read, since a supervisor still starting is Q19's ordinary case.
+            // **A reader that did something is read again at once.** Added
+            // 2026-11-14, the automatic repair.
+            let it_acted = retake.reads_taken == 1
+                && half.installation.the_fourth_branch_stands_again(&mut connection).await;
+            // **The cadence is the two figures this document already derives**,
+            // measured from the **end** of the previous read. No figure is added.
+            if !it_acted {
+                half.wait.until(retake.pause_before_the_next_read()).await;
+            }
+            retake.reads_taken = retake.reads_taken.saturating_add(1);
+            read = within_the_reading_limit(half.installation.read(&mut connection)).await?;
+        }
+
+        // ---- Step 6: the hardware reading, on the three branches that take one.
+        let hardware = if what_the_branch_does(read.check).a_fresh_reading_is_taken {
+            let now = half.wait.now();
+            within_the_reading_limit(readings::take_the_hardware_reading(
+                &mut connection,
+                server,
+                // **H17: the identity present on the machine when the reading was
+                // taken, or the explicit absence of one.**
+                read.identity_on_the_machine.clone(),
+                // **H10's path, and it is the recorded root.** `Job files and
+                // outputs` **L1** chooses the root once per installation at
+                // hand-over and records it against the server row; that column now
+                // exists, so the reading has a path to be taken against. **A
+                // machine that has never been set up has no such root**, and there
+                // the figure is absent — **nothing is substituted for it**, which
+                // is what H10 and `Server protocol and transfers` F16 require.
+                attempt
+                    .row
+                    .recorded_machine_root
+                    .as_ref()
+                    .map(|root| root.path.as_str()),
+                now,
+            ))
+            .await?
+        } else {
+            None
+        };
+
+        Ok((read.check, hardware))
+    }
+    .await;
+    let (installation, hardware) = match checked {
+        Ok(read) => read,
+        Err(why) => {
             half.opener.tear_down(connection).await;
-            return Attempt::ItStopped(WhereItStopped::TheNotLinuxCheck(outcome));
+            return Attempt::ItStopped(why);
         }
-    }
-
-    // ---- Step 5: the installation identity and its four branches, with Q19's
-    // re-take on the fourth.
-    let mut read = half.installation.read(&mut connection).await;
-    let mut retake = TheFourthBranchRetake::begun();
-    while !retake.settled(read.check) {
-        // **What ends it, and the list is closed**: the read settling on one of
-        // the other three branches, **the break declaration, there being no
-        // connection left to read on**, and the period ending — which is the
-        // caller dropping this future.
-        if half.opener.ended(&connection).is_some() {
-            return Attempt::ItStopped(WhereItStopped::TheExchangeDidNotComplete);
-        }
-        // **The cadence is the two figures this document already derives**,
-        // measured from the **end** of the previous read. No figure is added.
-        half.wait.until(retake.pause_before_the_next_read()).await;
-        retake.reads_taken = retake.reads_taken.saturating_add(1);
-        read = half.installation.read(&mut connection).await;
-    }
-
-    // ---- Step 6: the hardware reading, on the three branches that take one.
-    let hardware = if what_the_branch_does(read.check).a_fresh_reading_is_taken {
-        let now = half.wait.now();
-        readings::take_the_hardware_reading(
-            &mut connection,
-            server,
-            // **H17: the identity present on the machine when the reading was
-            // taken, or the explicit absence of one.**
-            read.identity_on_the_machine.clone(),
-            // **H10's path, and it is the recorded root.** `Job files and
-            // outputs` **L1** chooses the root once per installation at
-            // hand-over and records it against the server row; that column now
-            // exists, so the reading has a path to be taken against. **A
-            // machine that has never been set up has no such root**, and there
-            // the figure is absent — **nothing is substituted for it**, which
-            // is what H10 and `Server protocol and transfers` F16 require.
-            attempt
-                .row
-                .recorded_machine_root
-                .as_ref()
-                .map(|root| root.path.as_str()),
-            now,
-        )
-        .await
-    } else {
-        None
     };
 
     Attempt::ItIsLive(WhatTheConnectionGave {
         connection,
-        installation: Some(read.check),
+        installation: Some(installation),
         hardware,
         steps_not_built: &STEPS_NOT_BUILT,
     })
+}
+
+/// **`Servers`’ bounded-reading rule, for one reading after login.** A minute
+/// is twice the per-command limit, so a reading of several commands has room;
+/// expiry is the connection attempt's own timeout.
+const THE_LIMIT_ON_ONE_READING_AFTER_LOGIN: std::time::Duration = std::time::Duration::from_secs(60);
+
+async fn within_the_reading_limit<T>(
+    reading: impl std::future::Future<Output = T>,
+) -> Result<T, WhereItStopped> {
+    tokio::time::timeout(THE_LIMIT_ON_ONE_READING_AFTER_LOGIN, reading)
+        .await
+        .map_err(|_| WhereItStopped::TheConnectDeadlineExpired)
 }
 
 /// **Q4 and Q5: the comparison, made in Smoozy's own process at the one moment
@@ -458,6 +506,25 @@ mod tests {
 
     /// The callback Q1 step 3 calls, where a test does not care what it does.
     fn nothing_to_publish(_publishes: &mut crate::testing::ThePublisher) {}
+
+    #[tokio::test(start_paused = true)]
+    async fn bad_batch_2_inspection_that_never_answers_ends_the_connection_attempt() {
+        struct NeverReads;
+        impl<C: Send> TheInstallationIdentityRead<C> for NeverReads {
+            async fn read(&mut self, _: &mut C) -> crate::acting::TheIdentityRead {
+                std::future::pending().await
+            }
+        }
+        let desk = TheDesk::with(AMachine::answering());
+        let TheActingHalf { opener, credentials, publishes, wait, .. } = desk.half;
+        let mut half = TheActingHalf { opener, credentials, publishes, wait, installation: NeverReads };
+        let row = a_row();
+        let ended = tokio::time::timeout(std::time::Duration::from_secs(61),
+            run(an_attempt(&row), &mut half, &mut ChangedIdentityWarning::none_yet(), &mut nothing_to_publish))
+            .await.expect("the whole post-login reading must end");
+        assert!(matches!(ended, Attempt::ItStopped(WhereItStopped::TheConnectDeadlineExpired)));
+        assert_eq!(half.opener.torn_down(), 1);
+    }
 
     #[tokio::test]
     async fn the_key_check_stops_the_attempt_before_anything_reaches_the_machine() {
@@ -669,6 +736,44 @@ mod tests {
         assert_eq!(
             desk.half.wait.waited_for,
             vec![crate::repair::PAUSE_BETWEEN_ATTEMPTS; 2]
+        );
+    }
+
+    #[tokio::test]
+    async fn q19b_the_reader_is_told_once_at_the_first_re_read_and_a_reader_that_acted_is_read_at_once() {
+        // **Q19b**: never after the first read, once per connection, and the
+        // next read follows at once where the reader did something.
+        let row = a_row();
+        let mut desk = TheDesk::with(AMachine::answering());
+        desk.half.installation.answers = vec![
+            InstallationCheck::PresentAndTheSupervisorDidNotAnswer,
+            InstallationCheck::PresentAndTheSupervisorDidNotAnswer,
+            InstallationCheck::PresentAndTheSupervisorDidNotAnswer,
+            InstallationCheck::PresentAndTheSupervisorDidNotAnswer,
+            InstallationCheck::PresentAndEqualConfirmed,
+        ];
+        let ended = run(an_attempt(&row), &mut desk.half, &mut ChangedIdentityWarning::none_yet(), &mut nothing_to_publish)
+            .await;
+        assert!(matches!(ended, Attempt::ItIsLive(_)));
+        assert_eq!(desk.half.installation.told_it_stays_silent_after, vec![2], "told once, after the first re-read");
+        assert_eq!(desk.half.wait.waited_for, vec![crate::repair::PAUSE_BETWEEN_ATTEMPTS; 4]);
+
+        let mut desk = TheDesk::with(AMachine::answering());
+        desk.half.installation.does_something_when_told = true;
+        desk.half.installation.answers = vec![
+            InstallationCheck::PresentAndTheSupervisorDidNotAnswer,
+            InstallationCheck::PresentAndTheSupervisorDidNotAnswer,
+            InstallationCheck::PresentAndEqualConfirmed,
+        ];
+        let ended = run(an_attempt(&row), &mut desk.half, &mut ChangedIdentityWarning::none_yet(), &mut nothing_to_publish)
+            .await;
+        assert!(matches!(ended, Attempt::ItIsLive(_)));
+        assert_eq!(desk.half.installation.told_it_stays_silent_after, vec![2]);
+        assert_eq!(desk.half.installation.reads_taken, 3);
+        assert_eq!(
+            desk.half.wait.waited_for,
+            vec![crate::repair::PAUSE_BETWEEN_ATTEMPTS],
+            "the read after a repair is taken at once"
         );
     }
 

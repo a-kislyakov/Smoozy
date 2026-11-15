@@ -72,6 +72,9 @@ import { theCheckIsShownOn } from "./the-dependency-check.js";
 import { theSettingsSectionIsOpened, TRANSFERS_SECTION } from "./settings.js";
 import { theHistoryEntryIsOpened } from "./the-history.js";
 import { theValueIsDrawnInto } from "./the-value-drawn.js";
+import { theServerWillOpenOn, thePanelOverItIsCollapsed, FILES } from "./a-server.js";
+import { theBrowserIsOpenedAt } from "./files.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 const shell = window.__TAURI__;
 
@@ -155,8 +158,13 @@ export function theTransfersAreShown() {
 
 export function aTransferIsAskedFor(act, whose, picked) {
   const to = act === DOWNLOAD_ALL_TO || act === DOWNLOAD_TO;
+  // **A plain Download from Files leaves the user in Files** —
+  // `Design/File Browser`, 2026-11-11, the four questions, scout 1.9: the
+  // bottom bar's count says it runs. Only one that could not start goes to
+  // Transfers, where its reason is said (below).
+  const theUserStays = act === DOWNLOAD;
   if (to) aFolderIsAwaited = true;
-  else theCurrentPlaceIs(TRANSFERS);
+  else if (!theUserStays) theCurrentPlaceIs(TRANSFERS);
   if (act === DOWNLOAD_ALL || act === DOWNLOAD_ALL_TO) {
     return aDownloadIsAskedFor("a_whole_job_download_is_asked_for", {
       job: whose || "",
@@ -183,6 +191,11 @@ function aDownloadIsAskedFor(command, asked) {
       if (asked.to && aFolderIsAwaited) {
         aFolderIsAwaited = false;
         if (!answer || answer.what === "TheUserChoseNoFolder") return;
+        theCurrentPlaceIs(TRANSFERS);
+      }
+      // **A download that stayed in Files and could not start** is said in
+      // Transfers, so the user goes there for it (scout 1.9).
+      if (!asked.to && command === "a_file_download_is_asked_for" && answer && answer.what === "DidNotStart") {
         theCurrentPlaceIs(TRANSFERS);
       }
       theDownloadAnswered(answer);
@@ -263,14 +276,18 @@ function theDownloadQuestionIsPut(asks) {
   // `Design/Transfers § A download meeting files already there`, the paragraph
   // of 2026-10-01; the answers are then *Download* and *Stop*. Step 10c's
   // Vast-pass fix piece 1.
+  // **The box's heading and its warnings are every other box's** — the
+  // drawing's `.mbox h3` and `.mwarn`, as Files asks the same question; an
+  // `h2` took the browser's own margins and the amber lines no colour (the UI
+  // at every size, C-24).
   if (asks.headline) {
-    const heading = el("h2");
+    const heading = el("h3");
     saidInto(heading, asks.headline, "b", "mono");
     box.body.appendChild(heading);
   }
   for (const beside of [asks.cannot_vouch_for, asks.refusals]) {
     if (!beside) continue;
-    const line = el("p", "amber");
+    const line = el("p", "mwarn");
     saidInto(line, beside, "b", "mono");
     box.body.appendChild(line);
   }
@@ -286,7 +303,7 @@ function theDownloadQuestionIsPut(asks) {
     const control = el("button", "btn", "quiet");
     control.type = "button";
     control.textContent = answer.label;
-    control.addEventListener("click", () => {
+    const pressed = () => {
       box.close();
       shell.core
         .invoke("the_download_question_was_answered", {
@@ -302,7 +319,11 @@ function theDownloadQuestionIsPut(asks) {
           theScreenIsAskedFor();
         })
         .catch(() => {});
-    });
+    };
+    control.addEventListener("click", pressed);
+    // **Escape is *Stop***: a download is never left waiting on a question
+    // nobody can see (scout 1.12).
+    if (answer.act === STOP_THE_DOWNLOAD) box.onEscape = pressed;
     row.appendChild(control);
   }
   box.body.appendChild(row);
@@ -433,6 +454,11 @@ function theScreenIsDrawn(said) {
   screen.filter.hidden = Boolean(said.could_not_read);
   screen.label.hidden = Boolean(said.could_not_read);
 
+  // **The list is drawn again up to four times a second while bytes move, and
+  // nothing the user opened or is on goes with it** (UI consistency, finding
+  // 6): the control with the keyboard's focus keeps it, an open *which ones*
+  // list stays open, and a file's open menu stays on its file.
+  const focused = whereTheFocusIs();
   screen.list.replaceChildren();
   for (const request of said.requests) {
     if (request.group_heading) {
@@ -442,10 +468,14 @@ function theScreenIsDrawn(said) {
     }
     screen.list.appendChild(aRequest(request));
   }
+  theOpenNamesAreShownAgain();
+  theOpenMenuIsPutBack();
+  theFocusIsPutBack(focused);
   if (said.could_not_read) {
-    screen.list.appendChild(
-      theFailureShape({ sentence: said.could_not_read, kind: "ending", controls: [], room: EXPANDED }),
-    );
+    const failure = theFailureShape({ sentence: said.could_not_read, kind: "ending", controls: [], room: EXPANDED });
+    // Inside the list's gutter, as a request is (the UI at every size, C-25).
+    failure.classList.add("transfers-failure");
+    screen.list.appendChild(failure);
   }
   if (said.nothing_here) {
     const none = el("p", "tnone");
@@ -489,8 +519,24 @@ function aRequest(request) {
   // at the ordinary weight** — the drawing's `span.rqlead`, then a space and
   // the name (`Design/Transfers`, the Creator's fourteenth notes, note 4).
   // The word is the application's; until then the two read as one.
-  if (request.name_leads && name.children[0]) name.children[0].classList.add("rqlead");
+  if (request.name_leads && name.children[0]) {
+    name.children[0].classList.add("rqlead");
+    // **The name shortens inside its link, and *For* stays** — the drawing's
+    // `.rqn.rqled` (`Design/Transfers`, the Creator's notes on the test copy
+    // of 2026-11-12, note 12): the link was cut away whole, *For …*.
+    name.classList.add("rqled");
+  }
+  if (request.show_in_files) theNameShowsTheFileInFiles(request, name);
+  // **How it ended keeps its width** while the name before it is cut short
+  // (the UI at every size, C-20): the name's last piece, in a piece of its own.
+  let ending = null;
+  if (request.name_ends && name.lastElementChild) {
+    ending = el("span", "rqend");
+    ending.appendChild(name.lastElementChild);
+    while (name.lastChild && name.lastChild.nodeType === 3 && !name.lastChild.textContent.trim()) name.lastChild.remove();
+  }
   header.appendChild(name);
+  if (ending) header.appendChild(ending);
   header.appendChild(el("span", "grow"));
   const count = el("span", "rqm", "mono");
   // **The ending word in History's colours** (the Creator's seventh notes,
@@ -503,8 +549,15 @@ function aRequest(request) {
   if (request.badge) where.appendChild(el("span", "badge", "sm", request.badge));
   saidInto(where, request.where_it_goes, "span", "mono", true);
 
+  // **Cut short on a narrow line, so each reads whole on hover** (the UI at
+  // every size, C-18).
+  name.title = name.textContent;
+  where.title = where.textContent;
   if (request.collapsed) header.appendChild(where);
-  if (request.control) header.appendChild(theHeadersControl(request));
+  if (request.control) header.appendChild(theHeadersControl(request, request.control));
+  // **An upload left over: *Continue*, then *Remove*** (`Design/Transfers §
+  // What a past sitting left behind`, 2026-11-11).
+  if (request.also) header.appendChild(theHeadersControl(request, request.also));
   box.appendChild(header);
   const started = el("time", "rqstarted");
   started.appendChild(document.createTextNode(request.started_label));
@@ -535,16 +588,76 @@ function aRequest(request) {
   return box;
 }
 
-function theHeadersControl(request) {
+/// **The `.blend`'s name is a link into Files** — `Design/Transfers § The
+/// dependency check's own transfers`, the paragraph of 2026-11-10 (the
+/// Creator's twenty-ninth notes, note 5), and the drawing's `.golink` inside
+/// the mono span, hover *Show in Files*, as a panel's title is. The name's
+/// value is drawn into the link as it was into its span. **A press goes to
+/// that server's place and shows its Files on the file's folder with the
+/// file chosen**, the way the queue's *Writing to* link goes there
+/// (`a-new-job.js`): the panel over that server collapses so the folder is
+/// what shows. **The folder and the name are the application's**; this page
+/// composes no path. A file that has gone leaves its folder open with
+/// nothing chosen, which is Files' own answer.
+function theNameShowsTheFileInFiles(request, name) {
+  const piece = request.name.pieces.find((one) => one.value !== null && one.value !== undefined);
+  const value = name.children[name.children.length - 1];
+  if (!piece || !value) return;
+  const where = request.show_in_files;
+  const link = el("button", "golink");
+  link.type = "button";
+  link.title = where.hover;
+  theValueIsDrawnInto(link, piece.value);
+  link.addEventListener("click", () => {
+    theBrowserIsOpenedAt(request.server, where.folder, where.name);
+    thePanelOverItIsCollapsed(request.server);
+    theServerWillOpenOn(request.server, FILES);
+    theCurrentPlaceIs(A_SERVER, request.server);
+  });
+  value.replaceChildren(link);
+}
+
+function theHeadersControl(request, which) {
   const control = el("button", "mini");
   control.type = "button";
-  control.textContent = request.control.label;
+  control.textContent = which.label;
   control.addEventListener("click", () => {
-    const act = request.control.act;
+    const act = which.act;
     if (act === "stop") return theStopBoxIsOpened(request.id);
+    // **An upload left over, sent again with *Skip existing*** — the four
+    // questions, batch 2, fix 2. Its answer is said as a file sent again is.
+    // **And a download from Files left over, asked for again the same way**
+    // (the live pass of 2026-11-12, new fault 4).
+    if (act === "continue" || act === "continue-download") {
+      const command = act === "continue" ? "an_upload_left_over_is_continued" : "a_download_left_over_is_continued";
+      return shell.core
+        .invoke(command, { request: request.id })
+        .then((answer) => {
+          theDownloadAnswered(answer);
+          theScreenIsAskedFor();
+        })
+        .catch(() => {});
+    }
+    if (act === "download-remaining") {
+      if (control.disabled) return;
+      control.disabled = true;
+      return aDownloadIsAskedFor("a_whole_job_download_is_asked_for", {
+        job: request.job || "", to: false, remaining: true,
+      }).finally(() => { control.disabled = false; theScreenIsAskedFor(); });
+    }
     // **The way back to the thing the transfer was about** — History, with
     // that job chosen by its identity (must-do 1).
     if (act === "open-the-job") return theHistoryEntryIsOpened(request.job || "");
+    // **`Design/Transfers` as added 2026-11-11: on a finished upload, *Show in
+    // Files*** opens Files on that server at the folder it went to, the way the
+    // name of the `.blend` does. The four questions, scout 2.8.
+    if (act === "show-in-files" && request.the_folder_in_files) {
+      const where = request.the_folder_in_files;
+      theBrowserIsOpenedAt(request.server, where.folder, where.name);
+      thePanelOverItIsCollapsed(request.server);
+      theServerWillOpenOn(request.server, FILES);
+      return theCurrentPlaceIs(A_SERVER, request.server);
+    }
     if (act === "open-the-check") {
       // **`Design/Transfers § The dependency check's own transfers`: the way
       // back is to that panel, and it starts nothing** — the rows as they
@@ -562,15 +675,20 @@ function theHeadersControl(request) {
 
 function aLine(request, line) {
   const p = el("p", "rqs");
-  if (line.tone !== "plain") p.classList.add(line.tone);
+  // **`underway`: the mark where a bar cannot be drawn, then plain words** — a
+  // dependency upload that can still grow (`Design/Transfers`, 2026-11-09).
+  const underway = line.tone === "underway";
+  if (line.tone !== "plain" && !underway) p.classList.add(line.tone);
   if (line.tone === "bad2") p.appendChild(el("span", "fdot"));
-  const words = el(line.tone === "plain" ? "span" : "b");
+  // The drawing's `.ckdot`, the check's own underway mark (`t-growing`).
+  if (underway) p.appendChild(el("span", "ckdot"));
+  const words = el(line.tone === "plain" || underway ? "span" : "b");
   saidInto(words, line.words, "span", "mono");
   p.appendChild(words);
   if (line.due_at) {
     p.appendChild(document.createTextNode(" "));
     p.appendChild(
-      theCountdown(line.due_at, { in: line.trying_again_in, now: line.trying_again_now }),
+      theCountdown(line.due_at, { in: line.trying_again_in, now: line.trying_again_now, unit: line.seconds }),
     );
   }
   if (line.link) {
@@ -578,10 +696,16 @@ function aLine(request, line) {
     const link = el("button", "lnk");
     link.type = "button";
     link.textContent = line.link.label;
+    link.dataset.act = line.link.act;
     link.addEventListener("click", () =>
       line.link.act.startsWith(WHICH_ONES)
         ? theNamesAreShownUnder(p, request.id, line.link.act)
-        : theActIsTaken(line.link.act, request.id),
+        : // **Settings, at the download folder**: the way to choose another
+          // folder from a trouble line (`Design/Transfers § When a download
+          // meets trouble`, 2026-11-11).
+          line.link.act === "the-download-folder-setting"
+          ? theSettingsSectionIsOpened(TRANSFERS_SECTION)
+          : theActIsTaken(line.link.act, request.id),
     );
     p.appendChild(link);
   }
@@ -603,20 +727,49 @@ function aLine(request, line) {
 // second press puts them away. The 38's piece 9, item 32.
 const WHICH_ONES = "which-ones";
 
+// **The lists of names that are open, by request and line**, with the names
+// they hold, so drawing the list again keeps them open (UI consistency,
+// finding 6).
+const theOpenNames = new Map();
+
 async function theNamesAreShownUnder(line, request, which) {
+  const key = request + "\n" + which;
   const shown = line.nextElementSibling;
   if (shown && shown.classList.contains("transfers-names")) {
     shown.remove();
+    theOpenNames.delete(key);
     return;
   }
   const names = await shell.core.invoke("the_files_a_line_names", { request, which });
+  theOpenNames.set(key, names || []);
+  // The list may have been drawn again while the names were asked for.
+  theOpenNamesAreShownAgain();
+}
+
+function theNamesList(names) {
   const list = el("div", "clist", "mono", "transfers-names");
-  for (const name of names || []) {
+  for (const name of names) {
     const one = el("div");
     theValueIsDrawnInto(one, name);
     list.appendChild(one);
   }
-  line.after(list);
+  return list;
+}
+
+function theOpenNamesAreShownAgain() {
+  if (!screen) return;
+  const seen = new Set();
+  for (const box of screen.list.querySelectorAll(".req")) {
+    for (const link of box.querySelectorAll("button.lnk[data-act]")) {
+      const key = box.dataset.request + "\n" + link.dataset.act;
+      if (!theOpenNames.has(key)) continue;
+      seen.add(key);
+      const line = link.closest("p");
+      const next = line && line.nextElementSibling;
+      if (line && !(next && next.classList.contains("transfers-names"))) line.after(theNamesList(theOpenNames.get(key)));
+    }
+  }
+  for (const key of Array.from(theOpenNames.keys())) if (!seen.has(key)) theOpenNames.delete(key);
 }
 
 // ── A file ─────────────────────────────────────────────────────────────────
@@ -625,20 +778,41 @@ function aFile(request, file) {
   const parts = [];
   const row = el("div", "tf");
   if (file.state) row.classList.add(file.state);
+  // Which file the row is, so a menu opened on it finds it again after the
+  // list is drawn again (UI consistency, finding 6).
+  row.dataset.file = file.path || "";
   const name = el("span", "tn", "mono");
   // The file's path, in the order its bytes run (X9, `web/the-value-drawn.js`).
   theValueIsDrawnInto(name, file.path);
+  // **Cut at its start, the whole path on hover** (the UI at every size,
+  // C-19): the end is what tells frames apart.
+  name.title = file.path || "";
   row.appendChild(name);
 
   const bar = el("span", "tb");
   if (file.staged && file.expected) {
     bar.appendChild(
-      theMarkOnARow({ staged: file.staged, expected: file.expected }, { of: file.of }),
+      theMarkOnARow(
+        { staged: file.staged, expected: file.expected, stagedSaid: file.staged_size, expectedSaid: file.expected_size },
+        { of: file.of },
+      ),
     );
   }
   row.appendChild(bar);
   const tail = el("span", "tm");
-  if (file.tail) tail.textContent = file.tail;
+  // **The figure sits in the last column, so every file's bar is the bar
+  // column's whole width and the bars line up** — the drawing's one bar
+  // column with the figure after it (the UI at every size, C-17). **A
+  // part-sent file's figure too, with *uploaded* after it** — the drawing's
+  // *118 / 312 MB uploaded* — so its figure never jumps into the bar column
+  // and its bar never shrinks to a stub (UI consistency, finding 41).
+  const figure = bar.querySelector(".rqs");
+  if (figure) tail.appendChild(figure);
+  if (file.tail && figure) {
+    const word = el("span");
+    word.textContent = file.tail;
+    figure.appendChild(word);
+  } else if (file.tail) tail.textContent = file.tail;
   row.appendChild(tail);
   parts.push(row);
 
@@ -646,6 +820,7 @@ function aFile(request, file) {
   // right-click menu, never on the row**, and a file with nothing left to stop
   // opens no menu at all.
   if (file.stop) {
+    row.dataset.stops = "";
     row.addEventListener("contextmenu", (press) => {
       press.preventDefault();
       theMenuIsShown(row, file.stop, request.id, file.path);
@@ -700,6 +875,8 @@ function aFile(request, file) {
 function theMenuIsShown(row, label, request, path) {
   theMenuGoes();
   const menu = el("div", "ctx", "transfers-ctx");
+  menu.dataset.request = request;
+  menu.dataset.file = path || "";
   const stop = el("button");
   stop.type = "button";
   stop.textContent = label;
@@ -708,9 +885,57 @@ function theMenuIsShown(row, label, request, path) {
     theActIsTaken("stop-one-file", request, path);
   });
   menu.appendChild(stop);
-  row.after(menu);
+  // **Inside its row, over the rows under it** — the drawing's
+  // `.tf > .transfers-ctx` — so opening it moves no row (UI consistency,
+  // finding 6).
+  row.appendChild(menu);
   theOpenMenu = menu;
-  stop.focus();
+  theFocusMovesTo(stop);
+}
+
+// **The open menu goes back on its file's row** once the list is drawn
+// again, and goes where that file is no longer listed.
+function theOpenMenuIsPutBack() {
+  if (!theOpenMenu) return;
+  // Only on a row that still has something to stop (Sol's point 3).
+  const row = theRowOf(theOpenMenu.dataset.request, theOpenMenu.dataset.file);
+  if (row && row.dataset.stops !== undefined) row.appendChild(theOpenMenu);
+  else theMenuGoes();
+}
+
+function theRowOf(request, file) {
+  for (const box of screen.list.querySelectorAll(".req")) {
+    if (box.dataset.request !== request) continue;
+    for (const row of box.querySelectorAll(".tf")) if (row.dataset.file === file) return row;
+  }
+  return null;
+}
+
+// **Where the keyboard's focus is, said so it can be found again**: in the
+// open menu, or a control on a request, known by its request and its words.
+function whereTheFocusIs() {
+  const now = document.activeElement;
+  if (!now || !screen || !screen.list.contains(now)) return null;
+  if (theOpenMenu && theOpenMenu.contains(now)) return { inTheMenu: true };
+  const box = now.closest(".req");
+  if (!box) return null;
+  return { request: box.dataset.request, kind: now.tagName, classes: now.className, words: now.textContent };
+}
+
+function theFocusIsPutBack(was) {
+  if (!was) return;
+  let found = null;
+  if (was.inTheMenu) found = theOpenMenu && theOpenMenu.querySelector("button");
+  else {
+    for (const box of screen.list.querySelectorAll(".req")) {
+      if (box.dataset.request !== was.request) continue;
+      found = Array.from(box.querySelectorAll(was.kind)).find(
+        (one) => one.className === was.classes && one.textContent === was.words,
+      );
+      break;
+    }
+  }
+  if (found && found.isConnected) theFocusMovesTo(found, { preventScroll: true });
 }
 
 function theMenuGoes() {
@@ -798,25 +1023,31 @@ function aBox(onTop) {
   const body = el("div", "mbox");
   wrap.appendChild(body);
   const close = () => wrap.remove();
-  // **Escape closes the thing on top, one layer at a time.**
-  wrap.addEventListener("keydown", (press) => {
-    if (press.key !== "Escape") return;
-    press.preventDefault();
-    close();
-  });
-  return {
+  // **Escape closes the thing on top, one layer at a time** — and a box
+  // something waits on takes its answer that does nothing instead
+  // (`onEscape`: the already-there box's *Stop*; `Design/Whole app §
+  // Keyboard shortcuts`, 2026-11-11, the four questions, batch 2, fix 3).
+  const box = {
     body,
     close,
+    onEscape: null,
     raise() {
       // **The drawing's `.modal` fills the positioned box it sits in**, so the
       // stop box sits inside this screen's own host, as the servers screen's
       // dialogs sit inside theirs. The format boxes are the drawing's `top`
       // layer and are opened from other screens, so they sit over the page.
       (onTop || !screen ? document.body : screen.host).appendChild(wrap);
-      const first = body.querySelector("button");
-      if (first) first.focus();
+      const first = body.querySelector('button,[tabindex="0"]');
+      if (first) theFocusMovesTo(first);
     },
   };
+  wrap.addEventListener("keydown", (press) => {
+    if (press.key !== "Escape") return;
+    press.preventDefault();
+    if (box.onEscape) box.onEscape();
+    else close();
+  });
+  return box;
 }
 
 /// **Space or Return presses a tick or a choice that is not a native control**,
@@ -1004,7 +1235,25 @@ function theFormatBoxIsDrawn(said, whenDone, closesOnDone, whenReadItNow, whenSo
       // words, and each folder under it as a value, in the order its bytes run
       // (X9, `web/the-value-drawn.js`).
       let fmtWhere;
-      if (format.the_top) {
+      if (format.the_tops && format.the_tops.length) {
+        // **More than three folders: where they sit** — a top holding one
+        // written folder whole, a top holding several once with how many
+        // (`Design/Render Settings § What it will write`; the drawing's
+        // `fmt-many`). Two lines at most, and nothing to press.
+        fmtWhere = el("span", "fmw");
+        if (format.the_top) {
+          fmtWhere.appendChild(document.createTextNode(format.the_top));
+          fmtWhere.appendChild(document.createTextNode(" · "));
+        }
+        format.the_tops.forEach((top, at) => {
+          if (at) fmtWhere.appendChild(document.createTextNode(" · "));
+          const folder = el("span", "mono");
+          theValueIsDrawnInto(folder, top.folder);
+          fmtWhere.appendChild(folder);
+          if (top.folders) saidInto(fmtWhere.appendChild(el("span")), top.folders).before(" ");
+        });
+        if (format.more_folders) saidInto(fmtWhere.appendChild(el("span")), format.more_folders).before(" ");
+      } else if (format.the_top) {
         fmtWhere = el("span", "fmw");
         fmtWhere.appendChild(document.createTextNode(format.the_top));
         if (format.where_in_the_job) {
@@ -1091,7 +1340,7 @@ function theFormatBoxIsDrawn(said, whenDone, closesOnDone, whenReadItNow, whenSo
   // **Where they go**: the standing folder, §8's proposal named as the user's
   // download folder, and somewhere else. Each is a choice row so a folder's
   // path and the words about it stay two nodes (X7).
-  const to = el("div", "frm");
+  const to = el("div", "frm", "transfers-destination");
   const toLabel = el("label");
   toLabel.textContent = said.to;
   to.appendChild(toLabel);

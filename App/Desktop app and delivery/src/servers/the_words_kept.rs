@@ -336,24 +336,13 @@ impl ReadsAStreamBackWhole for OverTheReadingSession {
             .enable_all()
             .build()
             .map_err(|why| why.to_string())?;
-        let path = path.as_bytes().to_vec();
         // **Nobody is waiting on it** (`Server protocol and transfers` §1.1
-        // item 2): a reading the user waits on goes first.
-        let read = runtime.block_on(self.sessions.a_reading(false, move |subsystem| {
-            Box::pin(async move {
-                Ok(
-                    smoozy_dependencies::acting::checking::read_a_stream_back_over_the_file_session(
-                        subsystem, &path, length,
-                    )
-                    .await,
-                )
-            })
-        }));
-        match read {
-            Ok(Ok(read)) => read,
-            Ok(Err(failure)) => Err(format!("{failure:?}")),
-            Err(not_lent) => Err(format!("{not_lent:?}")),
-        }
+        // item 2): a reading the user waits on goes first. **And it comes in
+        // pieces**, so a command or a user's reading asked meanwhile goes
+        // between two of them — until 2026-11-12 the whole stream was one
+        // reading and a submission waited behind it (the live pass of that
+        // date, new fault 3).
+        runtime.block_on(self.sessions.a_streams_bytes(false, path.as_bytes(), 0, length))
     }
 }
 

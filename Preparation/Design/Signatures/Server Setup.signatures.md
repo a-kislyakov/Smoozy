@@ -82,3 +82,51 @@
 2026-11-04 — GPT-6.1 (Codex) — wrote the brief’s progress and failure rules. No auditor has seen it.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the stopped card's two paragraphs, *Install* and *Don't install*. The last words read before the release. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 2, Server output keeps everything.md`, outside any round — *Server output* kept until Smoozy disconnects, each act under its own line; one control for a setup failure's raw words, Smoozy's own labelled; the control at the card's edge where no steps stand. The Creator's twenty-eighth notes, notes 1 and 7. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — a setup press during an update, and the flaky layers test.md`, outside any round — a press during Smoozy's own update waits in the line; the card reads the update's line with *Queued* under it and no *Cancel setup*. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 1, connecting and setting up.md`, outside any round — *This server*: a failed connection says its reason after *Could not connect:*; a server no release is built for reads *This server's processor is not supported. Nothing was changed.*; *Adding Telegram*: a failed placement is said on Telegram's own line, in red, and the setup still reads ready. The four questions, scouts 3.1, 3.3 and 1.3, under Rule 10. No auditor has seen it.
+
+2026-11-11 — GPT-6.1 (Codex), second UI builder — Kept download choices and folder readings visible.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — E-11: only the Install Blender box's versions scroll. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 3, words a user can't act on.md`, outside any round — The driver warning names the driver needed and what to do (scout 3.5); unsupported servers say what is supported (3.4); *Not connected.*, *This server has not been set up.*, *No Blender on this server.* (3.9); *End setup* for *Abandon setup*, and the stopped card says whether jobs can run (3.10); step names say what they do (3.12); the package-manager line says why (3.13); the admin box names the password (3.8). The drawing's words changed with them. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 4, Telegram.md`, outside any round — *Smoozy isn't responding.* put back on the card's state line, as batch 3 had changed it with the row (scout 3.7). No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — The remove box reads *Remove* where no job uses that Blender (scout 1.17). No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), second builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — the unpack tool's box says installing it beside jobs is untested (scout 1.18); giving up on the restart says *Check the server is running, then connect.* (2.11). No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Changed busy-server words and qualified the GPU driver advice.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: *This server*: where no connection stands, the card's action is *Connect and set up*, which connects and then sets up as a press would (scout 4.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the live pass found.md`, outside any round — § A long step: Cancel setup, once pressed, reads Cancelling… and keeps its words; a press while the new server program is waited on ends the wait. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the admin fresh look, logs in Telegram, and the empty screen.md`, outside any round — § Admin access: the box opens only over the server whose step was refused. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the night's live pass found.md`, outside any round — *The step that failed*: blender.org's HTTP 403 said with its cause and what to do. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep of the app and the website: screen words only, as listed in `Audits/Build/The word sweep, the app and the website — what landed.md`. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Added setup’s refusal over an incompatible program.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — made the batch 2 GPU check and missing-mark section one account.
+2026-11-14 — Claude Opus 5.5 — added the two boxes of the Creator's batch 1 rulings.
+2026-11-14 — Claude Opus 5.5 — the Queued list lists an act once (Rough share 1).
+2026-11-14 — Claude Opus 5.5 — the lost-mark line: Set up writes it back (the Creator's ruling on 164, Rough share 2).
+2026-11-14 — Claude Opus 5.5 — A wrong admin password (Rough share 2, 136 and 137).
+2026-11-14 — Claude Opus 5.5 — A server busy with its own updates (Rough share 2, 139).
+2026-11-14 — Claude Opus 5.5 — The GPU after the restart (Rough share 2, 142 and 143).
+2026-11-14 — Claude Opus 5.5 — Smoozy's folder on a full disk (Rough share 2, 120).
+2026-11-14 — Claude Opus 5.5 — a finished release already on the server is greyed (Rough share 4, the runner's ruling).
+2026-11-14 — Claude Opus 5.5 — a press during Smoozy's own repair waits behind it as behind an update, under the repair's line (the automatic repair).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: three quoted lines reworded.
+2026-11-15 — Claude Opus 5.5 — the card during the repair, and a reading left unanswered (what the what-if live pass found).
+2026-11-15 — Claude Opus 5.5 — the Set up press while Smoozy does not answer (Sol's look on what the what-if live pass found).
+2026-11-15 — Claude Opus 5.5 — the card says *isn't responding* with the row, and *Connecting…* while Smoozy's first checks run (the re-check before 0.4.0).

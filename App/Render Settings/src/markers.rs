@@ -659,13 +659,23 @@ mod tests {
     /// loaded range belongs to the one job it was loaded for*. Built in this
     /// module's store and the desktop's route from a history entry.
     /// **109 from 2026-11-06**, with Q2b and Y1c: the simulation choice and its range.
+    /// **110 from 2026-11-10**, with **Y1d** — *the range's frames* on a
+    /// first-frame check, the runner's ruling on `Job files and outputs` P6a
+    /// (the twenty-eighth notes, piece 13).
+    /// **112 from 2026-11-14**, with **V3a** — the reading says whether the
+    /// file's scripts run, and the page says so (the leftovers of the Rough
+    /// what-if answers, 222 and 227) — and **Q14a** — a newer copy of the file
+    /// that has not finished uploading is said on the page (185). Both built
+    /// by the same sitting: `Render Settings — machine`'s settings half, `Job
+    /// files and outputs — machine`'s reading script, and the desktop's Render
+    /// Settings page.
     #[test]
     fn the_plan_defines_one_hundred_and_four_distinct_clauses() {
         let plan =
             fs::read_to_string(the_architecture_folder().join(format!("{THIS_PLANS_NAME}.md")))
                 .expect("the plan is readable");
         let defined: HashSet<String> = the_clauses_defined_by(&plan).into_iter().collect();
-        assert_eq!(defined.len(), 109, "{:?}", {
+        assert_eq!(defined.len(), 112, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

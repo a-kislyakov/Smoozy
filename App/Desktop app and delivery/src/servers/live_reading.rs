@@ -183,6 +183,14 @@ pub trait WhatAPassTakes {
     /// written**: what its reads write — the cursor's advance among them — is
     /// those mechanisms' own and unchanged.
     fn take(&mut self, server: &str, read: WhatAPassReads);
+
+    /// **Every read of this pass has been taken.** Nothing by default; the
+    /// one implementation hears how long the pass took, for `Queue &
+    /// History` §17's gap lines (note 11's piece 5a). It reads nothing and waits on
+    /// nothing.
+    fn the_pass_is_over(&mut self, server: &str) {
+        let _ = server;
+    }
 }
 
 /// **The pause between one pass and the next — this stage's pick, which P10d
@@ -251,6 +259,7 @@ where
         for read in what_this_pass_reads(takes, server) {
             takes.take(server, read);
         }
+        takes.the_pass_is_over(server);
         // **The pause is measured from the end of the previous pass and never
         // from its start** — P10d's own pacing rule, and `Servers` N3 is the
         // same rule stated for the repair.
@@ -270,6 +279,8 @@ mod tests {
         queue_on_screen: bool,
         commentary_on_screen: bool,
         passes_left: usize,
+        /// How many reads had been taken each time a pass said it was over.
+        over_after: Vec<usize>,
     }
 
     impl WhatAPassTakes for APass {
@@ -290,6 +301,10 @@ mod tests {
 
         fn take(&mut self, server: &str, read: WhatAPassReads) {
             self.taken.push((server.to_string(), read));
+        }
+
+        fn the_pass_is_over(&mut self, _server: &str) {
+            self.over_after.push(self.taken.len());
         }
     }
 
@@ -454,6 +469,18 @@ mod tests {
             "**P10d: one pass at a time, the pause between passes measured \
              from the end of the previous pass**"
         );
+    }
+
+    /// **Note 11's piece 5a: each pass says it is over once all its reads are taken**,
+    /// and before the pause — so a pass is timed whole, its pause left out.
+    #[test]
+    fn n5a_each_pass_says_it_is_over_after_its_last_read() {
+        let (pass, _) = run(APass {
+            passes_left: 3,
+            queue_on_screen: true,
+            ..APass::default()
+        });
+        assert_eq!(pass.over_after, vec![2, 4, 6]);
     }
 
     /// **What ends it: the break declaration, there being no connection left to

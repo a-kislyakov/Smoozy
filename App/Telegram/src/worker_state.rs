@@ -36,6 +36,19 @@ pub trait TheTelegramWorkersState: Send {
     fn the_update_position(&self) -> Result<Option<i64>, WhyTheStoreFailed>;
     /// Written only after the work for every earlier update is done (F3).
     fn record_the_update_position(&mut self, next: i64) -> Result<(), WhyTheStoreFailed>;
+    /// **`Telegram` F3b — when the position was written**, in seconds since
+    /// 1970 on this machine's own clock, or nothing where the store holds no
+    /// moment for it. Added 2026-11-12, the Fable review, sitting 6. **A
+    /// store that keeps no moment answers nothing**, and the listener then
+    /// asks with no offset.
+    fn the_update_positions_moment(&self) -> Result<Option<u64>, WhyTheStoreFailed> {
+        Ok(None)
+    }
+    /// **`Telegram` F3b — the position and its moment, in one write.** A
+    /// store that keeps no moment writes the position alone.
+    fn record_the_update_position_at(&mut self, next: i64, _at: u64) -> Result<(), WhyTheStoreFailed> {
+        self.record_the_update_position(next)
+    }
     /// **`Telegram` B3** — the identity of the board this machine last created.
     fn the_board(&self) -> Result<Option<i64>, WhyTheStoreFailed>;
     fn record_the_board(&mut self, message: i64) -> Result<(), WhyTheStoreFailed>;
@@ -121,13 +134,56 @@ pub trait TheTelegramWorkersState: Send {
         Err(WhyTheStoreFailed("this store keeps no phone's choice".into()))
     }
 
+    // The twenty-eighth notes, notes 18 and 19 (2026-11-09) — `Telegram`
+    // C7a's record of each live job's message. **Defaults read as nothing and
+    // refuse to write**, as the register's do.
+
+    /// **`Telegram` C7a — every live job's message**, one to a job.
+    fn the_jobs_messages(&self) -> Result<Vec<AJobsMessage>, WhyTheStoreFailed> {
+        Ok(Vec::new())
+    }
+    /// **`Telegram` C7a — one job's message recorded**, written once Telegram
+    /// accepts the send (R1b's order), replacing any record for the same job.
+    fn record_a_jobs_message(&mut self, record: AJobsMessage) -> Result<(), WhyTheStoreFailed> {
+        let _ = record;
+        Err(WhyTheStoreFailed("this store keeps no job's message".into()))
+    }
+    /// **`Telegram` C7a — a job's message record ends**: its cut accepted, the
+    /// message found impossible to edit, or the job's record folder gone.
+    fn the_jobs_message_ends(&mut self, job: &str) -> Result<(), WhyTheStoreFailed> {
+        let _ = job;
+        Ok(())
+    }
+    /// **`Telegram` B3 as changed 2026-11-12 — the action instructions and
+    /// context-resolution entries the last board this machine confirmed
+    /// held, with the moment**, in the listener's own written form, or
+    /// nothing. Added by the Fable review's sitting 6 follow-up. **Defaults
+    /// read as nothing and refuse to write**, as the register's do.
+    fn the_entries_last_held(&self) -> Result<Option<String>, WhyTheStoreFailed> {
+        Ok(None)
+    }
+    /// **`Telegram` B3 as changed 2026-11-12 — that record written**, or
+    /// emptied with nothing.
+    fn record_the_entries_last_held(&mut self, written: Option<String>) -> Result<(), WhyTheStoreFailed> {
+        let _ = written;
+        Err(WhyTheStoreFailed("this store keeps no record of the entries last held".into()))
+    }
+
+    /// **The live job's message of one job**, where one is recorded.
+    fn the_jobs_message_of(&self, job: &str) -> Option<AJobsMessage> {
+        self.the_jobs_messages().ok()?.into_iter().find(|record| record.job == job)
+    }
+
     /// **`Telegram` B8's third recognition, widened by R1a's widening and
     /// R1b**: this machine speaks for a message it holds an action-context
     /// record bound to, a register line about a job for, or that is its own
     /// status message (C7).
     fn speaks_for_the_message(&self, message: i64) -> bool {
         self.holds_a_context_record_bound_to(message).unwrap_or(false)
-            || matches!(self.the_sent_message(message), Ok(Some(ASentMessage { about: WhatAMessageIsAbout::AJob { .. }, .. })))
+            // **R1a as added 2026-11-13: a line about no job is claimed too**,
+            // so a reply to a general answer this machine sent while it was
+            // the listener is handled as no reply, never failed closed.
+            || matches!(self.the_sent_message(message), Ok(Some(ASentMessage { .. })))
             || self.the_status_message().ok().flatten() == Some(message)
     }
 }
@@ -156,12 +212,23 @@ pub enum WhatAMessageIsAbout {
         #[serde(default)]
         generation: Option<String>,
         #[serde(default)]
-        frame: Option<u64>,
+        frame: Option<i64>,
         #[serde(default)]
         layer: Option<String>,
     },
     /// The listener's own: *Which job?*, a status reply, a refusal, an ask.
     NoJob,
+}
+
+/// **`Telegram` C7a — one live job's message**: the job identity, the
+/// attempt's generation and the message identity, and nothing else — its last
+/// accepted words live in the worker's memory alone. Added 2026-11-09, the
+/// twenty-eighth notes, notes 18 and 19.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AJobsMessage {
+    pub job: String,
+    pub generation: String,
+    pub message: i64,
 }
 
 /// **`Telegram` V1d — the phone's choice**: the value in the manifest's own
@@ -197,6 +264,9 @@ pub fn the_register_kept_within_its_bound<T>(lines: &mut BTreeMap<i64, T>) {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 struct WhatIsHeld {
     update_position: Option<i64>,
+    /// `Telegram` F3b: when the position was written.
+    #[serde(default)]
+    update_position_written_at: Option<u64>,
     board: Option<i64>,
     machinery_message: Option<i64>,
     routing_key: String,
@@ -211,6 +281,11 @@ struct WhatIsHeld {
     sent_messages: BTreeMap<i64, ASentMessage>,
     #[serde(default)]
     phones_choice: Option<ThePhonesChoice>,
+    #[serde(default)]
+    jobs_messages: BTreeMap<String, AJobsMessage>,
+    /// `Telegram` B3 as changed 2026-11-12.
+    #[serde(default)]
+    entries_last_held: Option<String>,
 }
 
 impl WhatIsHeld {
@@ -272,6 +347,15 @@ impl TheTelegramWorkersState for InMemory {
     }
     fn record_the_update_position(&mut self, next: i64) -> Result<(), WhyTheStoreFailed> {
         self.held.update_position = Some(next);
+        self.held.update_position_written_at = None;
+        Ok(())
+    }
+    fn the_update_positions_moment(&self) -> Result<Option<u64>, WhyTheStoreFailed> {
+        Ok(self.held.update_position_written_at)
+    }
+    fn record_the_update_position_at(&mut self, next: i64, at: u64) -> Result<(), WhyTheStoreFailed> {
+        self.held.update_position = Some(next);
+        self.held.update_position_written_at = Some(at);
         Ok(())
     }
     fn the_board(&self) -> Result<Option<i64>, WhyTheStoreFailed> {
@@ -343,8 +427,26 @@ impl TheTelegramWorkersState for InMemory {
     fn the_phones_choice(&self) -> Result<Option<ThePhonesChoice>, WhyTheStoreFailed> {
         Ok(self.held.phones_choice.clone())
     }
+    fn the_entries_last_held(&self) -> Result<Option<String>, WhyTheStoreFailed> {
+        Ok(self.held.entries_last_held.clone())
+    }
+    fn record_the_entries_last_held(&mut self, written: Option<String>) -> Result<(), WhyTheStoreFailed> {
+        self.held.entries_last_held = written;
+        Ok(())
+    }
     fn record_the_phones_choice(&mut self, choice: ThePhonesChoice) -> Result<bool, WhyTheStoreFailed> {
         Ok(self.held.the_phones_choice_written(choice))
+    }
+    fn the_jobs_messages(&self) -> Result<Vec<AJobsMessage>, WhyTheStoreFailed> {
+        Ok(self.held.jobs_messages.values().cloned().collect())
+    }
+    fn record_a_jobs_message(&mut self, record: AJobsMessage) -> Result<(), WhyTheStoreFailed> {
+        self.held.jobs_messages.insert(record.job.clone(), record);
+        Ok(())
+    }
+    fn the_jobs_message_ends(&mut self, job: &str) -> Result<(), WhyTheStoreFailed> {
+        self.held.jobs_messages.remove(job);
+        Ok(())
     }
 }
 
@@ -364,6 +466,12 @@ impl AFileStandIn {
             store.write(&WhatIsHeld { routing_key: routing_key.to_string(), ..WhatIsHeld::default() })?;
         }
         Ok(store)
+    }
+
+    /// Where the file is, for a test's tidying.
+    #[cfg(test)]
+    pub(crate) fn path_for_tests(&self) -> &std::path::Path {
+        &self.path
     }
 
     fn read(&self) -> Result<WhatIsHeld, WhyTheStoreFailed> {
@@ -396,7 +504,19 @@ impl TheTelegramWorkersState for AFileStandIn {
         Ok(self.read()?.update_position)
     }
     fn record_the_update_position(&mut self, next: i64) -> Result<(), WhyTheStoreFailed> {
-        self.change(|h| h.update_position = Some(next))
+        self.change(|h| {
+            h.update_position = Some(next);
+            h.update_position_written_at = None;
+        })
+    }
+    fn the_update_positions_moment(&self) -> Result<Option<u64>, WhyTheStoreFailed> {
+        Ok(self.read()?.update_position_written_at)
+    }
+    fn record_the_update_position_at(&mut self, next: i64, at: u64) -> Result<(), WhyTheStoreFailed> {
+        self.change(|h| {
+            h.update_position = Some(next);
+            h.update_position_written_at = Some(at);
+        })
     }
     fn the_board(&self) -> Result<Option<i64>, WhyTheStoreFailed> {
         Ok(self.read()?.board)
@@ -467,11 +587,45 @@ impl TheTelegramWorkersState for AFileStandIn {
     fn the_phones_choice(&self) -> Result<Option<ThePhonesChoice>, WhyTheStoreFailed> {
         Ok(self.read()?.phones_choice)
     }
+    fn the_entries_last_held(&self) -> Result<Option<String>, WhyTheStoreFailed> {
+        Ok(self.read()?.entries_last_held)
+    }
+    fn record_the_entries_last_held(&mut self, written: Option<String>) -> Result<(), WhyTheStoreFailed> {
+        self.change(|h| h.entries_last_held = written)
+    }
     fn record_the_phones_choice(&mut self, choice: ThePhonesChoice) -> Result<bool, WhyTheStoreFailed> {
         let mut written = false;
         self.change(|h| written = h.the_phones_choice_written(choice))?;
         Ok(written)
     }
+    fn the_jobs_messages(&self) -> Result<Vec<AJobsMessage>, WhyTheStoreFailed> {
+        Ok(self.read()?.jobs_messages.into_values().collect())
+    }
+    fn record_a_jobs_message(&mut self, record: AJobsMessage) -> Result<(), WhyTheStoreFailed> {
+        self.change(|h| {
+            h.jobs_messages.insert(record.job.clone(), record);
+        })
+    }
+    fn the_jobs_message_ends(&mut self, job: &str) -> Result<(), WhyTheStoreFailed> {
+        self.change(|h| {
+            h.jobs_messages.remove(job);
+        })
+    }
+}
+
+/// **A file stand-in in a scratch folder of its own, and the path that stops
+/// its writes** — for the tests of `Telegram` F3c. Every write goes through a
+/// sibling file ([`AFileStandIn::write`]); a folder made at that sibling's
+/// path makes every write fail while every read still answers, as a store on
+/// a full disk does. Taking the folder away lets writes through again.
+#[cfg(test)]
+pub(crate) fn a_file_store_whose_writes_can_be_stopped(name: &str) -> (AFileStandIn, PathBuf) {
+    let folder = std::env::temp_dir().join(format!("smoozy-telegram-f3c-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&folder);
+    std::fs::create_dir_all(&folder).expect("a scratch folder");
+    let path = folder.join("state.json");
+    let store = AFileStandIn::at(path.clone(), &format!("key-{name}")).expect("a store");
+    (store, path.with_extension("writing"))
 }
 
 #[cfg(test)]
@@ -504,7 +658,9 @@ mod tests {
         store.register_a_sent_message(ASentMessage { message: 61, conversation: 9, about: WhatAMessageIsAbout::NoJob }).unwrap();
         assert_eq!(store.the_sent_message(60).unwrap().unwrap().about, about("job-1"));
         assert!(store.speaks_for_the_message(60), "a job's line speaks for its message");
-        assert!(!store.speaks_for_the_message(61), "a line about no job speaks for nothing");
+        // R1a as changed 2026-11-13: a line about no job is claimed too, so
+        // its machine can say the reply is about no job.
+        assert!(store.speaks_for_the_message(61), "a line about no job speaks for its message");
         assert!(store.speaks_for_the_message(52), "the status message is this machine's");
         assert_eq!(store.forget_sent_messages_where(&|line| line.message == 60).unwrap(), 1);
         assert_eq!(store.the_sent_message(60).unwrap(), None);
@@ -514,6 +670,15 @@ mod tests {
         assert!(!store.record_the_phones_choice(choice(100, 5)).unwrap(), "the same choice again changes nothing");
         assert!(store.record_the_phones_choice(choice(100, 6)).unwrap(), "one date, a later update");
         assert_eq!(store.the_phones_choice().unwrap().unwrap().operation, "op-100-6");
+        // **`Telegram` C7a — one live job's message to a job**, replaced by a
+        // later record for the same job and gone once it ends.
+        let record = |message: i64| AJobsMessage { job: "job-1".into(), generation: "g1:1".into(), message };
+        assert_eq!(store.the_jobs_message_of("job-1"), None);
+        store.record_a_jobs_message(record(70)).unwrap();
+        store.record_a_jobs_message(record(71)).unwrap();
+        assert_eq!(store.the_jobs_messages().unwrap(), vec![record(71)]);
+        store.the_jobs_message_ends("job-1").unwrap();
+        assert_eq!(store.the_jobs_message_of("job-1"), None);
     }
 
     #[test]

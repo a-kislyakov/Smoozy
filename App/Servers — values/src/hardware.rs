@@ -967,6 +967,9 @@ pub struct TheDriverStatement {
     /// **What that row stops**, which the words follow (`Rendering` L23a's
     /// bullet of 2026-11-02).
     pub below_it: WhatTheBarStops,
+    /// **That row's driver minimum**, so the warning names the driver that
+    /// would do — the four questions, scout 3.5, 2026-11-11.
+    pub driver_minimum: &'static [u32],
 }
 
 /// **H11b: *"It is said only where Smoozy cannot change the driver."***
@@ -1020,6 +1023,7 @@ pub fn what_the_bar_says(
                 cuda_version: the_driver.cuda_version.clone(),
                 from_blender: row.from_blender,
                 below_it: row.below_it,
+                driver_minimum: row.driver_minimum,
             })
         }
         _ => None,
@@ -1538,6 +1542,7 @@ mod tests {
                 cuda_version: Some("12.4".into()),
                 from_blender: (5, 2, 0),
                 below_it: WhatTheBarStops::Optix,
+                driver_minimum: &[570],
             })
         );
         assert_eq!(said.blenders_below_their_bar, vec![(5, 2, 2)]);

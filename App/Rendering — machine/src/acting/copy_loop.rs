@@ -555,6 +555,44 @@ pub fn what_the_marker_said_about_the_remap_pairs(
     what_the_marker_said_about_the_pairs(&remap.pairs, &observed.as_the_stream_carried_them())
 }
 
+/// **K14c: the file names the job says as *Missing:*, from the comparison.**
+///
+/// - **A pair whose line says it was not applied** is named, always.
+/// - **A pair no line named** is named only where `the_stream_was_whole` —
+///   the marker passed and the ordinary stream reached its end. A line this
+///   loop did not see is not a path Smoozy could not change.
+///
+/// **The name is the last part of the pair's new location**, as text. **At
+/// most [`THE_MOST_MISSING_NAMES_THAT_TRAVEL`] travel**, and a longer list
+/// ends by saying how many more.
+pub fn the_files_a_remap_left_unchanged(
+    said: &WhatTheMarkerSaidAboutThePairs,
+    the_stream_was_whole: bool,
+) -> Vec<String> {
+    let mut names: Vec<String> = said
+        .per_pair
+        .iter()
+        .filter(|(_, line)| match line {
+            Some(line) => !line.applied,
+            None => the_stream_was_whole,
+        })
+        .map(|(pair, _)| {
+            let whole = pair.new_location.as_bytes();
+            let name = whole.rsplit(|byte| *byte == b'/').next().unwrap_or(whole);
+            String::from_utf8_lossy(name).into_owned()
+        })
+        .collect();
+    if names.len() > THE_MOST_MISSING_NAMES_THAT_TRAVEL {
+        let more = names.len() - THE_MOST_MISSING_NAMES_THAT_TRAVEL;
+        names.truncate(THE_MOST_MISSING_NAMES_THAT_TRAVEL);
+        names.push(format!("{more} more files"));
+    }
+    names
+}
+
+/// K14c's bound on the names one ending carries. A Build figure.
+pub const THE_MOST_MISSING_NAMES_THAT_TRAVEL: usize = 100;
+
 /// **The loop, held by the worker for one attempt.**
 ///
 /// The ceiling and the observers are shared by both streams — the two draw
@@ -682,7 +720,15 @@ where
                 }
                 Ok(how_many) => how_many,
                 Err(why) if why.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(_) => break,
+                Err(why) => {
+                    // **A read that fails ends the reading with no end of
+                    // stream, and says why once** (`Rented-server runtime` M5 and
+                    // `Rented-server runtime` M5a) — until the Fable review's
+                    // fifth sitting it ended the reading and recorded nothing.
+                    first_loss_reason
+                        .get_or_insert_with(|| format!("read error: {why}"));
+                    break;
+                }
             };
             let bytes = &buffer[..how_many];
 
@@ -698,7 +744,7 @@ where
                     discarded += how_many as u64;
                     if first_loss_reason.is_none() {
                         first_loss_reason =
-                            Some("the shared capture ceiling was reached".to_string());
+                            Some("size limit reached".to_string());
                     }
                 }
                 WhatTheWorkerDoesWithTheRestOfTheStream::RetainsIt => {
@@ -714,7 +760,7 @@ where
                             if left_over > 0 {
                                 discarded += left_over;
                                 first_loss_reason.get_or_insert_with(|| {
-                                    "the shared capture ceiling was reached".to_string()
+                                    "size limit reached".to_string()
                                 });
                             }
                         }
@@ -1127,6 +1173,50 @@ mod tests {
         assert_eq!(said.pairs_the_marker_never_mentioned, 0);
         drop(observers);
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// **K14c: a pair not applied is named always, and a pair no line named
+    /// only where the stream was whole.** The Fable review's fifth sitting,
+    /// fault 5.
+    #[test]
+    fn the_names_said_as_missing_are_the_pairs_not_applied_and_those_no_line_named() {
+        use smoozy_dependencies_machine::material::what_the_marker_said_about_the_pairs;
+        let job = crate::material::tests::a_job();
+        let remap = crate::material::tests::a_remap(&job, true);
+        // Both applied: nothing is missing.
+        let both = format!(
+            "{}\n{}\n",
+            the_marker_line_for(&remap.pairs[0]),
+            the_marker_line_for(&remap.pairs[1])
+        );
+        let said = what_the_marker_said_about_the_pairs(&remap.pairs, both.as_bytes());
+        assert!(the_files_a_remap_left_unchanged(&said, true).is_empty());
+        // The image's line says it was not applied; the library has no line.
+        let not_applied = the_marker_line_for(&remap.pairs[0]).replace("\"applied\":true", "\"applied\":false");
+        assert_ne!(not_applied, the_marker_line_for(&remap.pairs[0]), "the line was changed");
+        let said = what_the_marker_said_about_the_pairs(&remap.pairs, not_applied.as_bytes());
+        assert_eq!(
+            the_files_a_remap_left_unchanged(&said, true),
+            vec!["wood.png".to_string(), "props.blend".to_string()]
+        );
+        assert_eq!(
+            the_files_a_remap_left_unchanged(&said, false),
+            vec!["wood.png".to_string()],
+            "a stream that was not whole says nothing of a pair with no line"
+        );
+        // More than the bound: the last entry says how many more.
+        let many: Vec<_> = (0..THE_MOST_MISSING_NAMES_THAT_TRAVEL + 7)
+            .map(|_| (remap.pairs[0].clone(), None))
+            .collect();
+        let said = smoozy_dependencies_machine::material::WhatTheMarkerSaidAboutThePairs {
+            pairs_the_marker_never_mentioned: many.len(),
+            per_pair: many,
+            lines_naming_no_pair_of_this_material: 0,
+            lines_that_would_not_read_back: 0,
+        };
+        let names = the_files_a_remap_left_unchanged(&said, true);
+        assert_eq!(names.len(), THE_MOST_MISSING_NAMES_THAT_TRAVEL + 1);
+        assert_eq!(names.last().map(String::as_str), Some("7 more files"));
     }
 
     /// **A pair the marker never mentioned is named rather than lost**, which

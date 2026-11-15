@@ -80,7 +80,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 
 use smoozy_dependencies::acting::checking::{
-    read_a_stream_back_over_the_file_session, TheMachineAReadingIsAskedOf,
+    TheMachineAReadingIsAskedOf,
     BETWEEN_TWO_ASKS_OF_ONE_READING,
 };
 use smoozy_job_files::composing::{
@@ -120,14 +120,17 @@ use crate::surface::render_settings::WhatTheRunHolds;
 /// written under it.
 pub const THE_MODULE: &str = "Render Settings";
 
-/// **The bound on one whole reading, as the desk waits on it** — `Server
-/// Setup` B1's one number for every Blender run the desktop waits on, the same
-/// the check's reading carries. **What ends at it is the wait and not the
-/// run**; the waiter's expired deadline is `Server protocol and transfers`
-/// C16 and `Server protocol and transfers` C17's *the waiter gave up*, which `Render Settings`' frame puts
-/// with the channel's own ending.
-pub const THE_BOUND_ON_ONE_READING: Duration =
-    smoozy_dependencies::acting::blender::THE_TIME_LIMIT_A_BLENDER_RUN_CARRIES;
+/// **The longest one ask of a reading waits for its answer** — `Render
+/// Settings` Q10's build detail of 2026-11-13, the same the check's reading
+/// carries. **A deadline on each ask and never on the whole reading**: while
+/// the server answers that the read is still running, the read goes on. **What
+/// ends at it is the wait and not the run**; the waiter's expired deadline is
+/// `Server protocol and transfers` C16 and C17's *the waiter gave up*, which
+/// `Render Settings`' frame puts with the channel's own ending. Until that date
+/// `Server Setup` B1's minute bounded the whole read (the Creator's note 4 on
+/// the test copy of 2026-11-12).
+pub const THE_LONGEST_AN_ASK_OF_A_READING_WAITS: Duration =
+    smoozy_dependencies::acting::checking::THE_LONGEST_AN_ASK_WAITS;
 
 // ════════════════════════════════════════════════════════════════════════════
 // The machine, over the per-server point
@@ -194,6 +197,168 @@ pub trait TheMachineAFileIsReadOn: TheMachineAReadingIsAskedOf {
     }
 }
 
+/// **How long the desktop waits, after Stop, for the server to say the read
+/// has ended** (`Design/Render Settings § A read can take longer`, changed
+/// 2026-11-13). A Build figure: the kill ends a reading's Blender at once
+/// (`Render Settings` W2), so the answer is the next ask's; past it the page
+/// says *Stop requested.*
+pub const HOW_LONG_A_STOPPED_READ_IS_WAITED_ON: Duration = Duration::from_secs(30);
+
+/// `Render Settings` Q5 and W2: one monotonic start and one-way Stop per read.
+#[derive(Debug)]
+pub struct AReadControl {
+    started: std::time::Instant,
+    stop: tokio::sync::watch::Sender<bool>,
+    /// **The server said the stopped read has ended**, or nothing was
+    /// started there to end (`Design/Render Settings § A read can take
+    /// longer`, changed 2026-11-13, the night's live pass, fault 3).
+    ended_there: std::sync::atomic::AtomicBool,
+    /// **Where the read's walk is, as the server last said** — `Render
+    /// Settings` Q5's build detail of 2026-11-13 (the Creator's notes on the
+    /// test copy, second round, note 15): the step and how many there are.
+    walk: std::sync::Mutex<Option<(u64, u64)>>,
+    /// **What redraws the page when the walk moves**, where the act that
+    /// started the read gave one.
+    redraw: std::sync::Mutex<Option<ARedraw>>,
+}
+
+/// The act that redraws the page, kept beside a read's control.
+pub struct ARedraw(pub Box<dyn Fn() + Send + Sync>);
+impl std::fmt::Debug for ARedraw {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("a redraw")
+    }
+}
+
+impl AReadControl {
+    pub fn new() -> Self {
+        Self {
+            started: std::time::Instant::now(),
+            stop: tokio::sync::watch::channel(false).0,
+            ended_there: std::sync::atomic::AtomicBool::new(false),
+            walk: std::sync::Mutex::new(None),
+            redraw: std::sync::Mutex::new(None),
+        }
+    }
+    /// The act that redraws the page when the walk moves.
+    pub fn redraws_with(&self, redraw: impl Fn() + Send + Sync + 'static) {
+        if let Ok(mut held) = self.redraw.lock() {
+            *held = Some(ARedraw(Box::new(redraw)));
+        }
+    }
+    /// **The server said where the walk is**; the page is redrawn where that
+    /// moved it.
+    pub fn the_walk_is_at(&self, step: u64, steps: u64) {
+        let moved = match self.walk.lock() {
+            Ok(mut walk) if *walk != Some((step, steps)) => {
+                *walk = Some((step, steps));
+                true
+            }
+            _ => false,
+        };
+        if moved {
+            if let Ok(redraw) = self.redraw.lock() {
+                if let Some(redraw) = redraw.as_ref() {
+                    (redraw.0)();
+                }
+            }
+        }
+    }
+    /// Where the read's walk is, as the server last said.
+    pub fn walk(&self) -> Option<(u64, u64)> {
+        self.walk.lock().ok().and_then(|walk| *walk)
+    }
+    pub fn stop(&self) { self.stop.send_replace(true); }
+    pub fn is_stopped(&self) -> bool { *self.stop.borrow() }
+    /// Whether the read is stopped and the server said it has ended there.
+    pub fn the_stop_was_confirmed(&self) -> bool {
+        self.is_stopped() && self.ended_there.load(std::sync::atomic::Ordering::SeqCst)
+    }
+    /// The server said the stopped read has ended, or nothing was started there.
+    pub fn it_ended_there(&self) { self.ended_there.store(true, std::sync::atomic::Ordering::SeqCst); }
+    pub fn elapsed(&self) -> u64 { self.started.elapsed().as_secs() }
+    async fn stopped(&self) {
+        let mut signal = self.stop.subscribe();
+        let _ = signal.wait_for(|stopped| *stopped).await;
+    }
+}
+
+fn a_stopped_reading() -> WhatTheReadingLeft {
+    let mut frame = the_machine_did_not_take_it();
+    frame.smoozy_ended_it = true;
+    WhatTheReadingLeft::only(frame)
+}
+
+/// `Render Settings` W2 over `Server protocol and transfers` C21. Drop the
+/// pending wait before borrowing the machine to send exactly one bounded Stop.
+///
+/// **Then the read's outcome is asked, as a read's is, until the server says
+/// it has one** — its Blender has ended there — **or
+/// [`HOW_LONG_A_STOPPED_READ_IS_WAITED_ON`] passes** (`Design/Render Settings
+/// § A read can take longer`, changed 2026-11-13, the night's live pass,
+/// fault 3). Only the first confirms the stop; the page says *Read stopped.*
+/// for it and *Stop requested.* otherwise. A stop before the read was asked
+/// started nothing there, and is confirmed as it stands.
+async fn the_reading_until_stopped<M: TheMachineAReadingIsAskedOf>(
+    machine: &mut M, request: &Request, control: &AReadControl,
+    bound: Duration, pace: Duration,
+) -> WhatTheReadingLeft {
+    if control.is_stopped() {
+        control.it_ended_there();
+        return a_stopped_reading();
+    }
+    let tell = |step, steps| control.the_walk_is_at(step, steps);
+    tokio::select! {
+        biased;
+        _ = control.stopped() => {},
+        left = what_the_files_reading_left_telling(machine, request, bound, pace, &tell) => return left,
+    }
+    if let Some(stop) = smoozy_dependencies::acting::checking::the_stop_of(&request.identity) {
+        let _ = tokio::time::timeout(Duration::from_secs(5), machine.ask(&stop)).await;
+    }
+    if the_stopped_reading_has_ended(machine, request, bound, pace).await {
+        control.it_ended_there();
+    }
+    a_stopped_reading()
+}
+
+/// **Whether the server says the stopped read has a recorded outcome**
+/// within [`HOW_LONG_A_STOPPED_READ_IS_WAITED_ON`] — the read's own request
+/// asked again under its own identity (`Server protocol and transfers` C4),
+/// at the read's own pace. Anything else — still in hand at the bound, no
+/// answer, an answer that is neither — is not a confirmation.
+async fn the_stopped_reading_has_ended<M: TheMachineAReadingIsAskedOf>(
+    machine: &mut M, request: &Request, each_ask: Duration, pace: Duration,
+) -> bool {
+    let asked_until_it_says = async {
+        loop {
+            let Ok(WhatCameBack::ItAnswered(answered)) = tokio::time::timeout(each_ask, machine.ask(request)).await else {
+                return false;
+            };
+            match answered.fields.text(asked::WHAT_BECAME_OF_IT_FIELD) {
+                Some(asked::IT_HAS_A_RECORDED_OUTCOME) => return true,
+                Some(asked::IT_IS_STILL_IN_HAND) => tokio::time::sleep(pace).await,
+                _ => return false,
+            }
+        }
+    };
+    tokio::time::timeout(HOW_LONG_A_STOPPED_READ_IS_WAITED_ON, asked_until_it_says).await.unwrap_or(false)
+}
+
+// `Render Settings` Q5: Stop also ends the identity checks before and after Blender.
+async fn the_four_values_until_stopped<M: TheMachineAFileIsReadOn>(
+    machine: &mut M, file: &str, control: Option<&AReadControl>,
+) -> Result<FourValuesNow, ()> {
+    match control {
+        Some(control) => tokio::select! {
+            biased;
+            _ = control.stopped() => Err(()),
+            values = machine.the_four_values_of(file) => Ok(values),
+        },
+        None => Ok(machine.the_four_values_of(file).await),
+    }
+}
+
 /// **The machine a reading is asked of, as `Server protocol and transfers` T5's
 /// per-server point lends it**: the supervisor asked through the point, with
 /// the package area the server row records, and every stream read back on the
@@ -219,20 +384,10 @@ impl<C: AHeldConnection> TheMachineAReadingIsAskedOf for ThisServersMachine<'_, 
     /// stated length as the whole answer and a short one as an error in
     /// words.
     async fn read_the_stream_back(&mut self, path: &[u8], length: u64) -> Result<Vec<u8>, String> {
-        let path = path.to_vec();
-        let read = self
-            .sessions
-            .a_reading(true, move |subsystem| {
-                Box::pin(async move {
-                    Ok(read_a_stream_back_over_the_file_session(subsystem, &path, length).await)
-                })
-            })
-            .await;
-        match read {
-            Ok(Ok(read)) => read,
-            Ok(Err(failure)) => Err(format!("{failure:?}")),
-            Err(not_lent) => Err(format!("{not_lent:?}")),
-        }
+        // **In pieces** (`Server protocol and transfers` §1.1 item 2 as added
+        // 2026-11-12), so a Render pressed while a reading's streams come
+        // back is not held for their whole length.
+        self.sessions.a_streams_bytes(true, path, 0, length).await
     }
 }
 
@@ -411,14 +566,42 @@ impl WhatTheReadingLeft {
 /// **One file's reading, asked until it ends, and what it left** —
 /// `Render Settings` Q4 over the one request.
 ///
-/// **The bound and the pace are handed in** so a test can watch the bound
-/// fire without waiting a minute; the one caller hands in
-/// [`THE_BOUND_ON_ONE_READING`] and the check's own pace.
+/// **The wait on each ask and the pace are handed in** so a test can watch
+/// the bound fire without waiting a minute; the one caller hands in
+/// [`THE_LONGEST_AN_ASK_OF_A_READING_WAITS`] and the check's own pace. **The
+/// bound is on each ask and never on the whole read** (`Render Settings` Q10's
+/// build detail, 2026-11-13): a read the server keeps answering *still in
+/// hand* goes on until it lands or the user stops it.
 pub async fn what_the_files_reading_left<M>(
     machine: &mut M,
     request: &Request,
-    bound: Duration,
+    each_ask: Duration,
     pace: Duration,
+) -> WhatTheReadingLeft
+where
+    M: TheMachineAReadingIsAskedOf,
+{
+    what_the_files_reading_left_telling(machine, request, each_ask, pace, &|_, _| {}).await
+}
+
+/// **The walk's step, off a *still in hand* answer** — `Render Settings` Q5's
+/// build detail of 2026-11-13: two whole numbers with one space between, the
+/// step no greater than how many there are. Anything else says nothing.
+pub fn the_walk_in(answered: &Answered) -> Option<(u64, u64)> {
+    let (step, steps) = answered.fields.text(asked::THE_READINGS_WALK_FIELD)?.split_once(' ')?;
+    let (step, steps): (u64, u64) = (step.parse().ok()?, steps.parse().ok()?);
+    (step >= 1 && step <= steps).then_some((step, steps))
+}
+
+/// [`what_the_files_reading_left`], telling `tell` where the walk is each
+/// time a *still in hand* answer says (`Render Settings` Q5's build detail of
+/// 2026-11-13).
+pub async fn what_the_files_reading_left_telling<M>(
+    machine: &mut M,
+    request: &Request,
+    each_ask: Duration,
+    pace: Duration,
+    tell: &(dyn Fn(u64, u64) + Sync),
 ) -> WhatTheReadingLeft
 where
     M: TheMachineAReadingIsAskedOf,
@@ -430,12 +613,12 @@ where
         the_other_scenes: None,
     };
     let could_not_be_reached = || WhatTheReadingLeft::only(the_machine_could_not_be_reached());
-    let deadline = tokio::time::Instant::now() + bound;
     let ended = loop {
-        let answered = match tokio::time::timeout_at(deadline, machine.ask(request)).await {
-            // **`Server protocol and transfers` C16 and `Server protocol and transfers` C17: a waiter's
+        let answered = match tokio::time::timeout(each_ask, machine.ask(request)).await {
+            // **`Server protocol and transfers` C16 and C17: a waiter's
             // expired deadline says the waiter gave up**, and `Render
-            // Settings`' frame puts it with the channel's own ending.
+            // Settings`' frame puts it with the channel's own ending. **Only
+            // an ask the server left unanswered gets here.**
             Err(_) => return could_not_be_reached(),
             Ok(WhatCameBack::ItAnswered(answered)) => answered,
             Ok(WhatCameBack::NothingCorrelatedCameBack) | Ok(WhatCameBack::ItWasNeverAsked) => {
@@ -450,11 +633,12 @@ where
         }
         match answered.fields.text(asked::WHAT_BECAME_OF_IT_FIELD) {
             Some(asked::IT_HAS_A_RECORDED_OUTCOME) => break answered,
-            Some(asked::IT_IS_STILL_IN_HAND) => {}
+            Some(asked::IT_IS_STILL_IN_HAND) => {
+                if let Some((step, steps)) = the_walk_in(&answered) {
+                    tell(step, steps);
+                }
+            }
             _ => return no_blender_ran(),
-        }
-        if tokio::time::Instant::now() + pace >= deadline {
-            return could_not_be_reached();
         }
         tokio::time::sleep(pace).await;
     };
@@ -468,9 +652,15 @@ where
     M: TheMachineAReadingIsAskedOf,
 {
     // **`Render Settings` Q8: a read Smoozy ended itself is none of the three**, and this is the
-    // machine's own record of whose ending it was — never an inference.
+    // machine's own record of whose ending it was — never an inference. **A
+    // read the server says was interrupted is one too** (its worker went with
+    // a restart of the server's Smoozy): no exit status, no start mark and no
+    // stream are evidence of nothing about the file, and read as a failing
+    // status they told the user to pick another Blender (after Sol's look at
+    // reading the file past a minute, point 4).
     let smoozy_ended_it = ended.fields.text(asked::THE_RUN_WAS_ENDED_BY_SMOOZY_FIELD)
-        == Some(asked::THE_ANSWER_IS_YES);
+        == Some(asked::THE_ANSWER_IS_YES)
+        || ended.fields.text(asked::THE_READING_WAS_INTERRUPTED_FIELD) == Some(asked::THE_ANSWER_IS_YES);
     let exit = match ended.fields.text(asked::THE_EXIT_STATUS_FIELD) {
         Some("0") => ExitStatus::Succeeded,
         // A status other than nought, or none at all — a run ended by a
@@ -715,10 +905,13 @@ pub struct WhatTheReadLearnt {
 pub struct TheFilesReadingOn<M> {
     pub machine: M,
     pub learnt: Arc<Mutex<WhatTheReadLearnt>>,
+    /// **The wait on each ask of the read, never on the whole read**
+    /// (`Render Settings` Q10's build detail, 2026-11-13).
     pub bound: Duration,
     pub pace: Duration,
     /// `Render Settings` Q4: saved library pairs, composed as at submission.
     pub library_pairs: Vec<smoozy_dependencies::remap::Pair>,
+    pub control: Option<Arc<AReadControl>>,
 }
 
 impl<M> TheFilesReadingOn<M> {
@@ -726,9 +919,10 @@ impl<M> TheFilesReadingOn<M> {
         TheFilesReadingOn {
             machine,
             learnt: Arc::default(),
-            bound: THE_BOUND_ON_ONE_READING,
+            bound: THE_LONGEST_AN_ASK_OF_A_READING_WAITS,
             pace: BETWEEN_TWO_ASKS_OF_ONE_READING,
             library_pairs: Vec::new(),
+            control: None,
         }
     }
 }
@@ -751,11 +945,14 @@ impl<M: TheMachineAFileIsReadOn + Send> DrivesOneFileInspection for TheFilesRead
             ran_no_blender.remove(&the_file);
         }
         let WhatTheReadingLeft {
-            frame: left,
+            frame: mut left,
             no_blender_ran,
             printed,
             the_other_scenes,
-        } = what_the_files_reading_left(&mut self.machine, &request, self.bound, self.pace).await;
+        } = match &self.control {
+            Some(control) => the_reading_until_stopped(&mut self.machine, &request, control, self.bound, self.pace).await,
+            None => what_the_files_reading_left(&mut self.machine, &request, self.bound, self.pace).await,
+        };
         if no_blender_ran {
             if let Ok(mut ran_no_blender) = the_reads_that_ran_no_blender().lock() {
                 ran_no_blender.insert(the_file);
@@ -789,11 +986,13 @@ impl<M: TheMachineAFileIsReadOn + Send> DrivesOneFileInspection for TheFilesRead
         // nothing standing, and the reading is then discarded rather than
         // stored — the safe direction that crate names.
         let now = match left.channel {
+            _ if left.smoozy_ended_it => None,
             ChannelOutcome::TheMachineCouldNotBeReached => None,
             ChannelOutcome::TheInvocationAnswered => {
-                match self.machine.the_four_values_of(of.the_blends_path).await {
-                    FourValuesNow::Answered(now) => Some(now),
-                    FourValuesNow::TheChannelCannotAnswer => None,
+                match the_four_values_until_stopped(&mut self.machine, of.the_blends_path, self.control.as_deref()).await {
+                    Ok(FourValuesNow::Answered(now)) => Some(now),
+                    Ok(FourValuesNow::TheChannelCannotAnswer) => None,
+                    Err(()) => { left.smoozy_ended_it = true; None },
                 }
             }
         };
@@ -873,6 +1072,14 @@ impl HoldsTheFilesHalf for TheFilesHalfOfThisRun<'_> {
     ) -> Landed {
         match self.held.lock() {
             Ok(mut held) => {
+                // `Render Settings` Q5: Stop and storing share this lock. A
+                // late result supplies no settings, outputs or scene ticks.
+                if let Some(control) = held.read_controls.get(&crate::surface::render_settings::keyed(self.server, self.file))
+                    .filter(|control| control.is_stopped()) {
+                    // The reading came back whole, so its Blender has ended.
+                    control.it_ended_there();
+                    return Landed::DiscardedTheFileMoved;
+                }
                 let landed = held.readings.a_reading_landed(
                     key,
                     started_under,
@@ -1000,7 +1207,21 @@ where M: TheMachineAFileIsReadOn + Send,
     }
     let mut reads = TheFilesReadingOn::over(machine);
     reads.library_pairs = library_pairs;
-    let started_under = match reads.machine.the_four_values_of(file).await {
+    reads.control = held.lock().ok().and_then(|held| held.read_controls
+        .get(&crate::surface::render_settings::keyed(server, file)).cloned());
+    let values = match the_four_values_until_stopped(&mut reads.machine, file, reads.control.as_deref()).await {
+        Ok(values) => values,
+        Err(()) => {
+            // Stopped before any Blender was started: nothing runs there to end.
+            if let Some(control) = reads.control.as_deref() {
+                control.it_ended_there();
+            }
+            return WhatTheReadCameTo::ThePreLoad {
+                went: HowThePreLoadWent::NoReading(Ending::SmoozyStoppedIt), operation: None,
+            };
+        }
+    };
+    let started_under = match values {
         FourValuesNow::Answered(values) => values,
         FourValuesNow::TheChannelCannotAnswer => {
             return WhatTheReadCameTo::TheFourValuesCouldNotBeRead
@@ -1179,6 +1400,7 @@ mod tests {
                 eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
             },
             announced_add_on_case: None,
+            the_files_own_scripts_run: None,
             the_folders_at_the_machines_top: None,
         }
     }
@@ -2215,10 +2437,12 @@ mod tests {
                         .iter()
                         .map(|row| {
                             format!(
-                                "{} × {} {:?}",
+                                "{} × {:?}",
                                 row.place.as_str(),
-                                row.how_many.as_str(),
-                                row.format.as_ref().map(|format| format.as_str().to_string())
+                                row.counts
+                                    .iter()
+                                    .map(|one| format!("{} {}", one.how_many.as_str(), one.format.as_str()))
+                                    .collect::<Vec<_>>()
                             )
                         })
                         .collect::<Vec<_>>()
@@ -2228,32 +2452,130 @@ mod tests {
         }
     }
 
-    /// **The bound over the whole reading**: a machine that says *still in
-    /// hand* for ever is given up on, and the wait's ending is the channel's.
+    /// **The bound is on each ask** (`Render Settings` Q10's build detail,
+    /// 2026-11-13): a machine that answered *still in hand* and then stops
+    /// answering is given up on one bound after the ask it left unanswered,
+    /// and the wait's ending is the channel's. Until that date this test held
+    /// a machine saying *still in hand* for ever to a bound over the whole
+    /// read, and expected the page's false *Could not reach the server.*
     #[test]
-    fn a_reading_still_in_hand_for_ever_is_given_up_at_the_bound() {
-        let file = &a_file_of_its_own("a_reading_still_in_hand_for_ever_is_given_up_at_the_bound");
-        let machine = AStandIn::answering(vec![still_in_hand(); 10_000], Vec::new());
-        let started = std::time::Instant::now();
-        let left = block_on(what_the_files_reading_left(
-            &mut { machine },
-            &the_files_reading_asked(
-                &Identity::issue(IdentityKind::Operation).expect("an identity"),
-                &ABlendToRead {
-                    server: &the_key(file).server,
-                    the_blends_path: file,
-                    with: &BlenderIdentity {
-                        path: THE_BUILD.to_string(),
-                        version: a_version(5, 1, 0),
-                    },
+    fn a_reading_whose_server_stops_answering_is_given_up_at_the_bound() {
+        let file = &a_file_of_its_own("a_reading_whose_server_stops_answering_is_given_up_at_the_bound");
+        let gate = Arc::new(tokio::sync::Notify::new());
+        let mut machine = AStandIn::answering(vec![still_in_hand(); 10_000], Vec::new());
+        machine.gate = Some(Arc::clone(&gate));
+        let asked_list = Arc::clone(&machine.asked);
+        let request = the_files_reading_asked(
+            &Identity::issue(IdentityKind::Operation).expect("an identity"),
+            &ABlendToRead {
+                server: &the_key(file).server,
+                the_blends_path: file,
+                with: &BlenderIdentity {
+                    path: THE_BUILD.to_string(),
+                    version: a_version(5, 1, 0),
                 },
-            ),
-            Duration::from_millis(50),
-            Duration::from_millis(5),
-        ));
+            },
+        );
+        let started = std::time::Instant::now();
+        let left = block_on(async move {
+            let mut machine = machine;
+            // **Three asks are answered, and the fourth never is.**
+            let opens = async {
+                for _ in 0..3 {
+                    gate.notify_one();
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            };
+            let (left, ()) = tokio::join!(
+                what_the_files_reading_left(
+                    &mut machine,
+                    &request,
+                    Duration::from_millis(50),
+                    Duration::from_millis(5),
+                ),
+                opens
+            );
+            left
+        });
         assert_eq!(left.frame.channel, ChannelOutcome::TheMachineCouldNotBeReached);
-        // **Given up at the bound, not when the machine stopped answering.**
+        assert_eq!(asked_list.lock().expect("the list").len(), 3);
         assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
+    }
+
+    /// **The Creator's note 4 on the test copy of 2026-11-12, Sol's first
+    /// test: a read the server is still running past a minute lands.** The
+    /// server answers every ask at once, says the read is still running for 70
+    /// seconds, then hands back a good reading. **The real figures** — the
+    /// wait on each ask and the second between asks — on a paused clock, so
+    /// the test runs at once. The page takes the reading and says nothing
+    /// about the connection. Until 2026-11-13 one minute bounded the whole
+    /// read and the page said *Could not reach the server.* at about a minute.
+    #[test]
+    fn a_read_the_server_is_still_running_past_a_minute_lands_and_says_nothing_of_the_connection() {
+        let file = &a_file_of_its_own(
+            "a_read_the_server_is_still_running_past_a_minute_lands_and_says_nothing_of_the_connection",
+        );
+        let ordinary = framed(&a_printed_document(&a_settings_half(), 3));
+        let mut answers = vec![still_in_hand(); 70];
+        answers.push(ended(&ordinary, b"", Some("0")));
+        let machine = AStandIn::answering(answers, streams(ordinary, Vec::new()));
+        let asked_list = Arc::clone(&machine.asked);
+        let held = a_run_with_a_pick(file);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .start_paused(true)
+            .build()
+            .expect("a runtime");
+        let started = runtime.block_on(async { tokio::time::Instant::now() });
+        let came_to = runtime.block_on(the_file_is_read_with_library_pairs(
+            machine,
+            &held,
+            &a_server(),
+            file,
+            Vec::new(),
+        ));
+        let took = runtime.block_on(async { tokio::time::Instant::now() }) - started;
+        assert!(took >= Duration::from_secs(70), "the read ran {took:?} on the paused clock");
+        let WhatTheReadCameTo::ThePreLoad { went, .. } = &came_to else {
+            panic!("{came_to:?}");
+        };
+        assert!(went.the_files_half_was_replaced(), "{went:?}");
+        assert_eq!(asked_list.lock().expect("the list").len(), 71);
+        let held = held.lock().expect("held");
+        let panel = crate::surface::render_settings::the_panel(&held, &a_server(), file);
+        assert!(panel.the_read_failure.is_none(), "{:?}", panel.the_read_failure);
+        let band = format!("{:?}", panel.the_band);
+        assert!(!band.contains("Connection lost"), "{band}");
+        assert!(!band.contains("Could not reach"), "{band}");
+    }
+
+    /// **The Creator's notes on the test copy, second round, note 15: the
+    /// server's *still in hand* says where the walk is, and the read's control
+    /// keeps it** (`Render Settings` Q5's build detail of 2026-11-13). Three
+    /// answers say nothing, then 1 of 250, then 120 of 250, then one that is
+    /// not a walk; the control holds 120 of 250 and the read lands as before.
+    #[test]
+    fn a_reading_in_hand_tells_its_control_where_the_walk_is() {
+        let file = &a_file_of_its_own("a_reading_in_hand_tells_its_control_where_the_walk_is");
+        let ordinary = framed(&a_printed_document(&a_settings_half(), 3));
+        let walk = |said: &str| still_in_hand().and(asked::THE_READINGS_WALK_FIELD, said);
+        let mut answers = vec![still_in_hand(); 3];
+        answers.extend([walk("1 250"), walk("120 250"), walk("251 250"), walk("a walk")]);
+        answers.push(ended(&ordinary, b"", Some("0")));
+        let machine = AStandIn::answering(answers, streams(ordinary, Vec::new()));
+        let held = a_run_with_a_pick(file);
+        let control = Arc::new(AReadControl::new());
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let noted = Arc::clone(&seen);
+        let watched = Arc::clone(&control);
+        control.redraws_with(move || noted.lock().unwrap().push(watched.walk()));
+        held.lock().unwrap().read_controls.insert(crate::surface::render_settings::keyed(&a_server(), file), Arc::clone(&control));
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().start_paused(true).build().expect("a runtime");
+        let came_to = runtime.block_on(the_file_is_read_with_library_pairs(machine, &held, &a_server(), file, Vec::new()));
+        let WhatTheReadCameTo::ThePreLoad { went, .. } = &came_to else { panic!("{came_to:?}") };
+        assert!(went.the_files_half_was_replaced(), "{went:?}");
+        assert_eq!(*seen.lock().unwrap(), vec![Some((1, 250)), Some((120, 250))], "drawn again at each step, and only then");
+        assert_eq!(control.walk(), Some((120, 250)));
     }
 
     /// **`Render Settings` Q17, from the file's side: a file replaced while the read ran reads
@@ -2612,5 +2934,216 @@ mod tests {
                 _ => assert!(lines[0].contains("<0.01>"), "{lines:?}"),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod fourth_part_read_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use smoozy_dependencies::acting::checking::the_stop_of;
+
+    struct PendingRead {
+        entered: Arc<tokio::sync::Notify>,
+        asked: Arc<Mutex<Vec<Request>>>,
+        streams: Arc<AtomicUsize>,
+    }
+    impl TheMachineAReadingIsAskedOf for PendingRead {
+        async fn ask(&mut self, request: &Request) -> WhatCameBack {
+            self.asked.lock().unwrap().push(request.clone());
+            if request.name == asked::THE_STOP_REQUEST {
+                return WhatCameBack::ItAnswered(Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test"));
+            }
+            self.entered.notify_one();
+            std::future::pending().await
+        }
+        async fn read_the_stream_back(&mut self, _: &[u8], _: u64) -> Result<Vec<u8>, String> {
+            self.streams.fetch_add(1, Ordering::SeqCst);
+            Ok(Vec::new())
+        }
+    }
+    impl TheMachineAFileIsReadOn for PendingRead {
+        async fn the_four_values_of(&mut self, _: &str) -> FourValuesNow {
+            self.entered.notify_one();
+            std::future::pending().await
+        }
+    }
+    #[tokio::test]
+    async fn fourth_part_4_3_stop_also_interrupts_the_final_file_identity_read() {
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let mut machine = PendingRead { entered: entered.clone(), asked: Arc::default(), streams: Arc::default() };
+        let control = AReadControl::new();
+        let (left, ()) = tokio::join!(
+            the_four_values_until_stopped(&mut machine, "/test.blend", Some(&control)),
+            async { entered.notified().await; control.stop(); }
+        );
+        assert!(left.is_err());
+    }
+    #[tokio::test(start_paused = true)]
+    async fn fourth_part_4_3_stop_interrupts_a_pending_read_and_names_only_its_operation() {
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        let streams = Arc::new(AtomicUsize::new(0));
+        let mut machine = PendingRead { entered: entered.clone(), asked: asked.clone(), streams: streams.clone() };
+        let control = AReadControl::new();
+        let operation = Identity::issue(IdentityKind::Operation).unwrap();
+        let request = Request::speaking(THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, operation.clone(), asked::THE_READING_OF_A_BLEND_REQUEST);
+        let (left, ()) = tokio::join!(
+            the_reading_until_stopped(&mut machine, &request, &control, Duration::from_secs(60), Duration::from_secs(1)),
+            async { entered.notified().await; control.stop(); control.stop(); }
+        );
+        assert!(left.frame.smoozy_ended_it);
+        assert!(left.printed.is_none());
+        assert_eq!(streams.load(Ordering::SeqCst), 0);
+        let sent = asked.lock().unwrap();
+        // **One read, one stop, then the read's own outcome asked again**
+        // (the night's live pass, fault 3) — never a second stop.
+        assert_eq!(sent.len(), 3, "one read, one stop, the read asked again");
+        assert_eq!(sent[2].identity, operation);
+        assert_eq!(sent[1].name, asked::THE_STOP_REQUEST);
+        assert_eq!(sent[1].fields.text(asked::THE_OPERATION_TO_STOP_FIELD), Some(operation.as_text().as_str()));
+        assert_ne!(sent[1].identity, operation);
+        assert!(the_stop_of(&operation).is_some());
+    }
+    /// **A server that reads until stopped, then says the reading is still
+    /// in hand `still` times before it has a recorded outcome.**
+    struct EndsAfterTheStop {
+        asked: Arc<Mutex<Vec<Request>>>,
+        entered: Arc<tokio::sync::Notify>,
+        stopped: bool,
+        still: usize,
+    }
+    impl TheMachineAReadingIsAskedOf for EndsAfterTheStop {
+        async fn ask(&mut self, request: &Request) -> WhatCameBack {
+            self.asked.lock().unwrap().push(request.clone());
+            let answered = Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test");
+            if request.name == asked::THE_STOP_REQUEST {
+                self.stopped = true;
+                return WhatCameBack::ItAnswered(answered);
+            }
+            if !self.stopped {
+                self.entered.notify_one();
+                return std::future::pending().await;
+            }
+            if self.still > 0 {
+                self.still -= 1;
+                return WhatCameBack::ItAnswered(answered.carrying(Fields::none().and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_IS_STILL_IN_HAND)));
+            }
+            WhatCameBack::ItAnswered(answered.carrying(
+                Fields::none()
+                    .and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_HAS_A_RECORDED_OUTCOME)
+                    .and(asked::THE_RUN_WAS_ENDED_BY_SMOOZY_FIELD, asked::THE_ANSWER_IS_YES),
+            ))
+        }
+        async fn read_the_stream_back(&mut self, _: &[u8], _: u64) -> Result<Vec<u8>, String> {
+            Ok(Vec::new())
+        }
+    }
+
+    /// **The night's live pass, fault 3: after Stop the desktop waits for the
+    /// server to say the read has ended**, asking its outcome as a read is
+    /// asked, and only then is the stop confirmed (`Design/Render Settings §
+    /// A read can take longer`, changed 2026-11-13). **Failed before the
+    /// fix**: the desktop stopped waiting as the stop went out, so the page
+    /// said *Stop requested.* while Blender read on.
+    #[tokio::test(start_paused = true)]
+    async fn night_pass_3_after_stop_the_server_is_asked_until_the_read_has_ended() {
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let mut machine = EndsAfterTheStop { asked: asked.clone(), entered: entered.clone(), stopped: false, still: 2 };
+        let control = AReadControl::new();
+        let operation = Identity::issue(IdentityKind::Operation).unwrap();
+        let request = Request::speaking(THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, operation.clone(), asked::THE_READING_OF_A_BLEND_REQUEST);
+        let (left, ()) = tokio::join!(
+            the_reading_until_stopped(&mut machine, &request, &control, Duration::from_secs(60), Duration::from_secs(1)),
+            async { entered.notified().await; control.stop(); }
+        );
+        assert!(left.frame.smoozy_ended_it);
+        assert!(control.the_stop_was_confirmed(), "the server said the read ended");
+        let names: Vec<String> = asked.lock().unwrap().iter().map(|one| one.name.clone()).collect();
+        assert_eq!(names.iter().filter(|name| name.as_str() == asked::THE_STOP_REQUEST).count(), 1, "one stop: {names:?}");
+        assert_eq!(names.len(), 5, "the read, the stop, then the read's outcome three times: {names:?}");
+        assert!(asked.lock().unwrap().iter().filter(|one| one.name != asked::THE_STOP_REQUEST).all(|one| one.identity == operation));
+    }
+
+    /// **And where the server never says so, the stop stays unconfirmed**
+    /// after [`HOW_LONG_A_STOPPED_READ_IS_WAITED_ON`], so the page says *Stop
+    /// requested.* and claims nothing more.
+    #[tokio::test(start_paused = true)]
+    async fn night_pass_3_a_stop_the_server_never_confirms_stays_unconfirmed() {
+        let entered = Arc::new(tokio::sync::Notify::new());
+        let mut machine = PendingRead { entered: entered.clone(), asked: Arc::default(), streams: Arc::default() };
+        let control = AReadControl::new();
+        let request = Request::speaking(THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, Identity::issue(IdentityKind::Operation).unwrap(), asked::THE_READING_OF_A_BLEND_REQUEST);
+        let began = tokio::time::Instant::now();
+        let (left, ()) = tokio::join!(
+            the_reading_until_stopped(&mut machine, &request, &control, Duration::from_secs(60), Duration::from_secs(1)),
+            async { entered.notified().await; control.stop(); }
+        );
+        assert!(left.frame.smoozy_ended_it);
+        assert!(control.is_stopped() && !control.the_stop_was_confirmed());
+        assert!(began.elapsed() <= HOW_LONG_A_STOPPED_READ_IS_WAITED_ON + Duration::from_secs(6), "{:?}", began.elapsed());
+    }
+
+    #[tokio::test]
+    async fn fourth_part_4_3_stop_before_admission_sends_nothing() {
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        let mut machine = PendingRead { entered: Arc::default(), asked: asked.clone(), streams: Arc::default() };
+        let control = AReadControl::new(); control.stop();
+        let request = Request::speaking(THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, Identity::issue(IdentityKind::Operation).unwrap(), asked::THE_READING_OF_A_BLEND_REQUEST);
+        let left = the_reading_until_stopped(&mut machine, &request, &control, Duration::from_secs(60), Duration::from_secs(1)).await;
+        assert!(left.frame.smoozy_ended_it);
+        assert!(asked.lock().unwrap().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod an_interrupted_read {
+    use super::*;
+
+    /// **A server answering one fixed ending** to every ask.
+    struct AnEnding(Fields);
+    impl TheMachineAReadingIsAskedOf for AnEnding {
+        async fn ask(&mut self, request: &Request) -> WhatCameBack {
+            WhatCameBack::ItAnswered(
+                Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test").carrying(self.0.clone()),
+            )
+        }
+        async fn read_the_stream_back(&mut self, _: &[u8], _: u64) -> Result<Vec<u8>, String> {
+            Err("no stream".to_string())
+        }
+    }
+
+    /// **An interrupted read never tells the user to pick another Blender** —
+    /// `Render Settings` Q8, after Sol's look at reading the file past a
+    /// minute, point 4. A read whose worker went with a restart of the
+    /// server's program has no exit status, no start mark and no streams;
+    /// read as a failing status, it was ending 2, *This Blender could not open
+    /// the file*, with *pick another Blender*. **Where the server says it was
+    /// interrupted it is a read Smoozy ended itself**, which claims nothing
+    /// about the file. **And without that word the same shape stays ending 2**,
+    /// which is a build that could not be started.
+    #[tokio::test]
+    async fn an_interrupted_read_is_read_stopped_and_never_a_blender_that_could_not_open_the_file() {
+        let ended = || {
+            Fields::none()
+                .and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_HAS_A_RECORDED_OUTCOME)
+                .and(asked::THE_START_MARK_SEEN_FIELD, asked::THE_ANSWER_IS_NO)
+                .and(asked::THE_RUN_WAS_ENDED_BY_SMOOZY_FIELD, asked::THE_ANSWER_IS_NO)
+        };
+        let request = Request::speaking(
+            THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+            Identity::issue(IdentityKind::Operation).expect("randomness"),
+            asked::THE_READING_OF_A_BLEND_REQUEST,
+        );
+        let mut interrupted =
+            AnEnding(ended().and(asked::THE_READING_WAS_INTERRUPTED_FIELD, asked::THE_ANSWER_IS_YES));
+        let left = what_the_files_reading_left(&mut interrupted, &request, Duration::from_secs(60), Duration::from_secs(1)).await;
+        assert_eq!(smoozy_render_settings::endings::judge(left.frame), Ending::SmoozyStoppedIt);
+
+        let mut a_build_that_did_not_start = AnEnding(ended());
+        let left =
+            what_the_files_reading_left(&mut a_build_that_did_not_start, &request, Duration::from_secs(60), Duration::from_secs(1)).await;
+        assert_eq!(smoozy_render_settings::endings::judge(left.frame), Ending::TheFileCouldNotBeOpenedByThisVersion);
     }
 }

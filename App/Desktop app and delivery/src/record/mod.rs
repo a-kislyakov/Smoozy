@@ -91,12 +91,23 @@ pub enum RecordFailure {
     },
     /// The engine reported something.
     Engine { reported: String },
+    /// **The record's file is damaged**: the engine reads it as no database,
+    /// or as a damaged one, or the start's quick check found damage
+    /// (`Desktop app and delivery` L9a, batch 2 of the Bad what-if answers,
+    /// 97). Nothing is written to it and nothing replaces it.
+    TheRecordIsDamaged { reported: String },
 }
 
 impl From<rusqlite::Error> for RecordFailure {
     fn from(error: rusqlite::Error) -> Self {
-        RecordFailure::Engine {
-            reported: error.to_string(),
+        use rusqlite::ErrorCode;
+        match error.sqlite_error_code() {
+            Some(ErrorCode::NotADatabase | ErrorCode::DatabaseCorrupt) => RecordFailure::TheRecordIsDamaged {
+                reported: error.to_string(),
+            },
+            _ => RecordFailure::Engine {
+                reported: error.to_string(),
+            },
         }
     }
 }
@@ -143,6 +154,7 @@ impl LocalRecord {
         );
         let connection = rusqlite::Connection::open(path)?;
         settle_the_durability(&connection)?;
+        the_record_is_whole(&connection)?;
         migrations::bring_up_to_date(&connection, path, was_already_there)?;
         Ok(LocalRecord {
             connection,
@@ -192,6 +204,19 @@ impl LocalRecord {
 /// **`journal_mode = DELETE`**, which is the engine's own default and is
 /// stated rather than assumed: it is what makes the record one file at rest,
 /// which is what L7's publication and L8's copy both stand on.
+/// **L9a: the record is checked for damage at opening, before anything reads
+/// it** — the engine's own quick check, which reads every page and answers
+/// *ok* or what it found. A record that is partly damaged otherwise failed
+/// only on the screens that touched the damaged part, each saying it could not
+/// read its own content. Batch 2 of the Bad what-if answers, 97.
+fn the_record_is_whole(connection: &rusqlite::Connection) -> Result<(), RecordFailure> {
+    let found: String = connection.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))?;
+    if found == "ok" {
+        return Ok(());
+    }
+    Err(RecordFailure::TheRecordIsDamaged { reported: found })
+}
+
 fn settle_the_durability(connection: &rusqlite::Connection) -> Result<(), RecordFailure> {
     connection.pragma_update(None, "journal_mode", "DELETE")?;
     connection.pragma_update(None, "synchronous", "EXTRA")?;
@@ -254,13 +279,27 @@ pub fn copy_beside(path: &Path) -> PathBuf {
     PathBuf::from(copy)
 }
 
+/// Where a copy is written before it takes the copy's name.
+pub fn staged_copy_beside(path: &Path) -> PathBuf {
+    let mut staged = path.as_os_str().to_os_string();
+    staged.push(".before-migration.part");
+    PathBuf::from(staged)
+}
+
 /// Take L8's copy.
+///
+/// **Staged and published** (L8, *how the copy is taken*, 2026-11-11, the
+/// Fable review's fourth sitting): the bytes go to
+/// [`staged_copy_beside`], flushed to the device, and are renamed onto the
+/// copy's name, so that name holds a whole copy or nothing. Written in place,
+/// a take cut short left a short file at the name L13 restores from.
 pub fn take_the_copy(path: &Path) -> Result<PathBuf, RecordFailure> {
     let copy = copy_beside(path);
+    let staged = staged_copy_beside(path);
     let bytes = std::fs::read(path).map_err(|error| RecordFailure::Engine {
         reported: format!("the record could not be read to copy it: {error}"),
     })?;
-    let written = files::write_whole_file(&copy, &bytes, Durability::ToTheDevice);
+    let written = files::write_whole_file(&staged, &bytes, Durability::ToTheDevice);
     if !written.wrote_the_file() {
         return Err(match written.first_error {
             Some(failure) => RecordFailure::File(failure),
@@ -269,6 +308,7 @@ pub fn take_the_copy(path: &Path) -> Result<PathBuf, RecordFailure> {
             },
         });
     }
+    files::publish(&staged, &copy).map_err(RecordFailure::File)?;
     Ok(copy)
 }
 
@@ -281,9 +321,68 @@ pub fn take_the_copy(path: &Path) -> Result<PathBuf, RecordFailure> {
 /// a newer schema and L9 would refuse to open it — **so L9's refusal is what
 /// the user meets only where the copy is gone**, and it is not the ordinary
 /// outcome of a rollback.
+///
+/// **The engine's rollback journal is settled first** (L13, *what the restore
+/// does with the engine's rollback journal*, 2026-11-11, the Fable review's
+/// fourth sitting). A failed start ends the new build outright, and a build
+/// ended inside a write leaves its journal beside the record. The engine's own
+/// page (`https://www.sqlite.org/howtocorrupt.html` §1.4, read 2026-11-11)
+/// lists *"Overwriting a database file with another without also deleting any
+/// hot journal associated with the original database"* among the acts
+/// *"likely to lead to corruption"*: the first opening after the rename would
+/// play that journal back onto the copy.
 pub fn restore_the_copy(path: &Path) -> Result<(), RecordFailure> {
     let copy = copy_beside(path);
+    the_journal_beside_the_record_is_settled(path)?;
     files::publish(&copy, path).map_err(RecordFailure::File)
+}
+
+/// The engine's rollback journal for the record at `path`: the record's name
+/// with `-journal` added (the same page, §1.3).
+pub fn journal_beside(path: &Path) -> PathBuf {
+    let mut journal = path.as_os_str().to_os_string();
+    journal.push("-journal");
+    PathBuf::from(journal)
+}
+
+/// **The record about to be replaced is left with no journal, in an order
+/// that is safe to die in.** First the engine is asked to read the record as
+/// it stands — no migration, no creation, no setting changed — which is its
+/// own rollback of a hot journal (`https://www.sqlite.org/lockingv3.html`
+/// §4.1, read 2026-11-11: *"If the file does have a hot journal, then the
+/// journal is rolled back before the file is read"*, and then *"Delete the
+/// journal file"*). **A journal still at its name after a reading that
+/// answered is removed**, and one that will not go refuses the restore, since
+/// renaming the copy under it is the corruption this exists to prevent.
+fn the_journal_beside_the_record_is_settled(path: &Path) -> Result<(), RecordFailure> {
+    let journal = journal_beside(path);
+    if matches!(files::outside_program_wrote(&journal), files::Recheck::Absent) {
+        return Ok(());
+    }
+    // **No record at the name at all**: the journal is nobody's, and the copy
+    // must not be renamed in under it.
+    if matches!(files::outside_program_wrote(path), files::Recheck::Absent) {
+        return files::remove_file(&journal).map_err(RecordFailure::File);
+    }
+    let read = rusqlite::Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .and_then(|connection| {
+            connection.query_row("SELECT count(*) FROM sqlite_schema", [], |row| row.get::<_, i64>(0))
+        });
+    match (read, files::outside_program_wrote(&journal)) {
+        (_, files::Recheck::Absent) => Ok(()),
+        // **The engine read the record and left this journal**: by its own
+        // judgement it is not one to play, and it goes.
+        (Ok(_), _) => files::remove_file(&journal).map_err(RecordFailure::File),
+        // **The engine could not read the record, and a journal stands**: it
+        // is the only thing that can mend the record in place, so it is left
+        // and the restore is refused (Sol's first point on this sitting's
+        // fixes). The copy stays beside the record.
+        (Err(failed), _) => Err(RecordFailure::Engine {
+            reported: format!(
+                "the record's journal could not be played before the copy was restored, so nothing was replaced: {failed}"
+            ),
+        }),
+    }
 }
 
 /// **L13's other half: the copy is discarded only after the new version's own
@@ -291,6 +390,44 @@ pub fn restore_the_copy(path: &Path) -> Result<(), RecordFailure> {
 /// successfully* and which §20.1 Z21 defines.
 pub fn discard_the_copy(path: &Path) -> Result<(), RecordFailure> {
     files::remove_file(&copy_beside(path)).map_err(RecordFailure::File)
+}
+
+/// **L9b: a damaged record set aside, and L8's copy put in its place** — the
+/// Creator's ruling of 2026-11-14 on 97 (*offer to go back to the copy kept
+/// from before the last update, not start fresh*), built with the Rough
+/// what-if answers, share 1.
+///
+/// **Nothing is deleted.** The damaged file, and its journal where one
+/// stands, are renamed beside the record under the first free name
+/// `….damaged`, `….damaged-2`, …, and only then is the copy renamed in, so the
+/// record's name never holds a mix of the two. **There must be a copy**: with
+/// none, nothing moves. Answers where the damaged file now is.
+pub fn the_damaged_record_is_set_aside_for_the_copy(path: &Path) -> Result<PathBuf, RecordFailure> {
+    if !migrations::the_copy_is_there(path) {
+        return Err(RecordFailure::Engine {
+            reported: "there is no copy from before the last update".into(),
+        });
+    }
+    let aside = (1u32..)
+        .map(|n| {
+            let mut name = path.as_os_str().to_os_string();
+            name.push(if n == 1 { ".damaged".to_string() } else { format!(".damaged-{n}") });
+            PathBuf::from(name)
+        })
+        .find(|name| {
+            matches!(files::outside_program_wrote(name), files::Recheck::Absent)
+                && matches!(files::outside_program_wrote(&journal_beside(name)), files::Recheck::Absent)
+        })
+        .expect("a free name is found");
+    let journal = journal_beside(path);
+    if !matches!(files::outside_program_wrote(&journal), files::Recheck::Absent) {
+        files::publish(&journal, &journal_beside(&aside)).map_err(RecordFailure::File)?;
+    }
+    if !matches!(files::outside_program_wrote(path), files::Recheck::Absent) {
+        files::publish(path, &aside).map_err(RecordFailure::File)?;
+    }
+    restore_the_copy(path)?;
+    Ok(aside)
 }
 
 #[cfg(test)]
@@ -304,6 +441,80 @@ mod tests {
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
         path.join("local-record.sqlite3")
+    }
+
+    /// **L9a, batch 2 of the Bad what-if answers, 97**: a file that is no
+    /// database, and one damaged part-way, are each refused as damaged — the
+    /// one failure the window says in a line of its own — and neither is
+    /// written over. Before this, both came back as the engine's own words,
+    /// and the partly damaged one opened and failed screen by screen.
+    #[test]
+    fn bad_batch_2_a_damaged_database_is_refused_without_erasing_it() {
+        let path = scratch("bad-batch-2-damaged");
+        let damaged = vec![b'x'; 8192];
+        std::fs::write(&path, &damaged).unwrap();
+        assert!(matches!(LocalRecord::open_at(&path), Err(RecordFailure::TheRecordIsDamaged { .. })));
+        assert_eq!(std::fs::read(&path).unwrap(), damaged);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+
+        // A whole record, then a page in its middle overwritten.
+        let path = scratch("bad-batch-2-partly-damaged");
+        {
+            let record = LocalRecord::open_at(&path).expect("a fresh record");
+            record
+                .connection()
+                .execute_batch(
+                    "CREATE TABLE the_users_work (what TEXT);
+                     WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000)
+                     INSERT INTO the_users_work SELECT printf('row %d of the user''s work, padded out', i) FROM n;",
+                )
+                .unwrap();
+        }
+        let mut bytes = std::fs::read(&path).unwrap();
+        let page = 4096;
+        assert!(bytes.len() > page * 6, "the record spans several pages");
+        let middle = (bytes.len() / page / 2) * page;
+        bytes[middle..middle + page].fill(0xA5);
+        std::fs::write(&path, &bytes).unwrap();
+        assert!(matches!(LocalRecord::open_at(&path), Err(RecordFailure::TheRecordIsDamaged { .. })));
+        assert_eq!(std::fs::read(&path).unwrap(), bytes, "nothing was written over it");
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    /// **L9b, the Creator's ruling on 97**: a damaged record is set aside,
+    /// whole, and L8's copy opens in its place. With no copy nothing moves.
+    #[test]
+    fn rough_share_1_a_damaged_record_goes_back_to_the_copy_and_is_kept() {
+        let path = scratch("rough-1-back-to-the-copy");
+        {
+            let record = LocalRecord::open_at(&path).expect("a fresh record");
+            record.connection().execute_batch("CREATE TABLE the_users_work (what TEXT); INSERT INTO the_users_work VALUES ('kept');").unwrap();
+        }
+        let damaged = vec![b'x'; 8192];
+        // No copy yet: refused, and the damaged file stays where it is.
+        std::fs::write(&path, &damaged).unwrap();
+        assert!(the_damaged_record_is_set_aside_for_the_copy(&path).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), damaged);
+        // A copy from before the last update, then the damage.
+        std::fs::remove_file(&path).unwrap();
+        {
+            let record = LocalRecord::open_at(&path).expect("a fresh record");
+            record.connection().execute_batch("CREATE TABLE the_users_work (what TEXT); INSERT INTO the_users_work VALUES ('kept');").unwrap();
+        }
+        take_the_copy(&path).unwrap();
+        std::fs::write(&path, &damaged).unwrap();
+        std::fs::write(journal_beside(&path), b"a journal").unwrap();
+        std::fs::write(PathBuf::from(format!("{}.damaged", path.display())), b"an earlier one").unwrap();
+        let aside = the_damaged_record_is_set_aside_for_the_copy(&path).expect("the copy is put back");
+        assert_eq!(aside, PathBuf::from(format!("{}.damaged-2", path.display())), "an earlier one is not written over");
+        assert_eq!(std::fs::read(&aside).unwrap(), damaged, "the damaged file is kept whole");
+        assert_eq!(std::fs::read(journal_beside(&aside)).unwrap(), b"a journal");
+        assert!(!migrations::the_copy_is_there(&path), "the copy is spent");
+        let record = LocalRecord::open_at(&path).expect("the copy opens");
+        let kept: String = record.connection().query_row("SELECT what FROM the_users_work", [], |row| row.get(0)).unwrap();
+        assert_eq!(kept, "kept");
+        drop(record);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     /// L5 and L6: a fresh record is created, migrated to what this binary
@@ -531,6 +742,179 @@ mod tests {
         discard_the_copy(&path).unwrap();
         assert!(!migrations::the_copy_is_there(&path));
 
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// The variable that makes [`the_child_killed_in_the_middle_of_a_write`]
+    /// act: the record it writes to.
+    #[cfg(unix)]
+    const THE_KILLED_WRITERS_RECORD: &str = "SMOOZY_TEST_THE_KILLED_WRITERS_RECORD";
+    #[cfg(unix)]
+    const WRITING: &str = "the-child-is-in-the-middle-of-its-write";
+
+    /// **Not a test on its own**: it does nothing unless the test below started
+    /// it as a child. Then it opens the record, starts a write too large for
+    /// its memory, so part of it is already in the record's file and the
+    /// engine's undo file stands beside it, says so, and waits to be killed.
+    #[cfg(unix)]
+    #[test]
+    fn the_child_killed_in_the_middle_of_a_write() {
+        let Some(path) = std::env::var_os(THE_KILLED_WRITERS_RECORD) else {
+            return;
+        };
+        let connection = rusqlite::Connection::open(PathBuf::from(path)).unwrap();
+        connection.pragma_update(None, "cache_size", 5).unwrap();
+        connection
+            .execute_batch("BEGIN IMMEDIATE; UPDATE the_users_work SET what = replace(what, 'new', 'cut');")
+            .unwrap();
+        println!("{WRITING}");
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+    }
+
+    /// **L13, the Fable review's fourth sitting, fault 2: a restore after a
+    /// build that was killed in the middle of a write gives back the copy as
+    /// it was taken.** A failed start ends the new build outright
+    /// (`crate::updating::the_probe`), and a build ended in the middle of a
+    /// write leaves the engine's undo file beside the record. The engine's own
+    /// page (`https://www.sqlite.org/howtocorrupt.html` §1.4, read
+    /// 2026-11-11) lists *"Overwriting a database file with another without
+    /// also deleting any hot journal associated with the original database"*
+    /// among the acts *"likely to lead to corruption"*: the next opening
+    /// plays the undo file back onto the restored copy.
+    ///
+    /// **Unix only**, as the kill is.
+    #[cfg(unix)]
+    #[test]
+    fn a_restore_after_a_build_killed_in_the_middle_of_a_write_gives_back_the_copy_as_it_was() {
+        let path = a_record_whose_last_writer_was_killed("restore-over-an-undo-file");
+        let undo_file = journal_beside(&path);
+
+        restore_the_copy(&path).expect("the copy is restored over the record");
+
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        let sound: String = connection
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .unwrap_or_else(|failed| failed.to_string());
+        let (rows, old): (i64, i64) = connection
+            .query_row(
+                "SELECT count(*), coalesce(sum(what LIKE 'old %'), 0) FROM the_users_work",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap_or((-1, -1));
+        assert_eq!(
+            (sound.as_str(), rows, old),
+            ("ok", 600, 600),
+            "the restored record is not the copy that was taken: the killed build's undo file was played back onto it"
+        );
+        assert!(!undo_file.exists(), "the killed build's undo file outlived the restore");
+        drop(connection);
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// The previous build's record with 600 rows of the user's work, its copy
+    /// taken, every row rewritten as an upgrade would, and then a writer
+    /// killed in the middle of a write: the engine's undo file stands beside
+    /// the record.
+    #[cfg(unix)]
+    fn a_record_whose_last_writer_was_killed(name: &str) -> PathBuf {
+        use std::io::BufRead;
+        use std::process::{Command, Stdio};
+
+        let path = scratch(name);
+        // The previous build's record, with the user's work in it.
+        {
+            let record = LocalRecord::open_at(&path).unwrap();
+            let connection = record.connection();
+            connection
+                .execute_batch("CREATE TABLE the_users_work (id INTEGER PRIMARY KEY, what TEXT NOT NULL)")
+                .unwrap();
+            let filler = "x".repeat(900);
+            connection.execute_batch("BEGIN").unwrap();
+            for id in 0..600 {
+                connection
+                    .execute(
+                        "INSERT INTO the_users_work (id, what) VALUES (?1, ?2)",
+                        rusqlite::params![id, format!("old {id} {filler}")],
+                    )
+                    .unwrap();
+            }
+            connection.execute_batch("COMMIT").unwrap();
+        }
+        take_the_copy(&path).expect("the copy is taken");
+
+        // The new build's upgrade, finished: every row rewritten.
+        {
+            let connection = rusqlite::Connection::open(&path).unwrap();
+            connection
+                .execute_batch("UPDATE the_users_work SET what = replace(what, 'old', 'new')")
+                .unwrap();
+        }
+
+        // The new build, killed in the middle of a later write.
+        let mut child = Command::new(std::env::current_exe().expect("this test program"))
+            .args(["--exact", "record::tests::the_child_killed_in_the_middle_of_a_write", "--nocapture"])
+            .env(THE_KILLED_WRITERS_RECORD, &path)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("the child starts");
+        let said = std::io::BufReader::new(child.stdout.take().expect("its output"))
+            .lines()
+            .map_while(Result::ok)
+            .find(|line| line.contains(WRITING));
+        assert!(said.is_some(), "the child began its write");
+        child.kill().expect("the child is killed outright");
+        let _ = child.wait();
+        assert!(
+            std::fs::metadata(journal_beside(&path)).is_ok_and(|found| found.len() > 512),
+            "the killed build left no undo file, so this test shows nothing"
+        );
+        path
+    }
+
+    /// **Sol's first point on the fourth sitting's fixes: a journal the
+    /// engine could not play is never removed, and the restore is refused.**
+    /// Removing it and then dying before the rename, or failing the rename,
+    /// would leave the record in place part-written with nothing to mend it
+    /// (the engine's own page, §1.3). The copy stays beside the record.
+    ///
+    /// The engine is kept from playing the journal by a record it may not
+    /// write to. **Unix only**, as the kill is.
+    #[cfg(unix)]
+    #[test]
+    fn a_journal_the_engine_could_not_play_is_left_and_the_restore_is_refused() {
+        use std::os::unix::fs::PermissionsExt;
+        let path = a_record_whose_last_writer_was_killed("journal-not-played");
+        let as_it_stood = std::fs::read(&path).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o444)).unwrap();
+
+        let restored = restore_the_copy(&path);
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        assert!(journal_beside(&path).exists(), "a journal the engine could not play was removed");
+        assert!(restored.is_err(), "the copy was renamed in after the engine could not play the journal");
+        assert!(migrations::the_copy_is_there(&path), "the copy was spent on a restore that was refused");
+        assert_eq!(std::fs::read(&path).unwrap(), as_it_stood, "the record in place was changed");
+        let _ = std::fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    /// **L8, the Fable review's fourth sitting, fault 3: a copy at the copy's
+    /// name is always a whole one.** A take cut short leaves its part-written
+    /// file under another name, and the next take clears it.
+    #[test]
+    fn a_take_cut_short_leaves_nothing_at_the_copys_name() {
+        let path = scratch("staged-copy");
+        drop(LocalRecord::open_at(&path).unwrap());
+        // What a take killed part-way leaves.
+        std::fs::write(staged_copy_beside(&path), b"half a copy").unwrap();
+        assert!(!migrations::the_copy_is_there(&path), "a part-written copy stands at the copy's name");
+        take_the_copy(&path).expect("the copy is taken");
+        assert!(migrations::the_copy_is_there(&path));
+        assert!(!staged_copy_beside(&path).exists(), "the take left its staging file behind");
+        assert_eq!(std::fs::read(copy_beside(&path)).unwrap(), std::fs::read(&path).unwrap());
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 

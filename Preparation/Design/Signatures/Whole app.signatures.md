@@ -107,3 +107,47 @@
 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the job page at every width, and the reorder handle.md`, outside any round — step 1 also stacks a job's page by its own width; step 2 also folds the server list by its own; the pane beside a dragged one keeps its smallest width; Settings' section list keeps its own width when the rail is dragged (the Creator's twenty-seventh notes, notes 4 and 5). No auditor has seen it.
 
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the focus ring on the control.md`, outside any round — *Keyboard shortcuts* gains *Tab lands on the control itself*: the ring on the tick, radio, switch or button, never round its words; every tick and radio reached by Tab and pressed by Space; a drag handle not a Tab stop (the Creator's twenty-seventh notes, note 1). No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 2, Server output keeps everything.md`, outside any round — the raw-text control's note: on the Set up card it is *Server output*. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 3, updates by the user's choice and the Dock.md`, outside any round — *Updating* and *Checking for updates*: one update box on every system, once per version, with *What's new*, the restart and jobs sentences, Linux's password sentence, *Later* and *Install now*; About's held form and its two automatic sentences went. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 4, Tab stays inside what is open.md`, outside any round — *Keyboard shortcuts*: Tab stays inside the box on top and wraps; a box takes the focus when it opens and gives it back when it closes; a panel over a server keeps the screen under it out of Tab's reach. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 5, the report's address.md`, outside any round — *Reporting a problem*: the address is a mail link with the copy icon beside it; a save that did not land says why where the user can act on it. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece A1, the ring and the whole text after a key.md`, outside any round — *Keyboard shortcuts*: the ring shows wherever the keyboard moved the focus and never where the pointer did; Tab into a text field chooses its whole text. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), on the Creator's word of 2026-11-11 — About's notice reads *Smoozy is free and open source.* (was *Smoozy is free software.*), the standard term everywhere Smoozy says it; the change noted in place under *About*
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 2, uploads and transfers.md`, outside any round — Escape on a box something waits on takes its answer that does nothing; the already-there box's *Stop* (scout 1.12). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 3, words a user can't act on.md`, outside any round — The fourth ending's colour and its notification word are *interrupted*, not *abandoned* (scout 3.24); the admin box's example title is *This step needs the server's login password* (3.8). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 5, updates.md`, outside any round — § Updating: *Skip this version* for *Later* (Sol's S3); About names the step a failed update stopped at (S5). No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), second builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — § Updating: the update box's *Auto-downloads resume on the next connection. Other transfers do not.* (scout 3.47). No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, sixth part: § Updating: About's reason after the step; the Linux box shows the download. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's brief on the double-check ideas (idea 10), outside any round — the one line an older Smoozy shows on a newer record. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the admin fresh look, logs in Telegram, and the empty screen.md`, outside any round — the older-Smoozy line is drawn in the mockup, state `older`. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, the window.md`, outside any round — *Words*: every time of day on the 24-hour clock (the Creator's note 5 on the test copy of 2026-11-12). No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, the window.md`, outside any round — a box that runs the full width of its panel has square corners (the Creator's note 6 on the test copy of 2026-11-12). No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — reading the file, past a minute.md`, outside any round — *The failure shape*: on a box, the cross sits at the top right, on the first line, and is not among the controls at the foot; on a single line the cross still ends it. *Type and spacing*: the *Connection lost* band went. From the Creator's note 4 on the test copy of 2026-11-12. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, second round.md`, outside any round — § While other work runs. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Website/Brief — Help, the Creator's picks.md`, outside any round — *Help* in the Smoozy menu, and § Help links. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+2026-11-14 — Claude Opus 5.5 — added A damaged record (batch 2).
+2026-11-14 — Claude Opus 5.5 — added A damaged record — going back to the copy (Rough share 1).
+2026-11-14 — Claude Opus 5.5 — the update box's setups sentence and About's read-only folder reasons (Rough share 5, 424, 426, 61).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: the update's two Mac reasons and the damaged record's offer reworded.
+2026-11-15 — Claude Opus 5.5 — the runner's rulings on Codex's word check: the damaged record's restart line reworded.

@@ -57,6 +57,12 @@ pub struct Subsystem<S> {
     stashed: HashMap<u32, (u8, Vec<u8>)>,
     /// The identifiers of writes handed over and not yet settled.
     writes_in_flight: Vec<u32>,
+    /// **Set while a request is being written or a reply read, and left set
+    /// where that was dropped part-way** — `Server protocol and transfers`
+    /// C19's paragraph of 2026-11-12. The stream then stands inside a packet,
+    /// so every later ask is answered *the channel is gone* without touching
+    /// it. The Fable review's seventh sitting, fault 5.
+    a_packet_was_cut: bool,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin + Send> Subsystem<S> {
@@ -123,6 +129,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Subsystem<S> {
             },
             stashed: HashMap::new(),
             writes_in_flight: Vec::new(),
+            a_packet_was_cut: false,
         };
         if subsystem.announcement.announces(extension::LIMITS) {
             if let Some(limits) = subsystem.ask_for_the_limits().await {
@@ -749,7 +756,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Subsystem<S> {
         id
     }
 
+    /// **A request, written whole or the channel marked** (`Server protocol
+    /// and transfers` C19's paragraph of 2026-11-12): a write dropped part-way
+    /// leaves half a request on the stream, and one that failed has ended it.
     async fn send(&mut self, packet_kind: u8, composed: &Composed) -> Result<(), SubsystemFailure> {
+        if self.a_packet_was_cut {
+            return Err(SubsystemFailure::TheChannelIsGone);
+        }
+        self.a_packet_was_cut = true;
         self.stream
             .write_all(&composed.framed(packet_kind))
             .await
@@ -757,7 +771,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Subsystem<S> {
         self.stream
             .flush()
             .await
-            .map_err(|_| SubsystemFailure::TheChannelIsGone)
+            .map_err(|_| SubsystemFailure::TheChannelIsGone)?;
+        self.a_packet_was_cut = false;
+        Ok(())
     }
 
     /// Reads until the reply carrying this identifier arrives, stashing any
@@ -768,7 +784,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send> Subsystem<S> {
             return Ok(stashed);
         }
         loop {
+            // **A reply is read whole or the channel is marked** (`Server
+            // protocol and transfers` C19's paragraph of 2026-11-12). A wait
+            // dropped inside this read loses the bytes it had taken, and the
+            // next read would take a payload's bytes for a length.
+            if self.a_packet_was_cut {
+                return Err(SubsystemFailure::TheChannelIsGone);
+            }
+            self.a_packet_was_cut = true;
             let (packet_kind, payload) = read_one_packet(&mut self.stream).await?;
+            self.a_packet_was_cut = false;
             let mut fields = Fields::over(&payload);
             let id = fields
                 .u32()
@@ -876,6 +901,63 @@ mod tests {
     /// the request's own number, so a download crept forward by a couple of
     /// kilobytes a time and an upload composed one write packet larger than the
     /// server's own maximum and hung. Nothing refused; nothing said anything.
+    /// **`Server protocol and transfers` C19's paragraph of 2026-11-12: a
+    /// channel on which a reply was cut is not used again.** The Fable
+    /// review's seventh sitting, fault 5.
+    ///
+    /// **The fault as it stood, made exactly.** A read's answer arrives in
+    /// part and the wait for it is dropped at a deadline. The bytes already
+    /// taken are gone, so the next ask reads from inside that packet — and
+    /// here the rest of the cut answer is shaped as a whole *OK* for the next
+    /// request, which the client took as its own reply: a close that was
+    /// never answered read as done.
+    #[tokio::test]
+    async fn a_channel_whose_reply_was_cut_is_not_used_again() {
+        use tokio::io::AsyncWriteExt as _;
+        let (ours, mut theirs) = tokio::io::duplex(64 * 1024);
+        let mut version = Composed::new();
+        version.u32(3);
+        theirs.write_all(&version.framed(kind::VERSION)).await.unwrap();
+        let mut subsystem = Subsystem::negotiate(ours).await.expect("negotiated");
+
+        let handle = Handle::of(b"h1".to_vec());
+        let read = subsystem.send_a_read(&handle, 0, 64).await.expect("the read is sent");
+
+        // What would be a whole *OK* for the request after this one.
+        let mut an_ok_for_the_next = Composed::new();
+        an_ok_for_the_next.u32(read + 1).u32(0).string(b"").string(b"");
+        let an_ok_for_the_next = an_ok_for_the_next.framed(kind::STATUS);
+        // The read's answer: its data are a few bytes, then that *OK*.
+        let mut data = vec![0xEEu8; 8];
+        data.extend_from_slice(&an_ok_for_the_next);
+        let mut answer = Composed::new();
+        answer.u32(read).string(&data);
+        let answer = answer.framed(kind::DATA);
+        // It arrives as far as the first eight data bytes, and stops.
+        let cut_at = answer.len() - an_ok_for_the_next.len();
+        theirs.write_all(&answer[..cut_at]).await.unwrap();
+        let waited = tokio::time::timeout(
+            std::time::Duration::from_millis(200),
+            subsystem.the_read_answered(read),
+        )
+        .await;
+        assert!(waited.is_err(), "the answer was cut, and the wait for it expired");
+
+        // The rest arrives, and the caller asks one thing more on the channel.
+        theirs.write_all(&answer[cut_at..]).await.unwrap();
+        let closed = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            subsystem.close(&handle),
+        )
+        .await
+        .expect("an ask on a cut channel is answered at once");
+        assert_eq!(
+            closed,
+            Err(SubsystemFailure::TheChannelIsGone),
+            "the rest of a cut answer was read as the reply to the next request"
+        );
+    }
+
     #[test]
     fn a_reply_is_read_past_its_identifier_and_not_through_it() {
         let mut composed = Composed::new();

@@ -643,6 +643,98 @@ pub mod an_event_as_written {
     }
 }
 
+/// **The measure of one journal entry, as [`an_event_as_written`] writes it**
+/// — `State, identity and recovery` E6a's per-entry budget is a budget on the
+/// written entry. **Here rather than beside the journal's append** because a
+/// composer on any system holds its words to it, and the append is the
+/// machine's own and built on Unix alone. Added 2026-11-10, the Creator's
+/// twenty-ninth notes, note 11 (piece J).
+pub mod the_measure_of_an_entry {
+    use super::an_event_as_written::AnEventAsWritten;
+    use smoozy_state::identities::{Identity, IdentityKind};
+    use smoozy_state::journal::{AnEvent, SequenceNumber, WhatHappened, THE_PER_ENTRY_BUDGET};
+
+    /// **The bytes `what` would take as one entry, measured as it is written** —
+    /// `State, identity and recovery` E6a's budget is a budget on the written
+    /// entry, so this is the one measure a composer may hold its words to.
+    ///
+    /// **Measured at the worst a journal can give it**: the largest sequence
+    /// number there is, and an event identity of the length every one has. So a
+    /// composer whose words pass here passes at the append, at any sequence. The
+    /// words are measured as written, which is after their quotation marks and
+    /// backslashes are escaped; a name full of either takes twice its length.
+    /// Added 2026-11-10, the Creator's twenty-ninth notes, note 11 (piece J):
+    /// until then the preview's words were held to a figure counted before
+    /// escaping, and eleven of twelve entries on a live pass came out at 531 to
+    /// 597 bytes and were refused.
+    pub fn the_bytes_it_would_take(what: &WhatHappened) -> u64 {
+        let identity = Identity::read_back(
+            IdentityKind::Event,
+            &"f".repeat(smoozy_state::identities::IDENTITY_BYTES * 2),
+        )
+        .expect("an identity of the right length reads back");
+        let event = AnEvent::journalled(identity, SequenceNumber::MAX, what.clone())
+            .expect("an identity read back as an event's is an event's");
+        super::write(&AnEventAsWritten::of(&event))
+            .map(|bytes| bytes.len() as u64)
+            .unwrap_or(u64::MAX)
+    }
+
+    /// **Whether `what` fits `State, identity and recovery` E6a's per-entry budget**, by
+    /// [`the_bytes_it_would_take`].
+    pub fn it_fits_the_budget(what: &WhatHappened) -> bool {
+        the_bytes_it_would_take(what) <= THE_PER_ENTRY_BUDGET
+    }
+
+    /// **Whether words of `kind`, about a subject of `about`, fit `State, identity and recovery` E6a's budget
+    /// whenever they are journalled** — for a composer, which knows neither the
+    /// moment nor the subject's own text. Measured at the latest moment a
+    /// machine's clock is allowed for here (eleven digits of seconds, either side
+    /// of the usual epoch), on a clock named as the supervisor names its own, and
+    /// with a subject of the length every identity has.
+    pub fn words_of_this_kind_fit(kind: &str, about: Option<IdentityKind>, says: &str) -> bool {
+        use smoozy_state::observed::{Clock, MachineClock, Reading};
+        let any = "f".repeat(smoozy_state::identities::IDENTITY_BYTES * 2);
+        it_fits_the_budget(&WhatHappened {
+            kind: kind.to_string(),
+            about: about.and_then(|kind| Identity::read_back(kind, &any)),
+            says: says.to_string(),
+            happened_at: Reading::taken(
+                (),
+                std::time::UNIX_EPOCH + std::time::Duration::new(99_999_999_999, 999_999_999),
+                Clock::AMachine(MachineClock(any.clone())),
+            ),
+        })
+    }
+
+    /// **The longest start of `text` for which `fits` holds**, cut at a character
+    /// boundary — the whole of it where it fits, and the empty text where nothing
+    /// longer does.
+    ///
+    /// **For a kind the plan makes copy a bounded piece of the user's own text
+    /// in** — a dropped job's label (`Queue & History` L22, `Rented-server
+    /// runtime` U20), whose records go in the same act, so there is no record left
+    /// to name. A bound counted in bytes before escaping is not a bound on the
+    /// entry; `fits` is meant to be [`words_of_this_kind_fit`] over the composed
+    /// words, which is.
+    pub fn the_longest_start_that_fits(text: &str, fits: impl Fn(&str) -> bool) -> String {
+        if fits(text) {
+            return text.to_string();
+        }
+        let mut end = text.len();
+        while end > 0 {
+            end -= 1;
+            while !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            if fits(&text[..end]) {
+                break;
+            }
+        }
+        text[..end].to_string()
+    }
+}
+
 /// What went wrong reading a record back.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TheRecordCouldNotBeRead {

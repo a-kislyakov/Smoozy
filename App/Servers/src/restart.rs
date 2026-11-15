@@ -129,6 +129,7 @@ pub struct TheRestartMark(Arc<TheMarksOwnState>);
 
 struct TheMarksOwnState {
     held: Mutex<WhereTheMarkStands>,
+    started: Mutex<Option<std::time::Instant>>,
     wakes: tokio::sync::Notify,
 }
 
@@ -166,6 +167,7 @@ impl TheRestartMark {
     pub fn none_is_set() -> TheRestartMark {
         TheRestartMark(Arc::new(TheMarksOwnState {
             held: Mutex::new(WhereTheMarkStands::NoMarkWasEverSet),
+            started: Mutex::new(None),
             wakes: tokio::sync::Notify::new(),
         }))
     }
@@ -177,10 +179,27 @@ impl TheRestartMark {
     /// because `Server Setup` R1 item 6 is one step of one run and
     /// `Server Setup` Y9 allows one run at a time.
     pub fn set(&self) {
+        self.set_at(std::time::Instant::now());
+    }
+
+    fn set_at(&self, now: std::time::Instant) {
         let mut held = self.0.held.lock().expect("the mark");
         if matches!(*held, WhereTheMarkStands::NoMarkWasEverSet) {
+            *self.0.started.lock().expect("the restart instant") = Some(now);
             *held = WhereTheMarkStands::ItStands;
         }
+    }
+
+    /// `Servers` M1: elapsed on the desktop's monotonic clock alone.
+    pub fn waited(&self) -> Option<Duration> {
+        self.waited_at(std::time::Instant::now())
+    }
+
+    fn waited_at(&self, now: std::time::Instant) -> Option<Duration> {
+        let held = self.0.held.lock().expect("the mark");
+        if !matches!(*held, WhereTheMarkStands::ItStands) { return None; }
+        self.0.started.lock().expect("the restart instant")
+            .and_then(|started| now.checked_duration_since(started))
     }
 
     /// **S11: the period ended, so nothing holds a mark any more.**
@@ -519,5 +538,21 @@ mod tests {
         assert!(while_it_stands.the_ordinary_repair_is_suppressed);
         assert!(while_it_stands.the_could_not_restore_notification_is_suppressed);
         assert!(while_it_stands.no_condition_record_is_raised);
+    }
+}
+
+#[cfg(test)]
+mod third_part_tests {
+    use super::*;
+    #[test]
+    fn third_part_2_11_restart_duration_is_measured_on_one_clock() {
+        let mark = TheRestartMark::none_is_set();
+        let now = std::time::Instant::now();
+        assert_eq!(mark.waited_at(now), None);
+        mark.set_at(now);
+        mark.set_at(now + Duration::from_secs(20));
+        assert_eq!(mark.waited_at(now + Duration::from_secs(62)), Some(Duration::from_secs(62)));
+        mark.cleared_by(HowTheWaitEnds::TheMachineAnswers);
+        assert_eq!(mark.waited_at(now + Duration::from_secs(63)), None);
     }
 }

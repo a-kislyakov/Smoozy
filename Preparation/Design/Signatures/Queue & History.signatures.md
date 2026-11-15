@@ -101,3 +101,56 @@
 2026-11-04 — GPT-6.1 (Codex) — Recorded the page presses and preview ruling.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the first-frame pair's question and the delete box's one sentence. The last words read before the release. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 8, the Queue's dot and the first-frame buttons.md`, outside any round — the waiting dot; the first-frame pair's buttons and boxes; the empty slot while a job waits on an answer. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 8, the Queue's dot and the first-frame buttons.md`, outside any round — *Already answered.* for a late *Cancel the job*. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — the drawing pass.md`, outside any round — notes 8 and 10: *What the job writes*, the folders by where they sit, the count a link to every folder. No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's ruling 3 at the foot of `Audits/Build/Fable review/The live pass of the night's fixes — what happened.md` (the full disk), outside any round — *The queue list*: a fifth state word, *Waiting: the server's disk is full.*, on the row and the entry's status line (Rule 10, the runner's ruling 3). No drawing state added. No auditor has seen it.
+
+2026-11-11 — GPT-6.1 (Codex), outside any round — Recorded the late cancel's sentence and its place in the entry. From the thirtieth notes brief. No auditor has seen it.
+
+2026-11-11 — GPT-6.1 (Codex) — Set the Queue words for a job run again after an interruption.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — D-11: on the job page, a folder holding more than one format keeps its counts at its top. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — D-11 withdrawn, its sentence taken out. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 3, words a user can't act on.md`, outside any round — The reason a job failed before rendering is in the user's words (scout 3.2); the full-disk sentence says *on the server* and *Submit again* (3.23); a job interrupted twice reads *Interrupted* and *The render was interrupted twice and not run again.*, not *Abandoned* (3.24, as Sol narrowed it); jobs not in this Queue are explained before *Add to Queue* and *Ignore* (3.27); a waiting row says *Waiting* (3.29). The drawing's words changed with them. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — A rendering entry's status line names how long it has rendered, *Rendering · 2h 14m* (scout 2.1). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — An ordinary queue row's second line: *Interior · 240 frames*, with *· frame 148* while rendering (the UI at every size, A-21). No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — A failure with words in its error stream reads *The render did not finish. Blender's output may say why.*, not *Cause unknown.* (scout 1.14, narrowed). The drawing changed with it. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), second builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — a row that was rendering says *Was rendering frame 88 at 11:04. Current status unknown.* while not updating (scout 2.7). No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Added Reconnect on a stale entry and a Resume count that follows typing.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: *The two ways to render it again*: an entry whose settings were never saved says *This job's settings were not saved.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — A job that appears on the server while connected is offered then; Ignore covers the jobs it was shown. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — A job the phone starts from one of this app's jobs joins the Queue by itself. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — *History*: one *Missing:* line for each file the render went on without. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — *Finishing* under *A rendering entry*. No auditor has seen this text.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list, Sol's points.md`, outside any round — *A rendering entry*: *Finishing* follows the frame in hand. No auditor has seen this text.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep of the app and the website: screen words only, as listed in `Audits/Build/The word sweep, the app and the website — what landed.md`. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep, Codex's points: the interrupted-twice entry's words. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Kept local jobs unchanged when an endpoint reaches a different installation.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — struck *to end it* from the timed-out stop sentence (batch 3, 287).
+2026-11-14 — Claude Opus 5.5 — a job Smoozy closed on while sending it gets the not-submitted row (Rough share 1).
+2026-11-14 — Claude Opus 5.5 — added *Force stop* in the stop slot after a timed-out stop, and its box (the Creator's ruling on 287, Rough share 3).
+2026-11-14 — Claude Opus 5.5 — a sixth waiting state, the server's setup stopped part-way (Rough share 4, 310).
+2026-11-14 — Claude Opus 5.5 — the driver box names transfers (the leftovers of the Rough what-if answers, 144).
+2026-11-14 — Claude Opus 5.5 — Continue anyway on a check that writes nothing sends the range (the leftovers of the Rough what-if answers, 459).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: two quoted sentences reworded.

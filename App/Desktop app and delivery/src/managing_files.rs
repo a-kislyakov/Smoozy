@@ -431,7 +431,33 @@ pub fn the_act_is_written_down(
     counts: smoozy_file_browser::diary::TheThreeCounts,
     named: &[AJobNamed],
 ) -> Option<crate::diary_service::Wrote> {
-    use smoozy_file_browser::diary::{AFileActCompleted, HowItRan, WhatTheFileActLineNames};
+    the_act_is_written_down_as(
+        started,
+        row,
+        act,
+        about,
+        destination,
+        counts,
+        named,
+        smoozy_file_browser::diary::HowItRan::Ordinary,
+    )
+}
+
+/// **[`the_act_is_written_down`], saying how the act ran** — `File Browser`
+/// `File Browser` B3's *ordinary* or *elevated* (`File Browser` P6). Added 2026-11-12 for the retry with
+/// admin access.
+#[allow(clippy::too_many_arguments)]
+pub fn the_act_is_written_down_as(
+    started: &crate::start::Started,
+    row: &smoozy_servers::store::ServerRow,
+    act: smoozy_file_browser::diary::FileAct,
+    about: smoozy_file_browser::diary::WhatTheActWasAbout,
+    destination: Option<String>,
+    counts: smoozy_file_browser::diary::TheThreeCounts,
+    named: &[AJobNamed],
+    ran: smoozy_file_browser::diary::HowItRan,
+) -> Option<crate::diary_service::Wrote> {
+    use smoozy_file_browser::diary::{AFileActCompleted, WhatTheFileActLineNames};
     use smoozy_state::identities::IdentityKind;
     let service = started.diary.as_ref()?;
     let run = started.run.clone()?;
@@ -452,7 +478,7 @@ pub fn the_act_is_written_down(
         server_row_label: crate::surface::servers::what_a_server_is_called(row),
         about,
         destination,
-        ran: HowItRan::Ordinary,
+        ran,
         counts,
     }
     .line(&names);
@@ -729,6 +755,11 @@ pub enum WhatTheDeleteCameTo {
         refused: usize,
         not_attempted: usize,
         never_learned: usize,
+        /// **How many of the refused were refused for permission** — kept
+        /// with the act's answer and not on its record, so `Design/File
+        /// Browser`'s offer after a part-way delete can be made (2026-11-12,
+        /// the live pass's new fault 6).
+        refused_for_permission: usize,
     },
 }
 
@@ -882,6 +913,7 @@ pub async fn a_delete_is_made<C: AHeldConnection>(
     let mut blocked: HashSet<Vec<u8>> = HashSet::new();
     let mut outcomes: Vec<Option<UnitOutcome>> = vec![None; total];
     let mut gone = false;
+    let mut refused_for_permission = 0usize;
     let in_flight = in_flight.max(1);
     let mut at = 0;
     let block_above = |blocked: &mut HashSet<Vec<u8>>, path: &[u8]| {
@@ -947,7 +979,14 @@ pub async fn a_delete_is_made<C: AHeldConnection>(
                             match answer {
                                 Ok(()) => ended.push((position, UnitOutcome::Done)),
                                 Err(SubsystemFailure::TheChannelIsGone) => gone = true,
-                                Err(_) => ended.push((position, UnitOutcome::Failed)),
+                                Err(failure) => {
+                                    // `Design/File Browser`, 2026-11-12: the
+                                    // offer after a part-way delete.
+                                    if failure.is_the_login_not_being_allowed() {
+                                        refused_for_permission += 1;
+                                    }
+                                    ended.push((position, UnitOutcome::Failed))
+                                }
                             }
                         }
                     }
@@ -1011,6 +1050,7 @@ pub async fn a_delete_is_made<C: AHeldConnection>(
         refused: count(|one| *one == Some(UnitOutcome::Failed)),
         not_attempted: count(|one| matches!(one, Some(UnitOutcome::NotAttempted { .. }))),
         never_learned: count(Option::is_none),
+        refused_for_permission,
     }
 }
 
@@ -1458,6 +1498,9 @@ pub async fn a_move_is_made<C: AHeldConnection>(
 
     the_marks_are_finished(record, named, A_MOVE, &touched);
     let count = |wanted: fn(&UnitOutcome) -> bool| ended.iter().filter(|(_, one)| wanted(one)).count();
+    if count(|one| *one == UnitOutcome::Failed) > 0 {
+        the_disk_is_read_at_a_refusal(sessions, into, &the_record).await;
+    }
     WhatThePasteCameTo::Ran {
         record: the_record,
         done: count(|one| *one == UnitOutcome::Done),
@@ -1632,6 +1675,55 @@ where
         });
     }
     Ok(planned)
+}
+
+/// **`File Browser` M6b: a move or a copy the server refused part-way reads
+/// the free space where it lands, once** — the leftovers of the Rough what-if
+/// answers (449), the same failure-time reading an upload takes (`File
+/// Browser`'s upload-refusal rule). A move to a larger disk that fills half way
+/// ended split, said only as so many refused; none left now reads *Server disk
+/// is full.* beside the counts. **Nothing is refused before the act**: it is
+/// not a fit estimate. A reading that does not come back names nothing. Held
+/// for this run by the act's record, as an upload's reading is.
+async fn the_disk_is_read_at_a_refusal<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    into: &[u8],
+    the_record: &Identity,
+) {
+    let path = String::from_utf8_lossy(into).into_owned();
+    let read = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        sessions.a_reading(true, move |subsystem| {
+            Box::pin(async move {
+                Ok(smoozy_server_protocol::free_space::read_it_at_the_deepest_ancestor_that_exists(subsystem, &path)
+                    .await
+                    .is_ok_and(|read| read.available_bytes == 0))
+            })
+        }),
+    )
+    .await;
+    if matches!(read, Ok(Ok(Ok(true)))) {
+        the_disk_was_full_at(the_record);
+    }
+}
+
+/// The acts of this run that met a full disk where they landed —
+/// `File Browser` M6b.
+fn the_acts_that_met_a_full_disk() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static FULL: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    FULL.get_or_init(Default::default)
+}
+
+/// **`File Browser` M6b: this act's reading found no space left.**
+pub fn the_disk_was_full_at(the_record: &Identity) {
+    if let Ok(mut held) = the_acts_that_met_a_full_disk().lock() {
+        held.insert(the_record.as_text());
+    }
+}
+
+/// **Whether this act met a full disk where it landed** (`File Browser` M6b).
+pub fn the_disk_was_full_for(the_record: &Identity) -> bool {
+    the_acts_that_met_a_full_disk().lock().is_ok_and(|held| held.contains(&the_record.as_text()))
 }
 
 /// **What a copy came to.**
@@ -2195,6 +2287,9 @@ pub async fn a_copy_is_made<C: AHeldConnection>(
     if ran.the_program_is_older && count(|one| *one == Some(UnitOutcome::Done)) == 0 {
         return WhatTheCopyCameTo::TheServerCannotCopy(WhyTheServerCannotCopy::SmoozyThereIsOlder);
     }
+    if count(|one| *one == Some(UnitOutcome::Failed)) > 0 {
+        the_disk_is_read_at_a_refusal(sessions, into, &the_record).await;
+    }
     WhatTheCopyCameTo::Ran {
         record: the_record,
         done: count(|one| *one == Some(UnitOutcome::Done)),
@@ -2309,6 +2404,316 @@ async fn the_pair_is_made<C: AHeldConnection>(
     } else {
         UnitOutcome::Failed
     }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// An act retried with admin access — `File Browser` P5, `File Browser` P6 and `File Browser` P6b
+// ════════════════════════════════════════════════════════════════════════════
+
+/// **What an act retried with admin access came to.**
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WhatTheElevatedActCameTo {
+    /// The act was done.
+    Done,
+    /// **A folder read with admin access**: its entries, in the protocol's own
+    /// shape (`File Browser` P8 marks them read elevated where they are drawn).
+    TheRows(Vec<smoozy_server_protocol::subsystem::Entry>),
+    /// **`File Browser` P6b rule 3**: a path refused on the desk. Nothing was
+    /// sent.
+    ThePathIsRefused(smoozy_file_browser::elevated::WhyThePathIsRefused),
+    /// **A password is owed and none is held** (`Server Setup` E4's fourth
+    /// bullet), or passwordless elevation turned out to need one. The act did
+    /// not run; the box asks.
+    APasswordIsNeeded,
+    /// **The wrong-password ending, matched exactly** (`Server Setup` E4). The
+    /// act did not run.
+    TheWrongPassword,
+    /// **The elevating command refused for some other reason** — the login
+    /// may not use admin access at all. The act did not run.
+    AdminAccessWasRefused,
+    /// **`File Browser` P6b rule 2**: a rename found its landing name already
+    /// there and changed nothing.
+    TheLandingIsTaken,
+    /// **`File Browser` P6b as changed (Sol's finding 3)**: the folder, opened
+    /// and read with `pwd -P`, was not the folder sent. Nothing was done.
+    ThePathGoesThroughALink,
+    /// **The runner's ruling 1**: the new folder was made and could not be
+    /// handed to the login.
+    MadeButOwnedByRoot,
+    /// **Sol's finding 1**: the answer carried another act's mark, so what
+    /// ran was not this act.
+    AnotherActRan,
+    /// The act ran with admin access and failed, in the server's own words.
+    Failed { the_servers_words: String },
+    /// **`File Browser` P6**: the elevated listing did not run, or did not
+    /// split into whole records — never shown as a listing, and the reason is
+    /// said (Sol's finding 9).
+    TheFolderWasNotRead(WhyTheFolderWasNotRead),
+    /// The connection lent nothing, or went while the act ran.
+    TheConnectionWent,
+}
+
+/// **Why an elevated listing was not shown** — `File Browser` P6: *"reported as
+/// unavailable against that connection, with the reason said"*.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WhyTheFolderWasNotRead {
+    /// The listing ended unclean; the server's own words.
+    TheServerSaid(String),
+    /// It ended clean and its bytes did not split into whole records.
+    TheReplyWasNotAFileList,
+}
+
+impl WhatTheElevatedActCameTo {
+    /// **Whether the elevating command let the act run** — the act's mark came
+    /// back — so a password the user typed worked (`File Browser` P5 as
+    /// changed: kept only once it worked).
+    pub fn the_password_worked(&self) -> bool {
+        !matches!(
+            self,
+            WhatTheElevatedActCameTo::ThePathIsRefused(_)
+                | WhatTheElevatedActCameTo::APasswordIsNeeded
+                | WhatTheElevatedActCameTo::TheWrongPassword
+                | WhatTheElevatedActCameTo::AdminAccessWasRefused
+                | WhatTheElevatedActCameTo::TheConnectionWent
+        )
+    }
+}
+
+impl WhatTheElevatedActCameTo {
+    /// **The act was refused with admin access in a way that ends every
+    /// unit**: the password, the grant, or the connection.
+    pub fn ends_every_unit(&self) -> bool {
+        matches!(
+            self,
+            WhatTheElevatedActCameTo::APasswordIsNeeded
+                | WhatTheElevatedActCameTo::TheWrongPassword
+                | WhatTheElevatedActCameTo::AdminAccessWasRefused
+                | WhatTheElevatedActCameTo::TheConnectionWent
+        )
+    }
+}
+
+/// **A press's acts, one elevated command per unit, stopping at a refusal
+/// that ends every unit.** With what each came to: whether the password the
+/// user typed was the one sent after a passwordless sending.
+pub async fn the_elevated_acts_are_made<'a, C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    acts: &[smoozy_file_browser::elevated::AnElevatedAct],
+    how: smoozy_server_setup::elevated::HowElevationIsObtained<'a>,
+    typed: Option<&'a smoozy_security_and_licence::plaintext::Origin>,
+) -> (Vec<WhatTheElevatedActCameTo>, bool) {
+    use smoozy_server_setup::elevated::HowElevationIsObtained;
+    let mut how = how;
+    let mut the_typed_one_went_after_all = false;
+    loop {
+        let mut ended = Vec::new();
+        for act in acts {
+            let came = an_elevated_act_is_made(sessions, act, how).await;
+            let stop = came.ends_every_unit();
+            ended.push(came);
+            if stop {
+                break;
+            }
+        }
+        // **`File Browser` P6b, *two more rules after Fable's fresh look*
+        // (finding 6, 2026-11-12): a typed password is sent where the act has
+        // just shown it needs one.** P5's probe passed, so the act went with
+        // no password; it came back as *a password is needed*, nothing ran,
+        // and one was typed with this press. Sent once more, with it. Until
+        // then the typed password was dropped and the box had asked for
+        // something that could not help. Where the passwordless sending
+        // works, nothing typed is ever sent (after Sol's second look).
+        if let (HowElevationIsObtained::Passwordless, Some(typed), false) =
+            (how, typed, the_typed_one_went_after_all)
+        {
+            if ended.first() == Some(&WhatTheElevatedActCameTo::APasswordIsNeeded) {
+                how = HowElevationIsObtained::APasswordIsHeld(typed);
+                the_typed_one_went_after_all = true;
+                continue;
+            }
+        }
+        return (ended, the_typed_one_went_after_all);
+    }
+}
+
+/// **One act, retried with admin access** — `File Browser` P6 and `File
+/// Browser` P6b, as changed after Sol's look (2026-11-12).
+///
+/// In this order: the folder and names are checked on the desk (`File Browser`
+/// P6b rule 3); **this server's turn is taken** and held to the end (Sol's
+/// finding 1); the paths file is written through the subsystem — the act's
+/// name, a mark made for this act alone, the folder, the names; **the act's
+/// constant command runs once**, under `sudo -k -n` where elevation is
+/// passwordless or `sudo -k -S` with the password on its standard input and
+/// nowhere else (Sol's findings 5 and 6: no validate, no cached credential
+/// used or made); the file is taken away; and where a password was used,
+/// `sudo -K` follows as a second guard. **What came back is read by the
+/// act's mark**: none is the elevating command's refusal, another act's is
+/// not this act. **One act, one command** (`File Browser` P6b rule 1).
+pub async fn an_elevated_act_is_made<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    act: &smoozy_file_browser::elevated::AnElevatedAct,
+    how: smoozy_server_setup::elevated::HowElevationIsObtained<'_>,
+) -> WhatTheElevatedActCameTo {
+    use smoozy_file_browser::elevated::{
+        read_the_elevated_listing, the_complaint_holds, what_crosses, who_answered, AnElevatedAct, WhoAnswered,
+        MADE_BUT_OWNED_BY_ROOT, THE_CACHED_CREDENTIALS_GO, THE_LANDING_IS_TAKEN, THE_PATHS_FILE,
+        THE_PATH_GOES_THROUGH_A_LINK,
+    };
+    use smoozy_server_protocol::transport::CarriesAValueOnACommandsStandardInput;
+    use smoozy_server_setup::elevated::HowElevationIsObtained;
+    use smoozy_server_setup::elevation::{what_a_failed_validate_means, WhatTheStepMet};
+    use smoozy_servers::readings::CommandChannel;
+
+    // **This act's own mark** (Sol's finding 1), from a fresh identity.
+    let Ok(mark) = Identity::issue(smoozy_state::identities::IdentityKind::Operation) else {
+        return WhatTheElevatedActCameTo::TheConnectionWent;
+    };
+    let mark = mark.as_text().into_bytes();
+    // **`File Browser` P6b rule 3: every path checked before anything is sent.**
+    let bytes = match what_crosses(act, &mark) {
+        Ok(bytes) => bytes,
+        Err(why) => return WhatTheElevatedActCameTo::ThePathIsRefused(why),
+    };
+    // **`Server Setup` E4's fourth bullet: nothing is sent**, and the box asks.
+    if how == HowElevationIsObtained::APasswordIsOwedAndNoneIsHeld {
+        return WhatTheElevatedActCameTo::APasswordIsNeeded;
+    }
+    // **One act at a time on this server**, from the file's writing until it
+    // is taken away.
+    let _turn = sessions.an_elevated_act_takes_its_turn().await;
+    let the_token: &'static [u8] = THE_PATHS_FILE.link_path_on_the_subsystem.as_bytes();
+    let put = sessions
+        .a_reading(true, move |subsystem| {
+            Box::pin(async move { Ok(the_paths_file_is_written(subsystem, &bytes).await.is_ok()) })
+        })
+        .await;
+    match put {
+        Ok(Ok(true)) => {}
+        Ok(Ok(false)) => {
+            the_carriage_goes(sessions, the_token).await;
+            return WhatTheElevatedActCameTo::Failed {
+                the_servers_words: String::new(),
+            };
+        }
+        _ => return WhatTheElevatedActCameTo::TheConnectionWent,
+    }
+
+    let command = act.the_command();
+    let mut channel = crate::setting_up::an_elevated_channel(sessions);
+    let (ran, a_password_was_used) = match how {
+        HowElevationIsObtained::APasswordIsHeld(password) => (
+            channel
+                .run_carrying_a_value_on_its_standard_input(command.with_a_password, password.for_a_destination())
+                .await,
+            true,
+        ),
+        _ => (channel.run(command.passwordless).await, false),
+    };
+    // **The carriage goes whatever happened** (`File Browser` P6b rule 5), and
+    // **`sudo -K` follows a password, a second guard and never the first**.
+    the_carriage_goes(sessions, the_token).await;
+    if a_password_was_used {
+        let _ = channel.run(THE_CACHED_CREDENTIALS_GO).await;
+    }
+    let Ok(ran) = ran else {
+        return WhatTheElevatedActCameTo::TheConnectionWent;
+    };
+    let complaint = String::from_utf8_lossy(&ran.complaint).into_owned();
+    let output = match who_answered(&ran.output, &mark) {
+        // **The script never ran as root.** With a password, `Server Setup`
+        // E4's one wrong-password constant is read and nothing else; without
+        // one, a password is required after all.
+        WhoAnswered::TheElevatingCommandRefused if a_password_was_used => {
+            return match what_a_failed_validate_means(true, false, false, &complaint) {
+                WhatTheStepMet::AWrongPassword => WhatTheElevatedActCameTo::TheWrongPassword,
+                _ => WhatTheElevatedActCameTo::AdminAccessWasRefused,
+            };
+        }
+        WhoAnswered::TheElevatingCommandRefused => return WhatTheElevatedActCameTo::APasswordIsNeeded,
+        // **Root was reached and the act did not begin** (after Sol's second
+        // look): said in the server's words, never as a refusal.
+        WhoAnswered::TheActDidNotBegin if matches!(act, AnElevatedAct::AListing { .. }) => {
+            return WhatTheElevatedActCameTo::TheFolderWasNotRead(WhyTheFolderWasNotRead::TheServerSaid(complaint));
+        }
+        WhoAnswered::TheActDidNotBegin => {
+            return WhatTheElevatedActCameTo::Failed {
+                the_servers_words: complaint,
+            }
+        }
+        WhoAnswered::AnotherAct => return WhatTheElevatedActCameTo::AnotherActRan,
+        WhoAnswered::ThisAct { output } => output,
+    };
+    let is_a_listing = matches!(act, AnElevatedAct::AListing { .. });
+    if the_complaint_holds(&ran.complaint, THE_PATH_GOES_THROUGH_A_LINK) {
+        return WhatTheElevatedActCameTo::ThePathGoesThroughALink;
+    }
+    if ran.ended_cleanly() {
+        if !is_a_listing {
+            return WhatTheElevatedActCameTo::Done;
+        }
+        return match read_the_elevated_listing(&output) {
+            Ok(rows) => WhatTheElevatedActCameTo::TheRows(rows),
+            Err(_) => WhatTheElevatedActCameTo::TheFolderWasNotRead(WhyTheFolderWasNotRead::TheReplyWasNotAFileList),
+        };
+    }
+    if is_a_listing {
+        return WhatTheElevatedActCameTo::TheFolderWasNotRead(WhyTheFolderWasNotRead::TheServerSaid(complaint));
+    }
+    if the_complaint_holds(&ran.complaint, THE_LANDING_IS_TAKEN) {
+        return WhatTheElevatedActCameTo::TheLandingIsTaken;
+    }
+    if the_complaint_holds(&ran.complaint, MADE_BUT_OWNED_BY_ROOT) {
+        return WhatTheElevatedActCameTo::MadeButOwnedByRoot;
+    }
+    WhatTheElevatedActCameTo::Failed {
+        the_servers_words: complaint,
+    }
+}
+
+/// **The paths file, written through the subsystem** — so every value crosses
+/// as a protocol field (`File Browser` P6b). Whatever an earlier act left at the token goes
+/// first, and the file is then made with the exclusive create, so it is
+/// never written through anything standing there.
+async fn the_paths_file_is_written<S>(
+    subsystem: &mut smoozy_server_protocol::subsystem::client::Subsystem<S>,
+    bytes: &[u8],
+) -> Result<(), SubsystemFailure>
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send,
+{
+    use smoozy_server_protocol::carriage::THE_DIRECTORY_ON_THE_SUBSYSTEM;
+    use smoozy_server_protocol::subsystem::StatusCode;
+    match subsystem.make_directory(THE_DIRECTORY_ON_THE_SUBSYSTEM.as_bytes()).await {
+        Ok(()) | Err(SubsystemFailure::TheServerRefused(StatusCode::Failure)) => {}
+        Err(failure) => return Err(failure),
+    }
+    let path = smoozy_file_browser::elevated::THE_PATHS_FILE.link_path_on_the_subsystem.as_bytes();
+    let _ = subsystem.remove(path).await;
+    let handle = subsystem.create_exclusively(path).await?;
+    let mut written = Ok(());
+    for (at, piece) in bytes.chunks(32 * 1024).enumerate() {
+        if let Err(failure) = subsystem.send_a_write(&handle, (at * 32 * 1024) as u64, piece).await {
+            written = Err(failure);
+            break;
+        }
+    }
+    let settled = subsystem.settle_the_writes().await;
+    let closed = subsystem.close(&handle).await;
+    written.and(settled).and(closed)
+}
+
+/// **The paths file is taken away** (`File Browser` P6b rule 5). A removal that
+/// cannot run leaves it for the next act's write, which replaces it first.
+async fn the_carriage_goes<C: AHeldConnection>(sessions: &ThisServersSessions<C>, token: &'static [u8]) {
+    let _ = sessions
+        .a_reading(true, move |subsystem| {
+            Box::pin(async move {
+                let _ = subsystem.remove(token).await;
+                Ok(())
+            })
+        })
+        .await;
 }
 
 #[cfg(test)]

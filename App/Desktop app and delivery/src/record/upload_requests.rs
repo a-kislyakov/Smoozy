@@ -507,8 +507,7 @@ impl UploadRequests<'_> {
                     Ok(numbers)
                 })
                 .map_err(the_store)?;
-            let [owed, joined, whole, done, bytes, bytes_done, open, undecided, bytes_enumerated, enumerated] =
-                numbers;
+            let [owed, joined, whole, done, bytes, bytes_done, open, undecided, bytes_enumerated, enumerated] = numbers;
             if owed != joined {
                 continue;
             }
@@ -563,9 +562,22 @@ impl UploadRequests<'_> {
                 .map_err(the_store)?
                 .collect::<Result<_, _>>()
                 .map_err(the_store)?;
+            // **What the user picked, by the first one's name** (`Design/
+            // Transfers § A request shows the whole`, 2026-11-13), saved once.
+            let (prefix, separator) = the_picked_prefix(&destination, b'/');
+            let picked = the_picked_saved_or_counted(
+                self.connection,
+                ThePickedOf::AnUpload,
+                &record,
+                &prefix,
+                separator[0],
+                enumerated,
+            )
+            .map_err(the_store)?;
             counted.push(AnUploadRequestCounted {
                 record: identity,
                 destination,
+                picked,
                 changed_landings,
                 files_in_the_whole: whole as usize,
                 files_done: done as usize,
@@ -821,6 +833,32 @@ impl UploadRequests<'_> {
     }
 }
 
+/// **`File Browser` U8 as amended 2026-11-12: a *Remove* that cleared every
+/// staged part marks the request whose entry was handed that transfer**, and
+/// the transfer window draws no row for it (the second live pass, new fault
+/// 3). The record stays: U9b still reads it.
+pub fn the_leftover_of_this_transfer_was_removed(
+    connection: &rusqlite::Connection,
+    transfer: &Identity,
+) -> rusqlite::Result<usize> {
+    connection.execute(
+        "UPDATE upload_request SET removed_by_the_user = 1
+         WHERE record IN (SELECT record FROM upload_request_entry WHERE transfer = ?1)",
+        [transfer.as_text()],
+    )
+}
+
+/// **The requests whose leftover the user removed**, by record identity —
+/// the rows the transfer window does not draw.
+pub fn the_requests_the_user_removed(
+    connection: &rusqlite::Connection,
+) -> rusqlite::Result<std::collections::HashSet<String>> {
+    let mut statement =
+        connection.prepare_cached("SELECT record FROM upload_request WHERE removed_by_the_user = 1")?;
+    let found = statement.query_map([], |row| row.get::<_, String>(0))?.collect();
+    found
+}
+
 /// **One request record, by its own identity.** Nothing in `KeepsTheRequest`
 /// asks for it; it is here because a test that closes and re-opens the record
 /// has to be able to ask for exactly the one it wrote, and because §21's
@@ -897,6 +935,12 @@ const SENT: &str = "(e.disposition = 'to send'
 pub struct AnUploadRequestCounted {
     pub record: Identity,
     pub destination: Vec<u8>,
+    /// **What the user picked**: the first thing's name, and how many more —
+    /// `Design/Transfers § A request shows the whole`, added 2026-11-13 (the
+    /// Creator's notes on the test copy of 2026-11-12, note 11). Read off the
+    /// entries' landing paths under the destination; nothing where none is
+    /// under it.
+    pub picked: Option<ThePicked>,
     /// The units a transfer is arranged for (`File Browser` U11).
     pub files_in_the_whole: usize,
     /// Of those, the ones *done*.
@@ -933,6 +977,130 @@ pub struct AnUploadRequestCounted {
 /// a caller cannot disagree: it is `State, identity and recovery` §9.4's
 /// operation identity, which [`outcomes::KIND`] fixes for every outcome record.
 pub const THE_RECORD_IDENTITY_KIND: IdentityKind = outcomes::KIND;
+
+/// **What the user picked for a transfer**, by the first thing's name and how
+/// many more — `Design/Transfers § A request shows the whole`, added
+/// 2026-11-13 (the Creator's notes on the test copy of 2026-11-12, notes 11
+/// and 12). A picked folder is one thing, however many files it holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThePicked {
+    /// The first picked file's or folder's own name, as its bytes.
+    pub first: Vec<u8>,
+    /// How many more were picked beside it.
+    pub more: usize,
+}
+
+/// **The destination as the start every landing path under it shares**, and
+/// the one separator those paths use: the destination with its trailing
+/// separators taken off, then one.
+pub(crate) fn the_picked_prefix(destination: &[u8], separator: u8) -> (Vec<u8>, Vec<u8>) {
+    let mut prefix = destination.to_vec();
+    while prefix.last() == Some(&separator) {
+        prefix.pop();
+    }
+    prefix.push(separator);
+    (prefix, vec![separator])
+}
+
+/// **The name of the thing picked that a landing path lies in** — the path's
+/// first part under the destination. Nothing where the path is not under it.
+pub(crate) fn the_picked_name(landing: &[u8], prefix: &[u8], separator: u8) -> Option<Vec<u8>> {
+    let rest = landing.strip_prefix(prefix)?;
+    let name = rest.split(|byte| *byte == separator).next().unwrap_or(rest);
+    (!name.is_empty()).then(|| name.to_vec())
+}
+
+/// **How many things were picked**: each entry's first part under the
+/// destination, told apart. `?1` is the request, `?2` the prefix's length,
+/// `?3` the prefix, `?4` the separator.
+const PICKED: &str = "count(DISTINCT CASE WHEN substr(e.landing_path, 1, ?2) = ?3 THEN
+       CASE WHEN instr(substr(e.landing_path, ?2 + 1), ?4) > 0
+            THEN substr(substr(e.landing_path, ?2 + 1), 1, instr(substr(e.landing_path, ?2 + 1), ?4) - 1)
+            ELSE substr(e.landing_path, ?2 + 1) END END)";
+
+/// **Whose entries a picked count is read from**: an upload request's or a
+/// manual download request's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ThePickedOf {
+    AnUpload,
+    ADownload,
+}
+
+impl ThePickedOf {
+    fn the_entries(self) -> &'static str {
+        match self {
+            ThePickedOf::AnUpload => "upload_request_entry",
+            ThePickedOf::ADownload => "download_request_entry",
+        }
+    }
+}
+
+/// **What the picked things were when they were counted**: how many entries
+/// the request held, its first and last landing paths, and the prefix they
+/// were read under. Entries are only ever added to a request, each at the next
+/// position, and a landing path is not rewritten, so a request whose four
+/// match still holds the same picked things.
+type ThePickedKey = (Vec<u8>, i64, Option<Vec<u8>>, Option<Vec<u8>>);
+
+/// **What the user picked, saved once per request** — `Design/Transfers § A
+/// request shows the whole`; after Sol's look, 2026-11-13, at the
+/// window notes, point 4. Until then the count of picked things was worked
+/// out again over every entry at every reading of Transfers and Files,
+/// finished requests included, while the record was held: about a quarter
+/// more time on a 150,000-file request. **It is kept for the life of this
+/// run of the app**, by request, and read again only where the request's
+/// entries have changed (a file joined it) or the app started again.
+static THE_PICKED_SAVED: std::sync::Mutex<
+    std::collections::BTreeMap<(ThePickedOf, String), (ThePickedKey, Option<ThePicked>)>,
+> = std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// **What the user picked for one request**: saved, or counted now and saved.
+/// Two readings by position, which the entries' key answers at once, tell
+/// whether the saved answer still holds; only where it does not are the
+/// entries walked.
+pub(crate) fn the_picked_saved_or_counted(
+    connection: &rusqlite::Connection,
+    of: ThePickedOf,
+    record: &str,
+    prefix: &[u8],
+    separator: u8,
+    entries: i64,
+) -> rusqlite::Result<Option<ThePicked>> {
+    let table = of.the_entries();
+    let one_landing = |order: &str| -> rusqlite::Result<Option<Vec<u8>>> {
+        connection
+            .prepare_cached(&format!(
+                "SELECT landing_path FROM {table} WHERE record = ?1 ORDER BY position {order} LIMIT 1"
+            ))?
+            .query_row([record], |row| row.get(0))
+            .map(Some)
+            .or_else(|error| match error {
+                rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                other => Err(other),
+            })
+    };
+    let first = one_landing("ASC")?;
+    let key: ThePickedKey = (prefix.to_vec(), entries, first.clone(), one_landing("DESC")?);
+    let at = (of, record.to_string());
+    if let Ok(saved) = THE_PICKED_SAVED.lock() {
+        if let Some((held, picked)) = saved.get(&at) {
+            if *held == key {
+                return Ok(picked.clone());
+            }
+        }
+    }
+    let how_many: i64 = connection
+        .prepare_cached(&format!("SELECT {PICKED} FROM {table} AS e WHERE e.record = ?1"))?
+        .query_row(rusqlite::params![record, prefix.len() as i64, prefix, vec![separator]], |row| row.get(0))?;
+    let picked = first
+        .as_deref()
+        .and_then(|landing| the_picked_name(landing, prefix, separator))
+        .map(|first| ThePicked { first, more: (how_many as usize).saturating_sub(1) });
+    if let Ok(mut saved) = THE_PICKED_SAVED.lock() {
+        saved.insert(at, (key, picked.clone()));
+    }
+    Ok(picked)
+}
 
 #[cfg(test)]
 mod tests {
@@ -1008,6 +1176,102 @@ mod tests {
             the_jobs: vec![an_identity(IdentityKind::Job), an_identity(IdentityKind::Job)],
         });
         request
+    }
+
+    /// **What the user picked is counted off the landing paths** —
+    /// `Design/Transfers § A request shows the whole`, added 2026-11-13 (the
+    /// Creator's notes on the test copy of 2026-11-12, note 11). One file into
+    /// `/root` is that file; a folder of two files and two loose files into
+    /// `/root/` (a trailing slash) is three things, the folder first.
+    #[test]
+    fn what_the_user_picked_is_counted_off_the_landing_paths() {
+        let connection = a_record();
+        let server = an_identity(IdentityKind::LocalServer);
+        let run = an_identity(IdentityKind::Run);
+        let request = |destination: &[u8], landings: &[&[u8]]| {
+            let entries = landings
+                .iter()
+                .map(|landing| {
+                    let mut entry = EnumerationEntry::enumerated(b"/here/x".to_vec(), landing.to_vec(), 5);
+                    entry.disposition = Some(Disposition::ToSend);
+                    entry
+                })
+                .collect();
+            UploadRequest::confirmed(
+                request::open_an_upload_request().expect("the answer handed in says open"),
+                an_identity(THE_RECORD_IDENTITY_KIND),
+                server.clone(),
+                None,
+                destination.to_vec(),
+                entries,
+                run.clone(),
+            )
+        };
+        let one = request(b"/root", &[b"/root/kitchen_v14.blend"]);
+        let several = request(
+            b"/root/",
+            &[b"/root/textures/wood.png", b"/root/textures/tile.png", b"/root/a.blend", b"/root/b.blend"],
+        );
+        UploadRequests::over(&connection).write_it_down(&one).unwrap();
+        UploadRequests::over(&connection).write_it_down(&several).unwrap();
+        let counted = UploadRequests::over(&connection).every_request_counted_for(&server).unwrap();
+        let of = |which: &UploadRequest| {
+            counted.iter().find(|one| one.record == which.record).expect("counted").picked.clone()
+        };
+        assert_eq!(of(&one), Some(ThePicked { first: b"kitchen_v14.blend".to_vec(), more: 0 }));
+        assert_eq!(of(&several), Some(ThePicked { first: b"textures".to_vec(), more: 2 }));
+    }
+
+    /// **What the user picked is saved once, and counted again only when the
+    /// picked things change** — `Design/Transfers § A request shows the
+    /// whole`; after Sol's look, 2026-11-13, at the window notes,
+    /// point 4: the count was worked out again at every reading of Transfers
+    /// and Files, finished requests included, while the record was held. A
+    /// middle entry is moved under `textures` behind the reading's back, with
+    /// how many entries there are and the first and last left as they were:
+    /// the reading still says what was saved. A file joins the request: it is
+    /// counted again.
+    #[test]
+    fn what_the_user_picked_is_saved_once_and_counted_again_only_when_it_changes() {
+        let connection = a_record();
+        let server = an_identity(IdentityKind::LocalServer);
+        let run = an_identity(IdentityKind::Run);
+        let entry = |landing: &[u8]| {
+            let mut entry = EnumerationEntry::enumerated(b"/here/x".to_vec(), landing.to_vec(), 5);
+            entry.disposition = Some(Disposition::ToSend);
+            entry
+        };
+        let mut request = UploadRequest::confirmed(
+            request::open_an_upload_request().expect("the answer handed in says open"),
+            an_identity(THE_RECORD_IDENTITY_KIND),
+            server.clone(),
+            None,
+            b"/root".to_vec(),
+            [&b"/root/textures/wood.png"[..], b"/root/textures/tile.png", b"/root/a.blend", b"/root/b.blend"]
+                .into_iter()
+                .map(entry)
+                .collect(),
+            run,
+        );
+        UploadRequests::over(&connection).write_it_down(&request).unwrap();
+        let picked = || {
+            UploadRequests::over(&connection).every_request_counted_for(&server).unwrap()[0].picked.clone()
+        };
+        assert_eq!(picked(), Some(ThePicked { first: b"textures".to_vec(), more: 2 }));
+        connection
+            .execute(
+                "UPDATE upload_request_entry SET landing_path = ?2 WHERE record = ?1 AND position = 2",
+                rusqlite::params![request.record.as_text(), b"/root/textures/stone.png".to_vec()],
+            )
+            .unwrap();
+        assert_eq!(
+            picked(),
+            Some(ThePicked { first: b"textures".to_vec(), more: 2 }),
+            "what was picked was counted again at a reading, though the picked things had not changed"
+        );
+        request.entries.push(entry(b"/root/c.blend"));
+        UploadRequests::over(&connection).write_it_down(&request).unwrap();
+        assert_eq!(picked(), Some(ThePicked { first: b"textures".to_vec(), more: 3 }));
     }
 
     #[test]

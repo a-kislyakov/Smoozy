@@ -343,7 +343,7 @@ fn evaluated_with(
                         outcome: ReleaseOutcome::Dropped,
                         produced_by: match why {
                             WhyDropped::TheDependencyWasCancelled => {
-                                "the dependency was cancelled".to_string()
+                                crate::waiting::THE_DEPENDENCY_WAS_CANCELLED.to_string()
                             }
                             // **The ending in its own four words and never
                             // this type's rendering** — step 10c's fifth pass

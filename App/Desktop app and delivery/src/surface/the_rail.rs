@@ -1619,6 +1619,48 @@ console.log(JSON.stringify({{
         assert!(body.contains("theRowsFigureIs(place, figure)"), "a redraw drops the screens' figures");
     }
 
+    /// **The second live pass's fault 8: a rail read again that has not
+    /// changed is not drawn again.** Right after opening, a burst of events
+    /// rebuilt the rail several times, and a press on *Transfers* that landed
+    /// on a row being replaced did nothing. The page's own `theRailIsReadAgain`
+    /// is lifted and run under Node: read three times with one answer and once
+    /// with another, the rail is replaced once. **Skipped, and says so, where
+    /// no Node is installed.**
+    #[test]
+    fn a_rail_read_again_unchanged_is_not_drawn_again() {
+        let page = the_page_module();
+        let at = page.find("export function theRailIsReadAgain()").expect("the re-read is gone");
+        let to = at + page[at..].find("\n}\n").expect("it closes") + 3;
+        let lifted = page[at..to].replace("export function", "function");
+        let script = format!(
+            r#"
+let replaced = 0;
+let answer = {{ places: [{{ place: "transfers" }}], servers: [] }};
+const nav = {{ parentNode: {{ replaceChild() {{ replaced += 1; }} }} }};
+const document = {{ querySelector: () => nav }};
+const shell = {{ core: {{ invoke: () => Promise.resolve(JSON.parse(JSON.stringify(answer))) }} }};
+const rows = new Map();
+let theRailAsLastDrawn = JSON.stringify(answer);
+function theRailIsDrawn() {{ return {{}}; }}
+function theRowsFigureIs() {{}}
+function theRailShowsWhereWeAre() {{}}
+{lifted}
+const settle = () => new Promise((go) => setTimeout(go, 0));
+for (let i = 0; i < 3; i += 1) {{ theRailIsReadAgain(); await settle(); }}
+answer = {{ places: [{{ place: "transfers" }}], servers: [{{ server: "one" }}] }};
+theRailIsReadAgain(); await settle();
+theRailIsReadAgain(); await settle();
+console.log(replaced);
+"#
+        );
+        let Ok(ran) = std::process::Command::new("node").arg("--input-type=module").arg("-e").arg(&script).output() else {
+            eprintln!("SKIPPED: no Node on this computer, so the rail was not run");
+            return;
+        };
+        assert!(ran.status.success(), "the rail did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "1", "an unchanged rail was drawn again");
+    }
+
     struct Collects(Arc<Mutex<Vec<crate::events::Delivery>>>);
     impl crate::events::Delivers for Collects {
         fn deliver(&self, delivery: &crate::events::Delivery) {

@@ -24,11 +24,11 @@ use crate::period::{OpeningAct, PeriodEnding};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WhatChanged {
     /// **D13: host and port together name what Smoozy is reaching**, so
-    /// changing either points the entry at a different machine. The hardware
+    /// changing either may reach a different machine. The hardware
     /// read from the old one is the wrong answer, the event cursor was taken
-    /// against a journal on the old one, and the confirmed installation
-    /// identity belonged to it, and **the recorded machine root was chosen on
-    /// it** (`Job files and outputs` L1). **All four go in the same write.**
+    /// against a journal on the old one, so those readings go. The expected installation identity and recorded root
+    /// are retained solely to locate and compare the new connection's
+    /// installation (`Servers` D13).
     HostOrPort,
     /// **D14: changing the username clears the remembered machine password
     /// without asking, because a password belongs to a login and the login has
@@ -53,16 +53,8 @@ pub enum WhatChanged {
 /// D12's table, as four fates rather than one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WhatTheEditThrowsAway {
-    /// The remembered hardware reading, **the recorded machine root**, the
-    /// event cursor and the last confirmed installation identity, which move
-    /// together and never separately.
-    ///
-    /// **Four, not three, since 2026-09-03.** `Job files and outputs` L1's
-    /// recorded root is machine-derived and carries an installation identity,
-    /// so D13's own reason reaches it exactly as it reaches the other three: a
-    /// host or port edit points the entry at a different machine, and a root
-    /// chosen on the old one is the wrong answer. **D3 and D13 were repaired
-    /// where this builder stood**; the rule itself does not move.
+    /// The hardware reading and cursor. The expected installation and root
+    /// are kept only to locate the identity check (`Servers` D13, 2026-11-14).
     pub the_machine_derived_values: Fate,
     pub the_remembered_host_key: Fate,
     pub the_remembered_machine_password: Fate,
@@ -173,10 +165,8 @@ pub fn what_follows(a_period_stood: bool, changed: WhatChanged) -> WhatFollowsFr
 /// it — so the staged material is kept and the user is told it is there.
 ///
 /// **What becomes of it on the new period** is §12.2's label and C14's gate: on
-/// a host or port edit **the installation identity read on the new connection is
-/// absent or different, and every transfer record held against the row is
-/// disqualified**, which is correct — the entry now points at a different
-/// machine.
+/// a host or port edit the live installation check still decides whether
+/// transfer records belong to the machine (`Servers` D13).
 pub const TRANSFERS_ARE_NOT_PERIOD_HELD: bool = true;
 
 /// **E6: the put-back may meet a changed identity, and it may never meet a

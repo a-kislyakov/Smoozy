@@ -299,6 +299,22 @@ And, of the flag the document names and does not use:
 
 **Not covered:** how Blender itself handles `SIGPIPE`, how much it writes, the pipe's capacity, and whether any particular render would reach either case.
 
+## 2.5a POSIX `read()` and `poll()` — when a pipe ends, and waiting for it without being held (M5a)
+
+*Added 2026-11-11, out of the Fable review's fifth sitting; no auditor has seen it.*
+
+**Source 1:** The Open Group Base Specifications Issue 7, 2018 edition, `read()`, read **2026-11-11** at `https://pubs.opengroup.org/onlinepubs/9699919799/functions/read.html`. Label: **documented**, the standard's own text. Of a read from an empty pipe or FIFO, exact words:
+
+> "If no process has the pipe open for writing, read() shall return 0 to indicate end-of-file."
+
+and, where some process has it open for writing and `O_NONBLOCK` is clear, the read *"shall block the calling thread until some data is written or the pipe is closed by all processes that had the pipe open for writing."*
+
+**Source 2:** the same edition, `poll()`, read **2026-11-11** at `https://pubs.opengroup.org/onlinepubs/9699919799/functions/poll.html`. Label: **documented**. Exact words: `POLLIN` — *"Data other than high-priority data may be read without blocking."*; `POLLHUP` — *"A device has been disconnected, or a pipe or FIFO has been closed by the last process that had it open for writing."*; of the wait — *"If none of the defined events have occurred on any selected file descriptor, poll() shall wait at least timeout milliseconds for an event to occur"*; and of what comes back — *"A value of 0 indicates that the call timed out and no file descriptors have been selected."*
+
+**What this carries:** the end of a render's stream is the word of every process holding that pipe open for writing, never of the render alone, so the render's ending cannot be taken from it; and the worker can wait for a stream to become readable for a bounded moment, then look at whether the render has ended, without giving up any byte — a stream `poll()` reports is read by the ordinary `read()`.
+
+**Not covered:** whether any Blender, or any script in a file, starts a process that outlives it. The desk stands in for one with a shell that leaves a process behind.
+
 ## 2.6 Shell Command Language §2.9.1 — the variable-assignment prefix (K7)
 
 **Source:** The Open Group Base Specifications Issue 7, 2018 edition, Shell Command Language §2.9.1 *Simple Commands*, read **2026-08-22** at `https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html`. Label: **documented**, the standard's own text. Exact words:

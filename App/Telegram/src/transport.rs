@@ -57,7 +57,7 @@ use std::fmt;
 use std::io::Write as _;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
@@ -69,11 +69,14 @@ use serde_json::{json, Map, Value};
 ///   machines use to talk to each other (`Telegram` B10, B11). **That third use
 ///   is the one a shorter list would silently break.**
 /// - **`callback_query`** carries every tap on a button.
+/// - **`edited_message`**, from 2026-11-13 (Telegram when things aren't
+///   ideal, problem 8), carries a command the user edited, which is answered
+///   that edits are ignored (R15).
 ///
 /// **Nothing else is named, and that is a decision.** P6a: a later clause that
 /// needs another kind adds it here, in this one place, and every ask carries it
 /// by construction.
-pub const THE_UPDATE_KINDS_EVERY_ASK_NAMES: [&str; 2] = ["message", "callback_query"];
+pub const THE_UPDATE_KINDS_EVERY_ASK_NAMES: [&str; 3] = ["message", "callback_query", "edited_message"];
 
 /// Where Telegram's service answers.
 pub const THE_SERVICES_ADDRESS: &str = "https://api.telegram.org";
@@ -201,6 +204,35 @@ pub enum WhatACallCarries {
     },
 }
 
+/// **How a send for the user goes — `Telegram` V1e and I2, the twenty-eighth
+/// notes, notes 18 and 19.** `silent` passes `disable_notification` (V1e's
+/// *silent*; an edit takes none, Sources entry 90); `reply_to` passes
+/// `reply_parameters` naming the job's message (I2: every frame's picture or
+/// album is a reply to it). **Where Telegram refuses a send that carried a
+/// reply, it is sent once more with no reply** (I2: *"never left unsent for
+/// that"*). The refusal's own words are not read for its cause (J3), so any
+/// refusal that names no wait is tried once more: one that was not about the
+/// reply is refused again, as it would have been.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HowItIsSent {
+    pub silent: bool,
+    pub reply_to: Option<i64>,
+}
+
+impl HowItIsSent {
+    pub fn silent(silent: bool) -> HowItIsSent {
+        HowItIsSent { silent, reply_to: None }
+    }
+    fn written_into(self, carried: &mut Map<String, Value>) {
+        if self.silent {
+            carried.insert("disable_notification".into(), json!(true));
+        }
+        if let Some(message) = self.reply_to {
+            carried.insert("reply_parameters".into(), json!({ "message_id": message }));
+        }
+    }
+}
+
 /// **One file a call uploads**, under the form part name the call refers to it
 /// by.
 #[derive(Clone, PartialEq, Eq)]
@@ -277,6 +309,12 @@ pub fn what_the_answer_says(text: &str) -> Result<Value, WhyTheCallFailed> {
                 .ok_or(WhyTheCallFailed::TheAnswerCouldNotBeRead(
                     "an accepted answer carried no result",
                 ))
+        }
+        // `Telegram` C6c: service failures keep messages owed, without any
+        // response text (which may contain private data) in the failure.
+        Some(false) if whole.get("error_code").and_then(Value::as_i64)
+            .is_some_and(|code| (500..600).contains(&code)) => {
+            Err(WhyTheCallFailed::NotReached("Telegram is temporarily unavailable".into()))
         }
         Some(false) => Err(WhyTheCallFailed::Refused(ARefusal {
             error_code: whole.get("error_code").and_then(Value::as_i64),
@@ -418,6 +456,10 @@ impl ReachesTelegram for OverHttps {
         };
 
         let mut answer = sent.map_err(|said| self.without_the_token(said.to_string()))?;
+        // C6c also covers a gateway's non-JSON service error.
+        if answer.status().is_server_error() {
+            return Err("Telegram is temporarily unavailable".into());
+        }
         answer
             .body_mut()
             .with_config()
@@ -486,6 +528,62 @@ pub struct TheClient {
     /// (`Telegram` C6; [`TheClient::no_call_longer_than`]).
     at_most: Option<Duration>,
     reached: Arc<AtomicU64>,
+    /// **`Telegram` F6: how Telegram has been answering**, shared by every
+    /// handle, as `reached` is.
+    answers: Arc<Mutex<HowTelegramAnswers>>,
+}
+
+/// **`Telegram` F6 — what Telegram's answers to this worker's calls say of
+/// it**, looked at in [`TheClient`]'s one place every call comes back through.
+/// When Telegram refuses (the Rough what-if answers 388–392 and 400).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HowTelegramAnswers {
+    /// A refusal coded 401 came, and no accepted call since.
+    pub the_token_is_rejected: bool,
+    /// A refusal coded 403 came, and no accepted call in the chat since.
+    pub the_chat_refuses: bool,
+    /// The moment a call first reached nothing, with no answer since.
+    pub nothing_reached_it_since: Option<Instant>,
+}
+
+/// **`Telegram` F6: whether a call is one in the chat** — a send, an edit, a
+/// pin or an unpin of a message. A 403 on any of these says the chat refuses;
+/// only an accepted send says it takes messages again (F6 item 2 as changed
+/// 2026-11-15).
+fn it_is_a_call_in_the_chat(method: &str) -> bool {
+    method.starts_with("send")
+        || method.starts_with("edit")
+        || matches!(method, "pinChatMessage" | "unpinChatMessage")
+}
+
+impl HowTelegramAnswers {
+    fn heard(&mut self, method: &str, answer: &WhatTheServiceGaveBack) {
+        match answer {
+            Err(WhyTheCallFailed::NotReached(_)) => {
+                self.nothing_reached_it_since.get_or_insert_with(Instant::now);
+                return;
+            }
+            Ok(_) => {
+                self.the_token_is_rejected = false;
+                // **`Telegram` F6 item 2 as changed 2026-11-15: only a new
+                // message sent ends it.** The what-if live pass saw a blocked
+                // bot's sends refused with 403 while the board's heartbeat
+                // edit went on every minute and emptied the word, so an edit,
+                // a pin or an unpin of a message already sent is no proof the
+                // chat takes messages (Sources entry 96a).
+                if method.starts_with("send") {
+                    self.the_chat_refuses = false;
+                }
+            }
+            Err(WhyTheCallFailed::Refused(refusal)) => match refusal.error_code {
+                Some(401) => self.the_token_is_rejected = true,
+                Some(403) if it_is_a_call_in_the_chat(method) => self.the_chat_refuses = true,
+                _ => {}
+            },
+            Err(WhyTheCallFailed::TheAnswerCouldNotBeRead(_)) => {}
+        }
+        self.nothing_reached_it_since = None;
+    }
 }
 
 impl fmt::Debug for TheClient {
@@ -505,7 +603,7 @@ impl TheClient {
 
     /// **Any wire at all** — a stand-in, in a test.
     pub fn over(wire: Arc<dyn ReachesTelegram>) -> TheClient {
-        TheClient { wire, at_most: None, reached: Arc::new(AtomicU64::new(0)) }
+        TheClient { wire, at_most: None, reached: Arc::new(AtomicU64::new(0)), answers: Arc::default() }
     }
 
     /// **The same client, with no call allowed longer than `window`** — each
@@ -519,6 +617,7 @@ impl TheClient {
             wire: self.wire.clone(),
             at_most: Some(window),
             reached: self.reached.clone(),
+            answers: self.answers.clone(),
         }
     }
 
@@ -529,15 +628,24 @@ impl TheClient {
         bound: Duration,
     ) -> WhatTheServiceGaveBack {
         let bound = self.at_most.map_or(bound, |window| bound.min(window));
-        let text = self
+        let answer = self
             .wire
             .call(method, &carries, bound)
-            .map_err(WhyTheCallFailed::NotReached)?;
-        let answer = what_the_answer_says(&text);
+            .map_err(WhyTheCallFailed::NotReached)
+            .and_then(|text| what_the_answer_says(&text));
         if answer.is_ok() {
             self.reached.fetch_add(1, Ordering::SeqCst);
         }
+        if let Ok(mut answers) = self.answers.lock() {
+            answers.heard(method, &answer);
+        }
         answer
+    }
+
+    /// **`Telegram` F6: how Telegram has been answering**, as every handle
+    /// of this client heard it.
+    pub fn how_telegram_answers(&self) -> HowTelegramAnswers {
+        self.answers.lock().map(|answers| *answers).unwrap_or_default()
     }
 
     /// `Telegram` F3a: shared by this worker's handles, never by another server.
@@ -650,9 +758,41 @@ impl TheClient {
 
     /// `Telegram` R7a: user text and its ranges, with optional buttons.
     pub fn send_marked_message(&self, chat: i64, text: &crate::job_messages::AMarkedText, buttons: Option<Value>) -> WhatTheServiceGaveBack {
+        self.send_marked_message_as(chat, text, buttons, HowItIsSent::default())
+    }
+
+    /// **The same, sent as `how` says** — silent or with its sound, and as a
+    /// reply where one is named (`Telegram` V1e, I2).
+    pub fn send_marked_message_as(&self, chat: i64, text: &crate::job_messages::AMarkedText, buttons: Option<Value>, how: HowItIsSent) -> WhatTheServiceGaveBack {
         let mut carried = json!({"chat_id": chat, "text": text.text, "entities": text.entities()});
         with_buttons(&mut carried, buttons);
-        self.ask("sendMessage", fields(carried), THE_BOUND_ON_AN_ORDINARY_CALL)
+        self.ask_as("sendMessage", fields(carried), THE_BOUND_ON_AN_ORDINARY_CALL, how)
+    }
+
+    /// **One send carrying `how`**, and **once more with no reply where
+    /// Telegram refuses the one that carried a reply** ([`HowItIsSent`]). A
+    /// flood refusal is the queue's (C6a) and is handed back as it is.
+    fn ask_as(&self, method: &str, carries: WhatACallCarries, bound: Duration, how: HowItIsSent) -> WhatTheServiceGaveBack {
+        let with = |how: HowItIsSent, carries: &WhatACallCarries| match carries.clone() {
+            WhatACallCarries::Fields(mut fields) => {
+                how.written_into(&mut fields);
+                WhatACallCarries::Fields(fields)
+            }
+            WhatACallCarries::FieldsAndFiles { mut fields, files } => {
+                how.written_into(&mut fields);
+                WhatACallCarries::FieldsAndFiles { fields, files }
+            }
+            nothing => nothing,
+        };
+        if how.reply_to.is_none() {
+            return self.ask(method, with(how, &carries), bound);
+        }
+        match self.ask(method, with(how, &carries), bound) {
+            Err(WhyTheCallFailed::Refused(refusal)) if crate::pacing::the_wait_a_refusal_asks_for(&refusal).is_none() => {
+                self.ask(method, with(HowItIsSent { reply_to: None, ..how }, &carries), bound)
+            }
+            other => other,
+        }
     }
     pub fn edit_marked_message(&self, chat: i64, id: i64, text: &crate::job_messages::AMarkedText, buttons: Option<Value>) -> WhatTheServiceGaveBack {
         let mut carried = json!({"chat_id": chat, "message_id": id, "text": text.text, "entities": text.entities()});
@@ -671,7 +811,8 @@ impl TheClient {
     ///
     /// **`Telegram` B25 — everything after the head is a spoiler**, sent as an
     /// entity list and never as markup; where it goes is
-    /// [`crate::board::text::the_spoiler_after_the_head`].
+    /// [`crate::board::text::the_spoiler_after_the_head`]. **B25a**: inside one
+    /// folded quotation of the same range.
     pub fn send_a_machinery_message(&self, chat_id: i64, text: &str) -> WhatTheServiceGaveBack {
         let mut carried = json!({ "chat_id": chat_id, "text": text, "disable_notification": true });
         with_the_spoiler(&mut carried, text);
@@ -740,6 +881,17 @@ impl TheClient {
     /// one button has gone. [`crate::actions::TheJobMessages`] is the only
     /// caller. A refusal is the caller's to read.
     pub fn delete_an_albums_companion(&self, chat_id: i64, message_id: i64) -> WhatTheServiceGaveBack {
+        self.delete_one_message(chat_id, message_id)
+    }
+
+    /// **`Telegram` D2 and I4 as changed 2026-11-13 — a message said in
+    /// between, once what settles it has arrived**: *Stop sent.* and *being
+    /// made again*, by their own identity. The bot's own message, never
+    /// pinned: *"Bots can delete outgoing messages in private chats, groups,
+    /// and supergroups."* (`deleteMessage`, Telegram's Bot API page, read
+    /// 2026-11-13). [`crate::actions::TheJobMessages`] is the only caller. A
+    /// refusal is the caller's to read.
+    pub fn delete_an_in_between_message(&self, chat_id: i64, message_id: i64) -> WhatTheServiceGaveBack {
         self.delete_one_message(chat_id, message_id)
     }
 
@@ -815,22 +967,35 @@ impl TheClient {
     }
 
     pub fn send_photo_marked(&self, chat: i64, name: &str, bytes: Vec<u8>, caption: Option<&crate::job_messages::AMarkedText>, buttons: Option<Value>) -> WhatTheServiceGaveBack {
-        self.send_one_marked_file("sendPhoto", "photo", chat, name, bytes, caption, buttons)
+        self.send_one_marked_file("sendPhoto", "photo", chat, name, bytes, caption, buttons, HowItIsSent::default())
+    }
+    /// **A picture sent as `how` says** — a frame's picture as a reply to its
+    /// job's message (`Telegram` I2), a contact sheet of one silently (V1e).
+    #[allow(clippy::too_many_arguments)]
+    pub fn send_photo_marked_as(&self, chat: i64, name: &str, bytes: Vec<u8>, caption: Option<&crate::job_messages::AMarkedText>, buttons: Option<Value>, how: HowItIsSent) -> WhatTheServiceGaveBack {
+        self.send_one_marked_file("sendPhoto", "photo", chat, name, bytes, caption, buttons, how)
     }
     pub fn send_video_marked(&self, chat: i64, name: &str, bytes: Vec<u8>, caption: Option<&crate::job_messages::AMarkedText>, buttons: Option<Value>) -> WhatTheServiceGaveBack {
-        self.send_one_marked_file("sendVideo", "video", chat, name, bytes, caption, buttons)
+        self.send_one_marked_file("sendVideo", "video", chat, name, bytes, caption, buttons, HowItIsSent::default())
+    }
+    /// **A video sent as `how` says** — the finished video and the moving
+    /// picture silently (`Telegram` V1e).
+    #[allow(clippy::too_many_arguments)]
+    pub fn send_video_marked_as(&self, chat: i64, name: &str, bytes: Vec<u8>, caption: Option<&crate::job_messages::AMarkedText>, buttons: Option<Value>, how: HowItIsSent) -> WhatTheServiceGaveBack {
+        self.send_one_marked_file("sendVideo", "video", chat, name, bytes, caption, buttons, how)
     }
     pub fn send_document_marked(&self, chat: i64, name: &str, bytes: Vec<u8>, caption: Option<&crate::job_messages::AMarkedText>, buttons: Option<Value>) -> WhatTheServiceGaveBack {
-        self.send_one_marked_file("sendDocument", "document", chat, name, bytes, caption, buttons)
+        self.send_one_marked_file("sendDocument", "document", chat, name, bytes, caption, buttons, HowItIsSent::default())
     }
 
-    fn send_one_marked_file(&self, method: &'static str, part: &str, chat: i64, name: &str, bytes: Vec<u8>, caption: Option<&crate::job_messages::AMarkedText>, buttons: Option<Value>) -> WhatTheServiceGaveBack {
+    #[allow(clippy::too_many_arguments)]
+    fn send_one_marked_file(&self, method: &'static str, part: &str, chat: i64, name: &str, bytes: Vec<u8>, caption: Option<&crate::job_messages::AMarkedText>, buttons: Option<Value>, how: HowItIsSent) -> WhatTheServiceGaveBack {
         let bound = the_bound_on_sending(bytes.len());
         let mut carried = json!({"chat_id": chat, part: format!("attach://{part}")});
         if let Some(caption) = caption { carried["caption"] = json!(caption.text); carried["caption_entities"] = caption.entities(); }
         with_buttons(&mut carried, buttons);
         let WhatACallCarries::Fields(fields) = fields(carried) else { unreachable!() };
-        self.ask(method, WhatACallCarries::FieldsAndFiles { fields, files: vec![AFileToSend { part_name: part.into(), file_name: name.into(), bytes }] }, bound)
+        self.ask_as(method, WhatACallCarries::FieldsAndFiles { fields, files: vec![AFileToSend { part_name: part.into(), file_name: name.into(), bytes }] }, bound, how)
     }
 
     /// **An album of pictures**, each uploaded and referred to by its part
@@ -893,6 +1058,18 @@ impl TheClient {
         chat_id: i64,
         pictures: Vec<(String, Vec<u8>, Option<crate::job_messages::AMarkedText>)>,
     ) -> WhatTheServiceGaveBack {
+        self.send_a_marked_album_as(chat_id, pictures, HowItIsSent::default())
+    }
+
+    /// **An album sent as `how` says** — a frame's album as a reply to its
+    /// job's message (`Telegram` I2; `sendMediaGroup` takes `reply_parameters`
+    /// as every send does, Sources entry 90), a contact sheet silently (V1e).
+    pub fn send_a_marked_album_as(
+        &self,
+        chat_id: i64,
+        pictures: Vec<(String, Vec<u8>, Option<crate::job_messages::AMarkedText>)>,
+        how: HowItIsSent,
+    ) -> WhatTheServiceGaveBack {
         // C6b: the time limit grows with the whole album.
         let all_the_bytes: usize = pictures.iter().map(|(_, bytes, _)| bytes.len()).sum();
         let mut media = Vec::new();
@@ -915,25 +1092,26 @@ impl TheClient {
         let WhatACallCarries::Fields(fields) = carried else {
             unreachable!("fields() always gives fields")
         };
-        self.ask(
+        self.ask_as(
             "sendMediaGroup",
             WhatACallCarries::FieldsAndFiles { fields, files },
             the_bound_on_sending(all_the_bytes),
+            how,
         )
     }
 
-    /// **`Telegram` R16 — answer one tap on a button, with nothing but its
-    /// identifier.** Telegram's `answerCallbackQuery` shows the user nothing
-    /// when no text is given, and clears the waiting mark on the button.
-    /// **This call carries no text, no alert, no link and no cache time, and
-    /// has no parameter for any of them**, because R16 answers with no text
-    /// and everything the user is told stays in the messages the plan already
-    /// sends (`Audits/Build/Step 10/Answering a button tap — what Telegram's
-    /// pages say.md`, section 3).
-    pub fn answer_callback_query(&self, callback_query_id: &str) -> WhatTheServiceGaveBack {
+    /// **`Telegram` R16 as changed 2026-11-13 — answer one tap on a button,
+    /// with its identifier and a few words.** Telegram shows the words *"as a
+    /// notification at the top of the chat screen"*, `text` being *"0-200
+    /// characters"* (`answerCallbackQuery`, Telegram's Bot API page, read
+    /// 2026-11-13), and clears the waiting mark on the button. **No alert, no
+    /// link and no cache time, and no parameter for any of them.** Until that
+    /// date it carried no words (`Audits/Build/Step 10/Answering a button tap
+    /// — what Telegram's pages say.md`, section 3).
+    pub fn answer_callback_query(&self, callback_query_id: &str, words: &str) -> WhatTheServiceGaveBack {
         self.ask(
             "answerCallbackQuery",
-            fields(json!({ "callback_query_id": callback_query_id })),
+            fields(json!({ "callback_query_id": callback_query_id, "text": words })),
             THE_BOUND_ON_AN_ORDINARY_CALL,
         )
     }
@@ -1019,9 +1197,18 @@ fn fields(object: Value) -> WhatACallCarries {
 /// **`Telegram` B25 — the spoiler as the service's `entities` field**: one
 /// `spoiler` entity, its start and length in UTF-16 code units. A text with
 /// nothing after its head carries none.
+///
+/// **And B25a (2026-11-11, Creator-stated): folded as well as blurred.** The
+/// same range is one `expandable_blockquote` too, sent first, with the
+/// spoiler inside it — Telegram lets a spoiler *"be part of any other
+/// entities, except pre and code"* (Sources entry 92). The text is untouched,
+/// so B2's bound and every read stay as they are.
 fn with_the_spoiler(carried: &mut Value, text: &str) {
     if let Some((offset, length)) = crate::board::text::the_spoiler_after_the_head(text) {
-        carried["entities"] = json!([{ "type": "spoiler", "offset": offset, "length": length }]);
+        carried["entities"] = json!([
+            { "type": "expandable_blockquote", "offset": offset, "length": length },
+            { "type": "spoiler", "offset": offset, "length": length }
+        ]);
     }
 }
 
@@ -1105,6 +1292,65 @@ mod tests {
     use super::*;
     use std::path::{Path, PathBuf};
 
+    /// **When Telegram refuses — `Telegram` F6: every answer is looked at in
+    /// one place shared by the worker's handles.** A 401 is the token, ended by
+    /// any accepted call; a 403 is the chat, ended only by an accepted send in
+    /// the chat (an ask for updates is accepted while the chat refuses, and
+    /// since 2026-11-15 an edit or a pin is no proof either); a
+    /// call that reached nothing starts the clock and any answer stops it.
+    #[test]
+    fn when_telegram_refuses_each_answer_is_looked_at_where_every_handle_sees_it() {
+        let (service, client) = a_client();
+        let handle = client.no_call_longer_than(Duration::from_secs(5));
+        assert_eq!(client.how_telegram_answers(), HowTelegramAnswers::default());
+        service.then_answers(r#"{"ok":false,"error_code":401,"description":"Unauthorized"}"#);
+        let _ = handle.get_me();
+        assert!(client.how_telegram_answers().the_token_is_rejected, "one handle's answer is every handle's");
+        let _ = client.get_updates(None, 0);
+        assert!(!client.how_telegram_answers().the_token_is_rejected, "an accepted call ends it");
+
+        service.then_answers(r#"{"ok":false,"error_code":403,"description":"Forbidden"}"#);
+        let _ = client.send_message(42, "hello", None);
+        assert!(client.how_telegram_answers().the_chat_refuses);
+        let _ = client.get_updates(None, 0);
+        let _ = client.get_me();
+        assert!(client.how_telegram_answers().the_chat_refuses, "an ask for updates does not end it");
+        // **The what-if live pass of 2026-11-15**: a blocked bot's sends were
+        // refused while its edits of messages already sent were not, and the
+        // board's heartbeat edit emptied the word every minute.
+        let _ = client.edit_message_text(42, 7, "hello", None);
+        let _ = client.edit_a_machinery_message(42, 7, "board");
+        let _ = client.pin_chat_message(42, 7);
+        assert!(client.how_telegram_answers().the_chat_refuses, "an edit or a pin of a message already sent does not end it");
+        let _ = client.send_message(42, "hello", None);
+        assert!(!client.how_telegram_answers().the_chat_refuses, "a send in the chat ends it");
+
+        service.then_answers(r#"{"ok":false,"error_code":400,"description":"Bad Request: message is not modified"}"#);
+        let _ = client.edit_message_text(42, 7, "hello", None);
+        assert_eq!(client.how_telegram_answers(), HowTelegramAnswers::default(), "a message's own refusal is not the chat's");
+
+        service.then_is_not_reached("no route").then_is_not_reached("no route");
+        let _ = client.get_updates(None, 0);
+        let first = client.how_telegram_answers().nothing_reached_it_since.expect("the clock starts");
+        let _ = client.get_updates(None, 0);
+        assert_eq!(client.how_telegram_answers().nothing_reached_it_since, Some(first), "the clock keeps its start");
+        service.then_answers(r#"{"ok":false,"error_code":502,"description":"Bad Gateway"}"#);
+        let _ = client.get_updates(None, 0);
+        assert_eq!(client.how_telegram_answers().nothing_reached_it_since, Some(first), "a service failure reached nothing (C6c)");
+        service.then_answers(r#"{"ok":false,"error_code":429,"parameters":{"retry_after":1}}"#);
+        let _ = client.get_updates(None, 0);
+        assert_eq!(client.how_telegram_answers().nothing_reached_it_since, None, "any answer stops it");
+    }
+
+    #[test]
+    fn bad_batch_1_service_errors_are_retried_and_client_refusals_stay_refusals() {
+        for code in [500, 502, 503, 504] {
+            let answer = format!(r#"{{"ok":false,"error_code":{code},"description":"unavailable"}}"#);
+            assert!(matches!(what_the_answer_says(&answer), Err(WhyTheCallFailed::NotReached(_))));
+        }
+        assert!(matches!(what_the_answer_says(r#"{"ok":false,"error_code":403}"#), Err(WhyTheCallFailed::Refused(_))));
+    }
+
     #[test]
     fn twenty_first_marked_sends_and_edits_keep_ranges_on_text_and_every_media_kind() {
         let (service, client) = a_client();
@@ -1128,8 +1374,9 @@ mod tests {
         }
         let WhatACallCarries::Fields(fields) = &heard[6].carries else { panic!() };
         assert_eq!(fields["text"], machinery);
-        assert_eq!(fields["entities"].as_array().unwrap().len(), 1);
-        assert_eq!(fields["entities"][0]["type"], "spoiler");
+        assert_eq!(fields["entities"].as_array().unwrap().len(), 2);
+        assert_eq!(fields["entities"][0]["type"], "expandable_blockquote");
+        assert_eq!(fields["entities"][1]["type"], "spoiler");
         assert_eq!(fields["disable_notification"], true);
     }
 
@@ -1164,12 +1411,13 @@ mod tests {
         assert_eq!(another_worker.how_many_calls_reached_telegram(), 1);
     }
 
-    /// **`Telegram` P6a: the list is exactly these two, in this one place.**
+    /// **`Telegram` P6a: the list is exactly these, in this one place** —
+    /// two until 2026-11-13, when `edited_message` joined them (R15).
     #[test]
     fn the_kinds_are_exactly_message_and_callback_query() {
         assert_eq!(
             THE_UPDATE_KINDS_EVERY_ASK_NAMES,
-            ["message", "callback_query"]
+            ["message", "callback_query", "edited_message"]
         );
     }
 
@@ -1187,7 +1435,7 @@ mod tests {
             assert_eq!(call.method, "getUpdates");
             assert_eq!(
                 the_fields_of(&call.carries)["allowed_updates"],
-                json!(["message", "callback_query"])
+                json!(["message", "callback_query", "edited_message"])
             );
         }
         assert!(!the_fields_of(&heard[0].carries).contains_key("offset"));
@@ -1282,6 +1530,7 @@ mod tests {
         let mut the_method = Vec::new();
         let mut the_callers = Vec::new();
         let mut the_companions_callers = Vec::new();
+        let mut the_in_between_callers = Vec::new();
         for (path, working) in the_working_half_of_every_file_under_src() {
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
             for (at, line) in working.lines().enumerate() {
@@ -1294,6 +1543,9 @@ mod tests {
                 if line.contains(".delete_an_albums_companion(") {
                     the_companions_callers.push(name.clone());
                 }
+                if line.contains(".delete_an_in_between_message(") {
+                    the_in_between_callers.push(name.clone());
+                }
             }
         }
         assert!(
@@ -1303,6 +1555,33 @@ mod tests {
         the_callers.dedup();
         assert_eq!(the_callers, ["listener.rs"], "a pin's line is deleted from {the_callers:?}");
         assert_eq!(the_companions_callers, ["actions.rs"], "a companion is deleted from {the_companions_callers:?}");
+        the_in_between_callers.dedup();
+        assert_eq!(the_in_between_callers, ["actions.rs"], "an in-between message is deleted from {the_in_between_callers:?}");
+    }
+
+    /// **`Telegram` I2 and V1e, the twenty-eighth notes, notes 18 and 19**: a
+    /// frame's picture goes as a reply to its job's message, and **once more
+    /// with no reply where Telegram refuses the one that carried it**; a silent
+    /// send carries `disable_notification`, and an ordinary one does not.
+    #[test]
+    fn twenty_eighth_19_a_reply_refused_is_sent_once_more_without_it_and_silence_is_carried() {
+        let service = Arc::new(a_stand_in::AStandInService::new());
+        service.then_answers(r#"{"ok":false,"error_code":400,"description":"Bad Request: message to be replied not found"}"#);
+        service.then_answers(r#"{"ok":true,"result":{"message_id":9}}"#);
+        let client = TheClient::over(service.clone());
+        let caption = crate::job_messages::AMarkedText::plain("Frame 1");
+        let sent = client.send_photo_marked_as(1, "1.png", vec![1, 2], Some(&caption), None, HowItIsSent { silent: false, reply_to: Some(40) });
+        assert_eq!(sent.unwrap()["message_id"], json!(9));
+        let heard = service.heard();
+        assert_eq!(heard.len(), 2, "sent once more");
+        assert_eq!(the_fields_of(&heard[0].carries)["reply_parameters"], json!({ "message_id": 40 }));
+        assert!(!the_fields_of(&heard[1].carries).contains_key("reply_parameters"), "the second goes with no reply");
+        assert!(!the_fields_of(&heard[0].carries).contains_key("disable_notification"));
+        let silent = Arc::new(a_stand_in::AStandInService::new());
+        let client = TheClient::over(silent.clone());
+        let _ = client.send_marked_message_as(1, &caption, None, HowItIsSent::silent(true));
+        assert_eq!(the_fields_of(&silent.heard()[0].carries)["disable_notification"], json!(true));
+        assert!(!the_fields_of(&silent.heard()[0].carries).contains_key("reply_parameters"));
     }
 
     fn the_working_half_of_every_file_under_src() -> Vec<(PathBuf, String)> {
@@ -1393,11 +1672,43 @@ mod tests {
         for call in &heard {
             the_spoiler_is_right(&call.method, &Value::Object(the_fields_of(&call.carries).clone()));
         }
-        assert_eq!(the_fields_of(&heard[0].carries)["entities"][0]["type"], json!("spoiler"));
+        assert_eq!(the_fields_of(&heard[0].carries)["entities"][1]["type"], json!("spoiler"));
         assert_eq!(the_fields_of(&heard[0].carries)["entities"], the_fields_of(&heard[1].carries)["entities"]);
         assert!(!the_fields_of(&heard[1].carries).contains_key("disable_notification"));
         assert!(!the_fields_of(&heard[2].carries).contains_key("entities"));
         assert!(!the_fields_of(&heard[3].carries).contains_key("entities"));
+    }
+
+    /// **`Telegram` B25a (2026-11-11): everything after a machinery message's
+    /// head is one folded quotation with the spoiler inside it, on every send
+    /// and every edit, and the text is sent exactly as composed.** The board
+    /// and one machine's message are both put through; the machine's name
+    /// carries a character outside the basic plane, so the range is counted
+    /// in UTF-16 units. A text with nothing after its head carries neither
+    /// mark, and a message for the user carries neither.
+    #[test]
+    fn a_machinery_message_is_folded_and_blurred_after_its_head_and_its_text_is_unchanged() {
+        use crate::board::text::the_spoiler_after_the_head;
+        use crate::board::text::tests::{a_board, the_marks};
+        use crate::board::text::TheUtterance;
+        let (service, client) = a_client();
+        let board = a_board("m1").compose().unwrap();
+        let utterance = TheUtterance { machine: "m2".into(), display: "Vast \u{1F3A5}".into(), announce: true, ..Default::default() }.compose().unwrap();
+        for text in [&board, &utterance] {
+            client.send_a_machinery_message(42, text).unwrap();
+            client.edit_a_machinery_message(42, 7, text).unwrap();
+        }
+        client.send_a_machinery_message(42, crate::board::text::THE_HEAD).unwrap();
+        client.send_message(42, "Which job?", None).unwrap();
+        let heard = service.heard();
+        for (call, text) in heard[..4].iter().zip([&board, &board, &utterance, &utterance]) {
+            let fields = the_fields_of(&call.carries);
+            assert_eq!(fields["text"], json!(text), "B25a: the text is sent exactly as composed");
+            let (offset, length) = the_spoiler_after_the_head(text).unwrap();
+            assert_eq!(fields["entities"], the_marks(offset, length), "B25a: {} is not folded and blurred after its head", call.method);
+        }
+        assert!(!the_fields_of(&heard[4].carries).contains_key("entities"), "a head alone carries no mark");
+        assert!(!the_fields_of(&heard[5].carries).contains_key("entities"), "a message for the user carries no mark");
     }
 
     #[test]
@@ -1675,7 +1986,7 @@ mod the_development_switch {
             ("deleteMessage", Box::new(|c| c.delete_a_pins_line(42, 7))),
             ("sendPhoto", Box::new(|c| c.send_photo(42, "frame.jpg", vec![1, 2, 3], None, None))),
             ("sendMediaGroup", Box::new(|c| c.send_media_group(42, vec![("a.jpg".into(), vec![1]), ("b.jpg".into(), vec![2])]))),
-            ("answerCallbackQuery", Box::new(|c| c.answer_callback_query("a tap"))),
+            ("answerCallbackQuery", Box::new(|c| c.answer_callback_query("a tap", "Sent."))),
             ("getWebhookInfo", Box::new(|c| c.get_webhook_info())),
             ("deleteWebhook", Box::new(|c| c.delete_webhook())),
         ];

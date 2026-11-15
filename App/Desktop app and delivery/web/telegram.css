@@ -44,3 +44,12 @@
 .stgrow [hidden] {
   display: none;
 }
+
+/* **A picture every [5] minutes is as tall as the other four choices** (UI
+   consistency, finding 31): the minutes field overhangs its line rather than
+   growing the row by nine pixels. Its margins take back its whole height —
+   half its 1.62 line each way, its padding and its border — so it adds
+   nothing to the name's line in any face. Taking back the padding and border
+   alone held in the Mac's faces and left the name a pixel taller in Windows'
+   (hosted run 43746222478), where the field's monospaced face sits lower. */
+.fmt .fmn .fld { margin-block: calc(-0.81em - 5px); }

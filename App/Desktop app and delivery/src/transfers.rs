@@ -607,6 +607,7 @@ mod tests {
         for statement in crate::record::schema::VERSION_6
             .iter()
             .chain(crate::record::schema::VERSION_8)
+            .chain(crate::record::schema::VERSION_64)
         {
             connection.execute(statement, []).expect("the tables");
         }
@@ -843,6 +844,7 @@ mod tests {
         record.checkpoints.push(Checkpoint {
             offset: 4_194_304,
             digest_of_everything_up_to_it: Digest::of(b"the first four mebibytes"),
+            running_state: None,
         });
         // The first attempt's staging object was created and its identity read,
         // so the start-over carries that identity across to the superseded
@@ -852,6 +854,7 @@ mod tests {
         record.checkpoints.push(Checkpoint {
             offset: 8_388_608,
             digest_of_everything_up_to_it: Digest::of(b"the first eight"),
+            running_state: None,
         });
         record.ending = Some(Ending::Stopped(StoppedReason::AbandonedByItsRequest));
         record.cleanup_is_owed = true;
@@ -1049,6 +1052,7 @@ mod tests {
         older.checkpoints.push(Checkpoint {
             offset: 512,
             digest_of_everything_up_to_it: Digest::of(b"the first half"),
+            running_state: None,
         });
         crate::record::transfer_records::put(&connection, &older).expect("the checkpoint");
 

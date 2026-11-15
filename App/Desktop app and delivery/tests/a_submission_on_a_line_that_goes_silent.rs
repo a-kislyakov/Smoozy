@@ -341,11 +341,20 @@ exit 0;
                         let job = request.fields.text(THE_JOB_FIELD).unwrap_or_default().to_string();
                         let answer = if request.name == THE_JOB_RECORD_IS_WRITTEN_REQUEST {
                             let cutting = cut.lock().expect("cut").take();
-                            if cutting.as_ref().is_none_or(|(accepted, _)| *accepted) {
+                            let accepted = cutting.as_ref().is_none_or(|(accepted, _)| *accepted);
+                            if accepted {
                                 taken.lock().expect("taken").push(job);
                             }
                             if let Some((_, now)) = cutting { now(); }
-                            answered.carrying(Fields::none())
+                            // **The acknowledgement says *present***, as the
+                            // machine's own program answers a record it wrote
+                            // (`Rendering` S8). One not accepted is cut before
+                            // any answer of its arrives.
+                            if accepted {
+                                answered.carrying(Fields::none().and(ON_THIS_MACHINE_FIELD, IT_IS_PRESENT))
+                            } else {
+                                answered.carrying(Fields::none())
+                            }
                         } else if request.name == THE_DOES_THE_MACHINE_HOLD_THIS_JOB_REQUEST {
                             let word = if taken.lock().expect("taken").contains(&job) {
                                 IT_IS_PRESENT

@@ -28,6 +28,12 @@
 // zone this computer is in (the file's name is in the user's own time), and
 // hides the box at *Cancel* or *Close* while telling the application.
 //
+// **The address is a mail link, with the copy icon right beside it** — the
+// Creator's twenty-eighth notes, note 6, `Reporting a problem` V10. A press of
+// the address asks the application through a closed command, which opens K25's
+// fixed mail link; the page names no address. The copy icon puts the bare
+// address on the clipboard and its label says what came of it.
+//
 // H32: values are content, never markup — `textContent`, `createElement`.
 // H33: no inline style; the rules are the drawing's own (`the-drawing.css`'s
 // `.rp-` rules) and `reporting.css`.
@@ -35,12 +41,17 @@
 import { whenTold } from "./event-route.js";
 import { theFailureShape, EXPANDED } from "./the-failure-shape.js";
 import { theValueIsDrawnInto } from "./the-value-drawn.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 const shell = window.__TAURI__;
 
 // The kind, declared beside the service that posts it — `THE_REPORT_BOX` in
 // `src/surface/reporting.rs`. The two have to agree.
 const THE_REPORT_BOX = "reporting:the-report-box";
+
+// What the application answers about the mail link — `TheMailLink` in
+// `src/surface/reporting.rs`.
+const THE_MAIL_LINK_DID_NOT_OPEN = "ItCouldNotBeOpened";
 
 // The readings, as the application names them.
 const COMPOSING = "composing";
@@ -62,6 +73,8 @@ let theOpeningDrawn = null;
 
 /// The moment the failure carried, in this computer's own time — the drawing's
 /// *8 Aug 23:14*.
+
+
 function theMomentDrawn(seconds) {
   const at = new Date(Number(seconds) * 1000);
   if (Number.isNaN(at.getTime())) return "";
@@ -70,6 +83,7 @@ function theMomentDrawn(seconds) {
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
   });
 }
 
@@ -164,8 +178,16 @@ function theBoxIsMade() {
   savedSays.id = "rpsaved";
   const send = anElement("p", "saved");
   send.className = "rp-send";
-  const address = anElement("p", "saved");
+  // **The address as a mail link, the copy icon right beside it** (note 6).
+  const addressRow = anElement("div", "saved");
+  addressRow.className = "rp-addrrow";
+  const address = aButton();
   address.className = "rp-addr mono";
+  const copy = aCopyIcon();
+  addressRow.append(address, copy.control);
+  // Where the mail link could not be opened, in the one failure shape.
+  const mailFailed = anElement("div", "saved");
+  mailFailed.className = "rp-mail-failed";
   const savedActs = anElement("div", "saved");
   savedActs.className = "mact";
   const close = aButton();
@@ -184,7 +206,8 @@ function theBoxIsMade() {
     savedHeading,
     savedSays,
     send,
-    address,
+    addressRow,
+    mailFailed,
     savedActs,
   );
   root.appendChild(box);
@@ -202,6 +225,27 @@ function theBoxIsMade() {
     press.preventDefault();
     shut();
   });
+  // **The mail link** — a closed command; the answer is about the ask (K25).
+  address.addEventListener("click", async () => {
+    let answer;
+    try {
+      answer = await shell.core.invoke("the_report_address_is_opened");
+    } catch (trouble) {
+      console.error(trouble);
+      answer = THE_MAIL_LINK_DID_NOT_OPEN;
+    }
+    theMailLinkFailureIsSaid(answer === THE_MAIL_LINK_DID_NOT_OPEN);
+  });
+  // **Copy**: the bare address, and the label says what came of it until the
+  // pointer or the focus leaves.
+  copy.control.addEventListener("click", async () => {
+    const landed = await theClipboardTakes(address.textContent);
+    theCopyIconIsNamed(copy, landed ? copy.said.copied : copy.said.notCopied);
+  });
+  const theLabelIsReset = () => theCopyIconIsNamed(copy, copy.said.copy);
+  copy.control.addEventListener("mouseleave", theLabelIsReset);
+  copy.control.addEventListener("blur", theLabelIsReset);
+
   choose.addEventListener("click", () => {
     if (choose.disabled) return;
     shell.core.invoke("a_folder_is_chosen_for_the_report");
@@ -239,8 +283,23 @@ function theBoxIsMade() {
     savedSays,
     send,
     address,
+    copy,
+    mailFailed,
     close,
   };
+}
+
+/// **The mail link's failure, said or taken away** — the one failure shape
+/// under the address, which stays (`Reporting a problem` V10).
+function theMailLinkFailureIsSaid(failed) {
+  const parts = theBox;
+  parts.mailFailed.textContent = "";
+  if (failed && parts.mailFailedSaid) {
+    parts.mailFailed.appendChild(
+      theFailureShape({ sentence: parts.mailFailedSaid, controls: [], room: EXPANDED }),
+    );
+  }
+  parts.mailFailed.hidden = !(failed && parts.mailFailedSaid);
 }
 
 /// **The saved sentence, in the parts the application sent**: each words or a
@@ -303,6 +362,9 @@ function theBoxIsDrawn(said) {
   // **A folder, or nothing proposed and nothing invented** — the drawing's
   // *No folder chosen*.
   theValueIsDrawnInto(parts.folder, said.folder || "");
+  // **Cut at its start, the whole folder on hover** (the UI at every size,
+  // E-05): its last folder is where the report goes.
+  parts.folder.title = said.folder || "";
   parts.folder.hidden = saved || !said.folder;
   parts.noFolder.textContent = said.noFolderChosen || "";
   parts.noFolder.hidden = saved || Boolean(said.folder);
@@ -331,12 +393,101 @@ function theBoxIsDrawn(said) {
   theSavedSentenceIsDrawn(parts.savedSays, said);
   parts.send.textContent = said.attachIt || "";
   theValueIsDrawnInto(parts.address, said.address || "");
+  parts.copy.said = {
+    copy: said.copy || "",
+    copied: said.copied || "",
+    notCopied: said.notCopied || "",
+  };
+  theCopyIconIsNamed(parts.copy, parts.copy.said.copy);
+  parts.mailFailedSaid = said.mailLinkFailed || "";
+  // A new reading starts with no failure said.
+  theMailLinkFailureIsSaid(false);
   parts.close.textContent = said.close || "";
 
   const wasHidden = parts.root.hidden;
   parts.root.hidden = false;
-  if (saved) parts.close.focus();
-  else if (fresh || wasHidden) parts.field.focus();
+  if (saved) theFocusMovesTo(parts.close);
+  else if (fresh || wasHidden) theFocusMovesTo(parts.field);
+}
+
+// ── The copy icon ───────────────────────────────────────────────────────────
+//
+// **A fourth copy of the output panel's copy icon** (`theCopyIcon` in
+// `web/the-machines-own-words.js`, and `web/telegram.js`'s third), made the
+// same way from the drawing's own `<symbol id="i-copy">` path data. Sharing one
+// would need a file of its own outside this piece's territory, as the second
+// copy's own note says. A change to the shape belongs in all four.
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function theCopyIcon() {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.3");
+  svg.setAttribute("stroke-linejoin", "round");
+  const box = document.createElementNS(SVG_NS, "rect");
+  for (const [name, value] of [["x", "5.5"], ["y", "5.5"], ["width", "8.2"], ["height", "8.2"], ["rx", "1.1"]]) {
+    box.setAttribute(name, value);
+  }
+  svg.appendChild(box);
+  const behind = document.createElementNS(SVG_NS, "path");
+  behind.setAttribute("d", "M10.5 2.3H3.4a1.1 1.1 0 0 0-1.1 1.1v7.1");
+  svg.appendChild(behind);
+  return svg;
+}
+
+/// **The drawing's icon button**: the icon, and its label shown on hover and
+/// focus (`.ib`, `.ibl`). The label arrives as prose off the event.
+function aCopyIcon() {
+  const control = aButton();
+  control.className = "ib";
+  control.appendChild(theCopyIcon());
+  const name = anElement("span");
+  name.className = "ibl";
+  control.appendChild(name);
+  return { control, name, said: { copy: "", copied: "", notCopied: "" } };
+}
+
+function theCopyIconIsNamed(icon, name) {
+  icon.control.setAttribute("aria-label", name || "");
+  icon.name.textContent = name || "";
+}
+
+// ── The clipboard ───────────────────────────────────────────────────────────
+//
+// **A fourth copy of `theClipboardTakes`** (`web/keys.js`,
+// `web/the-machines-own-words.js`, `web/telegram.js`), kept the same on
+// purpose, for the reason the second copy gives. The clipboard is the page's
+// because the application binds no clipboard service.
+
+function theClipboardTakes(contents) {
+  if (!contents) return Promise.resolve(false);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard
+      .writeText(contents)
+      .then(() => true)
+      .catch(() => theClipboardTakesItTheOtherWay(contents));
+  }
+  return Promise.resolve(theClipboardTakesItTheOtherWay(contents));
+}
+
+function theClipboardTakesItTheOtherWay(contents) {
+  const held = document.createElement("textarea");
+  held.className = "rp-away";
+  held.value = contents;
+  document.body.appendChild(held);
+  held.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy") === true;
+  } catch (trouble) {
+    console.error(trouble);
+  }
+  held.remove();
+  return copied;
 }
 
 whenTold(THE_REPORT_BOX, (delivery) => {
@@ -399,5 +550,5 @@ whenTold(THE_CRASH_BOX, (delivery) => {
   crashBox.dismiss.textContent = said.notNow || "";
   crashBox.report.textContent = said.reportIt || "";
   crashBox.root.hidden = false;
-  crashBox.report.focus();
+  theFocusMovesTo(crashBox.report);
 });

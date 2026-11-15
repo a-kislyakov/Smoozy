@@ -105,6 +105,17 @@ pub struct Payload {
     /// notes, note 6.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub the_check_writes_into: Option<String>,
+    /// **Y1d: *the range's frames*, on a first-frame check alone** — the range
+    /// job's frames exactly as that job carries them, set by the same act as
+    /// *writes into*. The check's render-start reading steps them as well as
+    /// its own, so it decides where the range job's folder sits by the range's
+    /// frames (`Job files and outputs` P6a); nothing else the check composes
+    /// reads them. **Absent on every other payload, and on every payload
+    /// written before 2026-11-10**, when the check decides by its own frame;
+    /// left out of the carried field when absent. Changed 2026-11-10, the
+    /// runner's ruling on the twenty-eighth notes (piece 13).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub the_range_jobs_frames: Option<FrameForm>,
 }
 
 fn simulations_on() -> bool { true }
@@ -188,6 +199,7 @@ pub fn compose(given: Composition<'_>) -> Payload {
         // **`Rendering` S13's *writes into***: never from the page either; the
         // same act sets it on the check once the range job's identity is issued.
         the_check_writes_into: None,
+        the_range_jobs_frames: None,
     }
 }
 

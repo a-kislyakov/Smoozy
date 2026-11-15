@@ -907,7 +907,7 @@ async fn the_provider_reboots_the_machine() {
             "the re-run left the frames already there alone: it wrote {the_second_attempt:?}"
         );
         assert!(
-            marks.iter().any(|mark| mark.starts_with("Interrupted and re-run")),
+            marks.iter().any(|mark| mark.starts_with("Interrupted and retried")),
             "`Queue & History` N1, the spec's *Both are marks on the job's own entry*: the queue entry says it was \
              interrupted and re-run: {marks:?}; the record carries {:?}",
             record.what_the_note_carried.re_run_marks
@@ -917,7 +917,7 @@ async fn the_provider_reboots_the_machine() {
         // the re-run attempt's own list (`Queue & History` N1).
         let from = the_second_attempt.first().copied().expect("the re-run wrote frames");
         assert!(
-            entry.marks.iter().any(|mark| mark.said == "Interrupted and re-run"
+            entry.marks.iter().any(|mark| mark.said == "Interrupted and retried"
                 && mark.parts.iter().any(|part| part.value == from.to_string())),
             "the re-run mark names the frame the re-run proceeded from, {from}: {marks:?}"
         );
@@ -971,7 +971,7 @@ async fn the_provider_reboots_the_machine() {
         let record = JobRecords::over(held.connection()).read(&job).expect("it reads").expect("it stands");
         drop(held);
         assert!(
-            marks.iter().any(|mark| mark.starts_with("Interrupted and re-run")),
+            marks.iter().any(|mark| mark.starts_with("Interrupted and retried")),
             "`Queue & History` N1: History's entry keeps the re-run mark: {marks:?}"
         );
         let folder = record.the_job_output_folder(machine.layout()).expect("the folder");

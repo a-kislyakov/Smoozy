@@ -120,7 +120,9 @@ pub struct HowAHandOverWent {
     /// of the placement and comes before the confirming write and before the
     /// five areas.
     pub the_directory_was_created: HowTheActWent,
-    /// How the elevated command itself went.
+    /// How the elevated command itself went. **Carried out, too, where the
+    /// login could already write the root and nothing was sent** (R7, *what
+    /// already stands at the root's name*).
     pub the_command: HowTheActWent,
     /// **R7's own evidence.** *"The command's exit is never that evidence."*
     pub the_landing_check: HowTheActWent,
@@ -308,6 +310,25 @@ pub async fn hand_one_mount_over(
     // before the five areas.
     let the_directory_was_created =
         create_the_directory(channel, files, owed, creation, how).await;
+
+    // **R7, *what already stands at the root's name* (added 2026-11-12, out of
+    // Fable's fresh look at the admin password, finding 1): the elevated
+    // command is sent only where it is owed.** R7's real write is tried first;
+    // where it already lands, an earlier run's hand-over is the one that
+    // counts, nothing is sent as root and no password is asked for. Until then
+    // every setup sent the recursive change of owner, needed or not.
+    if confirm_the_landing(files, &owed.the_target_path)
+        .await
+        .it_was_carried_out()
+    {
+        return HowAHandOverWent {
+            the_target_path: owed.the_target_path.clone(),
+            the_directory_was_created,
+            the_command: HowTheActWent::ItWasCarriedOut,
+            the_landing_check: HowTheActWent::ItWasCarriedOut,
+            the_links_removal_is_owed: false,
+        };
+    }
 
     let planted = plant_the_carriage(files, owed.carried_at, &owed.the_target_path).await;
 
@@ -775,6 +796,10 @@ impl HowTheDriverStepWent {
     /// can end the run in the machine's own words rather than carry on to the
     /// restart on a step that did not run.
     pub fn what_went_wrong(&self) -> Option<String> {
+        if matches!(self.the_check_after.as_ref().unwrap_or(&self.the_check_before),
+            crate::readings::WhatTheDriverCheckSaid::ItDidNot { the_exit: None, .. }) {
+            return Some("GPU check did not finish.".to_string());
+        }
         // **R1 item 5's swap: a refusal is not what went wrong while the
         // driver still answers** — the run carries on and the bar is recorded
         // as missed. **Where the driver no longer answers after it**, the old
@@ -972,6 +997,13 @@ pub async fn carry_out_the_driver_step(
     // and it is asked here**, against the readings the caller took at this step
     // rather than against anything a previous sitting recorded (Row 104).
     let which_branch = crate::ready_action::what_the_driver_step_does(needs);
+    if matches!(the_check_before, crate::readings::WhatTheDriverCheckSaid::ItDidNot { the_exit: None, .. }) {
+        return HowTheDriverStepWent {
+            the_check_before, which_branch, the_components: None, the_tool: None, the_install: None,
+            the_support_binaries: None, the_optix_library: None, the_swap: None,
+            the_driver_packages_after: None, the_version_after: None, the_check_after: None,
+        };
+    }
 
     match which_branch {
         // **Nothing is installed and nothing is touched.**
@@ -1741,6 +1773,53 @@ mod tests {
             .all(|command| !command.contains("/mnt/one")));
     }
 
+    /// **R7, *what already stands at the root's name*: a hand-over nobody
+    /// owes is not sent.** Fable's fresh look at the admin password, finding 1
+    /// (2026-11-12): a login that already owned the root still got the
+    /// elevated command on every setup.
+    #[test]
+    fn fresh_look_1_a_login_that_can_already_write_the_root_is_sent_nothing_as_root() {
+        let mut channel = AMachine::answering(vec![(
+            crate::elevated::THE_HAND_OVER_OF_THE_ROOT.elevated.as_str(),
+            said("", 0),
+        )]);
+        // **An earlier setup made the root and handed it over.**
+        let mut files = AMachine::default()
+            .with_directory("/mnt/one")
+            .with_directory("/mnt/one/smoozy");
+        let placement = block_on(carry_out_the_placement(
+            &mut channel,
+            &mut files,
+            &a_layout(),
+            HowElevationIsObtained::Passwordless,
+        ));
+        assert!(placement.it_is_complete());
+        assert!(
+            channel.asked.is_empty(),
+            "an elevated command was sent for a root the login can already write: {:?}",
+            channel.asked
+        );
+        // **And no password is asked for either**: the same machine, with a
+        // password owed and none held, is complete with nothing sent.
+        let mut channel = AMachine::default();
+        let mut files = AMachine::default()
+            .with_directory("/mnt/one")
+            .with_directory("/mnt/one/smoozy");
+        let placement = block_on(carry_out_the_placement(
+            &mut channel,
+            &mut files,
+            &a_layout(),
+            HowElevationIsObtained::APasswordIsOwedAndNoneIsHeld,
+        ));
+        assert!(placement.it_is_complete());
+        assert!(placement.hand_overs[0].the_command.it_was_carried_out());
+        // **The byte the check wrote is taken away again.**
+        assert!(!files
+            .files
+            .iter()
+            .any(|(path, _)| path == "/mnt/one/smoozy/.smoozy-landing-check"));
+    }
+
     #[test]
     fn a_machine_that_has_never_been_prepared_gets_its_root_made_before_anything_lands_in_it() {
         // **R7, and the fault this test exists for.** Until 2026-09-04 nothing
@@ -2162,6 +2241,16 @@ mod tests {
             HowElevationIsObtained::Passwordless,
         ));
         (went, channel.asked)
+    }
+
+    #[test]
+    fn bad_batch_2_a_check_without_an_exit_after_driver_work_stops_before_restart() {
+        let needs = a_550_machine_installing("5.2.2");
+        let swap = crate::elevated::THE_UBUNTU_DRIVER_SWAP.elevated.as_str();
+        let no_exit = smoozy_server_protocol::transport::CommandResult { output: Vec::new(), complaint: b"Server check timed out.".to_vec(), status: None };
+        let (went, _) = the_swap_on(&needs, vec![(swap, said("", 0)), ("nvidia-smi", no_exit)]);
+        assert_eq!(went.what_went_wrong().as_deref(), Some("GPU check did not finish."));
+        assert!(!went.the_check_passes(&needs));
     }
 
     /// **550.163.01 before, 580.178.04 after: the swap goes out, the check

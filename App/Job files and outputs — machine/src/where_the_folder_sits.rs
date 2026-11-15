@@ -33,14 +33,15 @@ use serde::{Deserialize, Serialize};
 use crate::layout::{TheLayout, WhereThePackageAreaSits, SHARED_TEMPORARY_AREAS};
 use crate::mapping::{the_renders_own_folders_resolved, the_shared_run, Anchor};
 use crate::names;
-use crate::reading::{Destination, TheVersionInHand};
+use crate::reading::TheOutputsHalf;
 
 /// **P19's two cases, and there is no third.**
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WhyTheFilesOwnPlaceWasNotUsed {
     /// **Case 1, another computer's**: a render destination in P4's foreign
-    /// form, a run of `/` alone, or a run that would need a folder made
-    /// directly under the machine's own root (a Mac's `/Users/…`).
+    /// form, or a run that would need a folder made directly under the
+    /// machine's own root (a Mac's `/Users/…`). A run of `/` alone is case 2
+    /// from 2026-11-14 (P19a).
     ItIsAnotherComputers,
     /// **Case 2, a folder Smoozy cannot use**: under the root, the package
     /// area's location or a shared temporary area; a refused make; or a
@@ -114,7 +115,7 @@ pub enum TheRun {
     /// fallback's place with no reason recorded.
     ThereIsNone,
     /// **P19 case 1, known from the paths alone**: a destination in P4's
-    /// foreign form, or a run of `/` alone.
+    /// foreign form. A run of `/` alone is `It` with no names (P19a).
     ItIsAnotherComputers,
     /// The run, as whole names under `/`.
     It(Vec<Vec<u8>>),
@@ -123,12 +124,13 @@ pub enum TheRun {
 /// **P18's run, worked out over the render's own output destinations** by the
 /// one resolution and the one shared-run rule the map uses
 /// ([`the_renders_own_folders_resolved`], [`the_shared_run`]).
-pub fn the_run_of(
-    destinations: &[Destination],
-    the_folder_the_blend_sits_in: &[u8],
-    version: TheVersionInHand,
-) -> TheRun {
-    let resolved = the_renders_own_folders_resolved(destinations, the_folder_the_blend_sits_in, version);
+///
+/// **P6a, 2026-11-10: an output that writes nothing for the job's frames takes
+/// no part**, here and in P19 case 1's foreign-form test below. So the reading
+/// handed in is the one the map is composed from — the job's frames and pins
+/// applied (R4 item 5) — on the page and at render start alike (P21).
+pub fn the_run_of(reading: &TheOutputsHalf, the_folder_the_blend_sits_in: &[u8]) -> TheRun {
+    let resolved = the_renders_own_folders_resolved(reading, the_folder_the_blend_sits_in);
     if resolved.is_empty() {
         return TheRun::ThereIsNone;
     }
@@ -142,9 +144,11 @@ pub fn the_run_of(
     if let Some(at) = run.iter().position(|name| name.iter().any(|byte| *byte == b'{' || *byte == b'}')) {
         run.truncate(at);
     }
-    if run.is_empty() {
-        return TheRun::ItIsAnotherComputers;
-    }
+    // **P19a, 2026-11-14 (the Rough what-if answers, share 3, 230 and 231):
+    // a run of `/` alone is case 2, a folder Smoozy cannot use** — the job's
+    // folder would be made in the top of the disk. It was case 1 and read *on
+    // another computer*, which `/` is not. An empty run reaches
+    // [`the_folder_is_chosen_and_made`] as no path, which is case 2.
     TheRun::It(run)
 }
 
@@ -323,6 +327,9 @@ impl MakesFolders for NothingIsMadeAtTheDesk<'_> {
 /// The run's whole names as one absolute path, or nothing where a name is not
 /// text — a folder Smoozy cannot name is one it cannot use (P19 case 2).
 fn the_run_as_a_path(segments: &[Vec<u8>]) -> Option<String> {
+    if segments.is_empty() {
+        return None;
+    }
     let mut out = String::new();
     for segment in segments {
         out.push('/');
@@ -439,7 +446,7 @@ mod tests {
     use super::*;
     use crate::layout::MachineRoot;
     use crate::reading::tests::a_destination;
-    use crate::reading::{AnAddedWritePlace, ArtistsText, DestinationKind, WhereItComesFrom};
+    use crate::reading::{AnAddedWritePlace, ArtistsText, DestinationKind, TheVersionInHand, WhereItComesFrom};
     use std::collections::BTreeSet;
 
     fn a_layout() -> TheLayout {
@@ -518,6 +525,12 @@ mod tests {
 
     const THE_JOB_AREA: &str = "/ephemeral/smoozy/jobs";
 
+    /// **A reading holding these destinations and no frame**, so none is known
+    /// to write and every one takes part, as before P6a.
+    fn as_read(destinations: &[crate::reading::Destination], version: TheVersionInHand) -> TheOutputsHalf {
+        crate::inventory::tests::a_reading(destinations.to_vec(), Vec::new(), version)
+    }
+
     /// **P7b: a node's folder opening with an expression is no other computer's**
     /// (P19 case 1), which is what sent such a job to the fallback; and the job's
     /// folder is made by name, so its run stops before a folder holding a brace.
@@ -556,16 +569,16 @@ mod tests {
         let the_blends = b"/home/ubuntu/rendering";
         let run = |at: &str| TheRun::It(at.split('/').filter(|one| !one.is_empty()).map(|one| one.as_bytes().to_vec()).collect());
         assert_eq!(
-            the_run_of(&[regular("//render/f_"), a_node("{project_root}/out")], the_blends, version),
+            the_run_of(&as_read(&[regular("//render/f_"), a_node("{project_root}/out")], version), the_blends),
             run("/home/ubuntu/rendering/render")
         );
         assert_eq!(
-            the_run_of(&[regular("//{scene_name}/a/f_"), a_node("//{scene_name}/a/b")], the_blends, version),
+            the_run_of(&as_read(&[regular("//{scene_name}/a/f_"), a_node("//{scene_name}/a/b")], version), the_blends),
             run("/home/ubuntu/rendering")
         );
         // **A path that truly is another computer's still is.**
         assert_eq!(
-            the_run_of(&[regular("//render/f_"), a_node("C:/out")], the_blends, version),
+            the_run_of(&as_read(&[regular("//render/f_"), a_node("C:/out")], version), the_blends),
             TheRun::ItIsAnotherComputers
         );
     }
@@ -641,7 +654,7 @@ mod tests {
                 WhereItComesFrom::AnAddedWritePlaceNamed(AnAddedWritePlace::TheBakeOutputPath),
             ),
         ];
-        let run = the_run_of(&destinations, blend, TheVersionInHand::of(5, 2));
+        let run = the_run_of(&as_read(&destinations, TheVersionInHand::of(5, 2)), blend);
         assert_eq!(run, a_run("/home/ubuntu/Render"));
         let mut machine = AMachine::with(&["/home", "/home/ubuntu"]);
         let sits = chosen(&run, None, &mut machine);
@@ -651,10 +664,71 @@ mod tests {
         assert_eq!(machine.made, vec!["/home/ubuntu/Render".to_string(), format!("/home/ubuntu/Render/{NAME}")]);
     }
 
+    /// **P6a, the shape of the Creator's screenshot (the twenty-eighth notes)**:
+    /// the `.blend` straight in `/home/ubuntu`, frames under `//Render/V_…/PNG`,
+    /// and two nodes at `//../../_OUT/…`, which climb to `/_OUT/…`, fed only by
+    /// a layer no frame renders. Before piece 13 the run was `/` alone and the
+    /// job went to the fallback as *another computer's*; now it sits in
+    /// `/home/ubuntu/Render`. With that layer rendering, the two write, and
+    /// the run is `/` again — case 2 from 2026-11-14 (P19a).
+    #[test]
+    fn p6a_an_output_that_writes_nothing_does_not_place_the_jobs_folder() {
+        use crate::inventory::tests::{a_frame, a_node_destination, a_reading, text};
+        let mut out_a = a_node_destination("Out A", "Image", "//../../_OUT/A", None);
+        out_a.the_view_layers_that_feed_it = vec![text("Unused")];
+        let mut out_b = a_node_destination("Out B", "Image", "//../../_OUT/B", None);
+        out_b.the_view_layers_that_feed_it = vec![text("Unused")];
+        let destinations = vec![
+            a_node_destination("V_A", "Image", "//Render/V_A/PNG", None),
+            a_node_destination("V_B", "Image", "//Render/V_B/PNG", None),
+            out_a,
+            out_b,
+        ];
+        let version = TheVersionInHand::of(5, 2);
+        let read = |layers: &[&str]| a_reading(destinations.clone(), vec![a_frame(1, layers, None), a_frame(2, layers, None)], version);
+        let run = the_run_of(&read(&["Hero"]), b"/home/ubuntu");
+        assert_eq!(run, a_run("/home/ubuntu/Render"));
+        let mut machine = AMachine::with(&["/home", "/home/ubuntu"]);
+        let sits = chosen(&run, None, &mut machine);
+        assert_eq!(sits.path, format!("/home/ubuntu/Render/{NAME}"));
+        assert_eq!(sits.where_it_is, WhereItIs::WhereTheFilePoints);
+        assert_eq!(the_run_of(&read(&["Hero", "Unused"]), b"/home/ubuntu"), TheRun::It(Vec::new()));
+        // **A path from another computer that writes nothing sends no job to
+        // the fallback** (P19 case 1 reads only the outputs that take part).
+        let mut mac = a_node_destination("Mac", "Image", "C:/Renders/x", None);
+        mac.the_view_layers_that_feed_it = vec![text("Unused")];
+        let with_a_mac = a_reading(
+            vec![a_node_destination("V_A", "Image", "//Render/V_A/PNG", None), mac],
+            vec![a_frame(1, &["Hero"], None)],
+            version,
+        );
+        assert_eq!(the_run_of(&with_a_mac, b"/home/ubuntu"), a_run("/home/ubuntu/Render/V_A/PNG"));
+    }
+
+    /// **P19a, the Rough what-if answers, share 3 (230, 231): a run of `/`
+    /// alone falls back as a folder Smoozy cannot use**, never as another
+    /// computer's — an output path at `/`, or one climbing past the top of
+    /// the disk. Before, it read *on another computer*.
+    #[test]
+    fn rough_share_3_a_run_of_the_root_alone_is_a_folder_smoozy_cannot_use() {
+        let destinations = vec![a_destination(
+            DestinationKind::TheRegularOutputPath,
+            "//../../../../../../frame_",
+            WhereItComesFrom::TheScenesOutputPath,
+        )];
+        let run = the_run_of(&as_read(&destinations, TheVersionInHand::of(5, 2)), b"/home/ubuntu");
+        assert_eq!(run, TheRun::It(Vec::new()), "the climb stops at the top of the disk");
+        let mut machine = AMachine::with(&[THE_JOB_AREA]);
+        let sits = chosen(&run, None, &mut machine);
+        assert_eq!(sits.path, format!("{THE_JOB_AREA}/{NAME}"));
+        assert_eq!(sits.where_it_is, fell_back(Some(WhyTheFilesOwnPlaceWasNotUsed::ItIsAFolderSmoozyCannotUse), false));
+        assert_eq!(machine.made, vec![format!("{THE_JOB_AREA}/{NAME}")], "nothing made at `/`");
+    }
+
     #[test]
     fn another_computers_paths_fall_back_with_case_one() {
-        // A foreign form, a run of `/` alone, and a Mac's `/Users/…` that
-        // would need a folder made directly under `/`.
+        // A foreign form, and a Mac's `/Users/…` that would need a folder
+        // made directly under `/`.
         for run in [TheRun::ItIsAnotherComputers, a_run("/Users/alex/Render")] {
             let mut machine = AMachine::with(&[THE_JOB_AREA]);
             let sits = chosen(&run, None, &mut machine);
@@ -667,7 +741,7 @@ mod tests {
             "C:\\Renders\\",
             WhereItComesFrom::TheScenesOutputPath,
         )];
-        assert_eq!(the_run_of(&destinations, b"/home/ubuntu", TheVersionInHand::of(5, 2)), TheRun::ItIsAnotherComputers);
+        assert_eq!(the_run_of(&as_read(&destinations, TheVersionInHand::of(5, 2)), b"/home/ubuntu"), TheRun::ItIsAnotherComputers);
     }
 
     #[test]

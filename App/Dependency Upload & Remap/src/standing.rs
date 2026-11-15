@@ -633,6 +633,7 @@ mod tests {
                 }),
                 set_aside: false,
                 rejected_guess: None,
+                included: false,
                 read_as: Vec::new(),
             };
         // scene → lib → tex; other → nothing.
@@ -770,6 +771,7 @@ mod tests {
             }),
             set_aside: false,
             rejected_guess: None,
+            included: false,
             read_as: Vec::new(),
         });
         let roots = vec![by_files.clone()];

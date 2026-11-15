@@ -40,7 +40,7 @@
 // four things it costs are kept here and nowhere else:
 //
 //  1. It ticks against a moment the application already published — the
-//     `theNextAttemptIsDueAt` the event carried, and nothing else.
+//     `theNextAttemptIsDueAt` the event carried, or the read’s elapsed seconds.
 //  2. It takes no reading, makes no request and posts nothing.
 //  3. **It ceases to exist off screen.** One interval serves every countdown on
 //     screen; a countdown whose element has left the document is dropped, and
@@ -106,6 +106,10 @@ const A_SERVER_IS_REPAIRING = "underway:a-server-is-repairing";
 export function theMarkOnAControl(control, label) {
   control.classList.add("uway");
   control.setAttribute("aria-disabled", "true");
+  // **The hidden label is out of the accessibility tree**, so the control
+  // keeps its name here. Added 2026-11-12, the live pass's picture of a
+  // pressed control with an empty name.
+  if (label) control.setAttribute("aria-label", label);
   control.replaceChildren();
   const held = document.createElement("span");
   held.className = "uwl";
@@ -121,6 +125,7 @@ export function theMarkOnAControl(control, label) {
 export function theMarkComesOffAControl(control, label) {
   control.classList.remove("uway");
   control.removeAttribute("aria-disabled");
+  control.removeAttribute("aria-label");
   control.replaceChildren();
   control.textContent = label;
   return control;
@@ -161,7 +166,16 @@ export function theMarkOnARow(howFarAlong, words) {
     // **Two figures and one word, and the word is prose off the event.** They
     // are separate nodes: a figure joined into a sentence is the join X7
     // forbids.
-    for (const part of [bytes(staged), (words && words.of) || "", bytes(expected)]) {
+    // **The sizes as the application words them, where it sends them** —
+    // Files' own wording, so a file's *12 MB* reads as its request's (UI
+    // consistency, finding 5); the page's own reckoning only where it sends
+    // none.
+    const stagedSaid = howFarAlong.stagedSaid || bytes(staged);
+    const expectedSaid = howFarAlong.expectedSaid || bytes(expected);
+    // **Even-width digits**, so what sits after a ticking figure stays put
+    // (UI consistency, cause 1).
+    said.classList.add("tnum");
+    for (const part of [stagedSaid, (words && words.of) || "", expectedSaid]) {
       const one = document.createElement("span");
       one.textContent = part;
       said.appendChild(one);
@@ -244,11 +258,13 @@ function drawEveryCountdown() {
   for (const one of Array.from(ticking)) {
     // **It ceases to exist when the thing it draws is off screen** — P10b and
     // M30. An element that has left the document is dropped here.
-    if (!one.line.isConnected) {
+    if (!one.line.isConnected || (one.elapsed !== undefined && one.line.closest("[hidden]"))) {
       ticking.delete(one);
       continue;
     }
-    theTimeLeft(one.line, one.dueAt, one.words);
+    if (one.elapsed !== undefined) {
+      theElapsedTime(one.line, one.elapsed + (performance.now() - one.drawnAt) / 1000);
+    } else theTimeLeft(one.line, one.dueAt, one.words);
   }
   if (ticking.size === 0 && theTick !== null) {
     clearInterval(theTick);
@@ -264,13 +280,43 @@ function drawEveryCountdown() {
 /// **This takes no reading, makes no request and posts nothing.**
 export function theCountdown(dueAt, words) {
   const line = document.createElement("span");
-  line.className = "sub";
+  // Even-width digits: *retrying in 12s* keeps its width as it counts down
+  // (UI consistency, finding 51).
+  line.className = "sub tnum";
   theTimeLeft(line, Number(dueAt), words);
   ticking.add({ line, dueAt: Number(dueAt), words });
   if (theTick === null) {
     theTick = setInterval(drawEveryCountdown, 1000);
   }
   return line;
+}
+
+// `Render Settings` Q5; `Desktop app and delivery` P10b and M30.
+// The existing visible ticker advances a published duration on one local clock.
+/// **The turning mark on a line of text** — the drawing's `.spin` as
+/// Render Settings' read line and the dependency check's header line draw it
+/// (`.rdline .spin`, `.ckline .spin`): on the line's text, before its words.
+/// Added 2026-11-13, the Creator's notes on the test copy, second round, note 16.
+export function theMarkOnALine() {
+  const turning = document.createElement("i");
+  turning.className = "spin";
+  return turning;
+}
+
+export function theElapsed(seconds) {
+  const line = document.createElement("span");
+  // Even-width digits: the clock keeps its width as it ticks (UI
+  // consistency, finding 16).
+  line.className = "tnum";
+  const elapsed = Math.max(0, Number(seconds));
+  theElapsedTime(line, elapsed);
+  ticking.add({ line, elapsed, drawnAt: performance.now() });
+  if (theTick === null) theTick = setInterval(drawEveryCountdown, 1000);
+  return line;
+}
+function theElapsedTime(line, elapsed) {
+  const seconds = Math.floor(Math.max(0, elapsed));
+  line.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 /// **How long is left, drawn as words and a number.**
@@ -295,6 +341,9 @@ function theTimeLeft(line, dueAt, words) {
   const many = document.createElement("span");
   many.textContent = String(left);
   line.appendChild(many);
+  // **The unit, bound to the figure with no space** — the drawing's *retrying
+  // in 12s*; the word is the application's (the UI at every size, B-06).
+  if (words && words.unit) line.appendChild(document.createTextNode(words.unit));
 }
 
 /// **A moment, with its date and the zone it is drawn in** — M3a.
@@ -313,6 +362,7 @@ function theMoment(seconds) {
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
     timeZoneName: "short",
   });
 }
@@ -374,6 +424,7 @@ export function theRepairingServer(parts) {
       theCountdown(parts.theNextAttemptIsDueAt, {
         in: parts.theTryingAgainIn,
         now: parts.theTryingAgainNow,
+        unit: parts.theSecondsUnit,
       }),
     );
   }

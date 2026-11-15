@@ -329,6 +329,88 @@ pub(crate) fn a_refused_root_in_words(
     }
 }
 
+/// **A recorded root read on this machine** — by its text and where it leads
+/// ([`a_root_on_this_machine`]), and **by its mark** (`Server Setup` R6a's
+/// change of later on 2026-11-13, item 4; Sol's look at the scout's list,
+/// point 1): where the record beside `the_roots_record` names a mark, the root
+/// must hold the same one, or the root is refused in words and nothing is
+/// made under it — so a disk not mounted after a restart, or replaced, never
+/// gets a new folder in its place on the disk beneath.
+#[cfg(unix)]
+pub(crate) fn a_recorded_root_on_this_machine(
+    written: &str,
+    the_roots_record: &std::path::Path,
+) -> Result<smoozy_job_files_machine::layout::MachineRoot, String> {
+    let root = a_root_on_this_machine(written).map_err(|why| a_refused_root_in_words(written, &why))?;
+    the_roots_mark_stands(&root, the_roots_record)?;
+    Ok(root)
+}
+
+/// **`Server Setup` R6a: the root holds the mark recorded beside its record**,
+/// and nothing to check where none is recorded — a root placed before marks
+/// were written. `Ok(true)` where a mark is recorded and stands.
+#[cfg(unix)]
+pub(crate) fn the_roots_mark_stands(
+    root: &smoozy_job_files_machine::layout::MachineRoot,
+    the_roots_record: &std::path::Path,
+) -> Result<bool, String> {
+    use smoozy_job_files_machine::layout::{
+        the_recorded_mark, the_root_holds_its_mark, THE_RECORD_OF_THE_ROOTS_MARK, THE_ROOTS_MARK,
+    };
+    let recorded_at = the_roots_record.with_file_name(THE_RECORD_OF_THE_ROOTS_MARK);
+    let Some(recorded) = the_recorded_mark(&recorded_at.display().to_string(), a_mark_read(&recorded_at))? else {
+        return Ok(false);
+    };
+    let in_the_root = std::path::Path::new(root.as_path()).join(THE_ROOTS_MARK);
+    the_root_holds_its_mark(root.as_path(), &recorded, a_mark_read(&in_the_root)).map(|()| true)
+}
+
+/// **`Server Setup` R6a: the root's mark, and the login's real write in it.**
+/// The write is made where a mark is recorded or the root stands: a root
+/// placed before marks were written, and not yet made, is made by its first
+/// run as before (`Server Setup` R6a's change of later on 2026-11-13, item 4,
+/// its last sentence but one).
+#[cfg(unix)]
+pub(crate) fn the_root_stands_and_takes_a_write(
+    root: &smoozy_job_files_machine::layout::MachineRoot,
+    the_roots_record: &std::path::Path,
+) -> Result<(), String> {
+    let marked = the_roots_mark_stands(root, the_roots_record)?;
+    if marked || std::path::Path::new(root.as_path()).exists() {
+        the_root_takes_a_write(root)?;
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn a_mark_read(at: &std::path::Path) -> smoozy_job_files_machine::layout::AMarkRead {
+    use smoozy_job_files_machine::layout::AMarkRead;
+    match std::fs::read(at) {
+        Ok(bytes) => AMarkRead::Read(bytes),
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => AMarkRead::NotThere,
+        Err(why) => AMarkRead::CouldNotBeRead(why.to_string()),
+    }
+}
+
+/// **`Server Setup` R6a: the login's real write in the root** — one byte,
+/// read back and taken away, as `Server Setup` R7's landing check makes it
+/// from the desktop (its name, `.smoozy-landing-check`, is that check's own).
+/// Made at a setup run's opening and at its final verification.
+#[cfg(unix)]
+pub(crate) fn the_root_takes_a_write(root: &smoozy_job_files_machine::layout::MachineRoot) -> Result<(), String> {
+    let at = std::path::Path::new(root.as_path()).join(".smoozy-landing-check");
+    let wrote = std::fs::write(&at, b"s").and_then(|()| std::fs::read(&at));
+    let _ = std::fs::remove_file(&at);
+    match wrote {
+        Ok(read_back) if read_back == b"s" => Ok(()),
+        Ok(_) => Err(smoozy_job_files_machine::layout::a_root_that_takes_no_write(
+            root.as_path(),
+            "what was written did not read back",
+        )),
+        Err(why) => Err(smoozy_job_files_machine::layout::a_root_that_takes_no_write(root.as_path(), &why.to_string())),
+    }
+}
+
 /// **The render worker**, which is `Rendering`'s kind run by this program —
 /// see the file's own front matter.
 #[cfg(unix)]
@@ -396,6 +478,12 @@ mod the_telegram_worker;
 #[cfg(unix)]
 mod the_telegram_journal;
 
+/// **The guard that every event this program journals fits `State, identity
+/// and recovery` E6a's budget, whatever the names** — the Creator's
+/// twenty-ninth notes, note 11 (piece J). Tests only.
+#[cfg(all(test, unix))]
+mod the_events_fit;
+
 #[cfg(unix)]
 mod unix {
     use std::io::Write;
@@ -409,7 +497,7 @@ mod unix {
         NOTHING_IS_RECORDED, THERE_IS_NO_PICTURE_OF_IT, THE_FRAMES_PICTURE_IS_MADE_AGAIN_REQUEST,
         THE_FRAME_ASKED_FIELD, THE_INSTRUCTIONS_OUTCOME_IS_RECORDED_REQUEST,
         THE_INSTRUCTIONS_OUTCOME_READING_REQUEST, THE_INSTRUCTION_FIELD, THE_JOB_IS_NOT_HERE,
-        THE_JOB_IS_SUBMITTED_AGAIN_REQUEST, THE_NEW_JOB_FIELD, THE_OUTCOME_FIELD,
+        THE_FRAME_IT_RESUMES_FROM_FIELD, THE_JOB_IS_SUBMITTED_AGAIN_REQUEST, THE_NEW_JOB_FIELD, THE_OUTCOME_FIELD,
         THE_SUBMISSIONS_MOMENT_FIELD, THE_TELEGRAM_WORKERS_CURSOR_MOVES_REQUEST,
         THE_TELEGRAM_WORKERS_FACT_REQUEST, THE_TELEGRAM_WORKERS_READ_FORWARD_REQUEST,
         THE_TELEGRAM_WORKERS_START_REQUEST, WHAT_BECAME_OF_THE_FRAME_FIELD,
@@ -428,12 +516,13 @@ mod unix {
         THE_ERASE_REQUEST, THE_FAILED_STEP_IS_RECORDED_REQUEST, THE_FIXED_COPY_IS_PRODUCED_REQUEST,
         THE_GROUP_BLOCK_MOVE_REQUEST, THE_INSTALL_RECORDS_REQUEST,
         THE_JOB_RECORD_IS_WRITTEN_REQUEST, THE_KEPT_CRASH_FILES_REQUEST,
-        THE_ONE_SETUP_STEP_REQUEST, THE_PER_JOB_NOTE_READING_REQUEST, THE_QUEUE_READING_REQUEST,
+        THE_ONE_SETUP_STEP_REQUEST, THE_PREVIEW_COPIES_REQUEST, THE_PER_JOB_NOTE_READING_REQUEST, THE_QUEUE_READING_REQUEST,
         THE_READING_OF_A_BLEND_REQUEST, THE_READ_FORWARD_REQUEST, THE_REORDER_REQUEST,
         THE_SETUP_RUNS_STATE_REQUEST, THE_SETUP_RUN_IS_OPENED_REQUEST,
         THE_SETUP_RUN_IS_STOPPED_REQUEST, THE_SET_UP_CARDS_READING_REQUEST,
-        THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST, THE_STOP_REQUEST, THE_SUPERVISOR_ENDS_ITSELF_REQUEST,
-        THE_TELEGRAM_CHOICE_IS_CHANGED_REQUEST,
+        THE_PAIRS_CLEAR_REQUEST, THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST,
+        THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST, THE_STOP_REQUEST,
+        THE_SUPERVISOR_ENDS_ITSELF_REQUEST, THE_TELEGRAM_CHOICE_IS_CHANGED_REQUEST,
     };
     use smoozy_queue_history_machine::acting::commands::{
         apply_a_rewrite, apply_the_clear, the_material_after_a_removal, the_record_ended,
@@ -560,6 +649,7 @@ mod unix {
         the_words_for, the_work_as_fields, AStopOnThisAttempt, OneAttemptsCapture,
         TheEndingAsRecorded, TheRenderKindsOwnField, TheWork, THE_COMPLETENESS_STATEMENT_FIELD,
         THE_FIGURE_CASE_FIELD, THE_HOLD_IS_PLACED_AT_RENDER_START_REQUEST, THE_OPERATION_FIELD,
+        THE_READINGS_PROCESS_FIELD, THE_READINGS_PROCESS_WAS_STARTED_REQUEST,
         THE_RECORDED_READING_WAS_WRITTEN_REQUEST, THE_RENDER_PROCESS_FIELD,
         THE_RENDER_PROCESS_WAS_STARTED_REQUEST, THE_RENDER_WORKERS_OWN_WORK_REQUEST,
         THE_WORKERS_OWN_PROCESS_FIELD, WHETHER_IT_WAS_RECORDED_FIELD, WHY_THERE_IS_NO_WORK_FIELD,
@@ -838,6 +928,17 @@ mod unix {
             WhatTheEndingCameTo::NothingWasEnded(why) => {
                 not_ended(format!("nothing was ended: {why}"))
             }
+            WhatTheEndingCameTo::ASupervisorHoldingNoEndpointWasEnded { process } => {
+                ended(format!(
+                    "No local endpoint was open. Stopped supervisor process {process}; \
+                     it was running a different Smoozy executable."
+                ))
+            }
+            WhatTheEndingCameTo::ASupervisorHoldingNoEndpointStillRuns { process } => {
+                not_ended(format!(
+                    "No local endpoint was open. Supervisor process {process} did not stop in time."
+                ))
+            }
         }))
     }
 
@@ -1036,11 +1137,62 @@ mod unix {
         /// from**, and it is cleared the moment the ending is written.
         the_render_this_run_started: Option<TheRenderThisRunStarted>,
         /// **Every render operation this run has started a worker for**, so a
-        /// record whose worker ended with no report is never started a third
-        /// time: *re-run once* bounds the cost at one repeated attempt (`State,
-        /// identity and recovery` §6), and the next start's reconciliation is
-        /// what takes such a record.
+        /// second attempt *re-run once* owes is started once and no more:
+        /// *re-run once* bounds the cost at one repeated attempt (`State,
+        /// identity and recovery` §6). **From 2026-11-10 a record whose worker
+        /// ended with no report is taken in this run** (`Rented-server
+        /// runtime` S10a), and writing *re-run once* on it takes it off this
+        /// list so the line starts its second attempt; the count on the
+        /// record is what keeps a third from ever starting.
         operations_this_run_started: Vec<Identity>,
+        /// **`Rented-server runtime` S10a: every render whose worker is gone
+        /// with no ending recorded, owed §6 step 2's branch.** Filled when
+        /// X9a's wait returns such a worker's ending, or when a watched pair
+        /// stops validating; emptied at the next look at the line. **In this
+        /// run's memory and written nowhere**: a run that ends first leaves
+        /// the record to the next start, as before.
+        the_renders_no_worker_is_left_for: Vec<Identity>,
+        /// **`Rented-server runtime` S10a and X9b: the pairs read on each
+        /// turn, by the render each belongs to** — the worker's own, for a
+        /// render this run wrote *resumed* for and holds no wait on; or the
+        /// render process's, for a render whose worker is gone while its
+        /// render process still runs. **A kernel reading and no store.**
+        the_pairs_watched_for_a_render: Vec<(Identity, RecordedPair)>,
+        /// **Every render operation whose ending this run has told** — the
+        /// job's own side run through to its event. `Queue & History` D14a
+        /// finishes a job record left *rendering*; where this run told the
+        /// ending already, only the record is written and nothing is told
+        /// twice.
+        the_endings_this_run_told: Vec<Identity>,
+        /// **Why the line is stopped, where the last look at it could not read
+        /// the operation records** — in the store's own words, for `Queue &
+        /// History` A1's queue reading to carry (`State, identity and
+        /// recovery` F12a). Set and cleared by [`Self::take_the_line`] alone,
+        /// at the one read that decides it. **The line stays stopped either
+        /// way**; this is only what lets the desk say why.
+        the_line_is_stopped_because: Option<String>,
+        /// **The job the line's last look could not start for want of room**
+        /// — `Rented-server runtime` M4a's refusal at a render's start (as
+        /// added 2026-11-11). `Queue & History` A1's queue reading names it,
+        /// and while it stands each turn of the loop takes the available
+        /// figure again ([`Self::the_turns_own_occasions`]). Set where
+        /// [`Self::start_a_render_attempt`] meets the refusal; cleared where an
+        /// attempt passes it, and where the line has nothing of its own to
+        /// start.
+        the_line_waits_for_room_at: Option<Identity>,
+        /// **That job was held back because the available figure could not
+        /// be taken at all**, and not because it read low. The job is tried
+        /// again the same way and the queue reading does not name it: nothing
+        /// says its disk is full.
+        the_figure_could_not_be_taken: bool,
+        /// **The available figure a test hands in**, in place of the state
+        /// mount's own. Nothing outside the tests sets it.
+        #[cfg(test)]
+        the_available_figure_is: Option<u64>,
+        /// **Readings a test hands in ahead of that figure**, taken one a
+        /// call, so one reading can fail between two that do not.
+        #[cfg(test)]
+        the_available_figures_to_come: std::collections::VecDeque<Result<u64, String>>,
         /// **The one setup run this supervisor has open**, with what its
         /// worker is told and what the desktop has commanded.
         ///
@@ -1748,6 +1900,82 @@ mod unix {
             self.start_the_role_worker_again(it_ended)
         }
 
+        /// **The state mount's available figure**, as M4a reads it.
+        fn the_available_figure(&mut self) -> Result<u64, String> {
+            #[cfg(test)]
+            if let Some(next) = self.the_available_figures_to_come.pop_front() {
+                return next;
+            }
+            #[cfg(test)]
+            if let Some(figure) = self.the_available_figure_is {
+                return Ok(figure);
+            }
+            the_available_figure_at(&self.package_area)
+        }
+
+        /// **What every turn of the loop does once its caller is answered** —
+        /// a caller having arrived or not. Each is an occasion something else
+        /// caused, so `Rented-server runtime` S10's *no timer* stands. Moved out
+        /// of the loop on 2026-11-10 so a test takes a turn as the loop does.
+        pub fn the_turns_own_occasions(&mut self) {
+            // **W10's fourth occasion, and it is the one that works with the
+            // laptop shut.** A turn no caller arrived for is one of the outcomes
+            // the endpoint's own bounded wait reports, so this is an occasion
+            // something else caused rather than a schedule — S10's *no timer*
+            // stands. **No store is read unless an ending has actually been
+            // seen.**
+            if let Some(said) = self.look_after_the_role_worker_on_this_turn() {
+                eprintln!("smoozy-server: the Telegram role worker — {said}");
+            }
+            // **`Rented-server runtime` S10a and X9b**: the pairs this run
+            // watches for a render, read off the kernel. The role worker's
+            // occasion above has just taken every ending the wait holds.
+            self.look_after_the_renders_on_this_turn();
+            // **M4a (as added 2026-11-11): while a job waits for room, each
+            // turn takes the available figure again**, and where the reserve
+            // can now be established the line is looked at. One reading of
+            // the system and no store, and only while a job waits, so S10's
+            // *no timer* stands. Until then a job refused for room started
+            // only when something else moved the line.
+            // **The look is taken once for each time room comes back**: the
+            // job stops being named as waiting for room here, and the line's
+            // own look names it again where it still cannot start it — so a
+            // line held back by something else is not looked at on every
+            // turn.
+            if self.the_line_waits_for_room_at.is_some()
+                && self.the_available_figure().is_ok_and(|available| {
+                    whether_a_placement_may_admit_a_render(available)
+                        == WhetherAPlacementMayAdmitARender::ItMay
+                })
+            {
+                self.the_line_waits_for_room_at = None;
+                self.the_line_may_have_moved = true;
+            }
+            // **`Queue & History` Q4's trigger, and only after a turn that set
+            // it**: a job written, an outcome written, a hold released, a
+            // reconciliation run. **An idle turn reads no store here**, so S10's
+            // *no timer* stands.
+            if std::mem::take(&mut self.the_line_may_have_moved) {
+                if let Some(said) = self.take_the_line() {
+                    eprintln!("smoozy-server: the line — {said}");
+                }
+                // **The same occasion moves the previews**: a preview that
+                // waited at the admission point is looked at again when
+                // something could have let it through (the 38's piece 3).
+                if let Some(said) = self.start_the_next_preview() {
+                    eprintln!("smoozy-server: the previews — {said}");
+                }
+            }
+            if let Some(said) = self.look_after_the_previews_on_this_turn() {
+                eprintln!("smoozy-server: the previews — {said}");
+            }
+            // **`Server Setup` Y7's command-gap window, looked at once a
+            // turn.** Like the occasion above, this is a turn something else
+            // caused rather than a schedule, so S10's *no timer* stands. **It
+            // reads no store unless the window has actually elapsed.**
+            self.look_after_the_setup_runs_refresh();
+        }
+
         /// **W10's fourth occasion: the supervisor's own turn.**
         ///
         /// **On each turn of the loop — including a turn no caller arrived for,
@@ -1845,12 +2073,13 @@ mod unix {
         /// run holds. So the endings are taken here and read here, and every
         /// other taker in this file calls this rather than the admission point.
         ///
-        /// **A render worker that ended with its ending unreported leaves its
-        /// operation record open**, and nothing here writes an outcome for it:
-        /// the group is gone and no report arrived, which is `State, identity
-        /// and recovery` §6's ordinary case, taken at the next reconciliation
-        /// (`Rented-server runtime` S10 names no other trigger). It is said on
-        /// the complaints stream rather than left to be found.
+        /// **A render worker that ended with its ending unreported is owed
+        /// `State, identity and recovery` §6 step 2's branch at once**
+        /// (`Rented-server runtime` S10a), and the next look at the line takes
+        /// it — which this sets, so it is this same turn's. **Until 2026-11-10
+        /// the record was left open for the next supervisor start**, and since
+        /// the line starts nothing while a render record is open, a worker
+        /// that died alone stopped the line for good.
         fn take_every_ending(&mut self) {
             let ended = self.admission_point.take_the_endings(self.wait.as_ref());
             // **A production whose worker ended with its ending unreported**
@@ -1880,10 +2109,113 @@ mod unix {
                 .find(|(operation, _)| *operation == render.work.operation)
             {
                 eprintln!(
-                    "smoozy-server: the render worker for {} ended at {status} with its ending                      unreported; its record stays open for the next reconciliation",
+                    "smoozy-server: the render worker for {} ended at {status} with its ending \
+                     unreported; its record is taken at the next look at the line",
                     render.work.operation.as_text()
                 );
+                let operation = render.work.operation.clone();
                 self.the_render_this_run_started = None;
+                self.a_render_is_owed_its_branch(operation);
+            }
+        }
+
+        /// **`Rented-server runtime` S10a: one render is owed its branch**,
+        /// and the line is looked at.
+        fn a_render_is_owed_its_branch(&mut self, operation: Identity) {
+            if !self.the_renders_no_worker_is_left_for.contains(&operation) {
+                self.the_renders_no_worker_is_left_for.push(operation);
+            }
+            self.the_line_may_have_moved = true;
+        }
+
+        /// **A pair is read on each turn from here on, for one render**
+        /// (`Rented-server runtime` S10a, X9b). One pair a render: a later
+        /// one replaces the earlier.
+        fn a_pair_is_watched_for(&mut self, operation: &Identity, pair: RecordedPair) {
+            self.the_pairs_watched_for_a_render
+                .retain(|(watched, _)| watched != operation);
+            self.the_pairs_watched_for_a_render
+                .push((operation.clone(), pair));
+        }
+
+        /// **`Rented-server runtime` S10a's second occasion and X9b's: each
+        /// watched pair is read off the kernel, and a render whose pair is
+        /// gone is owed its branch.** **No store is read here**, and nothing
+        /// at all where nothing is watched. **A reading that cannot be taken
+        /// keeps the watch** (X6: it relaxes nothing).
+        pub fn look_after_the_renders_on_this_turn(&mut self) {
+            if self.the_pairs_watched_for_a_render.is_empty() {
+                return;
+            }
+            let watched = std::mem::take(&mut self.the_pairs_watched_for_a_render);
+            for (operation, pair) in watched {
+                let gone = matches!(
+                    smoozy_runtime::execution_group::ValidatesTheRecordedPair::what_is_at(
+                        &self.worker_start.kernel,
+                        pair.identifier,
+                    ),
+                    Ok(there) if pair.validates_against(there).the_group_is_gone()
+                );
+                if gone {
+                    self.a_render_is_owed_its_branch(operation);
+                } else {
+                    self.the_pairs_watched_for_a_render.push((operation, pair));
+                }
+            }
+        }
+
+        /// **`Rented-server runtime` S10a, performed: §6 step 2's branch for
+        /// each render owed one**, through [`Self::one_record`] — the same
+        /// writes, in the same order, as at a start.
+        ///
+        /// **Step 0 holds here as it holds a start**: while the
+        /// setup-in-progress state stands, or cannot be read, nothing is
+        /// taken and the render stays owed; the clear's own reconciliation
+        /// takes it. **A record that has an outcome by now owes nothing** —
+        /// its worker reported before it went. **A branch that could not be
+        /// written stays owed** and is tried at the next look at the line;
+        /// one waiting on a render process (X9b) is the watch's.
+        fn the_renders_owed_a_branch_are_taken(&mut self) {
+            if self.the_renders_no_worker_is_left_for.is_empty() {
+                return;
+            }
+            match self.setup_state.read() {
+                Ok(standing) if reconciliation_may_run(standing.as_ref()) => {}
+                _ => return,
+            }
+            for operation in std::mem::take(&mut self.the_renders_no_worker_is_left_for) {
+                let record = match self.records.what_is_held_under(&operation) {
+                    Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record)) => record,
+                    Ok(_) => continue,
+                    Err(why) => {
+                        eprintln!(
+                            "smoozy-server: the record of a render whose worker is gone could \
+                             not be read, and is tried again: {}",
+                            what_the_store_said(&why)
+                        );
+                        self.the_renders_no_worker_is_left_for.push(operation);
+                        continue;
+                    }
+                };
+                if record.recorded_outcome().is_some() {
+                    continue;
+                }
+                let what = self.one_record(&record);
+                if what == WhatARecordGot::ABranchThatKeepsItOpen(Disposition::Resumed) {
+                    // Its worker is there after all; the watch has it.
+                    continue;
+                }
+                eprintln!(
+                    "smoozy-server: the render {} whose worker is gone with no ending — {what:?}",
+                    operation.as_text()
+                );
+                let it_is_watched = self
+                    .the_pairs_watched_for_a_render
+                    .iter()
+                    .any(|(watched, _)| *watched == operation);
+                if matches!(what, WhatARecordGot::NoBranchCouldBeTaken(_)) && !it_is_watched {
+                    self.the_renders_no_worker_is_left_for.push(operation);
+                }
             }
         }
 
@@ -2134,6 +2466,14 @@ mod unix {
         /// **The occasions are S14's and never a timer**, a watcher, a schedule
         /// or a free-space reading, so S10 stands unqualified.
         pub fn re_attempt_what_is_pending(&mut self, on: ReAttemptOccasion) {
+            // **`Rented-server runtime` S10a: while a render is owed its
+            // branch, each of S14's occasions looks at the line again** — a
+            // branch the store refused, or one the setup-in-progress state
+            // held back, has no other occasion once the turn that owed it has
+            // passed.
+            if !self.the_renders_no_worker_is_left_for.is_empty() {
+                self.the_line_may_have_moved = true;
+            }
             if self.pending.owed().is_empty() {
                 return;
             }
@@ -2145,6 +2485,10 @@ mod unix {
             let all_landed = owed.re_attempt(on, |write| self.perform_one_owed_write(write));
             if all_landed {
                 eprintln!("smoozy-server: every durable write held pending has now landed");
+                // **The line waited over them** (S14's fourth bullet), and
+                // the landing is what lets it move. Until 2026-11-10 nothing
+                // looked at it again until something else moved it.
+                self.the_line_may_have_moved = true;
             }
             self.pending = owed;
         }
@@ -2271,7 +2615,12 @@ mod unix {
                 std::path::Path::new(&self.package_area),
             );
             crate::the_telegram_journal::ADropAsJournalled {
+                // **`Queue & History` H9 and `Queue & History` H11 as changed 2026-11-09: a drop
+                // behind a cancel is the user's own act and is told nowhere**,
+                // the phone included (the twenty-eighth notes, note 16).
                 the_phone_is_silent: records.the_record_reports_nothing(held)
+                    || release.produced_by
+                        == smoozy_queue_history_machine::waiting::THE_DEPENDENCY_WAS_CANCELLED
                     || standing
                         .as_ref()
                         .is_some_and(|hold| records.the_hold_reports_nothing(hold, held)),
@@ -2456,6 +2805,83 @@ mod unix {
 
             let mut written = record.clone();
             let it_is_a_render = record.kind == the_word_for(WorkerKind::Render);
+            // **`Rented-server runtime` X9a: the wait is the *ended* test, and
+            // this run still holds the wait for this render's worker.** A
+            // record whose pair the start could not write reads as gone by
+            // the pair alone, beside a worker that is running.
+            if it_is_a_render
+                && disposition != Disposition::Resumed
+                && self
+                    .the_render_this_run_started
+                    .as_ref()
+                    .is_some_and(|render| render.work.operation == record.operation)
+            {
+                return WhatARecordGot::NoBranchCouldBeTaken(
+                    "this run started its worker and the wait has not returned its ending"
+                        .to_string(),
+                );
+            }
+            // **`Rented-server runtime` X9b: a render's group is not read as
+            // gone while the render process it recorded still validates.** No
+            // branch is taken, nothing is written and nothing starts beside
+            // it; its pair is read on each turn until it has gone. **A reading
+            // that cannot be taken relaxes nothing** (X6). Added 2026-11-10 —
+            // until then a worker that went before its Blender had a second
+            // attempt started on the same cards.
+            if it_is_a_render && disposition != Disposition::Resumed {
+                if let Some(pair) = the_render_process_recorded_on(record) {
+                    let there =
+                        smoozy_runtime::execution_group::ValidatesTheRecordedPair::what_is_at(
+                            &self.worker_start.kernel,
+                            pair.identifier,
+                        );
+                    let why_not = match there {
+                        Ok(there) if pair.validates_against(there).the_group_is_gone() => None,
+                        Ok(_) => Some(
+                            "its worker is gone and the render process it started is still \
+                             running, so nothing is started beside it and the record is taken \
+                             once that process has gone"
+                                .to_string(),
+                        ),
+                        Err(why) => Some(format!(
+                            "its worker is gone and whether its render process still runs could \
+                             not be read, so nothing is started beside it: {why}"
+                        )),
+                    };
+                    if let Some(why_not) = why_not {
+                        self.a_pair_is_watched_for(&record.operation, pair);
+                        // **A stop the record asks for still reaches it**
+                        // (X12 names the render process as the target): sent
+                        // where the termination was not issued, and nothing
+                        // where it was (`Rendering` K10).
+                        if record.desired_state()
+                            == smoozy_state::machine_operations::DesiredState::ShouldBeStopped
+                        {
+                            if let Some(why) =
+                                self.the_interrupt_is_issued_where_it_can_be(&record.operation, None)
+                            {
+                                eprintln!(
+                                    "smoozy-server: a stop outstanding on a render whose worker \
+                                     is gone — {why}"
+                                );
+                            }
+                        }
+                        return WhatARecordGot::NoBranchCouldBeTaken(why_not);
+                    }
+                }
+            }
+            // **`Rented-server runtime` S10a: a render carried on is not this
+            // run's child, so no wait returns its worker's ending** — its
+            // pair is read on each turn instead.
+            if it_is_a_render && disposition == Disposition::Resumed {
+                if let Some(pair) = record
+                    .execution_group
+                    .as_ref()
+                    .and_then(|group| RecordedPair::recorded_in(&group.as_that_document_recorded_it))
+                {
+                    self.a_pair_is_watched_for(&record.operation, pair);
+                }
+            }
             // **`Rented-server runtime` M17: *collection incomplete* for an
             // attempt whose capture record was established and whose worker
             // never reported an end**, written at the reconciliation that finds
@@ -2540,6 +2966,26 @@ mod unix {
             if ending.is_some() {
                 self.the_render_endings_owed.remove(&written.operation);
             }
+            // **`Rented-server runtime` S10a: a render this run started and
+            // has now written *re-run once* for is started once more by the
+            // line.** The count on the record is what bounds it: the attempt
+            // after this one meets *given up*.
+            if it_is_a_render && disposition == Disposition::ReRunOnce {
+                self.operations_this_run_started
+                    .retain(|started| *started != written.operation);
+                // **An ending this run classified and could not write
+                // (S14a) is no longer the job's state**: its worker went
+                // before the write landed, and the job is run again.
+                self.the_render_endings_owed.remove(&written.operation);
+            }
+            if disposition != Disposition::Resumed {
+                self.the_pairs_watched_for_a_render
+                    .retain(|(watched, _)| *watched != written.operation);
+            }
+            // **A branch written here is the branch S10a owed**, whichever
+            // occasion took it.
+            self.the_renders_no_worker_is_left_for
+                .retain(|owed| *owed != written.operation);
 
             // **Step 4**, and a journal that refuses does not undo the
             // disposition: it is on the record durably by now. **A refused
@@ -2639,6 +3085,7 @@ mod unix {
                                     .attempt_count,
                                 the_reason_the_machine_recorded: None,
                                 no_render_began: false,
+                                the_files_missing: Vec::new(),
                                 the_device_line_as_observed: None,
                             },
                             figure,
@@ -3081,22 +3528,44 @@ mod unix {
             if let Err(why) = self.finish_what_the_line_owes() {
                 return Some(format!("the line waits: {why}"));
             }
-            if self.the_render_this_run_started.is_some() {
+            // **`Rented-server runtime` S10a**: a render whose worker is gone
+            // with no ending takes its branch before the line is read.
+            self.the_renders_owed_a_branch_are_taken();
+            // **`Queue & History` D14a**: the acts a supervisor's end, or a
+            // refused write, left half-written are finished from the records
+            // they left.
+            self.the_acts_left_half_written_are_finished();
+            if let Some(render) = &self.the_render_this_run_started {
+                let (job, operation) = (render.work.job.clone(), render.work.operation.clone());
+                self.a_job_whose_render_stands_is_written_rendering(&job, &operation);
                 return None;
             }
             let open = match self.records.every_record_eligible_for_reconciliation() {
-                Ok(open) => open,
+                Ok(open) => {
+                    self.the_line_is_stopped_because = None;
+                    open
+                }
                 Err(why) => {
+                    // **Said to the desk as well as here** (`Queue & History`
+                    // A1 as changed 2026-11-10): the queue reading carries it
+                    // until a look reads the records again.
+                    let why = what_the_store_said(&why);
+                    self.the_line_is_stopped_because = Some(why.clone());
                     return Some(format!(
-                        "the line waits: the operation records could not be read: {}",
-                        what_the_store_said(&why)
-                    ))
+                        "the line waits: the operation records could not be read: {why}"
+                    ));
                 }
             };
             let renders: Vec<_> = open
                 .into_iter()
                 .filter(|record| record.kind == the_word_for(WorkerKind::Render))
                 .collect();
+            for render in &renders {
+                self.a_job_whose_render_stands_is_written_rendering(
+                    &render.subject,
+                    &render.operation,
+                );
+            }
             if let Some(owed) = renders.iter().find(|record| {
                 matches!(
                     record.latest_disposition(),
@@ -3110,6 +3579,7 @@ mod unix {
             if !renders.is_empty() {
                 // **`Queue & History` Q4: the render kind holds the cards exclusively**, and a
                 // render operation stands. Its outcome is what moves the line.
+                self.the_line_waits_for_room_at = None;
                 return None;
             }
             let (records, _) = match self.queue.every_record() {
@@ -3142,13 +3612,19 @@ mod unix {
                         what_the_queue_said(&why)
                     ));
                 }
-                let says = asked::the_drops_words(
+                let says = the_words_of_a_drop_for_a_removed_blender(
                     &dropped.the_answered_version_the_job_was_submitted_with,
                     &dropped.a_bounded_rendering_of_the_label,
                 );
                 self.after_a_removal(&dropped.job, material, None, &says);
             }
-            let job = at.started?;
+            // **Nothing of the line's own to start is nothing waiting for
+            // room** (M4a as added 2026-11-11): the job that waited was
+            // cancelled, cleared or held.
+            let Some(job) = at.started else {
+                self.the_line_waits_for_room_at = None;
+                return None;
+            };
             let record_directory = records
                 .iter()
                 .find(|record| record.job == job)
@@ -3158,6 +3634,306 @@ mod unix {
                 job,
                 record_directory,
             }))
+        }
+
+        /// **`Queue & History` D14a, performed: three acts written in more
+        /// than one step, finished from the records they left.** Added
+        /// 2026-11-10, the Fable review's first sitting. Each act writes its
+        /// deciding record first and the job record after; a supervisor that
+        /// ended between the two, or a job-record write the store refused,
+        /// left the job record behind, and until this nothing finished it.
+        ///
+        /// - **A job *rendering* under a render operation that has a recorded
+        ///   outcome** takes the job's own side of that ending
+        ///   ([`Self::the_jobs_side_of_a_written_ending`]).
+        /// - **A job *held* under a hold released *released*** takes
+        ///   `Queue & History` H3's placement.
+        /// - **A job *waiting* that an open render operation names** is
+        ///   written *rendering* under it (`Queue & History` Q2) — by
+        ///   [`Self::a_job_whose_render_stands_is_written_rendering`], which
+        ///   the line calls with the open renders it has already read.
+        ///
+        /// **Every step is safe to take again**: each reads the record that
+        /// decided the act and writes only what that record says is missing.
+        fn the_acts_left_half_written_are_finished(&mut self) {
+            let Ok((jobs, _)) = self.queue.every_record() else {
+                return;
+            };
+            for job in jobs {
+                match &job.state {
+                    QueueState::Rendering { operation } => {
+                        let Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record)) =
+                            self.records.what_is_held_under(operation)
+                        else {
+                            continue;
+                        };
+                        if record.kind == the_word_for(WorkerKind::Render)
+                            && record.recorded_outcome().is_some()
+                        {
+                            self.the_jobs_side_of_a_written_ending(&job, &record);
+                        }
+                    }
+                    QueueState::Held { hold } => {
+                        let Ok(Some(held)) = self.holds.read(hold) else {
+                            continue;
+                        };
+                        if let Some(release) = &held.release {
+                            if release.outcome == smoozy_runtime::holds::ReleaseOutcome::Released {
+                                eprintln!(
+                                    "smoozy-server: {} was released and never entered the line; \
+                                     it enters it now",
+                                    job.job.as_text()
+                                );
+                                self.the_released_job_enters_the_line(hold, release);
+                            }
+                        }
+                    }
+                    QueueState::Waiting | QueueState::Ended { .. } => {}
+                }
+            }
+        }
+
+        /// **`Queue & History` D14a's third bullet: a job whose render stands
+        /// open and whose record still says *waiting* is written *rendering*
+        /// under that operation** — `Queue & History` Q2's write, where the
+        /// start's own did not land.
+        ///
+        /// **A job released from a hold at its render's start, while the
+        /// attempt that held it is still ending, is written under that
+        /// attempt too**, and comes right: the attempt closes *held for an
+        /// answer*, and [`Self::a_job_held_at_render_start_is_written_held`]
+        /// then puts the job in the line by the answer its hold was given.
+        fn a_job_whose_render_stands_is_written_rendering(
+            &mut self,
+            job: &Identity,
+            operation: &Identity,
+        ) {
+            let Ok(Some(record)) = self.queue.read_one(job) else {
+                return;
+            };
+            if record.state != QueueState::Waiting {
+                return;
+            }
+            eprintln!(
+                "smoozy-server: {} has a render open and its record said waiting; it is written \
+                 rendering now",
+                job.as_text()
+            );
+            if let Err(why) = the_record_started(&mut self.queue, job, operation) {
+                eprintln!(
+                    "smoozy-server: its job record was not moved to rendering: {}",
+                    what_the_queue_said(&why)
+                );
+            }
+        }
+
+        /// **Every open render operation record**, read now.
+        fn the_open_render_operations(
+            &self,
+        ) -> Result<Vec<smoozy_state::machine_operations::OperationRecord>, String> {
+            Ok(self
+                .records
+                .every_record_eligible_for_reconciliation()
+                .map_err(|why| what_the_store_said(&why))?
+                .into_iter()
+                .filter(|record| record.kind == the_word_for(WorkerKind::Render))
+                .collect())
+        }
+
+        /// **Whether an open render operation names this job**, whatever the
+        /// job's own record says (`Queue & History` D14a: a cancel reads this
+        /// before it takes the waiting route). **A store that cannot be read
+        /// answers yes**: nothing is removed on a reading that was not taken.
+        fn a_render_stands_open_for(&self, job: &Identity) -> bool {
+            match self.the_open_render_operations() {
+                Ok(open) => open.iter().any(|record| record.subject == *job),
+                Err(_) => true,
+            }
+        }
+
+        /// **The job's own side of an ending the operation record already
+        /// carries** (`Queue & History` D14a's first bullet).
+        ///
+        /// **The outcome and the attempt's reported ending are read off the
+        /// operation record.** **The completeness statement and `Queue &
+        /// History` N6's figure are taken by `Rented-server runtime` S11's one
+        /// walk**, because what the worker reported rode a write that never
+        /// landed. **No free-space reading is taken**: `Rented-server runtime`
+        /// V12's is the ending's own moment's, and one taken later would read
+        /// a mount that may have been freed since (S14's third bullet).
+        ///
+        /// **An attempt that ended at a hold ended no job**: its job record is
+        /// written *held* under the hold that names it, and nothing else.
+        fn the_jobs_side_of_a_written_ending(
+            &mut self,
+            job: &JobRecord,
+            record: &smoozy_state::machine_operations::OperationRecord,
+        ) {
+            let Some(recorded) = record.recorded_outcome().cloned() else {
+                return;
+            };
+            // **An ending already told is not told again** — by this run, or
+            // by a run before it whose event the journal still holds. What is
+            // missing of its note and its job record is written all the same.
+            let already_told = if self.the_endings_this_run_told.contains(&record.operation) {
+                WhetherTheEndingIsAlreadyTold::ByThisRun
+            } else if self.the_journal_tells_the_ending_of(&job.job) {
+                WhetherTheEndingIsAlreadyTold::ByTheJournal
+            } else {
+                WhetherTheEndingIsAlreadyTold::No
+            };
+            let reported = record
+                .the_kinds_safe_boundary_marker
+                .as_deref()
+                .and_then(TheRenderKindsOwnField::read_back)
+                .and_then(|field| {
+                    field
+                        .attempts
+                        .into_iter()
+                        .find(|entry| entry.attempt == record.attempt_count)
+                })
+                .and_then(|entry| entry.ending);
+            let outcome = match &recorded {
+                RecordedOutcome::LeftStopped => TheOutcomeAsWritten::LeftStopped,
+                RecordedOutcome::GivenUp => TheOutcomeAsWritten::GivenUp,
+                RecordedOutcome::TheKindsOwn(word) => match word.as_str() {
+                    crate::the_render_worker::IT_WAS_HELD_FOR_AN_ANSWER => {
+                        self.a_job_held_at_render_start_is_written_held(job);
+                        return;
+                    }
+                    asked::IT_FINISHED => TheOutcomeAsWritten::Finished,
+                    asked::NO_STATUS_WAS_REAPED => TheOutcomeAsWritten::NoStatusWasReaped,
+                    _ => TheOutcomeAsWritten::Failed,
+                },
+            };
+            eprintln!(
+                "smoozy-server: {} ended and its job record still said rendering; the job's own \
+                 side of the ending is written now",
+                job.job.as_text()
+            );
+            let left_stopped = outcome == TheOutcomeAsWritten::LeftStopped;
+            self.the_stops_on_it_are_closed(&the_stops_the_field_names(record), left_stopped);
+            let (statement, figure) = self.the_measurements_that_ride(record).0.unwrap_or((
+                TheStatementAtTheEnding::NoneWasTaken {
+                    why: "the walk was not taken".to_string(),
+                },
+                WhatTheFigureIs::TheEndingsStepNeverRan,
+            ));
+            self.the_jobs_side_of_an_ending_knowing(
+                &job.job,
+                &record.operation,
+                TheEndingOnTheNote {
+                    outcome,
+                    exit_status: reported.as_ref().and_then(|ending| ending.exit_status),
+                    the_attempt_whose_capture_record_holds_the_words: record.attempt_count,
+                    the_reason_the_machine_recorded: if left_stopped {
+                        None
+                    } else {
+                        reported.as_ref().and_then(|ending| ending.reason.clone())
+                    },
+                    no_render_began: reported
+                        .as_ref()
+                        .is_some_and(|ending| ending.no_render_began),
+                    the_device_line_as_observed: reported
+                        .as_ref()
+                        .and_then(|ending| ending.device_line.clone()),
+                    the_files_missing: reported
+                        .as_ref()
+                        .map(|ending| ending.missing.clone())
+                        .unwrap_or_default(),
+                },
+                figure,
+                statement,
+                TheFreeSpaceAtTheEnding::NoneWasTaken {
+                    why: "the act that wrote this ending did not reach the job's own side, and \
+                          no reading is taken later"
+                        .to_string(),
+                },
+                already_told,
+            );
+        }
+
+        /// **A job whose attempt ended at a hold, and whose record never left
+        /// *rendering*, is written *held* under the hold that names it** —
+        /// the write [`a_hold_is_placed_at_render_start`] makes, where it did
+        /// not land. **The hold is found by its subject among the holds placed
+        /// at render start**: the unanswered one, or else the one answered
+        /// last. **Answered *yes*, the job takes `Queue & History` H3's
+        /// placement instead; answered anything else, the record is left as
+        /// it is and said.**
+        fn a_job_held_at_render_start_is_written_held(&mut self, job: &JobRecord) {
+            let its_holds: Vec<_> = self
+                .every_hold_standing()
+                .into_iter()
+                .filter(|held| {
+                    held.origin == smoozy_runtime::holds::Origin::RenderStart
+                        && held.subject == smoozy_runtime::holds::Subject::Job(job.job.clone())
+                })
+                .collect();
+            // **The attempt's own hold is the unanswered one, or else the one
+            // answered last**: a job is never started again while a hold of
+            // its stands unanswered, so every earlier hold was answered before
+            // this attempt began.
+            let unanswered = its_holds.iter().find(|held| held.release.is_none());
+            let answered_last = its_holds
+                .iter()
+                .filter(|held| held.release.is_some())
+                .max_by_key(|held| held.release.as_ref().map(|release| release.at.taken_at()));
+            let answered_yes = answered_last.filter(|held| {
+                held.release.as_ref().is_some_and(|release| {
+                    release.outcome == smoozy_runtime::holds::ReleaseOutcome::Released
+                })
+            });
+            let Some(hold) = unanswered.or(answered_yes) else {
+                eprintln!(
+                    "smoozy-server: {} ended its attempt at a hold, its record says rendering, \
+                     and the hold naming it was not answered yes",
+                    job.job.as_text()
+                );
+                return;
+            };
+            let mut written = job.clone();
+            written.state = QueueState::Held {
+                hold: hold.hold.clone(),
+            };
+            written.sequence_key = None;
+            // **Answered *yes* while the record still said *rendering***: the
+            // answer found no held record to place (`Queue & History` H3), so
+            // the placement is made here, behind whatever is waiting now.
+            if unanswered.is_none() {
+                if let Ok((records, _)) = self.queue.every_record() {
+                    smoozy_queue_history_machine::line::the_released_placement(
+                        &mut written,
+                        &records,
+                    );
+                    self.the_line_may_have_moved = true;
+                }
+            }
+            if let Err(why) = self.queue.write(&written) {
+                eprintln!(
+                    "smoozy-server: {} is held and its record was not moved to held: {}",
+                    job.job.as_text(),
+                    what_the_queue_said(&why)
+                );
+            }
+        }
+
+        /// **Every hold record on this machine that reads back**, found by
+        /// listing the holds' own area — the one place this program needs a
+        /// hold it holds no identity for (`Queue & History` D14a).
+        fn every_hold_standing(&self) -> Vec<smoozy_runtime::holds::HoldRecord> {
+            let Ok(entries) = std::fs::read_dir(&self.holds.area) else {
+                return Vec::new();
+            };
+            entries
+                .filter_map(|entry| entry.ok())
+                .filter_map(|entry| {
+                    let name = entry.file_name();
+                    let hold = name.to_str()?.strip_suffix(".hold")?;
+                    let hold = Identity::read_back(IdentityKind::Operation, hold)?;
+                    self.holds.read(&hold).ok().flatten()
+                })
+                .collect()
         }
 
         /// **One render attempt started: §14's one unit, then the job's own
@@ -3198,8 +3974,12 @@ mod unix {
                 }
                 TheAttemptToStart::TheSecond(standing) => {
                     let job = standing.subject.clone();
-                    self.operations_this_run_started
-                        .push(standing.operation.clone());
+                    // **Not counted as started until a worker is attempted**
+                    // (`Rented-server runtime` S10a): an attempt that could
+                    // not begin — the job record unread, M4a's reserve not
+                    // established — is tried again at the line's next look.
+                    // Until 2026-11-10 it was counted here, never tried again
+                    // in this run, and given up at the next start unrun.
                     let record_directory = match self.queue.read_one(&job) {
                         Ok(Some(record)) => record.record_directory,
                         _ => {
@@ -3231,9 +4011,14 @@ mod unix {
             };
 
             // **M4a, before anything is written.**
-            let available = match the_available_figure_at(&self.package_area) {
+            let available = match self.the_available_figure() {
                 Ok(available) => available,
                 Err(why) => {
+                    // **Tried again on the turn that next reads room**, as a
+                    // job refused for room is, and not named as one: the
+                    // figure was not low, it was not there.
+                    self.the_line_waits_for_room_at = Some(job.clone());
+                    self.the_figure_could_not_be_taken = true;
                     return format!(
                         "{} was not started: the available figure of the state mount could not be \
                          taken, so M4a's reserve cannot be established: {why}",
@@ -3244,11 +4029,17 @@ mod unix {
             if whether_a_placement_may_admit_a_render(available)
                 == WhetherAPlacementMayAdmitARender::NoRoomForControlState
             {
+                // **M4a (as added 2026-11-11): the job stays waiting, and
+                // the queue reading names it** — until then this was said in
+                // the supervisor's own output and nowhere else.
+                self.the_line_waits_for_room_at = Some(job.clone());
+                self.the_figure_could_not_be_taken = false;
                 return format!(
                     "{} was not started: the machine has no room for control state (M4a)",
                     job.as_text()
                 );
             }
+            self.the_line_waits_for_room_at = None;
             let streams = format!(
                 "{}/{}/attempt-{attempt}",
                 the_record_at(&self.package_area, THE_AREA_THE_CAPTURED_STREAMS_SIT_IN),
@@ -3267,6 +4058,7 @@ mod unix {
                 complaints_sink: capture.complaints_sink.clone(),
                 available_bytes: available,
                 render_process: None,
+                reading_process: None,
                 ending: None,
                 collection_incomplete_by_reconciliation: false,
                 the_termination_was_issued: false,
@@ -3325,7 +4117,7 @@ mod unix {
                 }
             };
 
-            if the_first {
+            if !self.operations_this_run_started.contains(&operation) {
                 self.operations_this_run_started.push(operation.clone());
             }
             self.the_render_this_run_started = Some(TheRenderThisRunStarted {
@@ -3475,6 +4267,7 @@ mod unix {
                 something_followed_the_marker: None,
                 device_line: None,
                 no_render_began: true,
+                missing: Vec::new(),
             };
             match self.a_render_attempt_ended(
                 operation,
@@ -3525,6 +4318,42 @@ mod unix {
             hold: Option<Identity>,
             statement: Option<TheStatementAtTheEnding>,
             figure: WhatTheFigureIs,
+        ) -> Result<(), String> {
+            self.a_render_attempt_ended_or_is_held(operation, ending, hold, statement, figure, None)
+        }
+
+        /// **`Rented-server runtime` S14b: the ending a worker reports while
+        /// its long completeness statement is not kept yet, held as a write
+        /// this store refused is held** — classified exactly as
+        /// [`Self::a_render_attempt_ended`] classifies it, kept in the run's
+        /// memory for the readings (S14, S14a), and nothing written. The
+        /// answer is the reason, so the report is answered as not yet accepted
+        /// and the worker sends it again (W12).
+        fn a_render_ending_waits_for_its_statement(
+            &mut self,
+            operation: &Identity,
+            ending: TheEndingAsRecorded,
+            hold: Option<Identity>,
+            why: &str,
+        ) -> Result<(), String> {
+            self.a_render_attempt_ended_or_is_held(
+                operation,
+                ending,
+                hold,
+                None,
+                WhatTheFigureIs::TheEndingsStepNeverRan,
+                Some(why),
+            )
+        }
+
+        fn a_render_attempt_ended_or_is_held(
+            &mut self,
+            operation: &Identity,
+            ending: TheEndingAsRecorded,
+            hold: Option<Identity>,
+            statement: Option<TheStatementAtTheEnding>,
+            figure: WhatTheFigureIs,
+            the_statement_is_not_kept_yet: Option<&str>,
         ) -> Result<(), String> {
             let record = match self.records.what_is_held_under(operation) {
                 Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record)) => record,
@@ -3601,6 +4430,25 @@ mod unix {
                 asked::NO_STATUS_WAS_REAPED => TheOutcomeAsWritten::NoStatusWasReaped,
                 _ => TheOutcomeAsWritten::Failed,
             };
+            if let Some(why) = the_statement_is_not_kept_yet {
+                // **`Rented-server runtime` S14b: nothing is written.** What
+                // the supervisor now knows is held for the readings, as below,
+                // and the reason is handed back so the report is answered as
+                // not yet accepted.
+                if hold.is_none() {
+                    self.the_render_endings_owed.insert(
+                        operation.clone(),
+                        ARenderEndingOwed {
+                            job: job.clone(),
+                            outcome,
+                            the_free_space,
+                        },
+                    );
+                }
+                return Err(format!(
+                    "the render worker could not keep its completeness statement yet: {why}"
+                ));
+            }
             if let Err(why) = self.records.write_it_back(&written) {
                 // **`Rented-server runtime` S14 and S14a: the store refused,
                 // so what the supervisor knows is held for the readings** —
@@ -3662,6 +4510,8 @@ mod unix {
                         ending.reason.clone()
                     },
                     no_render_began: ending.no_render_began,
+                    // **`Rendering` K14c, on any ending.**
+                    the_files_missing: ending.missing.clone(),
                     the_device_line_as_observed: ending.device_line.clone(),
                 },
                 figure,
@@ -3737,6 +4587,32 @@ mod unix {
             statement: TheStatementAtTheEnding,
             free_space: TheFreeSpaceAtTheEnding,
         ) {
+            self.the_jobs_side_of_an_ending_knowing(
+                job,
+                operation,
+                ending,
+                figure,
+                statement,
+                free_space,
+                WhetherTheEndingIsAlreadyTold::No,
+            );
+        }
+
+        /// **The same, knowing whether the ending was told already**
+        /// (`Queue & History` D14a): an ending already told is not journalled
+        /// again and keeps the note it has; what is missing of its note and
+        /// its job record is written all the same.
+        #[allow(clippy::too_many_arguments)]
+        fn the_jobs_side_of_an_ending_knowing(
+            &mut self,
+            job: &Identity,
+            operation: &Identity,
+            ending: TheEndingOnTheNote,
+            figure: WhatTheFigureIs,
+            statement: TheStatementAtTheEnding,
+            free_space: TheFreeSpaceAtTheEnding,
+            already_told: WhetherTheEndingIsAlreadyTold,
+        ) {
             // **`Queue & History` P1b: the ending's write is the catch-up**,
             // read off the statement this ending carries — taken before the
             // note takes the statement, and acted on after the job's own
@@ -3763,7 +4639,13 @@ mod unix {
                 TheOutcomeAsWritten::Finished => None,
             };
             let the_reading_it_carries = the_reading_carried_with_an_ending(&figure, &statement);
+            // **`Queue & History` D14a: an ending already told keeps the note
+            // it has.** Where the note carries an ending, that is the ending's
+            // own moment and reading, and it is not written over.
+            let the_note_has_it = already_told != WhetherTheEndingIsAlreadyTold::No
+                && matches!(self.notes.read(job), Ok(Some(note)) if note.ending.is_some());
             match self.now_on_the_machines_clock() {
+                _ if the_note_has_it => {}
                 Some(at) => {
                     if let Err(why) = self
                         .notes
@@ -3781,13 +4663,6 @@ mod unix {
                      this machine names no clock"
                 ),
             }
-            if let Err(why) = the_record_ended(&mut self.queue, job, operation) {
-                eprintln!(
-                    "smoozy-server: a render's outcome was written and its job record was not \
-                     moved to ended: {}",
-                    what_the_queue_said(&why)
-                );
-            }
             // Preserve either half's silence before a dependency drop removes it.
             let records = crate::the_telegram_journal::TheRecordsOnThisMachine::in_the_package_area(
                 std::path::Path::new(&self.package_area),
@@ -3800,16 +4675,59 @@ mod unix {
             } else {
                 says.to_string()
             };
-            self.journal_or_hold(
-                asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT,
-                Some(job.clone()),
-                &says,
-            );
+            if already_told == WhetherTheEndingIsAlreadyTold::No {
+                self.journal_or_hold(
+                    asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT,
+                    Some(job.clone()),
+                    &says,
+                );
+            }
+            if !self.the_endings_this_run_told.contains(operation) {
+                self.the_endings_this_run_told.push(operation.clone());
+            }
+            #[cfg(test)]
+            if the_run_ends_between_the_news_and_the_record::it_does() {
+                return;
+            }
             if let Some(ended) = a_hold_behind_it_may_drop {
                 self.the_holds_on_what_ended(job, ended, the_reading_it_carries.as_ref());
             }
+            // **`Queue & History` D14a as changed 2026-11-10: the job record
+            // is written *ended* last of the durable writes** — after the
+            // note, the event and the drop of a hold behind it. A supervisor
+            // that ends anywhere before this leaves the record *rendering*
+            // under a closed operation, which the next look at the line
+            // finishes, the journal saying whether the ending was told. Until
+            // then the record came second: a supervisor that ended just after
+            // it left an ending no event told, and nothing could find it.
+            if let Err(why) = the_record_ended(&mut self.queue, job, operation) {
+                eprintln!(
+                    "smoozy-server: a render's outcome was written and its job record was not \
+                     moved to ended: {}",
+                    what_the_queue_said(&why)
+                );
+            }
+            // **The catch-up this run already queued is not queued again.**
+            if already_told == WhetherTheEndingIsAlreadyTold::ByThisRun {
+                return;
+            }
             let (attempt, statement, the_job_was_interrupted) = the_catch_up;
             self.previews_are_owed_at_an_ending(job, attempt, &statement, the_job_was_interrupted);
+        }
+
+        /// **Whether the journal already holds the event of a job's ending**
+        /// (`Queue & History` D14a). A job ends once, so one such event about
+        /// it is its ending's. **A journal that cannot be read answers no**:
+        /// an ending told twice is the lesser fault beside one never told.
+        fn the_journal_tells_the_ending_of(&self, job: &Identity) -> bool {
+            self.journal
+                .read_forward_from(0, usize::MAX)
+                .is_ok_and(|read| {
+                    read.events.iter().any(|event| {
+                        event.what().kind == asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT
+                            && event.what().about.as_ref() == Some(job)
+                    })
+                })
         }
 
         /// **`Queue & History` H3: the released subject enters the line behind
@@ -3846,6 +4764,64 @@ mod unix {
                     "smoozy-server: a hold was released and its job did not enter the line: {}",
                     what_the_queue_said(&why)
                 ),
+            }
+            self.the_range_goes_with_its_check(hold);
+        }
+
+        /// **`Queue & History` H7a: *Continue anyway* on a first-frame check
+        /// that writes nothing sends the full range too** — the leftovers of
+        /// the Rough what-if answers (459), the runner's ruling of 2026-11-14.
+        /// A check whose own frame has no View Layer on is held at its start
+        /// with *the job will write nothing at all*; the user's *yes* to that
+        /// hold renders nothing, and `Queue & History` H7 then dropped the range held behind it,
+        /// though later frames would have written. **The *yes* is the user
+        /// asking for the render**, so the range's hold is released in the same
+        /// turn — *released*, journalled, and in the line behind what waits —
+        /// and the check's ending finds it no longer held. A *no*, and a check
+        /// held for anything else, change nothing here.
+        fn the_range_goes_with_its_check(&mut self, hold: &Identity) {
+            use smoozy_job_files_machine::holds::{the_conditions_a_hold_reason_names, WhatHoldsTheJob};
+            let Ok(Some(held)) = self.holds.read(hold) else {
+                return;
+            };
+            let it_writes_nothing = the_conditions_a_hold_reason_names(&held.reason)
+                .is_some_and(|named| named.contains(&WhatHoldsTheJob::TheJobWillWriteNothingAtAll));
+            let (true, smoozy_runtime::holds::Subject::Job(check)) = (it_writes_nothing, held.subject) else {
+                return;
+            };
+            let Some(clock) = self.the_machines_own_clock.clone() else {
+                return;
+            };
+            let Ok((records, _)) = self.queue.every_record() else {
+                return;
+            };
+            for record in records {
+                let QueueState::Held { hold: behind } = &record.state else {
+                    continue;
+                };
+                let Ok(Some(standing)) = self.holds.read(behind) else {
+                    continue;
+                };
+                if standing.release.is_some()
+                    || standing.dependency.as_ref().map(|named| &named.work) != Some(&check)
+                {
+                    continue;
+                }
+                let release = Release {
+                    outcome: smoozy_runtime::holds::ReleaseOutcome::Released,
+                    produced_by: THE_RANGE_WENT_WITH_CONTINUE_ANYWAY.to_string(),
+                    at: Reading::taken((), std::time::SystemTime::now(), clock.clone()),
+                };
+                if let Err(why) = self.holds.write_the_release(behind, &release) {
+                    eprintln!(
+                        "smoozy-server: {} was to go with its check's Continue anyway and its \
+                         release was not written, so its hold stands: {why}",
+                        record.job.as_text()
+                    );
+                    continue;
+                }
+                self.journal_a_release(behind, &release);
+                self.the_released_job_enters_the_line(behind, &release);
             }
         }
 
@@ -4037,10 +5013,23 @@ mod unix {
     /// **`Queue & History` L19's narrowing of that rule.**
     pub const THE_PAIRED_STOPS_RULE_UNDER_A_GROUP: &str =
         "; `Queue & History` L19: and only where its job carries this group:";
+    /// **`Queue & History` L19a's narrowing: the first-frame pair's stop**,
+    /// named by its check. Added 2026-11-09, the Creator's twenty-eighth notes,
+    /// note 16.
+    pub const THE_PAIRED_STOPS_RULE_UNDER_A_PAIR: &str =
+        "; `Queue & History` L19a: and only where its job is this first-frame check:";
 
-    fn the_rule_of_a_paired_stop(clear: &Identity, group: Option<&Identity>) -> String {
-        match group {
+    /// **The rule, with its scope** — `scope` is `Queue & History` L19's
+    /// group, or `Queue & History` L19a's first-frame check (an identity of a job), told apart
+    /// by the identity's own kind.
+    fn the_rule_of_a_paired_stop(clear: &Identity, scope: Option<&Identity>) -> String {
+        match scope {
             None => format!("{THE_PAIRED_STOPS_RULE} {}", clear.as_text()),
+            Some(check) if check.kind() == IdentityKind::Job => format!(
+                "{THE_PAIRED_STOPS_RULE} {}{THE_PAIRED_STOPS_RULE_UNDER_A_PAIR} {}",
+                clear.as_text(),
+                check.as_text()
+            ),
             Some(group) => format!(
                 "{THE_PAIRED_STOPS_RULE} {}{THE_PAIRED_STOPS_RULE_UNDER_A_GROUP} {}",
                 clear.as_text(),
@@ -4053,6 +5042,12 @@ mod unix {
     /// wrote, or nothing where the rule is not one.
     fn the_pair_in_the_rule(rule: &str) -> Option<(Identity, Option<Identity>)> {
         let rest = rule.strip_prefix(THE_PAIRED_STOPS_RULE)?.trim();
+        if let Some((clear, check)) = rest.split_once(THE_PAIRED_STOPS_RULE_UNDER_A_PAIR) {
+            return Some((
+                Identity::read_back(IdentityKind::Operation, clear.trim())?,
+                Some(Identity::read_back(IdentityKind::Job, check.trim())?),
+            ));
+        }
         match rest.split_once(THE_PAIRED_STOPS_RULE_UNDER_A_GROUP) {
             None => Some((Identity::read_back(IdentityKind::Operation, rest)?, None)),
             Some((clear, group)) => Some((
@@ -4298,8 +5293,7 @@ mod unix {
             // **Step 10c's owed piece 12: a refused root in words**, as the
             // setup's opening gives it (owed piece 6).
             let written = String::from_utf8_lossy(&written).trim().to_string();
-            let root = crate::a_root_on_this_machine(&written)
-                .map_err(|why| crate::a_refused_root_in_words(&written, &why))?;
+            let root = crate::a_recorded_root_on_this_machine(&written, at)?;
             let record_directory =
                 smoozy_job_files_machine::publication::the_job_record_directory(&root, job);
             let manifest_at = format!(
@@ -4851,14 +5845,27 @@ mod unix {
                 Ok((records, _)) => records,
                 Err(why) => return HowTheClearCame::NotWritten(what_the_queue_said(&why)),
             };
-            let covered: Vec<Identity> = what_the_clear_covers(
-                &records,
-                running.as_ref().map(|(running, _)| running),
-                group,
-            )
-            .into_iter()
-            .map(|record| record.job.clone())
-            .collect();
+            let covered: Vec<Identity> = match group.filter(|scope| scope.kind() == IdentityKind::Job) {
+                // **`Queue & History` L19a: the pair's waiting and held
+                // records and nothing else** — `Queue & History` L14's covered set, every
+                // record not the running one, read as the pair alone.
+                Some(check) => {
+                    let the_pair = self.the_first_frame_pair_of(check, &records);
+                    what_the_clear_covers(&records, running.as_ref().map(|(running, _)| running), None)
+                        .into_iter()
+                        .filter(|record| the_pair.contains(&record.job))
+                        .map(|record| record.job.clone())
+                        .collect()
+                }
+                None => what_the_clear_covers(
+                    &records,
+                    running.as_ref().map(|(running, _)| running),
+                    group,
+                )
+                .into_iter()
+                .map(|record| record.job.clone())
+                .collect(),
+            };
             // **`Queue & History` L13: the stop's subject is resolved here**, from the same
             // reading of the running one the clear exempts by — so they
             // cannot differ.
@@ -4893,6 +5900,38 @@ mod unix {
             }
         }
 
+        /// **`Queue & History` L19a's pair: the check and every job whose
+        /// unreleased hold names the check as its dependency** — found through
+        /// the line, a held record naming its hold and the hold its
+        /// dependency, as [`Self::the_holds_on_what_was_removed`] finds them.
+        /// A range whose release is written is waiting in the line, not held,
+        /// so it is not the pair's any more (`Queue & History` H4).
+        fn the_first_frame_pair_of(
+            &self,
+            check: &Identity,
+            records: &[smoozy_queue_history_machine::line::JobRecord],
+        ) -> Vec<Identity> {
+            let mut the_pair = vec![check.clone()];
+            for record in records {
+                let QueueState::Held { hold } = &record.state else {
+                    continue;
+                };
+                let Ok(Some(standing)) = self.holds.read(hold) else {
+                    continue;
+                };
+                // **A release written is an answer that won**, even where the
+                // record still reads *held* — the placement interrupted
+                // (`Queue & History` H3, `Queue & History` H4): its range is not the pair's to
+                // remove. Sol's fresh look, 2026-11-09.
+                if standing.release.is_none()
+                    && standing.dependency.as_ref().map(|named| &named.work) == Some(check)
+                {
+                    the_pair.push(record.job.clone());
+                }
+            }
+            the_pair
+        }
+
         /// **`Queue & History` L13 and `Queue & History` L19's resolution, written into the paired stop's
         /// record once** — `State, identity and recovery` G4: *the
         /// supervisor's resolution completes it durably before step 2*, and a
@@ -4920,12 +5959,26 @@ mod unix {
             ) {
                 return;
             }
-            match resolve_the_stops_subject(
-                running.map(|(running, _)| running),
-                running.and_then(|(_, group)| group.as_ref()),
-                group,
-                None,
-            ) {
+            // **`Queue & History` L19a: the stop takes the check's render and
+            // nothing else**; where the check is not rendering at the clear's
+            // write — it ended on its own, or had not started — nothing of the
+            // pair was rendering.
+            let resolved = match group.filter(|scope| scope.kind() == IdentityKind::Job) {
+                Some(check) => match running.map(|(running, _)| running) {
+                    Some(running) if &running.job == check => TheStopsSubject::Resolved {
+                        operation: running.operation.clone(),
+                        the_desktop_last_showed: None,
+                    },
+                    _ => TheStopsSubject::NothingWasRendering,
+                },
+                None => resolve_the_stops_subject(
+                    running.map(|(running, _)| running),
+                    running.and_then(|(_, group)| group.as_ref()),
+                    group,
+                    None,
+                ),
+            };
+            match resolved {
                 TheStopsSubject::Resolved { operation, .. } => {
                     let written = record
                         .the_supervisor_resolved_the_rule(operation)
@@ -5039,7 +6092,7 @@ mod unix {
                     }
                 }
             };
-            self.the_stop_is_carried_out(stop, &target)
+            self.the_stop_is_carried_out(stop, &target, false)
         }
 
         /// **`Rendering` K5 and `Rented-server runtime` X8, over one resolved
@@ -5067,6 +6120,7 @@ mod unix {
             &mut self,
             stop: &Identity,
             target: &Identity,
+            forced: bool,
         ) -> Option<String> {
             if let Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record)) =
                 self.records.what_is_held_under(target)
@@ -5165,7 +6219,7 @@ mod unix {
                     ));
                 }
             }
-            self.the_interrupt_is_issued_where_it_can_be(target, Some(stop))
+            self.the_signal_is_issued_where_it_can_be(target, Some(stop), forced)
         }
 
         /// **`Server protocol and transfers` C21 over a file-inspection
@@ -5237,10 +6291,11 @@ mod unix {
         }
 
         /// **X8 steps 3 and 4 for a file-inspection operation: the recorded
-        /// Blender's pair validated, and the interrupt issued to it** —
-        /// through `Rendering — machine`'s [`perform_the_stop`], the render's
-        /// own sequence, aimed by the pair and never by name (`Dependency
-        /// Upload & Remap` O1). **Once**: the field says it went out, written
+        /// Blender's pair validated, and the kill issued to it** (`Render
+        /// Settings` W2 as changed 2026-11-13; the interrupt, through
+        /// [`perform_the_stop`], until then) — `Rendering` K4's own path for a
+        /// reading, aimed by the pair and never by name (`Dependency Upload &
+        /// Remap` O1). **Once**: the field says it went out, written
         /// before it is sent and put back where nothing was. **Nothing where no
         /// Blender is recorded yet** — the worker's telling of it takes these
         /// steps when it lands.
@@ -5280,15 +6335,14 @@ mod unix {
                     what_the_store_said(&why)
                 ));
             }
-            let did = perform_the_stop(
-                &mut TheStopsFirstTwoWritesStand,
-                &self.worker_start.kernel,
-                TheTarget {
-                    the_recorded_render_process: pair,
-                    the_ending_was_reaped_before_the_issuance: false,
-                    the_records_say_the_group_has_ended: false,
-                },
-            );
+            // **`Render Settings` W2 as changed 2026-11-13 (the night's live
+            // pass, fault 3): the kill, not the interrupt** — `Rendering`
+            // K4's reasoning for a Blender that is not rendering: what an
+            // interrupt does to it is not established, and a reading keeps
+            // nothing, so ending it spoils nothing. On the pass a read's
+            // Blender went on for about 80 seconds after Stop. The field's
+            // *interrupt went out* is the issuance, whichever signal it was.
+            let did = the_reading_is_ended_outright(&self.worker_start.kernel, pair);
             if !matches!(
                 did,
                 WhatTheStopDid::TheInterruptIsOutAndNoOutcomeIsInYet
@@ -5305,8 +6359,7 @@ mod unix {
             }
             match did {
                 WhatTheStopDid::TheInterruptWasRefused { why } => Some(format!(
-                    "the interrupt to the file inspection's Blender was refused, and nothing \
-                     stronger is sent: {why}"
+                    "the kill to the file inspection's Blender was refused: {why}"
                 )),
                 WhatTheStopDid::ADurableWriteWasRefused { at, why } => {
                     Some(format!("the stop ended at {at:?}: {why}"))
@@ -5352,6 +6405,21 @@ mod unix {
             target: &Identity,
             stop: Option<&Identity>,
         ) -> Option<String> {
+            self.the_signal_is_issued_where_it_can_be(target, stop, false)
+        }
+
+        /// **The same, with `Rendering` K11a's one difference where `forced`**:
+        /// the user's *Force stop* (`Server protocol and transfers` C21a)
+        /// sends the kill to the recorded render process in place of the
+        /// interrupt — validated by the pair first, written onto the stop
+        /// before it is sent, once per command, exactly as the interrupt is.
+        /// The Creator's ruling on the Bad what-if answers' question 287.
+        fn the_signal_is_issued_where_it_can_be(
+            &mut self,
+            target: &Identity,
+            stop: Option<&Identity>,
+            forced: bool,
+        ) -> Option<String> {
             let Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record)) =
                 self.records.what_is_held_under(target)
             else {
@@ -5378,14 +6446,22 @@ mod unix {
                 return None;
             };
             let entry = &as_it_stood.attempts[at];
-            let Some(pair) = entry
+            let the_renders = entry
                 .render_process
                 .as_deref()
-                .and_then(RecordedPair::recorded_in)
-            else {
-                // **No render process is recorded yet**: the worker is still
-                // composing its attempt. The interrupt goes out when it
-                // records one.
+                .and_then(RecordedPair::recorded_in);
+            // **`Rendering` K4's paragraph of 2026-11-11: where no render
+            // process is recorded yet and the reading's is, the stop ends the
+            // reading outright.** A reading writes nothing the job keeps.
+            let it_is_the_reading = the_renders.is_none();
+            let Some(pair) = the_renders.or_else(|| {
+                entry
+                    .reading_process
+                    .as_deref()
+                    .and_then(RecordedPair::recorded_in)
+            }) else {
+                // **Neither is recorded yet**: the worker is still composing
+                // its attempt. The stop is taken when it records one.
                 return None;
             };
             let sent_for: Vec<String> = match stop {
@@ -5423,17 +6499,21 @@ mod unix {
                     what_the_store_said(&why)
                 ));
             }
-            let did = perform_the_stop(
-                &mut TheStopsFirstTwoWritesStand,
-                &self.worker_start.kernel,
-                TheTarget {
-                    the_recorded_render_process: pair,
-                    the_ending_was_reaped_before_the_issuance: false,
-                    // **Never a live validation** (`Rendering` K8): the ending
-                    // is recorded where the worker reports it.
-                    the_records_say_the_group_has_ended: false,
-                },
-            );
+            let did = if it_is_the_reading || forced {
+                the_reading_is_ended_outright(&self.worker_start.kernel, pair)
+            } else {
+                perform_the_stop(
+                    &mut TheStopsFirstTwoWritesStand,
+                    &self.worker_start.kernel,
+                    TheTarget {
+                        the_recorded_render_process: pair,
+                        the_ending_was_reaped_before_the_issuance: false,
+                        // **Never a live validation** (`Rendering` K8): the ending
+                        // is recorded where the worker reports it.
+                        the_records_say_the_group_has_ended: false,
+                    },
+                )
+            };
             if !matches!(
                 did,
                 WhatTheStopDid::TheInterruptIsOutAndNoOutcomeIsInYet
@@ -5485,6 +6565,23 @@ mod unix {
 
     /// **Every stop command a render's own field names, on any attempt** —
     /// the stops its ending closes.
+    /// **The render process the current attempt recorded** (`Rendering` L5),
+    /// where it recorded one — what `Rented-server runtime` X9b validates.
+    fn the_render_process_recorded_on(
+        record: &smoozy_state::machine_operations::OperationRecord,
+    ) -> Option<RecordedPair> {
+        record
+            .the_kinds_safe_boundary_marker
+            .as_deref()
+            .and_then(TheRenderKindsOwnField::read_back)?
+            .attempts
+            .iter()
+            .find(|entry| entry.attempt == record.attempt_count)?
+            .render_process
+            .as_deref()
+            .and_then(RecordedPair::recorded_in)
+    }
+
     fn the_stops_the_field_names(
         record: &smoozy_state::machine_operations::OperationRecord,
     ) -> Vec<Identity> {
@@ -5504,6 +6601,36 @@ mod unix {
     }
 
     /// **Which attempt [`TheSupervisorsStart::start_a_render_attempt`] starts.**
+    /// **A test's way to end the run between the two writes of a job's
+    /// ending** — its news and its job record — which no test can otherwise
+    /// reach: the job's own side returns there, as a supervisor that ended
+    /// would. Tests only, and one thread's own.
+    #[cfg(test)]
+    mod the_run_ends_between_the_news_and_the_record {
+        thread_local! {
+            static IT_DOES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+        }
+        pub fn it_does() -> bool {
+            IT_DOES.with(|it| it.get())
+        }
+        pub fn set(to: bool) {
+            IT_DOES.with(|it| it.set(to));
+        }
+    }
+
+    /// **Whether a job's ending has been told already** (`Queue & History`
+    /// D14a), and by whom — the difference being what this run still holds in
+    /// its memory.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum WhetherTheEndingIsAlreadyTold {
+        No,
+        /// This run journalled it, and queued its catch-up.
+        ByThisRun,
+        /// A run before this one journalled it; nothing of that run's memory
+        /// is left.
+        ByTheJournal,
+    }
+
     enum TheAttemptToStart {
         /// Attempt 1 of the job the admission point took.
         TheFirst {
@@ -5810,38 +6937,9 @@ mod unix {
                     eprintln!("smoozy-server: a refusal could not be journalled: {why}");
                 }
             }
-            // **W10's fourth occasion, and it is the one that works with the
-            // laptop shut.** A turn no caller arrived for is one of the outcomes
-            // the endpoint's own bounded wait reports, so this is an occasion
-            // something else caused rather than a schedule — S10's *no timer*
-            // stands. **No store is read unless an ending has actually been
-            // seen.**
-            if let Some(said) = start.look_after_the_role_worker_on_this_turn() {
-                eprintln!("smoozy-server: the Telegram role worker — {said}");
-            }
-            // **`Queue & History` Q4's trigger, and only after a turn that set
-            // it**: a job written, an outcome written, a hold released, a
-            // reconciliation run. **An idle turn reads no store here**, so S10's
-            // *no timer* stands.
-            if std::mem::take(&mut start.the_line_may_have_moved) {
-                if let Some(said) = start.take_the_line() {
-                    eprintln!("smoozy-server: the line — {said}");
-                }
-                // **The same occasion moves the previews**: a preview that
-                // waited at the admission point is looked at again when
-                // something could have let it through (the 38's piece 3).
-                if let Some(said) = start.start_the_next_preview() {
-                    eprintln!("smoozy-server: the previews — {said}");
-                }
-            }
-            if let Some(said) = start.look_after_the_previews_on_this_turn() {
-                eprintln!("smoozy-server: the previews — {said}");
-            }
-            // **`Server Setup` Y7's command-gap window, looked at once a
-            // turn.** Like the occasion above, this is a turn something else
-            // caused rather than a schedule, so S10's *no timer* stands. **It
-            // reads no store unless the window has actually elapsed.**
-            start.look_after_the_setup_runs_refresh();
+            // **What every turn does once its caller is answered**, a caller
+            // having arrived or not.
+            start.the_turns_own_occasions();
             // **G25's ending, taken after the turn that was told to end it, so
             // the caller has its result.** S6: this is the supervisor's one
             // deliberate end, and the restarter §3.2 names for this machine
@@ -5986,6 +7084,16 @@ mod unix {
             package_area: package_area.to_string(),
             the_render_this_run_started: None,
             operations_this_run_started: Vec::new(),
+            the_renders_no_worker_is_left_for: Vec::new(),
+            the_pairs_watched_for_a_render: Vec::new(),
+            the_endings_this_run_told: Vec::new(),
+            the_line_is_stopped_because: None,
+            the_line_waits_for_room_at: None,
+            the_figure_could_not_be_taken: false,
+            #[cfg(test)]
+            the_available_figure_is: None,
+            #[cfg(test)]
+            the_available_figures_to_come: Default::default(),
             the_setup_run_this_supervisor_opened: None,
             the_last_setup_steps_words: None,
             the_readings_this_run_started: Vec::new(),
@@ -6265,6 +7373,33 @@ mod unix {
         }
     }
 
+    /// **`Queue & History` L22's words for a waiting job dropped because the
+    /// Blender it was submitted with was removed**, cut to fit `State,
+    /// identity and recovery` E6a's budget as the entry is written — the
+    /// label first, and the version only where even no label would not fit.
+    /// Measured with the *Telegram off* lead `after_a_removal`
+    /// may put before them, so they fit either way. The label is copied
+    /// rather than named because the job's records go in the same act. Added
+    /// 2026-11-10, the Creator's twenty-ninth notes, note 11 (piece J): until
+    /// then a long label or one full of quotation marks made the entry too
+    /// long, and the drop was told to nobody.
+    pub fn the_words_of_a_drop_for_a_removed_blender(version: &str, label: &str) -> String {
+        use smoozy_runtime::written_form::the_measure_of_an_entry::{the_longest_start_that_fits, words_of_this_kind_fit};
+        let fits = |words: &str| {
+            words_of_this_kind_fit(
+                asked::THE_JOB_RECORD_REMOVED_EVENT,
+                Some(IdentityKind::Job),
+                &format!("Telegram off: {words}"),
+            )
+        };
+        let label = the_longest_start_that_fits(label, |label| fits(&asked::the_drops_words(version, label)));
+        if fits(&asked::the_drops_words(version, &label)) {
+            return asked::the_drops_words(version, &label);
+        }
+        let version = the_longest_start_that_fits(version, |version| fits(&asked::the_drops_words(version, "")));
+        asked::the_drops_words(&version, "")
+    }
+
     /// **Z9's own event kind**, in this document's own words, and the only kind
     /// this program journals.
     pub const THE_REFUSED_CALLER_EVENT: &str = "a caller refused before its request was framed";
@@ -6452,6 +7587,9 @@ mod unix {
             THE_RENDER_PROCESS_WAS_STARTED_REQUEST => {
                 the_render_process_was_started(empty, request, start)
             }
+            THE_READINGS_PROCESS_WAS_STARTED_REQUEST => {
+                the_readings_process_was_started(empty, request, start)
+            }
             THE_HOLD_IS_PLACED_AT_RENDER_START_REQUEST => {
                 a_hold_is_placed_at_render_start(empty, request, start)
             }
@@ -6494,6 +7632,12 @@ mod unix {
             THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST => {
                 a_half_of_the_pair(empty, request, start, TheHalf::TheStop)
             }
+            // **`Queue & History` L19a: a first-frame pair's stop**, the same
+            // two halves scoped to the pair its check names.
+            THE_PAIRS_CLEAR_REQUEST => a_half_of_the_pair(empty, request, start, TheHalf::TheClear),
+            THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST => {
+                a_half_of_the_pair(empty, request, start, TheHalf::TheStop)
+            }
             THE_STOP_REQUEST => a_stop_is_asked(empty, request, start),
             THE_CANCEL_REQUEST => a_cancel_is_asked(empty, request, start),
             THE_TELEGRAM_CHOICE_IS_CHANGED_REQUEST => a_change_of_reporting_is_asked(empty, request, start),
@@ -6505,6 +7649,7 @@ mod unix {
             }
             THE_ERASE_REQUEST => a_deleted_jobs_record_is_erased(empty, request, start),
             THE_KEPT_CRASH_FILES_REQUEST => the_kept_crash_files(empty, request, start),
+            THE_PREVIEW_COPIES_REQUEST => the_preview_copies(empty, request, start),
             THE_TELEGRAM_WORKERS_START_REQUEST => {
                 the_telegram_workers_start(empty, request, the_callers_process, start)
             }
@@ -7133,6 +8278,22 @@ mod unix {
         // written does not undo the enable**: the role is on, and the worker's
         // own start issues the key where it is still absent — which is also
         // what a machine switched on before this program existed meets.
+        // **`Telegram` F6: enabling empties the worker's word for how
+        // Telegram answers it** — new material is in place and nothing is
+        // known of it yet. Nothing else in the store is touched, so the
+        // buttons on older messages keep working. Added 2026-11-14, when
+        // Telegram refuses. **Only where no role worker is running** (Sol's
+        // look, point 1): a worker this enable keeps remembers the word it
+        // wrote and would not write it again, so emptying it under that
+        // worker would hide a refusal that still stands.
+        if desired == RoleDesiredState::Enabled
+            && start.the_role_worker.is_none()
+            && start.the_telegram_workers_state.read().is_ok_and(|held| held.telegrams_trouble.is_some())
+        {
+            if let Err(why) = start.the_telegram_workers_state.change(|held| held.telegrams_trouble = None) {
+                eprintln!("smoozy-server: what Telegram last said of this server was not emptied: {why}");
+            }
+        }
         if desired == RoleDesiredState::Enabled {
             if let Err(why) = start
                 .the_telegram_workers_state
@@ -7215,13 +8376,34 @@ mod unix {
         // carrying an ending drops them**: the render has ended, and its entry
         // has no live figures from then on. Added 2026-10-03, the Creator's
         // notes on 0.1.8, piece 6a.
+        // **`Queue & History` P3 as changed 2026-11-10 (the twenty-ninth
+        // notes, note 11): a production's main copy, reported as soon as it is
+        // published, is journalled at once**, and the answer says so, so the
+        // worker can say it beside its ending and the event is not journalled
+        // twice.
+        if said == IT_WAS_ACCEPTED {
+            if let Some(main) = crate::the_preview_worker::the_main_copy_in(&request.fields) {
+                let journalled = start.a_main_copy_was_published(&report.operation, &main);
+                return empty.carrying(
+                    Fields::none().and(WHETHER_THE_REPORT_WAS_ACCEPTED, said).and(
+                        crate::the_preview_worker::THE_MAIN_COPY_WAS_JOURNALLED_FIELD,
+                        if journalled { asked::THE_ANSWER_IS_YES } else { asked::THE_ANSWER_IS_NO },
+                    ),
+                );
+            }
+        }
         if said == IT_WAS_ACCEPTED {
             match AWorkersReport::read_back(|name| request.fields.text(name)) {
                 Some(figures) => {
                     // **`Queue & History` P1a: on a report, the supervisor
                     // queues preview work for the completed prefix** — the
-                    // 38's piece 3.
-                    start.previews_are_owed_on_a_report(&report.operation, &figures);
+                    // 38's piece 3. **Not once a stop's interrupt has gone
+                    // out** (`Queue & History` P1a as changed 2026-11-10): Blender goes on naming
+                    // the frames it skips, so a frame cut short would read as
+                    // whole; the ending's catch-up queues what is whole.
+                    if !a_stops_interrupt_went_out {
+                        start.previews_are_owed_on_a_report(&report.operation, &figures);
+                    }
                     // **`Queue & History` R5: held as they stood when a stop's
                     // interrupt was issued**, until the render ends. The report
                     // is still accepted, so the worker does not hold it and
@@ -7253,7 +8435,11 @@ mod unix {
         // piece 3.
         if said == IT_WAS_ACCEPTED {
             if let Some(ending) = crate::the_preview_worker::the_ending_in(&request.fields) {
-                if let Err(why) = start.a_production_ended(&report.operation, ending) {
+                let the_main_copy_was_journalled =
+                    crate::the_preview_worker::it_says_the_main_copy_was_journalled(&request.fields);
+                if let Err(why) =
+                    start.a_production_ended(&report.operation, ending, the_main_copy_was_journalled)
+                {
                     eprintln!(
                         "smoozy-server: a production's ending was reported and not written: {why}"
                     );
@@ -7274,6 +8460,35 @@ mod unix {
                         .carrying(Fields::none().and(asked::THE_MACHINES_OWN_WORDS_FIELD, why));
                 }
                 return empty.carrying(Fields::none().and(WHETHER_THE_REPORT_WAS_ACCEPTED, said));
+            }
+        }
+        if said == IT_WAS_ACCEPTED {
+            // **`Rented-server runtime` S14b: the worker says its ending's
+            // statement is not kept yet.** The ending is held for the
+            // readings and nothing is written; the worker sends it again.
+            if let Some(why) = request
+                .fields
+                .text(crate::the_render_worker::THE_STATEMENT_IS_NOT_KEPT_YET_FIELD)
+            {
+                if let Some((ending, hold, _, _)) = the_ending_in_the_report(&request.fields) {
+                    let why = match start.a_render_ending_waits_for_its_statement(
+                        &report.operation,
+                        ending,
+                        hold,
+                        why,
+                    ) {
+                        Err(why) => why,
+                        // **The record was already closed**: a repeat of a
+                        // report that landed, which acts on nothing.
+                        Ok(()) => {
+                            return empty
+                                .carrying(Fields::none().and(WHETHER_THE_REPORT_WAS_ACCEPTED, said))
+                        }
+                    };
+                    eprintln!("smoozy-server: a render's ending was reported and is held: {why}");
+                    return empty
+                        .carrying(Fields::none().and(asked::THE_MACHINES_OWN_WORDS_FIELD, why));
+                }
             }
         }
         if said == IT_WAS_ACCEPTED {
@@ -7644,7 +8859,11 @@ mod unix {
             Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record))
                 if record.kind == the_word_for(WorkerKind::FileInspection) =>
             {
-                Some(the_reading_as_its_record_stands(&record))
+                let this_run_holds_it = start
+                    .the_readings_this_run_started
+                    .iter()
+                    .any(|reading| reading.work.operation == *operation);
+                Some(the_reading_as_its_record_stands(&record, this_run_holds_it))
             }
             Ok(_) => Some(a_file_inspection_refused(
                 "that identity is another operation's on this machine".to_string(),
@@ -7794,38 +9013,71 @@ mod unix {
     /// cannot be read back is not taken for a reading in hand: where it is
     /// closed it is a recorded outcome with nothing to read, and the words say
     /// so.
+    ///
+    /// **A reading whose worker went with a restart of this program is
+    /// interrupted** (after Sol's look at reading the file past a minute,
+    /// points 2 and 4): its record is open with *re-run once* written, and
+    /// nothing starts a reading's second attempt
+    /// ([`smoozy_runtime::supervisor::NO_SECOND_ATTEMPT_IS_STARTED_HERE`]), so
+    /// answering *still in hand* kept the desktop waiting for work nobody was
+    /// running. It is answered as a recorded outcome carrying
+    /// [`asked::THE_READING_WAS_INTERRUPTED_FIELD`], as a reading closed with
+    /// no ending of its own is. **Nothing about the file or its Blender is
+    /// claimed**: no exit status, no start mark, no stream. A reading this run
+    /// holds is answered as before.
     fn the_reading_as_its_record_stands(
         record: &smoozy_state::machine_operations::OperationRecord,
+        this_run_holds_it: bool,
     ) -> Fields {
+        let its_worker_went = record.recorded_outcome().is_none()
+            && !this_run_holds_it
+            && record
+                .latest_disposition()
+                .is_some_and(|(disposition, _)| *disposition == Disposition::ReRunOnce);
+        let interrupted = |words: String| {
+            Fields::none()
+                .and(
+                    asked::WHAT_BECAME_OF_IT_FIELD,
+                    asked::IT_HAS_A_RECORDED_OUTCOME,
+                )
+                .and(asked::THE_START_MARK_SEEN_FIELD, asked::THE_ANSWER_IS_NO)
+                // **Yes, as well as the interrupted field** (Sol's look at the
+                // window and read points, point 2, 2026-11-13): a desktop
+                // before that field reads this one alone, and *no* there read
+                // as Blender failing on the file. It is true too: the reading
+                // ended for Smoozy's own reason, never the file's.
+                .and(
+                    asked::THE_RUN_WAS_ENDED_BY_SMOOZY_FIELD,
+                    asked::THE_ANSWER_IS_YES,
+                )
+                .and(asked::THE_READING_WAS_INTERRUPTED_FIELD, asked::THE_ANSWER_IS_YES)
+                .and(asked::THE_MACHINES_OWN_WORDS_FIELD, words)
+        };
+        if its_worker_went {
+            return interrupted(
+                "the reading's worker went when the server's Smoozy restarted, and nothing \
+                 starts it again"
+                    .to_string(),
+            );
+        }
         match record
             .the_kinds_safe_boundary_marker
             .as_deref()
             .and_then(TheFileInspectionKindsOwnField::read_back)
         {
             Some(field) if field.ending.is_some() || record.recorded_outcome().is_none() => {
-                field.as_it_stands()
+                // `Render Settings` Q5's build detail of 2026-11-13: a file's
+                // reading still in hand says where its walk is.
+                field.as_it_stands_with_its_walk()
             }
             _ if record.recorded_outcome().is_none() => {
                 Fields::none().and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_IS_STILL_IN_HAND)
             }
-            _ => Fields::none()
-                .and(
-                    asked::WHAT_BECAME_OF_IT_FIELD,
-                    asked::IT_HAS_A_RECORDED_OUTCOME,
-                )
-                .and(asked::THE_START_MARK_SEEN_FIELD, asked::THE_ANSWER_IS_NO)
-                .and(
-                    asked::THE_RUN_WAS_ENDED_BY_SMOOZY_FIELD,
-                    asked::THE_ANSWER_IS_NO,
-                )
-                .and(
-                    asked::THE_MACHINES_OWN_WORDS_FIELD,
-                    format!(
-                        "the reading's record was closed with no ending of its own ({:?}), so \
-                         nothing of what it printed is named",
-                        record.recorded_outcome()
-                    ),
-                ),
+            _ => interrupted(format!(
+                "the reading's record was closed with no ending of its own ({:?}), so \
+                 nothing of what it printed is named",
+                record.recorded_outcome()
+            )),
         }
     }
 
@@ -8086,6 +9338,46 @@ mod unix {
         /// Per job and attempt, the attempt's own frame list (`Job files and
         /// outputs` M8), read once.
         the_attempts_lists: std::collections::HashMap<(Identity, u32), Vec<i64>>,
+        /// **`Queue & History` P1b's follow-up**: each frame whose production
+        /// was standing when its job's ending was written, looked at again
+        /// when that production ends. This run's memory only. Added
+        /// 2026-11-10, the Creator's twenty-ninth notes, note 11.
+        looked_at_again: Vec<AFrameLookedAtAgain>,
+    }
+
+    /// **A frame the ending passed over because its production was
+    /// standing** (`Queue & History` P1b's follow-up): the production, the
+    /// frame as it would be owed again, and what the ending's statement gives
+    /// its copies — none where the statement leaves nothing to make.
+    #[derive(Debug)]
+    pub struct AFrameLookedAtAgain {
+        production: Identity,
+        owed_again: APreviewOwed,
+        what_the_statement_gives: Option<crate::the_preview_worker::WhatTheStatementGivesAFrame>,
+    }
+
+    /// **What one copy's *a preview was published* event says** (`Queue &
+    /// History` P3): the frame, the production, the View Layer, the main mark,
+    /// the place and, where the record holds one, the source.
+    fn the_published_preview_of(
+        copy: &crate::the_preview_worker::TheProductionsEnding,
+        frame: i64,
+        operation: &Identity,
+    ) -> smoozy_queue_history_machine::previews::ThePublishedPreview {
+        let record = copy.the_record.as_ref();
+        smoozy_queue_history_machine::previews::ThePublishedPreview {
+            frame,
+            operation: operation.as_text(),
+            view_layer: record
+                .and_then(|record| record.the_view_layer_its_picture_came_from.as_ref())
+                .map(|name| name.as_bytes().to_vec()),
+            main: record.is_none_or(|record| record.it_is_the_main_copy),
+            place: record.map_or(0, |record| record.its_place_in_the_frames_set),
+            // **The source, written only where the record holds one**
+            // (`Queue & History` P3, the Creator's tenth notes, note 2).
+            source: record.and_then(|record| record.where_it_came_from.clone()),
+            the_names_are_in_the_record: false,
+        }
     }
 
     impl ThePreviewsThisRunHolds {
@@ -8325,10 +9617,14 @@ mod unix {
             records
                 .excluded_by_the_candidate_rules
                 .retain(|frame| !once_more.contains(frame));
+            // **`Queue & History` P1a as changed 2026-11-10 (the twenty-ninth notes, note 11):
+            // only whole frames** — the frame in hand the same report carries
+            // says whether the newest frame saved is still being written.
             let queued = smoozy_queue_history_machine::acting::previews::queue_on_a_report(
                 &job,
                 &list,
                 Some(newest),
+                report.readings.value().frame_in_hand,
                 &records,
             );
             if queued.frames.is_empty() {
@@ -8405,6 +9701,57 @@ mod unix {
                     ),
                 the_shape: smoozy_queue_history_machine::waiting::TheInventorysShape::Frames,
             };
+            // **`Queue & History` P1b's follow-up** (2026-11-10, the twenty-ninth notes, note
+            // 11): a frame the statement counts whose production is standing is
+            // passed over below, so the ending notes what the statement gives
+            // its copies — `Job files and outputs` B16 to `Job files and outputs` B20 and `Job files and outputs` B31a over the statement's present
+            // files, never the folder — and looks again when it ends.
+            let standing = self
+                .the_previews
+                .making
+                .as_ref()
+                .filter(|making| {
+                    &making.work.job == job
+                        && carried.frames_already_there.contains(&making.work.frame)
+                })
+                .map(|making| (making.work.operation.clone(), making.work.frame));
+            if let Some((production, frame)) = standing {
+                let size_of = |path: &[u8]| {
+                    if statement.present.iter().any(|present| present.as_slice() == path) {
+                        Some(1)
+                    } else if statement.present_at_zero_bytes.iter().any(|zero| zero.as_slice() == path) {
+                        Some(0)
+                    } else {
+                        None
+                    }
+                };
+                let given = smoozy_job_files_machine::derivatives::what_one_frame_is_made_of(
+                    frame,
+                    &in_force.outputs,
+                    &in_force.inventory,
+                    &in_force.picks,
+                    &in_force.the_jobs_pins,
+                    &in_force.the_scenes_view_layers_in_order,
+                    &in_force.whole_range,
+                    the_job_was_interrupted,
+                    &size_of,
+                )
+                .ok()
+                .map(|made_of| crate::the_preview_worker::WhatTheStatementGivesAFrame::of(&made_of));
+                let mark = AFrameLookedAtAgain {
+                    production,
+                    owed_again: APreviewOwed {
+                        job: job.clone(),
+                        frame,
+                        attempt,
+                        record_directory: record.record_directory.clone(),
+                        the_job_was_interrupted,
+                    },
+                    what_the_statement_gives: given,
+                };
+                self.the_previews.looked_at_again.retain(|one| one.production != mark.production);
+                self.the_previews.looked_at_again.push(mark);
+            }
             self.the_preview_records_are_read();
             let mut records = self.the_previews.what_the_records_say_about(job, attempt);
             records.excluded_by_the_candidate_rules.clear();
@@ -8508,6 +9855,7 @@ mod unix {
                 complaints_sink: capture.complaints_sink.clone(),
                 script: script.clone(),
                 ending: None,
+                the_main_copy_told_early: None,
             };
             let what = WhatIsStarted {
                 operation: operation.clone(),
@@ -8550,7 +9898,7 @@ mod unix {
                         the_other_layers: Vec::new(),
                     };
                     if let Err(and) =
-                        self.a_production_ended_and_nothing_follows(&operation, ending)
+                        self.a_production_ended_and_nothing_follows(&operation, ending, false)
                     {
                         eprintln!(
                             "smoozy-server: a preview worker was not started and its record was \
@@ -8596,12 +9944,90 @@ mod unix {
             &mut self,
             operation: &Identity,
             ending: crate::the_preview_worker::TheProductionsEnding,
+            the_main_copy_was_journalled: bool,
         ) -> Result<(), String> {
-            self.a_production_ended_and_nothing_follows(operation, ending)?;
+            self.a_production_ended_and_nothing_follows(
+                operation,
+                ending,
+                the_main_copy_was_journalled,
+            )?;
             if let Some(said) = self.start_the_next_preview() {
                 eprintln!("smoozy-server: the previews — {said}");
             }
             Ok(())
+        }
+
+        /// **`Queue & History` P3 as changed 2026-11-10 (the twenty-ninth
+        /// notes, note 11): a production's main copy, journalled as soon as it
+        /// is published**, before the frame's other copies exist, so History
+        /// does not wait for every layer. Only for a production of this kind
+        /// whose record is still open and whose main copy was published; the
+        /// answer is whether its event was journalled.
+        fn a_main_copy_was_published(
+            &mut self,
+            operation: &Identity,
+            main: &crate::the_preview_worker::TheProductionsEnding,
+        ) -> bool {
+            if main.came_to != crate::the_preview_worker::WhatTheProductionCameTo::Published {
+                return false;
+            }
+            let mut record = match self.records.what_is_held_under(operation) {
+                Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record))
+                    if record.kind == the_word_for(WorkerKind::Preview)
+                        && record.recorded_outcome().is_none() =>
+                {
+                    record
+                }
+                _ => return false,
+            };
+            let Some(mut field) = record
+                .the_kinds_safe_boundary_marker
+                .as_deref()
+                .and_then(crate::the_preview_worker::ThePreviewKindsOwnField::read_back)
+            else {
+                return false;
+            };
+            let says = the_published_preview_of(main, field.frame, operation).as_says();
+            // **The main copy goes into the production's record first**
+            // (piece J, after Sol's fresh look): its event may leave the
+            // copy's names to that record, and a reader asking it before the
+            // ending — or after a worker that never reports one — must find
+            // them there. Refused, the event waits for the ending, as any
+            // early event the journal refuses does.
+            field.the_main_copy_told_early = Some(crate::the_preview_worker::TheProductionsEnding {
+                the_other_layers: Vec::new(),
+                ..main.clone()
+            });
+            record.the_kinds_safe_boundary_marker = Some(field.as_written());
+            if let Err(why) = self.records.write_it_back(&record) {
+                eprintln!(
+                    "smoozy-server: the main copy of frame {} was not written into its \
+                     production's record, so its event waits for the ending: {}",
+                    field.frame,
+                    what_the_store_said(&why)
+                );
+                return false;
+            }
+            // **Journalled now or not at all** (Sol's fresh look, round 1): an
+            // event held pending lives in this run's memory, so a restart would
+            // lose it after the worker was told it was journalled, and the
+            // ending would skip it. Refused, it is the ending's to journal.
+            match self.journal_at(
+                asked::THE_PREVIEW_PUBLISHED_EVENT,
+                Some(record.subject),
+                &says,
+                std::time::SystemTime::now(),
+            ) {
+                Ok(()) => true,
+                Err(_) => {
+                    eprintln!(
+                        "smoozy-server: the main copy of frame {} was not journalled early; its \
+                         production's ending journals it",
+                        field.frame
+                    );
+                    false
+                }
+            }
         }
 
         /// The ending's write and its event, without starting the next one.
@@ -8609,6 +10035,7 @@ mod unix {
             &mut self,
             operation: &Identity,
             ending: crate::the_preview_worker::TheProductionsEnding,
+            the_main_copy_was_journalled: bool,
         ) -> Result<(), String> {
             let mut record = match self.records.what_is_held_under(operation) {
                 Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record))
@@ -8645,25 +10072,30 @@ mod unix {
                 ending
                     .every_copy_published()
                     .into_iter()
-                    .map(|copy| {
-                        let record = copy.the_record.as_ref();
-                        smoozy_queue_history_machine::previews::ThePublishedPreview {
-                            frame: field.frame,
-                            operation: operation.as_text(),
-                            view_layer: record
-                                .and_then(|record| {
-                                    record.the_view_layer_its_picture_came_from.as_ref()
-                                })
-                                .map(|name| name.as_bytes().to_vec()),
-                            main: record.is_none_or(|record| record.it_is_the_main_copy),
-                            place: record.map_or(0, |record| record.its_place_in_the_frames_set),
-                            // **The source, written only where the record holds
-                            // one** (`Queue & History` P3, the Creator's tenth
-                            // notes, note 2).
-                            source: record.and_then(|record| record.where_it_came_from.clone()),
-                        }
-                    })
+                    .map(|copy| the_published_preview_of(copy, field.frame, operation))
                     .collect();
+            // **`Queue & History` P1b's follow-up** (2026-11-10): where the
+            // job's ending passed this frame over because this production was
+            // standing, the frame is queued once more if the production came
+            // out *not made*, or short of what the ending's statement gives it.
+            // The mark is spent only once the ending is written, so a write
+            // the store refuses leaves it for the worker's report again.
+            let owed_again = self
+                .the_previews
+                .looked_at_again
+                .iter()
+                .find(|mark| &mark.production == operation)
+                .and_then(|mark| {
+                    let short = came_to
+                        == crate::the_preview_worker::WhatTheProductionCameTo::NotMade
+                        || mark
+                            .what_the_statement_gives
+                            .as_ref()
+                            .is_some_and(|given| given.it_came_out_short(&ending));
+                    short.then(|| mark.owed_again.clone())
+                });
+            let the_main_copy_is_published =
+                ending.came_to == crate::the_preview_worker::WhatTheProductionCameTo::Published;
             if let Some(words) = &ending.words {
                 eprintln!(
                     "smoozy-server: the preview of frame {} of {} — {}: {words}",
@@ -8684,15 +10116,48 @@ mod unix {
                 .write_it_back(&record)
                 .map_err(|why| what_the_store_said(&why))?;
             self.the_previews.learn_from(&record);
+            self.the_previews
+                .looked_at_again
+                .retain(|mark| &mark.production != operation);
             // **Every copy published is journalled, the main one first** — so
             // the desktop's read forward owes its fetches newest frame's main
-            // copy first, even where another layer's copy failed.
-            for one in published {
+            // copy first, even where another layer's copy failed. **The main
+            // copy's is not journalled twice** where its early report was
+            // (`Queue & History` P3 as changed 2026-11-10).
+            let the_sets_words = published.first().filter(|one| one.main).map(|one| one.as_says());
+            for one in &published {
+                if one.main && the_main_copy_was_journalled {
+                    continue;
+                }
                 self.journal_or_hold(
                     asked::THE_PREVIEW_PUBLISHED_EVENT,
                     Some(record.subject.clone()),
                     &one.as_says(),
                 );
+            }
+            match owed_again {
+                // **The frame is made again, and its set event waits for that
+                // production** (`Queue & History` P1b's follow-up).
+                Some(owed) => {
+                    eprintln!(
+                        "smoozy-server: the preview of frame {} of {} came out short of the \
+                         job's ending, so it is made once more",
+                        owed.frame,
+                        owed.job.as_text()
+                    );
+                    self.the_previews.owed.push_back(owed);
+                }
+                // **`Queue & History` P3: the frame's set is made**, saying
+                // what its main copy's event says — `Telegram` I2's trigger.
+                None => {
+                    if let Some(words) = the_sets_words.filter(|_| the_main_copy_is_published) {
+                        self.journal_or_hold(
+                            asked::THE_PREVIEW_SET_MADE_EVENT,
+                            Some(record.subject.clone()),
+                            &words,
+                        );
+                    }
+                }
             }
             Ok(())
         }
@@ -8803,7 +10268,17 @@ mod unix {
             .find(|entry| entry.attempt == record.attempt_count)
         {
             Some(entry) if entry.render_process.is_none() => {
-                entry.render_process = Some(pair.to_string())
+                entry.render_process = Some(pair.to_string());
+                // **`Rendering` K4's paragraph of 2026-11-11: the interrupt
+                // still goes to a render that starts after all.** Whatever
+                // was issued before this moment was issued to the reading —
+                // no render process was recorded to send anything to — so
+                // nothing has been issued to this render, and the record says
+                // so before the stop below is taken against it.
+                entry.the_termination_was_issued = false;
+                for on in entry.the_stops_on_it.iter_mut() {
+                    on.its_interrupt_went_out = false;
+                }
             }
             Some(_) => {
                 return empty.carrying(not_recorded(
@@ -8817,6 +10292,33 @@ mod unix {
             }
         }
         written.the_kinds_safe_boundary_marker = Some(field.as_written());
+        // **`Rented-server runtime` X9b: the worker's own pair is written
+        // here where the start could not write it.** A record with no group
+        // reads as gone at the next start, beside a render that is running.
+        // This run holds the pair, and `Rendering` L5a lets no render go on
+        // unless this write lands.
+        // **And where the record carries another pair**: a second attempt
+        // whose own pair could not be written still carries the first
+        // attempt's, which is gone.
+        if let Some(pair) = start
+            .the_render_this_run_started
+            .as_ref()
+            .filter(|render| render.work.operation == operation)
+            .and_then(|render| render.worker)
+        {
+            let its_own = pair.as_this_document_records_it();
+            if written
+                .execution_group
+                .as_ref()
+                .is_none_or(|group| group.as_that_document_recorded_it != its_own)
+            {
+                written.execution_group =
+                    Some(smoozy_state::machine_operations::TheRecordedExecutionGroup {
+                        as_that_document_recorded_it: its_own,
+                        started_under_run: start.run.run.clone(),
+                    });
+            }
+        }
         match start.records.write_it_back(&written) {
             Ok(()) => {
                 // **A stop that arrived before the render process was
@@ -8835,6 +10337,120 @@ mod unix {
             }
             Err(why) => empty.carrying(not_recorded(what_the_store_said(&why))),
         }
+    }
+
+    /// **`Rendering` K4's paragraph of 2026-11-11, written: the pair of the
+    /// Blender the worker started for the reading, into the attempt's entry
+    /// beside `Rendering` L5's.** A later reading of the same attempt takes
+    /// the place of an earlier one. **A stop that arrived before the pair**
+    /// wrote *should be stopped* and found nothing to end; it is taken now.
+    fn the_readings_process_was_started(
+        empty: Answered,
+        request: &Request,
+        start: &mut TheSupervisorsStart,
+    ) -> Answered {
+        let (Some(operation), Some(pair)) = (
+            request
+                .fields
+                .text(THE_OPERATION_FIELD)
+                .and_then(|text| Identity::read_back(IdentityKind::Operation, text)),
+            request
+                .fields
+                .text(THE_READINGS_PROCESS_FIELD)
+                .filter(|text| RecordedPair::recorded_in(text).is_some()),
+        ) else {
+            return empty.saying_it_does_not_answer_that_request(&request.name);
+        };
+        let not_recorded = |why: String| {
+            Fields::none()
+                .and(WHETHER_IT_WAS_RECORDED_FIELD, "no")
+                .and(asked::THE_MACHINES_OWN_WORDS_FIELD, why)
+        };
+        let record = match start.records.what_is_held_under(&operation) {
+            Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record))
+                if record.recorded_outcome().is_none()
+                    && record.kind == the_word_for(WorkerKind::Render) =>
+            {
+                record
+            }
+            Ok(_) => {
+                return empty.carrying(not_recorded(
+                    "no open render operation is recorded under that identity".to_string(),
+                ))
+            }
+            Err(why) => return empty.carrying(not_recorded(what_the_store_said(&why))),
+        };
+        let mut written = record.clone();
+        let Some(mut field) = written
+            .the_kinds_safe_boundary_marker
+            .as_deref()
+            .and_then(TheRenderKindsOwnField::read_back)
+        else {
+            return empty.carrying(not_recorded(
+                "the render kind's own field does not read back".to_string(),
+            ));
+        };
+        match field
+            .attempts
+            .iter_mut()
+            .find(|entry| entry.attempt == record.attempt_count)
+        {
+            // **Never once a render process is recorded**: the stop is the
+            // render's from then on.
+            Some(entry) if entry.render_process.is_none() => {
+                entry.reading_process = Some(pair.to_string())
+            }
+            Some(_) => {
+                return empty.carrying(not_recorded(
+                    "a render process is already recorded for this attempt".to_string(),
+                ))
+            }
+            None => {
+                return empty.carrying(not_recorded(
+                    "the render kind's own field names no such attempt".to_string(),
+                ))
+            }
+        }
+        written.the_kinds_safe_boundary_marker = Some(field.as_written());
+        match start.records.write_it_back(&written) {
+            Ok(()) => {
+                if let Some(why) = start.the_interrupt_is_issued_where_it_can_be(&operation, None) {
+                    eprintln!("smoozy-server: a stop that was waiting for its reading — {why}");
+                }
+                empty.carrying(Fields::none().and(
+                    WHETHER_IT_WAS_RECORDED_FIELD,
+                    crate::the_render_worker::IT_WAS_RECORDED,
+                ))
+            }
+            Err(why) => empty.carrying(not_recorded(what_the_store_said(&why))),
+        }
+    }
+
+    /// **`Rendering` K4's paragraph of 2026-11-11: the reading's Blender,
+    /// validated and ended with the kill** — `Rented-server runtime` X8's
+    /// steps 3 and 4 for a process that is not rendering. **A pair that does
+    /// not validate sends nothing** (X6): the reading has ended, the worker
+    /// goes on, and the stop is taken against the render it records. **A
+    /// reading the kernel would not give relaxes nothing.**
+    fn the_reading_is_ended_outright(
+        kernel: &impl smoozy_runtime::execution_group::ValidatesTheRecordedPair,
+        pair: RecordedPair,
+    ) -> WhatTheStopDid {
+        let what_is_there = match kernel.what_is_at(pair.identifier) {
+            Ok(what_is_there) => what_is_there,
+            Err(why) => return WhatTheStopDid::TheInterruptWasRefused { why },
+        };
+        if pair.validates_against(what_is_there).the_group_is_gone() {
+            return WhatTheStopDid::ThePairDidNotValidateSoNothingWasSent;
+        }
+        // SAFETY: a signal sent to one process identifier, validated above
+        // against the pair recorded when that process was started.
+        if unsafe { libc::kill(pair.identifier as libc::pid_t, libc::SIGKILL) } != 0 {
+            return WhatTheStopDid::TheInterruptWasRefused {
+                why: std::io::Error::last_os_error().to_string(),
+            };
+        }
+        WhatTheStopDid::TheInterruptIsOutAndNoOutcomeIsInYet
     }
 
     /// **`Rented-server runtime` X1 for a file-inspection operation: the pair
@@ -8945,6 +10561,23 @@ mod unix {
             ));
         }
         let job = match start.records.what_is_held_under(&operation) {
+            // **`Rendering` K4's paragraph of 2026-11-12 (the double-check
+            // ideas, idea 5): no hold is placed for a render a stop has been
+            // asked of**, whether or not the stop's signal went out. A stop
+            // that landed as the reading ended let the worker go on to ask
+            // for a hold, and the job was left stopped and waiting on a
+            // question. The worker is told no hold was placed (`Rendering`
+            // P3's ending for it), and the attempt's ending is written with
+            // the stop asked.
+            Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record))
+                if record.recorded_outcome().is_none()
+                    && record.desired_state()
+                        == smoozy_state::machine_operations::DesiredState::ShouldBeStopped =>
+            {
+                return empty.carrying(none_placed(
+                    "a stop was asked for this render, so no hold is placed".to_string(),
+                ))
+            }
             Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record))
                 if record.recorded_outcome().is_none() =>
             {
@@ -9270,8 +10903,7 @@ mod unix {
         // **Step 10c's owed piece 12: a refused root in words**, as the setup's
         // opening gives it (owed piece 6).
         let written = String::from_utf8_lossy(&written).trim().to_string();
-        let root = crate::a_root_on_this_machine(&written)
-            .map_err(|why| crate::a_refused_root_in_words(&written, &why))?;
+        let root = crate::a_recorded_root_on_this_machine(&written, at)?;
         let record_directory =
             smoozy_job_files_machine::publication::the_job_record_directory(&root, job);
         let manifest_at = format!(
@@ -9740,19 +11372,13 @@ mod unix {
             .nothing_to_make
             .get(&job)
             .is_some_and(|frames| frames.iter().any(|(judged, _)| *judged == frame));
-        let covered = std::fs::read(format!(
-            "{}/{}",
-            record.record_directory,
-            smoozy_job_files_machine::manifest::MANIFEST_FILE_NAME
-        ))
-        .ok()
-        .and_then(|bytes| smoozy_job_files_machine::manifest::SubmissionManifest::read_back(&bytes))
-        .is_none_or(|manifest| match manifest.frame_range {
-            smoozy_job_files_machine::manifest::FrameRange::TheUsersParsedIntegers(frames) => {
-                frames.contains(&frame)
-            }
-            smoozy_job_files_machine::manifest::FrameRange::TheFilesOwn => true,
-        });
+        // **The frames the job covers**: the user's own integers, or — for
+        // the file's own range — the reading in force, once the render has
+        // read it. Nothing read counts as covered, as before. *(The file's own
+        // range counted every frame as covered until 2026-11-14, so `/frame
+        // 99999` on such a job was told *Not finished rendering.*; the Rough
+        // what-if answers, share 5, 408.)*
+        let covered = the_frames_in(&record.record_directory).is_none_or(|frames| frames.contains(&frame));
         let still_to_end = !matches!(record.state, QueueState::Ended { .. });
         if still_to_end && covered && !nothing_to_make {
             came_to(empty, IT_HAS_NOT_FINISHED)
@@ -9813,6 +11439,17 @@ mod unix {
         }
         let Some(failed) = the_job_in(request) else {
             return empty.saying_it_does_not_answer_that_request(&request.name);
+        };
+        // **The phone's *Resume*** (`Telegram` Y4a as changed 2026-11-11, the
+        // four questions, scout 1.5): the frame the new job starts at. A field
+        // that is there and not a frame is refused rather than read as the
+        // whole job.
+        let resumes_from = match request.fields.text(THE_FRAME_IT_RESUMES_FROM_FIELD) {
+            None => None,
+            Some(text) => match text.parse::<i64>() {
+                Ok(from) => Some(from),
+                Err(_) => return empty.saying_it_does_not_answer_that_request(&request.name),
+            },
         };
         let command = request.identity.clone();
 
@@ -9888,10 +11525,10 @@ mod unix {
             // setup's opening gives it (owed piece 6).
             Ok(written) => {
                 let written = String::from_utf8_lossy(&written).trim().to_string();
-                match crate::a_root_on_this_machine(&written) {
+                match crate::a_recorded_root_on_this_machine(&written, &start.the_roots_record) {
                     Ok(root) => root,
                     Err(why) => {
-                        return refused(start, crate::a_refused_root_in_words(&written, &why))
+                        return refused(start, why)
                     }
                 }
             }
@@ -9906,7 +11543,7 @@ mod unix {
                 )
             }
         };
-        let copy = match manifest
+        let mut copy = match manifest
             .copied_under(&job, Some(label.as_str()).filter(|label| !label.is_empty()))
         {
             Ok(copy) => copy,
@@ -9917,6 +11554,26 @@ mod unix {
                 )
             }
         };
+        // ***Resume*: the range is every frame the job asked for from that
+        // frame on, in asked order** — `Rendering` A4 and A5's arithmetic, as
+        // the desk's History reckons it (`Rendering`'s `the_carried_on_range`).
+        // The asked frames are the manifest's, or the reading's whole range
+        // for a job that rendered the file's own.
+        if let Some(from) = resumes_from {
+            let asked = match &manifest.frame_range {
+                smoozy_job_files_machine::manifest::FrameRange::TheUsersParsedIntegers(frames) => frames.clone(),
+                smoozy_job_files_machine::manifest::FrameRange::TheFilesOwn => {
+                    crate::the_render_worker::the_reading_in_force_for_the_job_in(&record.record_directory, 1)
+                        .map(|in_force| in_force.whole_range)
+                        .unwrap_or_default()
+                }
+            };
+            let rest: Vec<i64> = asked.iter().position(|frame| *frame >= from).map(|at| asked[at..].to_vec()).unwrap_or_default();
+            if rest.is_empty() {
+                return refused(start, format!("the job asked for no frame from frame {from} on"));
+            }
+            copy.frame_range = smoozy_job_files_machine::manifest::FrameRange::TheUsersParsedIntegers(rest);
+        }
         let record_directory =
             smoozy_job_files_machine::publication::the_job_record_directory(&root, &job);
         if let Err(why) = the_copy_is_published(&record_directory, &copy) {
@@ -9929,11 +11586,16 @@ mod unix {
             Err(why) => return refused(start, what_the_queue_said(&why)),
         };
         let new_record = JobRecord::submitted(job.clone(), None, record_directory, &keys);
-        if let Err(why) = the_job_record_and_its_note_in_one_act(
+        // **A *Resume* writes the job it carries on from on the new note, in
+        // the same act** (`Queue & History` N15's build detail of 2026-11-12,
+        // the four questions, batch 4's leftover); *Submit again* writes none,
+        // as at the desk.
+        if let Err(why) = smoozy_queue_history_machine::acting::note::the_job_record_and_its_note_in_one_act_carrying_on(
             &mut start.queue,
             &mut start.notes,
             &new_record,
             &label,
+            resumes_from.map(|_| &failed),
         ) {
             return refused(start, what_the_queue_said(&why));
         }
@@ -9956,7 +11618,10 @@ mod unix {
         if let Err(why) = start.journal_about(
             asked::THE_JOB_RECORD_WRITTEN_EVENT,
             Some(job.clone()),
-            &crate::the_telegram_journal::what_a_resubmissions_event_says(&the_state[0].1, &failed),
+            &match resumes_from {
+                Some(from) => crate::the_telegram_journal::what_a_resumptions_event_says(&the_state[0].1, &failed, from),
+                None => crate::the_telegram_journal::what_a_resubmissions_event_says(&the_state[0].1, &failed),
+            },
         ) {
             eprintln!("smoozy-server: a job submitted again could not be journalled: {why}");
         }
@@ -10133,6 +11798,20 @@ mod unix {
             }
             fields = with_the_item(fields, asked::THE_JOB_FIELD, at, pairs);
         }
+        // **`Telegram` F6, `Queue & History` A1 as widened 2026-11-14: how
+        // Telegram is answering this machine's bot, once**, where the role is
+        // enabled and the store holds a word this program knows.
+        if start.role_state.read() == Ok(RoleDesiredState::Enabled) {
+            if let Some(trouble) = start
+                .the_telegram_workers_state
+                .read()
+                .ok()
+                .and_then(|held| held.telegrams_trouble)
+                .and_then(|word| asked::TheTelegramTrouble::read_back(&word))
+            {
+                fields = fields.and(asked::TELEGRAMS_TROUBLE_HERE_FIELD, trouble.the_word());
+            }
+        }
         // **`Telegram` V1d, `Queue & History` A1: the phone's choice, once**,
         // where the Telegram worker's store holds one; a store that cannot be
         // read carries none, as a machine that holds none does.
@@ -10152,7 +11831,53 @@ mod unix {
         if let Some(next) = the_admission_point(&records, |_| String::new()).started {
             fields = fields.and(asked::THE_JOB_THAT_STARTS_NEXT_FIELD, next.as_text());
         }
+        // **`Queue & History` A1 as changed 2026-11-10: where the line is
+        // stopped over operation records that would not read, the reading
+        // says so**, in the store's own words, and the desk raises `State,
+        // identity and recovery` F12a's condition on the server's row.
+        if let Some(why) = &start.the_line_is_stopped_because {
+            fields = fields.and(asked::THE_LINE_IS_STOPPED_FIELD, why.clone());
+        }
+        // **`Queue & History` A1 as changed 2026-11-11: the job the line
+        // could not start for want of room** (`Rented-server runtime` M4a),
+        // where it still stands in the store just read.
+        if let Some(job) = &start.the_line_waits_for_room_at {
+            if !start.the_figure_could_not_be_taken
+                && records.iter().any(|record| &record.job == job)
+            {
+                fields = fields.and(asked::THE_LINE_WAITS_FOR_ROOM_FIELD, job.as_text());
+            }
+        }
+        // **`Queue & History` A1 as changed 2026-11-14: a setup that stopped
+        // part-way holds the line** (`Rented-server runtime` P2), and the
+        // reading says so where no setup worker is running it now.
+        if let Some(run) = the_setup_that_holds_the_line(
+            start.setup_state.read().ok().flatten().as_ref(),
+            &start.admission_point.what_is_admitted(),
+        ) {
+            fields = fields.and(asked::THE_LINE_WAITS_FOR_A_SETUP_FIELD, run.as_text());
+        }
         empty.carrying(fields)
+    }
+
+    /// **The setup run a standing *setup in progress* state names, where no
+    /// setup worker is admitted** — `Queue & History` A1 as changed 2026-11-14.
+    /// A setup that is running holds the line too, and that is its own
+    /// business: only one nobody is running is said. Nothing where the state
+    /// is clear. The Rough what-if answers, share 4 (310).
+    fn the_setup_that_holds_the_line(
+        standing: Option<&smoozy_runtime::setup_state::SetupInProgressState>,
+        admitted: &smoozy_runtime::arbitration::WhatIsAdmitted,
+    ) -> Option<Identity> {
+        let standing = standing?;
+        if admitted
+            .operations
+            .iter()
+            .any(|operation| operation.kind == WorkerKind::Setup)
+        {
+            return None;
+        }
+        Some(standing.the_run_that_set_it.clone())
     }
 
     /// **`Rented-server runtime` S14 and S14a: a job whose record reads
@@ -10238,13 +11963,31 @@ mod unix {
             return Vec::new();
         };
         let mut pairs = Vec::new();
-        if let Some(figures) = start.the_newest_figures.get(operation) {
-            pairs.extend(figures.as_pairs());
-        }
         let held = match start.records.what_is_held_under(operation) {
             Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(held)) => Some(held),
             _ => None,
         };
+        // `Queue & History` R5: no previous attempt's figures during the re-run.
+        let running_again = held.as_ref().is_some_and(crate::the_render_worker::a_render_is_running_again);
+        if running_again {
+            pairs.push((asked::THE_JOB_IS_RUNNING_AGAIN_FIELD, asked::THE_ANSWER_IS_YES.to_string()));
+        } else if let Some(figures) = start.the_newest_figures.get(operation)
+            .filter(|figures| held.as_ref().is_some_and(|held| held.attempt_count == figures.attempt))
+        {
+            pairs.extend(figures.as_pairs());
+        }
+        // **`Queue & History` R5, addition of 2026-11-11: how long the job
+        // has rendered**, this machine's now less `Queue & History` N1's
+        // started moment, both on this machine's own clock, so nothing
+        // crosses clocks (`Queue & History` N16). The four questions, scout
+        // 2.1.
+        if let (Ok(Some(note)), Some(own)) = (start.notes.read(&record.job), start.the_machines_own_clock.as_ref()) {
+            if let Some(started) = note.started.as_ref().filter(|started| started.clock() == own) {
+                if let Ok(since) = std::time::SystemTime::now().duration_since(started.taken_at()) {
+                    pairs.push((asked::THE_JOB_HAS_RENDERED_FOR_FIELD, since.as_secs().to_string()));
+                }
+            }
+        }
         // **`Queue & History` R5's *stopping* mark, beside the figures held
         // where they stood** (the live pass's faults, piece E).
         if held.as_ref().is_some_and(a_stops_interrupt_went_out_on) {
@@ -10416,6 +12159,94 @@ mod unix {
     /// is said to be so, never trimmed (`Reporting a problem` G4). **No
     /// statement at all is the answer that there are none.** Nothing is
     /// written and nothing is journalled.
+    /// **A preview production's copies, read** — `Queue & History` P3 and
+    /// `Queue & History` P10a as changed 2026-11-10, the Creator's twenty-ninth notes, note 11
+    /// (piece J): the View Layer names and the sources the production's own
+    /// record holds, for a copy whose event left them there to fit `State,
+    /// identity and recovery` E6a's budget. **A pure reading** (`Server
+    /// protocol and transfers` C6). **Only a store that could not be read is
+    /// *cannot say***, which the desk asks again.
+    ///
+    /// **Only a preview production of the job named is answered as present**,
+    /// so the desk never names one job's copy from another's record. **Its
+    /// copies are written into its record at its ending; before then it names
+    /// the main copy alone**, which the worker's early report wrote there
+    /// before that copy's event was journalled.
+    fn the_preview_copies(empty: Answered, request: &Request, start: &TheSupervisorsStart) -> Answered {
+        let (Some(job), Some(production)) = (
+            the_job_in(request),
+            request
+                .fields
+                .text(asked::THE_PREVIEW_PRODUCTION_FIELD)
+                .and_then(|text| Identity::read_back(IdentityKind::Operation, text)),
+        ) else {
+            return empty.saying_it_does_not_answer_that_request(&request.name);
+        };
+        let absent = || Fields::none().and(asked::ON_THIS_MACHINE_FIELD, asked::IT_IS_ABSENT);
+        let record = match start.records.what_is_held_under(&production) {
+            Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record))
+                if record.kind == the_word_for(WorkerKind::Preview) && record.subject == job =>
+            {
+                record
+            }
+            Ok(_) => return empty.carrying(absent()),
+            Err(why) => {
+                return empty.carrying(
+                    Fields::none()
+                        .and(asked::ON_THIS_MACHINE_FIELD, asked::THE_MACHINE_CANNOT_SAY)
+                        .and(asked::THE_MACHINES_OWN_WORDS_FIELD, what_the_store_said(&why)),
+                )
+            }
+        };
+        // **A field that does not read back names no copy, and says so**:
+        // it will not read back at the next ask either, so it is answered as
+        // a production with nothing to name rather than as a store that could
+        // not be read, which the desk asks again (Sol's fresh look).
+        let Some(field) = record
+            .the_kinds_safe_boundary_marker
+            .as_deref()
+            .and_then(crate::the_preview_worker::ThePreviewKindsOwnField::read_back)
+        else {
+            return empty.carrying(
+                Fields::none()
+                    .and(asked::ON_THIS_MACHINE_FIELD, asked::IT_IS_PRESENT)
+                    .and(asked::HOW_MANY_PREVIEW_COPIES_FIELD, "0")
+                    .and(
+                        asked::THE_MACHINES_OWN_WORDS_FIELD,
+                        "the production's own field did not read back",
+                    ),
+            );
+        };
+        // **Every copy its ending holds; before the ending, the main copy the
+        // early report wrote**, which is what its early event names.
+        let copies: Vec<smoozy_queue_history_machine::previews::ThePublishedPreview> =
+            match (&field.ending, &field.the_main_copy_told_early) {
+                (Some(ending), _) => ending.every_copy_published(),
+                (None, Some(main)) => main.every_copy_published(),
+                (None, None) => Vec::new(),
+            }
+            .into_iter()
+            .map(|copy| the_published_preview_of(copy, field.frame, &production))
+            .collect();
+        let mut fields = Fields::none()
+            .and(asked::ON_THIS_MACHINE_FIELD, asked::IT_IS_PRESENT)
+            .and(asked::HOW_MANY_PREVIEW_COPIES_FIELD, copies.len().to_string());
+        for (at, copy) in copies.into_iter().enumerate() {
+            let item = |name: &str| asked::the_field_of_item(asked::A_PREVIEW_COPY, at, name);
+            if copy.main {
+                fields = fields.and(&item(asked::THE_COPY_IS_THE_MAIN_ONE_FIELD), asked::IT_IS_YES);
+            }
+            fields = fields.and(&item(asked::THE_COPYS_PLACE_FIELD), copy.place.to_string());
+            if let Some(name) = copy.view_layer {
+                fields = fields.and(&item(asked::THE_COPYS_VIEW_LAYER_FIELD), name);
+            }
+            if let Some(source) = copy.source {
+                fields = fields.and(&item(asked::THE_PREVIEW_COPYS_SOURCE_FIELD), source.as_written());
+            }
+        }
+        empty.carrying(fields)
+    }
+
     fn the_kept_crash_files(
         empty: Answered,
         request: &Request,
@@ -11287,7 +13118,7 @@ mod unix {
     /// material has to be on the mount its final folder is on. The second is
     /// that the prefix is spelled once, next door, so a sweep that learns to
     /// recognise staged material recognises this too.
-    fn where_a_setup_run_works(start: &TheSupervisorsStart) -> Result<(String, String), String> {
+    fn where_a_setup_run_works(start: &TheSupervisorsStart, abandons: bool) -> Result<(String, String), String> {
         let at = &start.the_roots_record;
         let written = std::fs::read(at).map_err(|why| {
             format!(
@@ -11304,14 +13135,45 @@ mod unix {
         let written = String::from_utf8_lossy(&written).trim().to_string();
         let root = crate::a_root_on_this_machine(&written)
             .map_err(|why| crate::a_refused_root_in_words(&written, &why))?;
+        // **`Server Setup` R6a's change of later on 2026-11-13, item 4: the
+        // root by its mark, and the login's real write in it, before anything
+        // is made under it** (Sol's look at the scout's list, point 1). **An
+        // abandon (`Server Setup` S6) is not held by them**, so a server whose
+        // disk is gone can still be given up — and it makes nothing under a
+        // root that does not stand.
+        let the_root_stands = crate::the_root_stands_and_takes_a_write(&root, at);
+        if let Err(why) = &the_root_stands {
+            if !abandons {
+                return Err(why.clone());
+            }
+        }
         let layout = smoozy_job_files_machine::layout::TheLayout::of(
             root,
             smoozy_job_files_machine::layout::WhereThePackageAreaSits::UnderTheRoot,
         );
         let blender_area = layout.area(smoozy_job_files_machine::layout::Area::Blender);
         let staging = smoozy_job_files_machine::publication::the_setup_runs_staging_folder(&blender_area);
-        std::fs::create_dir_all(&staging).map_err(|why| format!("{staging}: {why}"))?;
+        if the_root_stands.is_ok() {
+            std::fs::create_dir_all(&staging).map_err(|why| format!("{staging}: {why}"))?;
+        }
         Ok((staging, blender_area))
+    }
+
+    /// **`Server Setup` R1 item 9's folder half, added later on 2026-11-13**:
+    /// the recorded root, by its mark, taking the login's real write. **The
+    /// root's record and its path were judged at the run's opening**
+    /// ([`where_a_setup_run_works`]), which no run passes without them, so
+    /// here only the mark and the write are read again.
+    fn the_root_stands_for_the_final_check(start: &TheSupervisorsStart) -> Result<(), String> {
+        let at = &start.the_roots_record;
+        let Ok(written) = std::fs::read(at) else {
+            return Ok(());
+        };
+        let written = String::from_utf8_lossy(&written).trim().to_string();
+        let Ok(root) = crate::a_root_on_this_machine(&written) else {
+            return Ok(());
+        };
+        crate::the_root_stands_and_takes_a_write(&root, at)
     }
 
     /// **`Server Setup` Y4's composed list, as the desktop composed it**, read
@@ -11493,16 +13355,16 @@ mod unix {
             Some(asked::THE_RECOVERY_ABANDONS) if taken_over.is_some() => true,
             Some(_) => {
                 return empty.carrying(refused(
-                    "only a recovery run may abandon a setup, and it names the run it takes \
-                     over (`Server Setup` S6)"
+                    "Only a recovery run can abandon a setup, and it must name the run it \
+                     takes over."
                         .to_string(),
                 ))
             }
         };
         if taken_over.is_some() && named_kind.is_some() {
             return empty.carrying(refused(
-                "a recovery run carries the run it takes over and no kind: `Server Setup` Y6b \
-                 gives it the taken-over run's kind, and two fields could disagree"
+                "A recovery run takes the kind of the run it takes over, so it must not name \
+                 one."
                     .to_string(),
             ));
         }
@@ -11541,7 +13403,7 @@ mod unix {
                 );
             }
         }
-        let (staging, blender_area) = match where_a_setup_run_works(start) {
+        let (staging, blender_area) = match where_a_setup_run_works(start, abandons) {
             Ok(where_it_works) => where_it_works,
             Err(why) => return empty.carrying(refused(why)),
         };
@@ -12092,8 +13954,7 @@ mod unix {
             }
             if let Some(pending) = &open.pending {
                 return empty.carrying(refused(format!(
-                    "a step is already in hand ({}), and `Server Setup` Y7 runs one step to its \
-                     boundary before the next",
+                    "Setup step {} is already in progress.",
                     pending.step.as_asked()
                 )));
             }
@@ -12106,6 +13967,17 @@ mod unix {
                      verification, not {}",
                     step.as_asked()
                 )));
+            }
+            // **`Server Setup` R1 item 9 as changed later on 2026-11-13
+            // (`Server Setup` R6a's change of that day, item 4; Sol's look at
+            // the scout's list, point 1): the final verification finds the
+            // root by its mark and makes the login's real write in it**, so an
+            // existing folder that cannot be written to never reads as ready.
+            // Not on an abandon, which gives the machine up.
+            if step == WhichStep::TheFinalVerification && !open.abandons {
+                if let Err(why) = the_root_stands_for_the_final_check(start) {
+                    return empty.carrying(refused(format!("Final check failed: {why}")));
+                }
             }
             // **`Server Setup` Y3: a boundary means every step up to it is done
             // and verified, so no step is performed while a step composed before
@@ -12122,9 +13994,7 @@ mod unix {
                     a_composed_boundary_not_yet_reached_before(open, step.its_step())
                 {
                     return empty.carrying(refused(format!(
-                        "this run has not reached {}, which comes before {} in its composed \
-                         list, and `Server Setup` Y3 does not let a step run past one that has \
-                         not finished",
+                        "Step {} must finish before {}.",
                         the_word_for_boundary(skipped),
                         step.as_asked()
                     )));
@@ -12686,9 +14556,20 @@ mod unix {
                 let last = |field: &TheSetupKindsOwnField| {
                     field.reached.iter().map(|it| it.at).max().unwrap_or(0)
                 };
+                // **An abandon ends what it took over** (`Server Setup` S6):
+                // it inherits that run's boundaries and writes none of its own,
+                // so where the two read the same moment the abandon is the
+                // newer. Nothing takes an abandon over, and a later run writes
+                // a later boundary, so it never outranks a run after it. Added
+                // 2026-11-13, the scout's list, item 2 (the second live pass's
+                // fault 6).
+                let abandoned = |field: &TheSetupKindsOwnField| {
+                    field.ending.as_deref() == Some(asked::IT_WAS_ABANDONED)
+                };
                 last(its)
                     .cmp(&last(theirs))
                     .then_with(|| its.ending.is_none().cmp(&theirs.ending.is_none()))
+                    .then_with(|| abandoned(its).cmp(&abandoned(theirs)))
                     .then_with(|| its.reached.len().cmp(&theirs.reached.len()))
                     .then_with(|| one.as_text().cmp(&other.as_text()))
             });
@@ -13506,9 +15387,7 @@ mod unix {
             Some(mark) if mark == asked::IT_HAD_NOTHING_TO_DO => WhatTheStepDid::NothingToDo,
             _ => {
                 return empty.carrying(refused(
-                    "a boundary is written with `Server Setup` Y4a's mark beside it, from a \
-                     closed set of two, in the same durable act"
-                        .to_string(),
+                    "The step's outcome is missing or unknown.".to_string(),
                 ))
             }
         };
@@ -13565,8 +15444,7 @@ mod unix {
             }
             if !open.composed.contains(&boundary) {
                 return empty.carrying(refused(format!(
-                    "{} is not in this run's composed list, and `Server Setup` Y4 composes that \
-                     list at run start",
+                    "Step {} is not part of this setup.",
                     the_word_for_boundary(boundary)
                 )));
             }
@@ -13579,8 +15457,7 @@ mod unix {
                 *earlier < boundary && !open.reached.iter().any(|(it, ..)| it == earlier)
             }) {
                 return empty.carrying(refused(format!(
-                    "this run has not reached {}, which comes before {} in its composed list, \
-                     and `Server Setup` Y3's boundary means every step up to it is done",
+                    "Step {} must finish before {}.",
                     the_word_for_boundary(skipped),
                     the_word_for_boundary(boundary)
                 )));
@@ -13588,8 +15465,7 @@ mod unix {
             if let Some((last, _, _, _)) = open.reached.last() {
                 if boundary <= *last {
                     return empty.carrying(refused(format!(
-                        "this run has already reached {}, and `Server Setup` Y3's marker means no \
-                         later step has begun",
+                        "Setup has already reached step {}.",
                         the_word_for_boundary(*last)
                     )));
                 }
@@ -13597,7 +15473,7 @@ mod unix {
         }
         let Some(now) = start.now_on_the_machines_clock() else {
             return empty.carrying(refused(
-                "this machine names no clock, so `Server Setup` Y3's moment cannot be taken"
+                "Could not record setup progress: this server has no installation identity."
                     .to_string(),
             ));
         };
@@ -14014,12 +15890,28 @@ mod unix {
         else {
             return empty.saying_it_does_not_answer_that_request(&request.name);
         };
-        let group = match request.fields.text(asked::THE_GROUP_FIELD) {
-            None => None,
-            Some(text) => match Identity::read_back(IdentityKind::Group, text) {
-                Some(group) => Some(group),
+        // **`Queue & History` L19a: the pair's two halves name its check, and
+        // only they read that field**; the scope is then the check's job
+        // identity, told from a group's by its kind.
+        let a_pairs_half = request.name == THE_PAIRS_CLEAR_REQUEST
+            || request.name == THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST;
+        let group = if a_pairs_half {
+            match request
+                .fields
+                .text(asked::THE_FIRST_FRAME_CHECK_FIELD)
+                .and_then(|text| Identity::read_back(IdentityKind::Job, text))
+            {
+                Some(check) => Some(check),
                 None => return empty.saying_it_does_not_answer_that_request(&request.name),
-            },
+            }
+        } else {
+            match request.fields.text(asked::THE_GROUP_FIELD) {
+                None => None,
+                Some(text) => match Identity::read_back(IdentityKind::Group, text) {
+                    Some(group) => Some(group),
+                    None => return empty.saying_it_does_not_answer_that_request(&request.name),
+                },
+            }
         };
         let last_saw = request
             .fields
@@ -14285,7 +16177,9 @@ mod unix {
             }
             Err(why) => return empty.carrying(refused(why)),
         }
-        let words = start.the_stop_is_carried_out(&command, &target);
+        // **`Server protocol and transfers` C21a: the user's *Force stop***.
+        let forced = request.fields.text(asked::THE_STOP_IS_FORCED_FIELD) == Some(asked::IT_IS_FORCED);
+        let words = start.the_stop_is_carried_out(&command, &target, forced);
         the_answer_about_a_command(empty, start, &command, None, words, TheHalf::TheStop)
     }
 
@@ -14404,6 +16298,17 @@ mod unix {
                 None
             }
             Ok(Some(record)) => match &record.state {
+                // **`Queue & History` D14a: a job an open render operation
+                // names is answered as a rendering one, whatever its record
+                // says** — the start's own write of *rendering* may not have
+                // landed, and the waiting route would remove the record and
+                // the material from under a running render.
+                QueueState::Waiting if start.a_render_stands_open_for(&job) => {
+                    not_cancelled(
+                        start,
+                        "it is rendering, and a rendering job is stopped rather than cancelled",
+                    )
+                }
                 QueueState::Waiting | QueueState::Held { .. } => {
                     let hold = match &record.state {
                         QueueState::Held { hold } => Some(hold.clone()),
@@ -14609,6 +16514,12 @@ mod unix {
     /// **Between the outcome word and the units not done, in the command
     /// record's own words** — written and read back here alone.
     const THE_UNITS_FOLLOW: &str = ": ";
+
+    /// **What released a range whose check's *Continue anyway* said yes over
+    /// nothing written** (`Queue & History` H7a) — the release's own reason,
+    /// as an answer's or a drop's is.
+    const THE_RANGE_WENT_WITH_CONTINUE_ANYWAY: &str =
+        "its first-frame check was told to continue though its frame writes nothing";
 
     /// **`Queue & History` X2 and X3, the machine's half: every unit of a
     /// deleted job's record removed, and never the renders.**
@@ -14912,8 +16823,7 @@ mod unix {
                 // setup's opening gives it (owed piece 6).
                 .and_then(|written| {
                     let written = String::from_utf8_lossy(&written).trim().to_string();
-                    crate::a_root_on_this_machine(&written)
-                        .map_err(|why| crate::a_refused_root_in_words(&written, &why))
+                    crate::a_recorded_root_on_this_machine(&written, &self.the_roots_record)
                 });
             match root {
                 Ok(root) => {
@@ -15519,15 +17429,13 @@ mod unix {
             }
             if let Some(pending) = &open.pending {
                 return empty.carrying(refused(format!(
-                    "a step is already in hand ({}), and `Server Setup` Y7 runs one step to its \
-                     boundary before the next",
+                    "Setup step {} is already in progress.",
                     pending.step.as_asked()
                 )));
             }
             if !open.composed.contains(&boundary) {
                 return empty.carrying(refused(format!(
-                    "{} is not in this run's composed list, and `Server Setup` Y4 composes that \
-                     list at run start",
+                    "Step {} is not part of this setup.",
                     the_word_for_boundary(boundary)
                 )));
             }
@@ -15546,9 +17454,7 @@ mod unix {
                 *earlier < boundary && !open.reached.iter().any(|(it, ..)| it == earlier)
             }) {
                 return empty.carrying(refused(format!(
-                    "this run has not reached {}, which comes before {} in its composed list, \
-                     and `Server Setup` Y3 does not let a step start past one that has not \
-                     finished",
+                    "Step {} must finish before {}.",
                     the_word_for_boundary(skipped),
                     the_word_for_boundary(boundary)
                 )));
@@ -15871,7 +17777,7 @@ mod unix {
     /// which rides the pre-package surface rather than the supervisor's
     /// endpoint. It is here so that a reader checking this list for
     /// completeness meets it rather than filing it as a gap for a third time.
-    pub const EVERY_REQUEST_THIS_MODULE_KNOWS_ABOUT: [ARequestThisModuleKnowsAbout; 61] = [
+    pub const EVERY_REQUEST_THIS_MODULE_KNOWS_ABOUT: [ARequestThisModuleKnowsAbout; 65] = [
         ARequestThisModuleKnowsAbout {
             what: "G12's health answer, with V9's setup-in-progress state riding beside it",
             stands: WhereARequestStands::AnsweredHere("THE_HEALTH_ANSWER_REQUEST"),
@@ -15945,6 +17851,10 @@ mod unix {
             stands: WhereARequestStands::AnsweredHere("THE_RENDER_PROCESS_WAS_STARTED_REQUEST"),
         },
         ARequestThisModuleKnowsAbout {
+            what: "`Rendering` K4's paragraph of 2026-11-11: the reading's process was started, and its pair is recorded for a stop that finds no render yet",
+            stands: WhereARequestStands::AnsweredHere("THE_READINGS_PROCESS_WAS_STARTED_REQUEST"),
+        },
+        ARequestThisModuleKnowsAbout {
             what: "`Rendering` P1 step 5: a hold is placed at render start, with a supervisor-issued identity",
             stands: WhereARequestStands::AnsweredHere("THE_HOLD_IS_PLACED_AT_RENDER_START_REQUEST"),
         },
@@ -15963,6 +17873,14 @@ mod unix {
         ARequestThisModuleKnowsAbout {
             what: "`Queue & History` L13's stop paired with a clear, naming no target, its subject resolved at the clear's write. Refused by name until step 10c's first stop-and-clear piece",
             stands: WhereARequestStands::AnsweredHere("THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST"),
+        },
+        ARequestThisModuleKnowsAbout {
+            what: "`Queue & History` L19a's clear of a first-frame pair, the first half of the pair's stop, naming the check — `Queue & History` L13's machinery scoped to the pair. Added 2026-11-09, the twenty-eighth notes, note 16",
+            stands: WhereARequestStands::AnsweredHere("THE_PAIRS_CLEAR_REQUEST"),
+        },
+        ARequestThisModuleKnowsAbout {
+            what: "`Queue & History` L19a's stop paired with a first-frame pair's clear, its subject the check's render alone. Added 2026-11-09, the twenty-eighth notes, note 16",
+            stands: WhereARequestStands::AnsweredHere("THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST"),
         },
         ARequestThisModuleKnowsAbout {
             what: "`Queue & History` L1's cancel of a waiting or held job. Refused by name until step 10c's first stop-and-clear piece",
@@ -16099,6 +18017,10 @@ mod unix {
         ARequestThisModuleKnowsAbout {
             what: "a job's kept crash files, read — `Reporting a problem` G5a's pure reading of what the render worker kept at each failed attempt, each file whole and named by its attempt, or that there are none; step 11's R3b",
             stands: WhereARequestStands::AnsweredHere("THE_KEPT_CRASH_FILES_REQUEST"),
+        },
+        ARequestThisModuleKnowsAbout {
+            what: "a preview production's copies, read — `Queue & History` P3 and `Queue & History` P10a's pure reading of the View Layer names and sources a production's record holds, for an event that left them there to fit `State, identity and recovery` E6a's budget (piece J)",
+            stands: WhereARequestStands::AnsweredHere("THE_PREVIEW_COPIES_REQUEST"),
         },
         ARequestThisModuleKnowsAbout {
             what: "bootstrap-and-repair",
@@ -16285,6 +18207,16 @@ mod unix {
                 package_area: area.clone(),
                 the_render_this_run_started: None,
                 operations_this_run_started: Vec::new(),
+                the_renders_no_worker_is_left_for: Vec::new(),
+                the_pairs_watched_for_a_render: Vec::new(),
+                the_endings_this_run_told: Vec::new(),
+                the_line_is_stopped_because: None,
+                the_line_waits_for_room_at: None,
+                the_figure_could_not_be_taken: false,
+                #[cfg(test)]
+                the_available_figure_is: None,
+                #[cfg(test)]
+                the_available_figures_to_come: Default::default(),
                 the_setup_run_this_supervisor_opened: None,
                 the_last_setup_steps_words: None,
                 the_readings_this_run_started: Vec::new(),
@@ -16319,6 +18251,91 @@ mod unix {
             machine
                 .start
                 .reconcile(ReconciliationMoment::EverySupervisorStart)
+        }
+
+        /// **A reading whose worker went with a restart of this program is
+        /// answered as interrupted, never as still running** — after Sol's
+        /// look at reading the file past a minute, points 2 and 4. A reading's
+        /// record is opened as a reading starts, and its worker is not left: the
+        /// program starts again. Until then the reconciliation wrote *re-run
+        /// once*, nothing starts a reading's second attempt, and every ask was
+        /// answered *still running* until a later start gave it up; and a
+        /// reading given up was answered with no exit status and no start mark,
+        /// which the desktop read as a Blender that could not open the file.
+        /// **Both now carry the interrupted field**, after one restart and after
+        /// two. A reading this run holds is still running.
+        #[test]
+        fn a_reading_whose_worker_went_with_a_restart_is_answered_as_interrupted() {
+            let field = TheFileInspectionKindsOwnField {
+                which: WhichReading::TheFilesReading,
+                build: b"/b".to_vec(),
+                blend: b"/a.blend".to_vec(),
+                version: None,
+                ordinary_sink: "/o".to_string(),
+                complaints_sink: "/c".to_string(),
+                script: "/s.py".to_string(),
+                ending: None,
+                staging: None,
+                pairs: None,
+                range: None,
+                blender: None,
+                stops: Vec::new(),
+                the_interrupt_went_out: false,
+            };
+            let mut machine = nothing_written_yet();
+            let operation = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let mut record = smoozy_state::machine_operations::OperationRecord::opened(
+                operation.clone(),
+                operation.clone(),
+                the_word_for(WorkerKind::FileInspection),
+            );
+            record.the_kinds_safe_boundary_marker = Some(field.as_written());
+            machine.start.records.record_before_acting(&record).expect("the record is written");
+            let interrupted = |answer: &Fields| {
+                (
+                    answer.text(asked::WHAT_BECAME_OF_IT_FIELD).map(str::to_string),
+                    answer.text(asked::THE_READING_WAS_INTERRUPTED_FIELD).map(str::to_string),
+                )
+            };
+            let the_answer = |machine: &AStartOverAnAreaThatGoesWithIt| {
+                the_repeat_of_a_file_inspection(&machine.start, &operation).expect("a record stands")
+            };
+            let interrupted_reading = (
+                Some(asked::IT_HAS_A_RECORDED_OUTCOME.to_string()),
+                Some(asked::THE_ANSWER_IS_YES.to_string()),
+            );
+
+            the_supervisor_starts_again(&mut machine);
+            assert_eq!(interrupted(&the_answer(&machine)), interrupted_reading, "after one restart");
+            the_supervisor_starts_again(&mut machine);
+            assert_eq!(interrupted(&the_answer(&machine)), interrupted_reading, "after two");
+            // **Sol's look at the window and read points, point 2 (the scout's
+            // list, item 6): a desktop before the interrupted field reads only
+            // *ended by Smoozy*,** and with it *no* it blamed Blender and offered
+            // another. That reader, as it stood, is the field alone.
+            let the_preceding_desktop_reads_smoozy_ended_it = |answer: &Fields| {
+                answer.text(asked::THE_RUN_WAS_ENDED_BY_SMOOZY_FIELD) == Some(asked::THE_ANSWER_IS_YES)
+            };
+            assert!(
+                the_preceding_desktop_reads_smoozy_ended_it(&the_answer(&machine)),
+                "an interrupted reading also says Smoozy ended it"
+            );
+
+            // **A reading this run started is still running.**
+            let held = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let mut record = smoozy_state::machine_operations::OperationRecord::opened(
+                held.clone(),
+                held.clone(),
+                the_word_for(WorkerKind::FileInspection),
+            );
+            record.the_kinds_safe_boundary_marker = Some(field.as_written());
+            machine.start.records.record_before_acting(&record).expect("the record is written");
+            assert_eq!(
+                the_repeat_of_a_file_inspection(&machine.start, &held)
+                    .expect("a record stands")
+                    .text(asked::WHAT_BECAME_OF_IT_FIELD),
+                Some(asked::IT_IS_STILL_IN_HAND)
+            );
         }
 
         /// **`Render Settings` Q8's *a read Smoozy ended itself*, decided by the
@@ -18225,6 +20242,10 @@ mod unix {
             worker: u32,
             /// **Its package area**, which the worker's records are read from.
             at: PathBuf,
+            /// **Where set, a job's message record is not written** (`Telegram`
+            /// F3c's job's message, the Fable review's sitting 6 follow-up):
+            /// the fact's request is answered by nothing, as on a full disk.
+            refuses_jobs_messages: std::sync::Arc<std::sync::atomic::AtomicBool>,
         }
 
         impl ASupervisorOnAThreadOfItsOwn {
@@ -18237,7 +20258,15 @@ mod unix {
                     let at = machine
                         .at
                         .join(smoozy_runtime::the_program::THE_FIXED_ENTRY_POINT_NAME);
-                    std::fs::write(&at, "#!/bin/sh\nexec sleep 600\n")
+                    // **Every worker this supervisor starts runs this one
+                    // stand-in, marked as this supervisor's own**, and every one
+                    // still running is ended when the thread ends, however it
+                    // ends (the scout's list, the runner's ruling of
+                    // 2026-11-13). Until then only the Telegram workers handed
+                    // to the test were ended, and each preview made again left
+                    // a `sleep 600` behind the run.
+                    let ours = TheStandInsOfOneSupervisor::marked(&at);
+                    std::fs::write(&at, format!("#!/bin/sh\nexec {}\n", ours.command))
                         .expect("the stand-in is written");
                     std::fs::set_permissions(&at, std::fs::Permissions::from_mode(0o755))
                         .expect("it is made runnable");
@@ -18291,11 +20320,8 @@ mod unix {
                             ToTheSupervisor::End => break,
                         }
                     }
-                    for worker in every_worker {
-                        // SAFETY: a signal to a child this test started and holds
-                        // in its wait, so the identifier is its own.
-                        unsafe { libc::kill(worker as libc::pid_t, libc::SIGKILL) };
-                    }
+                    drop(every_worker);
+                    drop(ours);
                 });
                 let (worker, at) = heard
                     .recv()
@@ -18305,6 +20331,7 @@ mod unix {
                     thread: Some(thread),
                     worker,
                     at,
+                    refuses_jobs_messages: std::sync::Arc::default(),
                 }
             }
 
@@ -18320,6 +20347,7 @@ mod unix {
                 std::sync::Arc::new(AskedOverAChannel {
                     to: std::sync::Mutex::new(self.sender()),
                     process,
+                    refuses_jobs_messages: self.refuses_jobs_messages.clone(),
                 })
             }
 
@@ -18353,6 +20381,59 @@ mod unix {
             }
         }
 
+        /// **The stand-ins one supervisor on a thread of its own starts**, by
+        /// the command each runs: `sleep` for six hundred seconds and a
+        /// fraction no other supervisor's carries — or, in its first moments,
+        /// the shell still reading this supervisor's own entry point, which
+        /// can take a second on a newly written file. Every one still running
+        /// is ended, and its ending taken, when this goes — at the thread's
+        /// end, or as a panic unwinds it.
+        struct TheStandInsOfOneSupervisor {
+            command: String,
+            entry_point: String,
+        }
+
+        impl TheStandInsOfOneSupervisor {
+            fn marked(entry_point: &std::path::Path) -> TheStandInsOfOneSupervisor {
+                static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+                let one = NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mark = (std::process::id() % 10_000) * 100 + one % 100;
+                TheStandInsOfOneSupervisor {
+                    command: format!("sleep 600.{mark:06}"),
+                    entry_point: entry_point.display().to_string(),
+                }
+            }
+
+            /// Every process running one of them, either way, **read in one
+            /// look** — two looks could each miss one that turned from the
+            /// shell into `sleep` between them.
+            fn the_processes(&self) -> Vec<libc::pid_t> {
+                let as_written = |text: &str| -> String {
+                    text.chars().flat_map(|c| if "\\.^$*+?()[]{}|".contains(c) { vec!['\\', c] } else { vec![c] }).collect()
+                };
+                let either = format!("^{}$|{}", as_written(&self.command), as_written(&self.entry_point));
+                let Ok(read) = std::process::Command::new("pgrep").args(["-f", "--", &either]).output() else {
+                    return Vec::new();
+                };
+                String::from_utf8_lossy(&read.stdout).split_whitespace().filter_map(|it| it.parse::<libc::pid_t>().ok()).collect()
+            }
+        }
+
+        impl Drop for TheStandInsOfOneSupervisor {
+            fn drop(&mut self) {
+                for process in self.the_processes() {
+                    // SAFETY: a signal to a process running this supervisor's
+                    // own marked stand-in, and a wait on it where it is this
+                    // test's child; a wait on any other answers at once.
+                    unsafe {
+                        libc::kill(process, libc::SIGKILL);
+                        let mut status = 0;
+                        libc::waitpid(process, &mut status, 0);
+                    }
+                }
+            }
+        }
+
         impl Drop for ASupervisorOnAThreadOfItsOwn {
             fn drop(&mut self) {
                 // **Ended by a word and not by the channel closing**: a worker
@@ -18367,14 +20448,70 @@ mod unix {
             }
         }
 
+        /// Whether `process` is still running: there, and not a zombie
+        /// waiting for its parent to take its ending.
+        fn still_running(process: u32) -> bool {
+            let read = std::process::Command::new("ps")
+                .args(["-o", "stat=", "-p", &process.to_string()])
+                .output()
+                .expect("ps answers");
+            let stat = String::from_utf8_lossy(&read.stdout).trim().to_string();
+            !stat.is_empty() && !stat.starts_with('Z')
+        }
+
+        /// **No stand-in a supervisor on a thread of its own started outlives
+        /// it** — the scout's list, the runner's ruling of 2026-11-13: the
+        /// server program's tests left `sleep 600` processes behind them, seven
+        /// in one whole run. Every worker the supervisor starts runs the one
+        /// stand-in, and only the Telegram workers the test was handed were
+        /// ended. Here the supervisor starts one more on its own — a restart
+        /// done on the machine, as a preview made again starts its worker —
+        /// and both must be gone once the supervisor is. **Failed before the
+        /// fix**: the second was still running.
+        #[test]
+        fn a_supervisor_on_a_thread_of_its_own_leaves_no_stand_in_behind() {
+            let on = ASupervisorOnAThreadOfItsOwn::started();
+            let first = on.worker;
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                the_supervisor_starts_again(machine);
+                machine.start.look_after_the_role_worker();
+                let second = machine
+                    .start
+                    .the_role_worker
+                    .as_ref()
+                    .expect("a worker was started again")
+                    .group
+                    .leader
+                    .identifier;
+                back.send(second).expect("sent");
+            });
+            let second = got.recv().expect("the second worker");
+            assert_ne!(first, second);
+            assert!(still_running(first) && still_running(second), "both stand-ins run");
+            drop(on);
+            assert!(!still_running(first), "the first stand-in is gone");
+            assert!(!still_running(second), "the stand-in the supervisor started on its own is gone");
+        }
+
         /// The worker's requests, carried to the supervisor's thread.
         struct AskedOverAChannel {
             to: std::sync::Mutex<std::sync::mpsc::Sender<ToTheSupervisor>>,
             process: u32,
+            refuses_jobs_messages: std::sync::Arc<std::sync::atomic::AtomicBool>,
         }
 
         impl crate::the_telegram_worker::AsksTheSupervisor for AskedOverAChannel {
             fn ask(&self, request: &Request) -> Result<Option<Answered>, String> {
+                if self.refuses_jobs_messages.load(std::sync::atomic::Ordering::SeqCst)
+                    && request.name == crate::the_telegram_worker::THE_TELEGRAM_WORKERS_FACT_REQUEST
+                    && matches!(
+                        crate::the_telegram_worker::the_fact_in(&request.fields),
+                        Some(crate::the_telegram_worker::AFact::AJobsMessage { .. })
+                    )
+                {
+                    return Ok(None);
+                }
                 let (back, answer) = std::sync::mpsc::channel();
                 self.to
                     .lock()
@@ -18911,6 +21048,7 @@ mod unix {
                     frame: 1,
                     of: 1,
                     percent: 0,
+                    finishing: false,
                 }),
                 waiting: None,
             }];
@@ -19092,30 +21230,27 @@ mod unix {
                 Some(the_old_board),
                 "the start carries the board it created"
             );
-            rounds_until(120, &mut [&mut holder, &mut other], &clock, &|_| {
-                sim.the_board_on_top()
-                    .is_some_and(|(top, _)| top != the_old_board)
+            // **`Telegram` B1 and `Telegram` B6 as changed 2026-11-12 (the runner's
+            // ruling 1 on the Fable review's sitting 6): the restarted holder
+            // carries on with the board it recorded**, edited, and holds again
+            // at once. Until then a new board was confirmed and the old one
+            // unpinned.
+            let before = sim.state().heard.len();
+            rounds_until(5, &mut [&mut holder, &mut other], &clock, &|workers| {
+                workers[0].is_holding()
             })
-            .expect("a new board was confirmed after the holder's restart");
+            .expect("the restarted holder holds again at once");
             for _ in 0..10 {
                 a_round_of(&mut [&mut holder, &mut other], &clock);
             }
-            assert!(
-                !sim.state().pins.contains(&the_old_board),
-                "`Telegram` B3: unpinned by its identity"
-            );
-            assert_eq!(sim.state().pins.len(), 1, "one pin, the new board");
+            assert_eq!(sim.state().pins, vec![the_old_board], "one pin, the same board");
             let (top, _) = sim.the_board_on_top().expect("pinned");
-            let new_holders_store = if holder.is_holding() {
-                holders_supervisor.the_store()
-            } else {
-                others_supervisor.the_store()
-            };
-            assert_eq!(
-                new_holders_store.board,
-                Some(top),
-                "the new board written through its supervisor"
+            assert_eq!(top, the_old_board);
+            assert!(
+                !sim.state().heard[before..].iter().any(|(caller, method, _)| caller == &again && method == "pinChatMessage"),
+                "nothing pinned"
             );
+            assert_eq!(holders_supervisor.the_store().board, Some(the_old_board), "its record stands");
         }
 
         /// **The Creator's fourteenth notes, note 2, through the whole program:
@@ -19141,6 +21276,7 @@ mod unix {
                     display: "Server Gone".into(),
                 }],
                 instructions: Vec::new(),
+                commands: Vec::new(),
             };
             let dead_board = sim.a_message_from_the_bot(&dead.compose().expect("composed"));
             sim.state().pins.push(dead_board);
@@ -19216,6 +21352,78 @@ mod unix {
             );
         }
 
+        fn the_role_state_in(at: &std::path::Path) -> TheRoleStateOnTheMachine {
+            TheRoleStateOnTheMachine {
+                at: the_record_at(&at.display().to_string(), records::THE_TELEGRAM_ROLE_STATE).into(),
+            }
+        }
+
+        /// **`Telegram` B14 as added 2026-11-13 (the Creator's notes on the
+        /// test copy, note 8): a server whose role is switched off leaves the
+        /// roster.** At the polite stop, a machine that does not hold and whose
+        /// role's desired state reads *disabled* pins one last machinery
+        /// message asking to be taken off, and the holder takes it off; one
+        /// whose role reads *enabled* — a restart — asks nothing. **Failed
+        /// before the fix**: a removed server that was not holding stayed on
+        /// the pinned message until a gather named it as not answering.
+        #[test]
+        fn notes_8_a_server_whose_role_is_switched_off_asks_the_holder_to_take_it_off() {
+            use crate::the_telegram_worker::WhatTheLastEditCameTo;
+            let (sim, clock, supervisors, [mut a, mut b], _) = two_machines_settled();
+            let a_holds = a.is_holding();
+            let (at, machine) = if a_holds { (&supervisors[1].at, "machine-b") } else { (&supervisors[0].at, "machine-a") };
+            let state = the_role_state_in(at);
+            let (holder, other) = if a_holds { (&mut a, &mut b) } else { (&mut b, &mut a) };
+            state.write(RoleDesiredState::Enabled).expect("written");
+            assert_eq!(other.a_last_board_edit_marking_this_machine_silent(), WhatTheLastEditCameTo::NotHolding, "a restart asks nothing");
+            state.write(RoleDesiredState::Disabled).expect("written");
+            assert_eq!(other.a_last_board_edit_marking_this_machine_silent(), WhatTheLastEditCameTo::AskedToBeTakenOff);
+            let sim_ = sim.clone();
+            rounds_until(20, &mut [holder], &clock, &|_| {
+                sim_.the_board_on_top().is_some_and(|(_, board)| !board.roster.iter().any(|entry| entry.machine == machine))
+            })
+            .expect("the holder took it off the roster");
+            assert!(sim.said_to_the_user().is_empty(), "nothing said: {:?}", sim.said_to_the_user());
+        }
+
+        /// **Sol's look at the Telegram fixes, point 6, through the real stop
+        /// sequence**: the worker's own run, its polite stop arriving, on a
+        /// machine whose role reads *disabled* — and Telegram refusing the
+        /// edit of its machinery message. Leaving is said in a fresh message,
+        /// and the holder takes it off. **Failed before the fix**: the pin
+        /// followed the refused edit, so the old words — its announcement —
+        /// were pinned, the run said it had asked to be taken off, and it
+        /// stayed listed.
+        #[test]
+        fn sol_6_a_removed_server_whose_edit_is_refused_still_leaves_through_its_own_stop() {
+            use crate::the_telegram_worker::{WhatTheLastEditCameTo, WhyTheRunEnded};
+            let (sim, clock, supervisors, [a, b], _) = two_machines_settled();
+            let a_holds = a.is_holding();
+            let (mut holder, other, at, machine) =
+                if a_holds { (a, b, supervisors[1].at.clone(), "machine-b") } else { (b, a, supervisors[0].at.clone(), "machine-a") };
+            the_role_state_in(&at).write(RoleDesiredState::Disabled).expect("written");
+            let its_message = {
+                let state = sim.state();
+                *state
+                    .texts
+                    .iter()
+                    .filter(|(_, text)| text.contains("smoozy-machinery") && text.contains(&format!("\"machine\":\"{machine}\"")))
+                    .map(|(id, _)| id)
+                    .max()
+                    .expect("its machinery message")
+            };
+            sim.state().every_edit_of_this_is_refused = Some(its_message);
+            assert_eq!(
+                other.run_until_stopped(|| true),
+                WhyTheRunEnded::ThePoliteStop(WhatTheLastEditCameTo::AskedToBeTakenOff)
+            );
+            let sim_ = sim.clone();
+            rounds_until(20, &mut [&mut holder], &clock, &|_| {
+                sim_.the_board_on_top().is_some_and(|(_, board)| !board.roster.iter().any(|entry| entry.machine == machine))
+            })
+            .unwrap_or_else(|| panic!("the holder took it off: {:?}", sim.the_board_on_top().map(|(_, b)| b.roster)));
+        }
+
         /// **`Telegram` section 19's one final board edit, marking this machine
         /// silent**, made by the holder when the polite stop arrives: the same
         /// board, edited once, with this machine off its roster — the heartbeat,
@@ -19224,7 +21432,12 @@ mod unix {
         #[test]
         fn the_holders_last_board_edit_takes_it_off_the_roster_and_changes_nothing_else() {
             use crate::the_telegram_worker::WhatTheLastEditCameTo;
-            let (sim, _clock, _supervisors, [a, b], _) = two_machines_settled();
+            let (sim, _clock, supervisors, [a, b], _) = two_machines_settled();
+            // A running worker's role reads *enabled* (W8), as a restart
+            // leaves it; *disabled* is the next test's.
+            for supervisor in &supervisors {
+                the_role_state_in(&supervisor.at).write(RoleDesiredState::Enabled).expect("written");
+            }
             let (holder, other, holders_machine) = if a.is_holding() {
                 (&a, &b, "machine-a")
             } else {
@@ -19390,6 +21603,7 @@ mod unix {
                         complaints_sink: format!("{directory}/complaints"),
                         available_bytes: 1,
                         render_process: None,
+                        reading_process: None,
                         ending: None,
                         collection_incomplete_by_reconciliation: false,
                         the_termination_was_issued: false,
@@ -19468,6 +21682,7 @@ mod unix {
                         something_followed_the_marker: Some(true),
                         device_line: None,
                         no_render_began: false,
+                        missing: Vec::new(),
                     },
                     None,
                     Some(two_there_and_one_not()),
@@ -19494,6 +21709,7 @@ mod unix {
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 },
                 WhatTheFigureIs::NoFrameCountsAsAlreadyThere,
@@ -19596,7 +21812,7 @@ mod unix {
             );
             let machines = said_once(&said, "Server A\nHall\n🔴 Failed");
             assert!(
-                machines.contains("Blender exited with code 1."),
+                machines.contains("Blender exited with an error."),
                 "{machines}"
             );
             assert!(machines.contains("2 frames on the server."), "{machines}");
@@ -19608,7 +21824,7 @@ mod unix {
                 the_buttons_on(&sim, &machines),
                 [
                     "Send Output log",
-                    "Retry"
+                    "Submit again \u{2014} 3 frames"
                 ],
                 "`Telegram` Y4a: *try it again* on the machine's own cause; no Stop on an ending (`Telegram` C1b)"
             );
@@ -19621,7 +21837,7 @@ mod unix {
             );
             said_once(
                 &said,
-                "Server A\nAttic\nAbandoned. Interrupted twice.",
+                "Server A\nAttic\nInterrupted twice. No more retries.",
             );
             assert_eq!(
                 said_once(&said, "Server A\nCellar\nStopped."),
@@ -19699,7 +21915,7 @@ mod unix {
                 let ending = TheEnding {
                     outcome: smoozy_rendering_machine::endings::RecordedOutcome::Finished,
                     hold: None, exit_status: Some(0), streams: None,
-                    statement: Some(Ok(statement)), figure: WhatTheFigureIs::It(832), the_device_line: None,
+                    statement: Some(Ok(statement)), figure: WhatTheFigureIs::It(832), the_device_line: None, the_files_missing: Vec::new(),
                 };
                 // A real stop's two recorded facts: requested, interrupt issued.
                 let WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(mut held) = machine.start.records.what_is_held_under(&operation).unwrap() else { panic!("operation"); };
@@ -19812,6 +22028,7 @@ mod unix {
                             something_followed_the_marker: Some(true),
                             device_line: None,
                             no_render_began: false,
+                            missing: Vec::new(),
                         },
                         None,
                         Some(TheStatementAtTheEnding::It(statement)),
@@ -19906,6 +22123,7 @@ mod unix {
                             something_followed_the_marker: Some(true),
                             device_line: None,
                             no_render_began: false,
+                            missing: Vec::new(),
                         },
                         None,
                         Some(TheStatementAtTheEnding::It(statement)),
@@ -20136,7 +22354,8 @@ mod unix {
                 "only the lost question was retried"
             );
             let question = the_message_saying(&sim, "Server A\nRange · frames ");
-            assert_eq!(the_buttons_and_their_taps_on(&sim, question).len(), 3);
+            // Two answers and no Stop (the twenty-eighth notes, note 16).
+            assert_eq!(the_buttons_and_their_taps_on(&sim, question).len(), 2);
         }
 
         #[test]
@@ -20178,7 +22397,7 @@ mod unix {
             let question = the_message_saying(&sim, "Server A\nRange · frames ");
             assert!(photo < question);
             assert!(the_buttons_and_their_taps_on(&sim, photo).is_empty());
-            assert_eq!(the_buttons_and_their_taps_on(&sim, question).len(), 3);
+            assert_eq!(the_buttons_and_their_taps_on(&sim, question).len(), 2);
         }
 
         #[test]
@@ -20203,7 +22422,7 @@ mod unix {
                 });
                 rounds(8, &mut worker, &clock);
                 let question = the_message_saying(&sim, "Server A\nRange · frames ");
-                assert_eq!(the_buttons_and_their_taps_on(&sim, question).len(), 3);
+                assert_eq!(the_buttons_and_their_taps_on(&sim, question).len(), 2);
                 if available {
                     let albums = the_albums_sent(&sim);
                     assert_eq!(albums[0].len(), 2);
@@ -20291,7 +22510,9 @@ mod unix {
                     .iter()
                     .filter(|text| text.contains("\nRetry\nStop this job?"))
                     .count(),
-                1,
+                0,
+                // **`Telegram` D2 as changed 2026-11-13**: the question went
+                // once *This job has already ended.* settled it.
                 "legacy context cannot open on a later attempt"
             );
             let (back, got) = std::sync::mpsc::channel();
@@ -20367,10 +22588,14 @@ mod unix {
             rounds(8, &mut worker, &clock);
             for n in 0..4 {
                 let text = format!("Server A\nStart {n}\nStarted.");
+                // **The tick since adds `Telegram` C1d's *Updated* line** (the
+                // twenty-ninth notes, note 9, piece T): the one start, as it
+                // reads now.
+                let updated = format!("{text}\nUpdated ");
                 assert_eq!(
                     sim.said_to_the_user()
                         .iter()
-                        .filter(|said| **said == text)
+                        .filter(|said| **said == text || said.starts_with(&updated))
                         .count(),
                     1
                 );
@@ -20382,6 +22607,43 @@ mod unix {
                 sim.calls("a", "sendMessage").len(),
                 before,
                 "no timer or reconnect start"
+            );
+        }
+
+        #[test]
+        /// **Sol's fresh look at the twenty-eighth notes' piece 8: a desk Stop
+        /// that lands just after frame 1 was done still removes the range**
+        /// (`Queue & History` L19a), and **the question already on the phone
+        /// loses its buttons**, since the job they would answer is gone. **It
+        /// failed before the fix**: the question kept *Render all* and
+        /// *Cancel job* for a range that no longer existed.
+        fn twenty_eighth_16_a_question_about_a_range_the_pair_stop_removed_loses_its_buttons() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let (check, operation) = a_render_running(machine, "Check", vec![1], None);
+                let (range, _) = a_hold_placed_on(machine, "Range", vec![1, 2, 3], Some(&check), "the first-frame check");
+                a_frame_produced_with_its_layers(machine, &check, 1, &[("Interior", 0)]);
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                back.send((check, range)).unwrap();
+            });
+            let (check, range) = got.recv().unwrap();
+            rounds(8, &mut worker, &clock);
+            let question = the_message_saying(&sim, "Server A\nRange · frames ");
+            assert_eq!(the_buttons_and_their_taps_on(&sim, question).len(), 2);
+            on.on_the_machine(move |machine| {
+                let clear = Identity::issue(IdentityKind::Operation).expect("randomness");
+                let stop = Identity::issue(IdentityKind::Operation).expect("randomness");
+                let (the_clear, _) = the_pairs_stop(&clear, &stop, &check);
+                let cleared = answer(&the_clear, &mut machine.start);
+                assert_eq!(cleared.fields.text(asked::THE_CLEARS_OUTCOME_FIELD), Some(asked::IT_WAS_CLEARED));
+                assert!(machine.start.queue.read_one(&range).unwrap().is_none(), "the range is gone");
+            });
+            rounds(8, &mut worker, &clock);
+            assert!(
+                the_buttons_and_their_taps_on(&sim, question).is_empty(),
+                "{:?}",
+                the_buttons_and_their_taps_on(&sim, question)
             );
         }
 
@@ -20420,7 +22682,7 @@ mod unix {
                     .iter()
                     .map(|(name, _)| name.as_str())
                     .collect::<Vec<_>>(),
-                ["Render all — 3 frames", "Cancel", "Stop this job"]
+                ["Render all — 3 frames", "Cancel job"]
             );
             assert!(sim
                 .state()
@@ -20428,17 +22690,26 @@ mod unix {
                 .values()
                 .flatten()
                 .all(|id| *id < question));
-            piece17_tap(&sim, question, "Stop this job");
+            // **The twenty-eighth notes, note 16: *Cancel job* asks in place,
+            // on the question itself**, and only *Cancel the job* sends the no.
+            piece17_tap(&sim, question, "Cancel job");
             rounds(8, &mut worker, &clock);
-            let confirm = the_message_saying(&sim, "Server A\nRange\nCancel this waiting job?");
+            let asked_in_place = sim.state().texts.get(&question).cloned().unwrap_or_default();
+            assert!(
+                asked_in_place.ends_with(
+                    "Cancel this job? Frames 1\u{2013}3 will not render. Their settings are deleted too. The first-frame check stays in History."
+                ),
+                "{asked_in_place}"
+            );
             let (back, got) = std::sync::mpsc::channel();
             let before = range.clone();
             on.on_the_machine(move |machine| {
                 back.send(machine.start.queue.read_one(&before).unwrap().is_some())
                     .unwrap()
             });
-            assert!(got.recv().unwrap(), "opening Stop did not cancel");
-            piece17_tap(&sim, confirm, "Stop this job");
+            assert!(got.recv().unwrap(), "asking did not cancel");
+            let confirm = question;
+            piece17_tap(&sim, confirm, "Cancel the job");
             rounds(8, &mut worker, &clock);
             let (back, got) = std::sync::mpsc::channel();
             on.on_the_machine(move |machine| {
@@ -20586,7 +22857,7 @@ mod unix {
                 "Server A\nKitchen\nFinished.",
                 "Server A\nHall\n🔴 Failed",
                 "Server A\nPorch\n🔴 Failed",
-                "Server A\nAttic\nAbandoned. Interrupted twice.",
+                "Server A\nAttic\nInterrupted twice. No more retries.",
                 "Server A\nCellar\nStopped.",
             ] {
                 let message = the_message_saying(&sim, beginning);
@@ -20603,7 +22874,7 @@ mod unix {
             };
             assert_eq!(
                 labels(the_message_saying(&sim, "Server A\nHall\n🔴 Failed")),
-                ["Send Output log", "Retry"],
+                ["Send Output log", "Submit again \u{2014} 3 frames"],
                 "its other actions stay"
             );
             assert_eq!(
@@ -20658,15 +22929,16 @@ mod unix {
             );
         }
 
-        /// **The eighteenth notes, note 16: a picture sent while its job
-        /// renders keeps its Stop; a last frame's picture read after the
-        /// ending, and the contact sheet, carry none** (`Telegram` C1b), and
-        /// the sheet has no companion message. Before 2026-10-25 the late
-        /// picture carried *Stop this job*, and *Kitchen · Frame sample*
-        /// followed the sheet only to carry one.
+        /// **The twenty-eighth notes, notes 18 and 19 (`Telegram` C1a, `Telegram` C1d,
+        /// `Telegram` C1e, `Telegram` I2, `Telegram` V1e): one message per job, from its start to its cut.** The
+        /// start is the job's own message, recorded, sounding under
+        /// *Everything*; frame 1's picture replies to it with no Stop; the tick
+        /// puts *Send a frame* beside *Stop this job*; at the ending it is cut
+        /// to one line with no buttons, and the contact sheet makes no sound.
+        /// ~~`eighteenth_6_a_picture_while_rendering_keeps_its_stop_and_nothing_after_the_ending_carries_one`~~
+        /// until 2026-11-09, when a picture carried *Stop this job*.
         #[test]
-        fn eighteenth_6_a_picture_while_rendering_keeps_its_stop_and_nothing_after_the_ending_carries_one(
-        ) {
+        fn twenty_eighth_18_one_message_per_job_from_its_start_to_its_cut() {
             let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
                 Vec::new(),
                 std::sync::Arc::new(std::time::SystemTime::now),
@@ -20677,6 +22949,10 @@ mod unix {
                     a_render_running(machine, "Kitchen", vec![1, 2, 3], None);
                 let directory = the_record_directory_of(machine, &kitchen);
                 its_choice_is_everything(&directory);
+                machine
+                    .start
+                    .journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(kitchen.clone()), "attempt 1")
+                    .unwrap();
                 std::fs::write(format!("{directory}/preview-1.png"), a_png_of(1280, 720))
                     .expect("published");
                 a_preview_journalled(machine, &kitchen, 1, true, 0);
@@ -20684,12 +22960,36 @@ mod unix {
             });
             let (kitchen, operation) = got.recv().expect("running");
             rounds(6, &mut worker, &clock);
+            // **The start is the job's own message** (`Telegram` C1a, `Telegram` C1d), with its sound
+            // under *Everything* (`Telegram` V1e), recorded (`Telegram` C7a).
+            let started: Vec<serde_json::Value> = sim
+                .calls("a", "sendMessage")
+                .into_iter()
+                .filter(|fields| fields["text"] == "Server A\nKitchen\nStarted.")
+                .collect();
+            assert_eq!(started.len(), 1, "one job's message");
+            assert!(started[0].get("disable_notification").is_none(), "its start sounds under Everything");
+            let jobs_message = the_jobs_message_of(&sim, "Kitchen");
+            // **Frame 1's picture replies to it, with no Stop and nothing after
+            // it** (`Telegram` I2, `Telegram` C1b).
             let first = *sim.state().photos.first().expect("frame 1's picture went");
-            assert_eq!(
-                eighteenth_6_the_stops_on(&sim, first),
-                ["Stop this job"],
-                "while it renders"
-            );
+            let photo = sim.calls("a", "sendPhoto").into_iter().next().expect("a picture");
+            assert_eq!(photo["reply_parameters"]["message_id"].as_i64(), Some(jobs_message));
+            assert!(eighteenth_6_the_stops_on(&sim, first).is_empty(), "no Stop on a picture");
+            // **The tick shows *Send a frame* beside *Stop this job* from the
+            // first finished frame** (`Telegram` C1c, `Telegram` C1d).
+            let buttons: Vec<String> = sim
+                .state()
+                .heard
+                .iter()
+                .filter(|(_, m, f)| m == "editMessageText" && f["message_id"].as_i64() == Some(jobs_message))
+                .filter_map(|(_, _, f)| f["reply_markup"]["inline_keyboard"][0].as_array().cloned())
+                .last()
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|b| b["text"].as_str().map(str::to_string))
+                .collect();
+            assert_eq!(buttons, ["Send a frame", "Stop this job"], "{:#?}", the_edits_of(&sim, jobs_message));
             let before_the_ending = *sim.state().texts.keys().max().expect("something was said");
             on.on_the_machine(move |machine| {
                 let directory = the_record_directory_of(machine, &kitchen);
@@ -20706,11 +23006,20 @@ mod unix {
             rounds(10, &mut worker, &clock);
             let said = sim.said_to_the_user();
             said_once(&said, "Server A\nKitchen\nFinished.");
-            assert_eq!(
-                sim.calls("a", "sendMediaGroup").len(),
-                1,
-                "the contact sheet went"
-            );
+            // **`Telegram` C1e: the job's message is cut to one line, its buttons gone.**
+            assert_eq!(sim.state().texts[&jobs_message], "Server A \u{b7} Kitchen \u{b7} Finished.");
+            let cut = sim
+                .state()
+                .heard
+                .iter()
+                .rfind(|(_, m, f)| m == "editMessageText" && f["message_id"].as_i64() == Some(jobs_message))
+                .map(|(_, _, f)| f["reply_markup"].clone())
+                .unwrap();
+            assert_eq!(cut, serde_json::json!({ "inline_keyboard": [] }));
+            // **`Telegram` V1e: the contact sheet makes no sound.**
+            let sheets = sim.calls("a", "sendMediaGroup");
+            assert_eq!(sheets.len(), 1, "the contact sheet went");
+            assert_eq!(sheets[0]["disable_notification"], serde_json::json!(true));
             assert!(
                 the_pictures_sent(&sim)
                     .iter()
@@ -20719,14 +23028,267 @@ mod unix {
                 the_pictures_sent(&sim)
             );
             assert!(
-                !said.iter().any(|text| text.contains("Frame sample")),
-                "no companion: {said:#?}"
-            );
-            assert!(
                 eighteenth_6_stops_after(&sim, before_the_ending).is_empty(),
                 "nothing after the ending carries a Stop: {:#?}",
                 eighteenth_6_stops_after(&sim, before_the_ending)
             );
+            // **Nothing edits a cut message again.**
+            let edits = the_edits_of(&sim, jobs_message).len();
+            rounds(6, &mut worker, &clock);
+            assert_eq!(the_edits_of(&sim, jobs_message).len(), edits);
+        }
+
+        /// **The Fable review, sitting 6 — `Telegram` C1e as changed
+        /// 2026-11-12: a cut Telegram keeps refusing is given up at the third
+        /// refusal, and the journal goes on.** The refusal here is neither
+        /// *not modified* nor C7's *cannot be edited*. Until this date the
+        /// cut was tried on every turn for good and the cursor never passed
+        /// that ending, so a restart sent every later message again.
+        #[test]
+        fn sitting_6_a_cut_telegram_keeps_refusing_is_given_up_and_the_cursor_passes_it() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let (kitchen, operation) =
+                    a_render_running(machine, "Kitchen", vec![1], None);
+                let directory = the_record_directory_of(machine, &kitchen);
+                its_choice_is_everything(&directory);
+                machine
+                    .start
+                    .journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(kitchen.clone()), "attempt 1")
+                    .unwrap();
+                back.send((kitchen, operation)).expect("sent");
+            });
+            let (kitchen, operation) = got.recv().expect("running");
+            rounds(6, &mut worker, &clock);
+            let jobs_message = the_jobs_message_of(&sim, "Kitchen");
+            assert_eq!(on.the_store().jobs_messages.len(), 1, "the job's message is recorded");
+            // From here Telegram refuses every edit of the job's message.
+            sim.state().every_edit_of_this_is_refused = Some(jobs_message);
+            let before = the_edits_of(&sim, jobs_message).len();
+            on.on_the_machine(move |machine| {
+                let directory = the_record_directory_of(machine, &kitchen);
+                std::fs::write(format!("{directory}/preview-1.png"), a_png_of(1280, 720)).expect("published");
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                a_preview_journalled(machine, &kitchen, 1, true, 0);
+            });
+            rounds(12, &mut worker, &clock);
+            said_once(&sim.said_to_the_user(), "Server A\nKitchen\nFinished.");
+            let tried = the_edits_of(&sim, jobs_message).len() - before;
+            assert!(
+                (1..=4).contains(&tried),
+                "the ending told once and the cut three times at most, then given up: {tried} edits were tried"
+            );
+            assert!(on.the_store().jobs_messages.is_empty(), "its record ended (`Telegram` C7a)");
+            // **Nothing tries it again, and the cursor has passed the ending**:
+            // a later event moves the saved place on.
+            let cursor = on.the_store().journal_cursor.expect("held");
+            on.on_the_machine(|machine| {
+                let (hall, _) = a_render_running(machine, "Hall", vec![1], None);
+                let directory = the_record_directory_of(machine, &hall);
+                its_choice_is_everything(&directory);
+                machine
+                    .start
+                    .journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(hall), "attempt 1")
+                    .unwrap();
+            });
+            rounds(8, &mut worker, &clock);
+            said_once(&sim.said_to_the_user(), "Server A\nHall\nStarted.");
+            assert_eq!(the_edits_of(&sim, jobs_message).len() - before, tried, "the cut is not tried again");
+            assert!(
+                on.the_store().journal_cursor.expect("held") > cursor,
+                "the saved place moved past the ending whose cut was refused"
+            );
+        }
+
+        /// **The Fable review's sitting 6 follow-up, its left item 1 —
+        /// `Telegram` F3c as changed 2026-11-12: a job's message whose record
+        /// could not be written is still edited and cut**, kept in the
+        /// worker's memory, and its record is written once the store takes
+        /// writes again. Until this date it read *Started.* for good.
+        #[test]
+        fn follow_up_a_jobs_message_whose_record_cannot_be_written_is_still_cut() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            on.refuses_jobs_messages.store(true, std::sync::atomic::Ordering::SeqCst);
+            let a_job_starts = |label: &'static str| {
+                let (back, got) = std::sync::mpsc::channel();
+                on.on_the_machine(move |machine| {
+                    let (job, operation) = a_render_running(machine, label, vec![1], None);
+                    let directory = the_record_directory_of(machine, &job);
+                    its_choice_is_everything(&directory);
+                    machine
+                        .start
+                        .journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job.clone()), "attempt 1")
+                        .unwrap();
+                    back.send((job, operation)).expect("sent");
+                });
+                got.recv().expect("running")
+            };
+            // **The record is never written, and the ending cuts the message
+            // from what memory holds.**
+            let (kitchen, operation) = a_job_starts("Kitchen");
+            rounds(6, &mut worker, &clock);
+            let jobs_message = the_jobs_message_of(&sim, "Kitchen");
+            assert!(on.the_store().jobs_messages.is_empty(), "its record was not written");
+            let before = the_edits_of(&sim, jobs_message).len();
+            on.on_the_machine(move |machine| {
+                let directory = the_record_directory_of(machine, &kitchen);
+                std::fs::write(format!("{directory}/preview-1.png"), a_png_of(1280, 720)).expect("published");
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                a_preview_journalled(machine, &kitchen, 1, true, 0);
+            });
+            rounds(12, &mut worker, &clock);
+            said_once(&sim.said_to_the_user(), "Server A\nKitchen\nFinished.");
+            let edits = the_edits_of(&sim, jobs_message);
+            assert!(edits.len() > before, "the job's message was cut at its ending");
+            assert!(!edits.last().unwrap().contains("Started."), "it no longer reads Started.: {edits:?}");
+            said_once(&sim.said_to_the_user(), "Server A \u{b7} Kitchen \u{b7} Finished.");
+            // **A second job's record, kept in memory, is written once the
+            // store takes a write again.**
+            a_job_starts("Hall");
+            rounds(6, &mut worker, &clock);
+            assert!(on.the_store().jobs_messages.is_empty(), "not written yet");
+            on.refuses_jobs_messages.store(false, std::sync::atomic::Ordering::SeqCst);
+            on.on_the_machine(|machine| {
+                machine.start.journal_about("a test's own event", None, "a later write").expect("journalled");
+            });
+            rounds(4, &mut worker, &clock);
+            assert_eq!(on.the_store().jobs_messages.len(), 1, "the record kept in memory is written");
+            said_once(&sim.said_to_the_user(), "Server A\nHall\nStarted.");
+        }
+
+        /// **The Fable review, sitting 6 — `Telegram` F3b: a different bot
+        /// keeps nothing of the old bot's conversation, and the same bot keeps
+        /// everything.** The position, the board's, the machinery message's
+        /// and the status message's identities, the register, the jobs'
+        /// message records and the action-context records go in the one write
+        /// that records the new bot; the journal cursor and the routing key
+        /// stay. Until this date the store named no bot, so a worker under a
+        /// new bot asked from the old bot's position and edited messages by
+        /// the old conversation's identities.
+        #[test]
+        fn sitting_6_a_different_bot_keeps_nothing_of_the_old_bots_conversation() {
+            use crate::the_telegram_worker::{the_start_asked, the_start_tied_to_its_bot};
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            on.on_the_machine(|machine| {
+                let (kitchen, _) = a_render_running(machine, "Kitchen", vec![1], None);
+                let directory = the_record_directory_of(machine, &kitchen);
+                its_choice_is_everything(&directory);
+                machine
+                    .start
+                    .journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(kitchen), "attempt 1")
+                    .unwrap();
+            });
+            sim.the_user_says("/status");
+            rounds(10, &mut worker, &clock);
+            let asked = on.asked_as(on.worker);
+            let said = std::sync::Mutex::new(Vec::<String>::new());
+            let says = |what: &str| said.lock().unwrap().push(what.to_string());
+            // **A store that names no bot takes the first and drops nothing.**
+            let before = on.the_store();
+            assert_eq!(before.bot, None);
+            assert!(before.update_position.is_some(), "an update was handled: {before:?}");
+            assert!(
+                before.update_position_written_at.is_some(),
+                "`Telegram` F3b: the position is written with its moment: {before:?}"
+            );
+            assert!(before.board.is_some() && before.status_message.is_some(), "{before:?}");
+            assert!(!before.jobs_messages.is_empty() && !before.sent_messages.is_empty(), "{before:?}");
+            assert!(!before.action_contexts.is_empty(), "the job's Stop is recorded: {before:?}");
+            let mut start = the_start_asked(asked.as_ref(), Duration::ZERO).expect("its start");
+            assert!(!the_start_tied_to_its_bot(&mut start, Some(111), asked.as_ref(), &says));
+            let mut kept = before.clone();
+            kept.bot = Some(111);
+            assert_eq!(on.the_store(), kept, "nothing dropped");
+            // **The same bot again: nothing changes, and nothing is written.**
+            let mut start = the_start_asked(asked.as_ref(), Duration::ZERO).expect("its start");
+            assert!(!the_start_tied_to_its_bot(&mut start, Some(111), asked.as_ref(), &says));
+            assert_eq!(start.state.update_position_written_at, kept.update_position_written_at);
+            // **No bot answered: nothing is compared or written, and this
+            // run's asks carry no position** (`Telegram` F3b; Sol's point): the moment
+            // is dropped from the start alone, so a different bot's updates
+            // are not confirmed unread.
+            assert!(!the_start_tied_to_its_bot(&mut start, None, asked.as_ref(), &says), "no bot answered: nothing compared");
+            assert_eq!(on.the_store(), kept);
+            assert_eq!(start.state.update_position, kept.update_position);
+            assert_eq!(start.state.update_position_written_at, None);
+            // An instruction's outcome is recorded under the old bot.
+            let recorded = on.asked_as(on.worker);
+            let mut acts = crate::the_telegram_worker::TheCommandPathOverTheSupervisor::over(
+                recorded,
+                std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                crate::the_telegram_journal::TheRecordsOnThisMachine::in_the_package_area(&on.at),
+            );
+            smoozy_telegram::actions::TheSupervisorsCommandPath::record_the_outcome(
+                &mut acts,
+                "stop-4242",
+                &smoozy_telegram::actions::ARecordedOutcome::Done,
+            )
+            .expect("recorded");
+            let kept = on.the_store();
+            assert!(kept.instruction_outcomes.contains_key("stop-4242"), "{kept:?}");
+            // **A different bot.**
+            assert!(the_start_tied_to_its_bot(&mut start, Some(222), asked.as_ref(), &says));
+            let after = on.the_store();
+            for held in [&after, &start.state] {
+                assert_eq!(held.bot, Some(222));
+                assert_eq!(held.update_position, None);
+                assert_eq!(held.update_position_written_at, None);
+                assert_eq!(held.board, None);
+                assert_eq!(held.machinery_message, None);
+                assert_eq!(held.status_message, None);
+                assert!(held.sent_messages.is_empty() && held.jobs_messages.is_empty() && held.action_contexts.is_empty());
+                assert_eq!(held.journal_cursor, kept.journal_cursor, "the journal is the machine's, not a conversation's");
+                // **The outcomes go too** (Sol's point): an instruction is
+                // named after its update, *stop-4242*, and the new bot's
+                // updates may carry the same numbers.
+                assert!(held.instruction_outcomes.is_empty(), "{held:?}");
+                assert_eq!(held.phones_choice, kept.phones_choice);
+            }
+            assert_eq!(after.routing_key, kept.routing_key);
+            assert!(said.lock().unwrap().iter().any(|what| what.contains("a different bot")), "it is said in the worker's lines");
+        }
+
+        /// **`Telegram` F3b's sentence of 2026-11-12 (Sol's look at the
+        /// double-check ideas, finding 2): a store that names no bot drops its
+        /// recorded instruction outcomes when the first bot is written into
+        /// it, and keeps its messages.** A store written by a program from
+        /// before the bot was kept holds *stop-4242* as done; the token now
+        /// names another bot, which nothing in the store can show. **It
+        /// failed before the fix**: the outcome was kept, so the new bot's
+        /// own update 4242, a stop, would have read as already done.
+        #[test]
+        fn double_check_sol_2_a_store_that_names_no_bot_drops_its_instruction_outcomes() {
+            use crate::the_telegram_worker::AFact;
+            let mut held = smoozy_runtime::acting::stores::TheTelegramWorkersStateAsHeld {
+                board: Some(12),
+                status_message: Some(14),
+                ..Default::default()
+            };
+            held.instruction_outcomes.insert("stop-4242".to_string(), "done".to_string());
+            held.jobs_messages.insert("a job".to_string(), "its message".to_string());
+            let kept = held.clone();
+            AFact::TheBot(222).written_into(&mut held);
+            assert!(held.instruction_outcomes.is_empty(), "an old bot's outcome was kept: {held:?}");
+            assert_eq!(held.bot, Some(222));
+            assert_eq!(
+                (held.board, held.status_message, &held.jobs_messages),
+                (kept.board, kept.status_message, &kept.jobs_messages),
+                "the same bot's messages are still right, and are kept"
+            );
+            // **The same bot again keeps what it has recorded since.**
+            held.instruction_outcomes.insert("stop-4300".to_string(), "done".to_string());
+            AFact::TheBot(222).written_into(&mut held);
+            assert!(held.instruction_outcomes.contains_key("stop-4300"));
         }
 
         /// **The eighteenth notes, note 16: a start read after its job has
@@ -20755,11 +23317,16 @@ mod unix {
                 );
             });
             rounds(8, &mut worker, &clock);
-            let start = the_message_saying(&sim, "Server A\nQuick\nStarted.");
+            // **From 2026-11-10 a start read once its job has ended sends
+            // nothing** — its failure tells it, and a job's message sent then
+            // could stand after the ending with nothing left to cut it (Sol's
+            // fresh look at the twenty-eighth notes' piece 10, round 2). Until
+            // then it went with no Stop.
             assert!(
-                the_buttons_and_their_taps_on(&sim, start).is_empty(),
-                "no Stop on a start read after the ending"
+                !sim.calls("a", "sendMessage").iter().any(|f| f["text"] == "Server A\nQuick\nStarted."),
+                "no start after the ending"
             );
+            the_message_saying(&sim, "Server A\nQuick\n🔴 Failed.");
         }
 
         /// **The eighteenth notes, note 16: a Stop tapped on an earlier
@@ -20955,6 +23522,158 @@ mod unix {
             );
         }
 
+        /// **When Telegram refuses, 400 as the brief has it: *Set up again*
+        /// keeps what the server remembers of its Telegram messages**, so a
+        /// Stop on a message sent before it still asks to confirm. *Set up
+        /// again* places the program and the role's material again, which
+        /// starts the supervisor and the worker again over the same package
+        /// area; the worker's store, and the button records in it, stay.
+        #[test]
+        fn when_telegram_refuses_set_up_again_keeps_the_old_buttons_working() {
+            let (sim, clock, mut on, mut worker) = one_worker_reading_its_line();
+            on.on_the_machine(|machine| {
+                let (job, _) = a_render_running(machine, "Kitchen", vec![1, 2], None);
+                machine
+                    .start
+                    .journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job), "attempt 1")
+                    .unwrap();
+            });
+            rounds(8, &mut worker, &clock);
+            let message = the_message_saying(&sim, "Server A\nKitchen\nStarted.");
+            let stop = the_buttons_and_their_taps_on(&sim, message)
+                .into_iter()
+                .find(|(text, _)| text.starts_with("Stop"))
+                .expect("the job's message carries Stop")
+                .1;
+            drop(worker);
+            // **The material placed again: *disabled*, then *enabled*** (`Telegram`
+            // L4's sentence of 2026-10-12), and the program placed again.
+            on.on_the_machine(|machine| {
+                answer(&a_role_request(THE_TELEGRAM_ROLE_IS_DISABLED_REQUEST), &mut machine.start);
+                answer(&a_role_request(THE_TELEGRAM_ROLE_IS_ENABLED_REQUEST), &mut machine.start);
+            });
+            let process = on.starts_again();
+            let mut again = a_worker_reading_its_line(&on, process, &sim, &clock);
+            rounds(8, &mut again, &clock);
+            sim.the_user_taps(message, &stop);
+            rounds(8, &mut again, &clock);
+            assert!(
+                the_buttons_and_their_taps_on(&sim, message)
+                    .iter()
+                    .any(|(text, _)| text == "Keep rendering"),
+                "the old Stop asks to confirm: {:?}",
+                sim.said_to_the_user()
+            );
+            assert!(
+                !sim.said_to_the_user().iter().any(|text| text.contains("expired")),
+                "{:?}",
+                sim.said_to_the_user()
+            );
+        }
+
+        /// **When Telegram refuses — `Telegram` F6: a blocked bot and a
+        /// rejected token are written to the store while they last, and the
+        /// word goes once messages go through again.** Renders are not
+        /// touched. *Before, a refused send was dropped and nothing anywhere
+        /// recorded why.*
+        #[test]
+        fn when_telegram_refuses_the_worker_writes_the_word_while_it_lasts() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            rounds(4, &mut worker, &clock);
+            assert_eq!(on.the_store().telegrams_trouble, None, "all is well");
+            sim.state().the_bot_is_blocked = true;
+            on.on_the_machine(|machine| {
+                let (job, _) = a_render_running(machine, "Kitchen", vec![1, 2], None);
+                machine
+                    .start
+                    .journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job), "attempt 1")
+                    .unwrap();
+            });
+            rounds(8, &mut worker, &clock);
+            assert_eq!(on.the_store().telegrams_trouble.as_deref(), Some("the chat refuses"));
+            sim.state().the_bot_is_blocked = false;
+            // **Since 2026-11-15 only a send ends it** (`Telegram` F6 item 2):
+            // unblocking sends the bot a Start, and its answer is one.
+            sim.the_user_says("/start");
+            rounds(8, &mut worker, &clock);
+            assert_eq!(on.the_store().telegrams_trouble, None, "messages go through again");
+            sim.state().refused_tokens.insert("a".to_string());
+            rounds(4, &mut worker, &clock);
+            assert_eq!(on.the_store().telegrams_trouble.as_deref(), Some("the token is rejected"));
+            sim.state().refused_tokens.clear();
+            rounds(8, &mut worker, &clock);
+            assert_eq!(on.the_store().telegrams_trouble, None);
+        }
+
+        /// **The what-if live pass of 2026-11-15, new fault 1: a blocked bot
+        /// whose edits still go through.** Telegram refused each new job
+        /// message with 403, and the word was never kept: the board's
+        /// heartbeat edit, accepted every minute, emptied it. **Only a send
+        /// ends it now** (`Telegram` F6 item 2 as changed that day), so the
+        /// word stands past several heartbeats, and goes at the first message
+        /// sent once the bot is unblocked.
+        #[test]
+        fn when_telegram_refuses_a_blocked_bot_whose_edits_go_through_is_still_said() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            rounds(4, &mut worker, &clock);
+            {
+                let mut state = sim.state();
+                state.the_bot_is_blocked = true;
+                state.its_edits_go_through_while_blocked = true;
+            }
+            on.on_the_machine(|machine| {
+                let (job, _) = a_render_running(machine, "Kitchen", vec![1, 2], None);
+                machine
+                    .start
+                    .journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job), "attempt 1")
+                    .unwrap();
+            });
+            let edits_before = sim.state().heard.iter().filter(|(_, method, _)| method.starts_with("edit")).count();
+            // **Past three of the board's heartbeats**, each an edit the
+            // blocked chat still takes.
+            let past_three_heartbeats =
+                3 * smoozy_telegram::board::staleness::THE_DEFAULT_RENEWAL_INTERVAL.as_secs()
+                    / smoozy_telegram::board::staleness::THE_READ_CADENCE.as_secs().max(1);
+            rounds(past_three_heartbeats as usize + 8, &mut worker, &clock);
+            let edits_after = sim.state().heard.iter().filter(|(_, method, _)| method.starts_with("edit")).count();
+            assert!(edits_after > edits_before, "the blocked chat took an edit meanwhile");
+            assert_eq!(on.the_store().telegrams_trouble.as_deref(), Some("the chat refuses"));
+            {
+                let mut state = sim.state();
+                state.the_bot_is_blocked = false;
+                state.its_edits_go_through_while_blocked = false;
+            }
+            sim.the_user_says("/start");
+            rounds(8, &mut worker, &clock);
+            assert_eq!(on.the_store().telegrams_trouble, None, "the answer to the Start went through");
+        }
+
+        /// **`Telegram` F6's judge: the token first, then the chat, then the
+        /// line, and the line only after three minutes.**
+        #[test]
+        fn when_telegram_refuses_the_word_is_judged_in_its_order() {
+            use crate::the_telegram_worker::{telegrams_trouble_in, HOW_LONG_NOTHING_REACHES_TELEGRAM_BEFORE_IT_IS_SAID};
+            use smoozy_framing::requests::TheTelegramTrouble;
+            use smoozy_telegram::transport::HowTelegramAnswers;
+            let now = std::time::Instant::now() + Duration::from_secs(3600);
+            let all = HowTelegramAnswers {
+                the_token_is_rejected: true,
+                the_chat_refuses: true,
+                nothing_reached_it_since: Some(now - Duration::from_secs(600)),
+            };
+            assert_eq!(telegrams_trouble_in(all, now), Some(TheTelegramTrouble::TheTokenIsRejected));
+            let chat = HowTelegramAnswers { the_token_is_rejected: false, ..all };
+            assert_eq!(telegrams_trouble_in(chat, now), Some(TheTelegramTrouble::TheChatRefuses));
+            let line = HowTelegramAnswers { the_chat_refuses: false, ..chat };
+            assert_eq!(telegrams_trouble_in(line, now), Some(TheTelegramTrouble::TelegramIsNotReached));
+            let lately = HowTelegramAnswers {
+                nothing_reached_it_since: Some(now - HOW_LONG_NOTHING_REACHES_TELEGRAM_BEFORE_IT_IS_SAID + Duration::from_secs(1)),
+                ..line
+            };
+            assert_eq!(telegrams_trouble_in(lately, now), None, "a short outage says nothing");
+            assert_eq!(telegrams_trouble_in(HowTelegramAnswers::default(), now), None);
+        }
+
         /// **The eighteenth notes, note 16: an answer applied carries Stop
         /// only while its job is live** (`Telegram` C1b) — *Render all* leaves
         /// the range waiting to render, so it keeps one; *Cancel it* removes
@@ -20983,10 +23702,11 @@ mod unix {
             let (range, kitchen, hall) = got.recv().unwrap();
             rounds(8, &mut worker, &clock);
             let question = the_message_saying(&sim, "Server A\nKitchen \u{b7} frames ");
-            assert_eq!(
-                eighteenth_6_the_stops_on(&sim, question),
-                ["Stop this job"],
-                "a waiting question keeps its Stop"
+            // **Since the Creator's twenty-eighth notes, note 16, the question
+            // carries no Stop**: its *Cancel job* is how the job is ended there.
+            assert!(
+                eighteenth_6_the_stops_on(&sim, question).is_empty(),
+                "a waiting question carries no Stop"
             );
             on.on_the_machine(move |machine| {
                 answer(
@@ -20998,16 +23718,21 @@ mod unix {
                     &mut machine.start,
                 );
             });
+            let hall_question = the_message_saying(&sim, "Server A\nHall \u{b7} frames ");
             rounds(8, &mut worker, &clock);
-            let rendering = the_message_saying(&sim, "Server A\nKitchen\nAnswered");
+            // **From 2026-11-09 each answer is told by an edit of its question**
+            // (`Telegram` A3), and the *yes* leaves it the range's job's message,
+            // carrying *Cancel this job* while the range waits its turn (`Telegram` C1d).
+            assert!(an_edit_said(&sim, "Server A\nKitchen\nAnswered “Render all — 3 frames”."), "{:#?}", the_edits_of(&sim, question));
+            let rendering = question;
             assert_eq!(
-                eighteenth_6_the_stops_on(&sim, rendering),
-                ["Stop this job"],
+                the_buttons_and_their_taps_on(&sim, rendering).into_iter().map(|(label, _)| label).collect::<Vec<_>>(),
+                ["Cancel this job"],
                 "the range is waiting to render"
             );
-            let cancelled = the_message_saying(&sim, "Server A\nHall\nAnswered");
+            assert_eq!(sim.state().texts[&hall_question], "Server A\nHall\nAnswered “Cancel job”.");
             assert!(
-                eighteenth_6_the_stops_on(&sim, cancelled).is_empty(),
+                the_buttons_and_their_taps_on(&sim, hall_question).is_empty(),
                 "the range was cancelled"
             );
             // The rental showed both the old question and the applied answer.
@@ -21025,18 +23750,15 @@ mod unix {
                 eighteenth_6_the_stops_on(&sim, question).is_empty(),
                 "old first-frame question loses Stop"
             );
-            assert!(
-                eighteenth_6_the_stops_on(&sim, rendering).is_empty(),
-                "old applied answer loses Stop"
-            );
             // ~~The question kept its other actions~~ — since 2026-10-31 (the
             // live Telegram pass's fault 6; `Telegram` A3 as dated that day)
-            // a released hold's question keeps no button at all.
+            // a released hold's question keeps no button at all, and from
+            // 2026-11-09 its job's *Cancel this job* goes with its ending.
             let labels: Vec<_> = the_buttons_and_their_taps_on(&sim, question)
                 .into_iter()
                 .map(|(label, _)| label)
                 .collect();
-            assert!(labels.is_empty(), "a released hold's question keeps no button: {labels:?}");
+            assert!(labels.is_empty(), "a released hold's question keeps no button once its job ended: {labels:?}");
         }
 
         #[test]
@@ -21094,13 +23816,12 @@ mod unix {
             );
             assert_eq!(
                 the_buttons_on(&sim, &waiting),
-                [
-                    "Render all \u{2014} 240 frames",
-                    "Cancel",
-                    "Stop this job"
-                ]
+                // **No Stop on the question, and its *no* is *Cancel job***
+                // (the Creator's twenty-eighth notes, note 16).
+                ["Render all \u{2014} 240 frames", "Cancel job"]
             );
 
+            let question = the_message_saying(&sim, "Server A\nKitchen \u{b7} frames 1\u{2013}240\nNeeds your answer.");
             on.on_the_machine(move |machine| {
                 let answered = answer(
                     &an_answer_to(&hold, THE_ANSWER_IS_YES, THE_ROUTE_IS_THE_DESK),
@@ -21115,11 +23836,32 @@ mod unix {
             rounds(4, &mut worker, &clock);
             let said = sim.said_to_the_user();
             said_once(&said, "Server A\nKitchen — frame 1\nFinished.");
-            assert_eq!(
-                said_once(&said, "Server A\nKitchen\nAnswered"),
-                "Server A\nKitchen\nAnswered “Render all — 240 frames”."
+            // **`Telegram` A3 as changed 2026-11-09: the answer applied is told
+            // by an edit of the question**, which is the range's job's message
+            // from then on and shows its progress (`Telegram` C1d) — no message of its own.
+            assert!(
+                the_edits_of(&sim, question).contains(&"Server A\nKitchen\nAnswered “Render all — 240 frames”.".to_string()),
+                "{:#?}",
+                the_edits_of(&sim, question)
             );
-            assert_eq!(said.len(), 4, "{said:#?}");
+            assert_eq!(sim.state().texts[&question], "Server A\nKitchen\nWaiting.");
+            assert_eq!(said.len(), 3, "{said:#?}");
+        }
+
+        /// **Whether any message was edited to say exactly `text`.**
+        fn an_edit_said(sim: &crate::the_telegram_worker::a_simulated_conversation::Sim, text: &str) -> bool {
+            sim.state().heard.iter().any(|(_, method, fields)| method == "editMessageText" && fields["text"].as_str() == Some(text))
+        }
+
+        /// **Every text one message was edited to, in order** (`Telegram` C1d,
+        /// `Telegram` C1e, `Telegram` A3 — the twenty-eighth notes, note 18).
+        fn the_edits_of(sim: &crate::the_telegram_worker::a_simulated_conversation::Sim, message: i64) -> Vec<String> {
+            sim.state()
+                .heard
+                .iter()
+                .filter(|(_, method, fields)| method == "editMessageText" && fields["message_id"].as_i64() == Some(message))
+                .filter_map(|(_, _, fields)| fields["text"].as_str().map(str::to_string))
+                .collect()
         }
 
         /// **`Telegram` F3 and `State, identity and recovery` E3 — where the
@@ -21228,12 +23970,15 @@ mod unix {
             assert!(sim.state().photos.is_empty());
         }
 
-        /// **`Telegram` A4 — a drop is told, with why.** The first frame's job
-        /// is cancelled before it ran, so the machine drops the hold behind it
-        /// and removes the held job with its hold record in the same act
-        /// (`Queue & History` H9, `Queue & History` H11). **The phone is told the held frames
-        /// will not render, and why**, from what this run read of the hold
-        /// when it was placed — the release event names none of it.
+        /// **`Telegram` A4 — a drop behind the user's own cancel is told
+        /// nowhere.** The first frame's job is cancelled before it ran, so the
+        /// machine drops the hold behind it and removes the held job with its
+        /// hold record in the same act (`Queue & History` H9, `Queue & History`
+        /// H11). **Since the Creator's twenty-eighth notes, note 16, a cancel is
+        /// the user's own act and nothing more is said**; until then the phone
+        /// was told *Not rendered: frame 1 was cancelled (240 frames held).* A
+        /// drop behind a check that failed or was stopped is still told
+        /// (`a_first_frame_job_that_fails_is_stopped_or_is_given_up_drops_its_held_job_told_once`).
         #[test]
         fn a_drop_is_told_with_its_reason() {
             let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
@@ -21266,19 +24011,7 @@ mod unix {
             });
             rounds(4, &mut worker, &clock);
             let said = sim.said_to_the_user();
-            assert_eq!(
-                said,
-                ["Server A\nKitchen\nNot rendered: frame 1 was cancelled (240 frames held)."],
-                "the drop, once, and nothing for the cancel itself"
-            );
-            // **The eighteenth notes, note 16 (`Telegram` C1b): a drop is an
-            // ending and carries no Stop.** Until 2026-10-25 it carried one that
-            // could only answer *This job has already ended.*
-            let message = the_message_saying(&sim, "Server A\nKitchen\nNot rendered: frame 1");
-            assert!(
-                the_buttons_and_their_taps_on(&sim, message).is_empty(),
-                "no Stop on a drop"
-            );
+            assert!(said.is_empty(), "nothing for the cancel and nothing for the drop: {said:?}");
         }
 
         /// **`Queue & History` L22 — a waiting job dropped at its turn because
@@ -21438,6 +24171,76 @@ mod unix {
                 moved > smoozy_runtime::acting::journal::THE_ENTRIES_IN_ONE_SEGMENT
                     && moved > cursor,
                 "read on past the gap: {cursor} to {moved}"
+            );
+        }
+
+        /// **The Fable review's sitting 6 follow-up, its left item 4 —
+        /// `Telegram` F3a as changed 2026-11-12: the message that says some
+        /// events were missed is tried by `Telegram` F3a's three counted tries and then
+        /// passed**, so a job's ending past the gap is still sent. Until this
+        /// date a turn whose gap message came back *not reached* ended there,
+        /// and while that one send kept failing and others got through,
+        /// nothing past the gap was ever sent.
+        #[test]
+        fn follow_up_a_gap_message_that_keeps_failing_is_passed_and_later_events_are_sent() {
+            let (sim, clock, mut on, worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            drop(worker);
+            on.on_the_machine(|machine| {
+                for n in 0..smoozy_runtime::acting::journal::THE_ENTRIES_IN_ONE_SEGMENT + 4 {
+                    machine
+                        .start
+                        .journal_about("a test's own event", None, &n.to_string())
+                        .expect("journalled");
+                }
+                std::fs::remove_file(
+                    machine
+                        .at
+                        .join(THE_AREA_THE_JOURNAL_SITS_IN)
+                        .join(format!("{:020}.segment", 0)),
+                )
+                .expect("the oldest segment is dropped");
+            });
+            let process = on.starts_again();
+            let (mut next, _) = a_worker_on(
+                &on,
+                process,
+                "a",
+                "a",
+                &sim,
+                &clock,
+                JobsHeldHere::default(),
+            );
+            let logs = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+            let copy = logs.clone();
+            next.the_journal()
+                .record_notes_with(std::sync::Arc::new(move |line| {
+                    copy.lock().unwrap().push(line.into())
+                }));
+            sim.state().broken_texts.push((
+                "a".into(),
+                "Some messages about this server's jobs were not sent.".into(),
+            ));
+            let (job, operation) = sixteenth_job(&on, "Video", vec![1, 2], true, false);
+            a_finished_video_of(&on, &job, 2_000);
+            a_video_job_finishes(&on, &job, &operation, asked::IT_FINISHED);
+            for _ in 0..24 {
+                a_round_of(&mut [&mut next], &clock);
+            }
+            let said = sim.said_to_the_user();
+            assert!(
+                !said.iter().any(|text| text.contains("Some messages about this server's jobs were not sent.")),
+                "the gap message never reached Telegram"
+            );
+            assert!(
+                said.iter().any(|text| text.contains("Video") && text.contains("Finished.")),
+                "the job's ending past the gap was sent: {said:?}"
+            );
+            assert!(
+                logs.lock().unwrap().iter().any(|line| line.contains("events were missed") && line.contains("passed after 3 counted tries")),
+                "the passed gap message is logged"
             );
         }
 
@@ -21820,6 +24623,19 @@ mod unix {
             statement: TheStatementAtTheEnding,
             figure: WhatTheFigureIs,
         ) {
+            the_render_reports_its_ending_naming(machine, operation, ending, statement, figure, &[]);
+        }
+
+        /// The same, with the file names the remap left unchanged
+        /// (`Rendering` K14c).
+        fn the_render_reports_its_ending_naming(
+            machine: &mut AStartOverAnAreaThatGoesWithIt,
+            operation: &Identity,
+            ending: &str,
+            statement: TheStatementAtTheEnding,
+            figure: WhatTheFigureIs,
+            missing: &[&str],
+        ) {
             machine
                 .start
                 .a_render_attempt_ended(
@@ -21841,6 +24657,7 @@ mod unix {
                         something_followed_the_marker: Some(true),
                         device_line: None,
                         no_render_began: false,
+                        missing: missing.iter().map(|name| name.to_string()).collect(),
                     },
                     None,
                     Some(statement),
@@ -21866,6 +24683,7 @@ mod unix {
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 },
                 WhatTheFigureIs::NoFrameCountsAsAlreadyThere,
@@ -21991,7 +24809,16 @@ mod unix {
             );
             rounds(4, &mut worker, &clock);
             let said = sim.said_to_the_user();
-            said_once(&said, "Server A\nCellar\nStop sent.");
+            // **`Telegram` D2 as changed 2026-11-13 (the Creator's addition):
+            // *Stop sent.* was said once, and went once *Stopped.* was told.**
+            let stop_sent_was_said = sim
+                .state()
+                .heard
+                .iter()
+                .filter(|(_, _, fields)| fields["text"].as_str() == Some("Server A\nCellar\nStop sent."))
+                .count();
+            assert_eq!(stop_sent_was_said, 1, "Stop sent. was said once");
+            assert!(!said.iter().any(|text| text.starts_with("Server A\nCellar\nStop sent.")), "and is gone: {said:#?}");
             said_once(&said, "Server A\nCellar\nStopped.");
             assert!(
                 !said
@@ -22001,16 +24828,282 @@ mod unix {
             );
             // **The eighteenth notes, note 16 (`Telegram` C1b, `Telegram` D2): neither the
             // acknowledgement nor the stop's outcome carries a Stop.**
-            for beginning in [
-                "Server A\nCellar\nStop sent.",
-                "Server A\nCellar\nStopped.",
-            ] {
+            // *Stop sent.*, the question it was edited into, is gone (above).
+            for beginning in ["Server A\nCellar\nStopped."] {
                 let message = the_message_saying(&sim, beginning);
                 assert!(
                     eighteenth_6_the_stops_on(&sim, message).is_empty(),
                     "{beginning:?} carries no Stop"
                 );
             }
+        }
+
+        /// **The job's own message of the job `label`** — the one message its
+        /// start went as (`Telegram` C1d), by its identity.
+        fn the_jobs_message_of(sim: &TheSim, label: &str) -> i64 {
+            let start = format!("Server A\n{label}\nStarted.");
+            let state = sim.state();
+            let sent: Vec<i64> = state
+                .heard
+                .iter()
+                .filter(|(_, m, f)| m == "editMessageText" && f["text"] == start.as_str())
+                .filter_map(|(_, _, f)| f["message_id"].as_i64())
+                .collect();
+            *sent.first().unwrap_or_else(|| panic!("{label}'s job's message: {:#?}", state.texts))
+        }
+
+        /// **`Telegram` D0 as changed 2026-11-09 (the twenty-eighth notes, note
+        /// 18): Stop pressed on the job's own message asks there, in place**,
+        /// and no new message; *Keep rendering* puts `Telegram` C1d's buttons back; asked
+        /// again and confirmed, the stop reaches the render. **It failed before
+        /// the change**: the start carried a Stop whose question was a new
+        /// message.
+        #[test]
+        fn twenty_eighth_18_stop_on_the_jobs_message_asks_in_place() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let (job, operation) = a_render_running(machine, "Cellar", vec![1, 2, 3], None);
+                let (child, pair) = a_stand_in_render(machine);
+                the_render_process_is_recorded(machine, &operation, &pair);
+                machine
+                    .start
+                    .journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job), "attempt 1")
+                    .unwrap();
+                back.send(child).expect("sent");
+            });
+            let mut child = got.recv().expect("running");
+            rounds(6, &mut worker, &clock);
+            let message = the_jobs_message_of(&sim, "Cellar");
+            let sent_before = sim.calls("a", "sendMessage").len();
+            piece17_tap(&sim, message, "Stop this job");
+            rounds(6, &mut worker, &clock);
+            assert!(child.try_wait().unwrap().is_none(), "asking stopped nothing");
+            assert_eq!(
+                sim.state().texts[&message],
+                "Server A\nCellar\nStarted.\nStop this job?\nThe current frame may not be saved."
+            );
+            let asked: Vec<String> = the_buttons_and_their_taps_on(&sim, message).into_iter().map(|(label, _)| label).collect();
+            assert_eq!(asked, ["Keep rendering", "Stop this job"]);
+            assert!(
+                !sim.calls("a", "sendMessage").iter().skip(sent_before).any(|f| f["text"].as_str().is_some_and(|t| t.contains("Stop this job?"))),
+                "no new message for the question"
+            );
+            // **The tick keeps the question while it is open.**
+            rounds(6, &mut worker, &clock);
+            assert!(sim.state().texts[&message].ends_with("Stop this job?\nThe current frame may not be saved."));
+            piece17_tap(&sim, message, "Keep rendering");
+            rounds(6, &mut worker, &clock);
+            // **With `Telegram` C1d's *Updated* line back** once the question
+            // has gone (the twenty-ninth notes, note 9, piece T).
+            let shown = sim.state().texts[&message].clone();
+            assert!(shown.starts_with("Server A\nCellar\nStarted.\nUpdated "), "{shown:?}");
+            let back_again: Vec<String> = the_buttons_and_their_taps_on(&sim, message).into_iter().map(|(label, _)| label).collect();
+            assert_eq!(back_again, ["Stop this job"], "`Telegram` C1d's buttons are back");
+            piece17_tap(&sim, message, "Stop this job");
+            rounds(6, &mut worker, &clock);
+            piece17_tap(&sim, message, "Stop this job");
+            rounds(8, &mut worker, &clock);
+            assert!(it_was_interrupted(&mut child), "the confirmed stop reached the render: {:#?}", sim.said_to_the_user());
+        }
+
+        /// **`Telegram` C1d's buttons after *Render all*, the twenty-eighth
+        /// notes, note 16's design item 9 (left by piece 8)**: while the range
+        /// waits its turn its job's message — the question — carries *Cancel
+        /// this job*, which asks in place with the pair's sentence. **It failed
+        /// before the change**: the answered question kept no button, and the
+        /// answer's own message asked *Cancel this job?* alone.
+        #[test]
+        fn twenty_eighth_16_a_waiting_range_offers_cancel_with_the_pairs_sentence() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let (check, operation) = a_render_running(machine, "Check", vec![1], None);
+                let (_, hold) = a_hold_placed_on(machine, "Range", vec![1, 2, 3], Some(&check), "the first-frame check");
+                a_frame_produced_with_its_layers(machine, &check, 1, &[("Interior", 0)]);
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                back.send(hold).unwrap();
+            });
+            let hold = got.recv().unwrap();
+            rounds(8, &mut worker, &clock);
+            let question = the_message_saying(&sim, "Server A\nRange \u{b7} frames ");
+            on.on_the_machine(move |machine| {
+                answer(&an_answer_to(&hold, THE_ANSWER_IS_YES, THE_ROUTE_IS_THE_DESK), &mut machine.start);
+            });
+            rounds(8, &mut worker, &clock);
+            assert_eq!(sim.state().texts[&question], "Server A\nRange\nWaiting.");
+            piece17_tap(&sim, question, "Cancel this job");
+            rounds(6, &mut worker, &clock);
+            assert_eq!(
+                sim.state().texts[&question],
+                "Server A\nRange\nWaiting.\nCancel this job?\nFrames 1\u{2013}3 have not started. Their settings are deleted too. The first-frame check stays in History."
+            );
+            let asked: Vec<String> = the_buttons_and_their_taps_on(&sim, question).into_iter().map(|(label, _)| label).collect();
+            assert_eq!(asked, ["Keep the job", "Cancel the job"]);
+        }
+
+        /// **Sol's fresh look, round 1: a first-frame question set to `Nothing`
+        /// and back keeps its two answers.** The question is the held range's
+        /// job's message (`Telegram` C1d), and a change to `Nothing` cuts a
+        /// job's message (`Telegram` C1e) — but a question already sent is not
+        /// sent again on the change back (`Telegram` V1c), so cutting it would
+        /// leave the hold with nothing to answer it on the phone. **It failed
+        /// before the fix**: the question was cut to *Reporting off.*.
+        #[test]
+        fn twenty_eighth_18_a_question_set_to_off_and_back_keeps_its_answers() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let (check, operation) = a_render_running(machine, "Check", vec![1], None);
+                let (range, _) = a_hold_placed_on(machine, "Range", vec![1, 2, 3], Some(&check), "the first-frame check");
+                a_frame_produced_with_its_layers(machine, &check, 1, &[("Interior", 0)]);
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                back.send(range).unwrap();
+            });
+            let range = got.recv().unwrap();
+            rounds(8, &mut worker, &clock);
+            let question = the_message_saying(&sim, "Server A\nRange \u{b7} frames ");
+            for value in [serde_json::json!("Nothing"), serde_json::json!("Everything")] {
+                let range = range.clone();
+                on.on_the_machine(move |machine| {
+                    the_choice_is_changed(&mut machine.start, &range, value);
+                });
+                rounds(4, &mut worker, &clock);
+            }
+            assert!(sim.state().texts[&question].starts_with("Server A\nRange \u{b7} frames "), "{}", sim.state().texts[&question]);
+            let answers: Vec<String> = the_buttons_and_their_taps_on(&sim, question).into_iter().map(|(label, _)| label).collect();
+            assert_eq!(answers, ["Render all \u{2014} 3 frames", "Cancel job"]);
+        }
+
+        /// **Sol's fresh look, round 1: a restart after the question was sent
+        /// and recorded as the range's job's message sends no second
+        /// question** (`Telegram` C7a). **It failed before the fix**: the
+        /// replayed ending asked again, with a sound, and two questions stood.
+        #[test]
+        fn twenty_eighth_18_a_restart_after_the_question_asks_nothing_again() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            on.on_the_machine(|machine| {
+                let (check, operation) = a_render_running(machine, "Check", vec![1], None);
+                a_hold_placed_on(machine, "Range", vec![1, 2, 3], Some(&check), "the first-frame check");
+                a_frame_produced_with_its_layers(machine, &check, 1, &[("Interior", 0)]);
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+            });
+            let questions = |sim: &TheSim| {
+                sim.calls("a", "sendMessage").iter().filter(|f| f["text"].as_str().is_some_and(|t| t.starts_with("Server A\nRange \u{b7} frames "))).count()
+            };
+            for _ in 0..8 {
+                worker.the_journal().the_next_cursor_move_is_lost = true;
+                rounds(1, &mut worker, &clock);
+            }
+            assert_eq!(questions(&sim), 1);
+            drop(worker);
+            let mut again = a_worker_reading_its_line(&on, on.worker, &sim, &clock);
+            rounds(8, &mut again, &clock);
+            assert_eq!(questions(&sim), 1, "the record stood: no second question");
+        }
+
+        /// **Sol's fresh look, round 1: a question whose buttons' edit was
+        /// refused is still the range's job's message** (`Telegram` C7a, A3), so
+        /// the answer is told on it. **It failed before the fix**: nothing was
+        /// recorded, and the answer went as a message of its own.
+        #[test]
+        fn twenty_eighth_18_a_question_without_its_buttons_is_still_the_jobs_message() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let (check, operation) = a_render_running(machine, "Check", vec![1], None);
+                let (_, hold) = a_hold_placed_on(machine, "Range", vec![1, 2, 3], Some(&check), "the first-frame check");
+                a_frame_produced_with_its_layers(machine, &check, 1, &[("Interior", 0)]);
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                back.send(hold).unwrap();
+            });
+            let hold = got.recv().unwrap();
+            sim.state().the_next_edits_are_refused = 1;
+            rounds(8, &mut worker, &clock);
+            let question = the_message_saying(&sim, "Server A\nRange \u{b7} frames ");
+            on.on_the_machine(move |machine| {
+                answer(&an_answer_to(&hold, THE_ANSWER_IS_YES, THE_ROUTE_IS_THE_DESK), &mut machine.start);
+            });
+            rounds(8, &mut worker, &clock);
+            assert!(the_edits_of(&sim, question).iter().any(|t| t.starts_with("Server A\nRange\nAnswered")), "{:#?}", sim.said_to_the_user());
+        }
+
+        /// **Sol's fresh look, round 1: an answer to *send a frame* carries no
+        /// Stop either, and replies to the job's message** (`Telegram` C1b,
+        /// `Telegram` I2). **It failed before the fix**: a lone picture answered carried
+        /// *Stop this job* and no reply.
+        #[test]
+        fn twenty_eighth_19_an_answered_frame_replies_to_the_jobs_message_with_no_stop() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            on.on_the_machine(|machine| {
+                let (job, _) = a_render_running(machine, "Shed", vec![1, 2, 3], None);
+                machine.start.journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job.clone()), "attempt 1").unwrap();
+                let directory = the_record_directory_of(machine, &job);
+                std::fs::write(format!("{directory}/preview-1.png"), a_png_of(1280, 720)).expect("published");
+                a_preview_journalled(machine, &job, 1, true, 0);
+            });
+            rounds(6, &mut worker, &clock);
+            let message = the_jobs_message_of(&sim, "Shed");
+            let photos_before = sim.calls("a", "sendPhoto").len();
+            sim.the_user_says("/frame 1");
+            rounds(10, &mut worker, &clock);
+            let photos = sim.calls("a", "sendPhoto");
+            assert!(photos.len() > photos_before, "a picture went: {:#?}", sim.said_to_the_user());
+            let answered = photos.last().unwrap();
+            assert_eq!(answered["reply_parameters"]["message_id"].as_i64(), Some(message));
+            let id = *sim.state().photos.last().unwrap();
+            assert!(eighteenth_6_the_stops_on(&sim, id).is_empty(), "no Stop on an answered picture");
+        }
+
+        /// **Sol's ask: two jobs ending in the same turn** — each job's message
+        /// is cut to its own one line, after its own ending, and neither is
+        /// edited again.
+        #[test]
+        fn twenty_eighth_18_two_endings_in_one_turn_cut_both_messages() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let mut both = Vec::new();
+                for label in ["Attic", "Porch"] {
+                    let (job, operation) = a_render_running(machine, label, vec![1], None);
+                    machine.start.journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job), "attempt 1").unwrap();
+                    both.push(operation);
+                }
+                back.send(both).unwrap();
+            });
+            let both = got.recv().unwrap();
+            rounds(6, &mut worker, &clock);
+            let (attic, porch) = (the_jobs_message_of(&sim, "Attic"), the_jobs_message_of(&sim, "Porch"));
+            on.on_the_machine(move |machine| {
+                the_render_reports_its_ending(machine, &both[0], asked::IT_FINISHED, None);
+                the_render_reports_its_ending(machine, &both[1], asked::IT_FAILED, Some(crate::the_render_worker::THE_FILES_OWN));
+            });
+            rounds(8, &mut worker, &clock);
+            assert_eq!(sim.state().texts[&attic], "Server A \u{b7} Attic \u{b7} Finished.");
+            assert_eq!(sim.state().texts[&porch], "Server A \u{b7} Porch \u{b7} 🔴 Failed.");
+            assert_eq!(on.the_store().jobs_messages.len(), 0, "both records ended (`Telegram` C7a)");
+        }
+
+        /// **`Telegram` C7a — a worker killed between the start's send and its
+        /// cursor's move sends no second job's message**: the record, written
+        /// once Telegram accepted the send, is read by the worker started
+        /// afresh. Sol's ask: a restart between sending and recording.
+        #[test]
+        fn twenty_eighth_18_a_restart_replaying_the_start_sends_no_second_message() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            on.on_the_machine(|machine| {
+                let (job, _) = a_render_running(machine, "Loft", vec![1, 2], None);
+                machine.start.journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job), "attempt 1").unwrap();
+            });
+            worker.the_journal().the_next_cursor_move_is_lost = true;
+            rounds(1, &mut worker, &clock);
+            let starts = |sim: &TheSim| sim.calls("a", "sendMessage").iter().filter(|f| f["text"] == "Server A\nLoft\nStarted.").count();
+            assert_eq!(starts(&sim), 1);
+            assert_eq!(on.the_store().jobs_messages.len(), 1, "recorded once accepted");
+            drop(worker);
+            let mut again = a_worker_reading_its_line(&on, on.worker, &sim, &clock);
+            rounds(6, &mut again, &clock);
+            assert_eq!(starts(&sim), 1, "the record stood: no second job's message");
         }
 
         /// **Every status message's text this worker sent, in order.**
@@ -22291,6 +25384,50 @@ mod unix {
             }
         }
 
+        /// **The Fable review's sitting 6 follow-up, its left item 5 —
+        /// `Telegram` A3 as changed 2026-11-12: where Telegram refuses the
+        /// edit that tells the answer applied in place, the sentence is sent
+        /// as its own message.** Until this date the refusal was only logged
+        /// and the phone was told nothing.
+        #[test]
+        fn follow_up_an_answer_whose_edit_in_place_is_refused_is_sent_as_its_own_message() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_line();
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let (first, operation) = a_render_running(machine, "Kitchen \u{2014} frame 1", vec![1], None);
+                let (_, hold) = a_hold_placed_on(
+                    machine,
+                    "Kitchen",
+                    (1..=240).collect(),
+                    Some(&first),
+                    "the first-frame check",
+                );
+                let directory = machine.start.queue.one_record(&first).expect("held").record_directory;
+                std::fs::write(format!("{directory}/preview-1.png"), a_png_of(1280, 720))
+                    .expect("the derivative is published");
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                back.send(hold).expect("sent");
+            });
+            let hold = got.recv().expect("placed");
+            rounds(4, &mut worker, &clock);
+            let question = the_message_saying(&sim, "Server A\nKitchen \u{b7} frames ");
+            sim.state().every_edit_of_this_is_refused = Some(question);
+            on.on_the_machine(move |machine| {
+                let answered = answer(
+                    &an_answer_to(&hold, THE_ANSWER_IS_YES, THE_ROUTE_IS_THE_DESK),
+                    &mut machine.start,
+                );
+                assert_eq!(answered.fields.text(THE_RELEASE_OUTCOME_FIELD), Some("released"));
+            });
+            rounds(6, &mut worker, &clock);
+            assert!(
+                !sim.state().texts[&question].contains("Answered"),
+                "the edit in place did not land"
+            );
+            let said = sim.said_to_the_user();
+            said_once(&said, "Server A\nKitchen\nAnswered \u{201c}Render all \u{2014} 240 frames\u{201d}.");
+        }
+
         /// **`Rented-server runtime` U13 and U14, `Telegram` A1 to A3, the
         /// map's piece 4: a waiting job answered from the phone and the desk at
         /// once is answered once, and the one that lost is told which answer
@@ -22361,8 +25498,12 @@ mod unix {
                 sim.the_user_taps(message, &token);
             };
 
-            // **The desk first.**
-            tap(&sim, "Server A\nKitchen \u{b7} frames ", "Cancel");
+            // **The desk first.** Since the twenty-eighth notes, note 16, the
+            // phone's *Cancel job* asks in place first, and *Cancel the job*
+            // is the no; the desk's yes lands before it is acted on.
+            tap(&sim, "Server A\nKitchen \u{b7} frames ", "Cancel job");
+            rounds(4, &mut worker, &clock);
+            tap(&sim, "Server A\nKitchen \u{b7} frames ", "Cancel the job");
             let (back, got) = std::sync::mpsc::channel();
             on.on_the_machine(move |machine| {
                 let answered = answer(
@@ -22384,10 +25525,9 @@ mod unix {
             );
             rounds(6, &mut worker, &clock);
             let said = sim.said_to_the_user();
-            assert_eq!(
-                said_once(&said, "Server A\nKitchen\nAnswered"),
-                "Server A\nKitchen\nAnswered “Render all — 240 frames”."
-            );
+            // **`Telegram` A3 as changed 2026-11-09: the winner is told by an
+            // edit of the question**; the loser still gets a message of its own.
+            assert!(an_edit_said(&sim, "Server A\nKitchen\nAnswered “Render all — 240 frames”."), "{said:#?}");
             let lost = said_once(&said, "Server A\nKitchen\nAlready answered");
             assert!(
                 lost.starts_with("Server A\nKitchen\nAlready answered “Render all — 240 frames” at ")
@@ -22467,10 +25607,7 @@ mod unix {
             );
             rounds(4, &mut worker, &clock);
             let said = sim.said_to_the_user();
-            assert_eq!(
-                said_once(&said, "Server A\nPorch\nAnswered"),
-                "Server A\nPorch\nAnswered “Render all — 240 frames”."
-            );
+            assert!(an_edit_said(&sim, "Server A\nPorch\nAnswered “Render all — 240 frames”."), "{said:#?}");
             assert!(
                 !said
                     .iter()
@@ -22637,16 +25774,16 @@ mod unix {
             rounds(6, &mut worker, &clock);
             let said = sim.said_to_the_user();
             assert_eq!(
-                said_once(&said, "Server A\nKitchen\nNot rendered: frame"),
-                "Server A\nKitchen\nNot rendered: frame 1 failed (240 frames held)."
+                said_once(&said, "Server A\nKitchen\n240 frames not rendered: frame"),
+                "Server A\nKitchen\n240 frames not rendered: frame 1 failed."
             );
             assert_eq!(
-                said_once(&said, "Server A\nPorch\nNot rendered: frame"),
-                "Server A\nPorch\nNot rendered: frame 1 was stopped (240 frames held)."
+                said_once(&said, "Server A\nPorch\n240 frames not rendered: frame"),
+                "Server A\nPorch\n240 frames not rendered: frame 1 was stopped."
             );
             assert_eq!(
-                said_once(&said, "Server A\nAttic\nNot rendered: frame"),
-                "Server A\nAttic\nNot rendered: frame 1 was abandoned (240 frames held)."
+                said_once(&said, "Server A\nAttic\n240 frames not rendered: frame"),
+                "Server A\nAttic\n240 frames not rendered: frame 1 was interrupted twice."
             );
             assert!(
                 !said.iter().any(|text| text.starts_with("Server A\nHall: ")
@@ -22696,8 +25833,8 @@ mod unix {
             rounds(6, &mut next, &clock);
             let said = sim.said_to_the_user();
             assert_eq!(
-                said_once(&said, "Server A\nKitchen\nNot rendered: frame"),
-                "Server A\nKitchen\nNot rendered: frame 1 failed (240 frames held)."
+                said_once(&said, "Server A\nKitchen\n240 frames not rendered: frame"),
+                "Server A\nKitchen\n240 frames not rendered: frame 1 failed."
             );
         }
 
@@ -22760,14 +25897,19 @@ mod unix {
                 the_first_frame: None,
                 label: "\u{e9}".repeat(200),
             };
-            assert_eq!(
-                what_a_drops_entry_says(&the_drops_entry(&long))
-                    .expect("it reads")
-                    .label
-                    .len(),
-                crate::the_telegram_journal::THE_BOUND_ON_A_DROPPED_LABEL,
-                "bounded at a character's edge"
-            );
+            // **Cut at a character's edge, and short enough that the entry
+            // fits `State, identity and recovery` E6a's budget as written** —
+            // piece J, 2026-11-10: a 160-byte label made the entry too long
+            // to journal, so this read 160 until then.
+            let says = the_drops_entry(&long);
+            let label = what_a_drops_entry_says(&says).expect("it reads").label;
+            assert!(label.len() < crate::the_telegram_journal::THE_BOUND_ON_A_DROPPED_LABEL);
+            assert!(!label.is_empty() && label.chars().all(|c| c == '\u{e9}'), "{label}");
+            assert!(smoozy_runtime::written_form::the_measure_of_an_entry::words_of_this_kind_fit(
+                asked::THE_RELEASE_EVENT,
+                Some(IdentityKind::Operation),
+                &says
+            ));
         }
 
         // --- *try it again* made on the machine (the fifth piece of the
@@ -22891,7 +26033,7 @@ mod unix {
             let message = the_message_saying(&sim, "Server A\nHall\n🔴 Failed");
             let try_again = the_buttons_and_their_taps_on(&sim, message)
                 .into_iter()
-                .find(|(label, _)| label == "Retry")
+                .find(|(label, _)| label.starts_with("Submit again"))
                 .map(|(_, tap)| tap)
                 .expect("`Telegram` Y4a: offered on the machine's own cause");
 
@@ -22987,7 +26129,7 @@ mod unix {
                 "the queue state first, as every such event: {}",
                 says[0]
             );
-            said_once(&sim.said_to_the_user(), "Server A\nHall\nResubmitted.");
+            said_once(&sim.said_to_the_user(), "Server A\nHall\nSubmitted again.");
 
             // **`Telegram` R4: a second press of the same button.**
             sim.the_user_taps(message, &try_again);
@@ -22998,8 +26140,8 @@ mod unix {
                 "a second press makes nothing"
             );
             let said = sim.said_to_the_user();
-            said_once(&said, "Server A\nHall\nResubmitted.");
-            said_once(&said, "Server A\nHall\nAlready resubmitted at ");
+            said_once(&said, "Server A\nHall\nSubmitted again.");
+            said_once(&said, "Server A\nHall\nAlready submitted again at ");
 
             // **`Telegram` B9: the first press's instruction, delivered again.**
             let entry = worker
@@ -23045,9 +26187,10 @@ mod unix {
                 .count()
         }
 
-        /// **`Telegram` Y4a: a failure of the file's own cause, and one Smoozy
-        /// cannot place, carry no *try it again*, and a tap forced on it makes
-        /// nothing.** The forced tap is the token a *try it again* for that
+        /// **`Telegram` Y4a: a failure of the file's own cause carries no *try
+        /// it again*, and a tap forced on it makes nothing** — and since
+        /// 2026-11-12 (`Telegram` Y4a as changed that day, the phone matching the app) one
+        /// Smoozy cannot place carries *Submit again*. The forced tap is the token a *try it again* for that
         /// job would carry, made under this machine's routing key but never
         /// recorded — because no button was attached — so it resolves to no
         /// record, is answered as expired (`Telegram` R3) and submits nothing.
@@ -23060,15 +26203,20 @@ mod unix {
             let (attic, attic_render, _) =
                 a_failed_job_on(&on, "Attic", crate::the_render_worker::UNDETERMINED);
             rounds(6, &mut worker, &clock);
-            for (job, render, beginning) in [
-                (&porch, &porch_render, "Server A\nPorch\n🔴 Failed"),
-                (&attic, &attic_render, "Server A\nAttic\n🔴 Failed"),
-            ] {
+            let _ = (&attic, &attic_render);
+            let attics = the_message_saying(&sim, "Server A\nAttic\n🔴 Failed");
+            assert!(
+                the_buttons_and_their_taps_on(&sim, attics)
+                    .iter()
+                    .any(|(label, _)| label.starts_with("Submit again")),
+                "*Submit again* on a cause Smoozy cannot place, as History offers it"
+            );
+            for (job, render, beginning) in [(&porch, &porch_render, "Server A\nPorch\n🔴 Failed")] {
                 let message = the_message_saying(&sim, beginning);
                 assert!(
                     !the_buttons_and_their_taps_on(&sim, message)
                         .iter()
-                        .any(|(label, _)| label == "Retry"),
+                        .any(|(label, _)| label.starts_with("Submit again") || label.starts_with("Resume")),
                     "no *try it again* on {beginning:?}"
                 );
                 let forced = smoozy_telegram::routing::context::AnActionContextRecord::issued_under(
@@ -23106,14 +26254,14 @@ mod unix {
             let said = sim.said_to_the_user();
             assert_eq!(
                 the_expired_answers(&sim),
-                2,
-                "each forced tap is answered, never acted on: {said:#?}"
+                1,
+                "the forced tap is answered, never acted on: {said:#?}"
             );
             assert!(
                 !said
                     .iter()
-                    .any(|text| text.contains("was resubmitted")
-                        || text.contains("already resubmitted")),
+                    .any(|text| text.contains("Submitted again.")
+                        || text.contains("Already submitted again at ")),
                 "{said:#?}"
             );
         }
@@ -23241,6 +26389,21 @@ mod unix {
             clock: &TheClock,
             readings: crate::the_telegram_worker::a_simulated_conversation::TheReadingsATestSets,
         ) -> crate::the_telegram_worker::TheAssembledWorker {
+            a_worker_with_its_readings_as(on, process, caller, "a", sim, clock, readings)
+        }
+
+        /// **The same, as machine `name`, *Server NAME*** — for two machines
+        /// each reading its own line (Sol's look at the Telegram fixes, its
+        /// note on the tests).
+        fn a_worker_with_its_readings_as(
+            on: &ASupervisorOnAThreadOfItsOwn,
+            process: u32,
+            caller: &str,
+            name: &str,
+            sim: &TheSim,
+            clock: &TheClock,
+            readings: crate::the_telegram_worker::a_simulated_conversation::TheReadingsATestSets,
+        ) -> crate::the_telegram_worker::TheAssembledWorker {
             use crate::the_telegram_worker::a_simulated_conversation::{NoWaits, THE_CONVERSATION};
             let asked = on.asked_as(process);
             let start = crate::the_telegram_worker::the_start_asked(asked.as_ref(), Duration::ZERO)
@@ -23254,9 +26417,9 @@ mod unix {
                     start,
                     configuration: smoozy_telegram::material::TheRoleConfiguration {
                         conversation: smoozy_telegram::proof::TheConversation(THE_CONVERSATION),
-                        machine: "machine-a".to_string(),
+                        machine: format!("machine-{name}"),
                         colour: None,
-                        label: Some("Server A".to_string()),
+                        label: Some(format!("Server {}", name.to_uppercase())),
                         reporting: Vec::new(),
                     },
                     holds: Box::new(crate::the_telegram_worker::TheLineOnThisMachine::over(
@@ -23331,12 +26494,11 @@ mod unix {
             });
             rounds(12, &mut worker, &clock);
             let said = sim.said_to_the_user();
-            assert_eq!(
-                said.len(),
-                2,
-                "only the reporting job's start and ending: {said:?}"
-            );
-            said_once(&said, "Server A\nReporting\nStarted.");
+            // **From 2026-11-10 a start read once its job has ended sends
+            // nothing** (`Telegram` C1a with the twenty-eighth notes' piece 10,
+            // Sol's round 2): the reporting job ended before its start was
+            // read, so its ending alone is said.
+            assert_eq!(said.len(), 1, "only the reporting job's ending: {said:?}");
             said_once(&said, "Server A\nReporting\nFinished.");
             assert!(on.the_store().journal_cursor.unwrap() > before);
             drop(worker);
@@ -23664,12 +26826,22 @@ mod unix {
                 main,
                 place,
                 source,
+                the_names_are_in_the_record: false,
             }
             .as_says();
             machine
                 .start
                 .journal_about(asked::THE_PREVIEW_PUBLISHED_EVENT, Some(job.clone()), &says)
                 .expect("journalled");
+            // **`Queue & History` P3 as changed 2026-11-10: the frame's set
+            // event follows its production's ending**, saying what the main
+            // copy's says; it is `Telegram` I2's trigger.
+            if main {
+                machine
+                    .start
+                    .journal_about(asked::THE_PREVIEW_SET_MADE_EVENT, Some(job.clone()), &says)
+                    .expect("journalled");
+            }
         }
 
         fn the_record_directory_of(
@@ -23912,6 +27084,7 @@ mod unix {
                     complaints_sink: format!("{directory}/c"),
                     script: format!("{directory}/s.py"),
                     ending: None,
+                    the_main_copy_told_early: None,
                 }
                 .as_written(),
             );
@@ -23980,6 +27153,7 @@ mod unix {
                     complaints_sink: format!("{directory}/c"),
                     script: format!("{directory}/s.py"),
                     ending: Some(ending),
+                    the_main_copy_told_early: None,
                 }
                 .as_written(),
             );
@@ -24013,6 +27187,7 @@ mod unix {
                     main: at == 0,
                     place: *place,
                     source: None,
+                    the_names_are_in_the_record: false,
                 }
                 .as_says();
                 machine
@@ -24020,6 +27195,22 @@ mod unix {
                     .journal_about(asked::THE_PREVIEW_PUBLISHED_EVENT, Some(job.clone()), &says)
                     .expect("journalled");
             }
+            // The frame's set event, as the supervisor journals it once the
+            // production has ended (`Queue & History` P3, 2026-11-10).
+            let says = smoozy_queue_history_machine::previews::ThePublishedPreview {
+                frame,
+                operation: operation.as_text(),
+                view_layer: Some(layers[0].0.as_bytes().to_vec()),
+                main: true,
+                place: layers[0].1,
+                source: None,
+                the_names_are_in_the_record: false,
+            }
+            .as_says();
+            machine
+                .start
+                .journal_about(asked::THE_PREVIEW_SET_MADE_EVENT, Some(job.clone()), &says)
+                .expect("journalled");
             operation
         }
 
@@ -24041,11 +27232,12 @@ mod unix {
         /// captioned with its View Layer, in place order, and nothing on the
         /// other copies' events** — ~~with *Stop this job* attached to each
         /// album's first picture while the job renders (`Telegram` D1, R1)~~
-        /// **and a separate Stop companion, with no button call on any album
+        /// ~~**and a separate Stop companion, with no button call on any album
         /// picture** (piece G, 2026-10-19: Telegram refused one on every album
-        /// picture on the live pass), while
-        /// a frame of one View Layer is one picture, as before, and still
-        /// carries the stop. A job whose reporting choice is the narrowest
+        /// picture on the live pass)~~ **with no button and nothing after it,
+        /// from 2026-11-09 (`Telegram` I2, `Telegram` C1b)**, while
+        /// a frame of one View Layer is one picture, as before, ~~and still
+        /// carries the stop~~ and carries none either. A job whose reporting choice is the narrowest
         /// sends nothing (`Telegram` V1). Through the supervisor's real journal
         /// and records and the worker's real reading.
         #[test]
@@ -24119,17 +27311,17 @@ mod unix {
                 .filter(|one| !in_albums.contains(one))
                 .copied()
                 .collect();
-            let stops: Vec<i64> = sim
-                .calls("a", "editMessageReplyMarkup")
-                .iter()
-                .filter(|fields| {
-                    fields["reply_markup"]["inline_keyboard"][0][0]["text"] == "Stop this job"
-                })
-                .filter_map(|fields| fields["message_id"].as_i64())
-                .collect();
+            // **`Telegram` I2 and `Telegram` C1b as changed 2026-11-09 (the twenty-eighth
+            // notes, note 19): a lone picture carries no Stop either**, and
+            // nothing follows a frame — the job's own message carries it.
             assert!(
-                !lone.is_empty() && lone.iter().all(|one| stops.contains(one)),
-                "a lone picture still carries the stop: {lone:?} {stops:?}"
+                !lone.is_empty() && lone.iter().all(|one| !edited.contains(one)),
+                "no button call on a lone picture: {lone:?} {edited:?}"
+            );
+            assert!(
+                !sim.said_to_the_user().iter().any(|text| text.ends_with("\nKitchen \u{b7} Frame 1")),
+                "no companion: {:#?}",
+                sim.said_to_the_user()
             );
             rounds(6, &mut worker, &clock);
             assert_eq!(sim.calls("a", "sendMediaGroup").len(), 2, "never twice");
@@ -24672,7 +27864,7 @@ mod unix {
             let unknown = sim.a_message_from_the_bot("a message nobody registered");
             sim.the_user_replies(unknown, "/stop");
             rounds(12, &mut worker, &clock);
-            said_once(&sim.said_to_the_user(), "Could not tell which job that message is about. Nothing changed.");
+            said_once(&sim.said_to_the_user(), "Could not tell which job that message is about. Nothing was changed.");
             assert_eq!(questions(&sim), 2, "nothing more was asked");
         }
 
@@ -24734,7 +27926,16 @@ mod unix {
             });
             rounds(3, &mut worker, &clock);
             assert_eq!(the_frames_sent(&sim), [1], "nothing passed over is sent late");
-            assert_eq!(sim.said_to_the_user(), said_while_off, "the change itself says nothing");
+            // **From 2026-11-09 a change away from `Nothing` while the job
+            // renders sends the job's own message, without a sound** (`Telegram`
+            // `Telegram` V1c, `Telegram` C1d, `Telegram` V1e); nothing else about the change is said.
+            let said: Vec<String> = sim.said_to_the_user().into_iter().filter(|text| !said_while_off.contains(text)).collect();
+            assert_eq!(said.len(), 1, "{said:#?}");
+            assert!(said[0].starts_with("Server A\nKitchen\n"), "{said:#?}");
+            let again: Vec<serde_json::Value> =
+                sim.calls("a", "sendMessage").into_iter().filter(|f| f["text"] == "Server A\nKitchen\nStarted.").collect();
+            assert_eq!(again.len(), 1);
+            assert_eq!(again[0]["disable_notification"], serde_json::json!(true));
             a_frame_is_produced(&on, &kitchen, 3, 1);
             rounds(3, &mut worker, &clock);
             assert_eq!(the_frames_sent(&sim), [1, 3], "on again from the change");
@@ -24999,6 +28200,35 @@ mod unix {
                         .ok()
                 })
                 .collect()
+        }
+
+        /// **Telegram when things aren't ideal, the scout's untraced question
+        /// (`Telegram` I2b, 2026-11-13): a fast job set to *Everything* whose
+        /// pictures fall behind sends the newest, not the backlog.** Twenty
+        /// frames are published before the worker reads one: it sends 17 to
+        /// 20, never 1 to 16. Frames published one at a time, each read before
+        /// the next, all go. Before, all twenty went, one by one.
+        #[test]
+        fn not_ideal_a_fast_jobs_picture_backlog_is_bounded_and_the_newest_sent() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            let kitchen = a_paced_render(&on, (1..=40).collect(), its_choice_is_everything);
+            for frame in 1..=20 {
+                a_frame_is_produced(&on, &kitchen, frame, 1);
+            }
+            for _ in 0..6 {
+                a_round_of(&mut [&mut worker], &clock);
+            }
+            assert_eq!(the_frames_sent(&sim), vec![17, 18, 19, 20], "the newest four, not the backlog");
+            for frame in 21..=25 {
+                a_frame_is_produced(&on, &kitchen, frame, 1);
+                for _ in 0..2 {
+                    a_round_of(&mut [&mut worker], &clock);
+                }
+            }
+            assert_eq!(the_frames_sent(&sim), vec![17, 18, 19, 20, 21, 22, 23, 24, 25], "kept up with, every frame goes");
         }
 
         /// **`Telegram` I2a with one View Layer and with two: a fast job
@@ -25296,6 +28526,316 @@ mod unix {
             );
         }
 
+        /// **The piece for note 11's pictures (the twenty-ninth notes, note 11; `Telegram` I2 as changed
+        /// 2026-11-10): the frame's album goes on its set event, with every
+        /// layer, and every layer gets its contact sheet.** The stand-in's one
+        /// frame of twelve View Layers and the regular output: the main copy's
+        /// event is journalled while the production still makes the others,
+        /// and nothing goes on it. Once the production ends, the set event
+        /// sends all thirteen copies, as an album of ten and one of three, and
+        /// the finished job's contact sheet names every layer. **It failed
+        /// before the fix**: the main copy's own event sent it alone, and the
+        /// other twelve never went.
+        #[test]
+        fn n1_the_frames_album_goes_on_its_set_event_with_every_layer() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let (job, operation) = a_render_running(machine, "Lineup", vec![1], None);
+                let directory = the_record_directory_of(machine, &job);
+                its_choice_is_everything(&directory);
+                machine.start.journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job.clone()), "attempt 1").unwrap();
+                let production = a_frames_production_left_standing(machine, &job, 1);
+                let says = smoozy_queue_history_machine::previews::ThePublishedPreview {
+                    frame: 1,
+                    operation: production.as_text(),
+                    view_layer: Some(b"Set 00".to_vec()),
+                    main: true,
+                    place: 0,
+                    source: None,
+                    the_names_are_in_the_record: false,
+                }
+                .as_says();
+                machine
+                    .start
+                    .journal_about(asked::THE_PREVIEW_PUBLISHED_EVENT, Some(job.clone()), &says)
+                    .expect("journalled");
+                back.send((job, operation, production)).unwrap();
+            });
+            let (job, operation, production) = got.recv().unwrap();
+            rounds(8, &mut worker, &clock);
+            assert!(
+                sim.calls("a", "sendPhoto").is_empty() && the_albums_sent(&sim).is_empty(),
+                "nothing goes on the main copy's own event: {:#?}",
+                sim.said_to_the_user()
+            );
+            on.on_the_machine(move |machine| {
+                let names: Vec<String> = (0..13).map(|place| format!("Set {place:02}")).collect();
+                let layers: Vec<(&str, u32)> =
+                    names.iter().enumerate().map(|(place, name)| (name.as_str(), place as u32)).collect();
+                a_frame_produced_under(machine, &job, 1, &layers, production, true);
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+            });
+            {
+                let sim = sim.clone();
+                rounds_until(60, &mut [&mut worker], &clock, &|_| {
+                    sim.state()
+                        .heard
+                        .iter()
+                        .filter(|(_, method, fields)| {
+                            method == "sendPhoto"
+                                && fields["caption"].as_str().is_some_and(|c| c.contains("all 1 frame"))
+                        })
+                        .count()
+                        == 13
+                })
+                .expect("every layer's contact sheet went");
+            }
+            let frames: Vec<Vec<String>> = the_albums_sent(&sim)
+                .into_iter()
+                .filter(|album| album.iter().all(|caption| caption.contains("Frame 1 \u{b7} Set ")))
+                .collect();
+            assert_eq!(
+                frames.iter().map(Vec::len).collect::<Vec<_>>(),
+                vec![10, 3],
+                "the frame's thirteen copies: {frames:#?}"
+            );
+        }
+
+        /// **Piece J, the twenty-ninth notes, note 11: a frame of twelve View
+        /// Layers whose names are as long as the Creator's goes as one album,
+        /// every picture captioned with its layer's name**, through the
+        /// simulated conversation. Every copy's event leaves the names to the
+        /// production's record (`Queue & History` P3 as changed 2026-11-10), so
+        /// the main copy's caption is read off that record as the others' are.
+        /// **It failed before the fix**: the events did not fit the journal,
+        /// and with the names left to the record the main copy went unnamed.
+        #[test]
+        fn piece_j_a_frame_of_twelve_long_layer_names_goes_as_one_named_album() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            let names: Vec<String> =
+                (0..12).map(|place| format!("SH010_Forest_Clearing_Wide_Background_{place:02}")).collect();
+            {
+                let names = names.clone();
+                on.on_the_machine(move |machine| {
+                    let (job, operation) = a_render_running(machine, "Clearing", vec![1], None);
+                    let directory = the_record_directory_of(machine, &job);
+                    its_choice_is_everything(&directory);
+                    machine.start.journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job.clone()), "attempt 1").unwrap();
+                    let production = Identity::issue(IdentityKind::Operation).expect("randomness");
+                    let layers: Vec<(&str, u32)> =
+                        names.iter().enumerate().map(|(place, name)| (name.as_str(), place as u32)).collect();
+                    a_frame_produced_under(machine, &job, 1, &layers, production, false);
+                    the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                });
+            }
+            {
+                let sim = sim.clone();
+                rounds_until(60, &mut [&mut worker], &clock, &|_| {
+                    !the_albums_sent(&sim).iter().all(|album| album.len() < 10)
+                })
+                .expect("the frame's album went");
+            }
+            let frames: Vec<Vec<String>> = the_albums_sent(&sim)
+                .into_iter()
+                .filter(|album| album.iter().all(|caption| caption.contains("Frame 1 \u{b7} SH010_")))
+                .collect();
+            assert_eq!(
+                frames.iter().map(Vec::len).collect::<Vec<_>>(),
+                vec![10, 2],
+                "the frame's twelve copies, each named: {:#?}",
+                the_albums_sent(&sim)
+            );
+            let captions: Vec<String> = frames.into_iter().flatten().collect();
+            for (place, name) in names.iter().enumerate() {
+                assert!(
+                    captions[place].contains(&format!("Frame 1 \u{b7} {name}")),
+                    "copy {place}: {}",
+                    captions[place]
+                );
+            }
+        }
+
+        /// **Piece T, the twenty-ninth notes, notes 9 and 11 (`Telegram` C1d and
+        /// `Telegram` C1e as changed 2026-11-10), through the simulated conversation.** A
+        /// job of `frames`, each frame `layers` View Layers, its last frame's
+        /// production standing at the ending, as on the Creator's run:
+        ///
+        /// - while it renders, the tick's edit of the job's message ends with
+        ///   *Updated* and Telegram's `date_time` entity, format `r`, whose own
+        ///   text is the moment in `Telegram` C2a's form;
+        /// - **at the ending, the job's message shows its one line at once**,
+        ///   while *Finished* still waits for the last frame's pictures;
+        /// - the last frame's pictures, made after, still reply to the job's
+        ///   message; *Finished* then goes once, and the cut sends the line
+        ///   no second time.
+        ///
+        /// **It failed before the change**: the message still said
+        /// *Started.* after the ending, with no *Updated* line.
+        fn piece_t_the_ending_at_once(label: &'static str, frames: Vec<i64>, layers: usize) {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            let last = *frames.last().expect("a frame");
+            let names: Vec<String> = (0..layers).map(|place| format!("Set {place:02}")).collect();
+            let (back, got) = std::sync::mpsc::channel();
+            {
+                let names = names.clone();
+                on.on_the_machine(move |machine| {
+                    let (job, operation) = a_render_running(machine, label, frames.clone(), None);
+                    let directory = the_record_directory_of(machine, &job);
+                    its_choice_is_everything(&directory);
+                    machine.start.journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job.clone()), "attempt 1").unwrap();
+                    let layers: Vec<(&str, u32)> =
+                        names.iter().enumerate().map(|(place, name)| (name.as_str(), place as u32)).collect();
+                    for frame in &frames[..frames.len() - 1] {
+                        let operation = Identity::issue(IdentityKind::Operation).expect("randomness");
+                        a_frame_produced_under(machine, &job, *frame, &layers, operation, false);
+                    }
+                    let production = a_frames_production_left_standing(machine, &job, last);
+                    back.send((job, operation, production)).unwrap();
+                });
+            }
+            let (job, operation, production) = got.recv().unwrap();
+            rounds(8, &mut worker, &clock);
+            let jobs_message = the_jobs_message_of(&sim, label);
+            // **Note 9: the *Updated* line**, on a tick's edit while it renders.
+            let updated: Option<serde_json::Value> = sim
+                .state()
+                .heard
+                .iter()
+                .filter(|(_, m, f)| {
+                    m == "editMessageText"
+                        && f["message_id"].as_i64() == Some(jobs_message)
+                        && f["text"].as_str().is_some_and(|t| t.contains("\nUpdated "))
+                })
+                .map(|(_, _, f)| f.clone())
+                .last();
+            let updated = updated.unwrap_or_else(|| panic!("an Updated line: {:#?}", the_edits_of(&sim, jobs_message)));
+            let moment = updated["entities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|e| e["type"] == "date_time")
+                .cloned()
+                .expect("the date_time entity");
+            assert_eq!(moment["date_time_format"], "r");
+            let unix_time = moment["unix_time"].as_u64().expect("its moment");
+            let in_utc = smoozy_telegram::board::text::the_moment_in_utc(
+                std::time::UNIX_EPOCH + std::time::Duration::from_secs(unix_time),
+            );
+            assert!(
+                updated["text"].as_str().unwrap().ends_with(&format!("\nUpdated {in_utc}")),
+                "{updated:#?}"
+            );
+            let pictures_replying = |sim: &TheSim| {
+                sim.state()
+                    .heard
+                    .iter()
+                    .filter(|(_, m, f)| {
+                        (m == "sendPhoto" || m == "sendMediaGroup")
+                            && f["reply_parameters"]["message_id"].as_i64() == Some(jobs_message)
+                    })
+                    .count()
+            };
+            on.on_the_machine(move |machine| {
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None)
+            });
+            rounds(6, &mut worker, &clock);
+            // **Note 11: the line at once**, while *Finished* waits.
+            let line = format!("Server A \u{b7} {label} \u{b7} Finished.");
+            let shown = sim.state().texts[&jobs_message].clone();
+            assert_eq!(shown, line, "{:#?}", the_edits_of(&sim, jobs_message));
+            let finished = format!("Server A\n{label}\nFinished.");
+            assert!(
+                !sim.said_to_the_user().iter().any(|t| t.starts_with(&finished)),
+                "Finished waits for the last frame's pictures: {:#?}",
+                sim.said_to_the_user()
+            );
+            let before_the_pictures = pictures_replying(&sim);
+            {
+                let names = names.clone();
+                on.on_the_machine(move |machine| {
+                    let layers: Vec<(&str, u32)> =
+                        names.iter().enumerate().map(|(place, name)| (name.as_str(), place as u32)).collect();
+                    a_frame_produced_under(machine, &job, last, &layers, production, true);
+                });
+            }
+            {
+                let sim = sim.clone();
+                let finished = finished.clone();
+                rounds_until(60, &mut [&mut worker], &clock, &|_| {
+                    sim.said_to_the_user().iter().any(|t| t.starts_with(&finished))
+                })
+                .expect("Finished went once the pictures were in");
+            }
+            rounds(4, &mut worker, &clock);
+            said_once(&sim.said_to_the_user(), &finished);
+            assert!(
+                pictures_replying(&sim) > before_the_pictures,
+                "the last frame's pictures reply to the job's message"
+            );
+            let edits = the_edits_of(&sim, jobs_message);
+            assert_eq!(edits.iter().filter(|text| **text == line).count(), 1, "the line once: {edits:#?}");
+            assert_eq!(edits.last(), Some(&line), "nothing after it: {edits:#?}");
+        }
+
+        /// The stand-in of the Creator's file: one frame, twelve View Layers
+        /// and the regular output, thirteen copies.
+        #[test]
+        fn piece_t_one_frame_of_many_layers_tells_its_ending_at_once() {
+            piece_t_the_ending_at_once("Lineup", vec![1], 13);
+        }
+
+        /// An ordinary job: three frames of one View Layer.
+        #[test]
+        fn piece_t_an_ordinary_job_tells_its_ending_at_once() {
+            piece_t_the_ending_at_once("Kitchen", vec![1, 2, 3], 1);
+        }
+
+        /// **A copy the production names that cannot be read leaves the rest
+        /// of the frame's set to go**, with a line in the server's record
+        /// (`Telegram` I2 as changed 2026-11-10). Before, the whole album was
+        /// given up in silence — the only route the code has to *no frame
+        /// picture at all, and no line in the chat*, which is what the
+        /// Creator's Telegram showed for note 11. **It failed before the fix**:
+        /// nothing went.
+        #[test]
+        fn n1_a_copy_that_cannot_be_read_leaves_the_rest_of_the_album_to_go() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            on.on_the_machine(|machine| {
+                let (job, _) = a_render_running(machine, "Lineup", vec![1, 2], None);
+                let directory = the_record_directory_of(machine, &job);
+                its_choice_is_everything(&directory);
+                machine.start.journal_about(asked::THE_RENDER_ATTEMPT_STARTED_EVENT, Some(job.clone()), "attempt 1").unwrap();
+                // The production's record names three copies; the third's file
+                // is gone by the time the set is read.
+                let operation = Identity::issue(IdentityKind::Operation).expect("randomness");
+                let production = a_frames_production_left_standing(machine, &job, 1);
+                let _ = operation;
+                let at = smoozy_job_files_machine::main_output::where_a_layers_copy_is_written_in(&directory, 1, 2)
+                    .published_at;
+                let layers: &[(&str, u32)] = &[("Set 00", 0), ("Set 01", 1), ("Set 02", 2)];
+                // Written, ended, and journalled: then the third copy goes.
+                a_frame_produced_under(machine, &job, 1, layers, production, true);
+                std::fs::remove_file(&at).expect("the third copy is gone");
+            });
+            rounds(10, &mut worker, &clock);
+            let albums = the_albums_sent(&sim);
+            assert_eq!(albums.len(), 1, "the frame's album went: {:#?}", sim.said_to_the_user());
+            assert_eq!(albums[0].len(), 2, "with the two copies there: {albums:#?}");
+        }
+
         /// **The runner's ruling of 2026-10-19 on the live pass's §7: the
         /// job's finished message waits for its last frame's pictures**, so
         /// the album never arrives after *finished*. The ending is journalled
@@ -25520,6 +29060,50 @@ mod unix {
             )
         }
 
+        /// **The Rough what-if answers, share 5 (408): a frame outside a job
+        /// that renders the file's own range has no picture**, and is never
+        /// told *Not finished rendering.* — the frames it covers are the
+        /// reading in force. A frame inside it still is. Before, the file's
+        /// own range counted every frame as covered.
+        #[test]
+        fn rough_share_5_a_frame_outside_the_files_own_range_is_not_said_to_be_rendering() {
+            let (_sim, _clock, on, _worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            let (job, _operation) = sixteenth_job(&on, "Video", (1..=90).collect(), true, false);
+            let worker = on.worker;
+            let (send, receive) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let manifest = std::fs::read(format!(
+                    "{}/{}",
+                    the_record_directory_of(machine, &job),
+                    smoozy_job_files_machine::manifest::MANIFEST_FILE_NAME
+                ))
+                .unwrap();
+                assert_eq!(
+                    smoozy_job_files_machine::manifest::SubmissionManifest::read_back(&manifest).unwrap().frame_range,
+                    smoozy_job_files_machine::manifest::FrameRange::TheFilesOwn,
+                    "the job does not render the file's own range"
+                );
+                let mut asked = |frame: &str| {
+                    let request = a_role_request(THE_FRAMES_PICTURE_IS_MADE_AGAIN_REQUEST).carrying(
+                        Fields::none()
+                            .and(asked::THE_JOB_FIELD, job.as_text())
+                            .and(THE_FRAME_ASKED_FIELD, frame),
+                    );
+                    answer_knowing_the_caller(&request, Some(worker), &mut machine.start)
+                        .fields
+                        .text(WHAT_BECAME_OF_THE_FRAME_FIELD)
+                        .map(str::to_string)
+                };
+                send.send((asked("99999"), asked("5"))).unwrap();
+            });
+            let (outside, inside) = receive.recv().unwrap();
+            assert_eq!(outside.as_deref(), Some(THERE_IS_NO_PICTURE_OF_IT), "a frame outside the job was said to be rendering");
+            assert_eq!(inside.as_deref(), Some(IT_HAS_NOT_FINISHED), "a frame inside the job was not said to be rendering");
+        }
+
         #[test]
         fn sixteenth_a_video_ending_goes_on_its_first_turn_and_passes_its_cursor() {
             let (sim, _clock, on, mut worker) = one_worker_reading_its_journal(
@@ -25574,7 +29158,7 @@ mod unix {
         /// says 'Video frame count unknown'."* The stopped ending keeps it,
         /// below. Since the second words sweep (2026-11-01) the count is said
         /// as a finished job of pictures says it, *Finished. 90 frames …*,
-        /// where it read *Job range: 1–90 (90 frames).*
+        /// where it read *Frame range: 1–90 (90 frames).*
         #[test]
         fn twenty_sixth_1_a_finished_video_says_nothing_about_its_frame_count() {
             let (sim, _clock, on, mut worker) = one_worker_reading_its_journal(
@@ -25596,7 +29180,7 @@ mod unix {
             let said = sim.said_to_the_user();
             let text = said_once(&said, "Server A\nVideo\nFinished.");
             assert!(text.starts_with("Server A\nVideo\nFinished. 90 frames"), "{text}");
-            assert!(!text.contains("Job range"), "{text}");
+            assert!(!text.contains("Frame range"), "{text}");
             assert!(!text.contains("frame count"), "{text}");
         }
 
@@ -25606,7 +29190,7 @@ mod unix {
                 (true, true, false, "Video on the server."),
                 (true, false, false, "Video file missing or empty."),
                 (true, true, true, "Video file missing or empty."),
-                (false, false, false, "Video file status unknown."),
+                (false, false, false, "Video file not checked."),
             ] {
                 let (sim, _clock, on, mut worker) = one_worker_reading_its_journal(
                     Vec::new(),
@@ -25630,6 +29214,7 @@ mod unix {
                             the_attempt_whose_capture_record_holds_the_words: 1,
                             the_reason_the_machine_recorded: None,
                             no_render_began: false,
+                            the_files_missing: Vec::new(),
                             the_device_line_as_observed: None,
                         },
                         WhatTheFigureIs::ThisIsAVideoJob,
@@ -25643,11 +29228,66 @@ mod unix {
                 let said = sim.said_to_the_user();
                 let text = said_once(&said, "Server A\nVideo\nStopped.");
                 assert!(text.contains(expected), "{text}");
-                assert!(text.contains("Job range: 1–90 (90 frames)."), "{text}");
+                assert!(text.contains("Frame range: 1–90 (90 frames)."), "{text}");
                 assert!(text.contains("Video frame count unknown."), "{text}");
                 assert!(
                     !text.contains("were not rendered"),
                     "presence cannot establish a partial video's frame count: {text}"
+                );
+            }
+        }
+
+        /// **`Rendering` K14c, `Queue & History` §10 and `Telegram` E1a's
+        /// sentence of 2026-11-11: a job whose remap left paths unchanged
+        /// finishes, its note names the files, and its finishing message says
+        /// *Missing:* for each** — pictures and a video alike. The Fable
+        /// review's fifth sitting, fault 5.
+        ///
+        /// **The case it bites on**: the names had nowhere to go, so the job
+        /// read *Finished.* and said nothing.
+        #[test]
+        fn a_job_whose_remap_left_paths_unchanged_finishes_and_says_missing_for_each() {
+            let (sim, clock, on, mut worker) = one_worker_reading_its_journal(
+                Vec::new(),
+                std::sync::Arc::new(std::time::SystemTime::now),
+            );
+            for (label, frames, video, images) in [
+                ("Image", vec![1, 2], false, true),
+                ("Video", (1..=90).collect::<Vec<i64>>(), true, false),
+            ] {
+                let (job, operation) = sixteenth_job(&on, label, frames, video, images);
+                let copy = job.clone();
+                on.on_the_machine(move |machine| {
+                    let statement = sixteenth_statement(machine, &copy, true, false);
+                    the_render_reports_its_ending_naming(
+                        machine,
+                        &operation,
+                        asked::IT_FINISHED,
+                        statement,
+                        if video { WhatTheFigureIs::ThisIsAVideoJob } else { WhatTheFigureIs::It(2) },
+                        &["wood.png", "props.blend"],
+                    );
+                    let note = machine.start.notes.read(&copy).expect("it reads").expect("a note");
+                    let ending = note.ending.expect("it ended");
+                    assert_eq!(ending.outcome, TheOutcomeAsWritten::Finished, "it is not failed for this");
+                    assert_eq!(ending.the_files_missing, ["wood.png", "props.blend"]);
+                });
+                // **A job of pictures says it finished once its last frame's
+                // pictures are made** (the runner's ruling of 2026-10-19).
+                if !video {
+                    a_frame_is_produced(&on, &job, 1, 2);
+                    a_frame_is_produced(&on, &job, 2, 2);
+                }
+                rounds(6, &mut worker, &clock);
+                let said = sim.said_to_the_user();
+                let head = format!("Server A\n{label}\nFinished.");
+                let text = said
+                    .iter()
+                    .find(|text| text.starts_with(&head))
+                    .unwrap_or_else(|| panic!("{label} finished and said so: {said:?}"));
+                assert!(
+                    text.ends_with("\nMissing: wood.png\nMissing: props.blend"),
+                    "one line for each file: {text}"
                 );
             }
         }
@@ -25985,6 +29625,7 @@ mod unix {
                         the_attempt_whose_capture_record_holds_the_words: 1,
                         the_reason_the_machine_recorded: None,
                         no_render_began: false,
+                        the_files_missing: Vec::new(),
                         the_device_line_as_observed: None,
                     },
                     WhatTheFigureIs::ThisIsAVideoJob,
@@ -26129,6 +29770,7 @@ mod unix {
                             words: None,
                             the_other_layers: Vec::new(),
                         }),
+                        the_main_copy_told_early: None,
                     }
                     .as_written(),
                 );
@@ -26548,6 +30190,7 @@ mod unix {
                     complaints_sink: format!("{directory}/c"),
                     script: format!("{directory}/s.py"),
                     ending: Some(ending),
+                    the_main_copy_told_early: None,
                 }
                 .as_written(),
             );
@@ -26563,11 +30206,18 @@ mod unix {
                 main: true,
                 place: layers[0].1,
                 source: None,
+                the_names_are_in_the_record: false,
             }
             .as_says();
             machine
                 .start
                 .journal_about(asked::THE_PREVIEW_PUBLISHED_EVENT, Some(job.clone()), &says)
+                .expect("journalled");
+            // The frame's set event (`Queue & History` P3, 2026-11-10): the
+            // main copy is published, so the set is made.
+            machine
+                .start
+                .journal_about(asked::THE_PREVIEW_SET_MADE_EVENT, Some(job.clone()), &says)
                 .expect("journalled");
             operation
         }
@@ -26751,7 +30401,7 @@ mod unix {
             let phone = the_message_saying(&sim, "Server A\nPhone range · frames ");
             assert_eq!(
                 labels_on(&sim, desk),
-                ["Render all \u{2014} 4 frames", "Cancel", "Stop this job"]
+                ["Render all \u{2014} 4 frames", "Cancel job"]
             );
 
             // **From the desk.**
@@ -26763,9 +30413,12 @@ mod unix {
                 );
             });
             rounds(6, &mut worker, &clock);
-            assert!(labels_on(&sim, desk).is_empty(), "{:?}", labels_on(&sim, desk));
-            let answered = the_message_saying(&sim, "Server A\nDesk range\nAnswered");
-            assert_eq!(labels_on(&sim, answered), ["Stop this job"]);
+            // **From 2026-11-09 the answer is told on the question itself**
+            // (`Telegram` A3), whose two answers go; it is the range's job's
+            // message from then on, carrying *Cancel this job* while the range
+            // waits its turn (`Telegram` C1d).
+            assert!(an_edit_said(&sim, "Server A\nDesk range\nAnswered “Render all — 4 frames”."));
+            assert_eq!(labels_on(&sim, desk), ["Cancel this job"]);
 
             // **From the phone.**
             let (_, token) = the_buttons_and_their_taps_on(&sim, phone)
@@ -26774,14 +30427,8 @@ mod unix {
                 .expect("on the question");
             sim.the_user_taps(phone, &token);
             rounds(10, &mut worker, &clock);
-            assert!(
-                sim.said_to_the_user()
-                    .iter()
-                    .any(|text| text.starts_with("Server A\nPhone range\nAnswered")),
-                "{:#?}",
-                sim.said_to_the_user()
-            );
-            assert!(labels_on(&sim, phone).is_empty(), "{:?}", labels_on(&sim, phone));
+            assert!(an_edit_said(&sim, "Server A\nPhone range\nAnswered “Render all — 4 frames”."), "{:#?}", the_edits_of(&sim, phone));
+            assert_eq!(labels_on(&sim, phone), ["Cancel this job"], "the answers went");
         }
 
         /// **`Telegram` R13, `Telegram` I4: *send a frame* finds a job that has ended,
@@ -26836,6 +30483,7 @@ mod unix {
                         complaints_sink: format!("{directory}/c"),
                         script: format!("{directory}/s.py"),
                         ending: None,
+                        the_main_copy_told_early: None,
                     }
                     .as_written(),
                 );
@@ -26938,7 +30586,305 @@ mod unix {
                 ["Server A\nKitchen · Frame 2 · Reflections · Not colour-accurate"],
                 "the picture asked for is sent as the answer, naming its View Layer"
             );
-            said_once(&sim.said_to_the_user(), being_made);
+            // **The Creator's addition of 2026-11-13 (`Telegram` D2 and `Telegram` I4):
+            // nothing in between stays** — *being made again* is deleted once
+            // its picture is sent.
+            assert!(
+                !sim.said_to_the_user().iter().any(|text| text.starts_with(being_made)),
+                "being made again is gone once the picture arrived: {:?}",
+                sim.said_to_the_user()
+            );
+        }
+
+        /// **A preview production's record for `frame`, closed *published***,
+        /// as the supervisor's own records hold it once the picture was made.
+        fn a_frame_published_in_the_records(machine: &mut AStartOverAnAreaThatGoesWithIt, job: &Identity, frame: i64) {
+            let directory = the_record_directory_of(machine, job);
+            let production = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let mut record = smoozy_state::machine_operations::OperationRecord::opened(
+                production,
+                job.clone(),
+                the_word_for(WorkerKind::Preview),
+            );
+            record.the_kinds_safe_boundary_marker = Some(
+                crate::the_preview_worker::ThePreviewKindsOwnField {
+                    job: job.as_text(),
+                    frame,
+                    attempt: 1,
+                    record_directory: directory.clone(),
+                    the_job_was_interrupted: false,
+                    ordinary_sink: format!("{directory}/o"),
+                    complaints_sink: format!("{directory}/c"),
+                    script: format!("{directory}/s.py"),
+                    ending: None,
+                    the_main_copy_told_early: None,
+                }
+                .as_written(),
+            );
+            machine.start.records.record_before_acting(&record).expect("written");
+            record
+                .close(
+                    RecordedOutcome::TheKindsOwn(
+                        crate::the_preview_worker::WhatTheProductionCameTo::Published.the_word().to_string(),
+                    ),
+                    None,
+                )
+                .expect("closed");
+            machine.start.records.write_it_back(&record).expect("written back");
+        }
+
+        /// **The Creator's notes on the test copy, note 9, and note 10's
+        /// ninth row: `/frame` on a finished job whose pictures were all
+        /// cleared finds its newest finished frame from the job's records and
+        /// makes it again** (`Telegram` R14 as added 2026-11-13, and `Telegram` I4). **Failed
+        /// before the fix**: the newest frame was looked for among the
+        /// pictures still on disk, so the answer was *No finished frame yet.*
+        #[test]
+        fn notes_9_frame_on_a_finished_job_with_every_picture_cleared_makes_the_newest_again() {
+            let (sim, clock) = (TheSim::default(), TheClock::default());
+            let on = ASupervisorOnAThreadOfItsOwn::started();
+            let mut worker = a_worker_with_its_readings(
+                &on,
+                on.worker,
+                "a",
+                &sim,
+                &clock,
+                crate::the_telegram_worker::a_simulated_conversation::TheReadingsATestSets::default(),
+            );
+            rounds_until(80, &mut [&mut worker], &clock, &|workers| how_many_hold(workers) == 1).expect("it holds");
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                let (kitchen, operation) = a_render_running(machine, "Kitchen", vec![1, 2, 3], None);
+                for frame in [1, 2, 3] {
+                    a_frame_published_in_the_records(machine, &kitchen, frame);
+                }
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                back.send(kitchen).expect("sent");
+            });
+            let kitchen = got.recv().expect("it ended");
+            rounds(4, &mut worker, &clock);
+            sim.the_user_says("/frame");
+            let being_made = "Server A\nKitchen · Frame 3\nRegenerating the preview";
+            {
+                let sim = sim.clone();
+                rounds_until(60, &mut [&mut worker], &clock, &|_| {
+                    sim.said_to_the_user().iter().any(|text| text.starts_with(being_made))
+                })
+                .unwrap_or_else(|| panic!("the newest finished frame is made again: {:?}", sim.said_to_the_user()));
+            }
+            assert!(
+                !sim.said_to_the_user().iter().any(|text| text.contains("No finished frame")),
+                "{:?}",
+                sim.said_to_the_user()
+            );
+            // **Sol's look at the Telegram fixes: the picture made again
+            // arrives.** Until then this test ended at the announcement. The
+            // stand-in production is ended, and the picture it would have
+            // made is published and journalled, as the reference test above
+            // does for frame 2.
+            on.on_the_machine(move |machine| {
+                if let Some(pair) = machine.start.the_previews.making.as_ref().and_then(|making| making.worker) {
+                    // SAFETY: a signal to a child this test's supervisor
+                    // started and holds in its wait.
+                    unsafe { libc::kill(pair.identifier as libc::pid_t, libc::SIGKILL) };
+                }
+                let directory = the_record_directory_of(machine, &kitchen);
+                std::fs::write(format!("{directory}/preview-3.png"), a_png_of(1280, 720)).expect("published");
+                a_main_preview_journalled_naming(machine, &kitchen, 3, None, None, true, 1);
+            });
+            {
+                let sim = sim.clone();
+                rounds_until(30, &mut [&mut worker], &clock, &|_| !the_pictures_sent(&sim).is_empty())
+                    .unwrap_or_else(|| panic!("the newest frame arrives: {:?}", sim.said_to_the_user()));
+            }
+            rounds(4, &mut worker, &clock);
+            let pictures = the_pictures_sent(&sim);
+            assert_eq!(pictures.len(), 1, "{pictures:?}");
+            assert!(pictures[0].starts_with("Server A\nKitchen · Frame 3"), "{pictures:?}");
+        }
+
+        /// **Sol's look at the Telegram fixes, its note on the tests: a
+        /// finished job on another server.** Two servers, each reading its own
+        /// line; the job finished on the one that does not listen. `/frame`
+        /// sends its newest picture, once, named for its server. Once the job
+        /// is deleted on that server, a reply asking for another of its frames
+        /// makes nothing again and sends nothing: the owner checks its own
+        /// record and folder before regenerating (`Telegram` R14).
+        #[test]
+        fn sol_a_finished_job_on_another_server_is_sent_once_and_refused_after_deletion() {
+            let (sim, clock) = (TheSim::default(), TheClock::default());
+            let (on_a, on_b) = (ASupervisorOnAThreadOfItsOwn::started(), ASupervisorOnAThreadOfItsOwn::started());
+            let readings = crate::the_telegram_worker::a_simulated_conversation::TheReadingsATestSets::default;
+            let mut a = a_worker_with_its_readings_as(&on_a, on_a.worker, "a", "a", &sim, &clock, readings());
+            let mut b = a_worker_with_its_readings_as(&on_b, on_b.worker, "b", "b", &sim, &clock, readings());
+            {
+                let sim = sim.clone();
+                rounds_until(120, &mut [&mut a, &mut b], &clock, &|workers| {
+                    how_many_hold(workers) == 1 && sim.the_board_on_top().is_some_and(|(_, board)| board.roster.len() == 2)
+                })
+                .expect("one holds, both listed");
+            }
+            let (owner, name) = if a.is_holding() { (&on_b, "B") } else { (&on_a, "A") };
+            let (back, got) = std::sync::mpsc::channel();
+            owner.on_the_machine(move |machine| {
+                let (kitchen, operation) = a_render_running(machine, "Kitchen", vec![1, 2, 3], None);
+                for frame in [1, 2, 3] {
+                    a_frame_published_in_the_records(machine, &kitchen, frame);
+                }
+                let directory = the_record_directory_of(machine, &kitchen);
+                std::fs::write(format!("{directory}/preview-3.png"), a_png_of(1280, 720)).expect("published");
+                a_main_preview_journalled_naming(machine, &kitchen, 3, None, None, true, 1);
+                the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                back.send((kitchen, directory)).expect("sent");
+            });
+            let (_kitchen, directory) = got.recv().expect("it ended");
+            for _ in 0..6 {
+                a_round_of(&mut [&mut a, &mut b], &clock);
+            }
+            let before = the_pictures_sent(&sim).len();
+            sim.the_user_says("/frame");
+            let caption = format!("Server {name}\nKitchen · Frame 3");
+            {
+                let (sim, caption) = (sim.clone(), caption.clone());
+                rounds_until(60, &mut [&mut a, &mut b], &clock, &|_| the_pictures_sent(&sim).iter().skip(before).any(|p| p.starts_with(&caption)))
+                    .unwrap_or_else(|| panic!("the picture: {:?} {:?}", the_pictures_sent(&sim), sim.said_to_the_user()));
+            }
+            for _ in 0..10 {
+                a_round_of(&mut [&mut a, &mut b], &clock);
+            }
+            let sent: Vec<String> = the_pictures_sent(&sim).into_iter().skip(before).filter(|p| p.starts_with(&caption)).collect();
+            assert_eq!(sent.len(), 1, "sent once: {sent:?}");
+            let picture = {
+                let state = sim.state();
+                *state.photos.iter().rev().find(|id| state.texts[id].starts_with(&caption)).expect("its message")
+            };
+            // The job is deleted on its server: its record folder goes.
+            std::fs::remove_dir_all(&directory).expect("deleted");
+            let said = sim.said_to_the_user().len();
+            sim.the_user_replies(picture, "/frame 2");
+            {
+                let sim = sim.clone();
+                rounds_until(60, &mut [&mut a, &mut b], &clock, &|_| sim.said_to_the_user().len() > said)
+                    .unwrap_or_else(|| panic!("an answer: {:?}", sim.said_to_the_user()));
+            }
+            for _ in 0..10 {
+                a_round_of(&mut [&mut a, &mut b], &clock);
+            }
+            assert!(
+                !sim.said_to_the_user().iter().any(|text| text.contains("Regenerating the preview")),
+                "nothing made again: {:?}",
+                sim.said_to_the_user()
+            );
+            assert_eq!(the_pictures_sent(&sim).len(), before + 1, "nothing more sent: {:?}", the_pictures_sent(&sim));
+        }
+
+        /// **Note 9 and note 10's ninth row: a sixth, and a seventh, finished
+        /// job are found.** Seven jobs finished on one server; `/frame` offers
+        /// all seven. **Failed before the fix**: a reply carried the newest
+        /// five ended jobs, so the two oldest could not be asked for.
+        #[test]
+        fn notes_9_frame_finds_finished_jobs_beyond_the_newest_five() {
+            let (sim, clock) = (TheSim::default(), TheClock::default());
+            let on = ASupervisorOnAThreadOfItsOwn::started();
+            let mut worker = a_worker_with_its_readings(
+                &on,
+                on.worker,
+                "a",
+                &sim,
+                &clock,
+                crate::the_telegram_worker::a_simulated_conversation::TheReadingsATestSets::default(),
+            );
+            rounds_until(80, &mut [&mut worker], &clock, &|workers| how_many_hold(workers) == 1).expect("it holds");
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                for at in 1..=7 {
+                    let (job, operation) = a_render_running(machine, &format!("kitchen_v{at:02}"), vec![1], None);
+                    a_frame_published_in_the_records(machine, &job, 1);
+                    the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                }
+                back.send(()).expect("sent");
+            });
+            got.recv().expect("they ended");
+            rounds(4, &mut worker, &clock);
+            sim.the_user_says("/frame");
+            {
+                let sim = sim.clone();
+                rounds_until(60, &mut [&mut worker], &clock, &|_| {
+                    sim.said_to_the_user().iter().any(|text| text.starts_with("Which job?"))
+                })
+                .unwrap_or_else(|| panic!("Which job? {:?}", sim.said_to_the_user()));
+            }
+            rounds(4, &mut worker, &clock);
+            let offered: Vec<String> = sim
+                .state()
+                .heard
+                .iter()
+                .filter_map(|(_, _, fields)| fields.get("reply_markup").cloned())
+                .flat_map(|markup| markup["inline_keyboard"].as_array().cloned().unwrap_or_default())
+                .flat_map(|row| row.as_array().cloned().unwrap_or_default())
+                .filter_map(|button| button["text"].as_str().map(str::to_string))
+                .filter(|text| text.starts_with("kitchen_v"))
+                .collect();
+            for at in 1..=7 {
+                assert!(offered.contains(&format!("kitchen_v{at:02}")), "kitchen_v{at:02} is offered: {offered:?}");
+            }
+        }
+
+        /// **The night's live pass, fault 1: a bare `/frame` with only finished
+        /// jobs answered *Which job?* with no buttons.** Right after a job's
+        /// pictures, Telegram refuses the edit that adds the buttons for
+        /// flooding. **Failed before the fix**: the flood retry needed the
+        /// listener to renew its board first, the listener was held by the very
+        /// turn that sent the edit, so the edit was given up and the question
+        /// stayed with nothing to press. After: the edit is sent again and
+        /// both jobs are offered.
+        #[test]
+        fn night_pass_1_which_job_keeps_its_buttons_when_telegram_asks_to_wait() {
+            let (sim, clock) = (TheSim::default(), TheClock::default());
+            let on = ASupervisorOnAThreadOfItsOwn::started();
+            let mut worker = a_worker_with_its_readings(
+                &on,
+                on.worker,
+                "a",
+                &sim,
+                &clock,
+                crate::the_telegram_worker::a_simulated_conversation::TheReadingsATestSets::default(),
+            );
+            rounds_until(80, &mut [&mut worker], &clock, &|workers| how_many_hold(workers) == 1).expect("it holds");
+            let (back, got) = std::sync::mpsc::channel();
+            on.on_the_machine(move |machine| {
+                for name in ["kitchen_v14", "hallway_v02"] {
+                    let (job, operation) = a_render_running(machine, name, vec![1], None);
+                    a_frame_published_in_the_records(machine, &job, 1);
+                    the_render_reports_its_ending(machine, &operation, asked::IT_FINISHED, None);
+                }
+                back.send(()).expect("sent");
+            });
+            got.recv().expect("they ended");
+            rounds(4, &mut worker, &clock);
+            sim.state().the_next_button_edits_are_flooded = 1;
+            sim.the_user_says("/frame");
+            let with_both = |sim: &TheSim| {
+                sim.state()
+                    .heard
+                    .iter()
+                    .filter(|(_, method, _)| method == "editMessageText")
+                    .filter_map(|(_, _, fields)| fields.get("reply_markup").map(|markup| markup.to_string()))
+                    .filter(|markup| markup.contains("kitchen_v14") && markup.contains("hallway_v02"))
+                    .count()
+            };
+            {
+                let sim = sim.clone();
+                rounds_until(60, &mut [&mut worker], &clock, &|_| with_both(&sim) >= 2)
+                    .unwrap_or_else(|| panic!("the buttons were not sent again: {:?}", sim.said_to_the_user()));
+            }
+            assert_eq!(sim.state().the_next_button_edits_are_flooded, 0, "the first edit was refused");
+            assert_eq!(
+                sim.said_to_the_user().iter().filter(|text| text.starts_with("Which job?")).count(),
+                1,
+                "one question: {:?}",
+                sim.said_to_the_user()
+            );
         }
 
         /// **A preview production's record, closed, whose main copy was
@@ -26991,6 +30937,7 @@ mod unix {
                     complaints_sink: format!("{directory}/c"),
                     script: format!("{directory}/s.py"),
                     ending: Some(ending),
+                    the_main_copy_told_early: None,
                 }
                 .as_written(),
             );
@@ -27187,6 +31134,7 @@ mod unix {
                             complaints_sink: format!("{directory}/c"),
                             script: format!("{directory}/s.py"),
                             ending: None,
+                            the_main_copy_told_early: None,
                         }
                         .as_written(),
                     );
@@ -27270,7 +31218,9 @@ mod unix {
             rounds(6, &mut worker, &clock);
             for frame in [2, 3] {
                 said_once(&sim.said_to_the_user(), &could_not(frame));
-                said_once(&sim.said_to_the_user(), &being_made(frame));
+                // **`Telegram` I4 as changed 2026-11-13: *being made again*
+                // goes once the answer that settles it is said.**
+                assert!(!sim.said_to_the_user().iter().any(|text| text.starts_with(&being_made(frame))));
             }
             assert!(the_pictures_sent(&sim).is_empty(), "no picture was made");
             on.on_the_machine(move |machine| {
@@ -28907,6 +32857,39 @@ mod unix {
             );
         }
 
+        /// **`Server Setup` S6: an abandon that took a stopped run over is the
+        /// ready action's newest run**, though it inherited that run's
+        /// boundaries and wrote none of its own (the scout's list, item 2: the
+        /// second live pass's fault 6, a reconnect after *End setup* showing the
+        /// stopped setup again). The two read the same moment and the same
+        /// list, and until 2026-11-13 their identities' text chose between
+        /// them, so about half of all abandons were read back as the run they
+        /// ended. **Eight pairs, so a coin cannot pass it.**
+        #[test]
+        fn an_abandon_is_the_ready_actions_run_and_never_the_run_it_ended() {
+            for _ in 0..8 {
+                let mut machine = a_machine_a_placement_wrote();
+                let reached = [(Boundary::Started, 100), (Boundary::Tooling, 200)];
+                let _stopped = a_setup_record_of(
+                    &mut machine,
+                    SetupKind::TheReadyAction,
+                    &reached,
+                    Some(asked::A_STEP_FAILED),
+                );
+                let abandon = a_setup_record_of(
+                    &mut machine,
+                    SetupKind::TheReadyAction,
+                    &reached,
+                    Some(asked::IT_WAS_ABANDONED),
+                );
+                let read = the_set_up_cards_reading_of(&mut machine);
+                assert_eq!(
+                    read.fields.text(asked::THE_READY_ACTIONS_RUN_FIELD),
+                    Some(abandon.as_text().as_str())
+                );
+            }
+        }
+
         /// A job whose ending is written, ended at the moment given.
         fn a_job_that_ended(
             machine: &mut AStartOverAnAreaThatGoesWithIt,
@@ -28931,6 +32914,7 @@ mod unix {
                         the_attempt_whose_capture_record_holds_the_words: 1,
                         the_reason_the_machine_recorded: None,
                         no_render_began: false,
+                        the_files_missing: Vec::new(),
                         the_device_line_as_observed: line.map(str::to_string),
                     },
                     Reading::taken(
@@ -31362,8 +35346,93 @@ mod unix {
             )
             .expect("the root is recorded");
             let (staging, _) =
-                where_a_setup_run_works(&machine.start).expect("a usable staging area");
+                where_a_setup_run_works(&machine.start, false).expect("a usable staging area");
             assert!(std::path::Path::new(&staging).is_dir());
+        }
+
+        /// **`Server Setup` R6a's change of later on 2026-11-13, item 4 (Sol's
+        /// look at the scout's list, point 1): a root is found by its mark
+        /// before anything is made under it.** A disk not mounted after a
+        /// restart leaves the root's name with nothing behind it, and until
+        /// this a setup run opened there made a new, empty folder on the disk
+        /// beneath — splitting the user's files when the disk came back. Now:
+        /// not there, another folder, and a folder the login cannot write to
+        /// are each refused in words, and nothing is made; an abandon is not
+        /// held by them and makes nothing either.
+        #[test]
+        fn a_root_whose_mark_does_not_stand_is_refused_and_nothing_is_made_under_it() {
+            use std::os::unix::fs::PermissionsExt;
+            struct GoesWithTheTest(PathBuf);
+            impl Drop for GoesWithTheTest {
+                fn drop(&mut self) {
+                    let _ = std::fs::set_permissions(self.0.join("ephemeral/smoozy"), std::fs::Permissions::from_mode(0o755));
+                    std::fs::remove_dir_all(&self.0).ok();
+                }
+            }
+            let mut machine = a_machine_a_placement_wrote();
+            let at = std::env::current_exe()
+                .expect("this test's own program")
+                .parent()
+                .expect("its folder")
+                .join(format!("smoozy-a-marked-root-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&at);
+            std::fs::create_dir_all(at.join("ephemeral")).expect("the mount point");
+            let _goes = GoesWithTheTest(at.clone());
+            let root = at.join("ephemeral/smoozy");
+            let root_text = root.display().to_string();
+            std::fs::write(&machine.start.the_roots_record, &root_text).expect("the root is recorded");
+            let the_record_of_the_mark = machine.start.the_roots_record.with_file_name("root-mark");
+            std::fs::write(&the_record_of_the_mark, "the-mark\n").expect("the mark is recorded");
+
+            // **The disk is not mounted: the root's name holds nothing.**
+            let opened = answer(
+                &asking(
+                    asked::THE_SETUP_RUN_IS_OPENED_REQUEST,
+                    Fields::none()
+                        .and(asked::THE_KIND_OF_SETUP_FIELD, the_word_for_setup_kind(SetupKind::TheReadyAction))
+                        .and(asked::HOW_MANY_COMPOSED_BOUNDARIES_FIELD, "0"),
+                ),
+                &mut machine.start,
+            );
+            assert_eq!(opened.fields.text(asked::WHAT_BECAME_OF_IT_FIELD), Some(asked::THERE_IS_NO_RECORD_OF_IT));
+            let said = opened.fields.text(asked::THE_MACHINES_OWN_WORDS_FIELD).unwrap_or_default();
+            assert_eq!(said, format!("Could not find {root_text}/.smoozy-root. Smoozy's folder or its disk may be missing."));
+            assert!(!root.exists(), "nothing is made under a root that does not stand");
+            assert_eq!(
+                crate::a_recorded_root_on_this_machine(&root_text, &machine.start.the_roots_record).map(|_| ()),
+                Err(said.to_string()),
+                "every job's reading of the root is refused the same way"
+            );
+            // **An abandon is not held, and makes nothing.**
+            assert!(where_a_setup_run_works(&machine.start, true).is_ok());
+            assert!(!root.exists(), "an abandon makes nothing under a root that does not stand");
+
+            // **Another folder of the same name — a replaced disk.**
+            std::fs::create_dir_all(&root).expect("a folder of the same name");
+            std::fs::write(root.join(".smoozy-root"), "another-mark").expect("its mark");
+            assert_eq!(
+                where_a_setup_run_works(&machine.start, false),
+                Err(format!("Smoozy's folder, {root_text}, is not the one set up here. Its disk may have been replaced."))
+            );
+            assert!(!root.join("blender").exists());
+
+            // **The same folder, and the login cannot write to it.**
+            std::fs::write(root.join(".smoozy-root"), "the-mark").expect("the right mark");
+            std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o555)).expect("read-only");
+            let refused = where_a_setup_run_works(&machine.start, false).expect_err("a folder that takes no write");
+            assert!(refused.starts_with(&format!("Smoozy's folder, {root_text}, can't be written to: ")), "{refused}");
+            assert_eq!(
+                the_root_stands_for_the_final_check(&machine.start).map_err(|why| why == refused),
+                Err(true),
+                "the final check makes the same write"
+            );
+
+            // **The folder Smoozy made, writable: the run works there.**
+            std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o755)).expect("writable again");
+            let (staging, _) = where_a_setup_run_works(&machine.start, false).expect("a usable staging area");
+            assert!(std::path::Path::new(&staging).is_dir());
+            assert_eq!(the_root_stands_for_the_final_check(&machine.start), Ok(()));
+            assert!(!root.join(".smoozy-landing-check").exists(), "the test write is taken away");
         }
 
         /// **Step 10c's owed piece 12: the four job-side refusals of a root
@@ -32365,6 +36434,7 @@ mod unix {
                         complaints_sink: machine.at.join("c").display().to_string(),
                         available_bytes: 1,
                         render_process: None,
+                        reading_process: None,
                         ending: None,
                         collection_incomplete_by_reconciliation: false,
                         the_termination_was_issued: false,
@@ -32918,6 +36988,7 @@ mod unix {
                 complaints_sink: machine.at.join(format!("c{attempt}")).display().to_string(),
                 available_bytes: 1,
                 render_process: None,
+                reading_process: None,
                 ending: None,
                 collection_incomplete_by_reconciliation: false,
                 the_termination_was_issued: false,
@@ -32947,6 +37018,7 @@ mod unix {
                 something_followed_the_marker: Some(true),
                 device_line: None,
                 no_render_began: false,
+                missing: Vec::new(),
             });
             let unwritten = a_capture(3);
             let WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(mut held) = machine
@@ -33548,6 +37620,348 @@ mod unix {
                 "V12: the reading rides the pending outcome unchanged to its landing"
             );
         }
+
+        /// **`Rented-server runtime` S14b: an ending whose worker could not
+        /// keep its long completeness statement is held as a write this store
+        /// refused is held** — nothing written, the reading saying the outcome
+        /// marked owed, the report answered as not yet accepted — **and the
+        /// same ending lands when the worker sends it whole.** The Fable
+        /// review's fifth sitting, fault 2.
+        ///
+        /// **The case it bites on**: the worker had nothing it could send, so
+        /// the job read *rendering* for as long as the mount had no room.
+        #[test]
+        fn an_ending_whose_statement_is_not_kept_yet_is_held_for_the_readings_and_written_only_whole() {
+            use smoozy_queue_history_machine::acting::note::{
+                THE_OUTCOME_IS_OWED_TO_THE_DURABLE_STORE_FIELD, THE_PENDING_OUTCOME_FIELD,
+            };
+            let mut machine = a_machine_a_placement_wrote();
+            let job = a_job();
+            let operation = a_render_open_for(&mut machine, &job);
+            let a_report = |machine: &AStartOverAnAreaThatGoesWithIt, fields: Fields| {
+                Request::speaking(
+                    THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+                    operation.clone(),
+                    THE_WORKERS_REPORT_REQUEST,
+                )
+                .carrying(
+                    fields
+                        .and(
+                            THE_RUN_THE_WORKER_WAS_STARTED_UNDER,
+                            machine.start.run.run.as_text(),
+                        )
+                        .and(asked::THE_ENDING_FIELD, asked::IT_FAILED),
+                )
+            };
+            let the_jobs_state = |machine: &mut AStartOverAnAreaThatGoesWithIt, name: &str| {
+                let answered = answer(&a_request(THE_QUEUE_READING_REQUEST), &mut machine.start);
+                answered
+                    .fields
+                    .text(&asked::the_field_of_item(asked::THE_JOB_FIELD, 0, name))
+                    .map(str::to_string)
+            };
+            let not_kept = a_report(
+                &machine,
+                Fields::none().and(
+                    crate::the_render_worker::THE_STATEMENT_IS_NOT_KEPT_YET_FIELD,
+                    "No space left on device (os error 28)",
+                ),
+            );
+            for _ in 0..2 {
+                let held = answer(&not_kept, &mut machine.start);
+                assert_eq!(
+                    held.fields.text(WHETHER_THE_REPORT_WAS_ACCEPTED),
+                    None,
+                    "not accepted and not refused: the worker sends it again (W12)"
+                );
+                assert!(held
+                    .fields
+                    .text(asked::THE_MACHINES_OWN_WORDS_FIELD)
+                    .is_some_and(|why| why.contains("No space left on device")));
+                assert!(
+                    machine
+                        .start
+                        .records
+                        .what_is_held_under(&operation)
+                        .expect("it reads")
+                        .recorded_outcome()
+                        .is_none(),
+                    "no ending is recorded without its statement for this reason"
+                );
+                assert_eq!(
+                    the_jobs_state(&mut machine, asked::THE_QUEUE_STATE_FIELD).as_deref(),
+                    Some(asked::IT_HAS_ENDED),
+                    "S14: the held outcome is the job's state rather than rendering"
+                );
+                assert_eq!(
+                    the_jobs_state(&mut machine, THE_PENDING_OUTCOME_FIELD).as_deref(),
+                    Some(asked::IT_FAILED)
+                );
+                assert_eq!(
+                    the_jobs_state(&mut machine, THE_OUTCOME_IS_OWED_TO_THE_DURABLE_STORE_FIELD)
+                        .as_deref(),
+                    Some(asked::THE_ANSWER_IS_YES)
+                );
+            }
+            let note = answer(
+                &asking(THE_PER_JOB_NOTE_READING_REQUEST, about(&job)),
+                &mut machine.start,
+            );
+            assert_eq!(note.fields.text(asked::THE_ENDING_FIELD), None, "the note waits");
+            // **The statement is kept, and the same ending lands with it**
+            // (Sol's look: this used to land an ending that carried none).
+            let statement = smoozy_job_files_machine::reckoning::TheCompletenessStatement {
+                expected: 2,
+                present: vec![b"frame-0001.png".to_vec()],
+                absent: vec![b"frame-0002.png".to_vec()],
+                present_at_zero_bytes: Vec::new(),
+                what_the_added_write_places_produced: Vec::new(),
+            };
+            let whole = a_report(
+                &machine,
+                Fields::none().and(
+                    THE_COMPLETENESS_STATEMENT_FIELD,
+                    serde_json::to_vec(&statement).expect("it writes"),
+                ),
+            );
+            let landed = answer(&whole, &mut machine.start);
+            assert_eq!(
+                landed.fields.text(WHETHER_THE_REPORT_WAS_ACCEPTED),
+                Some(IT_WAS_ACCEPTED)
+            );
+            assert!(machine.start.the_render_endings_owed.is_empty(), "nothing is owed once it lands");
+            let note = answer(
+                &asking(THE_PER_JOB_NOTE_READING_REQUEST, about(&job)),
+                &mut machine.start,
+            );
+            assert_eq!(note.fields.text(asked::THE_ENDING_FIELD), Some(asked::IT_FAILED));
+            let kept = machine.start.notes.read(&job).expect("it reads").expect("a note");
+            assert!(
+                matches!(
+                    &kept.the_completeness_statement,
+                    Some(TheStatementAtTheEnding::It(landed)) if *landed == statement
+                ),
+                "the count lands whole: {:?}",
+                kept.the_completeness_statement
+            );
+        }
+
+        /// **Whether the stand-in was ended outright**, within a test's own
+        /// bound — never a wait with no end.
+        fn it_was_ended_outright(child: &mut std::process::Child) -> bool {
+            use std::os::unix::process::ExitStatusExt;
+            let began = std::time::Instant::now();
+            while began.elapsed() < std::time::Duration::from_secs(10) {
+                if let Some(status) = child.try_wait().expect("readable") {
+                    return status.signal() == Some(libc::SIGKILL);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            child.kill().ok();
+            child.wait().ok();
+            false
+        }
+
+        /// The worker's word that it started the reading's Blender, through
+        /// the dispatch.
+        fn the_readings_process_is_told(
+            machine: &mut AStartOverAnAreaThatGoesWithIt,
+            operation: &Identity,
+            pair: &str,
+        ) -> Answered {
+            answer(
+                &a_request(crate::the_render_worker::THE_READINGS_PROCESS_WAS_STARTED_REQUEST)
+                    .carrying(
+                        Fields::none()
+                            .and(THE_OPERATION_FIELD, operation.as_text())
+                            .and(crate::the_render_worker::THE_READINGS_PROCESS_FIELD, pair),
+                    ),
+                &mut machine.start,
+            )
+        }
+
+        /// **`Rendering` K4's paragraph of 2026-11-11: a stop that finds no
+        /// render yet ends the reading outright, and the attempt that then
+        /// ends is left stopped.** A stand-in that never ends stands where the
+        /// reading's Blender goes. The Fable review's fifth sitting, fault 4.
+        ///
+        /// **The case it bites on**: nothing recorded the reading's Blender,
+        /// so the stop wrote *should be stopped* and reached nothing; a
+        /// reading that never ended could not be stopped at all.
+        #[test]
+        fn a_stop_that_finds_no_render_yet_ends_the_reading_outright_and_the_job_is_left_stopped() {
+            let mut machine = a_machine_a_placement_wrote();
+            let job = a_job();
+            let operation = a_render_open_for(&mut machine, &job);
+            let mut reading = std::process::Command::new("sleep")
+                .arg("120")
+                .spawn()
+                .expect("a stand-in for a reading that never ends");
+            let pair = the_kernels_record_of(&mut machine, &reading);
+            let told = the_readings_process_is_told(&mut machine, &operation, &pair);
+            assert_eq!(
+                told.fields.text(WHETHER_IT_WAS_RECORDED_FIELD),
+                Some(crate::the_render_worker::IT_WAS_RECORDED),
+                "{:?}",
+                told.fields.text(asked::THE_MACHINES_OWN_WORDS_FIELD)
+            );
+            answer(&a_stop_of(&operation), &mut machine.start);
+            assert!(
+                it_was_ended_outright(&mut reading),
+                "the stop reached the reading's Blender and ended it"
+            );
+            // **The worker's reading failed, and it says so.**
+            the_worker_reports(&mut machine, &operation, asked::IT_FAILED);
+            assert!(matches!(
+                machine
+                    .start
+                    .records
+                    .what_is_held_under(&operation)
+                    .expect("it reads"),
+                WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record)
+                    if record.recorded_outcome() == Some(&RecordedOutcome::LeftStopped)
+            ));
+        }
+
+        /// **A stop that arrives before the reading's pair is written is
+        /// taken when the pair is** (`Rendering` K4's paragraph of 2026-11-11).
+        #[test]
+        fn a_stop_asked_before_the_reading_started_ends_it_the_moment_it_is_told() {
+            let mut machine = a_machine_a_placement_wrote();
+            let job = a_job();
+            let operation = a_render_open_for(&mut machine, &job);
+            answer(&a_stop_of(&operation), &mut machine.start);
+            let mut reading = std::process::Command::new("sleep")
+                .arg("120")
+                .spawn()
+                .expect("a stand-in for the reading");
+            let pair = the_kernels_record_of(&mut machine, &reading);
+            the_readings_process_is_told(&mut machine, &operation, &pair);
+            assert!(it_was_ended_outright(&mut reading));
+        }
+
+        /// **The interrupt still goes to a render that starts after all**
+        /// (`Rendering` K4's paragraph of 2026-11-11): the kill was issued to
+        /// a reading that had in fact finished, the worker went on, and the
+        /// render it then records is interrupted though a termination was
+        /// already written as issued.
+        #[test]
+        fn a_render_that_starts_after_a_stop_ended_its_reading_is_still_interrupted() {
+            let mut machine = a_machine_a_placement_wrote();
+            let job = a_job();
+            let operation = a_render_open_for(&mut machine, &job);
+            let mut reading = std::process::Command::new("sleep")
+                .arg("120")
+                .spawn()
+                .expect("a stand-in for the reading");
+            let pair = the_kernels_record_of(&mut machine, &reading);
+            the_readings_process_is_told(&mut machine, &operation, &pair);
+            answer(&a_stop_of(&operation), &mut machine.start);
+            assert!(it_was_ended_outright(&mut reading));
+            let mut render = std::process::Command::new("sleep")
+                .arg("120")
+                .spawn()
+                .expect("a stand-in for the render");
+            let pair = the_kernels_record_of(&mut machine, &render);
+            let recorded = answer(
+                &a_request(THE_RENDER_PROCESS_WAS_STARTED_REQUEST).carrying(
+                    Fields::none()
+                        .and(THE_OPERATION_FIELD, operation.as_text())
+                        .and(THE_RENDER_PROCESS_FIELD, pair.as_str()),
+                ),
+                &mut machine.start,
+            );
+            assert_eq!(
+                recorded.fields.text(WHETHER_IT_WAS_RECORDED_FIELD),
+                Some(crate::the_render_worker::IT_WAS_RECORDED)
+            );
+            assert!(
+                it_was_interrupted(&mut render),
+                "the render that started after all got the interrupt"
+            );
+        }
+        /// **`Rendering` K4's paragraph of 2026-11-12 (the double-check
+        /// ideas, idea 5): the supervisor places no hold for a render a stop
+        /// has been asked of.** The stop lands as the reading ends: the
+        /// reading had printed its whole document, so the worker goes on and
+        /// asks for a hold. No hold is placed and the job is not moved to
+        /// *held*; the worker ends unreported and the attempt's ending is
+        /// written with the stop asked. **It failed before the fix**: the hold
+        /// was placed, and the job was left stopped and waiting on a question.
+        #[test]
+        fn double_check_5_a_stop_as_the_reading_ends_places_no_hold() {
+            let mut machine = a_machine_a_placement_wrote();
+            let job = a_job();
+            let operation = a_render_open_for(&mut machine, &job);
+            let mut reading = std::process::Command::new("sleep")
+                .arg("120")
+                .spawn()
+                .expect("a stand-in for the reading");
+            let pair = the_kernels_record_of(&mut machine, &reading);
+            the_readings_process_is_told(&mut machine, &operation, &pair);
+            answer(&a_stop_of(&operation), &mut machine.start);
+            let ended = it_was_ended_outright(&mut reading);
+            // **The worker had the reading's whole document, and asks for a
+            // hold.**
+            let asked_for = answer(
+                &a_request(THE_HOLD_IS_PLACED_AT_RENDER_START_REQUEST).carrying(
+                    Fields::none()
+                        .and(THE_OPERATION_FIELD, operation.as_text())
+                        .and(asked::THE_HOLD_REASON_FIELD, "the file changed"),
+                ),
+                &mut machine.start,
+            );
+            assert!(ended, "the stop reached the reading's Blender");
+            assert_eq!(
+                asked_for.fields.text(asked::THE_HOLD_IT_IS_HELD_UNDER_FIELD),
+                None,
+                "a hold was placed for a render a stop was asked of"
+            );
+            let state = machine
+                .start
+                .queue
+                .read_one(&job)
+                .expect("it reads")
+                .expect("the job record is there")
+                .state;
+            assert!(
+                !matches!(state, QueueState::Held { .. }),
+                "the job was moved to held: {state:?}"
+            );
+            assert!(
+                machine
+                    .start
+                    .journal
+                    .read_forward_from(0, 1000)
+                    .expect("the journal reads")
+                    .events
+                    .iter()
+                    .all(|event| event.what().kind != asked::THE_HOLD_PLACED_EVENT),
+                "a hold was journalled, so a question would be told"
+            );
+            // **The worker, told no hold was placed, ends with nothing
+            // reported, and the attempt's ending is written with the stop
+            // asked**: the job reads stopped and waits on nothing.
+            machine.start.a_render_is_owed_its_branch(operation.clone());
+            machine.start.the_renders_owed_a_branch_are_taken();
+            assert_eq!(
+                the_outcome_of(&machine, &operation),
+                Some(RecordedOutcome::LeftStopped),
+                "the attempt is left stopped"
+            );
+            let state = machine
+                .start
+                .queue
+                .read_one(&job)
+                .expect("it reads")
+                .expect("the job record is there")
+                .state;
+            assert!(
+                matches!(state, QueueState::Ended { .. }),
+                "the job has ended: {state:?}"
+            );
+        }
+
         // ------------------------------------------------ G15a, performed
 
         /// **A step from store version 1, standing in for the first real one**,
@@ -34110,12 +38524,58 @@ mod unix {
         /// 1. **a stop that arrives before the Blender is told** is taken, the
         ///    desired state written, and nothing sent — there is nothing
         ///    recorded to aim at;
-        /// 2. **the worker tells its Blender**, and the waiting stop's interrupt
-        ///    goes to it then; a repeat of the stop sends nothing more;
+        /// 2. **the worker tells its Blender**, and the waiting stop's kill
+        ///    goes to it then (the interrupt until 2026-11-13); a repeat of
+        ///    the stop sends nothing more;
         /// 3. **the worker's ending** is written *ended by Smoozy*, and the
         ///    stop's own command closes *left stopped*;
         /// 4. **a stop of a reading that already ended** closes at once with
         ///    its own ending, and sends nothing.
+        /// Whether the stand-in ended by the kill within ten seconds; it is
+        /// killed by the test otherwise.
+        fn it_was_killed(child: &mut std::process::Child) -> bool {
+            use std::os::unix::process::ExitStatusExt;
+            let began = std::time::Instant::now();
+            while began.elapsed() < std::time::Duration::from_secs(10) {
+                if let Some(status) = child.try_wait().expect("readable") {
+                    return status.signal() == Some(libc::SIGKILL);
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            child.kill().ok();
+            child.wait().ok();
+            false
+        }
+
+        /// **The night's live pass, fault 3: Stop on a read ends its Blender
+        /// on the server at once** (`Render Settings` W2 as changed
+        /// 2026-11-13, the kill, by `Rendering` K4's reasoning for a Blender
+        /// that is not rendering). The stand-in behaves as Blender did on the
+        /// research's tests: a first interrupt is heard and it runs on.
+        /// **Failed before the fix**: the stop sent the interrupt, the
+        /// stand-in said Blender's line and read on, as Blender read on for
+        /// about 80 seconds on the pass.
+        #[test]
+        fn night_pass_3_a_stop_of_a_read_ends_its_blender_at_once() {
+            let mut machine = a_machine_a_placement_wrote();
+            let operation = a_file_inspection_open(&mut machine);
+            let (mut child, pair, heard) = a_stand_in_that_wants_a_second_interrupt(&mut machine);
+            let told = answer(
+                &a_request(crate::the_file_inspection_worker::THE_BLENDER_OF_A_FILE_INSPECTION_WAS_STARTED_REQUEST)
+                    .carrying(
+                        Fields::none()
+                            .and(THE_OPERATION_FIELD, operation.as_text())
+                            .and(crate::the_file_inspection_worker::THE_BLENDERS_PAIR_FIELD, pair.as_str()),
+                    ),
+                &mut machine.start,
+            );
+            assert_eq!(told.fields.text(WHETHER_IT_WAS_RECORDED_FIELD), Some(crate::the_render_worker::IT_WAS_RECORDED));
+            let stopped = answer(&a_stop_of(&operation), &mut machine.start);
+            assert_eq!(stopped.fields.text(asked::THE_MACHINES_OWN_WORDS_FIELD), None);
+            assert!(it_was_killed(&mut child), "the read's Blender went on; it heard {:?}", what_it_heard(&heard));
+            assert!(the_file_inspections_field(&machine, &operation).the_interrupt_went_out, "the issuance is written");
+        }
+
         #[test]
         fn a_stop_of_a_file_inspection_reaches_its_recorded_blender_and_the_reading_says_so() {
             let mut machine = a_machine_a_placement_wrote();
@@ -34161,10 +38621,9 @@ mod unix {
                 told.fields.text(WHETHER_IT_WAS_RECORDED_FIELD),
                 Some(crate::the_render_worker::IT_WAS_RECORDED)
             );
-            assert!(
-                it_was_interrupted(&mut child),
-                "the interrupt reached the Blender"
-            );
+            // **The kill, from 2026-11-13** (`Render Settings` W2 as changed,
+            // the night's live pass, fault 3); the interrupt until then.
+            assert!(it_was_killed(&mut child), "the kill reached the Blender");
             assert!(the_file_inspections_field(&machine, &operation).the_interrupt_went_out);
             let again = answer(&stop, &mut machine.start);
             assert_eq!(
@@ -34538,6 +38997,51 @@ mod unix {
             );
         }
 
+        /// **`Rendering` K11a, the Creator's ruling on the Bad what-if
+        /// answers' question 287 (Rough share 3): a render that took the
+        /// interrupt as nothing is ended at once by the user's *Force stop***
+        /// — the kill, to the recorded render process, once per command, and
+        /// the ending is *left stopped* like any stop's. Before, the stop's
+        /// only signal was the interrupt and the forced mark did not exist.
+        #[test]
+        fn rough_share_3_a_forced_stop_kills_the_render_an_interrupt_did_not_end() {
+            let mut machine = a_machine_a_placement_wrote();
+            let job = a_job();
+            let operation = a_render_open_for(&mut machine, &job);
+            let (mut child, pair, heard) = a_stand_in_that_wants_a_second_interrupt(&mut machine);
+            the_render_process_is_recorded(&mut machine, &operation, &pair);
+
+            let first = a_stop_of(&operation);
+            let asked = answer(&first, &mut machine.start);
+            assert_eq!(asked.fields.text(asked::WHAT_BECAME_OF_IT_FIELD), Some(asked::IT_IS_STILL_IN_HAND));
+            assert!(it_heard(&heard, 1), "the first interrupt reached the render");
+            assert!(child.try_wait().expect("readable").is_none(), "the render runs on");
+
+            let forced = a_request(asked::THE_STOP_REQUEST).carrying(
+                Fields::none()
+                    .and(asked::THE_OPERATION_TO_STOP_FIELD, operation.as_text())
+                    .and(asked::THE_STOP_IS_FORCED_FIELD, asked::IT_IS_FORCED),
+            );
+            for _ in 0..3 {
+                let asked = answer(&forced, &mut machine.start);
+                assert_eq!(
+                    asked.fields.text(asked::THE_MACHINES_OWN_WORDS_FIELD),
+                    None,
+                    "the forced stop is taken"
+                );
+            }
+            assert!(it_was_killed(&mut child), "the render was ended with the kill; it heard {:?}", what_it_heard(&heard));
+            assert_eq!(
+                what_it_heard(&heard),
+                vec![IT_HEARD_THE_FIRST.to_string()],
+                "no second interrupt: the forced stop sent the kill, once"
+            );
+
+            the_worker_reports(&mut machine, &operation, asked::IT_FAILED);
+            assert_eq!(the_outcome_of(&machine, &operation), Some(RecordedOutcome::LeftStopped));
+            assert_eq!(the_outcome_of(&machine, &forced.identity), Some(RecordedOutcome::LeftStopped));
+        }
+
         /// **A stop that waited for the render process sends one interrupt
         /// when the process is recorded, counts as having sent it, and a fresh
         /// stop still sends the second** — the second shape again.
@@ -34866,6 +39370,85 @@ mod unix {
 
         /// **The first job's frames counted and its *stopping* mark, as the
         /// queue reading carries them** — no count where it carries no figures.
+        #[test]
+        fn a_second_attempt_says_running_again_until_its_own_render_starts() {
+            let mut machine = a_machine_a_placement_wrote();
+            let job = a_job();
+            let operation = a_render_open_for(&mut machine, &job);
+            let job_record = machine.start.queue.read_one(&job).unwrap().unwrap();
+            let says_again = |machine: &AStartOverAnAreaThatGoesWithIt| {
+                what_a_rendering_job_carries(&job_record, &machine.start).iter()
+                    .any(|(name, value)| *name == "running again" && value == "yes")
+            };
+            assert!(!says_again(&machine), "the first attempt is ordinary");
+            let WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(mut held) = machine.start.records.what_is_held_under(&operation).unwrap() else { panic!("the render record") };
+            held.attempt_count = 2;
+            let mut field = held.the_kinds_safe_boundary_marker.as_deref()
+                .and_then(TheRenderKindsOwnField::read_back).unwrap();
+            field.attempts[0].render_process = Some("4242 77".into());
+            held.the_kinds_safe_boundary_marker = Some(field.as_written());
+            machine.start.records.write_it_back(&held).unwrap();
+            assert!(says_again(&machine), "the first attempt's process is not the second render");
+            let mut second = field.attempts[0].clone();
+            second.attempt = 2;
+            second.render_process = None;
+            field.attempts.push(second);
+            held.the_kinds_safe_boundary_marker = Some(field.as_written());
+            machine.start.records.write_it_back(&held).unwrap();
+            assert!(says_again(&machine), "starting a worker is not starting its render");
+            let old_figures = the_figures_with(&machine, 60, 60);
+            machine.start.the_newest_figures.insert(operation.clone(), old_figures.clone());
+            let carried = what_a_rendering_job_carries(&job_record, &machine.start);
+            assert!(AWorkersReport::read_back(|name| carried.iter().find(|(key, _)| *key == name).map(|(_, value)| value.as_str())).is_none(), "no first-attempt figures during the re-run");
+            let phone = crate::the_telegram_journal::TheRecordsOnThisMachine::in_the_package_area(&machine.at);
+            assert!(phone.the_job_is_running_again(&job_record), "the phone reads the same durable fact");
+            machine.start.the_newest_figures.clear();
+            assert!(says_again(&machine), "no memory is needed after a restart");
+            field.attempts[1].render_process = Some("4243 78".into());
+            held.the_kinds_safe_boundary_marker = Some(field.as_written());
+            machine.start.records.write_it_back(&held).unwrap();
+            assert!(!says_again(&machine), "the second render has started");
+            machine.start.the_newest_figures.insert(operation.clone(), old_figures);
+            let carried = what_a_rendering_job_carries(&job_record, &machine.start);
+            assert!(AWorkersReport::read_back(|name| carried.iter().find(|(key, _)| *key == name).map(|(_, value)| value.as_str())).is_none(), "old figures do not return when Blender starts");
+            assert!(!phone.the_job_is_running_again(&job_record));
+            let mut ended = job_record;
+            ended.state = QueueState::Ended { outcome: operation };
+            assert!(what_a_rendering_job_carries(&ended, &machine.start).is_empty());
+        }
+
+        /// **`Queue & History` R5, addition of 2026-11-11: a rendering job's
+        /// part says how long it has rendered**, worked out here on the
+        /// machine's own clock from `Queue & History` N1's started moment —
+        /// and says nothing before that moment stands, or where it stands on
+        /// another clock. The four questions, scout 2.1.
+        #[test]
+        fn four_questions_2_1_a_rendering_job_says_how_long_it_has_rendered() {
+            let mut machine = a_machine_a_placement_wrote();
+            let job = a_job();
+            let _operation = a_render_open_for(&mut machine, &job);
+            let job_record = machine.start.queue.read_one(&job).unwrap().unwrap();
+            let rendered_for = |machine: &AStartOverAnAreaThatGoesWithIt| {
+                what_a_rendering_job_carries(&job_record, &machine.start)
+                    .into_iter()
+                    .find(|(name, _)| *name == asked::THE_JOB_HAS_RENDERED_FOR_FIELD)
+                    .map(|(_, value)| value.parse::<u64>().expect("whole seconds"))
+            };
+            assert_eq!(rendered_for(&machine), None, "no started moment yet");
+            let clock = machine.start.the_machines_own_clock.clone().expect("the machine names its clock");
+            let two_hours_fourteen_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(8040);
+            machine
+                .start
+                .notes
+                .the_attempt_started(&job, 1, &[1, 2, 3], smoozy_state::observed::Reading::taken((), two_hours_fourteen_ago, clock))
+                .expect("the started moment is written");
+            let said = rendered_for(&machine).expect("the figure rides the job's part");
+            assert!((8040..8050).contains(&said), "{said}");
+            let mut ended = job_record.clone();
+            ended.state = QueueState::Ended { outcome: Identity::issue(IdentityKind::Operation).unwrap() };
+            assert!(what_a_rendering_job_carries(&ended, &machine.start).is_empty());
+        }
+
         fn the_count_and_the_mark_read(
             machine: &mut AStartOverAnAreaThatGoesWithIt,
         ) -> (Option<u64>, bool) {
@@ -36013,6 +40596,56 @@ mod unix {
                 .collect()
         }
 
+        /// **`Queue & History` H7a, the leftovers of the Rough what-if
+        /// answers (459): *Continue anyway* on a first-frame check held because
+        /// it writes nothing sends the full range too.** The range held behind
+        /// the check is released in the same turn and enters the line, so the
+        /// check's ending, with no frame, finds nothing held to drop. Before,
+        /// the *yes* rendered nothing and `Queue & History` H7 dropped the range. **A *yes* to a
+        /// check held for another reason leaves the range held.**
+        #[test]
+        fn rough_leftovers_459_continue_anyway_over_nothing_written_sends_the_range() {
+            let mut machine = a_machine_a_placement_wrote();
+            let held_at_its_start = |machine: &mut AStartOverAnAreaThatGoesWithIt, reason: &str| {
+                let check = a_job();
+                let hold = Identity::issue(IdentityKind::Operation).expect("randomness");
+                let record = JobRecord::held_from_submission(check.clone(), None, "/r".to_string(), hold.clone());
+                the_job_record_and_its_note_in_one_act(&mut machine.start.queue, &mut machine.start.notes, &record, "Kitchen")
+                    .expect("the job is written");
+                machine
+                    .start
+                    .holds
+                    .place(&smoozy_runtime::holds::HoldRecord {
+                        hold: hold.clone(),
+                        subject: smoozy_runtime::holds::Subject::Job(check.clone()),
+                        reason: reason.to_string(),
+                        origin: smoozy_runtime::holds::Origin::Submission,
+                        dependency: None,
+                        release: None,
+                    })
+                    .expect("the hold is placed");
+                (check, hold)
+            };
+            let nothing = smoozy_job_files_machine::holds::WhatHoldsTheJob::TheJobWillWriteNothingAtAll.as_the_hold_record_carries_it();
+            let (check, check_hold) = held_at_its_start(&mut machine, nothing);
+            let (range, range_hold) = a_job_held_behind(&mut machine, &check, None);
+            let other = smoozy_job_files_machine::holds::WhatHoldsTheJob::TwoDestinationsAimedAtOneNameInOnePlace.as_the_hold_record_carries_it();
+            let (kept_check, kept_check_hold) = held_at_its_start(&mut machine, other);
+            let (kept, kept_hold) = a_job_held_behind(&mut machine, &kept_check, None);
+
+            for hold in [&check_hold, &kept_check_hold] {
+                answer(&an_answer_to(hold, THE_ANSWER_IS_YES, THE_ROUTE_IS_THE_DESK), &mut machine.start);
+            }
+
+            let released = machine.start.holds.read(&range_hold).expect("it reads").expect("there").release.expect("the range's release is written");
+            assert_eq!(released.outcome, smoozy_runtime::holds::ReleaseOutcome::Released);
+            assert!(!the_events_about(&machine, THE_RELEASE_EVENT, &range_hold).is_empty(), "the range's release is journalled");
+            let line = the_line_on(&machine);
+            assert!(line.contains(&check) && line.contains(&range), "{line:?}");
+            assert!(machine.start.holds.read(&kept_hold).expect("it reads").expect("there").release.is_none(), "a check held for another reason released its range");
+            assert!(!line.contains(&kept));
+        }
+
         /// **`Queue & History` H9 and `Rented-server runtime` U19a: a
         /// dependency cancelled before it ever ran drops the job held behind
         /// it, at the removal of its record.** Step 10c's S3, on the ruling of
@@ -36084,6 +40717,138 @@ mod unix {
                 the_events_about(&machine, THE_RELEASE_EVENT, &last_hold).len(),
                 1
             );
+        }
+
+        /// **The two halves of `Queue & History` L19a's pair stop, under
+        /// their own names, naming the check.**
+        fn the_pairs_stop(clear: &Identity, stop: &Identity, check: &Identity) -> (Request, Request) {
+            let with = |fields: Fields| fields.and(asked::THE_FIRST_FRAME_CHECK_FIELD, check.as_text());
+            (
+                Request::speaking(THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, clear.clone(), asked::THE_PAIRS_CLEAR_REQUEST)
+                    .carrying(with(Fields::none().and(asked::THE_PAIRED_STOP_FIELD, stop.as_text()))),
+                Request::speaking(
+                    THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+                    stop.clone(),
+                    asked::THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST,
+                )
+                .carrying(with(Fields::none().and(asked::THE_PAIRED_CLEAR_FIELD, clear.as_text()))),
+            )
+        }
+
+        /// **`Queue & History` L19a: stopping a first-frame check stops its
+        /// pair** — the range held on it removed first, no drop journalled
+        /// for it (the user's own act), then the check's render stopped; a
+        /// job outside the pair, waiting, stays. And the rule reads back with
+        /// the check, so a start that came back finishes the same pair. **It
+        /// failed before the change**: the program refused the pair's clear
+        /// by name, and nothing was removed or stopped. The Creator's
+        /// twenty-eighth notes, note 16.
+        #[test]
+        fn twenty_eighth_16_a_checks_stop_removes_its_range_then_stops_the_check() {
+            let mut machine = a_machine_a_placement_wrote();
+            let check = a_job();
+            let rendering = a_render_open_for(&mut machine, &check);
+            let (range, hold) = a_job_held_behind(&mut machine, &check, None);
+            let other = a_waiting_job(&mut machine, None);
+
+            let clear = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let stop = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let (the_clear, the_stop) = the_pairs_stop(&clear, &stop, &check);
+            let cleared = answer(&the_clear, &mut machine.start);
+            assert_eq!(
+                cleared.fields.text(asked::THE_CLEARS_OUTCOME_FIELD),
+                Some(asked::IT_WAS_CLEARED),
+                "{:?}",
+                cleared.fields.text(asked::THE_MACHINES_OWN_WORDS_FIELD)
+            );
+            let left = the_jobs_in_the_queue(&machine);
+            assert!(!left.contains(&range), "the range held on the check is gone");
+            assert!(left.contains(&other), "a job outside the pair stays");
+            assert_eq!(machine.start.holds.read(&hold).expect("it reads"), None);
+            assert!(
+                the_events_about(&machine, THE_RELEASE_EVENT, &hold).is_empty(),
+                "no drop is journalled: the range went with the user's own act"
+            );
+            let _ = answer(&the_stop, &mut machine.start);
+            assert_eq!(
+                the_desired_state_of(&machine, &rendering),
+                smoozy_state::machine_operations::DesiredState::ShouldBeStopped,
+                "the check's render is the stop's subject"
+            );
+            assert_eq!(
+                the_pair_in_the_rule(&the_rule_of_a_paired_stop(&clear, Some(&check))),
+                Some((clear, Some(check)))
+            );
+        }
+
+        /// **`Queue & History` L19a: a pair whose check is not rendering at the
+        /// clear's write stops nothing** — a render outside the pair goes on,
+        /// and the stop says nothing was rendering; the range is still taken.
+        #[test]
+        fn twenty_eighth_16_a_pairs_stop_never_stops_a_render_outside_the_pair() {
+            let mut machine = a_machine_a_placement_wrote();
+            let outside = a_job();
+            let rendering = a_render_open_for(&mut machine, &outside);
+            let check = a_waiting_job(&mut machine, None);
+            let (range, _) = a_job_held_behind(&mut machine, &check, None);
+
+            let clear = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let stop = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let (_, the_stop) = the_pairs_stop(&clear, &stop, &check);
+            let stopped = answer(&the_stop, &mut machine.start);
+            assert_eq!(
+                stopped.fields.text(asked::THE_STOPS_OUTCOME_FIELD),
+                Some(asked::NOTHING_WAS_RENDERING),
+                "{:?}",
+                stopped.fields.text(asked::THE_MACHINES_OWN_WORDS_FIELD)
+            );
+            let left = the_jobs_in_the_queue(&machine);
+            assert!(!left.contains(&check) && !left.contains(&range), "both parts go: {left:?}");
+            assert!(left.contains(&outside));
+            assert_eq!(
+                the_desired_state_of(&machine, &rendering),
+                smoozy_state::machine_operations::DesiredState::ShouldRun
+            );
+        }
+
+        /// **`Queue & History` L19a with `Queue & History` H4: a range whose release is written
+        /// is not the pair's**, even where its record still reads *held* —
+        /// the phone's *Render all* won and its placement was cut short. The
+        /// pair's clear leaves it. **It failed before Sol's fresh look**: the
+        /// clear removed the range the user had just approved.
+        #[test]
+        fn twenty_eighth_16_a_pairs_clear_leaves_a_range_whose_release_is_written() {
+            let mut machine = a_machine_a_placement_wrote();
+            let check = a_job();
+            let _rendering = a_render_open_for(&mut machine, &check);
+            let (range, hold) = a_job_held_behind(&mut machine, &check, None);
+            let mut standing = machine.start.holds.read(&hold).expect("reads").expect("placed");
+            standing.release = Some(Release {
+                outcome: smoozy_runtime::holds::ReleaseOutcome::Released,
+                produced_by: "the answer".to_string(),
+                at: Reading::taken((), std::time::SystemTime::now(), Clock::AMachine(MachineClock("this machine".to_string()))),
+            });
+            machine.start.holds.write_the_release(&hold, standing.release.as_ref().unwrap()).expect("the release is written");
+            let clear = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let stop = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let (the_clear, _) = the_pairs_stop(&clear, &stop, &check);
+            let _ = answer(&the_clear, &mut machine.start);
+            assert!(the_jobs_in_the_queue(&machine).contains(&range), "the approved range stays");
+        }
+
+        /// **A pair's half with no check named is refused by name**, never
+        /// read as a clear of the whole machine.
+        #[test]
+        fn twenty_eighth_16_a_pairs_clear_naming_no_check_is_refused_and_clears_nothing() {
+            let mut machine = a_machine_a_placement_wrote();
+            let waiting = a_waiting_job(&mut machine, None);
+            let clear = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let stop = Identity::issue(IdentityKind::Operation).expect("randomness");
+            let request = Request::speaking(THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, clear, asked::THE_PAIRS_CLEAR_REQUEST)
+                .carrying(Fields::none().and(asked::THE_PAIRED_STOP_FIELD, stop.as_text()));
+            let answered = answer(&request, &mut machine.start);
+            assert!(answered.the_request_name_it_says_it_does_not_answer().is_some());
+            assert!(the_jobs_in_the_queue(&machine).contains(&waiting));
         }
 
         /// **`Queue & History` H9 under `Queue & History` L19: a group's clear
@@ -36972,6 +41737,2042 @@ mod unix {
                     vec![2, 3],
                     "frame 1's second answer stands; frame 2 is asked once more"
                 );
+            }
+
+            // ── The piece for note 11's pictures (the Creator's twenty-ninth notes, note 11): a frame's
+            // pictures from the whole frame. Made-up names throughout.
+
+            /// **The worker's report naming the newest frame saved and the
+            /// frame in hand**, as the render worker sends it every two seconds.
+            fn a_report_naming_in_hand(
+                machine: &AStartOverAnAreaThatGoesWithIt,
+                operation: &Identity,
+                newest_frame_saved: i64,
+                the_frame_in_hand: i64,
+            ) -> Request {
+                crate::the_render_worker::the_figures_report(
+                    operation,
+                    &machine.start.run.run,
+                    &AWorkersReport {
+                        attempt: 1,
+                        readings: Reading::taken(
+                            smoozy_queue_history_machine::readings::LiveReadings {
+                                frame_in_hand: Some(the_frame_in_hand),
+                                ..Default::default()
+                            },
+                            std::time::SystemTime::now(),
+                            machine
+                                .start
+                                .the_machines_own_clock
+                                .clone()
+                                .expect("a placement wrote an installation identity"),
+                        ),
+                        newest_frame_saved: Some(newest_frame_saved),
+                        the_plan_total: None,
+                        the_units_finished: None,
+                    },
+                )
+            }
+
+            /// The stand-in's View Layers, made-up names.
+            fn the_stand_ins_layers() -> Vec<String> {
+                (1..=12).map(|at| format!("Set {at:02} \u{2013} Shape")).collect()
+            }
+
+            /// **The note 11 stand-in's shape**: one scene with twelve View
+            /// Layers, each feeding four File Output node outputs of its own
+            /// (48 files a frame, in seven folders), and the regular output's
+            /// JPEG fed by all twelve — 49 files a frame, every one landing
+            /// during compositing. Gives back every predicted path.
+            fn the_stand_ins_manifest(
+                record_directory: &std::path::Path,
+                job: &Identity,
+                frames: &[i64],
+            ) -> Vec<Vec<u8>> {
+                use smoozy_job_files_machine::inventory::{
+                    AnEntry, TheInventory, WhatTheInventoryIs, WhichRouteProducedTheName,
+                };
+                use smoozy_job_files_machine::reading::{
+                    ArtistsText, AtOneFrame, Destination, DestinationKind, Format, RecordedLocation,
+                    WhereItComesFrom, WhichScene,
+                };
+                let text = |words: &str| ArtistsText::of(words.as_bytes().to_vec());
+                let layers = the_stand_ins_layers();
+                let format = |name: &str, ending: &str| Format {
+                    as_the_file_records_it: text(name),
+                    the_ending_it_writes: Some(text(ending)),
+                    is_video_shaped: false,
+                };
+                let gating = smoozy_job_files_machine::reading::GatingConditions {
+                    the_effects_on_for_render: None,
+                    compositing_switch: true,
+                    a_compositing_tree_is_present: true,
+                    a_live_final_output_node: true,
+                    the_final_output_node_is_muted: false,
+                    four_fives_use_nodes_switch: None,
+                    save_output_switch: None,
+                    the_render_goes_out_through_a_sequencer_holding_a_scene_strip: false,
+                };
+                let mut destinations = vec![Destination {
+                    kind: DestinationKind::TheRegularOutputPath,
+                    recorded_location: Some(RecordedLocation::of(b"//Render/_Scrap".to_vec())),
+                    format: Some(format("JPEG", ".jpg")),
+                    origin: WhereItComesFrom::TheScenesOutputPath,
+                    scene: WhichScene::TheJobsOwnScene,
+                    the_view_layers_that_feed_it: layers.iter().map(|layer| text(layer)).collect(),
+                    the_location_with_its_folder_replaced: None,
+                }];
+                let folders = ["PNG/Group A", "Clear/1-1", "Clear/9-16", "Plain/16-9"];
+                for (at, layer) in layers.iter().enumerate() {
+                    for folder in folders {
+                        let node = format!("Out {folder} {at:02}");
+                        destinations.push(Destination {
+                            kind: DestinationKind::AnOutputOfAFileOutputNode {
+                                node: text(&node),
+                                output: text(layer),
+                                the_nodes_base_file_name: None,
+                                replaced: None,
+                                the_effect: None,
+                            },
+                            recorded_location: Some(RecordedLocation::of(format!("//{folder}/").into_bytes())),
+                            format: Some(format("PNG", ".png")),
+                            origin: WhereItComesFrom::AFileOutputNodeNamed(text(&node)),
+                            scene: WhichScene::TheJobsOwnScene,
+                            the_view_layers_that_feed_it: vec![text(layer)],
+                            the_location_with_its_folder_replaced: None,
+                        });
+                    }
+                }
+                let mut entries = Vec::new();
+                for frame in frames {
+                    entries.push(AnEntry {
+                        predicted_path: format!("/ephemeral/smoozy/out/Render/_Scrap{frame:04}.jpg").into_bytes(),
+                        frame: Some(*frame),
+                        the_route_that_produced_the_name: WhichRouteProducedTheName::ItWasAskedOfBlender,
+                        the_destinations_aiming_at_it: vec![0],
+                        may_grow: false,
+                    });
+                    for at in 1..destinations.len() {
+                        entries.push(AnEntry {
+                            predicted_path: format!("/ephemeral/smoozy/out/node-{at:02}/{frame:04}.png").into_bytes(),
+                            frame: Some(*frame),
+                            the_route_that_produced_the_name:
+                                WhichRouteProducedTheName::ItWasBuiltFromTheVersionsRecipe,
+                            the_destinations_aiming_at_it: vec![at],
+                            may_grow: false,
+                        });
+                    }
+                }
+                let paths = entries.iter().map(|entry| entry.predicted_path.clone()).collect();
+                let mut manifest = smoozy_rendering_machine::composition::testing::a_manifest(job, "5.2", "Lineup B");
+                manifest.recorded_reading =
+                    smoozy_job_files_machine::manifest::TheRecordedReading::ItWasReadBeforeSubmitting(Box::new(
+                        smoozy_job_files_machine::manifest::TheReadingAndEverythingDerivedFromIt {
+                            reading: smoozy_job_files_machine::reading::TheOutputsHalf {
+                                taken_by: smoozy_job_files_machine::reading::TheVersionInHand::of(5, 2),
+                                gating: gating.clone(),
+                                destinations,
+                                scenes_reached_through_a_sequencer_strip: Vec::new(),
+                                the_tree_is_shared_with: None,
+                                per_frame: frames
+                                    .iter()
+                                    .map(|frame| AtOneFrame {
+                                        frame: *frame,
+                                        view_layers_that_render: layers.iter().map(|layer| text(layer)).collect(),
+                                        gating: gating.clone(),
+                                        the_regular_output_paths_answered_path: None,
+                                    })
+                                    .collect(),
+                                recorded_locations: Vec::new(),
+                                views: smoozy_job_files_machine::reading::HowManyViewsTheSceneWrites::One,
+                                the_beauty_walk: smoozy_job_files_machine::main_output::WhatTheWalkFound::NoEntry,
+                                the_view_transform: None,
+                            },
+                            map: smoozy_job_files_machine::mapping::TheMap { pairs: Vec::new() },
+                            inventory: WhatTheInventoryIs::It(TheInventory {
+                                entries,
+                                added_write_place_folders: Vec::new(),
+                                collision_record: Vec::new(),
+                                a_destination_is_video_shaped: false,
+                                why_it_owes_nothing: None,
+                            }),
+                            picks: smoozy_job_files_machine::main_output::ThePicks::made_once(None, None),
+                        },
+                    ));
+                std::fs::write(
+                    record_directory.join(smoozy_job_files_machine::manifest::MANIFEST_FILE_NAME),
+                    manifest.as_written(),
+                )
+                .expect("the manifest is published");
+                paths
+            }
+
+            /// **One copy's ending**, published, of `layer` at `place` — the
+            /// main copy where `main`, made of `source`.
+            fn a_copy_published(
+                frame: i64,
+                source: &[u8],
+                layer: Option<&str>,
+                main: bool,
+                place: u32,
+            ) -> crate::the_preview_worker::TheProductionsEnding {
+                crate::the_preview_worker::TheProductionsEnding {
+                    came_to: crate::the_preview_worker::WhatTheProductionCameTo::Published,
+                    the_record: Some(smoozy_job_files_machine::main_output::ADerivativesRecord {
+                        the_source_file: source.to_vec(),
+                        frame,
+                        the_view_layer_its_picture_came_from: layer.map(|name| {
+                            smoozy_job_files_machine::reading::ArtistsText::of(name.as_bytes().to_vec())
+                        }),
+                        it_is_the_main_copy: main,
+                        its_place_in_the_frames_set: place,
+                        where_it_came_from: None,
+                    }),
+                    published_at: Some(format!("/r/preview-{frame}-{place}.png")),
+                    bytes: Some(10),
+                    the_sources_size: Some((64, 64)),
+                    the_size_it_was_written_at: Some((64, 64)),
+                    it_could_not_be_brought_under_every_cap: false,
+                    exit_status: Some(0),
+                    signal: None,
+                    words: None,
+                    the_other_layers: Vec::new(),
+                }
+            }
+
+            /// **A production's ending, reported as its worker reports it**,
+            /// saying whether its main copy's early report was taken.
+            fn a_production_reports(
+                machine: &mut AStartOverAnAreaThatGoesWithIt,
+                production: &Identity,
+                ended: &crate::the_preview_worker::TheProductionsEnding,
+                the_main_copy_was_journalled: bool,
+            ) -> Answered {
+                let mut fields = Fields::none()
+                    .and(THE_RUN_THE_WORKER_WAS_STARTED_UNDER, machine.start.run.run.as_text())
+                    .and(
+                        crate::the_preview_worker::THE_PRODUCTION_FIELD,
+                        serde_json::to_string(ended).expect("it renders"),
+                    );
+                if the_main_copy_was_journalled {
+                    fields = fields.and(
+                        crate::the_preview_worker::THE_MAIN_COPY_WAS_JOURNALLED_FIELD,
+                        asked::THE_ANSWER_IS_YES,
+                    );
+                }
+                let report = Request::speaking(
+                    THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+                    production.clone(),
+                    THE_WORKERS_REPORT_REQUEST,
+                )
+                .carrying(fields);
+                answer(&report, &mut machine.start)
+            }
+
+            /// **The ordinary multi-frame job: a frame still in hand waits for
+            /// the next frame.** Frame 3's first file is saved while frame 3 is
+            /// in hand: frames 1 and 2 are queued, frame 3 is not, however many
+            /// reports name it. Once frame 4 begins, frame 3 is queued. **It
+            /// failed before the fix**: frame 3 was queued at its first save.
+            #[test]
+            fn n1_a_frame_still_in_hand_waits_until_the_next_frame_begins() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let (_, operation, _) = a_job_rendering_frames(&mut machine, &[1, 2, 3, 4, 5]);
+                for _ in 0..3 {
+                    answer(&a_report_naming_in_hand(&machine, &operation, 3, 3), &mut machine.start);
+                }
+                assert_eq!(the_frames_standing(&machine), vec![1, 2], "frame 3 is still being written");
+                answer(&a_report_naming_in_hand(&machine, &operation, 3, 4), &mut machine.start);
+                assert_eq!(the_frames_standing(&machine), vec![1, 2, 3], "frame 4 began: frame 3 is whole");
+            }
+
+            /// **The stand-in: one frame, twelve View Layers, 49 files landing
+            /// one by one, each with its own save line.** Not one report queues
+            /// the frame; the ending does, once. **It failed before the fix**:
+            /// the first report started the frame's preview.
+            #[test]
+            fn n1_one_frame_of_twelve_view_layers_is_queued_only_at_its_ending() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let (job, operation, record_directory) = a_job_rendering_frames(&mut machine, &[1]);
+                let paths = the_stand_ins_manifest(&record_directory, &job, &[1]);
+                assert_eq!(paths.len(), 49);
+                for _ in 0..49 {
+                    answer(&a_report_naming_in_hand(&machine, &operation, 1, 1), &mut machine.start);
+                }
+                assert!(the_frames_standing(&machine).is_empty(), "the frame is still in hand");
+                assert!(every_preview_record(&machine).is_empty(), "no production started");
+                machine.start.previews_are_owed_at_an_ending(&job, 1, &every_file_present(&paths), false);
+                assert_eq!(the_frames_standing(&machine), vec![1], "the ending queues it, once");
+                assert!(machine.start.the_previews.looked_at_again.is_empty(), "nothing was standing");
+            }
+
+            /// **A stop between two save lines**: once the stop's interrupt has
+            /// gone out, Blender goes on naming the frames it skips, so a frame
+            /// cut short would read as whole. A report then queues nothing; the
+            /// ending's catch-up, with `Job files and outputs` B20's exclusion, is the route. **It
+            /// failed before the fix**: frames 1 to 3 were queued.
+            #[test]
+            fn n1_a_report_after_a_stops_interrupt_queues_nothing() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let (_, operation, _) = a_job_rendering_frames(&mut machine, &[1, 2, 3, 4, 5]);
+                let WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(mut held) =
+                    machine.start.records.what_is_held_under(&operation).expect("it reads")
+                else {
+                    panic!("the render's record");
+                };
+                let mut field = TheRenderKindsOwnField::read_back(
+                    held.the_kinds_safe_boundary_marker.as_deref().expect("the field"),
+                )
+                .expect("it reads back");
+                field.attempts[0].the_termination_was_issued = true;
+                held.the_kinds_safe_boundary_marker = Some(field.as_written());
+                machine.start.records.write_it_back(&held).expect("written back");
+                answer(&a_report_naming_in_hand(&machine, &operation, 3, 4), &mut machine.start);
+                assert!(the_frames_standing(&machine).is_empty(), "the stop's ending queues them");
+            }
+
+            /// **`Queue & History` P3 as changed 2026-11-10: the main copy is
+            /// journalled as soon as it is published, and the frame's set event
+            /// once the production ends.** The main copy's early report is
+            /// answered *journalled*; its event is there before any other copy
+            /// exists, and no set event yet. At the ending the other copies'
+            /// events follow, the main copy's is not journalled twice, and one
+            /// set event names the main copy. **It failed before the fix**: the
+            /// early report journalled nothing.
+            #[test]
+            fn n1_the_main_copy_is_journalled_at_once_and_the_set_once_the_production_ends() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let (job, operation, _) = a_job_rendering_frames(&mut machine, &[1, 2]);
+                answer(&a_report_naming_in_hand(&machine, &operation, 1, 2), &mut machine.start);
+                let (production, frame) = the_production_being_made(&machine).expect("frame 1");
+                assert_eq!(frame, 1);
+                let main = a_copy_published(1, b"/j/out/_Scrap0001.jpg", None, true, 0);
+                let early = Request::speaking(
+                    THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+                    production.clone(),
+                    THE_WORKERS_REPORT_REQUEST,
+                )
+                .carrying(
+                    Fields::none()
+                        .and(THE_RUN_THE_WORKER_WAS_STARTED_UNDER, machine.start.run.run.as_text())
+                        .and(
+                            crate::the_preview_worker::THE_MAIN_COPY_FIELD,
+                            serde_json::to_string(&main).expect("it renders"),
+                        ),
+                );
+                let said = answer(&early, &mut machine.start);
+                assert!(
+                    crate::the_preview_worker::it_says_the_main_copy_was_journalled(&said.fields),
+                    "the early report is answered: {:?}",
+                    said.fields
+                );
+                let published = the_events_about(&machine, asked::THE_PREVIEW_PUBLISHED_EVENT, &job);
+                assert_eq!(published.len(), 1, "the main copy, at once");
+                assert!(the_events_about(&machine, asked::THE_PREVIEW_SET_MADE_EVENT, &job).is_empty());
+                assert_eq!(the_production_being_made(&machine).map(|(_, frame)| frame), Some(1), "still being made");
+
+                let mut ended = main.clone();
+                ended.the_other_layers = vec![
+                    a_copy_published(1, b"/j/out/a.png", Some("Set 01"), false, 0),
+                    a_copy_published(1, b"/j/out/b.png", Some("Set 02"), false, 1),
+                ];
+                let said = a_production_reports(&mut machine, &production, &ended, true);
+                assert_eq!(said.fields.text(WHETHER_THE_REPORT_WAS_ACCEPTED), Some(IT_WAS_ACCEPTED));
+                let published = the_events_about(&machine, asked::THE_PREVIEW_PUBLISHED_EVENT, &job);
+                assert_eq!(published.len(), 3, "the main copy once, then the two others");
+                let mains = published
+                    .iter()
+                    .filter_map(|says| smoozy_queue_history_machine::previews::ThePublishedPreview::read_back(says))
+                    .filter(|one| one.main)
+                    .count();
+                assert_eq!(mains, 1);
+                let sets = the_events_about(&machine, asked::THE_PREVIEW_SET_MADE_EVENT, &job);
+                assert_eq!(sets, vec![published[0].clone()], "one set event, saying the main copy's words");
+            }
+
+            /// **Piece J, the twenty-ninth notes, note 11: the stand-in's frame of
+            /// twelve View Layers, with names as long as the Creator's, reaches the
+            /// journal whole, and every reader can read each copy's name.** The main
+            /// copy's early report, then the production's ending with the eleven
+            /// others: every *a preview was published* event and the set event are
+            /// journalled, each inside `State, identity and recovery` E6a's budget
+            /// as written, each naming its production and its place and leaving the
+            /// names to the record. Asked for the production's copies, the
+            /// supervisor answers the main copy alone while the production stands
+            /// (the early report wrote it there) and all twelve, each with its View
+            /// Layer, once it has ended; it answers *absent* for a production it
+            /// does not hold or one of another job. **It failed before the fix**:
+            /// eleven of the twelve events were refused at 577 bytes, as on the live
+            /// pass, and the reading did not exist; and before Sol's point 2 the
+            /// standing production named no copy.
+            #[test]
+            fn piece_j_a_frame_of_twelve_long_layer_names_reaches_the_journal_and_its_record() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let (job, operation, _) = a_job_rendering_frames(&mut machine, &[1, 2]);
+                answer(&a_report_naming_in_hand(&machine, &operation, 1, 2), &mut machine.start);
+                let (production, frame) = the_production_being_made(&machine).expect("frame 1");
+                assert_eq!(frame, 1);
+                let names: Vec<String> =
+                    (0..12).map(|place| format!("SH010_Forest_Clearing_Wide_Background_{place:02}")).collect();
+                let main = a_copy_published(1, b"/j/out/a.exr", Some(&names[0]), true, 0);
+                let early = Request::speaking(
+                    THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+                    production.clone(),
+                    THE_WORKERS_REPORT_REQUEST,
+                )
+                .carrying(
+                    Fields::none()
+                        .and(THE_RUN_THE_WORKER_WAS_STARTED_UNDER, machine.start.run.run.as_text())
+                        .and(
+                            crate::the_preview_worker::THE_MAIN_COPY_FIELD,
+                            serde_json::to_string(&main).expect("it renders"),
+                        ),
+                );
+                answer(&early, &mut machine.start);
+                let copies_of = |machine: &mut AStartOverAnAreaThatGoesWithIt, job: &Identity, production: &Identity| {
+                    let asked_for = Request::speaking(
+                        THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+                        Identity::issue(IdentityKind::Operation).expect("randomness"),
+                        asked::THE_PREVIEW_COPIES_REQUEST,
+                    )
+                    .carrying(
+                        Fields::none()
+                            .and(asked::THE_JOB_FIELD, job.as_text())
+                            .and(asked::THE_PREVIEW_PRODUCTION_FIELD, production.as_text()),
+                    );
+                    answer(&asked_for, &mut machine.start).fields
+                };
+                // **Sol's fresh look**: the early report wrote the main copy
+                // into the production's record before its event, so the record
+                // names it while the production stands — and would after a
+                // worker that never reports its ending.
+                let standing = copies_of(&mut machine, &job, &production);
+                assert_eq!(standing.text(asked::ON_THIS_MACHINE_FIELD), Some(asked::IT_IS_PRESENT));
+                assert_eq!(
+                    standing.text(asked::HOW_MANY_PREVIEW_COPIES_FIELD),
+                    Some("1"),
+                    "a production still standing names its main copy"
+                );
+                let item = |field: &str| asked::the_field_of_item(asked::A_PREVIEW_COPY, 0, field);
+                assert_eq!(standing.value(&item(asked::THE_COPYS_VIEW_LAYER_FIELD)), Some(names[0].as_bytes()));
+                assert_eq!(standing.text(&item(asked::THE_COPY_IS_THE_MAIN_ONE_FIELD)), Some(asked::IT_IS_YES));
+                let early_says = the_events_about(&machine, asked::THE_PREVIEW_PUBLISHED_EVENT, &job);
+                assert_eq!(early_says.len(), 1, "the main copy's early event");
+
+                let mut ended = main.clone();
+                ended.the_other_layers = (1..12)
+                    .map(|place| a_copy_published(1, b"/j/out/b.exr", Some(&names[place]), false, place as u32))
+                    .collect();
+                a_production_reports(&mut machine, &production, &ended, true);
+                let published = the_events_about(&machine, asked::THE_PREVIEW_PUBLISHED_EVENT, &job);
+                assert_eq!(published.len(), 12, "every copy's event is journalled: {published:#?}");
+                let sets = the_events_about(&machine, asked::THE_PREVIEW_SET_MADE_EVENT, &job);
+                assert_eq!(sets.len(), 1, "the set event is journalled");
+                for (kind, says) in published
+                    .iter()
+                    .map(|says| (asked::THE_PREVIEW_PUBLISHED_EVENT, says))
+                    .chain(sets.iter().map(|says| (asked::THE_PREVIEW_SET_MADE_EVENT, says)))
+                {
+                    assert!(
+                        smoozy_runtime::written_form::the_measure_of_an_entry::words_of_this_kind_fit(kind, Some(IdentityKind::Job), says),
+                        "{kind}: {says}"
+                    );
+                    let read = smoozy_queue_history_machine::previews::ThePublishedPreview::read_back(says)
+                        .expect("it reads back");
+                    assert_eq!(read.operation, production.as_text());
+                    assert!(read.the_names_are_in_the_record, "the names are left to the record: {says}");
+                }
+                let mut places: Vec<u32> = published
+                    .iter()
+                    .filter_map(|says| smoozy_queue_history_machine::previews::ThePublishedPreview::read_back(says))
+                    .map(|read| read.place)
+                    .collect();
+                places.sort();
+                assert_eq!(places, (0..12).collect::<Vec<u32>>());
+
+                let ended_copies = copies_of(&mut machine, &job, &production);
+                assert_eq!(ended_copies.text(asked::ON_THIS_MACHINE_FIELD), Some(asked::IT_IS_PRESENT));
+                assert_eq!(ended_copies.text(asked::HOW_MANY_PREVIEW_COPIES_FIELD), Some("12"));
+                for at in 0..12 {
+                    let item = |field: &str| asked::the_field_of_item(asked::A_PREVIEW_COPY, at, field);
+                    let place: usize = ended_copies
+                        .text(&item(asked::THE_COPYS_PLACE_FIELD))
+                        .and_then(|place| place.parse().ok())
+                        .expect("a place");
+                    assert_eq!(
+                        ended_copies.value(&item(asked::THE_COPYS_VIEW_LAYER_FIELD)),
+                        Some(names[place].as_bytes()),
+                        "copy {at}"
+                    );
+                    assert_eq!(
+                        ended_copies.text(&item(asked::THE_COPY_IS_THE_MAIN_ONE_FIELD)).is_some(),
+                        place == 0
+                    );
+                }
+                let unknown = Identity::issue(IdentityKind::Operation).expect("randomness");
+                assert_eq!(
+                    copies_of(&mut machine, &job, &unknown).text(asked::ON_THIS_MACHINE_FIELD),
+                    Some(asked::IT_IS_ABSENT)
+                );
+                let another = Identity::issue(IdentityKind::Job).expect("randomness");
+                assert_eq!(
+                    copies_of(&mut machine, &another, &production).text(asked::ON_THIS_MACHINE_FIELD),
+                    Some(asked::IT_IS_ABSENT),
+                    "one job's copy is never named from another's record"
+                );
+            }
+
+            /// **Sol's fresh look, round 1: an early main copy whose event the
+            /// journal refuses is answered *not journalled*, and nothing is
+            /// held for it**, so the production's ending journals it. Held
+            /// pending, it was answered *journalled* and lived only in this
+            /// run's memory: a restart lost it, and the ending skipped it for
+            /// good. **It failed before the fix**: the answer said journalled.
+            #[test]
+            fn n1_an_early_main_copy_the_journal_refuses_is_left_to_the_ending() {
+                use std::os::unix::fs::PermissionsExt;
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let (job, operation, _) = a_job_rendering_frames(&mut machine, &[1, 2]);
+                answer(&a_report_naming_in_hand(&machine, &operation, 1, 2), &mut machine.start);
+                let (production, _) = the_production_being_made(&machine).expect("frame 1");
+                let main = a_copy_published(1, b"/j/out/_Scrap0001.jpg", None, true, 0);
+                let early = Request::speaking(
+                    THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+                    production.clone(),
+                    THE_WORKERS_REPORT_REQUEST,
+                )
+                .carrying(
+                    Fields::none()
+                        .and(THE_RUN_THE_WORKER_WAS_STARTED_UNDER, machine.start.run.run.as_text())
+                        .and(
+                            crate::the_preview_worker::THE_MAIN_COPY_FIELD,
+                            serde_json::to_string(&main).expect("it renders"),
+                        ),
+                );
+                let area = machine.at.join(THE_AREA_THE_JOURNAL_SITS_IN);
+                let mut opened = Vec::new();
+                for entry in std::fs::read_dir(&area).expect("the area").flatten() {
+                    let path = entry.path();
+                    let was = std::fs::metadata(&path).expect("there").permissions();
+                    let mut shut = was.clone();
+                    shut.set_mode(0o444);
+                    std::fs::set_permissions(&path, shut).expect("closed");
+                    opened.push((path, was));
+                }
+                let was = std::fs::metadata(&area).expect("the area").permissions();
+                let mut shut = was.clone();
+                shut.set_mode(0o555);
+                std::fs::set_permissions(&area, shut).expect("closed");
+                opened.push((area.clone(), was));
+                let said = answer(&early, &mut machine.start);
+                for (path, was) in opened.into_iter().rev() {
+                    std::fs::set_permissions(&path, was).expect("opened again");
+                }
+                assert!(
+                    !crate::the_preview_worker::it_says_the_main_copy_was_journalled(&said.fields),
+                    "a refused event is not journalled: {:?}",
+                    said.fields
+                );
+                assert!(machine.start.pending.owed().is_empty(), "and nothing is held for it");
+                let mut ended = main.clone();
+                ended.the_other_layers = vec![a_copy_published(1, b"/j/out/a.png", Some("Set 01"), false, 0)];
+                a_production_reports(&mut machine, &production, &ended, false);
+                assert_eq!(the_events_about(&machine, asked::THE_PREVIEW_PUBLISHED_EVENT, &job).len(), 2);
+            }
+
+            /// **A production whose main copy was not reported early** — the
+            /// early report not taken, or a worker from before — has its main
+            /// copy journalled with the others at its ending, then the set.
+            #[test]
+            fn n1_a_main_copy_not_reported_early_is_journalled_with_the_others() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let (job, operation, _) = a_job_rendering_frames(&mut machine, &[1, 2]);
+                answer(&a_report_naming_in_hand(&machine, &operation, 1, 2), &mut machine.start);
+                let (production, _) = the_production_being_made(&machine).expect("frame 1");
+                let mut ended = a_copy_published(1, b"/j/out/_Scrap0001.jpg", None, true, 0);
+                ended.the_other_layers = vec![a_copy_published(1, b"/j/out/a.png", Some("Set 01"), false, 0)];
+                a_production_reports(&mut machine, &production, &ended, false);
+                assert_eq!(the_events_about(&machine, asked::THE_PREVIEW_PUBLISHED_EVENT, &job).len(), 2);
+                assert_eq!(the_events_about(&machine, asked::THE_PREVIEW_SET_MADE_EVENT, &job).len(), 1);
+            }
+
+            /// **`Queue & History` P1b's follow-up: the ending lands while a
+            /// production runs.** Frame 1 of the stand-in is being made when the
+            /// ending lands, so the ending passes it over and notes what the
+            /// statement gives it — every one of its View Layers. The production
+            /// ends with the main copy and two layers': the frame is queued once
+            /// more and no set event goes; the second production makes the whole
+            /// set and its set event goes. **It failed before the fix**: the
+            /// short set stood, and its main copy's event was Telegram's whole
+            /// trigger.
+            #[test]
+            fn n1_a_production_standing_at_the_ending_is_made_again_when_it_came_out_short() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let (job, operation, record_directory) = a_job_rendering_frames(&mut machine, &[1, 2]);
+                let paths = the_stand_ins_manifest(&record_directory, &job, &[1, 2]);
+                // Frame 2 begun: frame 1 is whole by the report, and is being made.
+                answer(&a_report_naming_in_hand(&machine, &operation, 1, 2), &mut machine.start);
+                let (first, frame) = the_production_being_made(&machine).expect("frame 1");
+                assert_eq!(frame, 1);
+                machine.start.previews_are_owed_at_an_ending(&job, 1, &every_file_present(&paths), false);
+                assert_eq!(the_frames_standing(&machine), vec![1, 2], "frame 1 standing, frame 2 queued");
+                let whole: Vec<(Vec<u8>, Option<String>)> = {
+                    let marks = &machine.start.the_previews.looked_at_again;
+                    assert_eq!(marks.len(), 1, "the ending notes the frame being made");
+                    let given = marks[0].what_the_statement_gives.as_ref().expect("the statement gives it copies");
+                    given.every_copy().collect()
+                };
+                assert!(whole.len() >= 12, "every View Layer has a copy: {}", whole.len());
+                let a_production_of = |copies: &[(Vec<u8>, Option<String>)]| {
+                    let mut ending = a_copy_published(1, &copies[0].0, copies[0].1.as_deref(), true, 0);
+                    ending.the_other_layers = copies[1..]
+                        .iter()
+                        .enumerate()
+                        .map(|(at, (source, layer))| {
+                            a_copy_published(1, source, layer.as_deref(), false, u32::try_from(at + 1).unwrap())
+                        })
+                        .collect();
+                    ending
+                };
+                a_production_reports(&mut machine, &first, &a_production_of(&whole[..3]), false);
+                assert!(
+                    the_events_about(&machine, asked::THE_PREVIEW_SET_MADE_EVENT, &job).is_empty(),
+                    "a short set is no set"
+                );
+                assert_eq!(the_frames_standing(&machine), vec![2, 1], "frame 1 is queued once more, after frame 2");
+
+                let (second, frame) = the_production_being_made(&machine).expect("frame 2");
+                assert_eq!(frame, 2);
+                a_production_reports(&mut machine, &second, &a_production_of(&whole), false);
+                let (again, frame) = the_production_being_made(&machine).expect("frame 1 again");
+                assert_eq!(frame, 1);
+                a_production_reports(&mut machine, &again, &a_production_of(&whole), false);
+                assert!(the_frames_standing(&machine).is_empty());
+                let sets: Vec<i64> = the_events_about(&machine, asked::THE_PREVIEW_SET_MADE_EVENT, &job)
+                    .iter()
+                    .filter_map(|says| smoozy_queue_history_machine::previews::ThePublishedPreview::read_back(says))
+                    .map(|one| one.frame)
+                    .collect();
+                assert_eq!(sets, vec![2, 1], "each frame's set once, frame 1's from the second production");
+            }
+
+            /// **The same ending, and a production that came out whole**: no
+            /// second production, and its set event goes at once.
+            #[test]
+            fn n1_a_production_standing_at_the_ending_that_came_out_whole_is_not_made_again() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let (job, operation, record_directory) = a_job_rendering_frames(&mut machine, &[1, 2]);
+                let paths = the_stand_ins_manifest(&record_directory, &job, &[1, 2]);
+                answer(&a_report_naming_in_hand(&machine, &operation, 1, 2), &mut machine.start);
+                let (first, _) = the_production_being_made(&machine).expect("frame 1");
+                machine.start.previews_are_owed_at_an_ending(&job, 1, &every_file_present(&paths), false);
+                let whole: Vec<(Vec<u8>, Option<String>)> = machine.start.the_previews.looked_at_again[0]
+                    .what_the_statement_gives
+                    .as_ref()
+                    .expect("copies")
+                    .every_copy()
+                    .collect();
+                let mut ending = a_copy_published(1, &whole[0].0, whole[0].1.as_deref(), true, 0);
+                ending.the_other_layers = whole[1..]
+                    .iter()
+                    .enumerate()
+                    .map(|(at, (source, layer))| a_copy_published(1, source, layer.as_deref(), false, u32::try_from(at + 1).unwrap()))
+                    .collect();
+                a_production_reports(&mut machine, &first, &ending, false);
+                assert_eq!(the_events_about(&machine, asked::THE_PREVIEW_SET_MADE_EVENT, &job).len(), 1);
+                assert_eq!(the_frames_standing(&machine), vec![2], "frame 1 is not made again");
+                assert!(machine.start.the_previews.looked_at_again.is_empty(), "the mark is spent");
+            }
+        }
+
+        /// **The Fable review's first sitting, 2026-11-10: the server's queue
+        /// after a death or a crash.** Each test poses one moment hand testing
+        /// cannot reach: a worker that dies alone with the supervisor alive, or
+        /// a supervisor that ended between two writes of one act.
+        mod a_death_or_a_crash {
+            use super::*;
+
+            /// A stand-in worker that ends at once and reports nothing.
+            fn a_worker_that_ends_at_once(machine: &AStartOverAnAreaThatGoesWithIt) {
+                use std::os::unix::fs::PermissionsExt;
+                let at = machine
+                    .at
+                    .join(smoozy_runtime::the_program::THE_FIXED_ENTRY_POINT_NAME);
+                std::fs::write(&at, "#!/bin/sh\nexit 0\n").expect("the program is written");
+                std::fs::set_permissions(&at, std::fs::Permissions::from_mode(0o755))
+                    .expect("it is made runnable");
+            }
+
+            /// **Turns of the loop with no caller, until something is true** —
+            /// bounded, so a fault ends the test rather than hanging it.
+            fn turns_until(
+                machine: &mut AStartOverAnAreaThatGoesWithIt,
+                what: &str,
+                it_is_so: impl Fn(&AStartOverAnAreaThatGoesWithIt) -> bool,
+            ) {
+                let began = std::time::Instant::now();
+                loop {
+                    machine.start.the_turns_own_occasions();
+                    if it_is_so(machine) {
+                        return;
+                    }
+                    assert!(
+                        began.elapsed() < std::time::Duration::from_secs(15),
+                        "after 15 seconds of turns: {what}"
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+
+            fn the_state_of_the_job(
+                machine: &AStartOverAnAreaThatGoesWithIt,
+                job: &Identity,
+            ) -> QueueState {
+                machine
+                    .start
+                    .queue
+                    .read_one(job)
+                    .expect("it reads")
+                    .expect("the job record is there")
+                    .state
+            }
+
+            fn the_record_of(
+                machine: &AStartOverAnAreaThatGoesWithIt,
+                operation: &Identity,
+            ) -> smoozy_state::machine_operations::OperationRecord {
+                match machine
+                    .start
+                    .records
+                    .what_is_held_under(operation)
+                    .expect("it reads")
+                {
+                    WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record) => record,
+                    _ => panic!("an operation record is held"),
+                }
+            }
+
+            /// **A kernel that publishes exactly the processes a test names**,
+            /// in the kernel's own published shape, and where it publishes.
+            fn a_kernel_that_publishes(
+                machine: &mut AStartOverAnAreaThatGoesWithIt,
+                processes: &[(u32, u64)],
+            ) -> PathBuf {
+                let kernel = machine.at.join("kernel");
+                std::fs::create_dir_all(&kernel).expect("the kernel's place is made");
+                for (identifier, start_time) in processes {
+                    let at = kernel.join(identifier.to_string());
+                    std::fs::create_dir_all(&at).expect("the record's place is made");
+                    let mut fields = vec![
+                        identifier.to_string(),
+                        "(stand-in)".to_string(),
+                        "S".to_string(),
+                    ];
+                    for field in 4..=21 {
+                        fields.push(field.to_string());
+                    }
+                    fields.push(start_time.to_string());
+                    for field in 23..=52 {
+                        fields.push(field.to_string());
+                    }
+                    std::fs::write(at.join("stat"), fields.join(" ")).expect("it is written");
+                }
+                machine.start.worker_start.kernel.where_the_kernel_publishes = kernel.clone();
+                kernel
+            }
+
+            /// The process is gone from what the kernel publishes.
+            fn the_process_goes(kernel: &std::path::Path, identifier: u32) {
+                std::fs::remove_dir_all(kernel.join(identifier.to_string()))
+                    .expect("the kernel's record goes");
+            }
+
+            /// The worker's own pair and the render process's, written into an
+            /// open render record as the start and `Rendering` L5 write them.
+            fn the_pairs_are_recorded(
+                machine: &mut AStartOverAnAreaThatGoesWithIt,
+                operation: &Identity,
+                worker: Option<&str>,
+                render_process: Option<&str>,
+            ) {
+                let mut record = the_record_of(machine, operation);
+                record.execution_group = worker.map(|pair| {
+                    smoozy_state::machine_operations::TheRecordedExecutionGroup {
+                        as_that_document_recorded_it: pair.to_string(),
+                        started_under_run: machine.start.run.run.clone(),
+                    }
+                });
+                let mut field = TheRenderKindsOwnField::read_back(
+                    record
+                        .the_kinds_safe_boundary_marker
+                        .as_deref()
+                        .expect("the field"),
+                )
+                .expect("it reads back");
+                field.attempts[0].render_process = render_process.map(str::to_string);
+                record.the_kinds_safe_boundary_marker = Some(field.as_written());
+                machine
+                    .start
+                    .records
+                    .write_it_back(&record)
+                    .expect("the pairs are recorded");
+            }
+
+            /// **Entry 1 of the scout's report: a render worker that dies with
+            /// no report, the supervisor alive.** `Rented-server runtime` S10a:
+            /// its record is taken at once — run again once, then given up —
+            /// and the job behind it starts. Before 2026-11-10 the record stood
+            /// open until the next supervisor start and nothing behind it ever
+            /// started.
+            #[test]
+            fn a_render_whose_worker_dies_unreported_is_run_again_once_then_given_up_and_the_line_moves(
+            ) {
+                let mut machine = a_machine_a_placement_wrote();
+                a_worker_that_ends_at_once(&machine);
+                let first = a_waiting_job(&mut machine, None);
+                let behind = a_waiting_job(&mut machine, None);
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                let QueueState::Rendering { operation } = the_state_of_the_job(&machine, &first)
+                else {
+                    panic!("the first job was started");
+                };
+                turns_until(
+                    &mut machine,
+                    "the job whose worker died never ended, so the line never moved",
+                    |machine| {
+                        matches!(
+                            the_state_of_the_job(machine, &first),
+                            QueueState::Ended { .. }
+                        )
+                    },
+                );
+                let record = the_record_of(&machine, &operation);
+                assert_eq!(record.attempt_count, 2, "it was run again once");
+                assert_eq!(record.recorded_outcome(), Some(&RecordedOutcome::GivenUp));
+                assert_eq!(
+                    the_events_about(&machine, asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT, &first)
+                        .len(),
+                    1,
+                    "the ending is told once"
+                );
+                turns_until(
+                    &mut machine,
+                    "the job behind it never started",
+                    |machine| !matches!(the_state_of_the_job(machine, &behind), QueueState::Waiting),
+                );
+            }
+
+            /// **A render carried over a supervisor restart, whose worker then
+            /// goes with no report.** The new supervisor is not its parent, so
+            /// no wait returns; `Rented-server runtime` S10a has the pair read
+            /// on each turn. Before 2026-11-10 the record stood open until yet
+            /// another restart.
+            #[test]
+            fn a_render_carried_over_a_restart_whose_worker_then_goes_is_taken_with_no_further_restart(
+            ) {
+                let mut machine = a_machine_a_placement_wrote();
+                a_worker_that_ends_at_once(&machine);
+                let kernel = a_kernel_that_publishes(&mut machine, &[(4242, 77)]);
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                the_pairs_are_recorded(&mut machine, &operation, Some("4242 77"), None);
+                let behind = a_waiting_job(&mut machine, None);
+                the_supervisor_starts_again(&mut machine);
+                assert!(
+                    matches!(
+                        the_record_of(&machine, &operation).latest_disposition(),
+                        Some((Disposition::Resumed, _))
+                    ),
+                    "the worker is alive at the start, so its render is carried on"
+                );
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                assert_eq!(
+                    the_state_of_the_job(&machine, &behind),
+                    QueueState::Waiting,
+                    "nothing starts beside a live render"
+                );
+
+                the_process_goes(&kernel, 4242);
+                turns_until(
+                    &mut machine,
+                    "the render whose worker went was never taken",
+                    |machine| the_record_of(machine, &operation).attempt_count == 2,
+                );
+                turns_until(
+                    &mut machine,
+                    "the job behind it never started",
+                    |machine| !matches!(the_state_of_the_job(machine, &behind), QueueState::Waiting),
+                );
+            }
+
+            /// **Entry 5 of the scout's report: the worker is gone and the
+            /// Blender it started is still running.** `Rented-server runtime`
+            /// X9b: no branch is taken and nothing starts beside it; once the
+            /// render process is gone too, the record is taken. Before
+            /// 2026-11-10 the start wrote *re-run once* and a second render
+            /// started on the same cards, writing the same frames.
+            #[test]
+            fn nothing_is_started_beside_a_render_process_that_outlived_its_worker() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_worker_that_ends_at_once(&machine);
+                let kernel = a_kernel_that_publishes(&mut machine, &[(5151, 88)]);
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                the_pairs_are_recorded(&mut machine, &operation, Some("4242 77"), Some("5151 88"));
+                the_supervisor_starts_again(&mut machine);
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                let record = the_record_of(&machine, &operation);
+                assert_eq!(
+                    (record.attempt_count, record.latest_disposition().is_none()),
+                    (1, true),
+                    "no branch is taken while the render process still runs"
+                );
+                assert_eq!(machine.start.wait.how_many_it_holds(), 0, "nothing was started");
+
+                the_process_goes(&kernel, 5151);
+                turns_until(
+                    &mut machine,
+                    "the record was never taken once the render process had gone",
+                    |machine| the_record_of(machine, &operation).attempt_count == 2,
+                );
+            }
+
+            /// **Entry 5, the other half: a start that ran the worker and could
+            /// not write its pair.** `Rented-server runtime` X9b: the pair this
+            /// run holds is written with the render process's. Before
+            /// 2026-11-10 the record kept no group, and the next start read
+            /// the live render as gone.
+            #[test]
+            fn the_workers_own_pair_is_written_with_the_render_process_where_the_start_could_not() {
+                if !the_kernel_here_publishes_records() {
+                    return;
+                }
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_waiting_job(&mut machine, None);
+                machine.start.take_the_line();
+                let QueueState::Rendering { operation } = the_state_of_the_job(&machine, &job)
+                else {
+                    panic!("the job was started");
+                };
+                let as_the_start_wrote_it = the_record_of(&machine, &operation)
+                    .execution_group
+                    .expect("the start recorded the worker's pair");
+                // The write of the pair is the one that did not land.
+                let mut record = the_record_of(&machine, &operation);
+                record.execution_group = None;
+                machine
+                    .start
+                    .records
+                    .write_it_back(&record)
+                    .expect("the record as a refused write left it");
+
+                let answered = answer(
+                    &a_request(THE_RENDER_PROCESS_WAS_STARTED_REQUEST).carrying(
+                        Fields::none()
+                            .and(THE_OPERATION_FIELD, operation.as_text())
+                            .and(THE_RENDER_PROCESS_FIELD, "5151 88"),
+                    ),
+                    &mut machine.start,
+                );
+                assert_eq!(
+                    answered.fields.text(WHETHER_IT_WAS_RECORDED_FIELD),
+                    Some(crate::the_render_worker::IT_WAS_RECORDED)
+                );
+                assert_eq!(
+                    the_record_of(&machine, &operation)
+                        .execution_group
+                        .map(|group| group.as_that_document_recorded_it),
+                    Some(as_the_start_wrote_it.as_that_document_recorded_it),
+                    "the worker's pair is on the record"
+                );
+            }
+
+            /// **Entry 7 of the scout's report: the supervisor ended just after
+            /// closing a render's record**, before the job's own side was
+            /// written. `Queue & History` D14a: the next look at the line
+            /// finishes it. Before 2026-11-10 the job read *rendering* for
+            /// good and no event told its ending.
+            #[test]
+            fn an_ending_whose_jobs_side_was_never_written_is_finished_at_the_next_look_at_the_line(
+            ) {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                let mut record = the_record_of(&machine, &operation);
+                record
+                    .close(RecordedOutcome::TheKindsOwn(asked::IT_FINISHED.to_string()), None)
+                    .expect("it closes");
+                machine
+                    .start
+                    .records
+                    .write_it_back(&record)
+                    .expect("the outcome is written, and the supervisor ends here");
+
+                the_supervisor_starts_again(&mut machine);
+                machine.start.take_the_line();
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Ended {
+                        outcome: operation.clone()
+                    }
+                );
+                assert_eq!(
+                    the_events_about(&machine, asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT, &job),
+                    vec![TheOutcomeAsWritten::Finished.the_answers_word().to_string()],
+                    "the ending is told, once"
+                );
+                machine.start.take_the_line();
+                assert_eq!(
+                    the_events_about(&machine, asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT, &job)
+                        .len(),
+                    1,
+                    "a second look tells nothing again"
+                );
+            }
+
+            /// **Entry 7: a hold answered *yes* whose job never entered the
+            /// line** — the release written, the placement not. `Queue &
+            /// History` D14a. Before 2026-11-10 the job stayed held for good,
+            /// a repeat of the answer being answered from the release.
+            #[test]
+            fn a_released_hold_whose_job_never_entered_the_line_enters_it_at_the_next_look() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_job();
+                let hold = Identity::issue(IdentityKind::Operation).expect("randomness");
+                machine
+                    .start
+                    .holds
+                    .place(&smoozy_runtime::holds::HoldRecord {
+                        hold: hold.clone(),
+                        subject: smoozy_runtime::holds::Subject::Job(job.clone()),
+                        reason: "the first-frame check".to_string(),
+                        origin: smoozy_runtime::holds::Origin::Submission,
+                        dependency: None,
+                        release: None,
+                    })
+                    .expect("the hold is placed");
+                the_job_record_and_its_note_in_one_act(
+                    &mut machine.start.queue,
+                    &mut machine.start.notes,
+                    &JobRecord::held_from_submission(job.clone(), None, "/r".to_string(), hold.clone()),
+                    "Kitchen",
+                )
+                .expect("the held job is written");
+                let at = machine.start.now_on_the_machines_clock().expect("a clock");
+                machine
+                    .start
+                    .holds
+                    .write_the_release(
+                        &hold,
+                        &Release {
+                            outcome: smoozy_runtime::holds::ReleaseOutcome::Released,
+                            produced_by: "the answer".to_string(),
+                            at,
+                        },
+                    )
+                    .expect("the release is written, and the supervisor ends here");
+
+                the_supervisor_starts_again(&mut machine);
+                machine.start.take_the_line();
+                assert!(
+                    matches!(
+                        the_state_of_the_job(&machine, &job),
+                        QueueState::Rendering { .. }
+                    ),
+                    "the released job entered the line and was started: {:?}",
+                    the_state_of_the_job(&machine, &job)
+                );
+            }
+
+            /// **Entry 7: a render started whose job record never left
+            /// *waiting*.** `Queue & History` D14a: a cancel is answered as a
+            /// rendering job's is, and the next look at the line writes the
+            /// record *rendering*. Before 2026-11-10 the cancel removed the
+            /// job's record and its material from under the running render.
+            #[test]
+            fn a_cancel_never_removes_a_job_whose_render_stands_whatever_its_record_says() {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                let mut record = machine
+                    .start
+                    .queue
+                    .read_one(&job)
+                    .expect("it reads")
+                    .expect("it is there");
+                record.state = QueueState::Waiting;
+                machine
+                    .start
+                    .queue
+                    .write(&record)
+                    .expect("the record as a refused write left it");
+
+                let asked_of = answer(
+                    &asking(asked::THE_CANCEL_REQUEST, about(&job)),
+                    &mut machine.start,
+                );
+                assert_eq!(
+                    asked_of.fields.text(asked::THE_CANCELS_OUTCOME_FIELD),
+                    Some(asked::IT_WAS_NOT_CANCELLED)
+                );
+                assert!(
+                    machine.start.queue.read_one(&job).expect("it reads").is_some(),
+                    "the job record stands"
+                );
+                machine.start.take_the_line();
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Rendering { operation }
+                );
+            }
+
+            /// **A stop outstanding on a render whose worker is gone and whose
+            /// Blender still runs.** `Rented-server runtime` X9b: the stop
+            /// reaches the render process, and the record is closed *left
+            /// stopped* once that process has gone. Before 2026-11-10 the start
+            /// wrote *left stopped* at once, sent nothing, and the line started
+            /// the next job beside the Blender still running.
+            #[test]
+            fn a_stop_outstanding_reaches_a_render_process_that_outlived_its_worker() {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                let mut child = std::process::Command::new("sleep")
+                    .arg("30")
+                    .spawn()
+                    .expect("a stand-in render process");
+                let pair = the_kernels_record_of(&mut machine, &child);
+                the_pairs_are_recorded(&mut machine, &operation, Some("4242 77"), Some(&pair));
+                let mut record = the_record_of(&machine, &operation);
+                record.the_stop_was_asked_for().expect("it is open");
+                machine
+                    .start
+                    .records
+                    .write_it_back(&record)
+                    .expect("should be stopped is written, and the supervisor ends here");
+
+                the_supervisor_starts_again(&mut machine);
+                assert_eq!(
+                    the_outcome_of(&machine, &operation),
+                    None,
+                    "nothing is closed while the render process still runs"
+                );
+                assert!(
+                    it_was_interrupted(&mut child),
+                    "the stop the record asked for reached the render process"
+                );
+                std::fs::remove_dir_all(machine.at.join("kernel").join(child.id().to_string()))
+                    .expect("the kernel's record goes");
+                turns_until(
+                    &mut machine,
+                    "the stopped render was never closed once its process had gone",
+                    |machine| {
+                        the_outcome_of(machine, &operation) == Some(RecordedOutcome::LeftStopped)
+                    },
+                );
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Ended { outcome: operation }
+                );
+            }
+
+            /// **A render this run started and still holds the wait for is not
+            /// read as gone for want of a recorded pair.** `Rented-server
+            /// runtime` X9a makes the wait the *ended* test. Before 2026-11-10
+            /// a reconciliation at the clear of a setup wrote *re-run once* on
+            /// it and the line started a second worker beside the first.
+            #[test]
+            fn a_render_this_run_still_holds_the_wait_for_is_never_read_as_gone() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                a_kernel_that_publishes(&mut machine, &[]);
+                let job = a_waiting_job(&mut machine, None);
+                machine.start.take_the_line();
+                let QueueState::Rendering { operation } = the_state_of_the_job(&machine, &job)
+                else {
+                    panic!("the job was started");
+                };
+                assert!(
+                    the_record_of(&machine, &operation).execution_group.is_none(),
+                    "this kernel published nothing, so no pair was recorded"
+                );
+                machine
+                    .start
+                    .reconcile(ReconciliationMoment::TheSetupInProgressStateIsCleared);
+                machine.start.take_the_line();
+                let record = the_record_of(&machine, &operation);
+                assert_eq!(
+                    (record.attempt_count, record.latest_disposition().is_none()),
+                    (1, true),
+                    "its worker is running under this run's own wait"
+                );
+                assert_eq!(machine.start.wait.how_many_it_holds(), 1, "one worker, not two");
+            }
+
+            /// **An ending's job side written once is not told a second time**
+            /// where only the job record's own write did not land: the next
+            /// look writes the record and journals nothing again (`Queue &
+            /// History` D14a).
+            #[test]
+            fn an_ending_told_once_is_not_told_again_when_only_its_job_record_was_not_written() {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                the_worker_reports(&mut machine, &operation, asked::IT_FAILED);
+                assert_eq!(
+                    the_events_about(&machine, asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT, &job)
+                        .len(),
+                    1
+                );
+                // The job record's write is the one that did not land.
+                let mut record = machine
+                    .start
+                    .queue
+                    .read_one(&job)
+                    .expect("it reads")
+                    .expect("it is there");
+                record.state = QueueState::Rendering {
+                    operation: operation.clone(),
+                };
+                machine.start.queue.write(&record).expect("as a refused write left it");
+
+                machine.start.take_the_line();
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Ended { outcome: operation }
+                );
+                assert_eq!(
+                    the_events_about(&machine, asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT, &job)
+                        .len(),
+                    1,
+                    "this run told the ending already"
+                );
+            }
+
+            /// A hold placed at a render's start for a job, and whether it has
+            /// been answered *yes*.
+            fn a_hold_at_render_start_for(
+                machine: &mut AStartOverAnAreaThatGoesWithIt,
+                job: &Identity,
+                answered_yes: bool,
+            ) -> Identity {
+                let hold = Identity::issue(IdentityKind::Operation).expect("randomness");
+                machine
+                    .start
+                    .holds
+                    .place(&smoozy_runtime::holds::HoldRecord {
+                        hold: hold.clone(),
+                        subject: smoozy_runtime::holds::Subject::Job(job.clone()),
+                        reason: "the file changed".to_string(),
+                        origin: smoozy_runtime::holds::Origin::RenderStart,
+                        dependency: None,
+                        release: None,
+                    })
+                    .expect("the hold is placed");
+                if answered_yes {
+                    let at = machine.start.now_on_the_machines_clock().expect("a clock");
+                    machine
+                        .start
+                        .holds
+                        .write_the_release(
+                            &hold,
+                            &Release {
+                                outcome: smoozy_runtime::holds::ReleaseOutcome::Released,
+                                produced_by: "the answer".to_string(),
+                                at,
+                            },
+                        )
+                        .expect("the release is written");
+                }
+                hold
+            }
+
+            /// The attempt ended at a hold: the operation record closed as the
+            /// worker's report of it closes one.
+            fn the_attempt_ended_at_a_hold(
+                machine: &mut AStartOverAnAreaThatGoesWithIt,
+                operation: &Identity,
+            ) {
+                let mut record = the_record_of(machine, operation);
+                record
+                    .close(
+                        RecordedOutcome::TheKindsOwn(
+                            crate::the_render_worker::IT_WAS_HELD_FOR_AN_ANSWER.to_string(),
+                        ),
+                        None,
+                    )
+                    .expect("it closes");
+                machine
+                    .start
+                    .records
+                    .write_it_back(&record)
+                    .expect("the attempt's ending is written");
+            }
+
+            /// **A job held at its render's start and answered *yes* before
+            /// the held attempt's ending landed** waits in the line with that
+            /// attempt's record still open. Whatever `Queue & History` D14a's
+            /// third bullet writes meanwhile, the job starts afresh, under a
+            /// new operation, once the attempt that held it has ended.
+            #[test]
+            fn a_job_released_from_a_hold_at_its_start_starts_afresh_once_the_attempt_that_held_it_has_ended(
+            ) {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_job();
+                let held_under = a_render_open_for(&mut machine, &job);
+                a_hold_at_render_start_for(&mut machine, &job, true);
+                let mut record = machine
+                    .start
+                    .queue
+                    .read_one(&job)
+                    .expect("it reads")
+                    .expect("it is there");
+                record.state = QueueState::Waiting;
+                machine.start.queue.write(&record).expect("released into the line");
+
+                machine.start.take_the_line();
+                assert_eq!(
+                    machine.start.wait.how_many_it_holds(),
+                    0,
+                    "nothing starts while the attempt that held it is still ending"
+                );
+                the_attempt_ended_at_a_hold(&mut machine, &held_under);
+                machine.start.take_the_line();
+                machine.start.take_the_line();
+                match the_state_of_the_job(&machine, &job) {
+                    QueueState::Rendering { operation } => assert_ne!(operation, held_under),
+                    other => panic!("the released job was started afresh: {other:?}"),
+                }
+            }
+
+            /// **A job whose attempt ended at a hold, whose record never left
+            /// *rendering*, and whose hold was answered *yes* meanwhile**
+            /// enters the line (`Queue & History` D14a's first bullet): the
+            /// answer found no held record to place, and nothing else would.
+            #[test]
+            fn a_job_answered_yes_while_its_record_still_said_rendering_enters_the_line() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_job();
+                let held_under = a_render_open_for(&mut machine, &job);
+                a_hold_at_render_start_for(&mut machine, &job, true);
+                the_attempt_ended_at_a_hold(&mut machine, &held_under);
+
+                machine.start.take_the_line();
+                machine.start.take_the_line();
+                match the_state_of_the_job(&machine, &job) {
+                    QueueState::Rendering { operation } => assert_ne!(operation, held_under),
+                    other => panic!("the released job entered the line and was started: {other:?}"),
+                }
+            }
+
+            /// **The same, the hold not yet answered**: the record is written
+            /// *held* under the hold that names the job.
+            #[test]
+            fn a_job_whose_attempt_ended_at_a_hold_is_written_held_under_it() {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_job();
+                let held_under = a_render_open_for(&mut machine, &job);
+                let hold = a_hold_at_render_start_for(&mut machine, &job, false);
+                the_attempt_ended_at_a_hold(&mut machine, &held_under);
+
+                machine.start.take_the_line();
+                assert_eq!(the_state_of_the_job(&machine, &job), QueueState::Held { hold });
+                assert!(
+                    the_events_about(&machine, asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT, &job)
+                        .is_empty(),
+                    "a hold ends an attempt and no job"
+                );
+            }
+
+            /// **An ending the store refused, whose worker then went.** The
+            /// run holds what it classified so the queue reading can say it
+            /// (`Rented-server runtime` S14a); once the job is run again under
+            /// S10a that is no longer its state, and it is let go.
+            #[test]
+            fn an_ending_held_for_a_full_store_is_let_go_once_its_job_is_run_again() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                machine.start.the_render_endings_owed.insert(
+                    operation.clone(),
+                    ARenderEndingOwed {
+                        job: job.clone(),
+                        outcome: TheOutcomeAsWritten::Finished,
+                        the_free_space: TheFreeSpaceAtTheEnding::NoneWasTaken {
+                            why: "a test".to_string(),
+                        },
+                    },
+                );
+                machine.start.a_render_is_owed_its_branch(operation.clone());
+                machine.start.take_the_line();
+                assert_eq!(
+                    the_record_of(&machine, &operation).attempt_count,
+                    2,
+                    "the job is run again"
+                );
+                assert!(
+                    !machine.start.the_render_endings_owed.contains_key(&operation),
+                    "its earlier ending is no longer what the queue reading says"
+                );
+            }
+
+            /// **A second attempt the line could not start is tried again at
+            /// its next look** (`Rented-server runtime` S10a's last sentence).
+            /// Before 2026-11-10 it was counted as started though no worker
+            /// ran: the line never tried it again in that run, and the next
+            /// start gave the job up without its second attempt ever running.
+            #[test]
+            fn a_second_attempt_that_could_not_be_started_is_tried_again_at_the_next_look() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                let its_record = machine
+                    .start
+                    .queue
+                    .read_one(&job)
+                    .expect("it reads")
+                    .expect("it is there");
+                machine.start.queue.remove(&job).expect("the job record cannot be read");
+                the_supervisor_starts_again(&mut machine);
+                let said = machine.start.take_the_line().unwrap_or_default();
+                assert!(said.contains("not started"), "{said}");
+                assert_eq!(machine.start.wait.how_many_it_holds(), 0);
+
+                machine
+                    .start
+                    .queue
+                    .write(&its_record)
+                    .expect("the job record reads again");
+                machine.start.take_the_line();
+                assert_eq!(
+                    machine.start.wait.how_many_it_holds(),
+                    1,
+                    "the second attempt was started at the next look"
+                );
+                assert_eq!(the_record_of(&machine, &operation).attempt_count, 2);
+            }
+
+            // --- after Sol's read-only fresh look, 2026-11-10 ---
+
+            /// A folder of the package area closed to new entries, and what it
+            /// takes to open it again — the shape of a mount with no room.
+            fn closed_to_writes(
+                machine: &AStartOverAnAreaThatGoesWithIt,
+                area: &str,
+            ) -> (PathBuf, std::fs::Permissions) {
+                use std::os::unix::fs::PermissionsExt;
+                let at = PathBuf::from(the_record_at(&machine.at.display().to_string(), area));
+                let as_it_was = std::fs::metadata(&at).expect("the area is there").permissions();
+                let mut closed = as_it_was.clone();
+                closed.set_mode(0o555);
+                std::fs::set_permissions(&at, closed).expect("the area is closed");
+                (at, as_it_was)
+            }
+
+            fn opened_again((at, as_it_was): (PathBuf, std::fs::Permissions)) {
+                std::fs::set_permissions(at, as_it_was).expect("the area takes entries again");
+            }
+
+            /// **Sol's first point: the line that waited over a held write is
+            /// looked at again when that write lands** (`Rented-server
+            /// runtime` S14: the admission point starts nothing over a pending
+            /// write). Before 2026-11-10 the landing left the line where it
+            /// was, until something else moved it.
+            #[test]
+            fn a_line_that_waited_over_a_held_write_is_looked_at_again_when_it_lands() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_waiting_job(&mut machine, None);
+                let journal = closed_to_writes(&machine, THE_AREA_THE_JOURNAL_SITS_IN);
+                machine.start.journal_or_hold(
+                    asked::THE_RENDER_ATTEMPT_STARTED_EVENT,
+                    Some(a_job()),
+                    "attempt 1",
+                );
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                assert_eq!(the_state_of_the_job(&machine, &job), QueueState::Waiting);
+
+                opened_again(journal);
+                answer(&a_request(THE_READINESS_REQUEST), &mut machine.start);
+                assert!(machine.start.pending.owed().is_empty(), "it landed");
+                machine.start.the_turns_own_occasions();
+                assert!(
+                    matches!(
+                        the_state_of_the_job(&machine, &job),
+                        QueueState::Rendering { .. }
+                    ),
+                    "the line was looked at again once the held write had landed"
+                );
+            }
+
+            /// **Sol's first point, the other half: a branch S10a owed and
+            /// could not write is taken again at the next request served.**
+            #[test]
+            fn a_render_whose_branch_could_not_be_written_is_taken_again_at_the_next_request() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                let records = closed_to_writes(&machine, THE_AREA_THE_TWO_RECORDS_SIT_IN);
+                machine.start.a_render_is_owed_its_branch(operation.clone());
+                machine.start.the_turns_own_occasions();
+                assert_eq!(
+                    the_record_of(&machine, &operation).attempt_count,
+                    1,
+                    "the store refused the branch"
+                );
+
+                opened_again(records);
+                answer(&a_request(THE_READINESS_REQUEST), &mut machine.start);
+                machine.start.the_turns_own_occasions();
+                assert_eq!(
+                    the_record_of(&machine, &operation).attempt_count,
+                    2,
+                    "the branch was written at the next request served"
+                );
+            }
+
+            /// **Sol's second point: a second attempt whose own pair the start
+            /// could not write carries the first attempt's**, and the next
+            /// start would read its live worker as gone. The pair this run
+            /// holds replaces it with the render process's.
+            #[test]
+            fn the_second_attempts_own_pair_replaces_the_firsts_where_the_start_could_not_write_it() {
+                if !the_kernel_here_publishes_records() {
+                    return;
+                }
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_waiting_job(&mut machine, None);
+                machine.start.take_the_line();
+                let QueueState::Rendering { operation } = the_state_of_the_job(&machine, &job)
+                else {
+                    panic!("the job was started");
+                };
+                let its_own = the_record_of(&machine, &operation)
+                    .execution_group
+                    .expect("the start recorded the worker's pair")
+                    .as_that_document_recorded_it;
+                the_pairs_are_recorded(&mut machine, &operation, Some("4242 77"), None);
+
+                the_render_process_is_recorded(&mut machine, &operation, "5151 88");
+                assert_eq!(
+                    the_record_of(&machine, &operation)
+                        .execution_group
+                        .map(|group| group.as_that_document_recorded_it),
+                    Some(its_own)
+                );
+            }
+
+            /// **Sol's third point: an ending the journal already tells is not
+            /// told again after a restart.** The note and the event landed,
+            /// the job record's write did not, and the supervisor started
+            /// again before the next look at the line.
+            #[test]
+            fn an_ending_the_journal_already_tells_is_not_told_again_after_a_restart() {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                let queue = closed_to_writes(&machine, THE_AREA_THE_QUEUE_SITS_IN);
+                the_worker_reports(&mut machine, &operation, asked::IT_FAILED);
+                opened_again(queue);
+                assert!(matches!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Rendering { .. }
+                ));
+
+                the_supervisor_starts_again(&mut machine);
+                machine.start.take_the_line();
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Ended { outcome: operation }
+                );
+                assert_eq!(
+                    the_events_about(&machine, asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT, &job)
+                        .len(),
+                    1,
+                    "the journal told it before the restart"
+                );
+            }
+
+            /// **Sol's fourth point: an ending told while neither its note nor
+            /// its job record could be written has both written afterwards.**
+            #[test]
+            fn an_ending_told_while_its_note_could_not_be_written_has_its_note_written_afterwards() {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                let queue = closed_to_writes(&machine, THE_AREA_THE_QUEUE_SITS_IN);
+                let notes = closed_to_writes(&machine, THE_AREA_THE_NOTES_SIT_IN);
+                the_worker_reports(&mut machine, &operation, asked::IT_FAILED);
+                opened_again(queue);
+                opened_again(notes);
+                assert!(
+                    machine
+                        .start
+                        .notes
+                        .read(&job)
+                        .expect("it reads")
+                        .expect("the note is there")
+                        .ending
+                        .is_none(),
+                    "the note's ending was refused"
+                );
+
+                machine.start.take_the_line();
+                assert!(
+                    machine
+                        .start
+                        .notes
+                        .read(&job)
+                        .expect("it reads")
+                        .expect("the note is there")
+                        .ending
+                        .is_some(),
+                    "the note learns the ending once it can be written"
+                );
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Ended { outcome: operation }
+                );
+                assert_eq!(
+                    the_events_about(&machine, asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT, &job)
+                        .len(),
+                    1
+                );
+            }
+
+            /// **Sol's fifth point: a hold answered long ago does not keep a
+            /// later render's job record from being repaired.**
+            #[test]
+            fn an_old_answered_hold_does_not_keep_a_fresh_renders_job_record_from_being_repaired() {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_job();
+                let fresh = a_render_open_for(&mut machine, &job);
+                a_hold_at_render_start_for(&mut machine, &job, true);
+                let mut record = machine
+                    .start
+                    .queue
+                    .read_one(&job)
+                    .expect("it reads")
+                    .expect("it is there");
+                record.state = QueueState::Waiting;
+                machine.start.queue.write(&record).expect("as a refused write left it");
+
+                machine.start.take_the_line();
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Rendering { operation: fresh }
+                );
+            }
+
+            /// **A job whose attempt ended at a hold that was then answered
+            /// *no* is not put back in the line**, whatever older holds of its
+            /// were answered: the hold answered last is the attempt's own.
+            #[test]
+            fn a_job_whose_last_hold_was_answered_no_is_not_put_back_in_the_line() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_job();
+                let held_under = a_render_open_for(&mut machine, &job);
+                a_hold_at_render_start_for(&mut machine, &job, true);
+                let refused = a_hold_at_render_start_for(&mut machine, &job, false);
+                let later = machine.start.now_on_the_machines_clock().expect("a clock");
+                machine
+                    .start
+                    .holds
+                    .write_the_release(
+                        &refused,
+                        &Release {
+                            outcome: smoozy_runtime::holds::ReleaseOutcome::Stopped,
+                            produced_by: "the answer".to_string(),
+                            at: Reading::taken(
+                                (),
+                                later.taken_at() + std::time::Duration::from_secs(60),
+                                later.clock().clone(),
+                            ),
+                        },
+                    )
+                    .expect("the no is written");
+                the_attempt_ended_at_a_hold(&mut machine, &held_under);
+
+                machine.start.take_the_line();
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Rendering {
+                        operation: held_under
+                    },
+                    "a job answered no is never started again"
+                );
+                assert_eq!(machine.start.wait.how_many_it_holds(), 0);
+            }
+
+            // --- the follow-up, the runner's rulings of 2026-11-10 ---
+
+            /// **Left fault 1: the supervisor ends between the two writes of a
+            /// job's ending, its news and its job record.** `Queue & History`
+            /// D14a as changed 2026-11-10: the news is written first, so what
+            /// is left is a job record still *rendering*, which the next look
+            /// at the line finishes without telling the ending twice. Before
+            /// that the record was written first: it read *ended*, no event
+            /// ever told it, and nothing could find that out.
+            #[test]
+            fn a_supervisor_that_ends_between_an_endings_news_and_its_record_leaves_nothing_untold() {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_job();
+                let operation = a_render_open_for(&mut machine, &job);
+                the_run_ends_between_the_news_and_the_record::set(true);
+                the_worker_reports(&mut machine, &operation, asked::IT_FAILED);
+                the_run_ends_between_the_news_and_the_record::set(false);
+
+                the_supervisor_starts_again(&mut machine);
+                machine.start.take_the_line();
+                assert_eq!(
+                    the_events_about(&machine, asked::THE_RECORDED_OUTCOME_WRITTEN_EVENT, &job)
+                        .len(),
+                    1,
+                    "the ending is told, and told once"
+                );
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Ended { outcome: operation }
+                );
+            }
+
+            /// **Left fault 3: one record that will not read stops the line,
+            /// and the queue reading says so** (`Queue & History` A1 as
+            /// changed 2026-11-10), so the desk can put it on the server's
+            /// row. The line stays stopped, as it did. Before that the reason
+            /// went to the server's own output and nowhere else.
+            #[test]
+            fn a_line_stopped_over_a_record_that_will_not_read_says_so_in_the_queue_reading() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let job = a_waiting_job(&mut machine, None);
+                let reading = |machine: &mut AStartOverAnAreaThatGoesWithIt| {
+                    answer(&a_request(THE_QUEUE_READING_REQUEST), &mut machine.start)
+                        .fields
+                        .text(asked::THE_LINE_IS_STOPPED_FIELD)
+                        .map(str::to_string)
+                };
+                assert_eq!(reading(&mut machine), None, "nothing is stopped yet");
+
+                let unreadable = PathBuf::from(the_record_at(
+                    &machine.at.display().to_string(),
+                    THE_AREA_THE_TWO_RECORDS_SIT_IN,
+                ))
+                .join(format!(
+                    "{}.operation",
+                    Identity::issue(IdentityKind::Operation)
+                        .expect("randomness")
+                        .as_text()
+                ));
+                std::fs::write(&unreadable, b"not a record").expect("a record that will not read");
+                let said = machine.start.take_the_line().unwrap_or_default();
+                assert!(said.contains("could not be read"), "{said}");
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Waiting,
+                    "the line stays stopped"
+                );
+                let why = reading(&mut machine).expect("the reading says the line is stopped");
+                assert!(!why.is_empty());
+
+                std::fs::remove_file(&unreadable).expect("the record goes");
+                machine.start.take_the_line();
+                assert_eq!(reading(&mut machine), None, "and says nothing once it moves again");
+                assert!(matches!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Rendering { .. }
+                ));
+            }
+
+            /// **The runner's ruling 3 of 2026-11-11, `Rented-server runtime`
+            /// M4a as added that day: a job the line cannot start for want of
+            /// room stays waiting, the queue reading names it, and the
+            /// supervisor starts it by itself once room is back** — on a turn
+            /// nobody asked anything on. *On the live pass a job taken with
+            /// 2 MB free waited with no word, and started only when the next
+            /// submission made the supervisor look at its line.*
+            #[test]
+            fn a_job_the_line_cannot_start_for_room_is_named_and_starts_when_room_is_back() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                let waits_at = |machine: &mut AStartOverAnAreaThatGoesWithIt| {
+                    answer(&a_request(THE_QUEUE_READING_REQUEST), &mut machine.start)
+                        .fields
+                        .text(asked::THE_LINE_WAITS_FOR_ROOM_FIELD)
+                        .map(str::to_string)
+                };
+                machine.start.the_available_figure_is = Some(2 * 1024 * 1024);
+                let job = a_waiting_job(&mut machine, None);
+                assert_eq!(waits_at(&mut machine), None, "the line has not been looked at yet");
+
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Waiting,
+                    "with no room for control state nothing is started"
+                );
+                assert_eq!(
+                    waits_at(&mut machine),
+                    Some(job.as_text()),
+                    "the reading names the job the line could not start for room"
+                );
+
+                // **Turns with no room move nothing**, and go on saying so.
+                machine.start.the_turns_own_occasions();
+                machine.start.the_turns_own_occasions();
+                assert_eq!(the_state_of_the_job(&machine, &job), QueueState::Waiting);
+                assert_eq!(waits_at(&mut machine), Some(job.as_text()));
+
+                // **Room is back, and nobody asks anything**: the next turn
+                // starts the job.
+                machine.start.the_available_figure_is =
+                    Some(smoozy_runtime::capture::THE_CONTROL_STATE_RESERVE);
+                assert!(!machine.start.the_line_may_have_moved, "nothing else moved the line");
+                machine.start.the_turns_own_occasions();
+                assert!(
+                    matches!(the_state_of_the_job(&machine, &job), QueueState::Rendering { .. }),
+                    "the job did not start by itself when room came back: {:?}",
+                    the_state_of_the_job(&machine, &job)
+                );
+                assert_eq!(waits_at(&mut machine), None, "and the reading names nothing once it has");
+            }
+
+            /// **Room comes back while something else holds the line**: the
+            /// line is looked at once, the job is no longer named as waiting
+            /// for room, and the line is not looked at again on every turn.
+            /// It starts when what held the line lets go.
+            #[test]
+            fn room_coming_back_under_a_line_held_by_something_else_is_looked_at_once() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                machine.start.the_available_figure_is = Some(0);
+                let job = a_waiting_job(&mut machine, None);
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                let reading = |machine: &mut AStartOverAnAreaThatGoesWithIt, field: &str| {
+                    answer(&a_request(THE_QUEUE_READING_REQUEST), &mut machine.start)
+                        .fields
+                        .text(field)
+                        .map(str::to_string)
+                };
+                assert_eq!(
+                    reading(&mut machine, asked::THE_LINE_WAITS_FOR_ROOM_FIELD),
+                    Some(job.as_text())
+                );
+
+                let unreadable = PathBuf::from(the_record_at(
+                    &machine.at.display().to_string(),
+                    THE_AREA_THE_TWO_RECORDS_SIT_IN,
+                ))
+                .join(format!(
+                    "{}.operation",
+                    Identity::issue(IdentityKind::Operation).expect("randomness").as_text()
+                ));
+                std::fs::write(&unreadable, b"not a record").expect("a record that will not read");
+                machine.start.the_available_figure_is =
+                    Some(smoozy_runtime::capture::THE_CONTROL_STATE_RESERVE);
+                machine.start.the_turns_own_occasions();
+                assert_eq!(the_state_of_the_job(&machine, &job), QueueState::Waiting);
+                assert_eq!(
+                    reading(&mut machine, asked::THE_LINE_WAITS_FOR_ROOM_FIELD),
+                    None,
+                    "room is back, so the job is not named as waiting for it"
+                );
+                assert!(reading(&mut machine, asked::THE_LINE_IS_STOPPED_FIELD).is_some());
+                assert!(machine.start.the_line_waits_for_room_at.is_none(), "no look on every turn");
+
+                std::fs::remove_file(&unreadable).expect("the record goes");
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                assert!(matches!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Rendering { .. }
+                ));
+            }
+
+            /// **Sol's first point on the full disk: room is read as back,
+            /// and the reading the start then takes fails.** The job is not
+            /// named as waiting for room, since nothing says it is, and it
+            /// is still tried again on the next turn. *As first built, the
+            /// look for room had let go of the job and nothing looked at the
+            /// line again.*
+            #[test]
+            fn a_start_whose_own_reading_fails_after_room_came_back_is_tried_again() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                machine.start.the_available_figure_is = Some(0);
+                let job = a_waiting_job(&mut machine, None);
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                assert_eq!(the_state_of_the_job(&machine, &job), QueueState::Waiting);
+
+                let room = smoozy_runtime::capture::THE_CONTROL_STATE_RESERVE;
+                machine.start.the_available_figure_is = Some(room);
+                machine.start.the_available_figures_to_come =
+                    [Ok(room), Err("the mount would not answer".to_string())].into();
+                machine.start.the_turns_own_occasions();
+                assert_eq!(the_state_of_the_job(&machine, &job), QueueState::Waiting);
+                assert_eq!(
+                    answer(&a_request(THE_QUEUE_READING_REQUEST), &mut machine.start)
+                        .fields
+                        .text(asked::THE_LINE_WAITS_FOR_ROOM_FIELD),
+                    None,
+                    "a reading that failed does not say the disk is full"
+                );
+                machine.start.the_turns_own_occasions();
+                assert!(
+                    matches!(the_state_of_the_job(&machine, &job), QueueState::Rendering { .. }),
+                    "the job was never tried again: {:?}",
+                    the_state_of_the_job(&machine, &job)
+                );
+            }
+
+            /// **A job the line could not start for room that is then
+            /// cancelled is no longer named**, and neither is anything once
+            /// the line holds nothing to start.
+            #[test]
+            fn a_job_that_waited_for_room_and_was_cancelled_is_no_longer_named() {
+                let mut machine = a_machine_a_placement_wrote();
+                a_program_at_the_pointer(&machine);
+                machine.start.the_available_figure_is = Some(0);
+                let job = a_waiting_job(&mut machine, None);
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                let waits_at = |machine: &mut AStartOverAnAreaThatGoesWithIt| {
+                    answer(&a_request(THE_QUEUE_READING_REQUEST), &mut machine.start)
+                        .fields
+                        .text(asked::THE_LINE_WAITS_FOR_ROOM_FIELD)
+                        .map(str::to_string)
+                };
+                assert_eq!(waits_at(&mut machine), Some(job.as_text()));
+                machine.start.queue.remove(&job).expect("the job is removed");
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                assert_eq!(waits_at(&mut machine), None, "a job that is gone waits for nothing");
+            }
+
+            /// **The Rough what-if answers, share 4 (310): a setup cut off
+            /// part-way holds the line, and the queue reading names its run**
+            /// (`Queue & History` A1 as changed 2026-11-14). *Before, the
+            /// reading said nothing, and the Queue read* Waiting *with no
+            /// reason until the user pressed* Set up again.
+            #[test]
+            fn rough_share_4_a_setup_that_stopped_part_way_is_named_on_the_queue_reading() {
+                let mut machine = a_machine_a_placement_wrote();
+                let job = a_waiting_job(&mut machine, None);
+                let named = |machine: &mut AStartOverAnAreaThatGoesWithIt| {
+                    answer(&a_request(THE_QUEUE_READING_REQUEST), &mut machine.start)
+                        .fields
+                        .text(asked::THE_LINE_WAITS_FOR_A_SETUP_FIELD)
+                        .map(str::to_string)
+                };
+                assert_eq!(named(&mut machine), None, "no setup stands, so nothing is named");
+
+                let run = Identity::issue(IdentityKind::Operation).expect("randomness");
+                machine.start.setup_state.set(&run).expect("P4's write");
+                machine.start.the_line_may_have_moved = true;
+                machine.start.the_turns_own_occasions();
+                assert_eq!(
+                    the_state_of_the_job(&machine, &job),
+                    QueueState::Waiting,
+                    "nothing starts while the state stands"
+                );
+                assert_eq!(named(&mut machine), Some(run.as_text()), "the reading names the run");
+            }
+
+            /// **When Telegram refuses — `Telegram` F6, `Queue & History` A1
+            /// as widened 2026-11-14: the reading carries the worker's word
+            /// once, only while the role is enabled, and enabling the role
+            /// empties it and touches nothing else in the store.** *Before,
+            /// nothing told the desktop, so the app never said Telegram had
+            /// stopped working there.*
+            #[test]
+            fn when_telegram_refuses_the_reading_carries_the_word_and_enabling_empties_it() {
+                let mut machine = a_machine_a_placement_wrote();
+                let said = |machine: &mut AStartOverAnAreaThatGoesWithIt| {
+                    answer(&a_request(THE_QUEUE_READING_REQUEST), &mut machine.start)
+                        .fields
+                        .text(asked::TELEGRAMS_TROUBLE_HERE_FIELD)
+                        .map(str::to_string)
+                };
+                assert_eq!(said(&mut machine), None, "no word, nothing said");
+                machine
+                    .start
+                    .the_telegram_workers_state
+                    .change(|held| {
+                        held.telegrams_trouble = Some("the chat refuses".to_string());
+                        held.board = Some(7);
+                        held.action_contexts.insert("a button".to_string(), "its record".to_string());
+                    })
+                    .expect("written");
+                assert_eq!(said(&mut machine), None, "a role that is not enabled says nothing");
+                machine.start.role_state.write(RoleDesiredState::Enabled).expect("written");
+                assert_eq!(said(&mut machine).as_deref(), Some("the chat refuses"));
+                machine
+                    .start
+                    .the_telegram_workers_state
+                    .change(|held| held.telegrams_trouble = Some("a word this program does not know".to_string()))
+                    .expect("written");
+                assert_eq!(said(&mut machine), None, "a word not known is no word");
+                machine
+                    .start
+                    .the_telegram_workers_state
+                    .change(|held| held.telegrams_trouble = Some("the token is rejected".to_string()))
+                    .expect("written");
+                assert_eq!(said(&mut machine).as_deref(), Some("the token is rejected"));
+                answer(&a_request(THE_TELEGRAM_ROLE_IS_ENABLED_REQUEST), &mut machine.start);
+                assert_eq!(said(&mut machine), None, "enabling empties it");
+                let held = machine.start.the_telegram_workers_state.read().expect("it reads");
+                assert_eq!(held.telegrams_trouble, None);
+                assert_eq!(held.board, Some(7), "nothing else is touched");
+                assert!(held.action_contexts.contains_key("a button"), "the buttons stay");
+            }
+
+            /// **A setup a worker is running now is not named**: it holds
+            /// the line as its own act, and the desktop says *Setting up*.
+            #[test]
+            fn rough_share_4_a_setup_being_run_is_not_named() {
+                use smoozy_runtime::arbitration::{the_two_declarations_already_given, Operation, WhatIsAdmitted};
+                let run = Identity::issue(IdentityKind::Operation).expect("randomness");
+                let standing = smoozy_runtime::setup_state::SetupInProgressState {
+                    the_run_that_set_it: run.clone(),
+                };
+                let an_operation = |kind: WorkerKind| Operation {
+                    identity: Identity::issue(IdentityKind::Operation).expect("randomness"),
+                    kind,
+                    declaration: the_two_declarations_already_given(WorkerKind::Render)
+                        .expect("the render's declaration is given"),
+                };
+                let nothing = WhatIsAdmitted::default();
+                assert_eq!(the_setup_that_holds_the_line(Some(&standing), &nothing), Some(run.clone()));
+                assert_eq!(the_setup_that_holds_the_line(None, &nothing), None);
+                let a_render = WhatIsAdmitted { operations: vec![an_operation(WorkerKind::Render)] };
+                assert_eq!(the_setup_that_holds_the_line(Some(&standing), &a_render), Some(run));
+                let a_setup = WhatIsAdmitted { operations: vec![an_operation(WorkerKind::Setup)] };
+                assert_eq!(the_setup_that_holds_the_line(Some(&standing), &a_setup), None);
             }
         }
     }

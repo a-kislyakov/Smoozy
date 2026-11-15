@@ -136,3 +136,67 @@
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — E1's exit at 0 and the exit code words. The last words read before the release. No auditor has seen it.
 
 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the token, the Install's reason, and two Set up words.md`, outside any round — L4: the old token erased only after the new one is confirmed saved. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — Telegram's one message per job, the plan text.md`, outside any round — C1d, C1e, C7a, V1e and §21 item 39 for one message per job, with C1a, C1b, D0, I2 and the rest carried; Sources entry 90. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 8, the Queue's dot and the first-frame buttons.md`, outside any round — A2's *Cancel job* asked in place; C1b, C1d, A3, A3a, D0 and R13a carried. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 8, the Queue's dot and the first-frame buttons.md`, outside any round — A3: a question's buttons go with its removed job. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece N1, a frame's pictures from the whole frame.md`, outside any round — I2: the album on the set-made event (twenty-ninth notes, note 11). No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece T, Telegram's job message tells the ending and its time.md`, outside any round — C1d: the *Updated* line; C1e: the ending shown at once; §21 item 6 narrowed (twenty-ninth notes, notes 9 and 11). No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the runner's rulings at the foot of `Audits/Build/Fable review/Sitting 5 — what landed.md`, outside any round — E1a gains a dated sentence: a finished job's message adds *Missing: <file name>* for each path the remap left unchanged. No auditor has seen it.
+
+2026-11-11 — GPT-6.1 (Codex) — Carried running-again through the server and job messages.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Thirtieth notes/Brief — the folded blur.md`, outside any round — B25a: a machinery message's spoiler is also one expandable block quotation; §21 item 40 and Sources entry 92 with it. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — R10: a *Status* reply past B2's bound is several messages, no server's line split; E1a: the *Missing:* lines stop inside the bound and count the rest; I2: a caption past 1,024 cuts the job name short; R13: a frame's choice names the server where two are offered. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 3, words a user can't act on.md`, outside any round — E1: a failure's status reads *Blender quit with an error.* or *Blender quit unexpectedly.*, the exit code staying in the log (scout 3.25). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 4, Telegram.md`, outside any round — B3, B11, B17, B18: the user's pins are left alone and the board is sent again over them (Sol's S1); I2: a copy not read is named on the album (Sol's S6); Y4a: *Submit again* and *Resume* (scout 1.5). No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: Build detail under A4.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, sixth part: Y4a: the carry-on cost closed. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code sub-agent), builder on `Audits/Build/Fable review/Brief — sitting 6, Telegram.md`, outside any round — F3b: the update position's age and its bot (the scout's entry 10); B3: a holder that stands down proposes again what its last board held (entry 8); C1e: a refused cut is given up after three tries (entry 19); Sources entry 93. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code sub-agent), builder on `Audits/Build/Fable review/Brief — sitting 6, Telegram.md`, outside any round — F3c: what was sent or done is not sent or done again where the store cannot be written (the scout's entry 19). No auditor has seen it.
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), builder of the Fable review's sitting 6 follow-up, outside any round — B1 and B6: a restarted server carries on with its own board (the runner's ruling 1). No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), builder of the Fable review's sitting 6 follow-up, outside any round — F3a: the message that says events were missed is passed after three counted tries; F3c: a job's message whose record could not be written is kept in memory; A3: a refused answer in place is sent as its own message; B3: an old board's unpin is tried until answered, and a holder that dies in the hand-over's gap proposes again at its next start; F3b: that record is dropped with a different bot. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent) — The double-check ideas, Sol's findings 2 and 5: F3b, a store that names no bot; C7, the superseded mark tried again; Sources entry 94. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the admin fresh look, logs in Telegram, and the empty screen.md`, outside any round — E3e: the log's block is folded and one button copies its last line; B25a's one exception; §21 item 41; Sources entry 95. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the live pass's leftovers.md`, outside any round — B10: a pin of a machine's own machinery message that reaches nothing keeps the message; a fresh one only where the service refuses the pin. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the live pass's leftovers.md`, outside any round — Y4a as changed: Submit again and Resume also on an undetermined cause and on a job given up after two interruptions; the undetermined sentence shortened. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — E3: a cut stream whose captured file holds nothing gets no button and the empty stream's sentence. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the Telegram notes.md`, outside any round — gathers in groups that fit, the roll call and leaving at switch-off, older ended jobs and the servers not reached, the newest finished frame from records, replies about no job on another machine, the status message's age. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the Telegram fixes, Sol's points.md`, outside any round — R10's commands under way on the board and run by the listener alone, R1a's claimant handing a reply about no job to the listener, B14's roll call asking twice, retrying on a full board, named by its holding, and leaving only once written, B10's pin after the words are written and replies said in turn. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — C1 and C1d's addition, *Finishing*. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the Telegram fixes, Sol's second check.md`, outside any round — R10's read-back before an answer, fresh request identities per run, answered records taken off again, instructions carrying a command kept until it is taken up; B10's replies in numbered parts; B14's second ask kept until the board holds it. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list, Sol's points.md`, outside any round — C1 and C1d's *Finishing*: the frame in hand. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the Telegram fixes, Sol's third check.md`, outside any round — R10's bound also counted from the heartbeat's own turn, an early renewal while a command waits, and a command answered as too slow, with the holder standing down, after the whole stated interval. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the night's live pass found.md`, outside any round — C6a: a routed answer's flood retry in the serial lane, never handed back for want of a renewal. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the night's live pass found.md`, outside any round — C1: the free disk on the disk Smoozy's folder is on. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — Telegram when things aren't ideal, the fixes.md`, outside any round — B11 a deleted board sent again; R16, R4 and D2 a tap's words and repeats; V1d the tap's moment; C1d Telegram's clock; S5 a bot used by a server; R15 and P6a /start, signed frames and edited commands; I2b the picture backlog. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — Telegram when things aren't ideal, the fixes.md` and the Creator's addition of the same day passed on by the runner, outside any round — D2 and I4: *Stop sent.* and *being made again* go once settled. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, second round.md` and the runner's addition from Sol's look, outside any round — R16: a hand-over forgets a tap in both its forms. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep of the app and the website: quoted screen words only, as listed in `Audits/Build/The word sweep, the app and the website — what landed.md`. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Batch 1: address checks, single Add press and Telegram setup and retry corrections.
+2026-11-14 — Claude Opus 5.5 — added the chat's name on S5b's proof.
+2026-11-14 — Claude Opus 5.5 — R4a: one submission identity per failed job, so a second Submit again or Resume is refused (the leftovers of the Rough what-if answers, 405).
+2026-11-14 — Claude Opus 5.5 — F6: the worker keeps one word of how Telegram answers it, carried on the queue reading; sources entry 96 (when Telegram refuses).
+2026-11-15 — Claude Opus 5.5 — F6 item 2: only an accepted send ends *the chat refuses*; Sources entry 96a (what the what-if live pass found).

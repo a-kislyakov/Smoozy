@@ -39,6 +39,10 @@ How many questions each topic holds is not repeated here — the [Question regis
 | What actually ran | x | x | x | x | x |
 | What a render demands | x | x | x | x | x |
 | Node setups | x | x | x | x | x |
+| Reading at a frame | desk test | desk test | desk test | desk test | x |
+| Working out a driver | desk test | desk test | desk test | desk test | x |
+| What a move works out | desk test | desk test | desk test | desk test | x |
+| Colour spaces and image sequences | desk test | desk test | desk test | desk test | x |
 
 ## Everything after answering is tracked elsewhere, on purpose
 

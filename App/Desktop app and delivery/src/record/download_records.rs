@@ -846,6 +846,30 @@ pub struct DownloadRequests<'a> {
     connection: &'a rusqlite::Connection,
 }
 
+/// **`Download` M13 as amended 2026-11-12: a manual request whose leftover
+/// the user removed is marked**, and the transfer window draws no row for it
+/// (the second live pass, new fault 3).
+pub fn the_leftover_of_this_request_was_removed(
+    connection: &rusqlite::Connection,
+    request: &Identity,
+) -> rusqlite::Result<usize> {
+    connection.execute(
+        "UPDATE download_request SET removed_by_the_user = 1 WHERE record = ?1",
+        [request.as_text()],
+    )
+}
+
+/// **The manual requests whose leftover the user removed**, by record
+/// identity.
+pub fn the_requests_the_user_removed(
+    connection: &rusqlite::Connection,
+) -> rusqlite::Result<std::collections::HashSet<String>> {
+    let mut statement =
+        connection.prepare_cached("SELECT record FROM download_request WHERE removed_by_the_user = 1")?;
+    let found = statement.query_map([], |row| row.get::<_, String>(0))?.collect();
+    found
+}
+
 impl<'a> DownloadRequests<'a> {
     pub fn over(connection: &'a rusqlite::Connection) -> Self {
         DownloadRequests { connection }
@@ -1355,9 +1379,29 @@ impl DownloadRequests<'_> {
                 .map_err(the_store)?
                 .collect::<Result<_, _>>()
                 .map_err(the_store)?;
+            // **What the user picked, by the first one's name** (`Design/
+            // Transfers § A request shows the whole`, 2026-11-13), saved once
+            // (Sol's look at the window notes, point 4). **Read off the
+            // landing paths as the download code writes them, on every
+            // system** (point 5): the destination, then `/` unless it already
+            // ends in one, then the path under it with `/` between its parts
+            // (`smoozy_download::fetching::the_landing_path`). Until then this
+            // took the computer's own separator, which on Windows matched none
+            // of them, or read `C:\…\/textures/a.png` as `/textures/a.png`.
+            let prefix = smoozy_download::fetching::the_landing_path(&destination, b"");
+            let picked = super::upload_requests::the_picked_saved_or_counted(
+                self.connection,
+                super::upload_requests::ThePickedOf::ADownload,
+                &record,
+                &prefix,
+                b'/',
+                entries,
+            )
+            .map_err(the_store)?;
             counted.push(AManualRequestCounted {
                 record: identity,
                 destination,
+                picked,
                 files_in_the_whole: whole as usize,
                 files_done: done as usize,
                 bytes_in_the_whole: bytes as u64,
@@ -1639,6 +1683,10 @@ const FETCHED: &str = "(e.disposition IN ('to fetch', 'replace')
 pub struct AManualRequestCounted {
     pub record: Identity,
     pub destination: Vec<u8>,
+    /// **What the user picked**: the first thing's name, and how many more —
+    /// `Design/Transfers § A request shows the whole`, added 2026-11-13 (the
+    /// Creator's notes on the test copy of 2026-11-12, note 11).
+    pub picked: Option<super::upload_requests::ThePicked>,
     /// The units a transfer is arranged for (`Download` M16).
     pub files_in_the_whole: usize,
     /// Of those, the ones *done*.
@@ -2368,6 +2416,80 @@ mod tests {
 
     /// **A manual request's counts are what the whole reading composes**, and
     /// a record the whole reading skips is skipped here too.
+    /// **What the user picked is counted off the landing paths on this
+    /// computer** — `Design/Transfers § A request shows the whole`, added
+    /// 2026-11-13 (the Creator's notes on the test copy of 2026-11-12, note
+    /// 11): both files land in `a/` under the destination, so one thing was
+    /// picked, `a`.
+    #[test]
+    #[cfg(unix)]
+    fn what_the_user_picked_for_a_download_is_counted_off_the_landing_paths() {
+        let connection = in_memory();
+        let server_row = an_identity(IdentityKind::LocalServer);
+        let mut keeper = DownloadRequests::over(&connection);
+        keeper.write_it_down(&a_request(&server_row)).unwrap();
+        let counted = keeper.every_request_counted_for(&server_row).unwrap();
+        assert_eq!(
+            counted[0].picked,
+            Some(super::super::upload_requests::ThePicked { first: b"a".to_vec(), more: 0 })
+        );
+    }
+
+    /// **What the user picked is read off the landing paths as the download
+    /// code wrote them, on every system** — `Design/Transfers § A request
+    /// shows the whole`; after Sol's look, 2026-11-13, at the window
+    /// notes, point 5. The download code puts the destination, then `/`
+    /// unless the destination already ends in one, then the path under it with
+    /// `/` between its parts (`smoozy_download::fetching::the_landing_path`),
+    /// on Windows too. The reading took this computer's own separator, so on
+    /// Windows a picked folder read as a count of files, or as `/textures/…`.
+    /// Here the landing paths are made by the download code itself, for a
+    /// Windows destination with and without a trailing `\`, a Mac one with
+    /// and without a trailing `/`, and one ending in `//`, which shows the
+    /// same mismatch on a Mac. Each reads as `textures` and one more.
+    #[test]
+    fn what_the_user_picked_for_a_download_follows_the_landing_paths_the_download_code_wrote() {
+        let connection = in_memory();
+        let server_row = an_identity(IdentityKind::LocalServer);
+        let mut keeper = DownloadRequests::over(&connection);
+        let destinations: [&[u8]; 5] = [
+            br"C:\Users\a\Downloads",
+            br"C:\Users\a\Downloads\",
+            b"/Users/a/Downloads",
+            b"/Users/a/Downloads/",
+            b"/Users/a/Downloads//",
+        ];
+        for destination in destinations {
+            let entry = |under: &[u8]| {
+                EnumerationEntry::enumerated(
+                    [b"/root/".as_ref(), under].concat(),
+                    smoozy_download::fetching::the_landing_path(destination, under),
+                    10,
+                    AVouchingMark::NoClaimIsMade,
+                )
+            };
+            let request = AManualRequest::confirmed(
+                an_identity(IdentityKind::Operation),
+                server_row.clone(),
+                None,
+                destination.to_vec(),
+                vec![entry(b"textures/a.png"), entry(b"textures/b.png"), entry(b"c.png")],
+                an_identity(IdentityKind::Run),
+            );
+            keeper.write_it_down(&request).unwrap();
+        }
+        let counted = keeper.every_request_counted_for(&server_row).unwrap();
+        assert_eq!(counted.len(), destinations.len());
+        for (one, destination) in counted.iter().zip(destinations) {
+            assert_eq!(
+                one.picked,
+                Some(super::super::upload_requests::ThePicked { first: b"textures".to_vec(), more: 1 }),
+                "into {}",
+                String::from_utf8_lossy(destination)
+            );
+        }
+    }
+
     #[test]
     fn a_manual_request_s_counts_are_what_the_whole_reading_composes() {
         let connection = in_memory();

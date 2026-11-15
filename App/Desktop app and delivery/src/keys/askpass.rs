@@ -335,7 +335,10 @@ pub fn run_with_the_askpass_route(
 /// what stood, and what the marker was waiting for was somebody to weigh it
 /// rather than somebody to write it. The reasoning is in that piece's account
 /// and in both decisions records.
-#[cfg(not(unix))]
+///
+/// **Built on every system since 2026-11-11**: the New key box says it in
+/// place of the passphrase field on Windows (`Design/Keys`, the four
+/// questions, scout 2.13), and that composition is tested on the Mac.
 pub const THE_WINDOWS_LIMIT: &str =
     "Keys with a passphrase are not supported on Windows.";
 

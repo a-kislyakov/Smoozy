@@ -126,7 +126,7 @@ use smoozy_state::identities::{Identity, IdentityKind};
 
 use crate::checking_a_file::{TheCheckReachesTheRecord, TheSittingIsOf, TheUsersOwnComputer};
 use crate::downloading::{
-    every_one_of, the_user_stopped_this_ending, TheNextFile, TheRowIsTold, TheRunsTransfers,
+    every_one_of, the_user_stopped_this_ending, TheRowIsTold, TheRunsTransfers,
 };
 use crate::reading_the_file::TheMachineAFileIsReadOn;
 use crate::record::dependency_records::TheDependencyRecord;
@@ -199,6 +199,72 @@ pub struct ASend {
     /// the check* hands back.
     pub file: String,
     pub files: Vec<AFileSent>,
+    /// **`Dependency Upload & Remap` G14b: the readings this send owes**, as
+    /// Transfers, the check and Render Settings read them.
+    pub readings: TheSendsReadings,
+}
+
+/// **`Dependency Upload & Remap` G14b and `Dependency Upload & Remap` A9c of 2026-11-09: the linked
+/// `.blend`s of one send and their readings**, as the screens read them. The
+/// twenty-eighth notes, note 11.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TheSendsReadings {
+    /// **Linked `.blend`s admitted and not yet read or let go** — each owes a
+    /// reading from the moment it is admitted. **While any is owed the send can
+    /// grow by itself**, so its whole is a count *so far* and no byte bar is
+    /// drawn (`Dependency Upload & Remap` A9c).
+    pub owed: usize,
+    /// **Distinct linked `.blend`s of the send, and how many are read** — each
+    /// counted once, however many files link it.
+    pub linked: usize,
+    pub read: usize,
+    /// **The one being read now**, by its landing place.
+    pub reading_now: Option<Vec<u8>>,
+    /// **A linked file of the send failed, was stopped, could not be read, or
+    /// the send was stopped**, so what it needs is not known: *, found so far.*
+    /// stays for good.
+    pub unknown_for_good: bool,
+    /// **Stop cut a reading the send owed**, so the send did not finish, though
+    /// every file of it may have landed (Sol's fresh look, 2026-11-09).
+    pub stopped: bool,
+    /// **The landing places of the files a reading found, which the send is
+    /// deciding** — from just before the rows land in the check until the send
+    /// has admitted them or left them out (`Dependency Upload & Remap` G14b and
+    /// `Dependency Upload & Remap` A9a). They are on their way meanwhile, in this one register every reader
+    /// reads, so no drawing and no press finds a found file in neither the
+    /// upload nor this list. The twenty-eighth notes, piece 12: for about 10 s a
+    /// found file stood outside the upload, *Upload 1 file (9.3 MB)* offered.
+    pub joining: Vec<Vec<u8>>,
+}
+
+impl TheSendsReadings {
+    /// **Whether the send can still grow by itself.**
+    pub fn it_can_grow(&self) -> bool {
+        self.owed > 0
+    }
+}
+
+/// **`Dependency Upload & Remap` G14b: the readings of this check's send on this
+/// server**, where one is counted, running or waiting, or still owes a reading.
+pub fn the_readings_of_the_send(server: &str, file: &str) -> Option<TheSendsReadings> {
+    the_register()
+        .iter()
+        .rev()
+        .find(|send| {
+            send.server == server
+                && send.file == file
+                && (send.readings.owed > 0 || send.files.iter().any(|one| one.ended.is_none()))
+        })
+        .map(|send| send.readings.clone())
+}
+
+/// **`Dependency Upload & Remap` A9e and `Dependency Upload & Remap` G14b: whether a send of this check owes
+/// a reading** — every file of it may have landed while one is still read, and
+/// the send has not ended.
+pub fn a_send_owes_a_reading(server: &str, file: &str) -> bool {
+    the_register()
+        .iter()
+        .any(|send| send.server == server && send.file == file && send.readings.owed > 0)
 }
 
 /// **`Dependency Upload & Remap` A9a: the landing place of every file this
@@ -216,9 +282,36 @@ fn the_files_on_their_way_in(register: &[ASend], server: &str) -> Vec<MachineLoc
     register
         .iter()
         .filter(|send| send.server == server)
-        .flat_map(|send| send.files.iter())
-        .filter(|file| file.ended.is_none())
-        .map(|file| MachineLocation::composed(file.landing.clone()))
+        .flat_map(|send| {
+            send.files
+                .iter()
+                .filter(|file| file.ended.is_none())
+                .map(|file| file.landing.clone())
+                .chain(send.readings.joining.iter().cloned())
+        })
+        .map(MachineLocation::composed)
+        .collect()
+}
+
+/// **The same, leaving out what one send is deciding** — the landing places its
+/// own reading put on their way, which its pre-flight is deciding now. **Another
+/// send's are kept**, so two sends to one server never both take one file (Sol's
+/// second look on the twenty-eighth notes, piece 12).
+fn the_files_on_their_way_but_what_this_send_decides(server: &str, this_send: &Identity) -> Vec<MachineLocation> {
+    let register = the_register();
+    register
+        .iter()
+        .filter(|send| send.server == server)
+        .flat_map(|send| {
+            let joining: &[Vec<u8>] = if send.request == *this_send { &[] } else { &send.readings.joining };
+            send.files
+                .iter()
+                .filter(|file| file.ended.is_none())
+                .map(|file| file.landing.clone())
+                .chain(joining.iter().cloned())
+                .collect::<Vec<_>>()
+        })
+        .map(MachineLocation::composed)
         .collect()
 }
 
@@ -437,6 +530,21 @@ fn the_placement_at<'a>(
     })
 }
 
+/// **Whether a placement record still names what stands at its mirror** — the
+/// four values the mirror was published with, read again. A reading that does
+/// not answer leaves the record standing, as before (batch 3 of the Bad
+/// what-if answers, 263).
+pub(crate) fn the_placement_still_stands(
+    placement: &PlacementRecord,
+    now: &smoozy_render_settings::readings::FourValuesNow,
+) -> bool {
+    use smoozy_render_settings::readings::FourValuesNow;
+    match now {
+        FourValuesNow::Answered(now) => *now == placement.four_values_at_publication,
+        FourValuesNow::TheChannelCannotAnswer => true,
+    }
+}
+
 /// **Whether a location an answer names is still on this computer** — a
 /// file or a folder, read without following a link. Bytes this system cannot
 /// be asked about are taken as still there, so nothing is said that was not
@@ -604,7 +712,7 @@ impl TheLocalDigests {
     fn of(&mut self, source: &StoredLocation) -> Option<smoozy_dependencies::contents::ContentIdentity> {
         self.0
             .entry(source.as_bytes().to_vec())
-            .or_insert_with(|| smoozy_dependencies::adapter::TheUsersOwnDisk.the_local_files_content_identity(source))
+            .or_insert_with(|| TheUsersOwnComputer.the_local_files_content_identity(source))
             .clone()
     }
 }
@@ -630,7 +738,7 @@ const HOW_OFTEN_A_WAIT_LOOKS_FOR_A_STOP: std::time::Duration = std::time::Durati
 /// reading, a turn or a lease goes with its guard, and a link left at a site is
 /// replaced by the next use (`Server protocol and transfers` §7.8), which
 /// `crate::managing_files`' count of a folder already leans on.
-async fn unless_a_stop_is_asked<T>(
+pub(crate) async fn unless_a_stop_is_asked<T>(
     step: impl std::future::Future<Output = T>,
     stopped: &mut (dyn FnMut() -> bool + Send),
 ) -> Option<T> {
@@ -797,6 +905,23 @@ where
     M: TheMachineAFileIsReadOn + Send,
 {
     let snapshot = the_snapshot(record, &of.machine);
+    what_is_already_on_the_server_over(machine, snapshot, of, rows, four_values, watched).await
+}
+
+/// **The same walk over a snapshot of the record taken before it** — which a
+/// reading a send owes takes, since its future goes between threads and holds
+/// no door to the record across a wait (`Dependency Upload & Remap` G14b).
+pub(crate) async fn what_is_already_on_the_server_over<M>(
+    machine: &mut M,
+    snapshot: Option<InMemoryRecord>,
+    of: &TheSittingIsOf,
+    rows: &mut [ACheckedRow],
+    four_values: &mut BTreeMap<Vec<u8>, Option<SourceReading>>,
+    watched: &mut TheWalkIsWatched<'_>,
+) -> WhereTheWalkEnded
+where
+    M: TheMachineAFileIsReadOn + Send,
+{
     // **A row whose answer is no longer on this computer is never *found on
     // your computer***. Sent here before, it reads *uploaded before, not
     // confirmed* (`Dependency Upload & Remap` Q7, and the spec: *"That state is
@@ -863,8 +988,11 @@ where
     }
     let mut done = 0;
     (watched.counted)(done, whole);
-    let mirrors = the_walk.iter().flatten().flat_map(|row| row.files.iter().map(|(_, mirror)| mirror));
-    if the_four_values_are_gathered(machine, of, &snapshot, four_values, mirrors, &mut *watched.stopped)
+    // **Held as a list before the wait**, so the walk's future can go between
+    // threads where a send's reading takes it (`Dependency Upload & Remap` G14b).
+    let mirrors: Vec<MachineLocation> =
+        the_walk.iter().flatten().flat_map(|row| row.files.iter().map(|(_, mirror)| mirror.clone())).collect();
+    if the_four_values_are_gathered(machine, of, &snapshot, four_values, mirrors.iter(), &mut *watched.stopped)
         .await
         .is_none()
     {
@@ -974,7 +1102,7 @@ pub enum WhereTheWalkEnded {
 /// **The keeper's snapshot of one machine's records**, or nothing where the
 /// record would not read — which asks nothing of the machine rather than
 /// reading an unread record as *nothing was placed* (L8a).
-fn the_snapshot<R: TheCheckReachesTheRecord + ?Sized>(
+pub(crate) fn the_snapshot<R: TheCheckReachesTheRecord + ?Sized>(
     record: &R,
     machine: &MachineKey,
 ) -> Option<InMemoryRecord> {
@@ -1089,18 +1217,30 @@ pub async fn a_row_is_confirmed<C: AHeldConnection, R: TheCheckReachesTheRecord 
     if let Ok(mut held) = held.lock() {
         if let Some(sitting) = held.sittings.get_mut(&key) {
             if let Some(file) = sitting.rows.get(at).map(ACheckedRow::the_real_file) {
-                for one in sitting.rows.iter_mut().filter(|one| one.the_real_file() == file) {
-                    match outcome {
-                        ConfirmationOutcome::Confirmed => one.state = RowState::AlreadyOnTheMachine,
-                        ConfirmationOutcome::Gone => one.state = RowState::NotFound,
-                        ConfirmationOutcome::NotConfirmed => {}
-                    }
-                }
+                verify_answers_the_rows_of(&mut sitting.rows, &file, outcome);
             }
         }
     }
     the_standing_is_brought_up_to_date(record, held, of);
     true
+}
+
+/// **Verify's answer on every row of the real file** — `Dependency Upload &
+/// Remap` G11b and Q7's three outcomes. **A row set aside while Verify was
+/// asking stays set aside** — the Rough what-if answers, share 1 (40): the
+/// answer put the row back to *already on the server* or *not found* over the
+/// user's *Ignore*, though the saved choice was still *ignored*.
+pub(crate) fn verify_answers_the_rows_of(rows: &mut [ACheckedRow], file: &[u8], outcome: ConfirmationOutcome) {
+    for one in rows
+        .iter_mut()
+        .filter(|one| one.the_real_file() == file && one.state != RowState::SetAside)
+    {
+        match outcome {
+            ConfirmationOutcome::Confirmed => one.state = RowState::AlreadyOnTheMachine,
+            ConfirmationOutcome::Gone => one.state = RowState::NotFound,
+            ConfirmationOutcome::NotConfirmed => {}
+        }
+    }
 }
 
 /// `Dependency Upload & Remap` Q5 route 1, K7 and Q7; `Server protocol and
@@ -1275,12 +1415,32 @@ where
     R: TheCheckReachesTheRecord + ?Sized,
 {
     use smoozy_dependencies::fixing::{re_production_is_owed, WhyItCouldNotBeFixed};
+    // **`Dependency Upload & Remap` G15's waits as changed later on 2026-11-13: the half
+    // hour starts here**, with the fixing (Sol's look at the scout's list,
+    // point 7).
+    let started = tokio::time::Instant::now();
     let did_not = WhyItCouldNotBeFixed::TheProductionDidNotPublish;
     let layout = of.layout.as_ref().ok_or(did_not)?;
     let (source, mirror) =
         the_file_and_its_mirror(row, of).ok_or(WhyItCouldNotBeFixed::TheMachineCopyIsNoLongerThere)?;
     let snapshot = the_snapshot(record, &of.machine).ok_or(did_not)?;
-    let content = match the_placement_at(&snapshot, &of.machine, &mirror) {
+    // **Batch 3 of the Bad what-if answers, 263: the placement is trusted only
+    // while the mirror still has the four values it was published with.** A
+    // plain upload in Files over the mirror writes no placement, so the record
+    // went on naming the copy this module sent and the fixed copy was never
+    // made again. Where the mirror moved, its contents are read through on the
+    // machine (`Dependency Upload & Remap` Q5's own fallback).
+    let placement = match the_placement_at(&snapshot, &of.machine, &mirror) {
+        Some(placement) => {
+            let now = match std::str::from_utf8(mirror.as_bytes()) {
+                Ok(text) => machine.the_four_values_of(text).await,
+                Err(_) => smoozy_render_settings::readings::FourValuesNow::TheChannelCannotAnswer,
+            };
+            the_placement_still_stands(placement, &now).then_some(placement)
+        }
+        None => None,
+    };
+    let content = match placement {
         Some(placement) => placement.content.clone(),
         None => match smoozy_dependencies::acting::machine::the_machine_copys_contents(machine, &mirror).await {
             MachineContents::Read(content) => content,
@@ -1322,19 +1482,7 @@ where
         &mirror, &address, &staging, &of.with, pairs,
     )
     .ok_or(did_not)?;
-    if !machine.the_folders_above_are_made(staging.as_bytes()).await {
-        return Err(did_not);
-    }
-    if let Err(why) = smoozy_dependencies::acting::fixing_worker::produce_one_fixed_copy(machine, &fixing).await {
-        machine.the_staged_copy_is_removed(staging.as_bytes()).await;
-        return Err(why);
-    }
-    match machine.the_fixed_copy_is_published(&fixing).await {
-        smoozy_dependencies::acting::fixing_worker::HowTheFixingWent::Published => {}
-        smoozy_dependencies::acting::fixing_worker::HowTheFixingWent::ItCouldNotBeFixed(why) => {
-            return Err(why)
-        }
-    }
+    the_fixing_is_carried_out(machine, &fixing, &staging, started).await?;
     // **K8, written at publication**, with what the fixing points at.
     let written = smoozy_dependencies::record::FixingRecord {
         machine: of.machine.clone(),
@@ -1353,6 +1501,57 @@ where
         Ok(())
     } else {
         Err(did_not)
+    }
+}
+
+/// **`Dependency Upload & Remap` M14's folders, production and publication, under one half hour from
+/// `started`** — `Dependency Upload & Remap` G15's waits as changed later on
+/// 2026-11-13 (Sol's look at the scout's list, point 7). The production's
+/// asks, its report, the publication's rename and the removal of a staged
+/// copy that did not publish are all inside it, so the user never waits past
+/// it. **A removal not finished by then is left asked on the connection**,
+/// done when the connection reaches it, and otherwise the staged copy stays
+/// in Smoozy's own staging folder for `Dependency Upload & Remap` O1's sweep.
+pub(crate) async fn the_fixing_is_carried_out<M>(
+    machine: &mut M,
+    fixing: &smoozy_dependencies::acting::fixing_worker::OneFixing,
+    staging: &MachineLocation,
+    started: tokio::time::Instant,
+) -> Result<(), smoozy_dependencies::fixing::WhyItCouldNotBeFixed>
+where
+    M: TheMachineAFileIsReadOn + Send,
+{
+    use smoozy_dependencies::acting::fixing_worker::{produce_one_fixed_copy_by, HowTheFixingWent};
+    let did_not = smoozy_dependencies::fixing::WhyItCouldNotBeFixed::TheProductionDidNotPublish;
+    let deadline = started + smoozy_dependencies::acting::checking::THE_OUTER_LIMIT_ON_A_CONTENTS_READING_OR_A_FIXING;
+    if !tokio::time::timeout_at(deadline, machine.the_folders_above_are_made(staging.as_bytes()))
+        .await
+        .unwrap_or(false)
+    {
+        return Err(did_not);
+    }
+    let produced = produce_one_fixed_copy_by(machine, fixing, deadline).await;
+    let produced = match produced {
+        Ok(()) if tokio::time::Instant::now() < deadline => Ok(()),
+        Ok(()) => Err(did_not),
+        Err(why) => Err(why),
+    };
+    if let Err(why) = produced {
+        // **Asked, and waited on no later than the half hour**: a removal the
+        // connection has not reached by then is done when it does, and its
+        // staged copy otherwise waits for `Dependency Upload & Remap` O1's sweep.
+        let _ = tokio::time::timeout_at(deadline, machine.the_staged_copy_is_removed(staging.as_bytes())).await;
+        return Err(why);
+    }
+    match tokio::time::timeout_at(deadline, machine.the_fixed_copy_is_published(fixing)).await {
+        Ok(HowTheFixingWent::Published) => Ok(()),
+        Ok(HowTheFixingWent::ItCouldNotBeFixed(why)) => Err(why),
+        // **A rename past the half hour is not waited for**: where it lands
+        // later, the copy has no fixing record
+        // (`Dependency Upload & Remap` K8) and
+        // `Dependency Upload & Remap` M16's trigger produces it again at the
+        // next check.
+        Err(_) => Err(did_not),
     }
 }
 
@@ -1498,11 +1697,20 @@ impl Drop for TheSendEndsIfLetGo {
             for file in send.files.iter_mut().filter(|file| file.ended.is_none()) {
                 file.ended = Some(HowItEnded::DidNotFinish);
             }
+            // **And it owes no reading any more** (`Dependency Upload & Remap`
+            // `Dependency Upload & Remap` G14b): nothing is left to take one.
+            if send.readings.owed > 0 {
+                send.readings.owed = 0;
+                send.readings.unknown_for_good = true;
+            }
+            send.readings.reading_now = None;
+            send.readings.joining.clear();
         }
     }
 }
 
 /// One file the pre-flight sends.
+#[derive(Debug, Clone)]
 struct AFileToSend {
     row: usize,
     source: StoredLocation,
@@ -1535,9 +1743,14 @@ enum TheRowIs {
 ///
 /// **`Dependency Upload & Remap` G11b and `Dependency Upload & Remap` A9b: each
 /// real file once.**
-pub fn the_rows_the_upload_sends(rows: &[ACheckedRow]) -> Vec<usize> {
-    crate::surface::the_dependency_check::one_row_per_real_file(rows, |one| {
-        one.state == RowState::FoundOnYourComputer
+///
+/// **Less every row left out because no scene uses it** — `Dependency Upload &
+/// Remap` A9 as narrowed 2026-11-09 (the twenty-eighth notes, note 14) — until
+/// the user includes it.
+pub fn the_rows_the_upload_sends(sitting: &crate::surface::the_dependency_check::ASitting) -> Vec<usize> {
+    let left_out = crate::surface::the_dependency_check::the_rows_left_out(sitting);
+    crate::surface::the_dependency_check::one_row_per_real_file_where(&sitting.rows, |at, one| {
+        one.state == RowState::FoundOnYourComputer && !left_out.contains(&at)
     })
 }
 
@@ -1548,13 +1761,13 @@ pub fn the_rows_the_upload_sends(rows: &[ACheckedRow]) -> Vec<usize> {
 /// **What a press then sends is decided again at the press** from the same
 /// reading ([`the_found_files_go_up`]), never from what the panel last drew.
 pub fn the_rows_left_to_upload(
-    rows: &[ACheckedRow],
+    sitting: &crate::surface::the_dependency_check::ASitting,
     layout: Option<&smoozy_job_files::layout::TheLayout>,
     on_its_way: &[MachineLocation],
 ) -> Vec<usize> {
-    the_rows_the_upload_sends(rows)
+    the_rows_the_upload_sends(sitting)
         .into_iter()
-        .filter(|at| !the_row_is_on_its_way(&rows[*at], layout, on_its_way))
+        .filter(|at| !the_row_is_on_its_way(&sitting.rows[*at], layout, on_its_way))
         .collect()
 }
 
@@ -1823,8 +2036,12 @@ pub(crate) fn what_a_folder_row_sends(at: &StoredLocation) -> Option<(usize, u64
 /// X12's reserved name), as both download walks step over it.
 fn the_files_under(folder: &StoredLocation) -> Option<Vec<StoredLocation>> {
     fn walk(path: &std::path::Path, into: &mut Vec<std::path::PathBuf>) -> Option<()> {
-        let mut entries: Vec<std::fs::DirEntry> =
-            std::fs::read_dir(path).ok()?.collect::<Result<_, _>>().ok()?;
+        // `Design/Dependency Upload & Remap § A slow local read on macOS`:
+        // counting a folder row can ask for access before any file is hashed.
+        let bytes = path_bytes(path)?;
+        let mut entries: Vec<std::fs::DirEntry> = crate::checking_a_file::local_read(&bytes, true, || {
+            std::fs::read_dir(path).ok()?.collect::<Result<_, _>>().ok()
+        })?;
         entries.sort_by_key(|entry| entry.file_name());
         for entry in entries {
             if entry.file_name() == THE_RESERVED_STAGING_FOLDER {
@@ -1872,13 +2089,311 @@ fn path_bytes(path: &std::path::Path) -> Option<Vec<u8>> {
     path.to_str().map(|text| text.as_bytes().to_vec())
 }
 
-/// How one row's files are going.
+/// How one real file's files are going.
 #[derive(Default)]
 struct HowTheRowGoes {
+    /// **The row it went for, as the panel stood then**, which the once rule
+    /// names; `usize::MAX` for a row a reading found that did not land.
+    row: usize,
     left: usize,
     refused_in: Option<Vec<u8>>,
     failed: Option<WhyItDidNotGoUp>,
     did_not_finish: bool,
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// The send that grows — `Dependency Upload & Remap` G14b and `Dependency Upload & Remap` A9c of 2026-11-09
+// ════════════════════════════════════════════════════════════════════════════
+
+/// **One send of the check while it runs**, which its channels, its reader and a
+/// press during it share — `Dependency Upload & Remap` G14b, `Dependency Upload & Remap` A9c of 2026-11-09
+/// (the twenty-eighth notes, note 11, Creator-stated). **Every lock here is held
+/// for one short act and never across a wait**, and is never taken inside the
+/// register's.
+struct TheSendShared {
+    request: Identity,
+    state: Mutex<TheSendState>,
+    /// **Told at every change** a channel or the reader may be waiting on: a
+    /// file admitted, a file ended, a reading done, the send ended. A waiter
+    /// takes its turn before it looks, so no change is missed between the two.
+    changed: tokio::sync::Notify,
+    /// **`Dependency Upload & Remap` A7's directories this send has seen
+    /// standing**, so a folder is not asked for again in the same send.
+    the_mirror_directories: TheMirrorDirectoriesSeen,
+    /// **The staging folders this send has seen made or standing** (`Server
+    /// protocol and transfers` S1), asked for once per folder.
+    the_staging_folders: TheStagingFoldersSeen,
+}
+
+#[derive(Default)]
+struct TheSendState {
+    /// Every file admitted, by its place in the register's entry.
+    files: Vec<AFileToSend>,
+    /// **The files not yet started, linked `.blend`s ahead of every other**
+    /// (`Dependency Upload & Remap` G14b): a joining linked file goes behind linked files waiting and ahead
+    /// of other files waiting.
+    waiting: std::collections::VecDeque<usize>,
+    /// Files started and not yet ended.
+    running: usize,
+    going: BTreeMap<Vec<u8>, HowTheRowGoes>,
+    /// **Linked `.blend`s published and waiting for their reading**, in the
+    /// order they were published.
+    to_read: std::collections::VecDeque<usize>,
+    readings: TheSendsReadings,
+    /// **`Dependency Upload & Remap` G13's visited set, per send**: a linked file's landing place once it
+    /// is admitted, so each is counted once.
+    visited: std::collections::BTreeSet<Vec<u8>>,
+    /// **Every landing place admitted and not ended unpublished** — a press and a
+    /// reading that both pass `Dependency Upload & Remap` A9a before either admits a file admit it once
+    /// (Sol's fresh look, 2026-11-09, finding 2); one that did not land may go
+    /// again, as *Retry* asks.
+    admitted: std::collections::BTreeSet<Vec<u8>>,
+    /// **The linked files that owe a reading now**, by landing place: from
+    /// admission until read, or until they end unpublished or Stop is pressed.
+    owing: std::collections::BTreeSet<Vec<u8>>,
+    /// **Linked files already queued for their reading at publication**.
+    queued: std::collections::BTreeSet<usize>,
+    came_to: WhatTheSendCameTo,
+    /// **No file running or waiting and no reading owed: the send has ended**,
+    /// and nothing more is admitted to it.
+    ended: bool,
+}
+
+impl TheSendState {
+    /// **Files admitted to the send**, in the order `Dependency Upload & Remap` G14b gives them. Answers each
+    /// one's place.
+    fn admits(&mut self, files: Vec<AFileToSend>) -> Vec<usize> {
+        let mut placed = Vec::with_capacity(files.len());
+        for file in files {
+            let at = self.files.len();
+            if !self.admitted.insert(file.mirror.as_bytes().to_vec()) {
+                continue;
+            }
+            if file.a_library {
+                // **Behind the linked files waiting, ahead of every other.**
+                let ahead = self.waiting.iter().take_while(|one| self.files[**one].a_library).count();
+                self.waiting.insert(ahead, at);
+                if self.visited.insert(file.mirror.as_bytes().to_vec()) {
+                    self.readings.linked += 1;
+                }
+                self.owing.insert(file.mirror.as_bytes().to_vec());
+                self.readings.owed = self.owing.len();
+            } else {
+                self.waiting.push_back(at);
+            }
+            let how = self.going.entry(file.the_real_file.clone()).or_default();
+            if how.left == 0 {
+                how.row = file.row;
+            }
+            how.left += 1;
+            self.files.push(file);
+            placed.push(at);
+        }
+        placed
+    }
+
+    /// **The next files' landing places**, as Transfers draws them waiting.
+    fn the_next_waiting(&self) -> Vec<Vec<u8>> {
+        self.waiting
+            .iter()
+            .take(2 * (crate::downloading::THE_FILES_A_ROW_DRAWS - 1))
+            .map(|at| self.files[*at].mirror.as_bytes().to_vec())
+            .collect()
+    }
+
+    /// **One file of the send ended** — its count, the reading a linked file
+    /// owes, and its row's state once the last file of its real file has ended.
+    fn a_file_ended(&mut self, at: usize, ended: &HowItEnded) -> Option<(RowState, Option<WhyItDidNotGoUp>)> {
+        let (a_library, the_real_file, mirror) = {
+            let file = &self.files[at];
+            (file.a_library, file.the_real_file.clone(), file.mirror.clone())
+        };
+        self.running = self.running.saturating_sub(1);
+        match ended {
+            HowItEnded::Published => {
+                self.came_to.published += 1;
+                if a_library {
+                    self.came_to.libraries_published += 1;
+                }
+            }
+            HowItEnded::Refused | HowItEnded::Failed => self.came_to.failed += 1,
+            HowItEnded::DidNotFinish => self.came_to.did_not_finish += 1,
+        }
+        // **`Dependency Upload & Remap` G14b: a linked file published owes its reading, in the order they
+        // were published; one that did not land owes none, and what it needs
+        // stays unknown.**
+        if a_library {
+            if matches!(ended, HowItEnded::Published) {
+                self.a_library_was_published(at);
+            } else {
+                self.owing.remove(mirror.as_bytes());
+                self.readings.owed = self.owing.len();
+                self.readings.unknown_for_good = true;
+            }
+        }
+        if !matches!(ended, HowItEnded::Published) {
+            self.admitted.remove(mirror.as_bytes());
+        }
+        // **The row's state from its files' publications**, once its last file
+        // has ended.
+        let how = self.going.entry(the_real_file).or_default();
+        how.left = how.left.saturating_sub(1);
+        match ended {
+            HowItEnded::Published => {}
+            HowItEnded::Refused => {
+                how.refused_in = Some(the_folder_holding(mirror.as_bytes()));
+                how.failed = Some(WhyItDidNotGoUp::TheServerRefusedTheWrite);
+            }
+            HowItEnded::Failed => {
+                how.failed.get_or_insert(WhyItDidNotGoUp::TheUploadFailed);
+            }
+            HowItEnded::DidNotFinish => how.did_not_finish = true,
+        }
+        if how.left == 0 {
+            match (&how.failed, how.did_not_finish) {
+                (Some(why), _) => Some((RowState::CouldNotBeSent, Some(*why))),
+                (None, true) => None,
+                (None, false) => Some((RowState::AlreadyOnTheMachine, None)),
+            }
+        } else {
+            None
+        }
+    }
+
+    /// **A linked `.blend` of the send was published** — it owes its reading from
+    /// this moment, in the order linked files were published.
+    fn a_library_was_published(&mut self, at: usize) {
+        if self.files[at].a_library && self.queued.insert(at) {
+            self.to_read.push_back(at);
+        }
+    }
+
+    /// **A reading the send owed is done, or let go.**
+    fn a_reading_is_done(&mut self, at: usize) {
+        let mirror = self.files[at].mirror.as_bytes().to_vec();
+        self.owing.remove(&mirror);
+        self.readings.owed = self.owing.len();
+    }
+
+    /// **Stop: every reading the send owes is let go** (`Dependency Upload & Remap` G15).
+    fn the_readings_are_stopped(&mut self) {
+        self.to_read.clear();
+        self.owing.clear();
+        self.readings.owed = 0;
+        self.readings.unknown_for_good = true;
+        self.readings.stopped = true;
+    }
+
+    /// **Whether the send has ended**: nothing waiting, nothing running and no
+    /// reading owed.
+    fn it_has_ended(&self) -> bool {
+        self.waiting.is_empty() && self.running == 0 && self.readings.owed == 0
+    }
+}
+
+/// **The sends running now, one per check per server** — `Dependency Upload & Remap` A9c of 2026-11-09: a
+/// press during one adds to it.
+fn the_sends_growing() -> std::sync::MutexGuard<'static, BTreeMap<String, Arc<TheSendShared>>> {
+    static HELD: OnceLock<Mutex<BTreeMap<String, Arc<TheSendShared>>>> = OnceLock::new();
+    HELD.get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// **A send that ends however it ends is no longer one a press joins.**
+struct TheSendStopsGrowing(String, Identity);
+
+impl Drop for TheSendStopsGrowing {
+    fn drop(&mut self) {
+        let mut growing = the_sends_growing();
+        if growing.get(&self.0).is_some_and(|shared| shared.request == self.1) {
+            growing.remove(&self.0);
+        }
+    }
+}
+
+impl TheSendShared {
+    fn state(&self) -> std::sync::MutexGuard<'_, TheSendState> {
+        self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// **What the screens read of the send, written to the register's entry**
+    /// after every change, with the files admitted since. Taken with the state's
+    /// lock held, so two changes are never written out of order.
+    fn the_register_is_told(&self, state: &TheSendState) {
+        let mut register = the_register();
+        if let Some(send) = register.iter_mut().find(|one| one.request == self.request) {
+            for file in state.files.iter().skip(send.files.len()) {
+                send.files.push(AFileSent {
+                    landing: file.mirror.as_bytes().to_vec(),
+                    size: file.size,
+                    transfer: None,
+                    ended: None,
+                });
+            }
+            send.readings = state.readings.clone();
+        }
+    }
+
+    /// **`Dependency Upload & Remap` G14b: rows a reading found are about to land
+    /// in the check** — the landing places their files would take stand on
+    /// their way from here ([`TheSendsReadings::joining`]). Answers the ones this
+    /// call put there.
+    ///
+    /// **A place another send already holds is not claimed**, so of two sends
+    /// to one server finding one file, the first takes it.
+    fn rows_are_about_to_land(&self, server: &str, landings: Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+        let elsewhere = the_files_on_their_way_but_what_this_send_decides(server, &self.request);
+        let mut state = self.state();
+        let mut put = Vec::new();
+        for landing in landings {
+            if !state.readings.joining.contains(&landing)
+                && !elsewhere.iter().any(|one| one.as_bytes() == landing.as_slice())
+            {
+                state.readings.joining.push(landing.clone());
+                put.push(landing);
+            }
+        }
+        self.the_register_is_told(&state);
+        put
+    }
+
+    /// **One reading's end, in one hold and one telling of the register**: what
+    /// it found joins (unless Stop was pressed), its joining places go in the
+    /// same act, and the reading is done. So a found file is on its way
+    /// throughout — joining, then admitted — or, left out, back to upload.
+    fn a_reading_is_decided(&self, at: usize, to_join: Vec<AFileToSend>, joining: &[Vec<u8>], it_was_read: bool, stopped: bool) {
+        let mut state = self.state();
+        if !stopped {
+            state.admits(to_join);
+        } else {
+            state.came_to.did_not_finish += 1;
+            state.the_readings_are_stopped();
+        }
+        state.readings.joining.retain(|one| !joining.contains(one));
+        state.readings.reading_now = None;
+        state.a_reading_is_done(at);
+        if it_was_read {
+            state.readings.read += 1;
+        } else {
+            state.readings.unknown_for_good = true;
+        }
+        self.the_register_is_told(&state);
+    }
+
+    /// **A press, or a reading, adds files to the running send** — answers
+    /// `false`, and keeps nothing, where the send has already ended.
+    fn joins(&self, files: Vec<AFileToSend>) -> Result<(), Vec<AFileToSend>> {
+        let mut state = self.state();
+        if state.ended {
+            return Err(files);
+        }
+        state.admits(files);
+        self.the_register_is_told(&state);
+        drop(state);
+        self.changed.notify_waiters();
+        Ok(())
+    }
 }
 
 /// **The found files go up** — see this file's head for the order.
@@ -1886,6 +2401,13 @@ struct HowTheRowGoes {
 /// `held` is the panel's own run memory, where each row's state is brought to
 /// its files' publications as they end; `record` is the application's door,
 /// whose `a_transfer_moved` tells both the panel and Transfers.
+///
+/// **`Dependency Upload & Remap` A9c of 2026-11-09: one send per check per
+/// server while it runs.** A press while one runs adds its files to it, `Dependency Upload & Remap` A9a still
+/// leaving out every file on its way and `Dependency Upload & Remap` Q8 still asked, and answers at once.
+/// **`Dependency Upload & Remap` G14b: linked `.blend`s go first, each is read as it lands, and what it needs
+/// joins the same send**, which ends when no file of it is running or waiting
+/// and no reading it owes is outstanding.
 pub async fn the_found_files_go_up<C: AHeldConnection>(
     asked: &WhatIsSent,
     sessions: &ThisServersSessions<C>,
@@ -1901,29 +2423,40 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
     // still deciding what to arrange joins it, the way a second press of
     // *Check dependencies…* joins a sitting. **Once its files are arranged the
     // hold is let go**, and a further press sends only what is not already on
-    // its way (`Dependency Upload & Remap` A9a) — until the eighteenth notes'
-    // piece 3 the hold lasted the whole send, and a press for rows found
-    // after the first had begun did nothing.
+    // its way (`Dependency Upload & Remap` A9a).
     let Some(one_at_a_time) = ASendRuns::for_the_check(&key) else {
         return came_to;
     };
+    // **A send of this check running now is the one a press adds to** — and
+    // then no second request stands in Transfers, not even while counting.
+    let joining = the_sends_growing().get(&key).cloned();
+    let request = match &joining {
+        Some(shared) => shared.request.clone(),
+        None => {
+            let Ok(request) = Identity::issue(IdentityKind::Operation) else {
+                return came_to;
+            };
+            request
+        }
+    };
+    let request_text = request.as_text();
     // **`Dependency Upload & Remap` A9c: from the press, the request stands in
     // Transfers with its *Stop*, and the foot says so**, before the first file
     // is read on either side.
-    let Ok(request) = Identity::issue(IdentityKind::Operation) else {
-        return came_to;
-    };
-    let request_text = request.as_text();
-    the_counts_under_way().push(ASendBeingCounted {
-        request: request.clone(),
-        server: of.server.clone(),
-        file: of.file.clone(),
-        started_at_millis: SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_or(0, |since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX)),
+    let the_count_ends = joining.is_none().then(|| {
+        the_counts_under_way().push(ASendBeingCounted {
+            request: request.clone(),
+            server: of.server.clone(),
+            file: of.file.clone(),
+            started_at_millis: SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_or(0, |since| i64::try_from(since.as_millis()).unwrap_or(i64::MAX)),
+        });
+        TheCountEnds(request.clone())
     });
-    let the_count_ends = TheCountEnds(request.clone());
-    let under_way = the_run.a_request_goes_under_way(&request, &of.machine.server_row, sessions);
+    let under_way = joining
+        .is_none()
+        .then(|| the_run.a_request_goes_under_way(&request, &of.machine.server_row, sessions));
     if let Ok(mut held) = held.lock() {
         held.what_a_send_said.remove(&key);
     }
@@ -1998,7 +2531,6 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
 
     // **The pre-flight, row by row.**
     let mut files: Vec<AFileToSend> = Vec::new();
-    let mut going: BTreeMap<usize, HowTheRowGoes> = BTreeMap::new();
     let mut folders = TheMirrorFoldersRead::default();
     let mut four_values = BTreeMap::new();
     let mut digests = TheLocalDigests::default();
@@ -2031,17 +2563,17 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
                 }
             }
             TheRowIs::Sent(these) => {
-                let these: Vec<AFileToSend> = these
-                    .into_iter()
-                    .filter(|file| mirrors_carried.insert(file.mirror.as_bytes().to_vec()))
-                    .collect();
-                if !these.is_empty() {
-                    going.entry(*at).or_default().left = these.len();
-                    files.extend(these);
-                }
+                files.extend(
+                    these
+                        .into_iter()
+                        .filter(|file| mirrors_carried.insert(file.mirror.as_bytes().to_vec())),
+                );
             }
         }
     }
+    // **`Dependency Upload & Remap` G14b: within a send, linked `.blend`s go first**, each in its row's
+    // order, and every other file after them in its own.
+    files.sort_by_key(|file| !file.a_library);
     if files.is_empty() {
         // **`Dependency Upload & Remap` A9c: a send that will not happen says
         // so**, where nothing else on the panel does: a failed row and the
@@ -2064,43 +2596,19 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
         return came_to;
     }
     // **`Dependency Upload & Remap` A9a once more, under the register's own
-    // lock, and the send entered in the same hold** — so another press whose
-    // pre-flight ran beside this one cannot arrange a file this one is about
-    // to: a row with any file already on its way is left out whole, as at the
-    // press. The record is written after the hold is let go, since its lock
-    // is never taken inside the register's.
-    let send = {
-        let mut register = the_register();
-        if let Some(layout) = of.layout.as_ref() {
-            let on_its_way = the_files_on_their_way_in(&register, &of.server);
-            let rows_on_their_way: std::collections::BTreeSet<usize> = files
-                .iter()
-                .filter(|file| is_on_its_way(layout, &file.source, &on_its_way))
-                .map(|file| file.row)
-                .collect();
-            files.retain(|file| !rows_on_their_way.contains(&file.row));
-            going.retain(|row, _| !rows_on_their_way.contains(row));
-        }
-        (!files.is_empty()).then(|| {
-            let send = ASend {
-                request: request.clone(),
-                server: of.server.clone(),
-                file: of.file.clone(),
-                files: files
-                    .iter()
-                    .map(|file| AFileSent {
-                        landing: file.mirror.as_bytes().to_vec(),
-                        size: file.size,
-                        transfer: None,
-                        ended: None,
-                    })
-                    .collect(),
-            };
-            register.push(send.clone());
-            send
-        })
-    };
-    let Some(send) = send else {
+    // lock** — so another press whose pre-flight ran beside this one cannot
+    // arrange a file this one is about to: a row with any file already on its
+    // way is left out whole, as at the press.
+    if let Some(layout) = of.layout.as_ref() {
+        let on_its_way = the_files_on_their_way_to(&of.server);
+        let rows_on_their_way: std::collections::BTreeSet<Vec<u8>> = files
+            .iter()
+            .filter(|file| is_on_its_way(layout, &file.source, &on_its_way))
+            .map(|file| file.the_real_file.clone())
+            .collect();
+        files.retain(|file| !rows_on_their_way.contains(&file.the_real_file));
+    }
+    if files.is_empty() {
         if let Ok(mut held) = held.lock() {
             held.what_a_send_said
                 .insert(key.clone(), crate::surface::the_dependency_check::WhatASendSaid::TheyAreAlreadyUploading);
@@ -2109,7 +2617,67 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
         the_standing_is_brought_up_to_date(record.as_ref(), held, of);
         record.a_transfer_moved();
         return came_to;
+    }
+    // **A press during a running send adds to it, and answers at once** — `Dependency Upload & Remap` A9c
+    // of 2026-11-09. A send that ended while this press counted is not joined:
+    // the files go in a send of their own below.
+    let files = match &joining {
+        Some(shared) => match shared.joins(files) {
+            Ok(()) => {
+                drop(one_at_a_time);
+                the_send_is_saved_whole(record.as_ref(), &request);
+                came_to.request = Some(request.clone());
+                record.a_transfer_moved();
+                return came_to;
+            }
+            Err(files) => files,
+        },
+        None => files,
     };
+    // **A fresh request where the send this press meant to join had ended.**
+    let (request, under_way, the_count_ends) = if joining.is_some() {
+        let Ok(request) = Identity::issue(IdentityKind::Operation) else {
+            return came_to;
+        };
+        let under_way = the_run.a_request_goes_under_way(&request, &of.machine.server_row, sessions);
+        (request, under_way, None)
+    } else {
+        let Some(under_way) = under_way else {
+            return came_to;
+        };
+        (request, under_way, the_count_ends)
+    };
+    let shared = Arc::new(TheSendShared {
+        request: request.clone(),
+        state: Mutex::new(TheSendState::default()),
+        changed: tokio::sync::Notify::new(),
+        the_mirror_directories: TheMirrorDirectoriesSeen::default(),
+        the_staging_folders: TheStagingFoldersSeen::default(),
+    });
+    let send = {
+        let mut state = shared.state();
+        state.admits(files);
+        let send = ASend {
+            request: request.clone(),
+            server: of.server.clone(),
+            file: of.file.clone(),
+            files: state
+                .files
+                .iter()
+                .map(|file| AFileSent {
+                    landing: file.mirror.as_bytes().to_vec(),
+                    size: file.size,
+                    transfer: None,
+                    ended: None,
+                })
+                .collect(),
+            readings: state.readings.clone(),
+        };
+        the_register().push(send.clone());
+        send
+    };
+    the_sends_growing().insert(key.clone(), Arc::clone(&shared));
+    let _stops_growing = TheSendStopsGrowing(key.clone(), request.clone());
     drop(the_count_ends);
     drop(one_at_a_time);
     let _ended_if_let_go = TheSendEndsIfLetGo(request.clone());
@@ -2122,6 +2690,7 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
         return came_to;
     }
     came_to.request = Some(request.clone());
+    shared.state().came_to = came_to.clone();
     let tell_it = Arc::clone(&record);
     let tell = move || tell_it.a_transfer_is_moving();
     record.a_transfer_moved();
@@ -2129,43 +2698,38 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
     // **`Dependency Upload & Remap` A9's range, filled** — up to four files of
     // the send at once, each channel taking the next when its own ends
     // (`crate::downloading::every_one_of`, step 10c's eleventh-pass fix piece
-    // 4). **The files start in the rows' order**; one that lands before a file
-    // above it is harmless, since each lands at its own mirror through its own
-    // publication and each row is brought to what its own files came to.
-    let running = TheSendRunning {
-        files: &files,
-        next: TheNextFile::default(),
-        going: Mutex::new(going),
-        came_to: Mutex::new(came_to),
-        the_mirror_directories: TheMirrorDirectoriesSeen::default(),
-        the_staging_folders: TheStagingFoldersSeen::default(),
+    // 4) — **and beside them the one reading at a time the send owes** (`Dependency Upload & Remap` G14b).
+    let channels = (0..THE_UPLOAD_DIRECTIONS_CEILING).map(|_| {
+        Box::pin(a_channel_of_the_send(
+            &shared, asked, &witness, sessions, the_run, &record, &tell, held, &key,
+        )) as std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>>
+    });
+    let reader = Box::pin(the_readings_the_send_owes(&shared, asked, sessions, the_run, &record, &tell, held, &key))
+        as std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>>;
+    every_one_of(channels.chain(std::iter::once(reader)).collect()).await;
+    let (going, came_to, readings) = {
+        let mut state = shared.state();
+        state.ended = true;
+        let readings = state.readings.clone();
+        (std::mem::take(&mut state.going), std::mem::take(&mut state.came_to), readings)
     };
-    let workers = (0..THE_UPLOAD_DIRECTIONS_CEILING)
-        .map(|_| {
-            a_channel_of_the_send(
-                &running, asked, &witness, sessions, the_run, &record, &request, &tell, held, &key,
-            )
-        })
-        .collect();
-    every_one_of(workers).await;
-    let TheSendRunning { going, came_to, .. } = running;
-    let going = going
-        .into_inner()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let came_to = came_to
-        .into_inner()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    // **What a linked file of it needed is not known, for good** — one failed,
+    // was stopped or could not be read, or the send was stopped: the summary
+    // keeps *, found so far.* until the file is checked again (`Dependency Upload & Remap` G14b).
+    if readings.unknown_for_good {
+        if let Ok(mut held) = held.lock() {
+            held.the_uploads_left_something_unknown.insert(key.clone());
+        }
+    }
+    let came_to = WhatTheSendCameTo { request: Some(request.clone()), ..came_to };
     drop(under_way);
 
     // **`Design/Whole app`'s once rule: several refused for one reason are said
     // once, above their rows** — the folder that refused the most of them.
     let mut refused_by_folder: BTreeMap<Vec<u8>, Vec<usize>> = BTreeMap::new();
-    for (row, how) in &going {
+    for how in going.values().filter(|how| how.row != usize::MAX) {
         if let Some(folder) = &how.refused_in {
-            refused_by_folder
-                .entry(folder.clone())
-                .or_default()
-                .push(*row);
+            refused_by_folder.entry(folder.clone()).or_default().push(how.row);
         }
     }
     if let Some((folder, rows)) = refused_by_folder
@@ -2189,67 +2753,76 @@ pub async fn the_found_files_go_up<C: AHeldConnection>(
     came_to
 }
 
-/// **One send while its files run**, shared by its channels. Added
-/// 2026-09-30, step 10c's eleventh-pass fix piece 4. Every lock here is held
-/// for one short act and never across a wait.
-struct TheSendRunning<'f> {
-    files: &'f [AFileToSend],
-    next: TheNextFile,
-    going: Mutex<BTreeMap<usize, HowTheRowGoes>>,
-    came_to: Mutex<WhatTheSendCameTo>,
-    /// **`Dependency Upload & Remap` A7's directories this send has seen
-    /// standing**, so a folder is not asked for again in the same send.
-    the_mirror_directories: TheMirrorDirectoriesSeen,
-    /// **The staging folders this send has seen made or standing** (`Server
-    /// protocol and transfers` S1), asked for once per folder.
-    the_staging_folders: TheStagingFoldersSeen,
-}
-
 /// **One channel of a send**: the next file, to its ending, then the next —
 /// with publication identities gathered in bounded groups before the files'
 /// endings, the send's count and each row's final state are reported
-/// (`Dependency Upload & Remap` Q5 route 1).
+/// (`Dependency Upload & Remap` Q5 route 1). **Where nothing waits but a file
+/// runs or a reading is owed, it waits to be told** (`Dependency Upload & Remap` G14b): a reading may admit
+/// more. It ends once the send has.
 #[allow(clippy::too_many_arguments)]
 async fn a_channel_of_the_send<C: AHeldConnection>(
-    running: &TheSendRunning<'_>,
+    shared: &TheSendShared,
     asked: &WhatIsSent,
     witness: &SendingFilesUpWasOpen,
     sessions: &ThisServersSessions<C>,
     the_run: &TheRunsTransfers,
     record: &Arc<dyn TheRecordAnUploadWrites>,
-    request: &Identity,
     tell: &(dyn Fn() + Sync),
     held: &Mutex<WhatTheRunHolds>,
     key: &str,
 ) {
+    let request = &shared.request;
     let request_text = request.as_text();
-    // `Dependency Upload & Remap` Q5 route 1: bounded groups, no timed wait.
     loop {
         let mut publications = Vec::new();
-        let mut endings = Vec::new();
-        for _ in 0..64 {
-            let Some(at) = running.next.of(running.files.len()) else {
-                break;
+        let mut endings: Vec<(usize, AFileToSend, HowItEnded, bool)> = Vec::new();
+        loop {
+            let told = shared.changed.notified();
+            let next = {
+                let mut state = shared.state();
+                match state.waiting.pop_front() {
+                    Some(at) => {
+                        state.running += 1;
+                        let waiting = state.the_next_waiting();
+                        Some(Some((at, state.files[at].clone(), waiting)))
+                    }
+                    None if !endings.is_empty() => Some(None),
+                    None if state.it_has_ended() => {
+                        state.ended = true;
+                        drop(state);
+                        shared.changed.notify_waiters();
+                        Some(None)
+                    }
+                    None => None,
+                }
             };
-            let file = &running.files[at];
+            let (at, file, waiting) = match next {
+                Some(Some(next)) => next,
+                Some(None) => break,
+                None => {
+                    told.await;
+                    continue;
+                }
+            };
             let mut began = false;
             let ended = if the_run.the_user_stopped_it(&request_text)
                 || the_run.the_user_stopped_this(&request_text, file.mirror.as_bytes())
             {
                 HowItEnded::DidNotFinish
             } else {
-                // **`Dependency Upload & Remap` G17b: a reading taken while this runs
-                // is not kept.**
+                // **`Dependency Upload & Remap` G17b: a reading resting on this
+                // file's place, taken while it runs, is not kept.**
                 if let Ok(mut held) = held.lock() {
-                    held.the_files_going_up.one_begins(&asked.of.machine);
+                    held.the_files_going_up.one_begins(&asked.of.machine, file.mirror.as_bytes());
                 }
                 began = true;
-                let ended = one_file_goes_up(
+                one_file_goes_up(
                     asked,
                     witness,
-                    file,
+                    &file,
                     at,
-                    running,
+                    shared,
+                    waiting,
                     sessions,
                     the_run,
                     record,
@@ -2257,14 +2830,28 @@ async fn a_channel_of_the_send<C: AHeldConnection>(
                     tell,
                     &mut publications,
                 )
-                .await;
-                ended
+                .await
             };
-            endings.push((at, ended, began));
-            if file.a_library
-                || file.size >= 1024 * 1024
-                || the_run.the_user_stopped_it(&request_text)
-            {
+            // **A linked file owes its reading from the moment it is published**,
+            // in the order linked files were published (Sol's fresh look,
+            // finding 6) — not when its channel has read the values back.
+            if file.a_library && matches!(ended, HowItEnded::Published) {
+                // **Its upload has ended before its reading can begin**, so the
+                // reading is not taken as overlapping its own file's upload and
+                // is kept (`Dependency Upload & Remap` G17b; Sol's second round).
+                if began {
+                    if let Ok(mut held) = held.lock() {
+                        held.the_files_going_up.one_ends(&asked.of.machine, file.mirror.as_bytes());
+                    }
+                    began = false;
+                }
+                shared.state().a_library_was_published(at);
+                shared.changed.notify_waiters();
+            }
+            let stops_the_group =
+                file.a_library || file.size >= 1024 * 1024 || the_run.the_user_stopped_it(&request_text);
+            endings.push((at, file, ended, began));
+            if stops_the_group || endings.len() >= 64 {
                 break;
             }
         }
@@ -2273,13 +2860,26 @@ async fn a_channel_of_the_send<C: AHeldConnection>(
         }
         let paths: Vec<_> = publications
             .iter()
-            .map(|(at, _)| running.files[*at].mirror.clone())
+            .map(|(at, _)| {
+                endings
+                    .iter()
+                    .find(|(one, ..)| one == at)
+                    .map(|(_, file, ..)| file.mirror.clone())
+                    .expect("a publication is of a file this group took")
+            })
             .collect();
-        let mut values = the_published_values(sessions, &asked.of, &paths).await;
+        // **Stop ends this wait too** (Sol's second round): what was published
+        // stays published, and a placement record not written here is found by
+        // `Dependency Upload & Remap` Q5's second route.
+        let mut values = unless_a_stop_is_asked(the_published_values(sessions, &asked.of, &paths), &mut || {
+            the_run.the_user_stopped_it(&request_text)
+        })
+        .await
+        .unwrap_or_default();
         let published: Vec<_> = publications
             .into_iter()
             .filter_map(|(at, content)| {
-                let file = &running.files[at];
+                let (_, file, ..) = endings.iter().find(|(one, ..)| *one == at)?;
                 match values.remove(file.mirror.as_bytes()) {
                     Some(FourValuesNow::Answered(four_values)) => Some(Published {
                         at: file.mirror.clone(),
@@ -2292,11 +2892,10 @@ async fn a_channel_of_the_send<C: AHeldConnection>(
             })
             .collect();
         the_group_is_recorded(record.as_ref(), &asked.of, published);
-        for (at, ended, began) in endings {
-            let file = &running.files[at];
+        for (at, file, ended, began) in endings {
             if began {
                 if let Ok(mut held) = held.lock() {
-                    held.the_files_going_up.one_ends(&asked.of.machine);
+                    held.the_files_going_up.one_ends(&asked.of.machine, file.mirror.as_bytes());
                 }
             }
             // **`Dependency Upload & Remap` A9e's (b), counted before the file reads
@@ -2305,60 +2904,285 @@ async fn a_channel_of_the_send<C: AHeldConnection>(
                 crate::surface::the_dependency_check::a_library_landed(held, key);
             }
             a_file_of_the_send_moved(request, at, |sent| sent.ended = Some(ended.clone()));
+            // **Only once the send counts it does the register let its bytes
+            // go**, so the two are never both short of it.
+            the_run.a_landed_file_is_counted(&request_text, at);
             the_file_of_the_send_is_saved(record.as_ref(), request, at);
-            {
-                let mut came_to = running
-                    .came_to
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                match ended {
-                    HowItEnded::Published => {
-                        came_to.published += 1;
-                        if file.a_library {
-                            came_to.libraries_published += 1;
-                        }
-                    }
-                    HowItEnded::Refused | HowItEnded::Failed => came_to.failed += 1,
-                    HowItEnded::DidNotFinish => came_to.did_not_finish += 1,
-                }
-            }
-            // **The row's state from its files' publications**, once its last
-            // file has ended.
-            let row = file.row;
             let became = {
-                let mut going = running
-                    .going
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                let how = going.entry(row).or_default();
-                how.left = how.left.saturating_sub(1);
-                match ended {
-                    HowItEnded::Published => {}
-                    HowItEnded::Refused => {
-                        how.refused_in = Some(the_folder_holding(file.mirror.as_bytes()));
-                        how.failed = Some(WhyItDidNotGoUp::TheServerRefusedTheWrite);
-                    }
-                    HowItEnded::Failed => {
-                        how.failed.get_or_insert(WhyItDidNotGoUp::TheUploadFailed);
-                    }
-                    HowItEnded::DidNotFinish => how.did_not_finish = true,
-                }
-                if how.left == 0 {
-                    match (&how.failed, how.did_not_finish) {
-                        (Some(why), _) => Some((RowState::CouldNotBeSent, Some(*why))),
-                        (None, true) => None,
-                        (None, false) => Some((RowState::AlreadyOnTheMachine, None)),
-                    }
-                } else {
-                    None
-                }
+                let mut state = shared.state();
+                let became = state.a_file_ended(at, &ended);
+                shared.the_register_is_told(&state);
+                became
             };
+            shared.changed.notify_waiters();
             if let Some((state, why)) = became {
                 the_row_became(held, key, &file.the_real_file, state, why);
             }
             record.a_transfer_moved();
         }
     }
+}
+
+/// **`Dependency Upload & Remap` G14b: the readings a send owes, one at a time,
+/// in the order its linked `.blend`s were published.** Each is read on its own
+/// at its landing place (`Dependency Upload & Remap` G1, `Dependency Upload & Remap` G2), its rows join the sitting standing at the foot
+/// of their groups (`Dependency Upload & Remap` G16), and every row it finds on the user's computer and not
+/// on its way joins the same send through the pre-flight (`Dependency Upload & Remap` Q5, `Dependency Upload & Remap` A9a, `Dependency Upload & Remap` A9b). **A
+/// file whose landing holds a different file (`Dependency Upload & Remap` Q8) is not sent and asks nothing
+/// mid-send**: its row stays to upload for the next press. **Stop ends the
+/// readings and a reading ending after it adds nothing** (`Dependency Upload & Remap` G15). **A reading the
+/// line cut is taken again when the line is back** (`Dependency Upload & Remap` G17's exception). The
+/// twenty-eighth notes, note 11.
+#[allow(clippy::too_many_arguments)]
+async fn the_readings_the_send_owes<C: AHeldConnection>(
+    shared: &TheSendShared,
+    asked: &WhatIsSent,
+    sessions: &ThisServersSessions<C>,
+    the_run: &TheRunsTransfers,
+    record: &Arc<dyn TheRecordAnUploadWrites>,
+    tell: &(dyn Fn() + Sync),
+    held: &Mutex<WhatTheRunHolds>,
+    key: &str,
+) {
+    let of = &asked.of;
+    let Some(layout) = of.layout.as_ref() else {
+        return;
+    };
+    let request_text = shared.request.as_text();
+    let stopped = || the_run.the_user_stopped_it(&request_text);
+    let package_area = layout.area(smoozy_job_files::layout::Area::Package);
+    let mut local_digests = TheLocalDigests::default();
+    // **A row a reading finds is asked nothing**: *Replace* is a press's alone.
+    let joining = WhatIsSent { replacing: false, ..asked.clone() };
+    loop {
+        let told = shared.changed.notified();
+        let next = {
+            let mut state = shared.state();
+            // **`Dependency Upload & Remap` G15: Stop cancels the readings the send owes.**
+            if stopped() && (state.readings.owed > 0 || !state.to_read.is_empty()) {
+                state.the_readings_are_stopped();
+                // **A send whose readings Stop cut did not finish**, so no check
+                // runs after it by itself (`Dependency Upload & Remap` G14): the next check reads them.
+                state.came_to.did_not_finish += 1;
+                shared.the_register_is_told(&state);
+                drop(state);
+                shared.changed.notify_waiters();
+                continue;
+            }
+            match state.to_read.pop_front() {
+                Some(at) => {
+                    state.readings.reading_now = Some(state.files[at].mirror.as_bytes().to_vec());
+                    shared.the_register_is_told(&state);
+                    Some(Some((at, state.files[at].clone())))
+                }
+                None if state.ended => Some(None),
+                None => None,
+            }
+        };
+        let (at, file) = match next {
+            Some(Some(next)) => next,
+            Some(None) => return,
+            None => {
+                told.await;
+                continue;
+            }
+        };
+        record.a_transfer_moved();
+        // **The landing places this reading put on their way**, taken off when
+        // the send has decided them, however the reading ends.
+        let mut joining_now: Vec<Vec<u8>> = Vec::new();
+        let holding = smoozy_dependencies::record::HoldingFile::OnTheUsersComputer(file.source.clone());
+        // **A reading cut on a line that is up is taken once more** — a repair can
+        // be over before the look for it begins (Sol's second round).
+        let mut taken_again_on_a_live_line = false;
+        let came = loop {
+            let mut machine = crate::reading_the_file::ThisServersMachine {
+                sessions,
+                package_area: &package_area,
+                server: &of.server,
+            };
+            // **Every wait in it ends at Stop** (Sol's fresh look, finding 3).
+            let came = a_reading_unless_stopped(
+                crate::checking_a_file::a_linked_file_of_a_send_is_read(
+                    &mut machine,
+                    &TheSendsDoor(record.as_ref()),
+                    &TheUsersOwnComputer,
+                    held,
+                    of,
+                    &file.mirror,
+                    holding.clone(),
+                    &mut local_digests,
+                    &mut || stopped(),
+                    // **What it found is on its way before its rows land**
+                    // (the twenty-eighth notes, piece 12).
+                    &mut |rows| joining_now.extend(shared.rows_are_about_to_land(&of.server, the_landings_found_rows_would_take(rows, of))),
+                ),
+                &mut || stopped(),
+            )
+            .await;
+            // **`Dependency Upload & Remap` G17's exception: a reading the line cut carries on with the send
+            // when `Servers` repairs the connection**, as its files do.
+            if matches!(came, crate::checking_a_file::ALinkedReadingCameTo::TheLineWasCut)
+                && crate::downloading::the_line_went_down(sessions).await
+                && crate::downloading::while_the_line_is_down(sessions, the_run, &request_text, None, tell).await
+                && !stopped()
+            {
+                continue;
+            }
+            if matches!(came, crate::checking_a_file::ALinkedReadingCameTo::TheLineWasCut)
+                && !taken_again_on_a_live_line
+                && sessions.a_connection_is_live()
+                && !stopped()
+            {
+                taken_again_on_a_live_line = true;
+                continue;
+            }
+            break came;
+        };
+        // **What the reading found joins the send**, unless the send was stopped.
+        let mut to_join = Vec::new();
+        let mut it_was_read = false;
+        match came {
+            crate::checking_a_file::ALinkedReadingCameTo::Read(found) if !stopped() => {
+                it_was_read = true;
+                let mut four_values_read = BTreeMap::new();
+                to_join = unless_a_stop_is_asked(
+                    the_rows_a_reading_found_join(&joining, sessions, record.as_ref(), held, key, found, &shared.request, &mut four_values_read, &mut local_digests),
+                    &mut || stopped(),
+                )
+                .await
+                .unwrap_or_default();
+            }
+            crate::checking_a_file::ALinkedReadingCameTo::CouldNotBeRead(why) => {
+                crate::surface::the_dependency_check::a_library_could_not_be_read(held, key, &file.the_real_file, why);
+            }
+            _ => {}
+        }
+        shared.a_reading_is_decided(at, to_join, &joining_now, it_was_read, stopped());
+        shared.changed.notify_waiters();
+        the_send_is_saved_whole(record.as_ref(), &shared.request);
+        record.a_transfer_moved();
+    }
+}
+
+/// **The send's door to the record, as a reading reaches it.**
+struct TheSendsDoor<'a>(&'a dyn TheRecordAnUploadWrites);
+
+impl TheCheckReachesTheRecord for TheSendsDoor<'_> {
+    fn with_the_record(&self, act: &mut dyn FnMut(&rusqlite::Connection)) -> bool {
+        self.0.with_the_record(act)
+    }
+}
+
+/// **The send as the register holds it, saved whole** — the files a press or a
+/// reading added included, so a send Smoozy closing cut leaves every file it
+/// arranged behind it (`Server protocol and transfers` S0a's records). Each
+/// save leaves a file already saved as it stood.
+fn the_send_is_saved_whole(record: &dyn TheRecordAnUploadWrites, request: &Identity) {
+    let send = the_register().iter().find(|one| one.request == *request).cloned();
+    if let Some(send) = send {
+        record.with_the_record(&mut |connection| {
+            let _ = crate::record::dependency_records::save_dependency_send(connection, &send);
+        });
+    }
+}
+
+/// **A reading the send owes, given up where Stop is pressed** — every wait in
+/// it, the four values' reads among them, ends at the press.
+pub(crate) async fn a_reading_unless_stopped(
+    reading: impl std::future::Future<Output = crate::checking_a_file::ALinkedReadingCameTo>,
+    stopped: &mut (dyn FnMut() -> bool + Send),
+) -> crate::checking_a_file::ALinkedReadingCameTo {
+    unless_a_stop_is_asked(reading, stopped)
+        .await
+        .unwrap_or(crate::checking_a_file::ALinkedReadingCameTo::Stopped)
+}
+
+/// **`Dependency Upload & Remap` G14b: the landing places the files of rows a
+/// reading found would take** — a whole location's mirror, or each member of a
+/// set row as it stands here. Only rows found on the user's computer: no other
+/// row can join. The twenty-eighth notes, piece 12.
+fn the_landings_found_rows_would_take(rows: &[ACheckedRow], of: &TheSittingIsOf) -> Vec<Vec<u8>> {
+    let Some(layout) = of.layout.as_ref() else {
+        return Vec::new();
+    };
+    let mut landings = Vec::new();
+    for one in rows.iter().filter(|one| one.state == RowState::FoundOnYourComputer) {
+        match what_the_row_sends(one) {
+            Some(WhatARowSends::TheLocation(location)) => {
+                if let Ok(mirror) = mirror_of(layout, location) {
+                    landings.push(mirror.as_bytes().to_vec());
+                }
+            }
+            Some(WhatARowSends::TheSetIn { .. }) => {
+                if let Some(set) = the_sets_files_and_their_mirrors(one, of) {
+                    landings.extend(set.files.into_iter().map(|(_, mirror)| mirror.as_bytes().to_vec()));
+                }
+            }
+            None => {}
+        }
+    }
+    landings
+}
+
+/// **The rows one reading found, through the send pre-flight** — `Dependency
+/// Upload & Remap` G14b: every row found on the user's computer and not on its
+/// way, each real file once (`Dependency Upload & Remap` A9a, `Dependency Upload & Remap` A9b), with `Dependency Upload & Remap` Q5 asked over it. **Answers the
+/// files that join the send.** A row already on the server takes that state; a
+/// row that could not be sent fails with its reason; **a row whose landing holds
+/// a different file is not sent and asks nothing**: it says so and stays to
+/// upload for the next press, where `Dependency Upload & Remap` Q8 asks.
+#[allow(clippy::too_many_arguments)]
+async fn the_rows_a_reading_found_join<C: AHeldConnection>(
+    asked: &WhatIsSent,
+    sessions: &ThisServersSessions<C>,
+    record: &dyn TheRecordAnUploadWrites,
+    held: &Mutex<WhatTheRunHolds>,
+    key: &str,
+    found: Vec<(usize, ACheckedRow)>,
+    this_send: &Identity,
+    four_values: &mut BTreeMap<Vec<u8>, Option<SourceReading>>,
+    digests: &mut TheLocalDigests,
+) -> Vec<AFileToSend> {
+    let of = &asked.of;
+    let Some(snapshot) = the_snapshot(record, &of.machine) else {
+        return Vec::new();
+    };
+    // **What this send's reading put on its way is what is being decided
+    // here**, so it is not taken as going already; another send's is.
+    let on_their_way_but_ours = || the_files_on_their_way_but_what_this_send_decides(&of.server, this_send);
+    let on_its_way = on_their_way_but_ours();
+    let mut folders = TheMirrorFoldersRead::default();
+    let mut carried = std::collections::BTreeSet::new();
+    let mut files = Vec::new();
+    for (at, one) in found {
+        if one.state != RowState::FoundOnYourComputer
+            || the_row_is_on_its_way(&one, of.layout.as_ref(), &on_its_way)
+            || !carried.insert(one.the_real_file())
+        {
+            continue;
+        }
+        match the_pre_flight(&one, at, asked, &snapshot, None, sessions, &mut folders, four_values, digests).await {
+            TheRowIs::NotSent => {}
+            TheRowIs::AlreadyThere => {
+                the_row_became(held, key, &one.the_real_file(), RowState::AlreadyOnTheMachine, None);
+            }
+            TheRowIs::CouldNotBeSent(why) => {
+                the_row_became(held, key, &one.the_real_file(), RowState::CouldNotBeSent, Some(why));
+            }
+            TheRowIs::AskedToReplace(_) => {
+                crate::surface::the_dependency_check::a_different_file_is_there(held, key, &one.the_real_file());
+            }
+            TheRowIs::Sent(these) => files.extend(these),
+        }
+    }
+    // **`Dependency Upload & Remap` A9a once more, against what is on its way now.**
+    if let Some(layout) = of.layout.as_ref() {
+        let on_its_way = on_their_way_but_ours();
+        files.retain(|file| !is_on_its_way(layout, &file.source, &on_its_way));
+    }
+    files.sort_by_key(|file| !file.a_library);
+    files
 }
 
 /// **A row brought to what its files came to.** It stays in the group it was
@@ -2381,6 +3205,7 @@ fn the_row_became(
                 one.why_it_did_not_go_up = why;
                 one.its_failure_was_cleared = false;
                 one.its_remap_waits_for_its_linked_files = false;
+                one.during_the_upload.a_different_file_is_there = false;
             }
         }
     }
@@ -2398,7 +3223,8 @@ async fn one_file_goes_up<C: AHeldConnection>(
     witness: &SendingFilesUpWasOpen,
     file: &AFileToSend,
     at: usize,
-    running: &TheSendRunning<'_>,
+    shared: &TheSendShared,
+    waiting: Vec<Vec<u8>>,
     sessions: &ThisServersSessions<C>,
     the_run: &TheRunsTransfers,
     record: &Arc<dyn TheRecordAnUploadWrites>,
@@ -2441,7 +3267,7 @@ async fn one_file_goes_up<C: AHeldConnection>(
         witness,
         &mut subsystem,
         &file.mirror,
-        &running.the_mirror_directories,
+        &shared.the_mirror_directories,
     )
     .await
         == HowTheDirectoryWent::TheRowFailsAsCouldNotBeSent
@@ -2453,10 +3279,8 @@ async fn one_file_goes_up<C: AHeldConnection>(
     // name**, in the reserved folder `File Browser` X12 names — asked for
     // first, so a folder the login may not write is the failure it is, and
     // **once per folder in a send** (`crate::uploading::TheStagingFoldersSeen`).
-    let mut staging = the_folder_holding(landing);
-    staging.push(b'/');
-    staging.extend_from_slice(THE_RESERVED_STAGING_FOLDER.as_bytes());
-    let made_by_this_send = match running
+    let staging = crate::uploading::the_staging_folder_beside(landing);
+    let made_by_this_send = match shared
         .the_staging_folders
         .asked_for(&mut subsystem, &staging)
         .await
@@ -2494,15 +3318,20 @@ async fn one_file_goes_up<C: AHeldConnection>(
     // protocol and transfers` S28a, so the sweep reaches it) and the file
     // goes again from its start.
     let earlier = the_part_an_earlier_send_left(record.as_ref(), of, &asked.run, file).filter(|part| {
-        let carries_on = matches!(
-            smoozy_dependencies::landing::a_resume_of_this_modules_upload(
-                u64::MAX,
-                &part.checkpoints,
-                &file.source,
-                &crate::checking_a_file::TheUsersOwnComputer,
-            ),
-            smoozy_dependencies::landing::ResumeVerdict::Proceeds { .. }
-        );
+        // **And only where the file's size now is the size the part was
+        // arranged at** (`File Browser` U8's paragraph of 2026-11-12): a file
+        // that only grew at its end still digests to every checkpoint, and a
+        // part left in publication pending would be published as it stood.
+        let carries_on = part.total_size_expected == file.size
+            && matches!(
+                smoozy_dependencies::landing::a_resume_of_this_modules_upload(
+                    u64::MAX,
+                    &part.checkpoints,
+                    &file.source,
+                    &crate::checking_a_file::TheUsersOwnComputer,
+                ),
+                smoozy_dependencies::landing::ResumeVerdict::Proceeds { .. }
+            );
         if !carries_on {
             let the_door = |act: &mut dyn FnMut(&rusqlite::Connection)| record.with_the_record(act);
             let _ = crate::downloading::a_part_is_abandoned(&the_door, the_run, part);
@@ -2550,9 +3379,6 @@ async fn one_file_goes_up<C: AHeldConnection>(
     a_file_of_the_send_moved(request, at, |sent| sent.transfer = Some(transfer.clone()));
     the_file_of_the_send_is_saved(record.as_ref(), request, at);
 
-    let waiting = crate::downloading::the_next_waiting(running.files, at, |one| {
-        Some(one.mirror.as_bytes().to_vec())
-    });
     the_run.a_file_goes(&request_text, at, landing.to_vec(), file.size, waiting);
     let mut watcher = TheRowIsTold {
         the_run,
@@ -2574,6 +3400,12 @@ async fn one_file_goes_up<C: AHeldConnection>(
         TheSourcesPublicationGate::over(&mut reading_for_the_gate, source.clone(), file.size);
     let mut local = ThePlatformFileAdapter;
     let mut identities = ThePlatformFileAdapter;
+    // **`Server protocol and transfers` S12b: the server's own program checks
+    // a carry-on's part**, where this send knows where it sits.
+    let the_servers_program = of
+        .layout
+        .as_ref()
+        .map(|layout| layout.area(smoozy_job_files::layout::Area::Package));
     let way_back = TheWayBack {
         sessions,
         the_run,
@@ -2584,6 +3416,7 @@ async fn one_file_goes_up<C: AHeldConnection>(
         this_run: asked.run.clone(),
         landing,
         record,
+        the_servers_program: the_servers_program.as_deref(),
     };
     // **`File Browser` K7 and K8: the source is watched where its identity can
     // be read**, and K9's gate covers it where it cannot.
@@ -2622,7 +3455,7 @@ async fn one_file_goes_up<C: AHeldConnection>(
     drop(draw);
     drop(subsystem);
     drop(watcher);
-    the_run.a_file_stopped(&request_text, at);
+    a_file_ends_in_the_register(the_run, &request_text, at, Some(&ending), true);
     let what_was_staged = keeper.what_was_staged.take();
     drop(keeper);
 
@@ -2679,6 +3512,27 @@ fn the_part_an_earlier_send_left(
     })
 }
 
+/// **A send's file ends in the run's register** — at the save that writes its
+/// ending, and again once its loop has returned, which says it once. **A file
+/// that landed keeps its bytes in the request's figure until the send counts
+/// it** (the twenty-eighth notes, piece 12): the count waits on its group's
+/// values read back, and Transfers' megabytes fell there by the file's size.
+///
+/// **A file the line cut, or whose channel went silent, stays moving while its
+/// loop carries it on** (`File Browser` U5's *waiting*), as an upload's file
+/// does: let go there, its carry-on's reports reached nothing and its bytes
+/// left the figure until it landed (Sol's fresh look on piece 12). **Once its
+/// loop has returned** (`its_loop_returned`) every ending lets it go but a
+/// landing. `None` is no ending yet.
+fn a_file_ends_in_the_register(the_run: &TheRunsTransfers, request: &str, at: usize, ending: Option<&Ending>, its_loop_returned: bool) {
+    match ending {
+        Some(Ending::Published) => the_run.a_file_landed(request, at),
+        Some(Ending::Interrupted | Ending::Stalled) if !its_loop_returned => {}
+        Some(_) => the_run.a_file_stopped(request, at),
+        None => {}
+    }
+}
+
 /// **`Server protocol and transfers` S8's writer for a send** — one save per
 /// write through the application's own record (the transfer wave's piece 1),
 /// and **the content identity the loop staged, remembered from `Server
@@ -2709,8 +3563,13 @@ impl KeepsTheRecord for TheSendsRecords<'_> {
             // **The file stops moving in the same hold as its ending goes
             // down**, so a Transfers row composed between never counts it
             // twice (the transfer wave's piece 5).
-            if written.is_ok() && record.ending.is_some() {
-                the_run.a_file_stopped(request, at);
+            //
+            // **A file that landed keeps its bytes in the request's figure until
+            // the send counts it** (the twenty-eighth notes, piece 12): the count
+            // waits on its group's values read back, and the megabytes fell
+            // there by the file's size.
+            if written.is_ok() {
+                a_file_ends_in_the_register(the_run, request, at, record.ending.as_ref(), false);
             }
         });
         written
@@ -2880,8 +3739,17 @@ pub(crate) fn the_standing_is_brought_up_to_date<R: TheCheckReachesTheRecord + ?
     let (states, counts): (Vec<(RowState, smoozy_dependencies::record::HoldingFile)>, _) = match held.lock() {
         Ok(held) => match held.sittings.get(&keyed(&of.server, &of.file)) {
             Some(sitting) => (
-                sitting.rows.iter().map(|row| (row.state, row.holding.clone())).collect(),
-                crate::surface::the_dependency_check::the_warning_counts(&sitting.rows, Default::default()),
+                // **`Dependency Upload & Remap` V11 and V12: a row left out
+                // counts as set aside** (2026-11-09).
+                sitting
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .map(|(at, row)| {
+                        (crate::surface::the_dependency_check::the_state_the_standing_counts(sitting, at), row.holding.clone())
+                    })
+                    .collect(),
+                crate::surface::the_dependency_check::the_warning_counts(sitting, Default::default()),
             ),
             None => return,
         },
@@ -2966,6 +3834,316 @@ mod tests {
 
     fn stored(bytes: &[u8]) -> StoredLocation {
         StoredLocation::as_the_system_returned_it(bytes)
+    }
+
+    /// **The twenty-eighth notes, piece 12: Transfers' megabytes never fall
+    /// while a send grows.** On a real line they went 233.7 → 228.7 MB three
+    /// times: a file that landed left the run's register at the save of its
+    /// ending, and the send counted it only after its group's values were read
+    /// back. Here one file of two lands, and the figure is read the way the
+    /// screen reads it — the register first, then the sends — at each step:
+    /// staged whole, landed, counted by the send, and let go by the register.
+    #[test]
+    fn twenty_eighth_12_a_landed_file_keeps_its_bytes_until_the_send_counts_it() {
+        use smoozy_server_protocol::transfers::moving::WatchesTheTransfer;
+        let the_run = TheRunsTransfers::for_this_run();
+        let request = Identity::issue(IdentityKind::Operation).expect("randomness");
+        let server = Identity::issue(IdentityKind::LocalServer).expect("randomness");
+        let id = request.as_text();
+        let a_file = |landing: &[u8], size| AFileSent { landing: landing.to_vec(), size, transfer: None, ended: None };
+        the_register().push(ASend {
+            request: request.clone(),
+            server: server.as_text(),
+            file: "/m/scene.blend".to_string(),
+            files: vec![a_file(b"/m/a.png", 100), a_file(b"/m/b.png", 50)],
+            readings: Default::default(),
+        });
+        let _under_way = the_run.a_request_is_under_way(&request, &server);
+        let servers = vec![crate::surface::transfers::AServerKnown { row: server.as_text(), name: "Desk".into(), badge: None }];
+        let the_figure = || {
+            let under_way = the_run.what_is_under_way();
+            let mut requests = crate::surface::transfers::the_requests_the_sends_hold(&servers);
+            requests.retain(|one| one.id == id);
+            crate::surface::transfers::what_this_run_is_moving(&mut requests, &under_way);
+            requests[0].bytes.expect("a send has bytes").0
+        };
+        the_run.a_file_goes(&id, 0, b"/m/a.png".to_vec(), 100, Vec::new());
+        let tell = || {};
+        let mut watcher = TheRowIsTold { the_run: &the_run, request: id.clone(), entry: 0, tell: &tell, started_over: None };
+        watcher.report(&smoozy_server_protocol::transfers::Report {
+            bytes_staged: 100,
+            bytes_expected: 100,
+            started_over: None,
+            verifying_a_prefix_of: None,
+        });
+        let mut seen = vec![the_figure()];
+        // **It lands**: at the save of its ending, and again as its loop returns.
+        a_file_ends_in_the_register(&the_run, &id, 0, Some(&Ending::Published), false);
+        seen.push(the_figure());
+        a_file_ends_in_the_register(&the_run, &id, 0, Some(&Ending::Published), true);
+        seen.push(the_figure());
+        // **The send counts it, then the register lets it go.**
+        a_file_of_the_send_moved(&request, 0, |sent| sent.ended = Some(HowItEnded::Published));
+        seen.push(the_figure());
+        the_run.a_landed_file_is_counted(&id, 0);
+        seen.push(the_figure());
+
+        // **The second file, cut by the line part-way and carried on** (Sol's
+        // fresh look on piece 12): it stays moving and its carry-on is counted;
+        // only when its loop returns without landing does it go.
+        the_run.a_file_goes(&id, 1, b"/m/b.png".to_vec(), 50, Vec::new());
+        let mut watcher = TheRowIsTold { the_run: &the_run, request: id.clone(), entry: 1, tell: &tell, started_over: None };
+        let staged = |bytes| smoozy_server_protocol::transfers::Report { bytes_staged: bytes, bytes_expected: 50, started_over: None, verifying_a_prefix_of: None };
+        watcher.report(&staged(30));
+        let mut cut = vec![the_figure()];
+        a_file_ends_in_the_register(&the_run, &id, 1, Some(&Ending::Interrupted), false);
+        cut.push(the_figure());
+        watcher.report(&staged(40));
+        cut.push(the_figure());
+        a_file_ends_in_the_register(&the_run, &id, 1, Some(&Ending::Interrupted), true);
+        cut.push(the_figure());
+        the_register().retain(|one| one.request != request);
+        assert_eq!(seen, [100, 100, 100, 100, 100], "the figure fell or counted the file twice");
+        assert_eq!(cut, [130, 130, 140, 100], "a file carried on across a repair");
+        assert!(the_run.what_is_under_way()[&id].landed.is_empty() && the_run.what_is_under_way()[&id].moving.is_empty());
+    }
+
+    /// **The twenty-eighth notes, piece 12: a file a reading finds is on its
+    /// way from just before its row lands until the send has decided it** —
+    /// joining, then admitted; or, left out or stopped, back to upload. On a
+    /// real line `lib_07.png` stood outside the upload for about 10 s, with
+    /// *Upload 1 file (9.3 MB)* offered, while the send's pre-flight decided it.
+    /// Read as every reader reads it, from the register.
+    #[test]
+    fn twenty_eighth_12_a_found_file_is_on_its_way_until_the_send_decides_it() {
+        let server = format!("piece-12-{}", Identity::issue(IdentityKind::Operation).expect("randomness").as_text());
+        let request = Identity::issue(IdentityKind::Operation).expect("randomness");
+        the_register().push(ASend {
+            request: request.clone(),
+            server: server.clone(),
+            file: "/m/main.blend".to_string(),
+            files: Vec::new(),
+            readings: Default::default(),
+        });
+        let shared = TheSendShared {
+            request: request.clone(),
+            state: Mutex::new(TheSendState::default()),
+            changed: tokio::sync::Notify::new(),
+            the_mirror_directories: TheMirrorDirectoriesSeen::default(),
+            the_staging_folders: TheStagingFoldersSeen::default(),
+        };
+        shared.joins(vec![a_file_to_send("lib_07.blend", true)]).expect("the send runs");
+        let going = |landing: &[u8]| the_files_on_their_way_to(&server).iter().any(|one| one.as_bytes() == landing);
+        let mut seen = Vec::new();
+
+        // **Found, then joins.**
+        let put = shared.rows_are_about_to_land(&server, vec![b"/m/lib_07.png".to_vec()]);
+        seen.push(("found", going(b"/m/lib_07.png")));
+        shared.a_reading_is_decided(0, vec![a_file_to_send("lib_07.png", false)], &put, true, false);
+        seen.push(("joined", going(b"/m/lib_07.png")));
+        // **Found, then left out** — a different file there.
+        let put = shared.rows_are_about_to_land(&server, vec![b"/m/other.png".to_vec()]);
+        seen.push(("found again", going(b"/m/other.png")));
+        shared.a_reading_is_decided(0, Vec::new(), &put, true, false);
+        seen.push(("left out", going(b"/m/other.png")));
+        // **Found, then Stop.**
+        let put = shared.rows_are_about_to_land(&server, vec![b"/m/late.png".to_vec()]);
+        shared.a_reading_is_decided(0, vec![a_file_to_send("late.png", false)], &put, true, true);
+        seen.push(("stopped", going(b"/m/late.png")));
+        let joining_left = the_register().iter().find(|one| one.request == request).map(|one| one.readings.joining.clone());
+
+        // **Two sends to one server find one file** (Sol's second look): the
+        // first holds it, the second claims nothing and its pre-flight reads the
+        // file as on its way.
+        let other = Identity::issue(IdentityKind::Operation).expect("randomness");
+        the_register().push(ASend { request: other.clone(), server: server.clone(), file: "/m/other.blend".to_string(), files: Vec::new(), readings: Default::default() });
+        let second = TheSendShared {
+            request: other.clone(),
+            state: Mutex::new(TheSendState::default()),
+            changed: tokio::sync::Notify::new(),
+            the_mirror_directories: TheMirrorDirectoriesSeen::default(),
+            the_staging_folders: TheStagingFoldersSeen::default(),
+        };
+        let first_holds = shared.rows_are_about_to_land(&server, vec![b"/m/shared.png".to_vec()]);
+        let second_holds = second.rows_are_about_to_land(&server, vec![b"/m/shared.png".to_vec()]);
+        let the_second_sees_it_going = the_files_on_their_way_but_what_this_send_decides(&server, &other)
+            .iter()
+            .any(|one| one.as_bytes() == b"/m/shared.png");
+        let the_first_decides_it = !the_files_on_their_way_but_what_this_send_decides(&server, &request)
+            .iter()
+            .any(|one| one.as_bytes() == b"/m/shared.png");
+        the_register().retain(|one| one.request != request && one.request != other);
+        assert_eq!(seen, [("found", true), ("joined", true), ("found again", true), ("left out", false), ("stopped", false)]);
+        assert_eq!(joining_left, Some(Vec::new()), "a landing was left joining");
+        assert_eq!((first_holds.len(), second_holds.len()), (1, 0), "both sends claimed one file");
+        assert!(the_second_sees_it_going && the_first_decides_it);
+    }
+
+    /// **One file for the send's own state**, a linked `.blend` or not.
+    fn a_file_to_send(named: &str, a_library: bool) -> AFileToSend {
+        AFileToSend {
+            row: 0,
+            source: stored(format!("/Users/a/{named}").as_bytes()),
+            mirror: MachineLocation::composed(format!("/m/{named}").into_bytes()),
+            size: 1,
+            a_library,
+            the_real_file: format!("/Users/a/{named}").into_bytes(),
+        }
+    }
+
+    fn the_names_waiting(state: &TheSendState) -> Vec<String> {
+        state
+            .waiting
+            .iter()
+            .map(|at| String::from_utf8_lossy(state.files[*at].mirror.as_bytes()).trim_start_matches("/m/").to_string())
+            .collect()
+    }
+
+    /// **`Dependency Upload & Remap` G14b: linked `.blend`s are admitted before
+    /// every other file of the send, those of the press and those joining later
+    /// alike** — a joining linked file behind linked files waiting and ahead of
+    /// other files waiting. **Each owes a reading from the moment it is
+    /// admitted, and is counted once**, however many files link it. The
+    /// twenty-eighth notes, note 11.
+    #[test]
+    fn twenty_eighth_11_linked_files_are_admitted_first_and_each_owes_one_reading() {
+        let mut state = TheSendState::default();
+        state.admits(vec![
+            a_file_to_send("a.png", false),
+            a_file_to_send("chair.blend", true),
+            a_file_to_send("b.png", false),
+            a_file_to_send("lamp.blend", true),
+        ]);
+        assert_eq!(the_names_waiting(&state), ["chair.blend", "lamp.blend", "a.png", "b.png"]);
+        assert_eq!((state.readings.owed, state.readings.linked), (2, 2));
+
+        // **The first linked file starts; a reading admits more.**
+        let chair = state.waiting.pop_front().expect("the first");
+        state.running += 1;
+        state.admits(vec![a_file_to_send("c.png", false), a_file_to_send("sofa.blend", true)]);
+        assert_eq!(the_names_waiting(&state), ["lamp.blend", "sofa.blend", "a.png", "b.png", "c.png"]);
+        assert_eq!((state.readings.owed, state.readings.linked), (3, 3));
+
+        // **The same linked file found again owes no second reading.**
+        state.admits(vec![a_file_to_send("sofa.blend", true)]);
+        assert_eq!((state.readings.owed, state.readings.linked), (3, 3));
+
+        // **A linked file published owes its reading; the send has not ended.**
+        assert_eq!(state.a_file_ended(chair, &HowItEnded::Published), Some((RowState::AlreadyOnTheMachine, None)));
+        assert_eq!(state.to_read.iter().copied().collect::<Vec<_>>(), [chair]);
+        assert!(!state.it_has_ended());
+    }
+
+    /// **Sol's fresh look, 2026-11-09, finding 2: a press and a reading that
+    /// both pass `Dependency Upload & Remap` A9a before either admits a file admit it once.** A second copy
+    /// would go up twice and queue a second reading the owed count never counted,
+    /// so the send could end while that reading was still owed.
+    #[test]
+    fn twenty_eighth_11_a_file_admitted_twice_goes_once() {
+        let mut state = TheSendState::default();
+        state.admits(vec![a_file_to_send("chair.blend", true), a_file_to_send("a.png", false)]);
+        let again = state.admits(vec![a_file_to_send("chair.blend", true), a_file_to_send("a.png", false)]);
+        assert!(again.is_empty(), "admitted again: {again:?}");
+        assert_eq!(the_names_waiting(&state), ["chair.blend", "a.png"]);
+        assert_eq!((state.readings.owed, state.readings.linked), (1, 1));
+        // **One that did not land may go again**, as *Retry* asks.
+        let at = state.waiting.pop_front().expect("it waits");
+        state.running += 1;
+        let _ = state.a_file_ended(at, &HowItEnded::Failed);
+        assert_eq!(state.admits(vec![a_file_to_send("chair.blend", true)]).len(), 1);
+    }
+
+    /// **Sol's second round, 2026-11-09: Stop ends every wait of a channel too** —
+    /// the published values read back after a group, which asks the machine with
+    /// no stop and no deadline of its own, so a send stopped there never ended.
+    /// **And a reading the line cut on a line that is up is taken once more**,
+    /// since a repair can be over before the look for it begins.
+    #[test]
+    fn twenty_eighth_11_stop_ends_the_read_back_and_a_cut_reading_is_taken_once_more() {
+        let channel = include_str!("the_found_files_sent.rs")
+            .split("async fn a_channel_of_the_send<")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .expect("the channel");
+        assert!(
+            channel.contains("unless_a_stop_is_asked(the_published_values("),
+            "the read-back is taken bare"
+        );
+        let reader = include_str!("the_found_files_sent.rs")
+            .split("async fn the_readings_the_send_owes<")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .expect("the reader");
+        assert!(reader.contains("taken_again_on_a_live_line"), "a reading cut on a live line is let go at once");
+    }
+
+    /// **Sol's fresh look, finding 6: readings follow the order the linked files
+    /// were published**, not the order their channels finished reading the
+    /// published values back.
+    #[test]
+    fn twenty_eighth_11_readings_follow_publication_order() {
+        let mut state = TheSendState::default();
+        state.admits(vec![a_file_to_send("a.blend", true), a_file_to_send("b.blend", true)]);
+        let (a, b) = (state.waiting.pop_front().expect("a"), state.waiting.pop_front().expect("b"));
+        state.running += 2;
+        state.a_library_was_published(a);
+        state.a_library_was_published(b);
+        let _ = state.a_file_ended(b, &HowItEnded::Published);
+        let _ = state.a_file_ended(a, &HowItEnded::Published);
+        assert_eq!(state.to_read.iter().copied().collect::<Vec<_>>(), [a, b]);
+        assert_eq!(state.readings.owed, 2, "a reading was lost or doubled");
+    }
+
+    /// **Sol's fresh look, finding 3: Stop ends a reading wherever it waits** —
+    /// the four values' reads among them, which ask the machine with no stop and
+    /// no deadline of their own.
+    #[test]
+    fn twenty_eighth_11_stop_ends_a_reading_that_waits_on_an_answer_that_never_comes() {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("a runtime");
+        let came = runtime.block_on(async {
+            let never = std::future::pending::<crate::checking_a_file::ALinkedReadingCameTo>();
+            tokio::time::timeout(std::time::Duration::from_secs(3), a_reading_unless_stopped(never, &mut || true)).await
+        });
+        assert!(
+            matches!(came, Ok(crate::checking_a_file::ALinkedReadingCameTo::Stopped)),
+            "the reading went on after Stop"
+        );
+        let reader = include_str!("the_found_files_sent.rs")
+            .split("async fn the_readings_the_send_owes<")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .expect("the reader");
+        assert!(reader.contains("a_reading_unless_stopped("), "the reader takes its readings bare");
+    }
+
+    /// **`Dependency Upload & Remap` G14b: a linked file that did not land owes no
+    /// reading, and what it needs is not known for good** — it failed, was
+    /// refused, or was stopped. **The send ends once nothing runs or waits and
+    /// no reading is owed, and a send that has ended takes nothing more**: a
+    /// press then makes a send of its own.
+    #[test]
+    fn twenty_eighth_11_a_linked_file_that_did_not_land_owes_nothing_and_an_ended_send_takes_nothing() {
+        for ending in [HowItEnded::Failed, HowItEnded::Refused, HowItEnded::DidNotFinish] {
+            let mut state = TheSendState::default();
+            state.admits(vec![a_file_to_send("chair.blend", true)]);
+            let at = state.waiting.pop_front().expect("it waits");
+            state.running += 1;
+            let _ = state.a_file_ended(at, &ending);
+            assert_eq!(state.readings.owed, 0, "{ending:?}");
+            assert!(state.readings.unknown_for_good, "{ending:?}");
+            assert!(state.to_read.is_empty(), "{ending:?}");
+            assert!(state.it_has_ended(), "{ending:?}");
+        }
+        let shared = TheSendShared {
+            request: Identity::issue(IdentityKind::Operation).expect("randomness"),
+            state: Mutex::new(TheSendState { ended: true, ..TheSendState::default() }),
+            changed: tokio::sync::Notify::new(),
+            the_mirror_directories: TheMirrorDirectoriesSeen::default(),
+            the_staging_folders: TheStagingFoldersSeen::default(),
+        };
+        let refused = shared.joins(vec![a_file_to_send("late.png", false)]).expect_err("an ended send took a file");
+        assert_eq!(refused.len(), 1);
+        assert!(shared.state().files.is_empty());
     }
 
     // ── The check's walk, `Dependency Upload & Remap` Q5a and Q5 route 1 ─────────
@@ -3113,14 +4291,18 @@ mod tests {
                 resolution: Some(Resolution { to: ResolvedTo::AWholeLocation(at.clone()), how: HowResolved::TheRecordedLocationItself }),
                 set_aside: false,
                 rejected_guess: None,
+                included: false,
                 read_as: Vec::new(),
             }],
             wanted: vec![Outstanding::a_file(reference)],
             proposal: None,
             members: None,
             size: Some(1),
+            the_files_the_jobs_frames_need: None,
+            the_files_not_in_its_folder: Vec::new(),
             why_it_did_not_go_up: None,
             the_part_already_up: None,
+            during_the_upload: Default::default(),
             its_failure_was_cleared: false,
             its_remap_waits_for_its_linked_files: false,
         }
@@ -3422,6 +4604,7 @@ mod tests {
             server: server.to_string(),
             file: "/Users/a/scene.blend".to_string(),
             files,
+            readings: Default::default(),
         };
         let register = vec![
             a_send(
@@ -3498,6 +4681,7 @@ mod tests {
                 }),
                 set_aside: false,
                 rejected_guess: None,
+                included: false,
                 read_as: Vec::new(),
             }])
             .expect("the root's answer");
@@ -3963,5 +5147,189 @@ mod two_readings_on_one_server {
             "(the send's reading, the page's reading)"
         );
         assert!(the_site_is_empty(&machine), "the link is taken away");
+    }
+}
+
+/// **`Dependency Upload & Remap` G15's waits as changed later on 2026-11-13:
+/// one half hour over the whole fixing and what the user waits for** (Sol's
+/// look at the scout's list, point 7).
+#[cfg(test)]
+mod one_half_hour_over_a_fixing {
+    use std::time::Duration;
+
+    use smoozy_dependencies::acting::fixing_worker::{HowTheFixingWent, OneFixing};
+    use smoozy_dependencies::bytes::MachineLocation;
+    use smoozy_render_settings::readings::FourValuesNow;
+    use smoozy_server_protocol::asking_the_supervisor::WhatCameBack;
+    use smoozy_server_protocol::framing::{Answered, Fields, Request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS};
+    use smoozy_server_protocol::requests as asked;
+
+    use crate::reading_the_file::TheMachineAFileIsReadOn;
+
+    /// **A server whose fixing does what each case says**: its folders take
+    /// `folders_take`; its worker says *still working* for good, or ends with
+    /// `status`; its publication and its removal of a staged copy never
+    /// answer, or answer at once.
+    struct AFixingServer {
+        folders_take: Duration,
+        status: Option<&'static str>,
+        it_publishes: bool,
+        it_removes: bool,
+    }
+
+    impl smoozy_dependencies::acting::checking::TheMachineAReadingIsAskedOf for AFixingServer {
+        async fn ask(&mut self, request: &Request) -> WhatCameBack {
+            let empty = Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "0.1.7");
+            let Some(status) = self.status else {
+                return WhatCameBack::ItAnswered(
+                    empty.carrying(Fields::none().and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_IS_STILL_IN_HAND)),
+                );
+            };
+            WhatCameBack::ItAnswered(
+                empty.carrying(
+                    Fields::none()
+                        .and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_HAS_A_RECORDED_OUTCOME)
+                        .and(asked::THE_EXIT_STATUS_FIELD, status)
+                        .and(asked::THE_ORDINARY_STREAM_FIELD, b"/streams/1".to_vec())
+                        .and(asked::THE_ORDINARY_STREAM_LENGTH_FIELD, "0"),
+                ),
+            )
+        }
+
+        async fn read_the_stream_back(&mut self, _: &[u8], _: u64) -> Result<Vec<u8>, String> {
+            Ok(Vec::new())
+        }
+    }
+
+    impl TheMachineAFileIsReadOn for AFixingServer {
+        async fn the_four_values_of(&mut self, _: &str) -> FourValuesNow {
+            FourValuesNow::TheChannelCannotAnswer
+        }
+
+        async fn the_folders_above_are_made(&mut self, _: &[u8]) -> bool {
+            tokio::time::sleep(self.folders_take).await;
+            true
+        }
+
+        async fn the_fixed_copy_is_published(&mut self, _: &OneFixing) -> HowTheFixingWent {
+            if !self.it_publishes {
+                std::future::pending::<()>().await;
+            }
+            HowTheFixingWent::Published
+        }
+
+        async fn the_staged_copy_is_removed(&mut self, _: &[u8]) {
+            if !self.it_removes {
+                std::future::pending::<()>().await;
+            }
+        }
+    }
+
+    fn at(path: &[u8]) -> MachineLocation {
+        MachineLocation::composed(path.to_vec())
+    }
+
+    /// **Batch 3 of the Bad what-if answers, 263: a mirror published over in
+    /// Files is no longer the placement's copy**, so the fixed copy's source
+    /// is read again rather than taken from the record. Same four values, or
+    /// no answer: the record stands.
+    #[test]
+    fn bad_batch_3_a_mirror_published_over_is_not_the_placements_copy() {
+        let four = |size: u64| smoozy_server_protocol::transfers::SourceReading {
+            size,
+            inode: "7".to_string(),
+            modification_time: 1,
+            change_time: 1,
+        };
+        use crate::the_found_files_sent::the_placement_still_stands;
+        use smoozy_dependencies::record::PlacementRecord;
+        use smoozy_render_settings::readings::FourValuesNow;
+        use smoozy_state::identities::{Identity, IdentityKind};
+        let placement = PlacementRecord {
+            machine: smoozy_dependencies::record::MachineKey::of(
+                Identity::issue(IdentityKind::LocalServer).expect("randomness"),
+                Identity::issue(IdentityKind::Installation).expect("randomness"),
+            ),
+            mirrored_location: at(b"/root/assets/files/a.blend"),
+            source_location: smoozy_dependencies::bytes::StoredLocation::as_the_system_returned_it(b"/Users/a/lib/a.blend"),
+            content: smoozy_dependencies::contents::ContentIdentity::of(b"the library as sent"),
+            four_values_at_publication: four(100),
+            confirmation: None,
+            marked_gone: false,
+        };
+        assert!(the_placement_still_stands(&placement, &FourValuesNow::Answered(four(100))));
+        assert!(!the_placement_still_stands(&placement, &FourValuesNow::Answered(four(120))));
+        assert!(the_placement_still_stands(&placement, &FourValuesNow::TheChannelCannotAnswer));
+    }
+
+    fn a_fixing() -> OneFixing {
+        OneFixing::of(
+            &at(b"/root/assets/files/a.blend"),
+            &at(b"/root/assets/fixed/assets/files/a.blend"),
+            &at(b"/root/assets/fixed/assets/files/.smoozy-staging/a.blend.fixing"),
+            &smoozy_render_settings::file_half::BlenderIdentity {
+                path: "/root/blender/blender-5.2.2/blender".to_string(),
+                version: smoozy_server_setup::blender::Version { major: 5, minor: 2, patch: 2 },
+            },
+            Vec::new(),
+        )
+        .expect("randomness")
+    }
+
+    /// **How long the user waits, and what they are told** — given the
+    /// test's own two hours, which the old waits ran into.
+    async fn what_it_comes_to(mut server: AFixingServer) -> (Result<Result<(), ()>, ()>, Duration) {
+        let started = tokio::time::Instant::now();
+        let fixing = a_fixing();
+        let staging = fixing.staging.clone();
+        let came = tokio::time::timeout(
+            Duration::from_secs(2 * 60 * 60),
+            super::the_fixing_is_carried_out(&mut server, &fixing, &staging, started),
+        )
+        .await
+        .map(|came| came.map_err(|_| ()))
+        .map_err(|_| ());
+        (came, started.elapsed())
+    }
+
+    const HALF_AN_HOUR: Duration = Duration::from_secs(30 * 60);
+
+    #[tokio::test(start_paused = true)]
+    async fn a_publication_that_never_answers_ends_at_the_half_hour() {
+        let (came, waited) =
+            what_it_comes_to(AFixingServer { folders_take: Duration::ZERO, status: Some("0"), it_publishes: false, it_removes: true })
+                .await;
+        assert_eq!(came, Ok(Err(())), "said as a production that did not publish");
+        assert!(waited <= HALF_AN_HOUR, "{waited:?}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_removal_that_never_answers_holds_nobody() {
+        let (came, waited) =
+            what_it_comes_to(AFixingServer { folders_take: Duration::ZERO, status: Some("1"), it_publishes: true, it_removes: false })
+                .await;
+        assert_eq!(came, Ok(Err(())));
+        assert!(waited <= HALF_AN_HOUR, "{waited:?}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_half_hour_starts_with_the_fixing_not_with_its_worker() {
+        let (came, waited) = what_it_comes_to(AFixingServer {
+            folders_take: Duration::from_secs(20 * 60),
+            status: None,
+            it_publishes: true,
+            it_removes: true,
+        })
+        .await;
+        assert_eq!(came, Ok(Err(())));
+        assert!(waited <= HALF_AN_HOUR, "{waited:?}");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_fixing_inside_the_half_hour_publishes() {
+        let (came, _) =
+            what_it_comes_to(AFixingServer { folders_take: Duration::ZERO, status: Some("0"), it_publishes: true, it_removes: true })
+                .await;
+        assert_eq!(came, Ok(Ok(())));
     }
 }

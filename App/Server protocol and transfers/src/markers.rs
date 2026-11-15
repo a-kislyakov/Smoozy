@@ -42,7 +42,9 @@ mod tests {
     /// performer — five files under that folder and its own integration test
     /// beside them. **35 from 2026-09-19**, when step 10c piece 2 added
     /// `asking_the_supervisor.rs`.
-    const THE_FILE_COUNT: usize = 35;
+    /// **36 from 2026-11-09**, when the twenty-eighth notes' piece 1 added
+    /// `release/two_routes.rs`, B10b's helper.
+    const THE_FILE_COUNT: usize = 36;
 
     /// Whether a word has a clause marker's shape.
     ///

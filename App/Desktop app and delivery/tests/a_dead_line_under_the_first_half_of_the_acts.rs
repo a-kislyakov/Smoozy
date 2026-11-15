@@ -1026,6 +1026,7 @@ exit 0;
                     format!("ON THE ROW {}", editing.refused.as_ref().map(as_read).unwrap_or_default())
                 }
                 AnActsAnswer::Asks { .. } => "ASKS".to_string(),
+                AnActsAnswer::Refused { said, .. } => format!("REFUSED {}", as_read(said)),
             }
         }
 
@@ -1271,7 +1272,7 @@ exit 0;
                 let shown = the_answer_read(&what_the_delete_says(&came_to, &asked.victims));
                 let left = if victim.exists() { the_files_under(&victim) + 1 } else { 0 };
                 println!("{said}: the delete came to {came_to:?}, {left} of {total} left: {shown}");
-                let WhatTheDeleteCameTo::Ran { record: the_act, done, refused, not_attempted, never_learned } =
+                let WhatTheDeleteCameTo::Ran { record: the_act, done, refused, not_attempted, never_learned, .. } =
                     came_to.clone()
                 else {
                     missed.push(format!("{said}: the delete came to {came_to:?}"));
@@ -3322,7 +3323,12 @@ exit 0;
                 if let Some(ended) = came.ended {
                     a_figure!(
                         missed,
-                        what_the_driving_left(ended) == WhatTheDrivingLeft::TheConnectionWasNotMade,
+                        // **A deadline is said as timed out** — 2026-11-11, the
+                        // four questions, scout 3.1.
+                        what_the_driving_left(ended)
+                            == WhatTheDrivingLeft::TheConnectionWasNotMadeBecause(
+                                smoozy_desktop::servers::a_period::WhyTheConnectionWasNotMade::ItTimedOut
+                            ),
                         "{said}: the page was left {:?}",
                         what_the_driving_left(ended)
                     );
@@ -3864,6 +3870,7 @@ exit 0;
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_files_own_scripts_run: None,
                 the_folders_at_the_machines_top: None,
             };
             let layer = || ArtistsText::of(b"ViewLayer".to_vec());
@@ -4319,7 +4326,7 @@ exit 0;
                 let rows = rows.unwrap_or_else(|| {
                     let held = self.held.lock().unwrap();
                     let key = format!("{}\u{1f}{}", of.server, of.file);
-                    the_rows_the_upload_sends(&held.sittings[&key].rows)
+                    the_rows_the_upload_sends(&held.sittings[&key])
                 });
                 let asked = WhatIsSent { of, run: self.run.clone(), rows, replacing: false };
                 let door: Arc<dyn TheRecordAnUploadWrites> = self.record.clone();

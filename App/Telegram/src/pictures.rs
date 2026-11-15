@@ -58,7 +58,11 @@ pub struct ADerivative {
     /// What the job is called (`Telegram` R7, `Telegram` R7a): the label
     /// whole, or the `.blend`'s name where there is none.
     pub job_label: String,
-    pub frame: u64,
+    /// **The frame's own number, below zero too** (`Specs/Render Settings`:
+    /// *"Nothing in Smoozy assumes the first frame is frame 1"*; Sol's S2, the
+    /// four questions, batch 4: it was a number of zero or more, and a frame
+    /// below zero was sent as frame 0).
+    pub frame: i64,
     pub file_name: String,
     pub bytes: Vec<u8>,
     /// **Which of the frame's pictures this is**, where the frame has more
@@ -67,6 +71,29 @@ pub struct ADerivative {
     /// layer's. Nothing for a frame of one View Layer, and nothing where it was
     /// not handed in.
     pub which_picture: Option<WhichPictureItIs>,
+    /// **`Telegram` I2 as changed 2026-11-11 (the four questions, batch 4,
+    /// Sol's S6): the View Layers of this frame whose copy could not be read
+    /// and was left out**, by name, an empty name for one its record does not
+    /// name. Only on the main copy; the caption of the first picture sent
+    /// names them ([`the_layers_not_read`]).
+    pub not_read: Vec<String>,
+}
+
+/// **`Telegram` I2 as changed 2026-11-11 — the line naming the View Layers
+/// whose preview could not be read**: *Could not read the preview of
+/// Reflections.*, several by commas, and those their records do not name
+/// counted, *… of Reflections and 1 other View Layer.* Nothing where none.
+pub fn the_layers_not_read(not_read: &[String]) -> Option<String> {
+    let named: Vec<&str> = not_read.iter().map(String::as_str).filter(|name| !name.is_empty()).collect();
+    let unnamed = not_read.len() - named.len();
+    let others = match (named.is_empty(), unnamed) {
+        (_, 0) => String::new(),
+        (true, 1) => "1 View Layer".to_string(),
+        (true, n) => format!("{n} View Layers"),
+        (false, 1) => " and 1 other View Layer".to_string(),
+        (false, n) => format!(" and {n} other View Layers"),
+    };
+    (!not_read.is_empty()).then(|| format!("Could not read the preview of {}{others}.", named.join(", ")))
 }
 
 /// **Which of a frame's pictures a copy is** — `Telegram` I2's caption names
@@ -196,9 +223,51 @@ pub fn whether_it_fits(bytes: &[u8]) -> WhetherItFits {
 /// notes, note 2): *Kitchen — final · frame 140 · Reflections · not
 /// colour-accurate*. Ordinary single-layer frames name none; the first-frame
 /// approval path can instead name the source filename its record retained.
-pub fn the_caption(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: u64, which_picture: Option<&WhichPictureItIs>) -> AMarkedText {
+pub fn the_caption(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: i64, which_picture: Option<&WhichPictureItIs>) -> AMarkedText {
+    the_caption_saying(server_label, job_label, frame, which_picture, &[])
+}
+
+/// **[`the_caption`], with the line naming the View Layers whose preview could
+/// not be read** (`Telegram` I2 as changed 2026-11-11), where there are any.
+pub fn the_caption_saying(
+    server_label: &(impl TheServersName + ?Sized),
+    job_label: &str,
+    frame: i64,
+    which_picture: Option<&WhichPictureItIs>,
+    not_read: &[String],
+) -> AMarkedText {
     let which = which_picture.map(|which| format!(" · {}", which.as_said())).unwrap_or_default();
-    a_user_message(server_label, job_label, &format!(" · Frame {frame}{which} · Not colour-accurate"), "")
+    let body = the_layers_not_read(not_read).unwrap_or_default();
+    within_the_caption_bound(job_label, |label| a_user_message(server_label, label, &format!(" · Frame {frame}{which} · Not colour-accurate"), &body))
+}
+
+/// **Telegram's bound on a picture's caption: 1,024 characters after entity
+/// parsing** — `InputMediaPhoto.caption`, *"0-1024 characters after entities
+/// parsing"* (`Preparation/Architecture/Sources/Telegram.sources.md`, entry
+/// 88, read 2026-10-18), counted here in UTF-16 units as the message bound is.
+pub const THE_BOUND_ON_A_CAPTION: usize = 1024;
+
+/// **A caption with a job name too long for Telegram's bound has the name cut
+/// short with an ellipsis**, so the server, the frame and the layer are still
+/// said and the picture still arrives (the UI at every size, C8). The job's
+/// own message carries its name whole. `compose` makes the caption around a
+/// label; a caption inside the bound is left exactly as it was.
+pub fn within_the_caption_bound(job_label: &str, compose: impl Fn(&str) -> AMarkedText) -> AMarkedText {
+    let whole = compose(job_label);
+    let units = whole.text.encode_utf16().count();
+    if units <= THE_BOUND_ON_A_CAPTION {
+        return whole;
+    }
+    let room = job_label.encode_utf16().count().saturating_sub(units - THE_BOUND_ON_A_CAPTION + 1);
+    let mut kept = String::new();
+    let mut used = 0;
+    for letter in job_label.chars() {
+        if used + letter.len_utf16() > room { break; }
+        used += letter.len_utf16();
+        kept.push(letter);
+    }
+    kept.push('\u{2026}');
+    compose(&kept)
 }
 
 /// **`Telegram` I3 — the one line for all three caps**: weight, width and height
@@ -208,13 +277,13 @@ const OVER_THE_LIMITS: &str = "Preview not sent: over Telegram's limits.";
 
 /// **`Telegram` I3 — what the user is told, once per job, where a picture is
 /// outside Telegram's limits.**
-pub fn outside_the_limits(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: u64) -> AMarkedText {
+pub fn outside_the_limits(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: i64) -> AMarkedText {
     a_user_message(server_label, job_label, &format!(" · Frame {frame}"), OVER_THE_LIMITS)
 }
 
 /// **`Telegram` I3 — a picture Telegram refused although it fit**, said once
 /// per job and truthfully: the refusal's own text is not read for a reason.
-pub fn telegram_did_not_accept(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: u64) -> AMarkedText {
+pub fn telegram_did_not_accept(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: i64) -> AMarkedText {
     a_user_message(server_label, job_label, &format!(" · Frame {frame}"), "Telegram rejected the preview.")
 }
 
@@ -222,14 +291,14 @@ pub fn telegram_did_not_accept(server_label: &(impl TheServersName + ?Sized), jo
 /// every time it is asked, since an answer to a request is always sent
 /// (`Telegram` V1's floor). Added 2026-10-16, the Telegram worker's piece 6;
 /// the drawing has no such state, so Rule 9 binds.
-pub fn a_frame_outside_the_limits(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: u64) -> AMarkedText {
+pub fn a_frame_outside_the_limits(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: i64) -> AMarkedText {
     a_user_message(server_label, job_label, &format!(" · Frame {frame}"), OVER_THE_LIMITS)
 }
 
 /// **`Telegram` I4 — a cleared picture is being made again**, said in answer
 /// to *send a frame*; the picture follows once the preview route has made it.
 /// Added 2026-10-16, the Telegram worker's piece 6; Rule 9 binds.
-pub fn a_frame_is_being_made_again(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: u64) -> AMarkedText {
+pub fn a_frame_is_being_made_again(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: i64) -> AMarkedText {
     a_user_message(server_label, job_label, &format!(" · Frame {frame}"), "Regenerating the preview.")
 }
 
@@ -237,7 +306,7 @@ pub fn a_frame_is_being_made_again(server_label: &(impl TheServersName + ?Sized)
 /// said once where *being made again* was said and the picture was not ready
 /// ten minutes later. Added 2026-10-16, owed piece 11, on the build runner's
 /// ruling of that day; the drawing has no such state, so Rule 9 binds.
-pub fn a_frames_picture_could_not_be_made(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: u64) -> AMarkedText {
+pub fn a_frames_picture_could_not_be_made(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: i64) -> AMarkedText {
     a_user_message(server_label, job_label, &format!(" · Frame {frame}"), "Could not generate the preview.")
 }
 
@@ -245,7 +314,7 @@ pub fn a_frames_picture_could_not_be_made(server_label: &(impl TheServersName + 
 /// being made: a frame the job does not cover, or one that has nothing a
 /// picture can be made from. Added 2026-10-16, the Telegram worker's piece 6;
 /// Rule 9 binds.
-pub fn there_is_no_picture_of_the_frame(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: u64) -> AMarkedText {
+pub fn there_is_no_picture_of_the_frame(server_label: &(impl TheServersName + ?Sized), job_label: &str, frame: i64) -> AMarkedText {
     a_user_message(server_label, job_label, &format!(" · Frame {frame}"), "No preview available.")
 }
 
@@ -297,7 +366,7 @@ pub struct ThePictures {
     server_label: AServerLabel,
     outside_the_limits: OnceForAJob,
     not_accepted: OnceForAJob,
-    delivered: std::collections::BTreeMap<(String, u64, usize), i64>,
+    delivered: std::collections::BTreeMap<(String, i64, usize), i64>,
 }
 
 impl ThePictures {
@@ -342,11 +411,12 @@ impl ThePictures {
                 Box::new(move |c: &TheClient| c.send_marked_message(chat, &text, None)),
             ));
         }
-        let caption = the_caption(
+        let caption = the_caption_saying(
             &self.server_label,
             &derivative.job_label,
             derivative.frame,
             derivative.which_picture.as_ref(),
+            &derivative.not_read,
         );
         WhatBecameOfAPicture::Offered(queue.offer(
             class,
@@ -356,7 +426,7 @@ impl ThePictures {
         ))
     }
 
-    /// I2/C1b: a lone picture has its Stop attached after its record exists.
+    /// I4: one picture answered; no Stop rides it (C1b as changed 2026-11-09).
     pub fn send_with_its_stop(
         &mut self,
         messages: &mut TheJobMessages,
@@ -367,16 +437,38 @@ impl ThePictures {
         self.send_a_frame_with_its_stop(messages, vec![derivative], class, stop)
     }
 
-    /// Send every held copy in order, at most ten per album. An album gets a
-    /// separate companion; never attach markup to an album member. Remember
-    /// accepted batches until that companion goes, so a retry repeats only
-    /// the unfinished part. This memory has the journal's at-least-once life.
+    /// **An answer to *send a frame*** (`Telegram` I4, R14): from 2026-11-09
+    /// no picture carries *Stop this job* (C1b), and nothing follows an album.
+    /// `stop` is kept for an answer's refusal, which is said with the job's
+    /// Stop while the job is live, as before.
     pub fn send_a_frame_with_its_stop(
         &mut self,
         messages: &mut TheJobMessages,
         copies: Vec<ADerivative>,
         class: AClassOfSend,
         stop: Option<&TheSubject>,
+    ) -> APictureSent {
+        self.send_a_frame_as(messages, copies, class, AFramesWay { stop, ..AFramesWay::default() })
+    }
+
+    /// **`Telegram` I2 as changed 2026-11-09 — a frame's copies, in order, at
+    /// most ten to an album, as `way` says.** A frame from the journal goes as
+    /// **a reply to its job's message, with no Stop and nothing after it**
+    /// (the twenty-eighth notes, note 19: *"One message, Stop on job"*); an
+    /// answer carries none either. Accepted batches are remembered
+    /// until the whole frame has gone, so a retry repeats only the unfinished
+    /// part. This memory has the journal's at-least-once life.
+    ///
+    /// **I3's refusal, once per job**: a line on the job's message while the
+    /// job is live and that message is recorded (C1d); otherwise a message of
+    /// its own — without a sound after the ending (V1e) — or, for an answer,
+    /// as before.
+    pub fn send_a_frame_as(
+        &mut self,
+        messages: &mut TheJobMessages,
+        copies: Vec<ADerivative>,
+        class: AClassOfSend,
+        way: AFramesWay<'_>,
     ) -> APictureSent {
         let Some(first) = copies.first() else {
             return APictureSent::NotSentAlreadySaid;
@@ -388,24 +480,12 @@ impl ThePictures {
         let queue = messages.queue.clone();
         let mut said = false;
         if !outside.is_empty() && self.outside_the_limits.first_time_for(&job) {
-            let text = outside_the_limits(&self.server_label, &label, frame);
-            let ended = if let Some(subject) = stop {
-                crate::actions::message_result(messages.send_about_in(
-                    &crate::job_messages::AComposedMessage {
-                        text,
-                        buttons: vec![],
-                    },
-                    subject,
-                    &self.server_label,
-                    &label,
-                    class,
-                ))
-            } else {
-                let chat = self.chat;
-                wait_for(
-                    &queue,
-                    queue.offer(class, Box::new(move |c| c.send_marked_message(chat, &text, None))),
-                )
+            let ended = match (way.stop, way.on_the_jobs_message()) {
+                (None, Some(keeper)) => {
+                    keeper.a_last_line(&job, OVER_THE_LIMITS);
+                    HowASendEnded::Accepted(Value::Null)
+                }
+                _ => self.a_refusal_said(messages, &way, outside_the_limits(&self.server_label, &label, frame), &label, class),
             };
             if matches!(
                 ended,
@@ -423,14 +503,14 @@ impl ThePictures {
                 APictureSent::NotSentAlreadySaid
             };
         }
-        let lone = fits.len() == 1;
+        let how = crate::transport::HowItIsSent { silent: false, reply_to: way.reply_to };
         let mut first_message = None;
         for (part, batch) in the_sends_of_a_frame(fits).into_iter().enumerate() {
             let key = (job.clone(), frame, part);
             let message = if let Some(id) = self.delivered.get(&key) {
                 *id
             } else {
-                match send_a_frames_copies_each(&queue, self.chat, &self.server_label, batch, class) {
+                match send_a_frames_copies_each_as(&queue, self.chat, &self.server_label, batch, class, how) {
                     Ok(sent) => {
                         // R1b: each picture is about its job and its frame.
                         for (message, copy) in &sent {
@@ -438,7 +518,11 @@ impl ThePictures {
                                 *message,
                                 crate::worker_state::WhatAMessageIsAbout::AJob {
                                     job: copy.job.clone(),
-                                    generation: stop.map(|subject| subject.generation.clone()),
+                                    generation: way.stop.map(|subject| subject.generation.clone()),
+                                    // A reply naming a frame below zero is
+                                    // not carried (R1a's request takes a
+                                    // frame of zero or more): it asks for the
+                                    // newest instead.
                                     frame: Some(copy.frame),
                                     layer: copy.which_picture.as_ref().map(|which| which.as_said()),
                                 },
@@ -454,32 +538,8 @@ impl ThePictures {
                             HowASendEnded::HandedBack(WhyTheCallFailed::Refused(_))
                         ) && self.not_accepted.first_time_for(&job)
                         {
-                            let text = telegram_did_not_accept(
-                                &self.server_label,
-                                &label,
-                                frame,
-                            );
-                            if let Some(subject) = stop {
-                                let _ = messages.send_about_in(
-                                    &crate::job_messages::AComposedMessage {
-                                        text,
-                                        buttons: vec![],
-                                    },
-                                    subject,
-                                    &self.server_label,
-                                    &label,
-                                    class,
-                                );
-                            } else {
-                                let chat = self.chat;
-                                wait_for(
-                                    &queue,
-                                    queue.offer(
-                                        class,
-                                        Box::new(move |c| c.send_marked_message(chat, &text, None)),
-                                    ),
-                                );
-                            }
+                            let text = telegram_did_not_accept(&self.server_label, &label, frame);
+                            let _ = self.a_refusal_said(messages, &way, text, &label, class);
                         }
                         return APictureSent::NotAccepted(ended);
                     }
@@ -488,33 +548,41 @@ impl ThePictures {
             first_message.get_or_insert(message);
         }
         let message = first_message.unwrap();
-        let attached = stop.map(|subject| {
-            if lone {
-                messages.attach_a_stop(message, subject, &self.server_label, &label, class)
-            } else {
-                messages.send_a_companion(
-                    a_user_message(&self.server_label, &label, &format!(" · Frame {frame}"), ""),
-                    subject,
-                    &self.server_label,
-                    &label,
-                    class,
-                )
-            }
-        });
-        if let Some(Err(WhyAMessageWasNotSent::NotSent(ended))) = &attached {
-            if matches!(
-                ended,
-                HowASendEnded::HandedBack(WhyTheCallFailed::NotReached(_))
-            ) {
-                return APictureSent::NotAccepted(ended.clone());
-            }
-        }
+        // **`Telegram` C1b as changed 2026-11-09: no picture or album carries
+        // a Stop, an answer to *send a frame* included, and nothing follows
+        // one** — the job's own message carries it (the twenty-eighth notes,
+        // note 19; Sol's fresh look, round 1, found answers still adding it).
         self.delivered
             .retain(|(held, number, _), _| held != &job || *number != frame);
         APictureSent::Sent {
             message,
-            stop: attached,
+            stop: None,
         }
+    }
+
+    /// **I3's refusal as a message of its own**: an answer's as before, Stop
+    /// and all while its job is live; a journal frame's with no Stop, and
+    /// without a sound once the job has ended (V1e).
+    fn a_refusal_said(
+        &mut self,
+        messages: &mut TheJobMessages,
+        way: &AFramesWay<'_>,
+        text: AMarkedText,
+        label: &str,
+        class: AClassOfSend,
+    ) -> HowASendEnded {
+        if let Some(subject) = way.stop {
+            return crate::actions::message_result(messages.send_about_in(
+                &crate::job_messages::AComposedMessage { text, buttons: vec![] },
+                subject,
+                &self.server_label,
+                label,
+                class,
+            ));
+        }
+        let (chat, how) = (self.chat, crate::transport::HowItIsSent::silent(way.after_the_ending));
+        let queue = messages.queue.clone();
+        wait_for(&queue, queue.offer(class, Box::new(move |c| c.send_marked_message_as(chat, &text, None, how))))
     }
 
     /// **Read how a picture's send ended.** A refusal by Telegram is said
@@ -525,7 +593,7 @@ impl ThePictures {
         queue: &TheSendQueue,
         job: &str,
         job_label: &str,
-        frame: u64,
+        frame: i64,
         ended: &HowASendEnded,
     ) -> Option<Receiver<HowASendEnded>> {
         let HowASendEnded::HandedBack(WhyTheCallFailed::Refused(_)) = ended else {
@@ -570,6 +638,27 @@ pub fn the_sends_of_a_frame(copies: Vec<ADerivative>) -> Vec<Vec<ADerivative>> {
     sends
 }
 
+/// **How a frame's pictures go** (`Telegram` I2, C1b, C1d, V1e, as changed
+/// 2026-11-09 by the twenty-eighth notes, notes 18 and 19).
+#[derive(Clone, Copy, Default)]
+pub struct AFramesWay<'a> {
+    /// **An answer's Stop**, on a lone picture, while its job is live.
+    pub stop: Option<&'a TheSubject>,
+    /// **The job's message the pictures reply to** (I2), where one is
+    /// recorded.
+    pub reply_to: Option<i64>,
+    /// **Where I3's line goes while the job is live** (C1d).
+    pub the_jobs_messages: Option<&'a crate::status::TheJobsOwnMessages>,
+    /// **The job has ended**: a refusal is said without a sound (V1e).
+    pub after_the_ending: bool,
+}
+
+impl AFramesWay<'_> {
+    fn on_the_jobs_message(&self) -> Option<&crate::status::TheJobsOwnMessages> {
+        self.the_jobs_messages.filter(|_| self.reply_to.is_some() && !self.after_the_ending)
+    }
+}
+
 /// **The first message a send made**: a picture's own, or an album's first
 /// picture's, since `sendMediaGroup` gives back every message it sent, in
 /// order.
@@ -611,6 +700,19 @@ pub fn send_a_frames_copies_each(
     copies: Vec<ADerivative>,
     class: AClassOfSend,
 ) -> Result<Vec<(i64, ADerivative)>, HowASendEnded> {
+    send_a_frames_copies_each_as(queue, chat, server_label, copies, class, crate::transport::HowItIsSent::default())
+}
+
+/// **The same, each send as `how` says** — a reply to the job's message
+/// (`Telegram` I2, the twenty-eighth notes, note 19).
+pub fn send_a_frames_copies_each_as(
+    queue: &TheSendQueue,
+    chat: i64,
+    server_label: &(impl TheServersName + ?Sized),
+    copies: Vec<ADerivative>,
+    class: AClassOfSend,
+    how: crate::transport::HowItIsSent,
+) -> Result<Vec<(i64, ADerivative)>, HowASendEnded> {
     let mut every = Vec::new();
     for one_send in the_sends_of_a_frame(copies) {
         let shown: Vec<ADerivative> = one_send.iter().map(|copy| ADerivative { bytes: Vec::new(), ..copy.clone() }).collect();
@@ -618,7 +720,7 @@ pub fn send_a_frames_copies_each(
             .into_iter()
             .enumerate()
             .map(|(at, copy)| {
-                let caption = if at == 0 { the_caption(server_label, &copy.job_label, copy.frame, copy.which_picture.as_ref()) }
+                let caption = if at == 0 { the_caption_saying(server_label, &copy.job_label, copy.frame, copy.which_picture.as_ref(), &copy.not_read) }
                     else {
                         let which = copy.which_picture.as_ref().map(|which| format!(" · {}", which.as_said())).unwrap_or_default();
                         AMarkedText::plain(format!("Frame {}{which} · Not colour-accurate", copy.frame))
@@ -631,10 +733,11 @@ pub fn send_a_frames_copies_each(
             queue.offer(
                 class,
                 Box::new(move |c: &TheClient| match captioned.as_slice() {
-                    [(file_name, bytes, caption)] => c.send_photo_marked(chat, file_name, bytes.clone(), Some(caption), None),
-                    many => c.send_a_marked_album(
+                    [(file_name, bytes, caption)] => c.send_photo_marked_as(chat, file_name, bytes.clone(), Some(caption), None, how),
+                    many => c.send_a_marked_album_as(
                         chat,
                         many.iter().map(|(name, bytes, caption)| (name.clone(), bytes.clone(), Some(caption.clone()))).collect(),
+                        how,
                     ),
                 }),
             ),
@@ -677,7 +780,7 @@ pub enum WhatTheSetHolds {
 }
 
 pub trait TheDerivativeSet {
-    fn what_it_holds(&self, job: &str, frame: u64) -> WhatTheSetHolds;
+    fn what_it_holds(&self, job: &str, frame: i64) -> WhatTheSetHolds;
 }
 
 /// **The answer to *send a frame*.**
@@ -688,7 +791,7 @@ pub enum AnAnswerToSendAFrame {
     /// **I4**: re-run the preview route under its own declarations (`Job
     /// files and outputs` B24); the picture is then on the journal like any
     /// other. *Act owed*: step 8b.
-    ProduceItAgain { job: String, frame: u64 },
+    ProduceItAgain { job: String, frame: i64 },
     /// **I5**: say this, from the records.
     Say(AMarkedText),
 }
@@ -700,7 +803,7 @@ pub fn answer_send_a_frame(
     server_label: &(impl TheServersName + ?Sized),
     job: &str,
     job_label: &str,
-    frame: u64,
+    frame: i64,
 ) -> AnAnswerToSendAFrame {
     match set.what_it_holds(job, frame) {
         WhatTheSetHolds::Held(derivative) => AnAnswerToSendAFrame::ThePicture(derivative),
@@ -738,7 +841,7 @@ pub(crate) mod tests {
         bytes
     }
 
-    fn a_derivative(job: &str, frame: u64, bytes: Vec<u8>) -> ADerivative {
+    fn a_derivative(job: &str, frame: i64, bytes: Vec<u8>) -> ADerivative {
         ADerivative {
             job: job.into(),
             job_label: "Kitchen \u{2014} final".into(),
@@ -746,6 +849,7 @@ pub(crate) mod tests {
             file_name: format!("frame{frame}.png"),
             bytes,
             which_picture: None,
+            not_read: Vec::new(),
         }
     }
 
@@ -886,6 +990,14 @@ pub(crate) mod tests {
             "S\nJ · Frame 3 · File Output node Beauty · Not colour-accurate"
         );
         assert_eq!(the_caption("S", "J", 3, None), "S\nJ · Frame 3 · Not colour-accurate", "one layer, none named");
+        // **C8 of the UI at every size: a job name past the caption's bound is
+        // cut short and the rest of the caption still said.** Before, a
+        // 1,100-letter name made a caption Telegram refuses.
+        let long = "Kitchen_".repeat(140);
+        let cut = the_caption("S", &long, 3, Some(&a_layer));
+        assert!(cut.text.encode_utf16().count() <= THE_BOUND_ON_A_CAPTION, "{}", cut.text.encode_utf16().count());
+        assert!(cut.text.ends_with("\u{2026} · Frame 3 · Reflections · Not colour-accurate"), "{}", &cut.text[cut.text.len() - 80..]);
+        assert!(cut.text.starts_with("S\nKitchen_Kitchen_"));
 
         let service = Arc::new(AStandInService::new());
         let queue = TheSendQueue::new(TheClient::over(service.clone()), Arc::new(OnThisComputersClock));
@@ -920,7 +1032,7 @@ pub(crate) mod tests {
     }
 
     /// One frame's copy, of a View Layer by name.
-    fn a_copy(frame: u64, layer: &str, bytes: Vec<u8>) -> ADerivative {
+    fn a_copy(frame: i64, layer: &str, bytes: Vec<u8>) -> ADerivative {
         ADerivative {
             which_picture: Some(WhichPictureItIs::AViewLayer(layer.into())),
             file_name: format!("{frame}-{layer}.png"),
@@ -963,40 +1075,32 @@ pub(crate) mod tests {
         media.iter().map(|one| one["caption"].as_str().unwrap().to_string()).collect()
     }
 
-    /// **`Telegram` I2 as written 2026-10-18 (the fourteenth notes, note 7):
-    /// a two-layer frame makes one `sendMediaGroup` whose two captions name
-    /// *Interior* and *Reflections* in place order** — ~~then one
-    /// Its Stop is on a separate companion, never on an album member.
+    /// **`Telegram` I2 and C1b as changed 2026-11-09 (the twenty-eighth notes,
+    /// note 19: *"One message, Stop on job"*): a two-layer frame makes one
+    /// `sendMediaGroup` whose two captions name *Interior* and *Reflections* in
+    /// place order, sent as a reply to the job's message, with its sound, and
+    /// nothing after it** — no companion, no Stop. Until then a second message
+    /// followed it holding only *Stop this job*. **An answer's album carries
+    /// none either.**
     #[test]
-    fn a_two_layer_frame_is_one_album_naming_both_layers_and_a_separate_companion() {
+    fn twenty_eighth_19_a_two_layer_frame_is_one_album_replying_to_the_jobs_message_and_nothing_after() {
         let service = Arc::new(AStandInService::new());
         service.then_answers(&the_album_answer(501, 2));
-        service.then_answers(r#"{"ok":true,"result":{"message_id":503}}"#);
         let mut messages = a_frames_messages(&service);
         let mut pictures = ThePictures::new(5, "RunPod 4090");
-        let copies = vec![
+        let copies = || vec![
             a_copy(140, "Interior", a_png_header(1920, 1080)),
             a_copy(140, "Reflections", a_png_header(1920, 1080)),
         ];
-        let sent = pictures.send_a_frame_with_its_stop(
+        let sent = pictures.send_a_frame_as(
             &mut messages,
-            copies,
+            copies(),
             AClassOfSend::FramePicturesAndMedia,
-            Some(&the_job()),
+            AFramesWay { reply_to: Some(40), ..AFramesWay::default() },
         );
-        assert_eq!(
-            sent,
-            APictureSent::Sent {
-                message: 501,
-                stop: Some(Ok(()))
-            }
-        );
+        assert_eq!(sent, APictureSent::Sent { message: 501, stop: None });
         let heard = service.heard();
-        assert_eq!(
-            heard.iter().map(|c| c.method.as_str()).collect::<Vec<_>>(),
-            ["sendMediaGroup", "sendMessage", "editMessageText"],
-            "the control is on a companion"
-        );
+        assert_eq!(heard.iter().map(|c| c.method.as_str()).collect::<Vec<_>>(), ["sendMediaGroup"], "nothing after the album");
         assert_eq!(
             the_albums_captions(&heard[0]),
             [
@@ -1005,99 +1109,62 @@ pub(crate) mod tests {
             ]
         );
         let WhatACallCarries::FieldsAndFiles { fields, .. } = &heard[0].carries else { panic!() };
-        assert!(fields.get("reply_markup").is_none() && fields.get("disable_notification").is_none(), "no button, and it notifies");
+        assert!(fields.get("reply_markup").is_none() && fields.get("disable_notification").is_none(), "no button, and it sounds");
+        assert_eq!(fields["reply_parameters"], serde_json::json!({ "message_id": 40 }));
+        service.then_answers(&the_album_answer(601, 2));
+        let answered = pictures.send_a_frame_with_its_stop(&mut messages, copies(), AClassOfSend::RoutedAnswersAndAcknowledgements, Some(&the_job()));
+        assert_eq!(answered, APictureSent::Sent { message: 601, stop: None });
+        assert_eq!(service.heard().len(), 2, "an answer's album has no companion either");
     }
 
+    /// **A part of a frame that reached nothing is owed, and the parts that
+    /// went are not sent again** — the journal's at-least-once life, now that
+    /// no companion follows.
     #[test]
-    fn piece17_retry_a_lost_companion_does_not_repeat_the_album() {
+    fn a_lost_part_of_a_frame_is_retried_without_repeating_the_album() {
         let service = Arc::new(AStandInService::new());
-        service.then_answers(&the_album_answer(501, 2));
-        service.then_is_not_reached("line gone for the companion");
-        service.then_answers(r#"{"ok":true,"result":{"message_id":503}}"#);
+        service.then_answers(&the_album_answer(801, 10));
+        service.then_is_not_reached("line gone for the eleventh copy");
+        service.then_answers(r#"{"ok":true,"result":{"message_id":811}}"#);
         let mut messages = a_frames_messages(&service);
         let mut pictures = ThePictures::new(5, "RunPod 4090");
-        let copies = || {
-            vec![
-                a_copy(140, "A", a_png_header(1280, 720)),
-                a_copy(140, "B", a_png_header(1280, 720)),
-            ]
-        };
-        let first = pictures.send_a_frame_with_its_stop(
-            &mut messages,
-            copies(),
-            AClassOfSend::FramePicturesAndMedia,
-            Some(&the_job()),
-        );
-        assert!(
-            matches!(first, APictureSent::NotAccepted(_)),
-            "a missing companion is still owed"
-        );
-        pictures.send_a_frame_with_its_stop(
-            &mut messages,
-            copies(),
-            AClassOfSend::FramePicturesAndMedia,
-            Some(&the_job()),
-        );
-        assert_eq!(
-            service
-                .heard()
-                .iter()
-                .filter(|call| call.method == "sendMediaGroup")
-                .count(),
-            1
-        );
+        let copies = || (1..=11).map(|n| a_copy(9, &format!("L{n}"), a_png_header(640, 360))).collect::<Vec<_>>();
+        let way = AFramesWay { reply_to: Some(40), ..AFramesWay::default() };
+        let first = pictures.send_a_frame_as(&mut messages, copies(), AClassOfSend::FramePicturesAndMedia, way);
+        assert!(matches!(first, APictureSent::NotAccepted(_)), "the eleventh copy is still owed");
+        let again = pictures.send_a_frame_as(&mut messages, copies(), AClassOfSend::FramePicturesAndMedia, way);
+        assert_eq!(again, APictureSent::Sent { message: 801, stop: None });
+        assert_eq!(service.heard().iter().filter(|call| call.method == "sendMediaGroup").count(), 1);
     }
 
-    #[test]
-    fn piece17_an_album_has_a_separate_stop_companion() {
-        let service = Arc::new(AStandInService::new());
-        service.then_answers(&the_album_answer(501, 2));
-        service.then_answers(r#"{"ok":true,"result":{"message_id":503}}"#);
-        let mut messages = a_frames_messages(&service);
-        let mut pictures = ThePictures::new(5, "RunPod 4090");
-        let copies = vec![
-            a_copy(140, "Interior", a_png_header(1280, 720)),
-            a_copy(140, "FX", a_png_header(1280, 720)),
-        ];
-        pictures.send_a_frame_with_its_stop(
-            &mut messages,
-            copies,
-            AClassOfSend::FramePicturesAndMedia,
-            Some(&the_job()),
-        );
-        let heard = service.heard();
-        assert_eq!(
-            heard.iter().map(|c| c.method.as_str()).collect::<Vec<_>>(),
-            ["sendMediaGroup", "sendMessage", "editMessageText"]
-        );
+    /// **An older release's companion**, recorded as holding nothing but its
+    /// Stop (`Telegram` C1b's line of 2026-11-02).
+    fn an_older_releases_companion(messages: &mut TheJobMessages) {
+        let mut stop = crate::job_messages::a_stop_to_offer("RunPod 4090", "Kitchen — final", false);
+        stop.payload["the_message_says_only_its_stop"] = serde_json::json!(true);
+        messages
+            .send_with_buttons(
+                &crate::job_messages::AComposedMessage { text: AMarkedText::plain("RunPod 4090\nKitchen — final · Frame 140"), buttons: vec![stop] },
+                &the_job(),
+            )
+            .unwrap();
     }
 
     /// **`Telegram` C1b's line of 2026-11-02: a companion says nothing but its
-    /// Stop, so it goes when its Stop goes.** The first 5.3 live pass saw, after
-    /// *B9 multilayer grade*'s album, a message holding only the server's name
-    /// and *B9 multilayer grade · Frame 1*. **What it bites on**: the ending took
-    /// the one button away and left the message standing. While the job is live
+    /// Stop, so it goes when its Stop goes** — from 2026-11-09 only one an
+    /// older release sent, since this one sends none. The first 5.3 live pass
+    /// saw, after *B9 multilayer grade*'s album, a message holding only the
+    /// server's name and *B9 multilayer grade · Frame 1*. While the job is live
     /// it stays, and a message with words of its own only loses its button.
     #[test]
-    fn an_albums_companion_goes_with_its_stop_and_nothing_else_does() {
+    fn an_older_releases_companion_goes_with_its_stop_and_nothing_else_does() {
         let service = Arc::new(AStandInService::new());
-        service.then_answers(&the_album_answer(501, 2));
         service.then_answers(r#"{"ok":true,"result":{"message_id":503}}"#);
         let mut messages = a_frames_messages(&service);
-        let mut pictures = ThePictures::new(5, "RunPod 4090");
-        let copies = vec![
-            a_copy(140, "Interior", a_png_header(1280, 720)),
-            a_copy(140, "FX", a_png_header(1280, 720)),
-        ];
-        pictures.send_a_frame_with_its_stop(&mut messages, copies, AClassOfSend::FramePicturesAndMedia, Some(&the_job()));
-        // **A lone picture of the same job keeps its caption and loses its button.**
-        service.then_answers(r#"{"ok":true,"result":{"message_id":700}}"#);
-        pictures.send_with_its_stop(
-            &mut messages,
-            a_derivative("job-a", 141, a_png_header(1280, 720)),
-            AClassOfSend::FramePicturesAndMedia,
-            Some(&the_job()),
-        );
+        an_older_releases_companion(&mut messages);
+        // **An older release's picture with its Stop keeps its caption and
+        // loses its button.**
+        messages.attach_a_stop(700, &the_job(), "RunPod 4090", "Kitchen — final", AClassOfSend::FramePicturesAndMedia).unwrap();
         let calls = service.heard().len();
 
         assert_eq!(messages.remove_the_stops_where(&|_| false).unwrap(), 0, "while the job is live it stays");
@@ -1129,17 +1196,11 @@ pub(crate) mod tests {
     /// **Where Telegram refuses the deletion, its button still goes** (`Telegram`
     /// B18: a message 48 hours old or more), so no Stop stands on an ended job.
     #[test]
-    fn a_companion_too_old_to_delete_still_loses_its_stop() {
+    fn an_older_companion_too_old_to_delete_still_loses_its_stop() {
         let service = Arc::new(AStandInService::new());
-        service.then_answers(&the_album_answer(501, 2));
         service.then_answers(r#"{"ok":true,"result":{"message_id":503}}"#);
         let mut messages = a_frames_messages(&service);
-        let mut pictures = ThePictures::new(5, "RunPod 4090");
-        let copies = vec![
-            a_copy(140, "Interior", a_png_header(1280, 720)),
-            a_copy(140, "FX", a_png_header(1280, 720)),
-        ];
-        pictures.send_a_frame_with_its_stop(&mut messages, copies, AClassOfSend::FramePicturesAndMedia, Some(&the_job()));
+        an_older_releases_companion(&mut messages);
         let calls = service.heard().len();
         service.then_answers(r#"{"ok":false,"error_code":400,"description":"Bad Request: message can't be deleted"}"#);
         assert_eq!(messages.remove_the_stops_where(&|_| true).unwrap(), 1);
@@ -1166,8 +1227,8 @@ pub(crate) mod tests {
         assert_eq!(service.heard().iter().map(|call| call.method.as_str()).collect::<Vec<_>>(), ["sendMediaGroup"]);
     }
 
-    /// **A one-layer frame makes one `sendPhoto`, its caption unchanged**, and
-    /// its stop attached, exactly as before.
+    /// **A one-layer frame makes one `sendPhoto`, its caption unchanged** —
+    /// ~~and its stop attached~~ and from 2026-11-09 nothing after it.
     #[test]
     fn a_one_layer_frame_is_one_picture_as_before() {
         let service = Arc::new(AStandInService::new());
@@ -1176,20 +1237,19 @@ pub(crate) mod tests {
         let mut pictures = ThePictures::new(5, "RunPod 4090");
         let copies = vec![a_derivative("job-a", 3, a_png_header(1920, 1080))];
         let sent = pictures.send_a_frame_with_its_stop(&mut messages, copies, AClassOfSend::FramePicturesAndMedia, Some(&the_job()));
-        assert_eq!(sent, APictureSent::Sent { message: 700, stop: Some(Ok(())) });
+        assert_eq!(sent, APictureSent::Sent { message: 700, stop: None });
         let heard = the_words_heard(&service);
         assert_eq!(heard[0], ("sendPhoto".into(), "RunPod 4090\nKitchen — final · Frame 3 · Not colour-accurate".into()));
-        assert_eq!(heard[1].0, "editMessageReplyMarkup");
-        assert_eq!(heard.len(), 2);
+        assert_eq!(heard.len(), 1, "no Stop on a picture from 2026-11-09, an answer's included (C1b)");
     }
 
-    /// Eleven copies make an album of ten, a lone picture, then a companion.
+    /// Eleven copies make an album of ten, then a lone picture, and nothing
+    /// after (no companion since 2026-11-09).
     #[test]
     fn eleven_copies_make_an_album_of_ten_then_one_picture() {
         let service = Arc::new(AStandInService::new());
         service.then_answers(&the_album_answer(801, 10));
         service.then_answers(r#"{"ok":true,"result":{"message_id":811}}"#);
-        service.then_answers(r#"{"ok":true,"result":{"message_id":812}}"#);
         let mut messages = a_frames_messages(&service);
         let mut pictures = ThePictures::new(5, "RunPod 4090");
         let copies: Vec<ADerivative> = (1..=11)
@@ -1205,18 +1265,13 @@ pub(crate) mod tests {
             sent,
             APictureSent::Sent {
                 message: 801,
-                stop: Some(Ok(()))
+                stop: None
             }
         );
         let heard = service.heard();
         assert_eq!(
             heard.iter().map(|c| c.method.as_str()).collect::<Vec<_>>(),
-            [
-                "sendMediaGroup",
-                "sendPhoto",
-                "sendMessage",
-                "editMessageText"
-            ]
+            ["sendMediaGroup", "sendPhoto"]
         );
         let captions = the_albums_captions(&heard[0]);
         assert_eq!(captions.len(), 10);
@@ -1230,9 +1285,8 @@ pub(crate) mod tests {
 
     /// **The live Telegram pass, fault 3 (`Telegram` I3a): a frame of heavy
     /// View Layers goes as more, smaller albums, never one heavier than an
-    /// album may weigh**, every layer in its place and named, then one
-    /// companion with the Stop. Five 3840 × 2160 copies of 6 MB: three, then
-    /// two.
+    /// album may weigh**, every layer in its place and named, and nothing
+    /// after them. Five 3840 × 2160 copies of 6 MB: three, then two.
     #[test]
     fn live_pass_3_heavy_layers_go_as_smaller_albums_and_every_layer_arrives() {
         let heavy = |layer: &str| {
@@ -1251,13 +1305,12 @@ pub(crate) mod tests {
         let service = Arc::new(AStandInService::new());
         service.then_answers(&the_album_answer(901, 3));
         service.then_answers(&the_album_answer(904, 2));
-        service.then_answers(r#"{"ok":true,"result":{"message_id":906}}"#);
         let mut messages = a_frames_messages(&service);
         let mut pictures = ThePictures::new(5, "RunPod 4090");
         let sent = pictures.send_a_frame_with_its_stop(&mut messages, copies, AClassOfSend::FramePicturesAndMedia, Some(&the_job()));
-        assert_eq!(sent, APictureSent::Sent { message: 901, stop: Some(Ok(())) });
+        assert_eq!(sent, APictureSent::Sent { message: 901, stop: None });
         let heard = service.heard();
-        assert_eq!(heard.iter().map(|c| c.method.as_str()).collect::<Vec<_>>(), ["sendMediaGroup", "sendMediaGroup", "sendMessage", "editMessageText"]);
+        assert_eq!(heard.iter().map(|c| c.method.as_str()).collect::<Vec<_>>(), ["sendMediaGroup", "sendMediaGroup"]);
         let first = the_albums_captions(&heard[0]);
         let second = the_albums_captions(&heard[1]);
         assert!(first[0].contains("Frame 4 · main ·") && first[2].contains("Frame 4 · fog ·"));
@@ -1274,7 +1327,7 @@ pub(crate) mod tests {
         let service = Arc::new(AStandInService::new());
         let mut messages = a_frames_messages(&service);
         let mut pictures = ThePictures::new(5, "RunPod 4090");
-        let frame = |n: u64| {
+        let frame = |n: i64| {
             vec![
                 a_copy(n, "Interior", a_png_header(1920, 1080)),
                 a_copy(n, "Huge", a_png_header(8000, 4000)),
@@ -1303,9 +1356,34 @@ pub(crate) mod tests {
         assert!(said[3].1.contains("Frame 3 · Interior ·"), "{:?}", said[3]);
     }
 
+    /// **`Telegram` C1d and V1e: I3's refusal is a line on the job's message
+    /// while the job is live**, and no message of its own; **after the ending
+    /// it is a message of its own without a sound.** The twenty-eighth notes,
+    /// note 18.
+    #[test]
+    fn twenty_eighth_18_a_refusal_is_a_line_on_the_jobs_message_while_live_and_silent_after() {
+        let service = Arc::new(AStandInService::new());
+        let mut messages = a_frames_messages(&service);
+        let keeper = crate::status::TheJobsOwnMessages::default();
+        let mut pictures = ThePictures::new(5, "RunPod 4090");
+        service.then_answers(r#"{"ok":true,"result":{"message_id":900}}"#);
+        let frame = vec![a_copy(1, "Interior", a_png_header(1920, 1080)), a_copy(1, "Huge", a_png_header(8000, 4000))];
+        let way = AFramesWay { reply_to: Some(40), the_jobs_messages: Some(&keeper), ..AFramesWay::default() };
+        pictures.send_a_frame_as(&mut messages, frame, AClassOfSend::FramePicturesAndMedia, way);
+        assert_eq!(service.heard().iter().map(|c| c.method.as_str()).collect::<Vec<_>>(), ["sendPhoto"]);
+        assert_eq!(keeper.the_lines_of("job-a"), ["Preview not sent: over Telegram's limits."]);
+        let mut after = ThePictures::new(5, "RunPod 4090");
+        let ended = AFramesWay { after_the_ending: true, the_jobs_messages: Some(&keeper), ..AFramesWay::default() };
+        after.send_a_frame_as(&mut messages, vec![a_copy(2, "Huge", a_png_header(8000, 4000))], AClassOfSend::FramePicturesAndMedia, ended);
+        let heard = service.heard();
+        assert_eq!(heard[1].method, "sendMessage");
+        let WhatACallCarries::Fields(fields) = &heard[1].carries else { panic!() };
+        assert_eq!(fields["disable_notification"], serde_json::json!(true));
+    }
+
     struct ASet;
     impl TheDerivativeSet for ASet {
-        fn what_it_holds(&self, job: &str, frame: u64) -> WhatTheSetHolds {
+        fn what_it_holds(&self, job: &str, frame: i64) -> WhatTheSetHolds {
             match (job, frame) {
                 ("gone", _) => WhatTheSetHolds::TheRecordIsGone,
                 (_, 1) => WhatTheSetHolds::Held(a_derivative(job, 1, a_png_header(320, 180))),
@@ -1328,5 +1406,77 @@ pub(crate) mod tests {
             AnAnswerToSendAFrame::Say(a_user_message("S", "J", " · Frame 9", "Not finished rendering."))
         );
         assert!(matches!(answer_send_a_frame(&ASet, "S", "gone", "J", 1), AnAnswerToSendAFrame::Say(s) if s.contains("No longer on the server")));
+    }
+
+    // ------------------------------------------------ the four questions, batch 4
+
+    /// **Sol's S2 (the four questions, batch 4, 2026-11-11): a frame below
+    /// zero keeps its number** in every caption and every line about its
+    /// picture. `Specs/Render Settings`: *"Nothing in Smoozy assumes the first
+    /// frame is frame 1"*, and a range may start below zero. Before, these took
+    /// a frame of zero or more, and the journal turned a frame below zero into
+    /// frame 0.
+    #[test]
+    fn four_questions_s2_a_frame_below_zero_keeps_its_number() {
+        assert_eq!(the_caption("S", "J", -5, None), "S\nJ · Frame -5 · Not colour-accurate");
+        assert_eq!(outside_the_limits("S", "J", -5), a_user_message("S", "J", " · Frame -5", OVER_THE_LIMITS));
+        assert!(telegram_did_not_accept("S", "J", -5).text.contains("Frame -5"));
+        assert!(a_frames_picture_could_not_be_made("S", "J", -5).text.contains("Frame -5"));
+        let service = Arc::new(AStandInService::new());
+        service.then_answers(&the_album_answer(601, 2));
+        let mut messages = a_frames_messages(&service);
+        let mut pictures = ThePictures::new(5, "RunPod 4090");
+        let sent = pictures.send_a_frame_as(
+            &mut messages,
+            vec![a_copy(-3, "Interior", a_png_header(1920, 1080)), a_copy(-3, "Reflections", a_png_header(1920, 1080))],
+            AClassOfSend::FramePicturesAndMedia,
+            AFramesWay::default(),
+        );
+        assert_eq!(sent, APictureSent::Sent { message: 601, stop: None });
+        assert_eq!(
+            the_albums_captions(&service.heard()[0]),
+            [
+                "RunPod 4090\nKitchen — final · Frame -3 · Interior · Not colour-accurate",
+                "Frame -3 · Reflections · Not colour-accurate",
+            ]
+        );
+    }
+
+    /// **Sol's S6 (the four questions, batch 4, 2026-11-11): a View Layer whose
+    /// preview could not be read is named on its album's first picture**, so
+    /// the artist knows the layer rendered and only its preview is missing
+    /// (`Telegram` I2 as changed that day). Before, it was left out with a line
+    /// in the server's record alone. A lone picture left of a two-layer frame
+    /// says it the same way.
+    #[test]
+    fn four_questions_s6_a_layer_whose_preview_was_not_read_is_named() {
+        let service = Arc::new(AStandInService::new());
+        service.then_answers(&the_album_answer(701, 2));
+        let mut messages = a_frames_messages(&service);
+        let mut pictures = ThePictures::new(5, "RunPod 4090");
+        let main = ADerivative { not_read: vec!["Reflections".into()], ..a_copy(140, "Interior", a_png_header(1920, 1080)) };
+        pictures.send_a_frame_as(
+            &mut messages,
+            vec![main.clone(), a_copy(140, "Shadow", a_png_header(1920, 1080))],
+            AClassOfSend::FramePicturesAndMedia,
+            AFramesWay::default(),
+        );
+        assert_eq!(
+            the_albums_captions(&service.heard()[0]),
+            [
+                "RunPod 4090\nKitchen — final · Frame 140 · Interior · Not colour-accurate\nCould not read the preview of Reflections.",
+                "Frame 140 · Shadow · Not colour-accurate",
+            ]
+        );
+
+        let alone = Arc::new(AStandInService::new());
+        let mut messages = a_frames_messages(&alone);
+        let mut pictures = ThePictures::new(5, "RunPod 4090");
+        let two = ADerivative { not_read: vec!["Reflections".into(), "Shadow".into()], ..main };
+        pictures.send_a_frame_as(&mut messages, vec![two], AClassOfSend::FramePicturesAndMedia, AFramesWay::default());
+        assert_eq!(
+            the_words_heard(&alone)[0].1,
+            "RunPod 4090\nKitchen — final · Frame 140 · Interior · Not colour-accurate\nCould not read the preview of Reflections, Shadow."
+        );
     }
 }

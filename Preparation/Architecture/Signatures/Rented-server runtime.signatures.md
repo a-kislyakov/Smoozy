@@ -101,3 +101,33 @@
 - 2026-10-26 — GPT-6.1 Sol (Codex) — Carried the free-and-open-source decision into this plan; preserved the former text.
 
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Removed withdrawn paid text or obsolete references in wave 5; the account holds the complete change and check list.
+
+- 2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece J, events that fit the journal.md`, outside any round — U20: a dated sentence, the drop's label cut further to fit E6a's budget as the entry is written (twenty-ninth notes, note 11). No auditor has seen this text.
+
+- 2026-11-10 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 1, the server's queue after a death or a crash.md`, outside any round — S10a: a render whose worker is gone with no ending takes its branch at once. X9b: a render's group is not gone while its render process validates, and the worker's pair is written with the render process's. No auditor has seen this text.
+
+- 2026-11-10 — Claude Fable 5.2 (Claude Code subagent), the same sitting as the line above, after Sol's read-only fresh look — S10a: looked at again at every request while a render is owed its branch, and when the last held write lands; a second attempt that could not start is not counted. X9b: the worker's pair also replaces an earlier attempt's. No auditor has seen this text.
+
+- 2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 3, replacing programs on a server.md`, outside any round — G14: a dated paragraph, *what runs after the restore*: G25's ending and start performed again once the pointer names the previous package, with the service manager's start limit quoted from its own manual. No auditor has seen this text.
+
+- 2026-11-11 — Claude Fable 5.2 (Claude Code subagent), the same sitting as the line above, after Sol's read-only fresh look — G14, *what runs after the restore*: done whatever phase the restore began from. No auditor has seen this text.
+
+- 2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 5, how a render ends and what it counts.md`, outside any round — §11.1 gains **M5a** (the worker takes the render's ending from its own wait, beside the copy, and reads each stream ten seconds more) and §3.3 gains **S14b** (an ending whose long completeness statement cannot be kept yet is reported saying so and held, never written without it); the sources file gains 2.5a, POSIX `read()` and `poll()`, read 2026-11-11. No auditor has seen this text.
+
+- 2026-11-11 — Claude Fable 5.2 (Claude Code subagent), the same sitting as the line above, after Sol's read-only fresh look — M5a: a stream every writer has closed is read to its end whatever the clock says. No auditor has seen this text.
+
+- 2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the runner's rulings at the foot of `Audits/Build/Fable review/Sitting 5 — what landed.md`, outside any round — M5a gains a dated sentence: the file-inspection and preview workers read their Blender's streams the same way. No auditor has seen this text.
+
+- 2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's rulings at the foot of `Audits/Build/Fable review/The live pass of the night's fixes — what happened.md` (ruling 2), outside any round — G4: a dated paragraph, *where the request carries no previous version and the machine has one*. No auditor has seen this text.
+
+- 2026-11-12 — Claude Fable 5.2 (Claude Code subagent), the same work as the line above, after Sol's read-only fresh look — G4: what the machine gives comes first. No auditor has seen this text.
+- 2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's ruling 3 at the foot of `Audits/Build/Fable review/The live pass of the night's fixes — what happened.md` (the full disk), outside any round — M4a: a render refused for want of the reserve stays waiting, is named in the queue reading, and is started by the supervisor once the reserve can be established. No auditor has seen this text.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent) — The double-check ideas, idea 5: M5a carried to the step-4 reading. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the live pass found.md`, outside any round — G13: an entry point that does not return is no answer (30 s at least for one asking of the exchange, 45 s for G25's ending on a container), and a caller that stops waiting is the did-not-answer branch at once. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the live pass's leftovers.md`, outside any round — G25: a paragraph, *a supervisor that holds no endpoint*: where nothing holds the endpoint, a supervisor started through the pointer that runs another program is ended; G14's *what this does not reach* struck for it. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened G25’s two new rollback diagnostics in the last words sweep.
+2026-11-14 — Claude Opus 5.5 — V9: the queue reading names the standing setup run too (Rough share 4, 310).

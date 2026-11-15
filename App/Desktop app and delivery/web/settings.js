@@ -169,6 +169,7 @@ function aDate(seconds, withTheTime) {
   if (withTheTime) {
     shape.hour = "2-digit";
     shape.minute = "2-digit";
+    shape.hourCycle = "h23";
   }
   return at.toLocaleString(undefined, shape);
 }
@@ -302,7 +303,7 @@ function theTransfersSection(section) {
   for (const one of [heading, row, noFolder, elsewhere, folderAnswer, limits, caps, totals, capsAnswer]) {
     section.appendChild(one);
   }
-  return { heading, path, choose, noFolder, elsewhere, folderAnswer, limits, up, down, totals, capsAnswer };
+  return { heading, path, choose, noFolder, elsewhere, folderAnswer, limits, caps, up, down, totals, capsAnswer };
 }
 
 function theCapRow(direction) {
@@ -400,6 +401,8 @@ function theTransfersSay(said) {
     if (!aFieldIsBeingTypedIn(cap.field)) cap.field.value = saved || "";
     cap.row.hidden = unread;
   }
+  // **A frame with nothing in it is not drawn** (the UI at every size, E-06).
+  t.caps.hidden = unread;
   theSentences(t.totals, said.eachCapIsATotal, said.emptyMeansNoCap);
 }
 
@@ -409,6 +412,10 @@ function theFoldersSection(section) {
   const heading = made("h2");
   const covers = made("p", { className: "hintl" });
   const list = made("div", { className: "folders" });
+  // **An empty list says so, and draws no frame** (the UI at every size,
+  // E-06).
+  const none = made("p", { className: "hintl" });
+  none.hidden = true;
   const unread = made("div", { className: "stg-answer" });
   const addRow = made("div", { className: "stgrow" });
   const add = aControl({ className: "mini" });
@@ -418,8 +425,8 @@ function theFoldersSection(section) {
   addRow.appendChild(add);
   const how = made("p", { className: "hintl" });
   const answer = made("div", { className: "stg-answer" });
-  for (const one of [heading, covers, list, unread, addRow, how, answer]) section.appendChild(one);
-  return { heading, covers, list, unread, add, how, answer, rows: [] };
+  for (const one of [heading, covers, list, none, unread, addRow, how, answer]) section.appendChild(one);
+  return { heading, covers, list, none, unread, add, how, answer, rows: [] };
 }
 
 whenTold(THE_SEARCH_FOLDERS, (delivery) => {
@@ -449,6 +456,10 @@ whenTold(THE_SEARCH_FOLDERS, (delivery) => {
   f.list.hidden = Boolean(unreadList);
   theAnswerIs(f.unread, unreadList);
   const many = Number(said.folderCount || 0);
+  const empty = !unreadList && many === 0;
+  if (empty) f.list.hidden = true;
+  f.none.hidden = !empty;
+  f.none.textContent = said.noSearchFoldersYet || "";
   for (let at = 0; at < many; at += 1) {
     const row = theFolderRow(said, at, many);
     f.list.appendChild(row);
@@ -482,7 +493,13 @@ function theFolderRow(said, at, many) {
   theValueIsDrawnInto(path, theFolder);
   row.appendChild(order);
   row.appendChild(grip);
-  row.appendChild(path);
+  // **The path and its mark share one piece that may wrap**: the mark stays on
+  // one line, beside the path where there is room and under it where there is
+  // not, and the row's buttons keep their place (the UI at every size, E-01
+  // and E-02).
+  const what = made("span", { className: "sfwhat" });
+  what.appendChild(path);
+  row.appendChild(what);
   if (said[`folder${at}Unreadable`] === "yes") {
     // **The mark is the last search's**, and the words are Design's one word.
     const mark = made("span", { className: "fmsg" });
@@ -496,7 +513,7 @@ function theFolderRow(said, at, many) {
       when.textContent = " " + (said.at || "") + " " + theMomentReads(searchedAt);
       mark.appendChild(when);
     }
-    row.appendChild(mark);
+    what.appendChild(mark);
   }
   row.appendChild(made("span", { className: "grow" }));
   const up = aControl({ className: "mini mv" });
@@ -603,10 +620,14 @@ function theWarningsSection(section) {
       row.appendChild(made("span", { className: "grow" }));
       row.appendChild(qualifier);
     }
-    kinds.appendChild(row);
-    // **This switch's own answer, under its row** (must-do 16).
+    // **This switch's own answer, under its row** (must-do 16), **in one
+    // piece with the row**, so the box's last line is the last row's and a
+    // failed save lines up with the rows (UI consistency, findings 19 and 61).
     const answer = made("div", { className: "stg-answer" });
-    kinds.appendChild(answer);
+    const together = made("div", { className: "trowbox" });
+    together.appendChild(row);
+    together.appendChild(answer);
+    kinds.appendChild(together);
     rows.set(which, { toggle, name, qualifier, answer });
   }
   const whileRunning = made("p", { className: "hintl" });

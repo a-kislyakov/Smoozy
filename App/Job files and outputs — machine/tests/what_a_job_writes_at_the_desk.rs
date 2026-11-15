@@ -151,7 +151,7 @@ fn the_four() -> Vec<(u16, u16, PathBuf)> {
         (4u16, 5u16, "SMOOZY_DESK_BLENDER_45", "/Applications/Blender 4.5.12.app/Contents/MacOS/Blender"),
         (5, 0, "SMOOZY_DESK_BLENDER_50", "/Applications/Blender 5.0.1.app/Contents/MacOS/Blender"),
         (5, 1, "SMOOZY_DESK_BLENDER_51", "/Applications/Blender 5.1.2.app/Contents/MacOS/Blender"),
-        (5, 2, "SMOOZY_DESK_BLENDER_52", "/Applications/Blender.app/Contents/MacOS/Blender"),
+        (5, 2, "SMOOZY_DESK_BLENDER_52", "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender"),
     ]
     .into_iter()
     .filter(|(major, minor, _, _)| {
@@ -530,9 +530,15 @@ fn the_jobs_folder_is_made_where_the_file_points_and_the_frames_land_in_it() {
         .into_iter()
         .map(|layer| AViewLayerTheJobPins { layer: ArtistsText::of(layer.as_bytes().to_vec()), on: false })
         .collect();
-    let destinations =
-        smoozy_job_files_machine::reading_script::the_destinations_that_will_be_written(&printed.outputs);
-    let run_of = the_run_of(&destinations, rendering.to_str().unwrap().as_bytes(), printed.outputs.taken_by);
+    // **`Job files and outputs` P6a: the run is read off the reading as the job
+    // renders it**, the pins applied, as the render worker reads it.
+    let as_the_job_renders_it = smoozy_job_files_machine::composing::the_reading_as_the_job_renders_it(
+        printed.clone(),
+        &enters_at,
+        &the_pins,
+    )
+    .expect("a reading");
+    let run_of = the_run_of(&as_the_job_renders_it, rendering.to_str().unwrap().as_bytes());
     println!("the run: {run_of:?}");
     let sits = the_folder_is_chosen_and_made(
         &WhatTheChoiceIsMadeFrom {

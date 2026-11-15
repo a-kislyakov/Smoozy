@@ -21,11 +21,11 @@
 //!   covers every frame of its span with the value it holds.
 //! - **A scene whose markers name cameras is moved**, though it carries no
 //!   animation at all: a marker changes the camera at its frame.
-//! - **A scene whose compositing tree is keyed is moved**, though the scene
-//!   itself carries no animation: a node's value is keyed, and the keys live
-//!   on the tree rather than on the scene. (A node's mute cannot be keyed —
-//!   4.5 refuses it, *"property "mute" not animatable"* — so the test keys a
-//!   value.)
+//! - **A scene whose compositing tree keys a node's value is not moved**
+//!   (since 2026-11-13, the Creator's notes on the test copy, second round,
+//!   note 15): the reading never reads a node input's value. Until then any
+//!   keyed tree moved its scene. (A node's mute cannot be keyed — 4.5 refuses
+//!   it, *"property "mute" not animatable"*.)
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -99,7 +99,7 @@ fn the_four() -> Vec<(u16, u16, PathBuf)> {
         (4u16, 5u16, "SMOOZY_DESK_BLENDER_45", "/Applications/Blender 4.5.12.app/Contents/MacOS/Blender"),
         (5, 0, "SMOOZY_DESK_BLENDER_50", "/Applications/Blender 5.0.1.app/Contents/MacOS/Blender"),
         (5, 1, "SMOOZY_DESK_BLENDER_51", "/Applications/Blender 5.1.2.app/Contents/MacOS/Blender"),
-        (5, 2, "SMOOZY_DESK_BLENDER_52", "/Applications/Blender.app/Contents/MacOS/Blender"),
+        (5, 2, "SMOOZY_DESK_BLENDER_52", "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender"),
     ]
     .into_iter()
     .map(|(major, minor, named, usual)| {
@@ -235,8 +235,11 @@ fn the_reading_moves_only_the_scenes_that_move_in_all_four() {
         // **Markers that name cameras: moved, with no animation on the scene.**
         assert!(stepped("Marked") > 0, "{named}: a scene whose markers name cameras is moved");
 
-        // **A keyed compositing tree: moved, with no animation on the scene.**
-        assert!(stepped("Tree") > 0, "{named}: a scene whose compositing tree is keyed is moved");
+        // **A compositing tree keyed on a node's value: not moved since
+        // 2026-11-13** (the Creator's notes on the test copy, second round,
+        // note 15). The reading never reads a node input's value; a node's
+        // mute, which it does read, cannot be keyed. Before, it was moved.
+        assert_eq!(stepped("Tree"), 0, "{named}: a tree keyed on a value the reading never reads moves nothing");
     }
     std::fs::remove_dir_all(&at).expect("the folder is removed");
 }
@@ -796,6 +799,618 @@ fn every_scene_read_in_one_opening_is_the_same_as_a_reading_naming_it_in_all_fou
             assert!(alone_bytes == beside_bytes, "{named} {scene}: the half read beside the others differs from the reading naming it");
         }
         assert_eq!(kinds.len(), the_scenes.len(), "{named}: every scene writes something different");
+    }
+    std::fs::remove_dir_all(&at).expect("the folder is removed");
+}
+
+/// **The Creator's notes on the test copy, second round, note 15: a scene
+/// whose keys reach nothing the reading reads is not moved, and the reading
+/// is the same as when every scene is moved** — in the four Blenders and 5.3.
+/// Run by hand at the desk:
+///
+/// ```text
+/// cargo test -p smoozy-job-files-machine --test stepping_at_the_desk keys_that_reach_nothing -- --ignored --nocapture
+/// ```
+///
+/// One file of seven scenes over frames 1 to 12. **Not moved**: a scene with
+/// nothing animated; one whose sequencer strip's opacity is keyed; one whose
+/// view exposure is keyed; one carrying animation data with nothing in it; one
+/// whose compositing tree keys a node's value. **Moved, as before**: one whose
+/// Cycles sample count is keyed (the reading reads it), and one whose strip's
+/// opacity is driven (what a driver resolves to is not in the research).
+///
+/// **The reading is the same both ways**: the document between the marks is
+/// compared byte for byte against a reading of the same file by the same
+/// script with every scene moved at every frame of its span, which is what
+/// the reading did before 2026-10-03.
+const THE_FILE_OF_KEYS_THAT_REACH_NOTHING: &str = r#"
+import bpy, sys
+out = sys.argv[sys.argv.index("--") + 1]
+bpy.ops.wm.read_factory_settings(use_empty=False)
+first = bpy.context.scene
+first.name = "Plain"
+first.frame_start = 1
+first.frame_end = 12
+
+def a_scene(name):
+    scene = bpy.data.scenes.new(name)
+    scene.frame_start = 1
+    scene.frame_end = 12
+    scene.view_layers.new("Layer")
+    return scene
+
+def a_strip(scene):
+    editor = scene.sequence_editor_create()
+    strips = getattr(editor, "strips", None)
+    if strips is None:
+        strips = editor.sequences
+    try:
+        return strips.new_effect(name="Fade", type="COLOR", channel=1, frame_start=1, length=12)
+    except TypeError:
+        return strips.new_effect(name="Fade", type="COLOR", channel=1, frame_start=1, frame_end=13)
+
+strips = a_scene("Strips")
+fade = a_strip(strips)
+fade.blend_alpha = 1.0
+fade.keyframe_insert("blend_alpha", frame=1)
+fade.blend_alpha = 0.0
+fade.keyframe_insert("blend_alpha", frame=12)
+
+exposure = a_scene("Exposure")
+exposure.view_settings.exposure = 0.0
+exposure.view_settings.keyframe_insert("exposure", frame=1)
+exposure.view_settings.exposure = 2.0
+exposure.view_settings.keyframe_insert("exposure", frame=12)
+
+empty = a_scene("Empty")
+empty.animation_data_create()
+
+tree_scene = a_scene("TreeValue")
+if bpy.app.version[:2] == (4, 5):
+    tree_scene.use_nodes = True
+    tree = tree_scene.node_tree
+else:
+    tree = bpy.data.node_groups.new("Compositor", "CompositorNodeTree")
+    tree_scene.compositing_node_group = tree
+blur = tree.nodes.new("CompositorNodeBlur")
+values = [socket for socket in blur.inputs if socket.type in ("VALUE", "INT", "VECTOR")]
+if values:
+    values[0].keyframe_insert("default_value", frame=1)
+else:
+    blur.keyframe_insert("size_x", frame=1)
+
+samples = a_scene("Samples")
+samples.cycles.samples = 16
+samples.cycles.keyframe_insert("samples", frame=1)
+samples.cycles.samples = 64
+samples.cycles.keyframe_insert("samples", frame=12)
+
+driven = a_scene("Driven")
+dimmed = a_strip(driven)
+curve = dimmed.driver_add("blend_alpha")
+curve.driver.type = "AVERAGE"
+
+for scene in bpy.data.scenes:
+    data = scene.animation_data
+    paths = []
+    if data is not None and data.action is not None:
+        action = data.action
+        for one in getattr(action, "fcurves", ()):
+            paths.append(one.data_path)
+        for layer in getattr(action, "layers", ()):
+            for strip in layer.strips:
+                for bag in getattr(strip, "channelbags", ()):
+                    paths.extend(one.data_path for one in bag.fcurves)
+    print("SMOOZY-DESK-PATHS", scene.name, sorted(set(paths)), flush=True)
+bpy.ops.wm.save_as_mainfile(filepath=out)
+"#;
+
+fn the_four_and_five_three() -> Vec<(u16, u16, PathBuf)> {
+    let mut all = the_four();
+    all.push((
+        5,
+        3,
+        PathBuf::from(
+            std::env::var("SMOOZY_DESK_BLENDER_53")
+                .unwrap_or_else(|_| "/Applications/Blender 5.3.app/Contents/MacOS/Blender".to_string()),
+        ),
+    ));
+    all
+}
+
+/// What sits between the document's two marks, byte for byte.
+fn between_the_marks(stream: &[u8]) -> Vec<u8> {
+    use smoozy_job_files_machine::reading::{THE_CLOSING_SENTINEL, THE_OPENING_SENTINEL};
+    let find = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).position(|w| w == needle);
+    let opens = find(stream, THE_OPENING_SENTINEL).expect("the opening mark") + THE_OPENING_SENTINEL.len();
+    let closes = find(&stream[opens..], THE_CLOSING_SENTINEL).expect("the closing mark");
+    stream[opens..opens + closes].to_vec()
+}
+
+/// The same script with every scene moved at every frame of its span.
+fn every_scene_moved(script: &str) -> String {
+    let mut moved = script.to_string();
+    for rule in ["    moves = the_walk_must_step(scene)\n", "    moves = something_on_it_moves(scene)\n"] {
+        moved = moved.replace(rule, "    moves = True\n");
+    }
+    assert!(moved != script, "the walk's rule is where the test looks for it");
+    // Moved at every frame: the reading off the curves (2026-11-13) is taken
+    // out too, or a scene of plain keys would be moved once per run.
+    todays_walk(&moved)
+}
+
+/// Reads `file` with `script` and the step counter loaded before it; gives
+/// back the stream.
+fn read_counting_steps(blender: &Path, at: &Path, counter: &Path, file: &Path, script: &str, called: &str) -> Vec<u8> {
+    let reading = at.join(called);
+    std::fs::write(&reading, script).expect("written");
+    let (status, stream) = run(
+        blender,
+        &[
+            "--factory-startup",
+            "--background",
+            "--python-exit-code",
+            "63",
+            "--python",
+            counter.to_str().unwrap(),
+            file.to_str().unwrap(),
+            "--python",
+            reading.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(status, Some(0), "{called}: the reading ends at success");
+    stream
+}
+
+fn steps_of(stream: &[u8], scene: &str) -> usize {
+    String::from_utf8_lossy(stream)
+        .lines()
+        .filter(|line| *line == format!("SMOOZY-DESK-STEPPED {scene}"))
+        .count()
+}
+
+/// Makes the file of keys that reach nothing in one Blender, and reads it
+/// both ways; gives back (the narrowed stream, the every-scene stream).
+fn the_file_of_keys_read_both_ways(at: &Path, major: u16, minor: u16, blender: &Path) -> (Vec<u8>, Vec<u8>) {
+    let named = format!("{major}.{minor}");
+    let maker = at.join("make-keys.py");
+    std::fs::write(&maker, THE_FILE_OF_KEYS_THAT_REACH_NOTHING).expect("written");
+    let counter = at.join("count.py");
+    std::fs::write(&counter, THE_STEPS_COUNTED).expect("written");
+    let file = at.join(format!("keys-{major}{minor}.blend"));
+    let (made, said) = run(
+        blender,
+        &["--factory-startup", "--background", "--python-exit-code", "63", "--python", maker.to_str().unwrap(), "--", file.to_str().unwrap()],
+    );
+    for line in String::from_utf8_lossy(&said).lines().filter(|line| line.starts_with("SMOOZY-DESK-PATHS")) {
+        println!("{named}: {line}");
+    }
+    assert_eq!(made, Some(0), "{named}: the file is made");
+    let script = the_reading_script(
+        &TheInvocation {
+            the_blender_build_path: blender.display().to_string(),
+            the_blend_path_on_the_machine: RecordedLocation::of(file.to_str().unwrap().as_bytes().to_vec()),
+            the_version_it_will_render_by: TheVersionInHand::of(major, minor),
+            the_frames_the_job_covers: Vec::new(),
+            the_check_is_written_as_a_picture: false,
+            the_check_is_marked: false,
+        },
+        None,
+    )
+    .expect("every name is on record");
+    let narrowed = read_counting_steps(blender, at, &counter, &file, &script, &format!("narrowed-{major}{minor}.py"));
+    let every = read_counting_steps(blender, at, &counter, &file, &every_scene_moved(&script), &format!("every-{major}{minor}.py"));
+    (narrowed, every)
+}
+
+#[test]
+#[ignore = "run by hand at the desk with the four Blenders and 5.3"]
+fn keys_that_reach_nothing_the_reading_reads_move_no_scene_and_change_no_answer() {
+    let at = std::env::temp_dir().join(format!("smoozy-keys-that-reach-nothing-{}", std::process::id()));
+    std::fs::create_dir_all(&at).expect("a folder");
+    for (major, minor, blender) in the_four_and_five_three() {
+        let named = format!("{major}.{minor}");
+        let (narrowed, every) = the_file_of_keys_read_both_ways(&at, major, minor, &blender);
+        for scene in ["Plain", "Strips", "Exposure", "Empty", "TreeValue", "Samples", "Driven"] {
+            println!("{named}: {scene} moved {} times, {} with every scene moved", steps_of(&narrowed, scene), steps_of(&every, scene));
+            assert!(steps_of(&every, scene) > 0, "{named}: {scene} is moved when every scene is");
+        }
+        for scene in ["Plain", "Strips", "Exposure", "Empty", "TreeValue"] {
+            assert_eq!(steps_of(&narrowed, scene), 0, "{named}: {scene}'s keys reach nothing the reading reads, so it is not moved");
+        }
+        for scene in ["Samples", "Driven"] {
+            assert!(steps_of(&narrowed, scene) > 0, "{named}: {scene} is still moved");
+        }
+        assert!(
+            between_the_marks(&narrowed) == between_the_marks(&every),
+            "{named}: the reading is the same as with every scene moved"
+        );
+    }
+    std::fs::remove_dir_all(&at).expect("the folder is removed");
+}
+
+/// **`Render Settings` Q5's build detail of 2026-11-13: the walk says where it
+/// is.** The same file: two scenes are moved, twelve frames each, so the
+/// walk's last line says 24 of 24; a reading that moves nothing writes none.
+#[test]
+#[ignore = "run by hand at the desk with the four Blenders and 5.3"]
+fn the_walk_says_where_it_is_in_all_five() {
+    use smoozy_job_files_machine::reading::{the_walks_last_step_in, THE_WALKS_MARK};
+    let at = std::env::temp_dir().join(format!("smoozy-the-walk-says-{}", std::process::id()));
+    std::fs::create_dir_all(&at).expect("a folder");
+    for (major, minor, blender) in the_four_and_five_three() {
+        let named = format!("{major}.{minor}");
+        let (narrowed, every) = the_file_of_keys_read_both_ways(&at, major, minor, &blender);
+        let lines = narrowed.windows(THE_WALKS_MARK.len()).filter(|w| *w == THE_WALKS_MARK).count();
+        println!("{named}: {lines} step lines, the last {:?}; every scene moved: the last {:?}", the_walks_last_step_in(&narrowed), the_walks_last_step_in(&every));
+        assert_eq!(the_walks_last_step_in(&narrowed), Some((24, 24)), "{named}");
+        assert!(lines >= 2, "{named}: the first step and the last");
+        assert_eq!(the_walks_last_step_in(&every), Some((84, 84)), "{named}: seven scenes of twelve frames");
+    }
+    std::fs::remove_dir_all(&at).expect("the folder is removed");
+}
+
+/// **`Job files and outputs` R4 item 5, read off the curves (2026-11-13, the
+/// Blender research *Reading at a frame*): a scene whose animation is plain
+/// keys is read off its curves, moved once per run of frames with the same
+/// key, and the reading is the same as today's walk** — in the four Blenders
+/// and 5.3. Run by hand at the desk, one Blender at a time:
+///
+/// ```text
+/// cargo test -p smoozy-job-files-machine --test stepping_at_the_desk read_off_its_curves -- --ignored --nocapture --test-threads=1
+/// ```
+///
+/// One file of ten scenes over frames 1 to 24, saved by Blender's own save.
+/// **Read off the curves**: a view-layer switch keyed on, off, on (three
+/// runs, so three moves); Cycles' sample count and a view layer's own sample
+/// count keyed (read only after the walk, so one move); markers naming two
+/// cameras with a marker naming none between them, the output path naming
+/// the camera from 5.0 (two runs); a muted switch (one move); nothing
+/// animated (never moved). **Walked as before, every frame**: a driven
+/// sample count, an NLA track, Time Stretching 200 to 100, and two markers on
+/// one frame naming different cameras. Each file is read twice by each
+/// reading — the pre-load reading of every scene, and the render-start
+/// reading naming *Markers* with frames 3, 15 and 30 — once as built and once
+/// with the reading off the curves taken out, which is today's walk; the
+/// documents between the marks must be byte-identical. Each move is counted
+/// by the test's own wrap of the script's one step, so no frame-change
+/// handler is loaded (one would make every scene walk).
+const THE_FILE_READ_OFF_ITS_CURVES: &str = r#"
+import bpy, sys
+out = sys.argv[sys.argv.index("--") + 1]
+bpy.ops.wm.read_factory_settings(use_empty=False)
+
+
+def frames(scene):
+    scene.frame_start = 1
+    scene.frame_end = 24
+    return scene
+
+
+def a_scene(name):
+    scene = frames(bpy.data.scenes.new(name))
+    scene.view_layers.new("Second")
+    return scene
+
+
+def cameras(scene, marks):
+    for name, frame in marks:
+        camera = bpy.data.objects.new(scene.name + name, bpy.data.cameras.new(scene.name + name))
+        scene.collection.objects.link(camera)
+        scene.timeline_markers.new(name, frame=frame).camera = camera
+
+
+def the_curves_of(scene):
+    action = scene.animation_data.action
+    curves = list(getattr(action, "fcurves", ()))
+    for layer in getattr(action, "layers", ()):
+        for strip in layer.strips:
+            for bag in getattr(strip, "channelbags", ()):
+                curves.extend(bag.fcurves)
+    return curves
+
+
+def switched(scene):
+    layer = scene.view_layers["Second"]
+    for value, frame in ((True, 1), (False, 8), (True, 16)):
+        layer.use = value
+        layer.keyframe_insert("use", frame=frame)
+
+
+first = frames(bpy.context.scene)
+first.name = "Switch"
+first.view_layers.new("Second")
+switched(first)
+
+samples = a_scene("Samples")
+samples.cycles.samples = 16
+samples.cycles.keyframe_insert("samples", frame=1)
+samples.cycles.samples = 64
+samples.cycles.keyframe_insert("samples", frame=24)
+layer = samples.view_layers["Second"]
+layer.samples = 4
+layer.keyframe_insert("samples", frame=1)
+layer.samples = 40
+layer.keyframe_insert("samples", frame=24)
+
+markers = a_scene("Markers")
+cameras(markers, (("A", 5), ("B", 15)))
+markers.timeline_markers.new("Note", frame=10)
+markers.render.filepath = "//markers/{camera_name}_####" if bpy.app.version >= (5, 0, 0) else "//markers/m_####"
+
+muted = a_scene("Muted")
+switched(muted)
+for curve in the_curves_of(muted):
+    curve.mute = True
+
+a_scene("Plain")
+
+driven = a_scene("Driven")
+driven.cycles.driver_add("samples").driver.type = "AVERAGE"
+
+stacked = a_scene("Stacked")
+stacked.cycles.samples = 8
+stacked.cycles.keyframe_insert("samples", frame=1)
+stacked.animation_data.nla_tracks.new()
+
+stretched = a_scene("Stretched")
+switched(stretched)
+stretched.render.frame_map_old = 200
+stretched.render.frame_map_new = 100
+
+tie = a_scene("Tie")
+cameras(tie, (("A", 5), ("B", 5)))
+
+for scene in bpy.data.scenes:
+    data = scene.animation_data
+    paths = []
+    if data is not None and data.action is not None:
+        paths = sorted(set((one.data_path, one.mute) for one in the_curves_of(scene)))
+    print("SMOOZY-DESK-PATHS", scene.name, paths, [(m.name, m.frame, m.camera.name if m.camera else None) for m in scene.timeline_markers], flush=True)
+bpy.ops.wm.save_as_mainfile(filepath=out)
+"#;
+
+/// The script as built with the reading off the curves taken out: today's
+/// walk. A script that has no reading off the curves is today's walk already.
+fn todays_walk(script: &str) -> String {
+    script.replace(
+        "    stands = the_frames_the_scene_stands_at(scene, span) if moves else None\n",
+        "    stands = None\n",
+    )
+}
+
+/// The script with its one step wrapped, so each move prints the scene's name.
+fn counting_each_move(script: &str) -> String {
+    let wrapped = script.replace("scene.frame_set(", "smoozy_desk_step(scene, ");
+    assert!(wrapped != script, "the script's one step is where the test looks for it");
+    wrapped.replacen(
+        "import bpy, json, os, sys, time\n",
+        "import bpy, json, os, sys, time\n\n\ndef smoozy_desk_step(scene, frame):\n    print(\"\\nSMOOZY-DESK-STEPPED\", scene.name, flush=True)\n    scene.frame_set(frame)\n\n",
+        1,
+    )
+}
+
+/// Reads `file` with `script`, no handler loaded; gives back the stream and
+/// how long the whole run took.
+fn read_with_no_handler(blender: &Path, at: &Path, file: &Path, script: &str, called: &str) -> (Vec<u8>, Duration) {
+    let reading = at.join(called);
+    std::fs::write(&reading, script).expect("written");
+    let started = Instant::now();
+    let (status, stream) = run(
+        blender,
+        &[
+            "--factory-startup",
+            "--background",
+            "--python-exit-code",
+            "63",
+            file.to_str().unwrap(),
+            "--python",
+            reading.to_str().unwrap(),
+        ],
+    );
+    let took = started.elapsed();
+    assert_eq!(status, Some(0), "{called}: the reading ends at success");
+    (stream, took)
+}
+
+#[test]
+#[ignore = "run by hand at the desk with the four Blenders and 5.3"]
+fn a_scene_read_off_its_curves_reads_as_the_walk_does_in_all_five() {
+    use smoozy_job_files_machine::reading::{the_walks_last_step_in, ArtistsText};
+    use smoozy_job_files_machine::reading_script::the_pre_load_reading_script;
+    let at = std::env::temp_dir().join(format!("smoozy-read-off-its-curves-{}", std::process::id()));
+    std::fs::create_dir_all(&at).expect("a folder");
+    let maker = at.join("make.py");
+    std::fs::write(&maker, THE_FILE_READ_OFF_ITS_CURVES).expect("written");
+    for (major, minor, blender) in the_four_and_five_three() {
+        let named = format!("{major}.{minor}");
+        let file = at.join(format!("curves-{major}{minor}.blend"));
+        let (made, said) = run(
+            &blender,
+            &["--factory-startup", "--background", "--python-exit-code", "63", "--python", maker.to_str().unwrap(), "--", file.to_str().unwrap()],
+        );
+        for line in String::from_utf8_lossy(&said).lines().filter(|line| line.starts_with("SMOOZY-DESK")) {
+            println!("{named}: {line}");
+        }
+        assert_eq!(made, Some(0), "{named}: the file is made");
+        let invocation = |frames: Vec<i64>| TheInvocation {
+            the_blender_build_path: blender.display().to_string(),
+            the_blend_path_on_the_machine: RecordedLocation::of(file.to_str().unwrap().as_bytes().to_vec()),
+            the_version_it_will_render_by: TheVersionInHand::of(major, minor),
+            the_frames_the_job_covers: frames,
+            the_check_is_written_as_a_picture: false,
+            the_check_is_marked: false,
+        };
+        let readings = [
+            ("pre-load", the_pre_load_reading_script(&invocation(Vec::new())).expect("every name is on record")),
+            (
+                "render-start",
+                the_reading_script(&invocation(vec![3, 15, 30]), Some(&ArtistsText::of(b"Markers".to_vec())))
+                    .expect("every name is on record"),
+            ),
+        ];
+        for (label, script) in readings {
+            let (read, read_took) = read_with_no_handler(&blender, &at, &file, &counting_each_move(&script), &format!("read-{label}-{major}{minor}.py"));
+            let (walked, walk_took) = read_with_no_handler(&blender, &at, &file, &counting_each_move(&todays_walk(&script)), &format!("walk-{label}-{major}{minor}.py"));
+            let scenes = ["Switch", "Samples", "Markers", "Muted", "Plain", "Driven", "Stacked", "Stretched", "Tie"];
+            for scene in scenes {
+                println!("{named} {label}: {scene} moved {} times, {} by today's walk", steps_of(&read, scene), steps_of(&walked, scene));
+            }
+            println!(
+                "{named} {label}: the walk's last line {:?}, today's {:?}; {:.2} s against {:.2} s",
+                the_walks_last_step_in(&read),
+                the_walks_last_step_in(&walked),
+                read_took.as_secs_f64(),
+                walk_took.as_secs_f64()
+            );
+            let identical = between_the_marks(&read) == between_the_marks(&walked);
+            println!("{named} {label}: identical: {identical}");
+            assert!(identical, "{named} {label}: the reading off the curves differs from today's walk");
+            assert_eq!(steps_of(&read, "Plain"), 0, "{named} {label}: nothing animated, never moved");
+            if label == "render-start" {
+                // **The camera reaches the reading**: from 5.0 the output path
+                // names the camera, so each frame's name is the camera the
+                // markers give it, read off the curves as by the walk.
+                let printed = the_printed_reading_in(&read).expect("the document is between its marks");
+                let names: Vec<(i64, String)> = printed
+                    .outputs
+                    .per_frame
+                    .iter()
+                    .map(|at| {
+                        let path = at.the_regular_output_paths_answered_path.as_ref().map(|one| one.as_bytes().to_vec()).unwrap_or_default();
+                        let path = String::from_utf8_lossy(&path).into_owned();
+                        (at.frame, path.rsplit('/').next().unwrap_or_default().to_string())
+                    })
+                    .collect();
+                println!("{named} {label}: the names at the job's frames {names:?}");
+                if major >= 5 {
+                    assert!(names.iter().any(|(frame, name)| *frame == 3 && name.starts_with("MarkersA")), "{named}: {names:?}");
+                    assert!(names.iter().any(|(frame, name)| *frame == 15 && name.starts_with("MarkersB")), "{named}: {names:?}");
+                    assert!(names.iter().any(|(frame, name)| *frame == 30 && name.starts_with("MarkersB")), "{named}: {names:?}");
+                }
+            }
+            if label == "pre-load" {
+                assert_eq!(steps_of(&read, "Switch"), 3, "{named}: a keyed switch is moved once per run");
+                assert_eq!(steps_of(&read, "Samples"), 1, "{named}: keys read only after the walk move once");
+                assert_eq!(steps_of(&read, "Markers"), 2, "{named}: markers move once per camera");
+                assert_eq!(steps_of(&read, "Muted"), 1, "{named}: a muted curve moves nothing");
+                // A span is the scene's frames, 1 to 24, and where a view
+                // layer's switch is keyed the frames beside its keys: 0 too.
+                let span = |scene: &str| if ["Switch", "Muted", "Stretched"].contains(&scene) { 25 } else { 24 };
+                for scene in ["Switch", "Samples", "Markers", "Muted"] {
+                    assert_eq!(steps_of(&walked, scene), span(scene), "{named}: today's walk moves {scene} at every frame");
+                }
+                // **From 2026-11-14 the driven scene's driver is followed
+                // without a move** (`Job files and outputs` R4 item 5, drivers
+                // and cheap moves): an Averaged Value driver with no variable
+                // gives the same at every frame, so the scene is moved once.
+                assert_eq!(steps_of(&read, "Driven"), 1, "{named}: a driver with nothing to follow moves once");
+                assert_eq!(steps_of(&walked, "Driven"), span("Driven"), "{named}: today's walk moves Driven at every frame");
+                for scene in ["Stacked", "Stretched", "Tie"] {
+                    assert_eq!(steps_of(&read, scene), span(scene), "{named}: {scene} is walked as before");
+                    assert_eq!(steps_of(&walked, scene), span(scene), "{named}: {scene} is walked as before");
+                }
+                assert_eq!(the_walks_last_step_in(&read), Some((73, 73)), "{named}: only walked scenes count");
+                assert_eq!(the_walks_last_step_in(&walked), Some((195, 195)), "{named}: today's walk counts all eight");
+            }
+        }
+    }
+    std::fs::remove_dir_all(&at).expect("the folder is removed");
+}
+
+/// **The same, timed, on a file heavy enough that each move costs what a
+/// production scene's does**: three geometry-node grids of 2.25 million
+/// points each, a noise's scale keyed on their node tree so every move works
+/// them out again, and the scene's Cycles sample count keyed over 30 frames. The pre-load reading as built
+/// against today's walk, whole runs timed from start to Blender quitting, the
+/// two documents byte-identical. (Timed until 2026-11-14; since then every
+/// move leaves the grids out, and the times are printed, not compared.) Run
+/// by hand at the desk, one Blender at a time:
+///
+/// ```text
+/// cargo test -p smoozy-job-files-machine --test stepping_at_the_desk a_heavy_file_read_off -- --ignored --nocapture --test-threads=1
+/// ```
+const THE_HEAVY_FILE: &str = r#"
+import bpy, sys
+out = sys.argv[sys.argv.index("--") + 1]
+bpy.ops.wm.read_factory_settings(use_empty=False)
+scene = bpy.context.scene
+scene.frame_start = 1
+scene.frame_end = 30
+scene.cycles.samples = 16
+scene.cycles.keyframe_insert("samples", frame=1)
+scene.cycles.samples = 64
+scene.cycles.keyframe_insert("samples", frame=30)
+group = bpy.data.node_groups.new("Heavy", "GeometryNodeTree")
+group.interface.new_socket(name="Geometry", in_out="OUTPUT", socket_type="NodeSocketGeometry")
+grid = group.nodes.new("GeometryNodeMeshGrid")
+grid.inputs["Vertices X"].default_value = 1500
+grid.inputs["Vertices Y"].default_value = 1500
+noise = group.nodes.new("ShaderNodeTexNoise")
+noise.inputs["Scale"].default_value = 1.0
+noise.inputs["Scale"].keyframe_insert("default_value", frame=1)
+noise.inputs["Scale"].default_value = 5.0
+noise.inputs["Scale"].keyframe_insert("default_value", frame=30)
+moved = group.nodes.new("GeometryNodeSetPosition")
+ends = group.nodes.new("NodeGroupOutput")
+group.links.new(grid.outputs["Mesh"], moved.inputs["Geometry"])
+group.links.new(noise.outputs["Color"], moved.inputs["Offset"])
+group.links.new(moved.outputs["Geometry"], ends.inputs[0])
+for at in range(3):
+    holder = bpy.data.objects.new("Grid" + str(at), bpy.data.meshes.new("Grid" + str(at)))
+    scene.collection.objects.link(holder)
+    holder.location.x = at * 3
+    holder.modifiers.new("Heavy", "NODES").node_group = group
+print("SMOOZY-DESK-GRIDS", [one.name for one in scene.objects], flush=True)
+bpy.ops.wm.save_as_mainfile(filepath=out)
+"#;
+
+#[test]
+#[ignore = "run by hand at the desk with the four Blenders and 5.3"]
+fn a_heavy_file_read_off_its_curves_is_faster_and_the_same_in_all_five() {
+    use smoozy_job_files_machine::reading_script::the_pre_load_reading_script;
+    let at = std::env::temp_dir().join(format!("smoozy-heavy-read-off-its-curves-{}", std::process::id()));
+    std::fs::create_dir_all(&at).expect("a folder");
+    let maker = at.join("make-heavy.py");
+    std::fs::write(&maker, THE_HEAVY_FILE).expect("written");
+    for (major, minor, blender) in the_four_and_five_three() {
+        let named = format!("{major}.{minor}");
+        let file = at.join(format!("heavy-{major}{minor}.blend"));
+        let (made, said) = run(
+            &blender,
+            &["--factory-startup", "--background", "--python-exit-code", "63", "--python", maker.to_str().unwrap(), "--", file.to_str().unwrap()],
+        );
+        for line in String::from_utf8_lossy(&said).lines().filter(|line| line.starts_with("SMOOZY-DESK")) {
+            println!("{named}: {line}");
+        }
+        assert_eq!(made, Some(0), "{named}: the file is made");
+        let script = the_pre_load_reading_script(&TheInvocation {
+            the_blender_build_path: blender.display().to_string(),
+            the_blend_path_on_the_machine: RecordedLocation::of(file.to_str().unwrap().as_bytes().to_vec()),
+            the_version_it_will_render_by: TheVersionInHand::of(major, minor),
+            the_frames_the_job_covers: Vec::new(),
+            the_check_is_written_as_a_picture: false,
+            the_check_is_marked: false,
+        })
+        .expect("every name is on record");
+        let (walked, walk_took) = read_with_no_handler(&blender, &at, &file, &counting_each_move(&todays_walk(&script)), &format!("walk-heavy-{major}{minor}.py"));
+        let (read, read_took) = read_with_no_handler(&blender, &at, &file, &counting_each_move(&script), &format!("read-heavy-{major}{minor}.py"));
+        let identical = between_the_marks(&read) == between_the_marks(&walked);
+        println!(
+            "{named}: today's walk {:.2} s, {} moves; read off the curves {:.2} s, {} moves; identical: {identical}",
+            walk_took.as_secs_f64(),
+            steps_of(&walked, "Scene"),
+            read_took.as_secs_f64(),
+            steps_of(&read, "Scene")
+        );
+        assert!(identical, "{named}: the reading off the curves differs from today's walk");
+        assert_eq!(steps_of(&read, "Scene"), 1, "{named}: one move");
+        // **No timing here from 2026-11-14**: every move now leaves the grids
+        // out (`Job files and outputs` R4 item 5, cheap moves), so the walk
+        // costs about what one move does. The speed against the body as it
+        // stood is proved by `drivers_and_cheap_moves_at_the_desk.rs`.
+        let _ = (read_took, walk_took);
+        std::fs::remove_file(&file).expect("the heavy file is removed");
     }
     std::fs::remove_dir_all(&at).expect("the folder is removed");
 }

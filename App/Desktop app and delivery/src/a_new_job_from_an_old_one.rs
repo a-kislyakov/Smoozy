@@ -72,7 +72,11 @@ pub const A_NEW_JOB_OPENS: &str = "history:a-new-job-opens";
 pub(crate) mod words {
     /// The record holds no setup for the entry — a job submitted before record
     /// version 25, or a column that will not read back.
-    pub const NO_SETTINGS_WERE_KEPT: &str = "This job's settings were not saved.";
+    /// **It says where to start instead** — `Design/Queue & History § The
+    /// two ways to render it again`, added 2026-11-12 (the four questions,
+    /// scout 4.13, Sol's narrowed form).
+    pub const NO_SETTINGS_WERE_KEPT: &str =
+        "This job's settings were not saved. Use Render settings… on its .blend in Files.";
     pub const THE_RECORD_WOULD_NOT_READ: &str = "Could not read Smoozy's database.";
     /// `Rendering` A10's refusal, said as itself.
     pub const THE_BLEND_MAY_NOT_BE_READ: &str = "No permission to read this job's .blend on the server.";
@@ -858,6 +862,19 @@ mod tests {
     use smoozy_render_settings::payload::{SceneEntry, VersionPick};
     use smoozy_render_settings::store::KeptVersion;
 
+    /// **The four questions, scout 4.13 in Sol's narrowed form: an entry whose
+    /// settings were never saved says where to start instead** —
+    /// `Design/Queue & History § The two ways to render it again`, added
+    /// 2026-11-12. Before, the sentence stopped at *were not saved.*
+    #[test]
+    fn fifth_part_4_13_an_entry_with_no_settings_says_where_to_start() {
+        assert_eq!(
+            words::NO_SETTINGS_WERE_KEPT,
+            "This job's settings were not saved. Use Render settings… on its .blend in Files."
+        );
+        assert!(words::NO_SETTINGS_WERE_KEPT.contains(crate::surface::files::words::RENDER_SETTINGS));
+    }
+
     /// A job of frames 1 to 240 on `server`, ended `outcome` with the figure
     /// `figure`, its `.blend` at `/root/kitchen.blend`.
     /// **`Render Settings` Y15b: a *Resume*'s range belongs to that one job.** The
@@ -986,6 +1003,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         record.what_the_note_carried.last_frame_figure = figure;
@@ -1017,6 +1035,7 @@ mod tests {
             simplify: Default::default(),
             the_check_is_written_as_a_picture: false,
             the_check_writes_into: None,
+            the_range_jobs_frames: None,
         };
         payload.simplify.use_simplify = Some(true);
         payload

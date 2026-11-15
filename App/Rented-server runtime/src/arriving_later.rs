@@ -762,11 +762,16 @@ mod tests {
         // 2026-10-30**, the walk that counts a folder's size on the machine
         // (the twenty-third notes, note 2) — nine. It was one before piece 5.
         // A tenth would fail here, which is what makes this an exact count
-        // rather than a floor.
+        // rather than a floor. *(Ten was reached later with
+        // `the_four_values_of_files.rs`, and the figure below moved with it.)*
+        // **Eleven since 2026-11-10**: `the_events_fit.rs`, the guard that
+        // every event the program journals fits `State, identity and
+        // recovery` E6a's budget, whatever the names (the twenty-ninth notes,
+        // note 11, piece J).
         let program = (
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../Rented-server runtime — program/src"),
-            10,
+            11,
         );
 
         let mut out = Vec::new();
@@ -979,7 +984,25 @@ mod tests {
         // 241 from 2026-10-27: wave 5 removes the withdrawn health
         // entitlement clause. Re-derived from the plan with this reader and
         // deduplicated as above: 242 minus one, with no new definition.
-        assert_eq!(unique.len(), 241);
+        //
+        // **243 from 2026-11-10, the Fable review's first sitting: §3.3
+        // gained S10a** — a render whose worker is gone with no ending
+        // recorded takes its branch at once — **and §6.2 gained X9b** — a
+        // render's group is not read as gone while its recorded render process
+        // validates. Both are named and performed in the machine program:
+        // `take_every_ending`, `the_renders_owed_a_branch_are_taken`,
+        // `look_after_the_renders_on_this_turn` and `one_record`.
+        //
+        // **245 from 2026-11-11, the Fable review's fifth sitting: §11.1
+        // gained M5a** — the render worker takes the render's ending from its
+        // own wait beside the copy, and reads each stream ten seconds more —
+        // **and §3.3 gained S14b** — an ending whose long completeness
+        // statement cannot be kept yet is reported saying so and held. Both
+        // are named and performed in the machine program: `after_the_launch`
+        // and `AStreamReadWhileItsRenderLives` in `the_render_worker.rs`,
+        // `TheEnding::as_fields_for` there, and
+        // `a_render_ending_waits_for_its_statement` in `main.rs`.
+        assert_eq!(unique.len(), 245);
     }
 
     /// **The gate's forward leg, run over this one document at the desk: every

@@ -47,7 +47,7 @@ use crate::board::hand_over::{
 };
 use crate::board::instructions::{
     what_the_deadline_owes, without, AKindOfEntry, AnEntry, TheAddressee, WhatADeadlineOwes, WhoIAm,
-    THE_DEFAULT_REPORTING_DEADLINE, THE_PROTOCOL_VERSION,
+    THE_DEFAULT_REPORTING_DEADLINE, THE_DEFAULT_RESOLUTION_DEADLINE, THE_PROTOCOL_VERSION,
 };
 use crate::board::janitor::{what_an_utterance_asks, what_the_janitor_does, NotAdmitted, WhatTheJanitorDoes};
 use crate::board::roster::{must_announce, the_display_of, without_the_silent};
@@ -55,7 +55,7 @@ use crate::board::staleness::{
     how_often_the_holder_renews, TheProofOfLife, TheStalenessWatch, WhatACompletedReadSaw,
     THE_DEFAULT_RENEWAL_INTERVAL, THE_READ_CADENCE,
 };
-use crate::board::text::{the_moment_in_utc, what_is_pinned, TheBoard, TheUtterance, WhatIsPinned};
+use crate::board::text::{the_moment_in_utc, what_is_pinned, ACommandUnderWay, TheBoard, TheUtterance, WhatIsPinned};
 use crate::pacing::{AClassOfSend, ASend, HowASendEnded, TheSendQueue};
 use crate::proof::{what_an_update_gets, TheConversation, WhatAnUpdateGets};
 use crate::routing::context::SENDING_A_FRAME;
@@ -117,7 +117,21 @@ pub trait ReadsItsOwnClock: Send + Sync {
     fn pause(&self, how_long: Duration) {
         std::thread::sleep(how_long);
     }
+    /// **The seconds since 1970 on this machine's clock**, or nothing where
+    /// it cannot be read — what an update position's age is counted from
+    /// (`Telegram` F3b). A clock a test moves by hand gives its own.
+    fn the_seconds_since_1970(&self) -> Option<u64> {
+        SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).ok().map(|since| since.as_secs())
+    }
 }
+
+/// **`Telegram` F3b — how old a kept update position may be and still be
+/// asked from.** Telegram numbers the next update afresh *"if there are no
+/// new updates for at least a week"* (`Sources` entry 93, read 2026-11-12),
+/// and an ask from a position above the new numbers confirms them unread. Six
+/// days: a day short of that week, for the time between an update's arrival
+/// and its work being done.
+pub const HOW_OLD_AN_UPDATE_POSITION_MAY_BE: Duration = Duration::from_secs(6 * 24 * 60 * 60);
 
 /// This computer's clock.
 pub struct OnThisComputer {
@@ -185,6 +199,13 @@ pub trait HandsOn: Send {
     fn an_entry_ended_at_its_deadline(&mut self, _entry: &AnEntry) {}
     /// A gather's reply, taken in by the janitor (B11, R11).
     fn a_reply_to_a_gather(&mut self, _from: &str, _reply: &Value) {}
+    /// **`Telegram` B10 as changed 2026-11-13 (Sol's second check, point 4)
+    /// — for a reply in numbered parts, the parts taken in and how many there
+    /// are**; nothing for a reply sent whole. The request is completed once
+    /// every part is in.
+    fn the_parts_taken_in(&mut self, _reply: &Value) -> Option<(Vec<u32>, u32)> {
+        None
+    }
     /// **B12 and R10 — a state-request this holder removed because its reply
     /// was taken in**: completed, not expired. Added by the round-1 code audit
     /// of the bot and the chat, fix-here item 17.
@@ -279,6 +300,75 @@ struct Holding {
     /// place**: compared, and set where it differed. Tried once the board is
     /// confirmed, and again at each renewal until a try completes.
     commands_in_place: bool,
+    /// **`Telegram` B3 as changed 2026-11-12 — old boards whose unpin reached
+    /// nothing**, tried again at each of this holder's turns until Telegram
+    /// answers. Added by the Fable review's sitting 6 follow-up.
+    unpins_owed: Vec<i64>,
+    /// **`Telegram` B14's roll call, 2026-11-13 — when this holding began**,
+    /// on this machine's clock, **and every machine heard from in it after its
+    /// first renewal**: an utterance of its taken in, whatever it carried. A
+    /// machine still alive announces to a new holder only once it has seen
+    /// that renewal (B14), while a gone machine's last message, still pinned,
+    /// is taken in at the claim and proves nothing; so only the later count.
+    began: Duration,
+    heard: HashSet<String>,
+    /// **`Telegram` B14 as changed 2026-11-13 (Sol's look at the Telegram
+    /// fixes, point 4) — this holding's own identity**, random, so a roll
+    /// call named by its holder and its holding repeats on no other computer
+    /// and in no other holding.
+    identity: String,
+    /// **`Telegram` R10 as changed 2026-11-13 (Sol's second check, point 1)
+    /// — when the read that last showed this holder's own board on top
+    /// began**, on this machine's clock: the claim's read-back, then each
+    /// turn's that ended confirmed.
+    read_back_at: Duration,
+    /// **`Telegram` R10 as changed 2026-11-13 (Sol's third check) — whether
+    /// the heartbeat on this holder's confirmed board counts** towards how
+    /// long no other machine can hold: true for the claim's own board, and
+    /// for a renewal whose read-back began before the heartbeat it replaced
+    /// had run out (see [`TheListener::its_board_was_read_back_lately`]).
+    the_heartbeat_counts: bool,
+    /// **`Telegram` B14 as changed 2026-11-13 (Sol's second check, point 5)
+    /// — roll-call second asks the board could not hold**, offered again at
+    /// each later edit of this holding.
+    second_asks_owed: Vec<AnEntry>,
+    /// **`Telegram` R10 as changed 2026-11-13 (Sol's second check, point 3)
+    /// — commands whose carrying instruction may leave the board**: taken
+    /// off as answered, or whose record did not fit.
+    commands_settled: HashSet<String>,
+}
+
+/// **`Telegram` R10 as changed 2026-11-13 (Sol's second check, point 1) —
+/// how long after a read that showed the holder's board began no other
+/// machine can hold**: the stated interval less the holder's own renewal
+/// interval and one read (B4, B5, B13), eight seconds at the defaults.
+fn the_read_back_bound(stated: Duration) -> Duration {
+    stated.saturating_sub(how_often_the_holder_renews(stated)).saturating_sub(THE_READ_CADENCE)
+}
+
+/// **`Telegram` R10 as changed 2026-11-13 (Sol's third check) — the moment
+/// until which no other machine can hold**, on this machine's clock: the
+/// read-back bound from the last read that showed this board, or, where its
+/// heartbeat counts, the stated interval less one read from the turn that
+/// wrote that heartbeat, whichever is later.
+fn the_bound_of(h: &Holding) -> Duration {
+    let stated = Duration::from_secs(h.board.renewal_seconds);
+    let by_the_read = h.read_back_at.saturating_add(the_read_back_bound(stated));
+    if h.the_heartbeat_counts {
+        by_the_read.max(h.last_renewal.saturating_add(stated.saturating_sub(THE_READ_CADENCE)))
+    } else {
+        by_the_read
+    }
+}
+
+/// **`Telegram` B14's roll call — what a holding is, for the routing**: when
+/// it began on this machine's clock, the machines heard from in it since its
+/// first renewal, and its own identity.
+#[derive(Debug, Clone)]
+pub struct TheHoldingSoFar {
+    pub began: Duration,
+    pub heard: HashSet<String>,
+    pub identity: String,
 }
 
 enum Standing {
@@ -338,18 +428,58 @@ pub struct TheListener {
     /// last, at most [`THE_ACCEPTED_KEPT`]: accepted by read-back (B8). D2's
     /// *Stop sent* and the routing's F3 read them.
     accepted: VecDeque<AnEntry>,
+    /// **`Telegram` F3c — this machine's machinery message, accepted by
+    /// Telegram, whose identity the store could not write.** Edited and
+    /// pinned as the recorded one would be; the write is tried again at each
+    /// saying. Added 2026-11-12, the Fable review, sitting 6.
+    machinery_not_yet_written: Option<i64>,
+    /// **`Telegram` F3c — the updates whose work is done and whose position
+    /// the store could not write**, by identifier: their work is not done
+    /// again in this run. At most [`THE_MOST_UPDATES_REMEMBERED`].
+    done_not_yet_written: HashSet<i64>,
+    /// **`Telegram` B6 as changed 2026-11-12 — whether a read has completed
+    /// since this worker started**, so a first read showing this machine's
+    /// own recorded board asks at once (B1, the runner's ruling 1).
+    a_read_completed_since_start: bool,
+    /// **`Telegram` B3 as changed 2026-11-12 — the entries this machine's
+    /// store holds as those its last confirmed board held**, as last written
+    /// or read; `None` until known. Added by the Fable review's sitting 6
+    /// follow-up, its left item 3.
+    entries_last_held: Option<Vec<AnEntry>>,
+    /// When that record was written, in seconds since 1970 on this clock.
+    entries_recorded_at: Option<u64>,
+    /// **`Telegram` R10 as added 2026-11-13 — the commands the routing asked
+    /// to be written on the board**, and those it asked to be taken off once
+    /// answered. Written by the holder's next board edit.
+    commands_to_record: Vec<ACommandUnderWay>,
+    commands_done: HashSet<String>,
+    /// **`Telegram` B10 as changed 2026-11-13 (Sol's look at the Telegram
+    /// fixes, point 6) — the words last written to this machine's machinery
+    /// message**, by its identity: a pin is made only once they are.
+    written: Option<(i64, String)>,
+    /// When the last read of the pin began, on this machine's clock: what
+    /// [`Holding::read_back_at`] takes where that read confirmed the board.
+    last_read_began: Duration,
+    /// **`Telegram` R10 as changed 2026-11-13 (Sol's third check) — the next
+    /// turn renews, whatever the time**: asked by the routing where a command
+    /// waits and this holder cannot yet be sure it alone holds.
+    renew_at_the_next_turn: bool,
+    /// **The same — the next turn ends this holding**, once its edit has had
+    /// the chance to take off the commands that could not be answered.
+    step_down_after_the_next_turn: bool,
 }
+
+/// How many updates whose position could not be written are remembered
+/// (`Telegram` F3c). Past it the memory starts again: an update forgotten is
+/// done once more, F3's at-least-once.
+const THE_MOST_UPDATES_REMEMBERED: usize = 1024;
 
 /// How many newly accepted entries the listener keeps for its readers.
 const THE_ACCEPTED_KEPT: usize = 256;
 
 impl TheListener {
     pub fn new(handed: WhatTheListenerIsHanded) -> TheListener {
-        let taps = TheTapAnswerer {
-            client: handed.client.clone(),
-            conversation: handed.settings.conversation,
-            answered: Arc::default(),
-        };
+        let taps = TheTapAnswerer::new(handed.client.clone(), handed.settings.conversation);
         let utterance = TheUtterance {
             machine: handed.me.machine.clone(),
             display: handed.me.display.to_string(),
@@ -380,6 +510,17 @@ impl TheListener {
             taps,
             unreadable: TheUnreadableBoardWatch::default(),
             accepted: VecDeque::new(),
+            machinery_not_yet_written: None,
+            done_not_yet_written: HashSet::new(),
+            a_read_completed_since_start: false,
+            entries_last_held: None,
+            entries_recorded_at: None,
+            commands_to_record: Vec::new(),
+            commands_done: HashSet::new(),
+            written: None,
+            last_read_began: Duration::ZERO,
+            renew_at_the_next_turn: false,
+            step_down_after_the_next_turn: false,
         }
     }
 
@@ -425,6 +566,122 @@ impl TheListener {
         }
     }
 
+    /// **`Telegram` B14's roll call, 2026-11-13 — when this holding began**,
+    /// on this machine's clock, and the machines heard from in it since its
+    /// first renewal. Nothing where this machine does not hold.
+    pub fn the_holding_so_far(&self) -> Option<TheHoldingSoFar> {
+        match &self.standing {
+            Standing::Holding(h) => Some(TheHoldingSoFar { began: h.began, heard: h.heard.clone(), identity: h.identity.clone() }),
+            Standing::StoodDown => None,
+        }
+    }
+
+    /// **`Telegram` R10 as changed 2026-11-13 (Sol's second check of the
+    /// Telegram fixes, point 1) — whether this machine holds and its own
+    /// board was read back lately**: within the stated renewal interval less
+    /// the holder's own renewal interval and one read (B4, B5, B13), eight
+    /// seconds at the defaults. A claimant asks only after seeing the
+    /// heartbeat unchanged for the whole stated interval, and this holder
+    /// renews at least that much sooner, so no other machine can hold yet.
+    /// The routing carries on with a command, and sends its answer, only
+    /// while this holds; otherwise the next turn reads the board first.
+    ///
+    /// **As changed 2026-11-13 (Sol's third check): or within the stated
+    /// interval less one read of the turn that wrote the heartbeat on its
+    /// confirmed board**, where that heartbeat counts — 58 seconds at the
+    /// defaults. A claimant must see that very heartbeat unchanged for the
+    /// whole stated interval, and it did not exist before that turn began.
+    /// Until then the bound counted from the start of the read, so reads of
+    /// nine seconds, which succeed, left it never holding and no command was
+    /// ever answered.
+    pub fn its_board_was_read_back_lately(&self) -> bool {
+        let Standing::Holding(h) = &self.standing else { return false };
+        self.clock.now() < the_bound_of(h)
+    }
+
+    /// **`Telegram` R10 as changed 2026-11-13 (Sol's third check) — the next
+    /// turn renews**, so its heartbeat starts the count again.
+    pub fn renew_at_the_next_turn(&mut self) {
+        if self.is_holding() {
+            self.renew_at_the_next_turn = true;
+        }
+    }
+
+    /// **`Telegram` R10 as changed 2026-11-13 (Sol's third check) — this
+    /// machine gives up listening after its next turn**, whose edit takes off
+    /// the commands it could not answer.
+    pub fn step_down_after_the_next_turn(&mut self) {
+        if self.is_holding() {
+            self.step_down_after_the_next_turn = true;
+        }
+    }
+
+    /// **When the read that last showed this holder's own board began**, on
+    /// this machine's clock. Nothing where it does not hold.
+    pub fn the_last_read_back(&self) -> Option<Duration> {
+        match &self.standing {
+            Standing::Holding(h) => Some(h.read_back_at),
+            Standing::StoodDown => None,
+        }
+    }
+
+    /// **The stated renewal interval of this holder's board** (B2). Nothing
+    /// where it does not hold.
+    pub fn the_stated_interval(&self) -> Option<Duration> {
+        match &self.standing {
+            Standing::Holding(h) => Some(Duration::from_secs(h.board.renewal_seconds)),
+            Standing::StoodDown => None,
+        }
+    }
+
+    /// **`Telegram` R10 as added 2026-11-13 — write a command under way on the
+    /// board**, at the holder's next edit, where it fits. Nothing where this
+    /// machine does not hold: only the holder runs a command.
+    pub fn record_a_command(&mut self, command: ACommandUnderWay) {
+        if self.is_holding() && !self.commands_to_record.iter().any(|c| c.gather == command.gather) {
+            self.commands_to_record.push(command);
+        }
+    }
+
+    /// **`Telegram` R10 as added 2026-11-13 — take an answered command off the
+    /// board**, at the holder's next edit.
+    pub fn a_command_is_done(&mut self, gather: &str) {
+        self.commands_to_record.retain(|c| c.gather != gather);
+        self.commands_done.insert(gather.to_string());
+        if let Standing::Holding(h) = &mut self.standing {
+            h.commands_settled.insert(gather.to_string());
+        }
+    }
+
+    /// **`Telegram` R10 as added 2026-11-13 — a proposal this machine no
+    /// longer makes**: a command's request, where the command was dropped
+    /// because this machine stopped holding.
+    pub fn withdraw_a_proposal(&mut self, operation: &str) {
+        self.utterance.proposed.retain(|p| p.operation != operation);
+    }
+
+    /// **`Telegram` B14 as added 2026-11-13 — a machine whose role is switched
+    /// off leaves the roster**: where it does not hold, it pins one last
+    /// machinery message asking to be taken off, best effort and never read
+    /// back. Gives back whether it was sent. A holder takes itself off by its
+    /// own last edit (`Telegram` section 19), so this does nothing there.
+    pub fn say_it_is_leaving(&mut self) -> bool {
+        if self.is_holding() {
+            return false;
+        }
+        self.utterance = TheUtterance {
+            machine: self.me.machine.clone(),
+            display: self.me.display.to_string(),
+            colour: self.me.display.colour().map(str::to_string),
+            leaving: true,
+            ..TheUtterance::default()
+        };
+        self.last_said = None;
+        let now = self.clock.now();
+        self.say(now, "", false);
+        self.last_said.is_some()
+    }
+
     /// **The entries this holder's confirmed boards newly carried, lately** —
     /// each accepted by exact read-back (B8), newest last. **`Telegram` D2's
     /// *Stop sent* is said from these**, the moment the full stop instruction is
@@ -460,7 +717,12 @@ impl TheListener {
     pub fn a_turn(&mut self) {
         let now = self.clock.now();
         if self.is_holding() {
-            self.a_holders_turn(now, None, false);
+            let renew = std::mem::take(&mut self.renew_at_the_next_turn);
+            self.a_holders_turn(now, None, renew);
+            // R10 as changed 2026-11-13 (Sol's third check).
+            if std::mem::take(&mut self.step_down_after_the_next_turn) && self.is_holding() {
+                self.stand_down("this machine could not be sure it alone listens, so a command was answered as too slow (R10)");
+            }
         } else {
             self.a_stood_down_turn(now);
         }
@@ -475,6 +737,7 @@ impl TheListener {
     /// **B13 — the read is a `getChat`**, the only published route to the
     /// current pin. A read that did not complete gives back nothing.
     fn read_the_pin(&mut self) -> Option<WhatIsPinned> {
+        self.last_read_began = self.clock.now();
         let read = match self.client.get_chat(self.settings.conversation) {
             Ok(chat) => what_is_pinned(&chat),
             Err(_) => return None,
@@ -506,8 +769,24 @@ impl TheListener {
             return;
         };
         let mut renewal = self.settings.renewal;
+        let the_first_read = !std::mem::replace(&mut self.a_read_completed_since_start, true);
+        let under_its_own_board = matches!(&top, WhatIsPinned::ABoard { id, board }
+            if board.holder == self.me.machine && self.store.the_board().ok().flatten() == Some(*id));
+        if the_first_read && !under_its_own_board {
+            self.the_entries_last_held_are_proposed_again();
+        }
         match &top {
             WhatIsPinned::ABoard { id, board } => {
+                // **B1 and B6 as changed 2026-11-12 (the runner's ruling 1 on
+                // the Fable review's sitting 6): a worker that starts under
+                // its own recorded board asks at once** and carries on with
+                // that board. Until then it waited a whole interval, not
+                // listening, and then sent a second board.
+                if the_first_read && under_its_own_board {
+                    self.note(&format!("started under this machine's own board {id}; asking at once (B1, B6)"));
+                    self.claim(now);
+                    return;
+                }
                 self.watch
                     .a_read_completed(now, WhatACompletedReadSaw::AHeartbeat(board.heartbeat.clone()));
                 // B14: only another machine's board is ever proof of life.
@@ -524,8 +803,85 @@ impl TheListener {
                 self.watch.a_read_completed(now, WhatACompletedReadSaw::NoReadableBoard)
             }
         }
+        self.the_record_of_entries_held_is_emptied_once_proposed();
         if self.watch.may_ask(now, renewal) {
             self.claim(now);
+        }
+    }
+
+    /// **`Telegram` B3 as changed 2026-11-12 (the Fable review's sitting 6
+    /// follow-up, its left item 3) — what a confirmed board holds of action
+    /// instructions and context-resolution entries is written into the store
+    /// whenever that list changes**, with the moment on this machine's clock.
+    /// A write that fails is tried again at the next confirmed board.
+    fn the_entries_held_are_recorded(&mut self, board: &TheBoard) {
+        let entries: Vec<AnEntry> =
+            board.instructions.iter().filter(|e| e.kind != AKindOfEntry::StateRequest).cloned().collect();
+        if self.entries_last_held.as_ref() == Some(&entries) {
+            return;
+        }
+        let at = self.clock.the_seconds_since_1970();
+        let written = if entries.is_empty() {
+            None
+        } else {
+            let Some(at) = at else { return };
+            Some(serde_json::json!({ "at": at, "entries": entries }).to_string())
+        };
+        match self.store.record_the_entries_last_held(written) {
+            Ok(()) => {
+                self.entries_last_held = Some(entries);
+                self.entries_recorded_at = at;
+            }
+            Err(why) => self.note(&format!("the entries the board holds were not recorded: {}", why.0)),
+        }
+    }
+
+    /// **`Telegram` B3 as changed 2026-11-12 — at a worker's start under
+    /// anything but its own recorded board, the entries its last confirmed
+    /// board held are proposed again**, those whose deadline (B12), counted
+    /// from the recorded moment on this same clock, has not passed. A holder
+    /// that died in a hand-over's gap so sends what its last board took in.
+    fn the_entries_last_held_are_proposed_again(&mut self) {
+        let Ok(Some(written)) = self.store.the_entries_last_held() else {
+            self.entries_last_held = Some(Vec::new());
+            return;
+        };
+        let Ok(record) = serde_json::from_str::<Value>(&written) else { return };
+        let Some(at) = record.get("at").and_then(Value::as_u64) else { return };
+        let Ok(entries) = serde_json::from_value::<Vec<AnEntry>>(record["entries"].clone()) else { return };
+        let now = self.clock.the_seconds_since_1970();
+        for entry in &entries {
+            let in_time = now.is_some_and(|now| now >= at && now - at < entry.deadline_seconds);
+            if in_time && !self.utterance.proposed.iter().any(|p| p.operation == entry.operation) {
+                self.note(&format!("proposing again {} from the last board this machine held (B3)", entry.operation));
+                self.utterance.proposed.push(entry.clone());
+            }
+        }
+        self.entries_last_held = Some(entries);
+        self.entries_recorded_at = Some(at);
+    }
+
+    /// **`Telegram` B3 as changed 2026-11-12 — the record is emptied once this
+    /// machine, not holding, proposes none of its entries any more**: each
+    /// has been seen on a board or refused, or its deadline has passed.
+    fn the_record_of_entries_held_is_emptied_once_proposed(&mut self) {
+        let Some(entries) = &self.entries_last_held else { return };
+        if entries.is_empty() {
+            return;
+        }
+        let now = self.clock.the_seconds_since_1970();
+        let at = self.entries_recorded_at;
+        let still = entries.iter().any(|e| {
+            let in_time = matches!((now, at), (Some(now), Some(at)) if now >= at && now - at < e.deadline_seconds);
+            in_time
+                && self.utterance.proposed.iter().chain(self.utterance.replacing.iter()).any(|p| p.operation == e.operation)
+        });
+        if still {
+            return;
+        }
+        match self.store.record_the_entries_last_held(None) {
+            Ok(()) => self.entries_last_held = Some(Vec::new()),
+            Err(why) => self.note(&format!("the record of the entries last held was not emptied: {}", why.0)),
         }
     }
 
@@ -559,13 +915,17 @@ impl TheListener {
                     }
                 }
                 _ => {
-                    // R10: the reply is said this turn, below.
+                    // R10: the reply is said this turn, below; B10 as
+                    // changed 2026-11-13: each of its parts, where several.
                     if let Some(reply) = self.hands_on.an_entry_addressed_here(&entry) {
-                        self.reply_to_a_gather(reply);
+                        for part in crate::routing::gather::the_parts_of(&reply) {
+                            self.reply_to_a_gather(part);
+                        }
                     }
                 }
             }
         }
+        self.the_proposals_that_are_replacements_on(board);
         let on_the_board = |operation: &str| board.instructions.iter().find(|e| e.operation == operation);
         self.utterance.acknowledged.retain(|op| on_the_board(op).is_some());
         // B15: the proposer observes its identity on the board as the relay
@@ -577,9 +937,12 @@ impl TheListener {
             matches!(on_the_board(&r.operation), Some(e) if e.kind == AKindOfEntry::ContextResolution)
         });
         // R10 and B12: a reply is kept while the state-request it answers
-        // stands (piece 3).
+        // stands (piece 3); **B10 as changed 2026-11-13 (Sol's second check,
+        // point 4): a part the request lists as taken in is not said again.**
         self.utterance.replies.retain(|reply| {
-            reply.get("operation").and_then(Value::as_str).is_some_and(|op| on_the_board(op).is_some())
+            let Some(request) = reply.get("operation").and_then(Value::as_str).and_then(on_the_board) else { return false };
+            let taken_in = request.payload.get("parts_in").and_then(Value::as_array);
+            !reply.get("part").is_some_and(|part| taken_in.is_some_and(|parts| parts.contains(part)))
         });
         // B14: an announcement, and a re-announcement, only to a holder seen
         // alive. Before 2026-10-18 a machine announced to whatever board it
@@ -588,6 +951,28 @@ impl TheListener {
         self.utterance.announce =
             alive && must_announce(board, &self.me.machine, self.last_announced_to.as_deref());
         self.say(now, &board.holder, alive);
+    }
+
+    /// **`Telegram` B3 as changed 2026-11-12 — a full instruction this
+    /// machine proposes, whose context-resolution entry `board` still
+    /// carries, is said as the replacement it is** (B8, B15). The two share
+    /// one operation identity, so as a proposal it would be dropped as
+    /// already on the board. It comes to be proposed where this machine's
+    /// last board took the replacement in after a claimant had copied the
+    /// entry (Sol's look at sitting 6).
+    fn the_proposals_that_are_replacements_on(&mut self, board: &TheBoard) {
+        let stands_unresolved = |p: &AnEntry| {
+            p.kind == AKindOfEntry::Action
+                && board.instructions.iter().any(|e| e.operation == p.operation && e.kind == AKindOfEntry::ContextResolution)
+        };
+        let (replacements, proposed): (Vec<AnEntry>, Vec<AnEntry>) =
+            std::mem::take(&mut self.utterance.proposed).into_iter().partition(stands_unresolved);
+        self.utterance.proposed = proposed;
+        for replacement in replacements {
+            if !self.utterance.replacing.iter().any(|r| r.operation == replacement.operation) {
+                self.utterance.replacing.push(replacement);
+            }
+        }
     }
 
     fn the_entries_addressed_here(&self, board: &TheBoard) -> Vec<AnEntry> {
@@ -639,10 +1024,32 @@ impl TheListener {
         if self.utterance.has_nothing_to_say() {
             return;
         }
-        let Ok(text) = self.utterance.compose() else {
-            self.note("this machine's machinery message would be over the bound and was not sent");
-            return;
+        // **B10 as changed 2026-11-13 (Sol's look at the Telegram fixes,
+        // point 3): replies that do not fit are said in turn** — as many
+        // whole replies as fit, oldest first, beside everything else; the
+        // rest once those requests have left the board and their replies
+        // with them. Until then two large replies together passed the bound
+        // and nothing at all was said.
+        let mut said = self.utterance.clone();
+        let text = loop {
+            match said.compose() {
+                Ok(text) => break text,
+                Err(_) if !said.replies.is_empty() => {
+                    said.replies.pop();
+                }
+                Err(_) => {
+                    self.note("this machine's machinery message would be over the bound and was not sent");
+                    return;
+                }
+            }
         };
+        if said.replies.len() < self.utterance.replies.len() {
+            self.note(&format!(
+                "{} of {} replies fit this machinery message; the rest are said in turn (B10)",
+                said.replies.len(),
+                self.utterance.replies.len()
+            ));
+        }
         if let Some((said, at, to)) = &self.last_said {
             if *said == text
                 && (!holder_is_alive || (to == holder && now.saturating_sub(*at) < self.settings.say_again_after))
@@ -651,23 +1058,72 @@ impl TheListener {
             }
         }
         let chat = self.settings.conversation;
-        let pinned = match self.store.the_machinery_message() {
+        // F3c: an identity the store could not write is written now where it
+        // can be, and is this machine's machinery message meanwhile.
+        if let Some(id) = self.machinery_not_yet_written {
+            if self.store.record_the_machinery_message(id).is_ok() {
+                self.machinery_not_yet_written = None;
+            }
+        }
+        let known = match self.machinery_not_yet_written {
+            Some(id) => Ok(Some(id)),
+            None => self.store.the_machinery_message(),
+        };
+        let pinned = match known {
             Ok(Some(id)) => {
-                let edited = text.clone();
-                // An identical text is refused by the service and changes
-                // nothing, so the pin is tried whatever the edit's answer.
-                self.send(
-                    AClassOfSend::RoutedAnswersAndAcknowledgements,
-                    // B25: the spoiler is sent again with the edit.
-                    Box::new(move |c: &TheClient| c.edit_a_machinery_message(chat, id, &edited)),
-                );
+                // **B10 as changed 2026-11-13 (Sol's look at the Telegram
+                // fixes, point 6): pinned only once the words are written.**
+                // Until then the pin was tried whatever the edit's answer, so
+                // a failed edit pinned the old words — for a machine asking
+                // to leave, an older announcement that listed it again.
+                let landed = self.written.as_ref() == Some(&(id, text.clone())) || {
+                    let edited = text.clone();
+                    match self.send(
+                        AClassOfSend::RoutedAnswersAndAcknowledgements,
+                        // B25: the spoiler is sent again with the edit.
+                        Box::new(move |c: &TheClient| c.edit_a_machinery_message(chat, id, &edited)),
+                    ) {
+                        HowASendEnded::Accepted(_) => true,
+                        // The words already there: written. The same reading
+                        // as the status message's (`crate::status`).
+                        HowASendEnded::HandedBack(WhyTheCallFailed::Refused(refusal))
+                            if refusal.description.as_deref().is_some_and(|d| d.contains("message is not modified")) =>
+                        {
+                            true
+                        }
+                        HowASendEnded::HandedBack(WhyTheCallFailed::Refused(_)) | HowASendEnded::DroppedAsSuperseded => {
+                            self.note(&format!("the edit of machinery message {id} was refused; a fresh one is sent (B10)"));
+                            false
+                        }
+                        HowASendEnded::HandedBack(_) => {
+                            self.note(&format!("the edit of machinery message {id} reached nothing; nothing is pinned, and it is tried again next turn (B10)"));
+                            return;
+                        }
+                    }
+                };
+                if !landed {
+                    self.written = None;
+                    false
+                } else {
+                self.written = Some((id, text.clone()));
                 // B19: a pin of a message still pinned produces no update, and
                 // the holder takes an utterance in from its pin update's copy.
                 // Unpinned first, so this pin always makes an update carrying
                 // the text just written; unpinning a message not pinned is
                 // harmless.
                 self.unpin(id);
-                self.pin(id)
+                match self.pin_answered(id) {
+                    Some(pinned) => pinned,
+                    // **B10 as written 2026-11-12: a pin that reached nothing
+                    // keeps this message.** Nothing is recorded as said, so the
+                    // next turn edits and pins it again; only a pin the service
+                    // refused sends a fresh one below.
+                    None => {
+                        self.note(&format!("the pin of machinery message {id} reached nothing; it is kept and pinned again next turn"));
+                        return;
+                    }
+                }
+                }
             }
             Ok(None) => false,
             Err(_) => return,
@@ -684,7 +1140,15 @@ impl TheListener {
             let Some(id) = sent.get("message_id").and_then(Value::as_i64) else {
                 return;
             };
-            if self.store.record_the_machinery_message(id).is_err() || !self.pin(id) {
+            self.written = Some((id, text.clone()));
+            // F3c: the message stands whether or not its identity could be
+            // written. Until 2026-11-12 a failed write ended the saying here,
+            // unpinned, and the next turn sent another.
+            if self.store.record_the_machinery_message(id).is_err() {
+                self.machinery_not_yet_written = Some(id);
+                self.note(&format!("machinery message {id} was sent and its identity could not be written; kept in memory (F3c)"));
+            }
+            if !self.pin(id) {
                 return;
             }
             self.note(&format!("sent machinery message {id}"));
@@ -699,7 +1163,7 @@ impl TheListener {
 
     /// **`Rented-server runtime` T4, and `Telegram` B6 and J3 — ask, and take the slot where the ask is won.**
     fn claim(&mut self, now: Duration) {
-        let Ok(offset) = self.store.the_update_position() else {
+        let Ok(offset) = self.the_position_to_ask_from() else {
             return;
         };
         match self.client.get_updates(offset, self.settings.the_claims_wait_seconds) {
@@ -719,6 +1183,34 @@ impl TheListener {
                 self.note("the ask for the slot was refused; standing down (`Rented-server runtime` T4)");
             }
             Err(_) => self.note("the ask for the slot reached nothing"),
+        }
+    }
+
+    /// **`Telegram` F3b — the position an ask carries: the kept one while it
+    /// is less than [`HOW_OLD_AN_UPDATE_POSITION_MAY_BE`] old, and otherwise
+    /// none**, so Telegram returns from the earliest unconfirmed update. No
+    /// moment kept, a moment later than the clock's reading, or a clock that
+    /// cannot be read: none. Until 2026-11-12 the kept position was always
+    /// carried, and one standing above Telegram's fresh numbers confirmed
+    /// every update unread.
+    fn the_position_to_ask_from(&self) -> Result<Option<i64>, crate::worker_state::WhyTheStoreFailed> {
+        let Some(position) = self.store.the_update_position()? else {
+            return Ok(None);
+        };
+        let written = self.store.the_update_positions_moment()?;
+        let young = match (written, self.clock.the_seconds_since_1970()) {
+            (Some(written), Some(now)) => now >= written && now - written < HOW_OLD_AN_UPDATE_POSITION_MAY_BE.as_secs(),
+            _ => false,
+        };
+        Ok(young.then_some(position))
+    }
+
+    /// **`Telegram` F3 and F3b — the position written past `update`, with
+    /// the moment of writing in the same write.**
+    fn the_position_moves_past(&mut self, update: i64) -> Result<(), crate::worker_state::WhyTheStoreFailed> {
+        match self.clock.the_seconds_since_1970() {
+            Some(now) => self.store.record_the_update_position_at(update + 1, now),
+            None => self.store.record_the_update_position(update + 1),
         }
     }
 
@@ -755,6 +1247,22 @@ impl TheListener {
     /// before the pin moves, and unpin the old board by its identity only after
     /// the new one is read back.**
     fn take_the_slot(&mut self, now: Duration, updates: Value) {
+        let mut lifted = Vec::new();
+        self.take_the_slot_lifting(now, updates, &mut lifted);
+        // **B3 as changed 2026-11-11 (the four questions, batch 4, Sol's S1):
+        // the user's pins lifted on the way down are pinned again, whether or
+        // not the claim was confirmed**, oldest first. A confirmed fresh board
+        // is newer than every one of them, so it stays the reported pin.
+        for id in lifted.into_iter().rev() {
+            if self.pin(id) {
+                self.note(&format!("pinned the user's message {id} again (B3)"));
+            }
+        }
+    }
+
+    /// [`Self::take_the_slot`]'s body; `lifted` gathers the user's pins it
+    /// unpinned to read beneath them.
+    fn take_the_slot_lifting(&mut self, now: Duration, updates: Value, lifted: &mut Vec<i64>) {
         let mut taken_in = Vec::new();
         let mut previous: Option<(i64, TheBoard)> = None;
         let mut reached_a_board = false;
@@ -780,6 +1288,13 @@ impl TheListener {
                         self.watch.stand_down();
                         return;
                     }
+                }
+                WhatTheClaimantDoes::LiftTheUsersPin { id } => {
+                    if !self.unpin(id) {
+                        self.watch.stand_down();
+                        return;
+                    }
+                    lifted.push(id);
                 }
                 WhatTheClaimantDoes::CopyIt { id, board } => {
                     previous = Some((id, board));
@@ -855,24 +1370,64 @@ impl TheListener {
         };
 
         let chat = self.settings.conversation;
-        let HowASendEnded::Accepted(sent) = self.send(
-            AClassOfSend::RoutedAnswersAndAcknowledgements,
-            // Silent: the board is what one machine tells another (B1, B21).
-            Box::new(move |c: &TheClient| c.send_a_machinery_message(chat, &text)),
-        ) else {
-            self.watch.stand_down();
-            return;
-        };
-        let Some(board_id) = sent.get("message_id").and_then(Value::as_i64) else {
-            self.watch.stand_down();
-            return;
-        };
-        self.note(&format!("sent board {board_id}"));
         let my_older_board = self.store.the_board().ok().flatten();
-        if self.store.record_the_board(board_id).is_err() || !self.pin(board_id) {
-            self.watch.stand_down();
-            return;
-        }
+        // **B1 as changed 2026-11-12 (the runner's ruling 1 on the Fable
+        // review's sitting 6): the board reached is this machine's own, by the
+        // identity it recorded, so it is edited into the successor** and no
+        // new board is sent. Not where a pin of the user's was lifted above
+        // it: that pin, pinned again, would stand above the old board, and B11
+        // would send the board again. An edit not accepted falls back to a
+        // new board, as B3 says.
+        let its_own = previous
+            .as_ref()
+            .filter(|(id, old)| lifted.is_empty() && old.holder == self.me.machine && my_older_board == Some(*id))
+            .map(|(id, _)| *id);
+        let carried_on = its_own.filter(|&id| {
+            let edited = text.clone();
+            let accepted = matches!(
+                self.send(
+                    AClassOfSend::RoutedAnswersAndAcknowledgements,
+                    Box::new(move |c: &TheClient| c.edit_a_machinery_message(chat, id, &edited)),
+                ),
+                HowASendEnded::Accepted(_)
+            );
+            if !accepted {
+                self.note(&format!("this machine's own board {id} could not be edited; sending a new one (B1, B3)"));
+            }
+            accepted
+        });
+        let board_id = match carried_on {
+            Some(id) => {
+                self.note(&format!("carried on with this machine's own board {id} (B1)"));
+                id
+            }
+            None => {
+                let HowASendEnded::Accepted(sent) = self.send(
+                    AClassOfSend::RoutedAnswersAndAcknowledgements,
+                    // Silent: the board is what one machine tells another (B1, B21).
+                    Box::new(move |c: &TheClient| c.send_a_machinery_message(chat, &text)),
+                ) else {
+                    self.watch.stand_down();
+                    return;
+                };
+                let Some(board_id) = sent.get("message_id").and_then(Value::as_i64) else {
+                    self.watch.stand_down();
+                    return;
+                };
+                self.note(&format!("sent board {board_id}"));
+                // F3c: a board whose identity could not be written is still pinned
+                // and held. Until 2026-11-12 the claim ended here, the board sent and
+                // never pinned, and the next claim sent another.
+                if self.store.record_the_board(board_id).is_err() {
+                    self.note(&format!("board {board_id} was sent and its identity could not be written (F3c)"));
+                }
+                if !self.pin(board_id) {
+                    self.watch.stand_down();
+                    return;
+                }
+                board_id
+            }
+        };
         match self.read_the_pin() {
             Some(WhatIsPinned::ABoard { id, board: read }) if id == board_id && read == board => {}
             _ => {
@@ -883,18 +1438,28 @@ impl TheListener {
             }
         }
         self.note(&format!("pinned board {board_id}"));
-        // B3: only now, and only by identity.
+        self.the_entries_held_are_recorded(&board);
+        // B3: only now, and only by identity. **An unpin that reaches
+        // nothing is owed** and tried again at each holder's turn (B3 as
+        // changed 2026-11-12); until then it was tried once.
         let previous_id = previous.as_ref().map(|(id, _)| *id);
+        let mut unpins_owed = Vec::new();
         if let Some(id) = previous_id.filter(|id| *id != board_id) {
-            self.unpin(id);
+            if !self.unpin(id) {
+                unpins_owed.push(id);
+            }
         }
         if let Some(id) = my_older_board.filter(|id| *id != board_id && Some(*id) != previous_id) {
-            self.unpin(id);
+            if !self.unpin(id) {
+                unpins_owed.push(id);
+            }
         }
         // B3: the stale unreadable board, unpinned by its identity only now
         // that the fresh board is confirmed.
         if let Some(id) = stale.filter(|id| *id != board_id) {
-            self.unpin(id);
+            if !self.unpin(id) {
+                unpins_owed.push(id);
+            }
         }
         // B8: what the popped machinery messages proposed is accepted now.
         let copied = |entry: &AnEntry| {
@@ -917,6 +1482,17 @@ impl TheListener {
             entered,
             told_unconfirmed: HashSet::new(),
             commands_in_place: false,
+            unpins_owed,
+            began: now,
+            heard: HashSet::new(),
+            identity: a_fresh_heartbeat().unwrap_or_else(|| format!("{}", self.wins)),
+            read_back_at: self.last_read_began,
+            // R10 as changed 2026-11-13 (Sol's third check): the claim's ask
+            // has won (`Rented-server runtime` T4) and its read-back showed
+            // this fresh board, made in this turn, on top.
+            the_heartbeat_counts: true,
+            second_asks_owed: Vec::new(),
+            commands_settled: HashSet::new(),
         }));
         // C6: no send in flight may run past the moment the heartbeat falls due.
         self.queue.the_heartbeat_falls_due(Some((the_first_renewal, self.clock.clone())));
@@ -930,7 +1506,7 @@ impl TheListener {
             self.tell_once(
                 format!("stale {id}"),
                 a_user_message(&self.me.display, "", "", &format!(
-                    "The pinned message was unreadable for {} seconds and was replaced. Requests sent in that time were lost.",
+                    "The pinned message was replaced. Requests sent in the last {} seconds were lost.",
                     self.settings.renewal.as_secs()
                 )),
             );
@@ -966,7 +1542,28 @@ impl TheListener {
     }
 
     fn stand_down(&mut self, why: &str) {
+        // **`Telegram` B3 as changed 2026-11-12 (the Fable review, sitting
+        // 6): a holder that stands down proposes again what its last
+        // confirmed board held** — every action instruction and every
+        // context-resolution entry. A claimant's board copied before this
+        // holder's last edit is pinned without it; what the new board does
+        // carry is dropped at the first read of it, by identity (B15).
+        if let Standing::Holding(h) = &self.standing {
+            let held: Vec<AnEntry> =
+                h.board.instructions.iter().filter(|e| e.kind != AKindOfEntry::StateRequest).cloned().collect();
+            for entry in held {
+                if !self.utterance.proposed.iter().any(|p| p.operation == entry.operation) {
+                    self.utterance.proposed.push(entry);
+                }
+            }
+        }
         self.standing = Standing::StoodDown;
+        // R16 and Sol's look at the Telegram fixes: listening given up, a
+        // button whose first tap this machine never handed on leaves hand.
+        self.taps.let_go_of_what_was_not_handed_on();
+        // R10 as added 2026-11-13: commands are the holder's alone.
+        self.commands_to_record.clear();
+        self.commands_done.clear();
         // C6: a machine not holding owes no heartbeat.
         self.queue.the_heartbeat_falls_due(None);
         self.watch.stand_down();
@@ -994,6 +1591,12 @@ impl TheListener {
     /// while ([`THE_SETTLE_BEFORE_NOTHING_PINNED_IS_BELIEVED`]), and a retry
     /// that unpinned again could keep that going.
     fn a_holders_turn(&mut self, now: Duration, carried: Option<(i64, i64, TheUtterance)>, renew_early: bool) -> bool {
+        self.the_unpins_owed_tried_again();
+        // R16 as changed 2026-11-13: a button whose first tap has left the
+        // last confirmed board is no longer in hand.
+        if let Standing::Holding(h) = &self.standing {
+            self.taps.let_go_of_what_left(&h.board);
+        }
         let mut taken_in = Vec::new();
         if let Some((update, id, utterance)) = carried {
             if self.unpinned_for_update != Some(update) {
@@ -1009,6 +1612,7 @@ impl TheListener {
             return false;
         };
         let mut pinned_the_board_again = false;
+        let mut sent_the_board_again = false;
         let mut unsettled = 0;
         for _ in 0..THE_MOST_POPS_IN_ONE_TURN {
             let (board_id, board) = match &mut self.standing {
@@ -1047,16 +1651,40 @@ impl TheListener {
                         // B11 waits the same way as B3's claimant (2026-10-18).
                         self.clock.pause(THE_SPACING_OF_UNSETTLED_READS);
                     } else {
-                        if pinned_the_board_again || !self.pin(board_id) {
+                        if pinned_the_board_again {
                             return false;
                         }
-                        pinned_the_board_again = true;
+                        match self.pin_answered(board_id) {
+                            Some(true) => pinned_the_board_again = true,
+                            // **B11 as changed 2026-11-13 (Telegram when
+                            // things aren't ideal, problem 1): the re-pin is
+                            // refused, so the board is gone — the user deleted
+                            // it — and it is sent again**, as over a user's
+                            // pin. Before, the refusal came back at every turn
+                            // for ever, and on a one-server bot nothing was
+                            // accepted again.
+                            Some(false) => {
+                                if sent_the_board_again || !self.send_the_board_again(None) {
+                                    return false;
+                                }
+                                sent_the_board_again = true;
+                            }
+                            None => return false,
+                        }
                     }
                 }
                 WhatTheJanitorDoes::Unpin { id } => {
                     if !self.unpin(id) {
                         return false;
                     }
+                }
+                WhatTheJanitorDoes::SendTheBoardAgain { over } => {
+                    // **B11 as changed 2026-11-11: the user's pin stays**;
+                    // at most once a turn, as the re-pin above.
+                    if sent_the_board_again || !self.send_the_board_again(Some(over)) {
+                        return false;
+                    }
+                    sent_the_board_again = true;
                 }
                 WhatTheJanitorDoes::TakeInAndUnpin { id, utterance } => {
                     // Popped first, so the board's read-back can find the board
@@ -1077,18 +1705,116 @@ impl TheListener {
         false
     }
 
+    /// **`Telegram` B3 as changed 2026-11-12 (the Fable review's sitting 6
+    /// follow-up, its left item 2) — each old board whose unpin reached
+    /// nothing is unpinned again**, and kept owed only while it still reaches
+    /// nothing. A refusal ends it: an unpin can do nothing more.
+    fn the_unpins_owed_tried_again(&mut self) {
+        let Standing::Holding(h) = &mut self.standing else { return };
+        if h.unpins_owed.is_empty() {
+            return;
+        }
+        let owed = std::mem::take(&mut h.unpins_owed);
+        let still: Vec<i64> = owed.into_iter().filter(|id| !self.unpin(*id)).collect();
+        if let Standing::Holding(h) = &mut self.standing {
+            h.unpins_owed.extend(still);
+        }
+    }
+
+    /// **`Telegram` B11 as changed 2026-11-11 (the four questions, batch 4,
+    /// Sol's S1) — a pin of the user's is the reported pin, so the board is
+    /// sent again**: the last confirmed board as a fresh message, pinned, read
+    /// back, and only then the old board unpinned by its identity, as B3 does.
+    /// The reported pin is the newest by sending date (B13), so the fresh
+    /// board is reported again and `over`, the user's, stays pinned. An edit
+    /// not yet confirmed is dropped with the old board: what it carried is
+    /// proposed again (B15). A fresh board not read back is B3's: this machine
+    /// stands down and the board stands for the next claimant.
+    ///
+    /// **`over` is nothing where the board was deleted** (B11 as changed
+    /// 2026-11-13): the old identity's unpin then reaches nothing pinned.
+    fn send_the_board_again(&mut self, over: Option<i64>) -> bool {
+        let Standing::Holding(h) = &self.standing else {
+            return false;
+        };
+        let (old, board) = (h.board_id, h.board.clone());
+        let Ok(text) = board.compose() else {
+            return false;
+        };
+        let chat = self.settings.conversation;
+        let HowASendEnded::Accepted(sent) = self.send(
+            AClassOfSend::RoutedAnswersAndAcknowledgements,
+            // Silent, as every board is (B1, B21).
+            Box::new(move |c: &TheClient| c.send_a_machinery_message(chat, &text)),
+        ) else {
+            return false;
+        };
+        let Some(fresh) = sent.get("message_id").and_then(Value::as_i64) else {
+            return false;
+        };
+        // F3c, as in the claim.
+        if self.store.record_the_board(fresh).is_err() {
+            self.note(&format!("board {fresh} was sent and its identity could not be written (F3c)"));
+        }
+        if !self.pin(fresh) {
+            return false;
+        }
+        match self.read_the_pin() {
+            Some(WhatIsPinned::ABoard { id, board: read }) if id == fresh && read == board => {}
+            _ => {
+                self.stand_down("the board sent again over the user's pin could not be read back (B3, B11)");
+                return false;
+            }
+        }
+        if let Standing::Holding(h) = &mut self.standing {
+            h.board_id = fresh;
+            h.pending = None;
+        }
+        // B3 as changed 2026-11-12: owed where it reaches nothing.
+        if !self.unpin(old) {
+            if let Standing::Holding(h) = &mut self.standing {
+                h.unpins_owed.push(old);
+            }
+        }
+        match over {
+            Some(over) => self.note(&format!("sent the board again as {fresh} over the user's pin {over}; unpinned board {old} (B11)")),
+            None => self.note(&format!("sent the board again as {fresh}: board {old} was gone (B11)")),
+        }
+        true
+    }
+
     /// **B8, B9, B11, B12 and B4 — everything the board owes this turn, as one
     /// candidate, written once and confirmed by read-back.**
-    fn keep_the_board(&mut self, now: Duration, taken_in: Vec<TheUtterance>, renew_early: bool) -> bool {
+    fn keep_the_board(&mut self, now: Duration, mut taken_in: Vec<TheUtterance>, renew_early: bool) -> bool {
         let moment = self.clock.the_moment();
         let Standing::Holding(h) = &self.standing else {
             return false;
         };
         let last_confirmed = h.board.clone();
+        // B3 as changed 2026-11-12: this machine holding again, over a board
+        // that still carries the entry its old board had replaced.
+        self.the_proposals_that_are_replacements_on(&last_confirmed);
+        let Standing::Holding(h) = &self.standing else {
+            return false;
+        };
         let mut candidate = h.board.clone();
+        if let Standing::Holding(h) = &mut self.standing {
+            if now.saturating_sub(h.began) >= how_often_the_holder_renews(Duration::from_secs(candidate.renewal_seconds)) {
+                h.heard.extend(taken_in.iter().map(|u| u.machine.clone()));
+            }
+        }
+        // **R10 as changed 2026-11-13 (Sol's second check, point 3): an
+        // instruction that carries a command is not ended by its addressee's
+        // acknowledgement**; it leaves once the command is taken up, below.
+        // Until then the acknowledgement took it off at once, often before
+        // the command's record was written.
+        for utterance in taken_in.iter_mut() {
+            utterance.acknowledged.retain(|op| !candidate.instructions.iter().any(|e| e.operation == *op && carries_a_command(e)));
+        }
         let mut not_admitted = Vec::new();
         let mut not_admitted_of_mine: Vec<AnEntry> = Vec::new();
         let mut completed: Vec<AnEntry> = Vec::new();
+        let mut progressed: Vec<String> = Vec::new();
         let own = TheUtterance {
             machine: self.me.machine.clone(),
             display: self.me.display.to_string(),
@@ -1121,13 +1847,49 @@ impl TheListener {
                     })
                     .cloned();
                 if let Some(entry) = the_request {
-                    candidate = without(&candidate, &entry.operation);
-                    completed.push(entry);
+                    // **B10 as changed 2026-11-13 (Sol's second check, point
+                    // 4): a reply in parts completes its request once every
+                    // part is in**; until then the request lists the parts in,
+                    // so the machine says the rest, and its deadline counts
+                    // again from this part.
+                    match self.hands_on.the_parts_taken_in(reply) {
+                        Some((held, of)) if (held.len() as u32) < of => {
+                            let mut listed = candidate.clone();
+                            if let Some(request) = listed.instructions.iter_mut().find(|e| e.operation == entry.operation) {
+                                request.payload["parts_in"] = serde_json::json!(held);
+                            }
+                            if listed.fits() {
+                                candidate = listed;
+                            }
+                            progressed.push(entry.operation.clone());
+                        }
+                        _ => {
+                            candidate = without(&candidate, &entry.operation);
+                            completed.push(entry);
+                        }
+                    }
                 }
             }
             for refused in asks.not_admitted {
+                // **R10 as changed 2026-11-13 (Sol's look at the Telegram
+                // fixes, point 2): no state-request's refusal is said, whoever
+                // proposed it**; until then only the holder's own were quiet.
+                if let (false, NotAdmitted::AnInstruction(entry)) = (mine, &refused) {
+                    if entry.kind == AKindOfEntry::StateRequest {
+                        continue;
+                    }
+                }
                 if let (true, NotAdmitted::AnInstruction(entry)) = (mine, &refused) {
                     not_admitted_of_mine.push((**entry).clone());
+                    // **R10 as added 2026-11-13: this machine's own gather
+                    // request the board cannot hold is asked again in a later
+                    // group**, and its routing says once per command what was
+                    // not checked. Until then each drew a refusal of its own:
+                    // ten from one `/status` (the Creator's notes on the test
+                    // copy, note 8).
+                    if entry.kind == AKindOfEntry::StateRequest {
+                        continue;
+                    }
                 }
                 not_admitted.push(refused);
             }
@@ -1149,7 +1911,9 @@ impl TheListener {
                         .instructions
                         .iter()
                         .any(|e| e.operation == entry.operation && e.kind == AKindOfEntry::Action);
-                    if accepted && self.act_once(&entry) {
+                    // R10 as changed 2026-11-13: one that carries a command
+                    // leaves once the command is taken up, below.
+                    if accepted && self.act_once(&entry) && !carries_a_command(&entry) {
                         candidate = without(&candidate, &entry.operation);
                     }
                 }
@@ -1158,7 +1922,10 @@ impl TheListener {
                     // and its own state-request completed in this same write.
                     if let Some(reply) = self.hands_on.an_entry_addressed_here(&entry) {
                         let me = self.me.machine.clone();
-                        self.hands_on.a_reply_to_a_gather(&me, &reply);
+                        // B10 as changed 2026-11-13: every part at once.
+                        for part in crate::routing::gather::the_parts_of(&reply) {
+                            self.hands_on.a_reply_to_a_gather(&me, &part);
+                        }
                         if entry.kind == AKindOfEntry::StateRequest && entry.addressee == TheAddressee::Machine(me) {
                             candidate = without(&candidate, &entry.operation);
                             completed.push(entry.clone());
@@ -1168,11 +1935,74 @@ impl TheListener {
             }
         }
 
+        // **R10 as added 2026-11-13 (Sol's look at the Telegram fixes,
+        // points 1 and 2) — the commands under way**: an answered one taken
+        // off, a new one written where it fits. One that does not fit is not
+        // written, and its command is confirmed at its answer instead.
+        candidate.commands.retain(|c| !self.commands_done.contains(&c.gather));
+        for command in &self.commands_to_record {
+            if self.commands_done.contains(&command.gather) || candidate.commands.iter().any(|c| c.gather == command.gather) {
+                continue;
+            }
+            let mut with = candidate.clone();
+            with.commands.push(command.clone());
+            if with.fits() {
+                candidate = with;
+            } else {
+                self.note(&format!("{} could not be written on the board: it is full (R10)", command.gather));
+                if let Standing::Holding(h) = &mut self.standing {
+                    h.commands_settled.insert(command.gather.clone());
+                }
+            }
+        }
+        // **R10 as changed 2026-11-13 (Sol's second check, point 3) — an
+        // instruction that carries a command leaves once the command is taken
+        // up**: its record is in this same candidate, or the command is
+        // answered, or its record did not fit; or R12's ten seconds have
+        // passed since it entered this board, so none stands for ever.
+        if let Standing::Holding(h) = &self.standing {
+            let settled: Vec<String> = candidate
+                .instructions
+                .iter()
+                .filter(|e| carries_a_command(e))
+                .filter(|e| {
+                    let gather = crate::routing::gather::the_gather_for(e.source_update.unwrap_or_default());
+                    let stood = h.entered.get(&e.operation).is_some_and(|at| now.saturating_sub(*at) >= THE_DEFAULT_RESOLUTION_DEADLINE);
+                    candidate.commands.iter().any(|c| c.gather == gather) || h.commands_settled.contains(&gather) || self.commands_done.contains(&gather) || stood
+                })
+                .map(|e| e.operation.clone())
+                .collect();
+            for operation in settled {
+                candidate = without(&candidate, &operation);
+            }
+        }
+
         let Standing::Holding(h) = &mut self.standing else {
             return false;
         };
         let mut ended = Vec::new();
         let mut unconfirmed = Vec::new();
+        // B10 as changed 2026-11-13: a request whose parts are arriving
+        // counts its deadline again from the latest part.
+        for operation in &progressed {
+            h.entered.insert(operation.clone(), now);
+        }
+        // **B14 as changed 2026-11-13 (Sol's second check, point 5): a
+        // roll-call second ask the board could not hold is offered again**,
+        // until the board admits it; dropped where its machine has been heard
+        // from in this holding or is off the roster.
+        let owed = std::mem::take(&mut h.second_asks_owed);
+        for again in owed {
+            let TheAddressee::Machine(machine) = &again.addressee else { continue };
+            if h.heard.contains(machine) || !candidate.roster.iter().any(|r| r.machine == *machine) {
+                continue;
+            }
+            match crate::board::instructions::admit(&candidate, &again, &moment) {
+                crate::board::instructions::AnAdmission::Accepted(with) => candidate = with,
+                crate::board::instructions::AnAdmission::AlreadyOnTheBoard => {}
+                crate::board::instructions::AnAdmission::DoesNotFit => h.second_asks_owed.push(again),
+            }
+        }
         for entry in &candidate.instructions {
             let entered = *h.entered.entry(entry.operation.clone()).or_insert(now);
             match what_the_deadline_owes(entry, entered, now) {
@@ -1193,9 +2023,40 @@ impl TheListener {
             // machine still alive re-announces, since the board no longer
             // lists it. The twenty-sixth notes, note 2.
             if let (AKindOfEntry::StateRequest, TheAddressee::Machine(machine)) = (&entry.kind, &entry.addressee) {
-                if *machine != self.me.machine {
-                    candidate = without_the_silent(&candidate, machine);
+                if *machine == self.me.machine {
+                    continue;
                 }
+                // **B14 as changed 2026-11-13 (Sol's look at the Telegram
+                // fixes, point 5): a missed roll-call answer is not yet a
+                // removal.** A machine heard from in this holding stays; one
+                // not heard from is asked once more, and taken off only when
+                // that ask goes unanswered too. Until then a live machine that
+                // was merely slow was taken off at the first miss.
+                let a_roll_call = matches!(crate::routing::gather::the_gather_of(entry), Some((_, crate::routing::gather::WhatAGatherIsFor::TheRollCall)));
+                if a_roll_call && h.heard.contains(machine) {
+                    continue;
+                }
+                if a_roll_call && entry.payload.get("again") != Some(&Value::Bool(true)) {
+                    let mut again = entry.clone();
+                    again.operation = format!("{}-again", entry.operation);
+                    again.payload["again"] = Value::Bool(true);
+                    match crate::board::instructions::admit(&candidate, &again, &moment) {
+                        crate::board::instructions::AnAdmission::Accepted(with) => candidate = with,
+                        crate::board::instructions::AnAdmission::AlreadyOnTheBoard => {}
+                        // **B14 as changed 2026-11-13 (Sol's second check,
+                        // point 5): one the board cannot hold waits**, and is
+                        // offered again at each later edit. Until then it was
+                        // dropped, and a gone server stayed listed for as long
+                        // as the holding lasted.
+                        crate::board::instructions::AnAdmission::DoesNotFit => {
+                            if !h.second_asks_owed.iter().any(|o| o.operation == again.operation) {
+                                h.second_asks_owed.push(again);
+                            }
+                        }
+                    }
+                    continue;
+                }
+                candidate = without_the_silent(&candidate, machine);
             }
         }
         let renew = renew_early || now.saturating_sub(h.last_renewal)
@@ -1233,10 +2094,29 @@ impl TheListener {
                 if renew { AClassOfSend::TheHoldersHeartbeat } else { AClassOfSend::RoutedAnswersAndAcknowledgements },
             );
         if confirmed {
+            self.the_entries_held_are_recorded(&candidate);
             self.utterance.proposed.clear();
             self.utterance.replacing.clear();
+            // R10 as added 2026-11-13: written, or not written for room.
+            self.commands_to_record.clear();
+            self.commands_done.retain(|gather| candidate.commands.iter().any(|c| &c.gather == gather));
             let mut try_the_commands = false;
             if let Standing::Holding(h) = &mut self.standing {
+                // **R10 as changed 2026-11-13 (Sol's third check): a renewed
+                // heartbeat counts where the read that confirmed it began
+                // before the heartbeat it replaced had run out** — that one's
+                // own bound, or the read-back bound, whichever is later — so
+                // no claimant had yet seen the old one unchanged for the whole
+                // stated interval. Counted before either moment moves.
+                if renew {
+                    let stated = Duration::from_secs(h.board.renewal_seconds);
+                    let the_old_one_ran_out = h.last_renewal.saturating_add(stated.saturating_sub(THE_READ_CADENCE))
+                        .max(h.read_back_at.saturating_add(the_read_back_bound(stated)));
+                    h.the_heartbeat_counts = self.last_read_began < the_old_one_ran_out;
+                }
+                // R10 as changed 2026-11-13: the read that confirmed this
+                // board — the turn's own, or the write's read-back.
+                h.read_back_at = self.last_read_began;
                 if renew {
                     h.last_renewal = now;
                     // C6: the next renewal is when a send in flight must end.
@@ -1245,6 +2125,9 @@ impl TheListener {
                     try_the_commands = !h.commands_in_place;
                 }
                 h.entered.retain(|op, _| candidate.instructions.iter().any(|e| &e.operation == op));
+                h.commands_settled.retain(|gather| {
+                    candidate.instructions.iter().any(|e| carries_a_command(e) && crate::routing::gather::the_gather_for(e.source_update.unwrap_or_default()) == *gather)
+                });
             }
             if try_the_commands {
                 // R17: a refused or unanswered try is tried again at a renewal.
@@ -1315,7 +2198,7 @@ impl TheListener {
         let Standing::Holding(h) = &self.standing else {
             return None;
         };
-        let offset = self.store.the_update_position().ok()?;
+        let offset = self.the_position_to_ask_from().ok()?;
         Some(TheAsk { win: h.win, offset, wait_seconds: self.settings.the_holders_wait_seconds })
     }
 
@@ -1328,7 +2211,16 @@ impl TheListener {
         }
         match &self.standing {
             Standing::Holding(h) if h.win == ask.win => {}
-            _ => return,
+            _ => {
+                // R16 and Sol's look at the Telegram fixes: a reply thrown
+                // away hands nothing on here, so its taps leave hand. Another
+                // server handles them; kept, they would answer every later
+                // press on their buttons *Already sent.* for good.
+                if let Ok(updates) = &got {
+                    self.taps.forget_the_taps_in(updates);
+                }
+                return;
+            }
         }
         match got {
             Ok(updates) => self.take_in_updates(&updates),
@@ -1353,7 +2245,11 @@ impl TheListener {
             let message = update.get("message");
             // P2 and P3 are piece 4's rule, wired in here at piece 3.
             let proved = TheConversation(self.settings.conversation);
-            let done = if what_an_update_gets(update, proved) == WhatAnUpdateGets::Ignored {
+            // F3c: work done in this run whose position could not be written
+            // is not done again.
+            let done = if self.done_not_yet_written.contains(&update_id) {
+                true
+            } else if what_an_update_gets(update, proved) == WhatAnUpdateGets::Ignored {
                 self.note(&format!("dismissed update {update_id}: not from the proved conversation"));
                 true
             } else if let Some((message, pinned)) = message.and_then(|m| Some((m, m.get("pinned_message")?))) {
@@ -1365,18 +2261,37 @@ impl TheListener {
                 // B18: the pin's line goes only once the pin is processed, and
                 // a line not reached comes back with its update (F3).
                 self.a_holders_turn(now, carried, false) && self.the_pins_line_is_dealt_with(update_id, message)
+            } else if self.taps.is_a_repeat(update) {
+                // R16 as changed 2026-11-13: a repeat is answered and not
+                // handed on.
+                self.taps.a_repeat_is_done(update);
+                self.note(&format!("update {update_id} repeats a tap in hand; not handed on (R16)"));
+                true
             } else {
                 match self.hands_on.an_update_from_the_conversation(update) {
-                    Ok(()) => true,
+                    Ok(()) => {
+                        self.taps.handed_on(update);
+                        true
+                    }
                     Err(why) => {
                         self.note(&format!("update {update_id} was not handled: {why}"));
                         false
                     }
                 }
             };
-            if !done || self.store.record_the_update_position(update_id + 1).is_err() {
+            if !done {
                 return;
             }
+            if self.the_position_moves_past(update_id).is_err() {
+                if self.done_not_yet_written.len() >= THE_MOST_UPDATES_REMEMBERED {
+                    self.done_not_yet_written.clear();
+                }
+                if self.done_not_yet_written.insert(update_id) {
+                    self.note(&format!("update {update_id} is done and its position could not be written; remembered (F3c)"));
+                }
+                return;
+            }
+            self.done_not_yet_written.remove(&update_id);
             self.note(&format!("confirmed update {update_id}"));
         }
     }
@@ -1424,18 +2339,26 @@ impl TheListener {
     }
 
     fn pin(&self, id: i64) -> bool {
+        self.pin_answered(id).unwrap_or(false)
+    }
+
+    /// **A pin, saying whether the service answered**: whether it pinned, or
+    /// nothing where no answer came back that could be read (B10's keep).
+    fn pin_answered(&self, id: i64) -> Option<bool> {
         let chat = self.settings.conversation;
-        let pinned = matches!(
-            self.send(
-                AClassOfSend::RoutedAnswersAndAcknowledgements,
-                Box::new(move |c: &TheClient| c.pin_chat_message(chat, id))
-            ),
-            HowASendEnded::Accepted(_)
-        );
+        let pinned = match self.send(
+            AClassOfSend::RoutedAnswersAndAcknowledgements,
+            Box::new(move |c: &TheClient| c.pin_chat_message(chat, id)),
+        ) {
+            HowASendEnded::Accepted(_) => true,
+            HowASendEnded::HandedBack(WhyTheCallFailed::Refused(_)) | HowASendEnded::DroppedAsSuperseded => false,
+            HowASendEnded::HandedBack(WhyTheCallFailed::NotReached(_))
+            | HowASendEnded::HandedBack(WhyTheCallFailed::TheAnswerCouldNotBeRead(_)) => return None,
+        };
         if pinned {
             self.note(&format!("pinned message {id}"));
         }
-        pinned
+        Some(pinned)
     }
 
     /// **Always by identity** (B3, B11). A refusal — a message no longer pinned
@@ -1509,7 +2432,7 @@ impl TheListener {
                 ),
                 NotAdmitted::AMachine { machine, display } => self.tell_once(
                     format!("full machine {machine}"),
-                    a_user_message(&display, "", "", "Not added: the pinned message is full. It won't answer /status until there is room."),
+                    a_user_message(&display, "", "", "Not added: the pinned message is full. This server won't answer /status until there is room."),
                 ),
             }
         }
@@ -1550,8 +2473,20 @@ pub fn the_line_a_pin_of_smoozys_wrote(message: &Value) -> Option<i64> {
                 || text.starts_with(crate::board::text::THE_HEAD_BEFORE_2026_10_28)
         });
     let a_persons_pin = message.pointer("/from/is_bot").and_then(Value::as_bool) == Some(false);
+    // **B18 as changed 2026-11-11 (the four questions, batch 4): the bot made
+    // this pin** — B3 pinning a user's message again — so its line goes too.
+    let the_bot_made_it = message.pointer("/from/is_bot").and_then(Value::as_bool) == Some(true);
     let names_itself = pinned.get("message_id").and_then(Value::as_i64) == Some(line);
-    (the_bots_own && opens_with_the_head && !a_persons_pin && !names_itself).then_some(line)
+    (((the_bots_own && opens_with_the_head && !a_persons_pin) || the_bot_made_it) && !names_itself).then_some(line)
+}
+
+/// **`Telegram` R10 as changed 2026-11-13 (Sol's second check, point 3) —
+/// an instruction that hands a command to the listener**: R1a's reply about
+/// no job, or V1d's tap on the ask. Its addressee's act only records the
+/// press; it leaves the board once the listener has taken the command up.
+fn carries_a_command(entry: &AnEntry) -> bool {
+    entry.kind == AKindOfEntry::Action
+        && (entry.action == crate::routing::context::AS_IF_NOT_A_REPLY || entry.action == crate::routing::context::CHOOSING_THE_PHONES_CHOICE)
 }
 
 /// **B2 — a fresh opaque heartbeat value**: random bytes, compared for
@@ -1593,7 +2528,14 @@ fn a_notice_about(entry: &AnEntry, fallback: &AServerLabel, result: &str) -> AMa
     let job = labels.and_then(|l| l.get("label")).and_then(Value::as_str).unwrap_or("");
     let mut no_job = entry.clone();
     if let Some(labels) = no_job.payload.get_mut("labels").and_then(Value::as_object_mut) { labels.remove("label"); }
-    a_user_message(&server, job, "", &format!("{} {result}", in_the_users_words(&no_job)))
+    // **The word sweep of 2026-11-13**: the notice starts its sentence with
+    // the act, so a stand-in (*an action*) takes a capital here.
+    let said = in_the_users_words(&no_job);
+    let said = match said.chars().next() {
+        Some(first) if first.is_lowercase() => format!("{}{}", first.to_uppercase(), &said[first.len_utf8()..]),
+        _ => said,
+    };
+    a_user_message(&server, job, "", &format!("{said} {result}"))
 }
 
 pub(crate) fn in_the_users_words(entry: &AnEntry) -> String {
@@ -1601,13 +2543,29 @@ pub(crate) fn in_the_users_words(entry: &AnEntry) -> String {
     let job = labels.and_then(|l| l.get("label")).and_then(Value::as_str).filter(|l| !l.is_empty());
     let frame = entry.payload.get("frame").and_then(Value::as_u64);
     let asked = match entry.kind {
-        AKindOfEntry::StateRequest => Some(frame.map_or("/status".to_string(), |f| format!("/frame {f}"))),
+        // **Each request's own command** (R13 as added 2026-11-13, note 9):
+        // a `frame` with no number read as `/status` until then.
+        AKindOfEntry::StateRequest => Some(match (frame, entry.action.as_str()) {
+            (Some(f), _) => format!("/frame {f}"),
+            (None, "send the newest frame") => "/frame".to_string(),
+            (None, "stop a job") => "/stop".to_string(),
+            (None, "the phone's choice") => "/reporting".to_string(),
+            _ => "/status".to_string(),
+        }),
         AKindOfEntry::ContextResolution => entry
             .payload
             .get("label")
             .and_then(Value::as_str)
             .map(str::to_string)
-            .or_else(|| frame.map(|f| format!("/frame {f}"))),
+            .or_else(|| frame.map(|f| format!("/frame {f}")))
+            // **A reply's own command** (2026-11-13, the Creator's notes on
+            // the test copy, note 10): a refused reply read *an action*.
+            .or_else(|| match entry.payload.get("request").and_then(Value::as_str) {
+                Some("Stop") => Some("/stop".to_string()),
+                Some("Frame") => Some("/frame".to_string()),
+                _ if entry.payload.get("request").and_then(|r| r.get("Reporting")).is_some() => Some("/reporting".to_string()),
+                _ => None,
+            }),
         AKindOfEntry::Action => labels
             .and_then(|l| l.get("button"))
             .and_then(Value::as_str)
@@ -1622,19 +2580,54 @@ pub(crate) fn in_the_users_words(entry: &AnEntry) -> String {
 }
 
 /// **`Telegram` R16 — the answerer of one process's taps**: every tap from the
-/// proved conversation answered once, with no text, by the process that
-/// received it, the answer's result ignored. **It needs no turn's lock**, so
+/// proved conversation answered once by the process that received it, the
+/// answer's result ignored. **It needs no turn's lock**, so
 /// [`run_until_stopped`]'s asker answers the moment its ask comes back, before
 /// it waits for the turn (fix-here item 4); the listener's own calls land on
 /// the same record of what was answered.
+///
+/// **R16 as changed 2026-11-13 (Telegram when things aren't ideal, problem
+/// 2): *Sent.*, or *Already sent.* for a repeat** — a tap on the same button
+/// of the same message while an earlier tap of it is in hand — and a repeat
+/// is never handed on.
 #[derive(Clone)]
 pub struct TheTapAnswerer {
     client: TheClient,
     conversation: i64,
     answered: Arc<Mutex<HashSet<String>>>,
+    /// **The buttons in hand**, by their data and message: the first tap's
+    /// identifier, and whether its update has been handed on.
+    in_hand: Arc<Mutex<HashMap<(String, i64), ATapInHand>>>,
+    /// The taps answered as repeats and not yet confirmed.
+    repeats: Arc<Mutex<HashSet<String>>>,
+}
+
+/// One button's first tap, while it is in hand.
+#[derive(Debug, Clone)]
+struct ATapInHand {
+    callback: String,
+    handed_on: bool,
+}
+
+/// **`Telegram` R16 as changed 2026-11-13 — the words a first tap is
+/// answered with.**
+pub const A_TAP_WAS_SENT: &str = "Sent.";
+/// **The same — a repeat's**, while the first is in hand.
+pub const A_TAP_WAS_ALREADY_SENT: &str = "Already sent.";
+
+/// A tap's button, by its data and its message.
+fn the_button_tapped(update: &Value) -> Option<(String, i64)> {
+    let tap = update.get("callback_query")?;
+    let data = tap.get("data").and_then(Value::as_str).unwrap_or_default().to_string();
+    let message = tap.pointer("/message/message_id").and_then(Value::as_i64)?;
+    Some((data, message))
 }
 
 impl TheTapAnswerer {
+    fn new(client: TheClient, conversation: i64) -> TheTapAnswerer {
+        TheTapAnswerer { client, conversation, answered: Arc::default(), in_hand: Arc::default(), repeats: Arc::default() }
+    }
+
     /// Answers every tap in `updates` not answered before, and gives back the
     /// updates it answered. A tap from any other conversation, or one whose
     /// conversation cannot be established, is not answered (P2, P3).
@@ -1649,10 +2642,73 @@ impl TheTapAnswerer {
             if what_an_update_gets(update, proved) == WhatAnUpdateGets::Ignored || !lock(&self.answered).insert(id.to_string()) {
                 continue;
             }
-            let _ = self.client.answer_callback_query(id);
+            let mut words = A_TAP_WAS_SENT;
+            if let Some(button) = the_button_tapped(update) {
+                let mut in_hand = lock(&self.in_hand);
+                match in_hand.get(&button) {
+                    Some(first) if first.callback != id => {
+                        words = A_TAP_WAS_ALREADY_SENT;
+                        lock(&self.repeats).insert(id.to_string());
+                    }
+                    Some(_) => {}
+                    None => {
+                        in_hand.insert(button, ATapInHand { callback: id.to_string(), handed_on: false });
+                    }
+                }
+            }
+            let _ = self.client.answer_callback_query(id, words);
             answered.push(update.get("update_id").and_then(Value::as_i64).unwrap_or_default());
         }
         answered
+    }
+
+    /// **Whether this tap was answered as a repeat**, so it is not handed on.
+    fn is_a_repeat(&self, update: &Value) -> bool {
+        update.pointer("/callback_query/id").and_then(Value::as_str).is_some_and(|id| lock(&self.repeats).contains(id))
+    }
+
+    /// A repeat's update is done.
+    fn a_repeat_is_done(&self, update: &Value) {
+        if let Some(id) = update.pointer("/callback_query/id").and_then(Value::as_str) {
+            lock(&self.repeats).remove(id);
+        }
+    }
+
+    /// A first tap's update was handed on.
+    fn handed_on(&self, update: &Value) {
+        let (Some(button), Some(id)) = (the_button_tapped(update), update.pointer("/callback_query/id").and_then(Value::as_str)) else {
+            return;
+        };
+        if let Some(first) = lock(&self.in_hand).get_mut(&button).filter(|first| first.callback == id) {
+            first.handed_on = true;
+        }
+    }
+
+    /// **R16 and Sol's look at the Telegram fixes: the taps in a reply this
+    /// machine throws away leave hand**, with any repeat among them, unless
+    /// the tap was already handed on here.
+    fn forget_the_taps_in(&self, updates: &Value) {
+        let Some(updates) = updates.as_array() else { return };
+        let ids: HashSet<&str> =
+            updates.iter().filter_map(|u| u.pointer("/callback_query/id").and_then(Value::as_str)).collect();
+        lock(&self.in_hand).retain(|_, first| first.handed_on || !ids.contains(first.callback.as_str()));
+        lock(&self.repeats).retain(|id| !ids.contains(id.as_str()));
+    }
+
+    /// **The same, when this machine stops listening**: every button whose
+    /// first tap it never handed on leaves hand, and every repeat with it.
+    fn let_go_of_what_was_not_handed_on(&self) {
+        lock(&self.in_hand).retain(|_, first| first.handed_on);
+        lock(&self.repeats).clear();
+    }
+
+    /// **A button leaves hand** once its first tap was handed on and its
+    /// operation is not on `board` (R4: `tap-` and the callback identifier).
+    fn let_go_of_what_left(&self, board: &TheBoard) {
+        lock(&self.in_hand).retain(|_, first| {
+            let operation = format!("tap-{}", first.callback);
+            !first.handed_on || board.instructions.iter().any(|e| e.operation == operation)
+        });
     }
 }
 
@@ -1711,6 +2767,7 @@ pub fn run_until_stopped(
                         if let Ok(updates) = &got {
                             answerer.answer_the_taps(updates);
                         }
+                        let failed = got.is_err();
                         let brought = matches!(&got, Ok(updates) if updates.as_array().is_some_and(|u| !u.is_empty()));
                         let mut held = lock(&listener);
                         held.what_the_ask_brought(ask, got);
@@ -1719,7 +2776,8 @@ pub fn run_until_stopped(
                         // An update whose work is not yet done stays unconfirmed
                         // and would come back at once; it is asked for again
                         // after one read, when its work may be done (F3, piece 3).
-                        if brought && confirmed_nothing {
+                        // `Telegram` C6c: failed polls must not spin.
+                        if failed || (brought && confirmed_nothing) {
                             std::thread::sleep(THE_READ_CADENCE);
                         }
                     }
@@ -1797,6 +2855,8 @@ mod tests {
         /// and every answer made, by caller and tap.
         taps_owed: HashMap<String, Vec<String>>,
         answered: Vec<(String, String)>,
+        /// **R16 as changed 2026-11-13**: the words each tap was answered with.
+        answer_words: HashMap<String, String>,
         /// **How long a file upload takes on the machines' clock.** Zero is
         /// instant. A call whose bound runs out first ends at its bound, not
         /// reached, as the real client does. **The upload waits for the clock
@@ -1820,6 +2880,25 @@ mod tests {
         from_the_user: HashSet<i64>,
         /// How many of the next `deleteMessage` calls reach nothing.
         the_next_deletions_reach_nothing: usize,
+        /// **The updates confirmed, each by its own identity**: *"An update
+        /// is considered confirmed as soon as getUpdates is called with an
+        /// offset higher than its update_id"* (`https://core.telegram.org/bots/api`,
+        /// getUpdates, read 2026-11-12). Kept one by one, since identifiers
+        /// may start again lower after a week with no update (the same page,
+        /// `Update.update_id`).
+        confirmed: HashSet<i64>,
+        /// **Sitting 6: this caller's next pin of a board waits** until
+        /// `the_held_pin_goes`, so a test can let another machine take a turn
+        /// between a claimant's copy of the board and its pin (B3).
+        hold_the_pin_of_a_board_by: Option<String>,
+        a_pin_is_held: bool,
+        the_held_pin_goes: bool,
+        /// **The sitting 6 follow-up: how many more unpins of a message reach
+        /// nothing**, by the message's identity (B3's unpin of an old board).
+        unpins_reach_nothing: HashMap<i64, usize>,
+        /// **How many of a caller's next pins of a message that is not a
+        /// board reach nothing** — its machinery message's (B10).
+        machinery_pins_reach_nothing: HashMap<String, usize>,
     }
 
     /// One pin's line.
@@ -1878,16 +2957,20 @@ mod tests {
                 assert!(owed.is_empty(), "R16: {caller} made a {method} call before answering the taps it was handed: {owed:?}");
                 return;
             }
+            // **R16 as changed 2026-11-13: the tap's identifier and a few
+            // words**, within Telegram's 0-200 characters, and nothing else.
             let carried = fields.as_object().map_or(0, |f| f.len());
+            let text = fields.get("text").and_then(Value::as_str).unwrap_or_default().to_string();
             assert!(
-                carried == 1 && fields.get("callback_query_id").is_some(),
-                "R16: an answer carried more than the tap's identifier: {fields}"
+                carried == 2 && fields.get("callback_query_id").is_some() && !text.is_empty() && text.chars().count() <= 200,
+                "R16: an answer carried other than the tap's identifier and its words: {fields}"
             );
             let id = fields["callback_query_id"].as_str().unwrap_or_default().to_string();
             let Some(at) = owed.iter().position(|o| *o == id) else {
                 panic!("R16: {caller} answered tap {id}, which it was not handed or had already answered");
             };
             owed.remove(at);
+            self.answer_words.insert(id.clone(), text);
             self.answered.push((caller.to_string(), id));
         }
         /// The taps from the proved conversation an ask hands a caller, which
@@ -1962,6 +3045,15 @@ mod tests {
         fn the_bot_pins(&self, id: i64, now: Duration) {
             self.state().a_pin(id, now, false);
         }
+        /// **The user deletes a message** — the board, say. Telegram reads
+        /// the slot as absent after a pinned message is deleted (`Telegram`
+        /// §3's observed ground), and a pin or edit of it is refused.
+        fn the_user_deletes(&self, id: i64) {
+            let mut s = self.state();
+            s.texts.remove(&id);
+            s.entities.remove(&id);
+            s.pins.retain(|p| *p != id);
+        }
         fn an_update(&self, chat: i64, text: &str) {
             let mut s = self.state();
             s.next_update += 1;
@@ -2007,6 +3099,28 @@ mod tests {
                 _ => json!({}),
             };
             let mut s = self.sim.state();
+            let pins_a_board = method == "pinChatMessage"
+                && fields
+                    .get("message_id")
+                    .and_then(Value::as_i64)
+                    .and_then(|id| s.texts.get(&id))
+                    .is_some_and(|text| {
+                        matches!(
+                            what_is_pinned(&json!({ "pinned_message": { "message_id": 1, "from": { "is_bot": true }, "text": text } })),
+                            WhatIsPinned::ABoard { .. }
+                        )
+                    });
+            if pins_a_board && s.hold_the_pin_of_a_board_by.as_deref() == Some(self.name.as_str()) {
+                s.hold_the_pin_of_a_board_by = None;
+                s.a_pin_is_held = true;
+                drop(s);
+                let given = Instant::now();
+                while !self.sim.state().the_held_pin_goes {
+                    assert!(given.elapsed() < Duration::from_secs(30), "the held pin was never let go");
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                s = self.sim.state();
+            }
             s.heard.push((self.name.clone(), method.to_string(), fields.clone()));
             s.the_taps_are_answered_first(&self.name, method, &fields);
             if method == "sendDocument" {
@@ -2031,6 +3145,18 @@ mod tests {
                 return Err("the line is cut".into());
             }
             let id = fields.get("message_id").and_then(Value::as_i64).unwrap_or(0);
+            if method == "unpinChatMessage" {
+                if let Some(left) = s.unpins_reach_nothing.get_mut(&id).filter(|left| **left > 0) {
+                    *left -= 1;
+                    return Err("the unpin reached nothing".into());
+                }
+            }
+            if method == "pinChatMessage" && !pins_a_board {
+                if let Some(left) = s.machinery_pins_reach_nothing.get_mut(&self.name).filter(|left| **left > 0) {
+                    *left -= 1;
+                    return Err("the pin reached nothing".into());
+                }
+            }
             // `Telegram` B24: every pin and every board or machinery message is
             // silent; a message composed for the user is not.
             let silent = fields.get("disable_notification") == Some(&json!(true));
@@ -2134,11 +3260,22 @@ mod tests {
                         s.refused_next.insert(open);
                     }
                     s.open_ask = Some(self.name.clone());
-                    if let Some(offset) = fields.get("offset").and_then(Value::as_i64) {
+                    let offset = fields.get("offset").and_then(Value::as_i64);
+                    if let Some(offset) = offset {
                         s.confirmed_below = s.confirmed_below.max(offset);
+                        let now_confirmed: Vec<i64> =
+                            s.updates.iter().map(|u| u["update_id"].as_i64().unwrap()).filter(|id| *id < offset).collect();
+                        s.confirmed.extend(now_confirmed);
                     }
-                    let below = s.confirmed_below;
-                    let waiting: Vec<Value> = s.updates.iter().filter(|u| u["update_id"].as_i64().unwrap() >= below).cloned().collect();
+                    let waiting: Vec<Value> = s
+                        .updates
+                        .iter()
+                        .filter(|u| {
+                            let id = u["update_id"].as_i64().unwrap();
+                            !s.confirmed.contains(&id) && offset.is_none_or(|offset| id >= offset)
+                        })
+                        .cloned()
+                        .collect();
                     s.owe_the_taps(&self.name, &waiting);
                     accepted(Value::Array(waiting))
                 }
@@ -2163,6 +3300,10 @@ mod tests {
         /// The machines' clock moves on by the pause, as it would.
         fn pause(&self, how_long: Duration) {
             *lock(&self.0) += how_long;
+        }
+        /// The same clock, as a date.
+        fn the_seconds_since_1970(&self) -> Option<u64> {
+            Some(1_800_000_000 + lock(&self.0).as_secs())
         }
     }
 
@@ -2257,6 +3398,11 @@ mod tests {
         }
 
         fn start(&mut self, name: &str) {
+            self.start_keeping_its_state_in(name, Box::new(InMemory::with_routing_key(&format!("key-{name}"))));
+        }
+
+        /// The same, with the store handed in.
+        fn start_keeping_its_state_in(&mut self, name: &str, store: Box<dyn TheTelegramWorkersState>) {
             let client = TheClient::over(Arc::new(ACaller { name: name.into(), sim: self.sim.clone(), clock: self.clock.clone() }));
             let queue = Arc::new(TheSendQueue::new(client.clone(), Arc::new(NoWaits)));
             let listener = TheListener::new(WhatTheListenerIsHanded {
@@ -2265,7 +3411,7 @@ mod tests {
                 clock: self.clock.clone(),
                 me: WhoThisMachineIs { machine: name.into(), display: format!("Server {name}").into() },
                 settings: TheSettings::for_the_conversation(CHAT),
-                store: Box::new(InMemory::with_routing_key(&format!("key-{name}"))),
+                store,
                 actor: Box::new(RecordsActs {
                     machine: name.into(),
                     recorded: HashSet::new(),
@@ -2634,7 +3780,7 @@ mod tests {
         let pinned_new = s.heard.iter().position(|(_, m, _)| m == "pinChatMessage").unwrap();
         let unpinned_old = s.heard.iter().position(|(_, m, f)| m == "unpinChatMessage" && f["message_id"] == json!(later)).unwrap();
         assert!(unpinned_old > pinned_new, "unpinned by its identity only after the fresh board");
-        assert_eq!(s.texts.values().filter(|t| t.contains("was unreadable for 60 seconds")).count(), 1);
+        assert_eq!(s.texts.values().filter(|t| t.contains("Requests sent in the last 60 seconds were lost.")).count(), 1);
         assert!(s.texts.values().all(|t| !t.contains("No server took over")));
     }
 
@@ -2657,6 +3803,42 @@ mod tests {
         drop(held);
         lock(&shared).what_the_ask_brought(ask, got);
         assert_eq!(fleet.sim.state().answered.len(), 1);
+    }
+
+    /// **R16 and Sol's look at the Telegram fixes: a tap in a reply this
+    /// machine throws away is not kept in hand.** Listening moves to another
+    /// server; this machine's open ask comes back late with a tap, which it
+    /// answers and then discards, since it no longer holds. The other server
+    /// handles that tap. A later fresh press on the same button must be
+    /// answered *Sent.*, never *Already sent.* — in both orders: the reply
+    /// answered after this machine stood down, and answered just before.
+    #[test]
+    fn a_tap_in_a_reply_thrown_away_after_listening_moves_does_not_block_the_button() {
+        for answered_before_standing_down in [false, true] {
+            let (mut fleet, holder) = a_fleet_with_one_holder(&["a"]);
+            let sim = fleet.sim.clone();
+            let listener = &mut fleet.member(&holder).listener;
+            let answerer = listener.the_tap_answerer();
+            sim.the_user_taps(CHAT, "tap-handed-over");
+            let ask = listener.the_ask_to_make().expect("holding");
+            let got = listener.client().get_updates(ask.offset, 0);
+            if answered_before_standing_down {
+                answerer.answer_the_taps(got.as_ref().unwrap());
+            }
+            listener.stand_down("a test: another server took over");
+            if !answered_before_standing_down {
+                answerer.answer_the_taps(got.as_ref().unwrap());
+            }
+            listener.what_the_ask_brought(ask, got);
+            let fresh = sim.the_user_taps(CHAT, "tap-fresh");
+            let again = listener.client().get_updates(ask.offset, 0);
+            assert!(answerer.answer_the_taps(again.as_ref().unwrap()).contains(&fresh));
+            assert_eq!(
+                sim.state().answer_words.get("tap-fresh").map(String::as_str),
+                Some(A_TAP_WAS_SENT),
+                "R16: a fresh press after the hand-over is answered as a first tap (answered before standing down: {answered_before_standing_down})"
+            );
+        }
     }
 
     /// **B9, U6 and fix-here item 2: an act that fails before its outcome is
@@ -2811,6 +3993,66 @@ mod tests {
             }
         }
         assert_eq!(s.pins.len(), 1, "the board alone is pinned");
+    }
+
+    /// **Sol's S1 (the four questions, batch 4, 2026-11-11): a pin the user
+    /// made stays** (`Telegram` B11 as changed that day). The user pins a
+    /// message newer than the board, so it is the reported pin; the holder
+    /// sends its board again rather than unpinning it, and the board is the
+    /// reported pin once more, the user's pin still in place, the old board
+    /// unpinned and the machines still on the roster. Before, the janitor
+    /// unpinned the user's message.
+    #[test]
+    fn four_questions_s1_a_pin_the_user_made_stays_and_the_board_is_sent_again() {
+        let (mut fleet, holder) = a_fleet_with_one_holder(&["a", "b"]);
+        let old_board = *fleet.sim.state().pins.iter().max().unwrap();
+        let theirs = fleet.sim.a_message_from_the_user("delivery notes for the client");
+        let now = fleet.clock.now();
+        fleet.sim.the_user_pins(theirs, now);
+        let last = fleet.sim.state().next_update;
+        fleet.rounds_until(20, |f| f.sim.state().confirmed_below > last).expect("the pin was processed");
+        for _ in 0..30 {
+            fleet.a_round();
+        }
+        let board = fleet.sim.the_board_on_top().expect("the board is the reported pin again");
+        assert_eq!(board.roster.len(), 2, "both machines are still on the roster");
+        assert_eq!(fleet.holders(), vec![holder]);
+        let s = fleet.sim.state();
+        assert!(s.pins.contains(&theirs), "S1: the user's pin stands");
+        assert!(!s.heard.iter().any(|(_, m, f)| m == "unpinChatMessage" && f["message_id"] == json!(theirs)), "never unpinned");
+        assert!(!s.pins.contains(&old_board), "the old board is unpinned by its identity");
+        assert_eq!(s.pins.len(), 2, "the user's pin and the board");
+    }
+
+    /// **Sol's S1, at a hand-over (`Telegram` B3 as changed 2026-11-11)**: the
+    /// holder is gone and the user has pinned a message newer than its board.
+    /// The machine taking the slot unpins it to read the board beneath, carries
+    /// the board's instruction over, and pins the user's message again; the
+    /// line that re-pin writes is deleted (B18), and the user's own line stays.
+    #[test]
+    fn four_questions_s1_a_hand_over_puts_the_users_pin_back() {
+        let (mut fleet, holder) = a_fleet_with_one_holder(&["a", "b"]);
+        let survivor = ["a", "b"].into_iter().find(|n| *n != holder).unwrap().to_string();
+        let entry = an_action_for("d", "a test instruction", json!({ "n": 1 })).unwrap();
+        let operation = entry.operation.clone();
+        fleet.member(&survivor).listener.propose(entry);
+        fleet
+            .rounds_until(20, |f| f.sim.the_board_on_top().is_some_and(|b| b.instructions.iter().any(|e| e.operation == operation)))
+            .expect("the proposal was accepted onto the board");
+        fleet.member(&holder).alive = false;
+        let theirs = fleet.sim.a_message_from_the_user("delivery notes for the client");
+        let now = fleet.clock.now();
+        fleet.sim.the_user_pins(theirs, now);
+        fleet.rounds_until(80, |f| f.holders() == vec![survivor.clone()]).expect("the survivor took the slot");
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        let board = fleet.sim.the_board_on_top().expect("the fresh board is the reported pin");
+        assert!(board.instructions.iter().any(|e| e.operation == operation), "the instruction was carried over");
+        let s = fleet.sim.state();
+        assert!(s.pins.contains(&theirs), "S1: the user's pin was put back");
+        assert_eq!(s.lines.values().filter(|l| l.by_a_person).count(), 1, "the user's own line stands");
+        assert_eq!(s.the_bots_lines_standing(), Vec::<i64>::new(), "the re-pin's line is deleted");
     }
 
     /// **`Telegram` B18 — a line from a pin the user made is never touched**,
@@ -2998,6 +4240,59 @@ mod tests {
         assert!(!fleet.sim.state().pins.contains(&dead), "the dead board unpinned by its identity");
     }
 
+    /// **Telegram when things aren't ideal, problem 1 (`Telegram` B11 as
+    /// changed 2026-11-13): on a one-server bot, the user deletes the board.**
+    /// The holder sends its board again, pinned, and an instruction proposed
+    /// after it is still accepted and acted on. Before, the re-pin of the
+    /// deleted board was refused at every turn for ever, and nothing was
+    /// accepted again.
+    #[test]
+    fn not_ideal_1_a_deleted_board_on_a_one_server_bot_is_sent_again_and_instructions_still_reach_it() {
+        let (mut fleet, holder) = a_fleet_with_one_holder(&["a"]);
+        let old = *fleet.sim.state().pins.iter().max().unwrap();
+        fleet.sim.the_user_deletes(old);
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        let board = fleet.sim.the_board_on_top().expect("a fresh board is pinned");
+        assert_eq!(board.holder, holder);
+        let fresh = *fleet.sim.state().pins.iter().max().unwrap();
+        assert_ne!(fresh, old, "a fresh message, not the deleted one");
+        assert_eq!(fleet.sim.state().pins.len(), 1, "the fresh board alone is pinned");
+        let entry = an_action_for(&holder, "a test instruction", json!({ "n": 1 })).unwrap();
+        let operation = entry.operation.clone();
+        fleet.member(&holder).listener.propose(entry);
+        fleet
+            .rounds_until(30, |f| lock(&f.acted).iter().any(|(_, op)| *op == operation))
+            .expect("an instruction after the deletion is accepted and acted on");
+        assert_eq!(fleet.holders(), vec![holder]);
+    }
+
+    /// **The Fable review's sitting 6 follow-up, its left item 2 — `Telegram`
+    /// B3 as changed 2026-11-12: an old board's unpin that reaches nothing is
+    /// tried again** at the holder's turns until Telegram answers. Until this
+    /// date it was tried once, and the old board stayed pinned beneath the new
+    /// one for good.
+    #[test]
+    fn follow_up_an_old_boards_unpin_that_reaches_nothing_is_tried_again() {
+        let mut fleet = AFleet::new();
+        let dead = a_dead_board(&fleet, "gone", &["gone"]);
+        fleet.sim.state().unpins_reach_nothing.insert(dead, 2);
+        fleet.start("a");
+        fleet.rounds_until(60, |f| f.holders() == ["a"]).expect("it takes the slot under B5");
+        fleet
+            .rounds_until(10, |f| !f.sim.state().pins.contains(&dead))
+            .expect("the old board's unpin was tried again until it landed");
+        let unpins = fleet.sim.state().heard.iter().filter(|(n, m, f)| n == "a" && m == "unpinChatMessage" && f["message_id"] == dead).count();
+        assert_eq!(unpins, 3, "tried until answered, and no more");
+        for _ in 0..30 {
+            fleet.a_round();
+        }
+        let unpins_after = fleet.sim.state().heard.iter().filter(|(n, m, f)| n == "a" && m == "unpinChatMessage" && f["message_id"] == dead).count();
+        assert_eq!(unpins_after, 3, "not tried again once answered");
+        assert_eq!(fleet.holders(), ["a"]);
+    }
+
     /// **D2: the same with the claim's read-back missing the new board once**
     /// (Sources entry 86's older reading). The claimant stands down with its
     /// own board pinned and nobody holding; **that board names it, so it is
@@ -3015,7 +4310,10 @@ mod tests {
         }
         assert!(machinery_sent_by(&fleet, "a", 0).is_empty(), "nothing pinned to its own board");
         let pins = pinned_by(&fleet, "a", 0);
-        assert_eq!(pins.len(), 2, "its two boards, and nothing else: {pins:?}");
+        // **B1 as changed 2026-11-12 (the runner's ruling 1 on the Fable
+        // review's sitting 6): its second claim reaches its own recorded
+        // board and carries on with it.** Until then this was two boards.
+        assert_eq!(pins.len(), 1, "its one board, and nothing else: {pins:?}");
         let s = fleet.sim.state();
         assert!(pins.iter().all(|id| s.texts[id].contains("smoozy-board")));
         drop(s);
@@ -3208,6 +4506,48 @@ mod tests {
         }
     }
 
+    /// **The runner's ruling 1 on the Fable review's sitting 6, `Telegram`
+    /// B1 and B6 as changed 2026-11-12 — a restarted holder whose record of
+    /// its board survives carries on with that board**: it edits it, sends no
+    /// new board, pins nothing, and listens again at once rather than after a
+    /// renewal interval. An entry addressed to itself on the board is acted on
+    /// once. Until this date a restart sent a second board, unpinned the old
+    /// one, and did not listen for about a minute (the night pass's new fault
+    /// 9). Where the record is gone, the case above still posts a new board.
+    #[test]
+    fn ruling_1_a_restarted_holder_with_its_record_carries_on_with_its_own_board() {
+        let mut fleet = AFleet::new();
+        let (store, _) = crate::worker_state::a_file_store_whose_writes_can_be_stopped("ruling-1");
+        fleet.start_keeping_its_state_in("a", Box::new(store.clone()));
+        fleet.rounds_until(100, |f| f.holders() == ["a"]).expect("a holds");
+        let entry = an_action_for("a", "a test instruction", json!({ "n": 1 })).unwrap();
+        let operation = entry.operation.clone();
+        fleet.member("a").listener.propose(entry);
+        fleet.member("a").listener.a_turn();
+        assert!(fleet.sim.the_board_on_top().unwrap().instructions.iter().any(|e| e.operation == operation));
+        let board_id = *fleet.sim.state().pins.iter().max().unwrap();
+        assert_eq!(store.the_board().unwrap(), Some(board_id));
+        // The worker dies and starts again on the same store.
+        fleet.members.clear();
+        let since = heard_so_far(&fleet);
+        fleet.start_keeping_its_state_in("a", Box::new(store.clone()));
+        let rounds = fleet.rounds_until(80, |f| f.holders() == ["a"]).expect("it holds again");
+        assert!(rounds <= 3, "it listens again at once, not after a renewal interval: {rounds} rounds");
+        for _ in 0..90 {
+            fleet.a_round();
+        }
+        let sent_by_a = fleet.sim.state().heard[since..].iter().filter(|(n, m, _)| n == "a" && m == "sendMessage").count();
+        assert_eq!(sent_by_a, 0, "no new board");
+        assert!(pinned_by(&fleet, "a", since).is_empty(), "nothing pinned");
+        assert_eq!(fleet.sim.state().pins, vec![board_id], "one board in the chat, the same one");
+        let board = fleet.sim.the_board_on_top().unwrap();
+        assert_eq!(board.holder, "a");
+        assert!(listed(&board, "a"));
+        assert!(board.instructions.is_empty(), "its entry was acted on and taken off");
+        assert_eq!(*lock(&fleet.acted), vec![("a".to_string(), operation)], "acted on once");
+        let _ = std::fs::remove_dir_all(store.path_for_tests().parent().expect("its scratch folder"));
+    }
+
     /// **D6: a new server joining a live holder announces only after the
     /// first renewal it sees** — and an instruction addressed to it before
     /// then reaches it, is acted on and is acknowledged, with no announcement
@@ -3301,8 +4641,13 @@ mod tests {
         assert_eq!(the_line_a_pin_of_smoozys_wrote(&a_pin(Some(true), true, &head)), Some(50_007));
         assert_eq!(the_line_a_pin_of_smoozys_wrote(&a_pin(None, true, &head)), Some(50_007), "no sender stated");
         assert_eq!(the_line_a_pin_of_smoozys_wrote(&a_pin(Some(false), true, &head)), None, "the user pinned it");
-        assert_eq!(the_line_a_pin_of_smoozys_wrote(&a_pin(Some(true), false, &head)), None, "not the bot's own");
-        assert_eq!(the_line_a_pin_of_smoozys_wrote(&a_pin(Some(true), true, "Frame 12 done")), None, "no head");
+        assert_eq!(the_line_a_pin_of_smoozys_wrote(&a_pin(None, false, &head)), None, "not the bot's own");
+        assert_eq!(the_line_a_pin_of_smoozys_wrote(&a_pin(None, true, "Frame 12 done")), None, "no head");
+        // **B18 as changed 2026-11-11 (the four questions, batch 4): a pin the
+        // bot made is Smoozy's**, B3 pinning a user's message again, whatever
+        // it pinned.
+        assert_eq!(the_line_a_pin_of_smoozys_wrote(&a_pin(Some(true), false, &head)), Some(50_007), "the user's own message, pinned again");
+        assert_eq!(the_line_a_pin_of_smoozys_wrote(&a_pin(Some(true), true, "Frame 12 done")), Some(50_007), "a job's message, pinned again");
         // A pin an older server made, under the head before step 13's words
         // sweep, is still Smoozy's own.
         let the_older_head = format!("{} \u{00b7} Server a\n\nsmoozy-machinery 1\n{{}}", crate::board::text::THE_HEAD_BEFORE_2026_10_28);
@@ -3311,5 +4656,355 @@ mod tests {
         naming_itself["pinned_message"]["message_id"] = json!(50_007);
         assert_eq!(the_line_a_pin_of_smoozys_wrote(&naming_itself), None, "never the pinned message");
         assert_eq!(the_line_a_pin_of_smoozys_wrote(&json!({ "message_id": 50_007, "text": "hello" })), None, "not a pin");
+    }
+
+    /// **Sitting 6 of the Fable review, F3 as changed 2026-11-12 — updates
+    /// numbered afresh after a week with none are still read.** Telegram's
+    /// page: *"If there are no new updates for at least a week, then identifier
+    /// of the next update will be chosen randomly instead of sequentially"*,
+    /// and *"An update is considered confirmed as soon as getUpdates is called
+    /// with an offset higher than its update_id"*
+    /// (`https://core.telegram.org/bots/api`, `Update` and `getUpdates`, read
+    /// 2026-11-12). Until this date the holder went on asking from its kept
+    /// position, so an update numbered below it was confirmed unread, and
+    /// every one after it: the bot never answered again.
+    #[test]
+    fn sitting_6_updates_numbered_afresh_after_a_week_of_silence_are_still_read() {
+        let mut fleet = AFleet::new();
+        fleet.sim.state().next_update = 5_000;
+        fleet.start("a");
+        fleet.rounds_until(100, |f| f.holders() == vec!["a".to_string()]).expect("a holds");
+        fleet.sim.an_update(CHAT, "hello");
+        fleet.rounds_until(10, |f| !lock(&f.handed_on).is_empty()).expect("the first update was handed on");
+        for _ in 0..3 {
+            fleet.a_round();
+        }
+        let asked_from = |fleet: &AFleet| {
+            let s = fleet.sim.state();
+            s.heard.iter().rev().find(|(_, method, _)| method == "getUpdates").map(|(_, _, fields)| fields.get("offset").cloned())
+        };
+        assert!(matches!(asked_from(&fleet), Some(Some(_))), "inside the week the ask carries the kept position");
+        // Eight days with no update, and Telegram numbers the next one afresh.
+        *lock(&fleet.clock.0) += Duration::from_secs(8 * 24 * 60 * 60);
+        fleet.sim.state().next_update = 40;
+        fleet.sim.an_update(CHAT, "/status");
+        fleet
+            .rounds_until(20, |f| lock(&f.handed_on).contains(&41))
+            .expect("the update numbered afresh is handed on");
+        // And the one after it, asked for from the new position.
+        fleet.sim.an_update(CHAT, "/status");
+        fleet.rounds_until(20, |f| lock(&f.handed_on).contains(&42)).expect("the next one too");
+        assert_eq!(lock(&fleet.handed_on).iter().filter(|id| **id == 41).count(), 1, "handed on once");
+    }
+
+    /// **Sitting 6 of the Fable review, B3 as changed 2026-11-12 — an
+    /// instruction the old holder's board accepted while a claimant was
+    /// between copying that board and pinning its own is not lost.** The old
+    /// holder's line comes back in that gap; its edit of the old board is read
+    /// back, since the old board is still the reported pin; the claimant's
+    /// board, copied before the edit, is then pinned without it. Until this
+    /// date no board carried the instruction after that, and nothing said so.
+    #[test]
+    fn sitting_6_an_instruction_accepted_while_the_board_is_copied_reaches_the_new_board() {
+        let (mut fleet, holder) = a_fleet_with_one_holder(&["a", "b"]);
+        let other = if holder == "a" { "b".to_string() } else { "a".to_string() };
+        // The holder's line stalls, and the other machine's pin of its fresh
+        // board will wait.
+        {
+            let mut s = fleet.sim.state();
+            s.cut.insert(holder.clone());
+            s.hold_the_pin_of_a_board_by = Some(other.clone());
+        }
+        let at = fleet.members.iter().position(|m| m.name == other).unwrap();
+        let mut claimant = fleet.members.remove(at);
+        let clock = fleet.clock.clone();
+        let claiming = std::thread::spawn(move || {
+            for _ in 0..200 {
+                if claimant.listener.is_holding() {
+                    break;
+                }
+                claimant.listener.a_turn();
+                if let Some(ask) = claimant.listener.the_ask_to_make() {
+                    let got = claimant.listener.client().get_updates(ask.offset, ask.wait_seconds);
+                    claimant.listener.what_the_ask_brought(ask, got);
+                }
+                *lock(&clock.0) += THE_READ_CADENCE;
+            }
+            claimant
+        });
+        let given = Instant::now();
+        while !fleet.sim.state().a_pin_is_held {
+            assert!(given.elapsed() < Duration::from_secs(30), "the other machine never came to pin its board");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        // The claimant has copied the old board and sent its own, not pinned
+        // yet. The old holder's line comes back and its turn runs: it accepts
+        // a stop for the other machine's job on the old board.
+        fleet.sim.state().cut.remove(&holder);
+        let stop = an_action_for(&other, "stop", json!({})).unwrap();
+        fleet.member(&holder).listener.propose(stop.clone());
+        fleet.member(&holder).listener.a_turn();
+        assert!(
+            fleet.member(&holder).listener.the_instructions_accepted_lately().iter().any(|e| e.operation == stop.operation),
+            "the old board's read-back accepted the stop, so the phone is told it was sent"
+        );
+        fleet.sim.state().the_held_pin_goes = true;
+        let claimant = claiming.join().expect("the claimant's turns ended");
+        assert!(claimant.listener.is_holding(), "the other machine took the slot");
+        fleet.members.push(claimant);
+        assert!(
+            !fleet.sim.the_board_on_top().unwrap().instructions.iter().any(|e| e.operation == stop.operation),
+            "the new board was copied before the stop"
+        );
+        fleet
+            .rounds_until(40, |f| lock(&f.acted).contains(&(other.clone(), stop.operation.clone())))
+            .expect("the stop reached the new board and was acted on");
+        assert_eq!(fleet.holders(), vec![other.clone()]);
+        assert_eq!(lock(&fleet.acted).iter().filter(|(_, op)| *op == stop.operation).count(), 1, "acted on once");
+    }
+
+    /// **The Fable review's sitting 6 follow-up, its left item 3 — `Telegram`
+    /// B3 as changed 2026-11-12: an old holder that dies after confirming a
+    /// Stop in the hand-over's gap, and starts again, proposes it again**, so
+    /// it reaches the new board and is acted on. Until this date it was lost
+    /// with the process, after the phone was told *Stop sent*.
+    #[test]
+    fn follow_up_a_holder_that_dies_in_the_gap_and_starts_again_proposes_the_stop_again() {
+        let mut fleet = AFleet::new();
+        let (store_a, _) = crate::worker_state::a_file_store_whose_writes_can_be_stopped("gap-a");
+        let (store_b, _) = crate::worker_state::a_file_store_whose_writes_can_be_stopped("gap-b");
+        fleet.start_keeping_its_state_in("a", Box::new(store_a.clone()));
+        fleet.start_keeping_its_state_in("b", Box::new(store_b.clone()));
+        fleet
+            .rounds_until(100, |f| f.holders().len() == 1 && f.sim.the_board_on_top().is_some_and(|b| b.roster.len() == 2))
+            .expect("one machine holds and both are on the roster");
+        let holder = fleet.holders().remove(0);
+        let other = if holder == "a" { "b".to_string() } else { "a".to_string() };
+        let holders_store = if holder == "a" { store_a.clone() } else { store_b.clone() };
+        {
+            let mut s = fleet.sim.state();
+            s.cut.insert(holder.clone());
+            s.hold_the_pin_of_a_board_by = Some(other.clone());
+        }
+        let at = fleet.members.iter().position(|m| m.name == other).unwrap();
+        let mut claimant = fleet.members.remove(at);
+        let clock = fleet.clock.clone();
+        let claiming = std::thread::spawn(move || {
+            for _ in 0..200 {
+                if claimant.listener.is_holding() {
+                    break;
+                }
+                claimant.listener.a_turn();
+                if let Some(ask) = claimant.listener.the_ask_to_make() {
+                    let got = claimant.listener.client().get_updates(ask.offset, ask.wait_seconds);
+                    claimant.listener.what_the_ask_brought(ask, got);
+                }
+                *lock(&clock.0) += THE_READ_CADENCE;
+            }
+            claimant
+        });
+        let given = Instant::now();
+        while !fleet.sim.state().a_pin_is_held {
+            assert!(given.elapsed() < Duration::from_secs(30), "the other machine never came to pin its board");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        fleet.sim.state().cut.remove(&holder);
+        let stop = an_action_for(&other, "stop", json!({})).unwrap();
+        fleet.member(&holder).listener.propose(stop.clone());
+        fleet.member(&holder).listener.a_turn();
+        assert!(
+            fleet.member(&holder).listener.the_instructions_accepted_lately().iter().any(|e| e.operation == stop.operation),
+            "the old board's read-back accepted the stop"
+        );
+        // **The old holder dies here**, before it reads the new board.
+        let at = fleet.members.iter().position(|m| m.name == holder).unwrap();
+        fleet.members.remove(at);
+        fleet.sim.state().the_held_pin_goes = true;
+        let claimant = claiming.join().expect("the claimant's turns ended");
+        assert!(claimant.listener.is_holding(), "the other machine took the slot");
+        fleet.members.push(claimant);
+        assert!(
+            !fleet.sim.the_board_on_top().unwrap().instructions.iter().any(|e| e.operation == stop.operation),
+            "the new board was copied before the stop"
+        );
+        // **It starts again on its own store.**
+        fleet.start_keeping_its_state_in(&holder, Box::new(holders_store.clone()));
+        fleet
+            .rounds_until(40, |f| lock(&f.acted).contains(&(other.clone(), stop.operation.clone())))
+            .expect("the stop reached the new board and was acted on");
+        assert_eq!(lock(&fleet.acted).iter().filter(|(_, op)| *op == stop.operation).count(), 1, "acted on once");
+        fleet.rounds_until(40, |_| false);
+        assert_eq!(holders_store.the_entries_last_held().unwrap(), None, "the record is emptied once the stop is on a board");
+        for store in [store_a, store_b] {
+            let _ = std::fs::remove_dir_all(store.path_for_tests().parent().expect("its scratch folder"));
+        }
+    }
+
+    /// **Sitting 6 of the Fable review, F3c — an update whose work is done
+    /// and whose position could not be written is not handled again in this
+    /// run.** Until 2026-11-12 it came back at the next ask and its work was
+    /// done again, every two seconds, for as long as the store could not be
+    /// written: a typed request answered over and over.
+    #[test]
+    fn sitting_6_an_update_whose_position_cannot_be_written_is_handed_on_once() {
+        let mut fleet = AFleet::new();
+        let (store, stops_writes) = crate::worker_state::a_file_store_whose_writes_can_be_stopped("position");
+        fleet.start_keeping_its_state_in("a", Box::new(store));
+        fleet.rounds_until(100, |f| f.holders() == vec!["a".to_string()]).expect("a holds");
+        for _ in 0..3 {
+            fleet.a_round();
+        }
+        std::fs::create_dir(&stops_writes).expect("writes stopped");
+        fleet.sim.an_update(CHAT, "/status");
+        let update = fleet.sim.state().next_update;
+        for _ in 0..10 {
+            fleet.a_round();
+        }
+        assert_eq!(lock(&fleet.handed_on).iter().filter(|id| **id == update).count(), 1, "its work is done once");
+        assert_eq!(fleet.holders(), vec!["a".to_string()]);
+        // The store can be written again: the position is written and asked from.
+        std::fs::remove_dir(&stops_writes).expect("writes let through");
+        fleet.rounds_until(10, |f| f.sim.state().confirmed.contains(&update)).expect("the update is confirmed");
+        assert_eq!(lock(&fleet.handed_on).iter().filter(|id| **id == update).count(), 1);
+        let _ = std::fs::remove_dir_all(stops_writes.parent().expect("its scratch folder"));
+    }
+
+    /// **Sitting 6 of the Fable review, F3c — a machinery message whose
+    /// identity could not be written is not sent again, and a board whose
+    /// identity could not be written is still pinned and held.** Until
+    /// 2026-11-12 a machine whose store could not be written sent a new
+    /// machinery message at every turn it had something to say, and one alone
+    /// on the bot sent a new board at every claim and never held the slot.
+    #[test]
+    fn sitting_6_a_machinery_message_and_a_board_whose_identity_cannot_be_written_are_sent_once() {
+        let sent_by = |fleet: &AFleet, name: &str| {
+            fleet.sim.state().heard.iter().filter(|(caller, method, _)| caller == name && method == "sendMessage").count()
+        };
+        // A machine that does not hold, with something to say.
+        let (mut fleet, holder) = a_fleet_with_one_holder(&["a"]);
+        let (store, stops_writes) = crate::worker_state::a_file_store_whose_writes_can_be_stopped("machinery");
+        std::fs::create_dir(&stops_writes).expect("writes stopped");
+        fleet.start_keeping_its_state_in("b", Box::new(store));
+        fleet
+            .rounds_until(100, |f| f.sim.the_board_on_top().is_some_and(|b| b.roster.len() == 2))
+            .expect("the second machine announced itself and was listed");
+        for _ in 0..20 {
+            fleet.a_round();
+        }
+        assert_eq!(sent_by(&fleet, "b"), 1, "one machinery message");
+        assert_eq!(fleet.holders(), vec![holder]);
+        let _ = std::fs::remove_dir_all(stops_writes.parent().expect("its scratch folder"));
+
+        // A machine alone on the bot, taking the slot.
+        let mut alone = AFleet::new();
+        let (store, stops_writes) = crate::worker_state::a_file_store_whose_writes_can_be_stopped("board");
+        std::fs::create_dir(&stops_writes).expect("writes stopped");
+        alone.start_keeping_its_state_in("c", Box::new(store));
+        alone.rounds_until(150, |f| f.holders() == vec!["c".to_string()]).expect("it holds the slot with a board it could not record");
+        for _ in 0..90 {
+            alone.a_round();
+        }
+        assert_eq!(sent_by(&alone, "c"), 1, "one board");
+        assert_eq!(alone.sim.state().pins.len(), 1);
+        let _ = std::fs::remove_dir_all(stops_writes.parent().expect("its scratch folder"));
+    }
+
+    /// **B10, as written 2026-11-12: a pin of a machine's own machinery
+    /// message that reaches nothing keeps that message.** The live pass of that
+    /// date (new fault 11) saw a new coordination message after a stalled
+    /// server came back; Codex's read found that any failed pin sent a fresh
+    /// machinery message and recorded it over the first. A stalled server's
+    /// calls reach nothing when it comes back, so one machine ended with two.
+    #[test]
+    fn a_machinery_message_whose_pin_reached_nothing_is_pinned_again_and_not_sent_again() {
+        let sent_by = |fleet: &AFleet, name: &str| {
+            fleet.sim.state().heard.iter().filter(|(caller, method, _)| caller == name && method == "sendMessage").count()
+        };
+        let (mut fleet, holder) = a_fleet_with_one_holder(&["a", "b"]);
+        let other = if holder == "a" { "b".to_string() } else { "a".to_string() };
+        fleet
+            .rounds_until(100, |f| f.sim.the_board_on_top().is_some_and(|b| b.roster.len() == 2))
+            .expect("the other machine announced itself and was listed");
+        let before = sent_by(&fleet, &other);
+        assert_eq!(before, 1, "one machinery message, its announcement");
+        // Its next pins reach nothing, and it has something new to say.
+        fleet.sim.state().machinery_pins_reach_nothing.insert(other.clone(), 3);
+        let stop = an_action_for(&holder, "stop", json!({})).unwrap();
+        fleet.member(&other).listener.propose(stop.clone());
+        fleet
+            .rounds_until(60, |f| lock(&f.acted).contains(&(holder.clone(), stop.operation.clone())))
+            .unwrap_or_else(|| panic!("the proposal was never acted on; {} machinery messages sent", sent_by(&fleet, &other)));
+        assert_eq!(sent_by(&fleet, &other), before, "a second machinery message was sent for the same machine");
+    }
+
+    /// **Sitting 6 of the Fable review, Sol's point on B3's change — a full
+    /// instruction that replaced its context-resolution entry on the old
+    /// board, after the claimant copied that entry, still reaches the new
+    /// board.** The new board carries the resolution entry under the same
+    /// operation identity, so the old holder says the full instruction as the
+    /// replacement it is (B8, B15). Proposed as a new instruction it was
+    /// dropped as already on the board, and the tap was lost.
+    #[test]
+    fn sitting_6_a_replacement_accepted_while_the_board_is_copied_reaches_the_new_board() {
+        let (mut fleet, holder) = a_fleet_with_one_holder(&["a", "b"]);
+        let other = if holder == "a" { "b".to_string() } else { "a".to_string() };
+        let full = an_action_for(&other, "stop", json!({})).unwrap();
+        let resolution = AnEntry {
+            kind: AKindOfEntry::ContextResolution,
+            addressee: TheAddressee::RoutingKey(format!("key-{other}")),
+            deadline_seconds: THE_DEFAULT_RESOLUTION_DEADLINE.as_secs(),
+            ..full.clone()
+        };
+        fleet.member(&holder).listener.propose(resolution.clone());
+        fleet
+            .rounds_until(10, |f| f.sim.the_board_on_top().is_some_and(|b| b.instructions.iter().any(|e| e.operation == full.operation)))
+            .expect("the resolution entry is on the board");
+        {
+            let mut s = fleet.sim.state();
+            s.cut.insert(holder.clone());
+            s.hold_the_pin_of_a_board_by = Some(other.clone());
+        }
+        let at = fleet.members.iter().position(|m| m.name == other).unwrap();
+        let mut claimant = fleet.members.remove(at);
+        let clock = fleet.clock.clone();
+        let claiming = std::thread::spawn(move || {
+            for _ in 0..200 {
+                if claimant.listener.is_holding() {
+                    break;
+                }
+                claimant.listener.a_turn();
+                if let Some(ask) = claimant.listener.the_ask_to_make() {
+                    let got = claimant.listener.client().get_updates(ask.offset, ask.wait_seconds);
+                    claimant.listener.what_the_ask_brought(ask, got);
+                }
+                *lock(&clock.0) += THE_READ_CADENCE;
+            }
+            claimant
+        });
+        let given = Instant::now();
+        while !fleet.sim.state().a_pin_is_held {
+            assert!(given.elapsed() < Duration::from_secs(30), "the other machine never came to pin its board");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        // The old holder's line comes back: the full instruction replaces the
+        // resolution entry on the old board, and is read back.
+        fleet.sim.state().cut.remove(&holder);
+        fleet.member(&holder).listener.propose_a_replacement(full.clone());
+        fleet.member(&holder).listener.a_turn();
+        assert!(
+            fleet.member(&holder).listener.the_instructions_accepted_lately().iter().any(|e| e.operation == full.operation && e.kind == AKindOfEntry::Action),
+            "the old board's read-back accepted the full instruction"
+        );
+        fleet.sim.state().the_held_pin_goes = true;
+        let claimant = claiming.join().expect("the claimant's turns ended");
+        assert!(claimant.listener.is_holding(), "the other machine took the slot");
+        fleet.members.push(claimant);
+        assert!(
+            fleet.sim.the_board_on_top().unwrap().instructions.iter().any(|e| e.operation == full.operation && e.kind == AKindOfEntry::ContextResolution),
+            "the new board was copied with the resolution entry"
+        );
+        fleet
+            .rounds_until(40, |f| lock(&f.acted).contains(&(other.clone(), full.operation.clone())))
+            .expect("the full instruction replaced the entry on the new board and was acted on");
     }
 }

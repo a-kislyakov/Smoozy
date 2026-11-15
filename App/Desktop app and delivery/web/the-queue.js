@@ -44,6 +44,7 @@ import { theMomentReads } from "./servers.js";
 import { theValueDrawn, theValueIsDrawnInto } from "./the-value-drawn.js";
 import { theWordsPanel, theNewestWordsStayInView } from "./the-machines-own-words.js";
 import { theTypingIsTakenFrom, theTypingIsPutBackInto } from "./the-typed-text.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 // The two acts a job entry hands Transfers — `TheAct` in
 // `src/surface/transfers.rs`. Copy carefully.
@@ -140,6 +141,25 @@ export function aPart(into, said, base, plain) {
 const A_SEPARATOR = "·";
 function aSeparatorAlone(said, base) {
   return said[base + "Lead"] === A_SEPARATOR && !said[base + "Value"] && !said[base + "Trail"];
+}
+
+/// **A control at work**: the drawing's `.wk`, the shared turning mark drawn
+/// over its words, which stay to hold its width; it takes no press and is
+/// never faded (`Design/Whole app § Anything that isn't instant`; UI
+/// consistency, finding 38).
+function theControlIsWorking(control, working) {
+  control.classList.toggle("wk", working);
+  if (working) control.setAttribute("aria-disabled", "true");
+  else control.removeAttribute("aria-disabled");
+}
+
+/// **A word that holds the width of another**, the drawing's `.holds`: the
+/// other is drawn unseen after it, taking no height and read by nothing, so
+/// the word can change to the other without moving what is beside it.
+export function theWordHoldsTheWidthOf(holder, other) {
+  if (!other) return;
+  holder.dataset.held = other;
+  holder.classList.add("holds");
 }
 
 /// A part where the value is a name rather than a figure, so it takes the
@@ -274,6 +294,10 @@ function aBadge(into, hue, small) {
 
 let thePressed = null;
 let theAnswerShown = null;
+// **An answer under a line of the entry, kept through the entry's redraws**
+// (finding 52), and the job whose entry was last drawn.
+let theAnswerStanding = null;
+let theJobShown = null;
 
 /// **Ask what a pressed control answers.** Exported for the history's own
 /// controls, which answer the same way. `extra` carries the job, the
@@ -283,6 +307,7 @@ let theAnswerShown = null;
 export function anActIsAskedFor(control, act, extra) {
   if (!act) return;
   thePressed = { control, act };
+  theAnswerStanding = null;
   const with_ = extra || {};
   shell.core
     .invoke("an_act_on_a_job", {
@@ -313,6 +338,14 @@ function itAnswers(control, act, extra) {
 
 whenTold(THE_ANSWER_SAYS, (delivery) => {
   const said = delivery.said || {};
+  // **A Telegram choice refused is no longer on its way**, and its control
+  // reads what the job carries again; one taken waits for the redraw that
+  // shows it.
+  if (said.act === "what-it-reports" && said.said && theTelegramAsked) {
+    const { face } = theTelegramAsked;
+    theTelegramAsked = null;
+    if (face.isConnected) theControlIsWorking(face, false);
+  }
   if (!thePressed || thePressed.act !== said.act || !said.said) return;
   const { control } = thePressed;
   thePressed = null;
@@ -330,9 +363,16 @@ whenTold(THE_ANSWER_SAYS, (delivery) => {
   // note 8). Until then *This folder is no longer there.* landed inside
   // `.agroup`, beside *Files on your computer*, and pushed *Delete* under it.
   const inABox = control.closest && control.closest(".modal");
-  const theActsRow = !inABox && control.closest && control.closest(".qdacts");
-  (theActsRow || control).after(holder);
+  // **The line the control sits on**: the acts row, or the job page's
+  // Telegram line, where the answer once landed inside the dropdown's box or
+  // between the minutes field and *minutes* (UI consistency, finding 52).
+  const theLine = !inABox && control.closest && (control.closest(".qdacts") || control.closest(".sftg"));
+  (theLine || control).after(holder);
   theAnswerShown = holder;
+  // **It stays through the page's own redraws**, put back under the same
+  // line, until another act is pressed or another job is shown (finding 52:
+  // it went at the next five-second redraw).
+  theAnswerStanding = theLine && !inABox ? { holder, after: theLine.classList.contains("qdacts") ? ".qdacts" : ".sftg", job: theJobShown } : null;
   // **A go-ahead answered in its own box keeps the box**, so what the
   // application said stays until the user closes it (step 10c's eleventh-pass
   // fix piece 5).
@@ -489,15 +529,16 @@ function theQueueIsDrawn(said) {
   detail.replaceChildren();
 
   list.appendChild(theHead(said));
-  // **The banners go straight into the list**, which is where the drawing's
-  // own rules put them; there is no wrapper for them to sit in.
-  banners = list;
+  scroll = document.createElement("div");
+  scroll.className = "qscroll";
+  // **The banners go at the top of the scrolling list, above the first
+  // server**, so however many there are the jobs keep their room (the UI at
+  // every size, A-06; the drawing moved them the same day).
+  banners = scroll;
   theDroppedAreDrawn(said);
   thePartIsDrawn(said);
   theUntrackedIsDrawn(said);
 
-  scroll = document.createElement("div");
-  scroll.className = "qscroll";
   // **The list and the entry keep their place across a redraw** —
   // `Design/Whole app § The window`, kept by `web/the-scrolled-place.js` for
   // the names given here and in `theEntryIsDrawn`. The Creator's second notes
@@ -526,7 +567,7 @@ function theQueueIsDrawn(said) {
   for (const row of scroll.querySelectorAll(".qrow[data-job]")) {
     if (row.dataset.job !== shown) continue;
     row.setAttribute("aria-current", "true");
-    if (theKeyboardWasOnTheList) row.focus();
+    if (theKeyboardWasOnTheList) theFocusMovesTo(row);
   }
   theKeyboardWasOnTheList = false;
 
@@ -640,6 +681,9 @@ function theRowsAreDrawn(said) {
     const name = document.createElement("b");
     const held1 = said["line" + line + "Name"];
     theValueIsDrawnInto(name, held1 || "");
+    // A long server name is cut short here, whole on hover; the counts keep
+    // their line (the UI at every size, A-09).
+    name.title = held1 || "";
     heading.appendChild(name);
     const grow = document.createElement("span");
     grow.className = "grow";
@@ -684,6 +728,7 @@ function theRowsAreDrawn(said) {
       const job = document.createElement("span");
       job.className = "qmn";
       theValueIsDrawnInto(job, folded);
+      job.title = folded;
       folding.appendChild(job);
       const bar = document.createElement("span");
       bar.className = "bar whole";
@@ -704,6 +749,7 @@ function theRowsAreDrawn(said) {
     }
     heading.appendChild(folding);
 
+
     heading.addEventListener("click", () => {
       const open = section.dataset.open === "true";
       section.dataset.open = open ? "false" : "true";
@@ -712,6 +758,13 @@ function theRowsAreDrawn(said) {
       else theFoldedServers.delete(server);
     });
     section.appendChild(heading);
+    if (said["line" + line + "UnreadableCount"] !== undefined) {
+      const warning = document.createElement("p");
+      warning.className = "rqs bad2";
+      aPart(warning, said, "line" + line + "Unreadable0");
+      section.appendChild(warning);
+    }
+
 
     const held = document.createElement("div");
     held.className = "qmrows";
@@ -758,16 +811,23 @@ function aGroupHeading(said, group) {
     );
   }
   heading.appendChild(grip);
+  // **The name and *— all N scenes* are one piece that is cut short where the
+  // list is narrow, whole on hover; *Cancel all* keeps its width** (the UI at
+  // every size, A-08).
+  const says = document.createElement("span");
+  says.className = "qghn";
   const name = document.createElement("span");
   const held3 = said["group" + group + "Name"];
   theValueIsDrawnInto(name, held3 || "");
-  heading.appendChild(name);
-  heading.appendChild(document.createTextNode(" — "));
+  says.appendChild(name);
+  says.appendChild(document.createTextNode(" — "));
   const scenes = document.createElement("span");
   scenes.textContent = said.allScenesLead || "";
-  heading.appendChild(scenes);
-  heading.appendChild(document.createTextNode(" "));
-  aFigureAndItsWord(heading, said["group" + group + "Scenes"], said["group" + group + "ScenesWord"]);
+  says.appendChild(scenes);
+  says.appendChild(document.createTextNode(" "));
+  aFigureAndItsWord(says, said["group" + group + "Scenes"], said["group" + group + "ScenesWord"]);
+  heading.appendChild(says);
+  says.title = says.textContent;
   const grow = document.createElement("span");
   grow.className = "grow";
   heading.appendChild(grow);
@@ -808,9 +868,7 @@ function aSubmittingRow(said, at, extra) {
   turning.className = "spin";
   state.appendChild(turning);
   row.appendChild(state);
-  const bars = document.createElement("span");
-  bars.className = "qbars";
-  row.appendChild(bars);
+  // No bar yet, so no empty line kept for one (the UI at every size, A-21).
   return row;
 }
 
@@ -875,14 +933,21 @@ function aNotSubmittedRow(said, at, extra) {
   why.className = "qs";
   if (aSentenceInto(why, said, "row" + at + "Why")) name.appendChild(why);
   row.appendChild(name);
+  // **This row has no entry to open, so its reason wraps and reads whole**,
+  // and the cross sits beside *Not submitted.* rather than alone on a line
+  // under it (the UI at every size, A-07).
+  row.classList.add("ns");
+  const went = document.createElement("span");
+  went.className = "qnsw";
   const state = document.createElement("span");
   state.classList.add("qst");
   const is = said["row" + at + "StateIs"];
   if (is) state.classList.add(is);
   aSentenceInto(state, said, "row" + at + "Went");
-  row.appendChild(state);
-  const bars = document.createElement("span");
-  bars.className = "qbars";
+  went.appendChild(state);
+  row.appendChild(went);
+  row.title = theRowReads(name.firstChild ? name.firstChild.textContent : "", why.textContent, state.textContent);
+  const bars = went;
   const cross = document.createElement("button");
   cross.type = "button";
   cross.className = "fx";
@@ -892,8 +957,17 @@ function aNotSubmittedRow(said, at, extra) {
   const act = said["row" + at + "NotSubmitted"] || "";
   cross.addEventListener("click", () => aBoxIsAskedFor(cross, CLEAR_THE_ROW, CLEAR_THE_ROW, act));
   bars.appendChild(cross);
-  row.appendChild(bars);
   return row;
+}
+
+/// **What a row says, whole, for its hover** — its name, its second line and
+/// its state, which a narrow list cuts short (the UI at every size, A-11;
+/// `Design/Whole app`: a cell that does not fit shows whole on hover).
+function theRowReads(...cells) {
+  return cells
+    .map((cell) => String(cell || "").trim())
+    .filter(Boolean)
+    .join(" — ");
 }
 
 function aRow(said, at, extra) {
@@ -948,6 +1022,18 @@ function aRow(said, at, extra) {
     sub.appendChild(held);
     wrote = true;
   }
+  // **A row that was rendering when the reading went quiet** — the drawing's
+  // stale row: *Was rendering frame 88 at 11:04. Current status unknown.*,
+  // each word the application's, the moment written as the heading writes its
+  // own (the four questions, scout 2.7).
+  const wasAt = said["row" + at + "WasAt"];
+  if (wasAt) {
+    const frame = said["row" + at + "WasFrame"] || "";
+    const was = `${said.wasRenderingFrameWord || ""} ${frame} ${said.atWord || ""} ${theMomentReads(wasAt)}.`;
+    sub.textContent = `${was} ${said.statusUnknownWord || ""}`;
+    sub.title = sub.textContent;
+    wrote = true;
+  }
   if (wrote) name.appendChild(sub);
   row.appendChild(name);
 
@@ -959,6 +1045,10 @@ function aRow(said, at, extra) {
   if (is) state.classList.add(is);
   const held6 = said["row" + at + "State"];
   state.textContent = held6 || "";
+  // **A rendering row holds the width of the word it flips to** —
+  // *Finishing* beside *Rendering* — so the name and its second line keep
+  // their width on every frame (UI consistency, finding 3).
+  theWordHoldsTheWidthOf(state, said["row" + at + "StateHeld"]);
   row.appendChild(state);
   // **A first-frame pair is one row, naming both parts under the name** —
   // the drawing's `.ffparts`, after the state, across the row.
@@ -975,7 +1065,10 @@ function aRow(said, at, extra) {
   if (renderlet !== undefined) bars.appendChild(aBar("qbar", renderlet));
   const whole = said["row" + at + "Whole"];
   if (whole !== undefined) bars.appendChild(aBar("qbar w", whole));
-  row.appendChild(bars);
+  // **A row with no bar keeps no empty line for one** (the UI at every size,
+  // A-21).
+  if (bars.children.length) row.appendChild(bars);
+  row.title = theRowReads(name.firstChild ? name.firstChild.textContent : "", wrote ? sub.textContent : "", held6 || "");
   return row;
 }
 
@@ -1192,7 +1285,7 @@ function theMenuIsShown(row, said, job) {
   menu.appendChild(top);
   row.after(menu);
   theOpenMenu = menu;
-  top.focus();
+  theFocusMovesTo(top);
 }
 
 function theMenuGoes() {
@@ -1268,6 +1361,10 @@ function thePartIsDrawn(said) {
   if (!said.thePartSays) return;
   const banner = document.createElement("div");
   banner.className = "qbanner amber";
+  // The drawing lays this banner out by its id (`#qpart`): stacked, its
+  // actions on their own line under the lists. Without it the actions sat
+  // beside the text and ran out of the list (the UI at every size, A-05).
+  banner.id = "qpart";
   const body = document.createElement("div");
 
   const heading = document.createElement("p");
@@ -1323,6 +1420,14 @@ function thePartIsDrawn(said) {
     lists.appendChild(value);
   }
   body.appendChild(lists);
+  // **`Rendering` S11 sends the first submission's settings, and says so** —
+  // a range changed on the page since is not used. Rough share 3, 462.
+  if (said.thePartSettings) {
+    const settings = document.createElement("p");
+    settings.className = "qb2";
+    settings.textContent = said.thePartSettings;
+    body.appendChild(settings);
+  }
   banner.appendChild(body);
 
   // **The control waits rather than going: nothing retries on its own.** Where
@@ -1539,6 +1644,19 @@ export function theEntryIsDrawn(into, said, extra) {
     itAnswers(stopOrCancel, said.entryStopOrCancelAct, { job });
     acts.appendChild(stopOrCancel);
   }
+  if (said.entryReconnectServer) {
+    const reconnect = aButton(said.reconnect, "mini");
+    // **While it reconnects it keeps its place and shows the turning mark**,
+    // never faded — `Design/Whole app § Anything that isn't instant` (UI
+    // consistency, finding 38).
+    reconnect.addEventListener("click", () => {
+      if (reconnect.classList.contains("wk")) return;
+      theControlIsWorking(reconnect, true);
+      shell.core.invoke("an_act_that_needs_a_connection", { act: "reconnect", server: said.entryReconnectServer })
+        .finally(() => { theControlIsWorking(reconnect, false); }).catch(() => {});
+    });
+    acts.appendChild(reconnect);
+  }
   if (extra.headerActs) extra.headerActs(acts);
   header.appendChild(acts);
   into.appendChild(header);
@@ -1591,6 +1709,10 @@ export function theEntryIsDrawn(into, said, extra) {
     if (at) words.appendChild(document.createTextNode(" "));
     aNamedPart(words, said, "entryStatus" + at);
   }
+  // **The status word holds the width of the word it flips to**, so the
+  // time after *Rendering* does not slide as it reads *Finishing* (UI
+  // consistency, finding 3).
+  if (said.entryStatusHeld && words.firstElementChild) theWordHoldsTheWidthOf(words.firstElementChild, said.entryStatusHeld);
   status.appendChild(words);
   main.appendChild(status);
   if (lostPreview) {
@@ -1627,6 +1749,14 @@ export function theEntryIsDrawn(into, said, extra) {
   body.appendChild(side);
 
   into.appendChild(body);
+  // **An answer standing under one of this entry's lines is put back under
+  // it** (finding 52); another job's goes.
+  theJobShown = screen + " " + job;
+  if (theAnswerStanding && theAnswerStanding.job === theJobShown && !theAnswerStanding.holder.isConnected) {
+    const line = into.querySelector(theAnswerStanding.after);
+    if (line) line.after(theAnswerStanding.holder);
+    theAnswerShown = theAnswerStanding.holder;
+  } else if (theAnswerStanding && theAnswerStanding.job !== theJobShown) theAnswerStanding = null;
   // **An entry drawn is a moment the page's own width is read** — the page
   // stacks its columns when it is too narrow for both, whatever the window's
   // width (`web/panes.js`; the Creator's twenty-seventh notes, notes 4 and 5).
@@ -1726,14 +1856,21 @@ function theHeldAnswersAreDrawn(main, said, job, theCheck) {
     }
     if (said["held" + at + "Answer"]) {
       const second = aButton(said["held" + at + "Answer"], "mini");
-      itAnswers(second, "the-held-jobs-second-answer", { job });
+      // **The application names the act**: the first-frame pair's *Cancel
+      // job* raises its box (the twenty-eighth notes, note 16); every other
+      // second answer acts at once.
+      itAnswers(second, said["held" + at + "AnswerAct"] || "the-held-jobs-second-answer", { job });
       row.appendChild(second);
     }
-    const note = document.createElement("span");
-    note.className = "note";
+    // **A note only where one is sent** — none under the first-frame pair
+    // since the twenty-eighth notes, note 16.
     const held12 = said["held" + at + "Note"];
-    note.textContent = held12 || "";
-    row.appendChild(note);
+    if (held12) {
+      const note = document.createElement("span");
+      note.className = "note";
+      note.textContent = held12;
+      row.appendChild(note);
+    }
     into.appendChild(row);
     main.appendChild(held);
   }
@@ -1855,6 +1992,10 @@ function theChecksSaid(said) {
   });
 }
 
+/// **The last estimate each job showed**, drawn unseen in its place while
+/// Blender's newest line carries none (finding 4). Only its shape is used.
+const theEstimatesShown = new Map();
+
 function theProgressIsDrawn(main, said) {
   if (!said.renderingNow) return;
   const group = document.createElement("div");
@@ -1877,6 +2018,14 @@ function theProgressIsDrawn(main, said) {
   // the twenty-seventh notes' focus brief, the Creator's screenshot 2).
   let drawn = null;
   let joining = false;
+  // **Blender's own estimate is pinned to the end of its line, and its room
+  // is held once the job has shown one** — the drawing's spacer before it,
+  // here an automatic margin that pins it on whichever line it lands — so
+  // the sample count gaining a digit never slides it, and its coming and
+  // going never wraps the line and moves the bars below (UI consistency,
+  // finding 4).
+  const estimateFrom = said.progNowEstimateFrom === undefined ? -1 : Number(said.progNowEstimateFrom);
+  let theEstimate = null;
   for (let at = 0; at < many; at += 1) {
     const base = "progNow" + at;
     if (aSeparatorAlone(said, base)) {
@@ -1893,10 +2042,23 @@ function theProgressIsDrawn(main, said) {
     }
     const part = document.createElement("span");
     part.className = at === 0 ? "pv mono" : "pn";
+    // The estimate is the drawing's `.pest`, pinned to the end of whichever
+    // line it lands on.
+    if (at === estimateFrom) part.classList.add("pest");
     if (aPart(part, said, base)) {
       line.appendChild(part);
       drawn = part;
+      if (at === estimateFrom) theEstimate = part;
     }
+  }
+  // A copy is kept, never the drawn element, so nothing drawn is held on to
+  // (Sol's point 4).
+  if (said.entryJob && theEstimate) theEstimatesShown.set(said.entryJob, theEstimate.cloneNode(true));
+  else if (said.entryJob && theEstimatesShown.has(said.entryJob)) {
+    const held = theEstimatesShown.get(said.entryJob).cloneNode(true);
+    held.classList.add("unseen");
+    held.setAttribute("aria-hidden", "true");
+    line.appendChild(held);
   }
   now.appendChild(line);
   // **Each bar only where the application sent its percentage** — absent
@@ -2009,9 +2171,17 @@ function theMarksAreDrawn(main, said, job) {
   main.appendChild(group);
 }
 
+/// **Where a press on a job's folder count left its list, per job, for the
+/// page's life** — open or not, and which of its groups are closed — so the
+/// redraw every few seconds keeps what the user opened (`Design/Queue &
+/// History § What the job writes`; the Creator's twenty-ninth notes, notes 8
+/// and 10). Nothing is asked of the application.
+const theFoldersOpened = new Map();
+
 function theWritesAreDrawn(main, said) {
   const many = howMany(said, "writeCount");
   if (!many) return;
+  const whoseFolders = said.entryJob || "";
   const group = document.createElement("div");
   group.className = "grp";
   const heading = document.createElement("h3");
@@ -2033,18 +2203,144 @@ function theWritesAreDrawn(main, said) {
     // drawing's `q-marks` state (the Creator's ninth notes, note 1, its E4 half).
     const inTheBold = howMany(said, "write" + at + "Bold");
     const parts = howMany(said, "write" + at + "PartCount");
+    // **More than three folders: the count is a press** that opens every
+    // folder under the line, and a second press closes it (the drawing's
+    // `q-manyfolders` and `q-manyfoldersopen`).
+    const fold = said["write" + at + "Fold"] === undefined ? -1 : Number(said["write" + at + "Fold"]);
+    let list = null;
     for (let part = 0; part < parts; part += 1) {
-      const piece = document.createElement("span");
-      if (!aPart(piece, said, "write" + at + "Part" + part)) continue;
+      let piece = document.createElement("span");
+      if (part === fold) {
+        piece = document.createElement("button");
+        piece.type = "button";
+        piece.className = "golink";
+        if (!aPart(piece, said, "write" + at + "Part" + part, true)) continue;
+        const press = piece;
+        const opened = () => theFoldersOpened.get(whoseFolders) || { open: false, closed: new Set() };
+        press.setAttribute("aria-expanded", String(opened().open));
+        press.addEventListener("click", () => {
+          const now = opened();
+          now.open = !now.open;
+          theFoldersOpened.set(whoseFolders, now);
+          press.setAttribute("aria-expanded", String(now.open));
+          if (now.open) {
+            list = theFoldersAreListed(said, "write" + at, now);
+            write.after(list);
+          } else if (list) {
+            list.remove();
+            list = null;
+          }
+        });
+        if (opened().open) list = theFoldersAreListed(said, "write" + at, opened());
+      } else if (!aPart(piece, said, "write" + at + "Part" + part)) continue;
       const into = part < inTheBold ? bold : says;
       into.appendChild(document.createTextNode(" "));
       into.appendChild(piece);
     }
     write.appendChild(says);
     held.appendChild(write);
+    if (list) held.appendChild(list);
   }
   group.appendChild(held);
   main.appendChild(group);
+}
+
+/// **Every folder the job writes into, under its line** — one row per
+/// folder with its count and format, grouped as Render settings groups them
+/// (`Design/Queue & History § What the job writes`), in the settings page's
+/// own cells. A group's line closes or opens its group in place, and that
+/// too is kept for the page's life.
+function theFoldersAreListed(said, base, opened) {
+  const list = document.createElement("div");
+  list.className = "writes";
+  const cell = (classes, text) => {
+    const one = document.createElement("span");
+    one.classList.add(...classes);
+    if (text) theValueIsDrawnInto(one, text);
+    return one;
+  };
+  const thePlaceIsDrawn = (holder, path) => {
+    // A path breaks only after a slash: each name holds the slash after it.
+    theValueIsDrawnInto(holder, path);
+    const whole = holder.firstChild;
+    if (!whole || !whole.childNodes) return;
+    for (const name of Array.from(whole.childNodes)) {
+      const after = name.nextSibling;
+      if (name.nodeType === 1 && after && after.nodeType === 3 && (after.textContent === "/" || after.textContent === "\\")) name.appendChild(after);
+    }
+  };
+  const theRowsAreDrawn = () => {
+    list.replaceChildren();
+    const rows = howMany(said, base + "RowCount");
+    for (let row = 0; row < rows; row += 1) {
+      const key = base + "Row" + row;
+      const head = said[key + "In"];
+      if (head !== undefined && opened.closed.has(head)) continue;
+      const lines = howMany(said, key + "CountCount");
+      const top = said[key + "Top"];
+      const theFolders = said[key + "FoldersValue"];
+      const place = cell(top || theFolders !== undefined ? ["p"] : ["p", "mono"]);
+      if (head !== undefined) place.classList.add("in");
+      if (lines > 1) place.classList.add("l" + Math.min(lines, 4));
+      if (theFolders !== undefined) {
+        const at = String(row);
+        if (!opened.seen) opened.seen = new Set();
+        if (!opened.seen.has(at)) {
+          opened.seen.add(at);
+          if (said[key + "Closed"]) opened.closed.add(at);
+        }
+        const line = document.createElement("button");
+        line.type = "button";
+        line.className = "wgrp";
+        line.setAttribute("aria-expanded", String(!opened.closed.has(at)));
+        const chevron = document.createElement("span");
+        chevron.className = "chev";
+        chevron.textContent = "▼";
+        line.appendChild(chevron);
+        const words = document.createElement("span");
+        const parent = document.createElement("span");
+        parent.className = "mono";
+        thePlaceIsDrawn(parent, said[key + "Place"] || "");
+        words.appendChild(parent);
+        const folders = document.createElement("span");
+        folders.className = "wfold";
+        const theWord = said[key + "FoldersWord"] || "";
+        folders.textContent = theFolders + BETWEEN_A_FIGURE_AND_ITS_UNIT + theWord;
+        words.appendChild(folders);
+        line.appendChild(words);
+        line.addEventListener("click", () => {
+          if (opened.closed.has(at)) opened.closed.delete(at);
+          else opened.closed.add(at);
+          theRowsAreDrawn();
+        });
+        place.appendChild(line);
+      } else if (top) {
+        place.textContent = top;
+      } else {
+        thePlaceIsDrawn(place, said[key + "Place"] || "");
+      }
+      list.appendChild(place);
+      for (let one = 0; one < lines; one += 1) {
+        list.appendChild(cell(["n", "mono"], said[key + "Count" + one] || ""));
+        list.appendChild(cell(["f", "mono"], said[key + "Format" + one] || ""));
+      }
+    }
+    const total = document.createElement("span");
+    total.className = "p tot";
+    const theTotal = said[base + "TotalValue"] || "";
+    const itsWord = said[base + "TotalWord"] || "";
+    total.textContent = theTotal + BETWEEN_A_FIGURE_AND_ITS_UNIT + itsWord;
+    list.appendChild(total);
+    const formats = howMany(said, base + "ByFormatCount");
+    for (let at = 0; at < formats; at += 1) {
+      const which = at === 0 ? "tot" : "tot2";
+      list.appendChild(cell(["n", which, "mono"], said[base + "ByFormat" + at + "Count"] || ""));
+      list.appendChild(cell(["f", which, "mono"], said[base + "ByFormat" + at + "Format"] || ""));
+      if (at + 1 < formats) list.appendChild(cell(["p"]));
+    }
+  };
+  theRowsAreDrawn();
+  return list;
 }
 
 function theFactsAreDrawn(main, said) {
@@ -2331,29 +2627,50 @@ document.addEventListener(
 /// of the large box was cut off and still opened downward.
 function theListIsKeptInsideTheWindow(face, list) {
   list.classList.remove("up");
+  list.classList.remove("left");
+  list.style.setProperty("--ddl-max-h", "none");
+  list.style.setProperty("--ddl-max-w", "none");
   const room = list.getBoundingClientRect();
   const control = face.getBoundingClientRect();
   const edges = theEdgesThatCutOff(face);
-  const below = edges.bottom - control.bottom;
-  const above = control.top - edges.top;
-  const up = room.bottom > edges.bottom && above > below;
+  // **Held to the room it has** (the UI at every size, A-12): leftward from the
+  // control's right edge where its names are wider than the room right of it,
+  // a name still too long wrapping; and no taller than the side it opens to,
+  // scrolling inside it. Two values the stylesheet reads (`--ddl-max-w`,
+  // `--ddl-max-h`), as `web/servers.js` places its menu (H33). The gap is the
+  // list's own 4 pixels, twice.
+  const rightward = edges.right - control.left - 8;
+  const leftward = control.right - edges.left - 8;
+  const leftwards = room.width > rightward && leftward > rightward;
+  if (leftwards) list.classList.add("left");
+  list.style.setProperty("--ddl-max-w", `${Math.round(Math.max(leftwards ? leftward : rightward, control.width))}px`);
+  const tall = list.getBoundingClientRect().height;
+  const below = edges.bottom - control.bottom - 8;
+  const above = control.top - edges.top - 8;
+  const up = tall > below && above > below;
   if (up) list.classList.add("up");
+  if (tall > (up ? above : below)) list.style.setProperty("--ddl-max-h", `${Math.round(Math.max(up ? above : below, 60))}px`);
   return up;
 }
 
-/// **The top and bottom a list under `face` can be seen between**: the
-/// window's, narrowed by every box around it whose overflow is not visible.
+/// **The edges a list under `face` can be seen between**: the window's,
+/// narrowed by every box around it whose overflow is not visible.
 function theEdgesThatCutOff(face) {
   let top = 0;
   let bottom = window.innerHeight;
+  let left = 0;
+  let right = window.innerWidth;
   const styleOf = typeof globalThis.getComputedStyle === "function" ? globalThis.getComputedStyle : null;
   for (let at = face.parentNode; styleOf && at && at.nodeType === 1; at = at.parentNode) {
-    if (styleOf(at).overflowY === "visible") continue;
+    const style = styleOf(at);
+    if (style.overflowY === "visible" && style.overflowX === "visible") continue;
     const box = at.getBoundingClientRect();
     top = Math.max(top, box.top);
     bottom = Math.min(bottom, box.bottom);
+    left = Math.max(left, box.left);
+    right = Math.min(right, box.right);
   }
-  return { top, bottom };
+  return { top, bottom, left, right };
 }
 
 /// **The View Layer dropdown, in Smoozy's own dropdown look** — the parts
@@ -2377,6 +2694,9 @@ function aViewLayerDropdown(label, names, shown, steps, picked) {
   const face = aButton(shown, "pkb");
   face.setAttribute("aria-label", label);
   face.setAttribute("aria-haspopup", "listbox");
+  // A closed control cut short reads whole on hover: names that start alike
+  // differ only at the end (the UI at every size, A-12).
+  face.title = shown;
   pick.appendChild(face);
   const list = document.createElement("span");
   list.className = "ctx";
@@ -2423,14 +2743,14 @@ function aViewLayerDropdown(label, names, shown, steps, picked) {
     if (press.key === "Escape" && open) {
       press.preventDefault();
       shut();
-      face.focus();
+      theFocusMovesTo(face);
     } else if (press.key === "ArrowDown" || press.key === "ArrowUp") {
       press.preventDefault();
       if (!open) opened();
       const at = options.indexOf(document.activeElement);
       const first = Math.max(0, names.indexOf(shown));
       const next = at < 0 ? first : at + (press.key === "ArrowDown" ? 1 : -1);
-      if (options[next]) options[next].focus();
+      if (options[next]) theFocusMovesTo(options[next]);
     } else if (press.key === "Tab" && open) {
       shut();
     }
@@ -2503,7 +2823,7 @@ function thePreviewIsDrawn(side, said, job, screen, opens) {
   const closeLarge = () => {
     thePreviewGoesAway(screen);
     const picture = opens && opens.focusReturnsTo ? opens.focusReturnsTo() : group.querySelector('.preview');
-    if (picture) picture.focus();
+    if (picture) theFocusMovesTo(picture);
   };
   const move = (offset) => {
     const at = steps.at === null ? newest : frames.findIndex(one => one.frame === steps.at);
@@ -2553,8 +2873,12 @@ function thePreviewIsDrawn(side, said, job, screen, opens) {
     // row** (its `.pvstep` markup), which the drawing's rules of 2026-10-24
     // order by: *Frame*, then arrow, field and arrow touching, the shortcut
     // after. Without them the lifted rules put the field after the shortcut.
+    // **The arrows and the field are one piece**, the drawing's `.pvarrows`,
+    // so where *Show latest* drops under them it starts at the column's left
+    // like everything else (UI consistency, finding 35).
+    const arrows = document.createElement('span'); arrows.className = 'pvarrows'; stepper.appendChild(arrows);
     const back = aButton('\u2039', 'sb'); back.dataset.pvgo = '-1'; back.setAttribute('aria-label', said.previousFrame || '');
-    back.disabled = at <= 0; back.addEventListener("click", () => move(-1));stepper.appendChild(back);
+    back.disabled = at <= 0; back.addEventListener("click", () => move(-1));arrows.appendChild(back);
     const number = document.createElement('label'); number.className = 'sn pvframe';
     number.appendChild(document.createTextNode(said.frameWord || ''));
     const field = document.createElement('input');field.className = 'num mono';field.type = 'text';field.inputMode = 'numeric';
@@ -2579,16 +2903,18 @@ function thePreviewIsDrawn(side, said, job, screen, opens) {
       thePreviewFocus = {key, large, start:field.selectionStart, end:field.selectionEnd};
       drawn();
     });
-    number.appendChild(field);stepper.appendChild(number);
+    number.appendChild(field);arrows.appendChild(number);
     const on = aButton('\u203a', 'sb');on.dataset.pvgo = '1';on.setAttribute('aria-label', said.nextFrame || '');
-    on.disabled = at >= newest;on.addEventListener("click", () => move(1));stepper.appendChild(on);
+    on.disabled = at >= newest;on.addEventListener("click", () => move(1));arrows.appendChild(on);
     const latest = aButton(screen === 'queue' ? said.showLatest : said.showLast, 'mini');latest.dataset.pvlatest = '';
     latest.disabled = at === newest && (screen !== 'queue' || steps.at === null);
     latest.addEventListener("click", () => {steps.at = screen === "history" ? frames[newest].frame : null;steps.typed = null;steps.error = null;steps.open = false;drawn();});
     stepper.appendChild(latest);tools.appendChild(stepper);
-    const caption = document.createElement('p');caption.className = 'pvshown';
-    caption.appendChild(document.createTextNode(said.showingFrame || ''));
-    caption.appendChild(document.createTextNode(' '));caption.appendChild(theValueDrawn(frame.frame));tools.appendChild(caption);
+    // **One line under the frame row says what the frame shows, a refused
+    // frame number, or a View Layer that did not render on this frame**, the
+    // first of them said covering the rest — the drawing's `.pvline` — so
+    // stepping frames moves nothing below (UI consistency, finding 32).
+    const underTheFrame = document.createElement('div');underTheFrame.className = 'pvline';
     if (steps.error) {
       const error = document.createElement('p');error.className = 'pverror';error.setAttribute('role','status');
       if (steps.error.bad) error.textContent = said.frameInvalid || '';
@@ -2597,17 +2923,27 @@ function thePreviewIsDrawn(side, said, job, screen, opens) {
         error.appendChild(theValueDrawn(steps.error.frame));error.appendChild(document.createTextNode(' '));
         error.appendChild(document.createTextNode(said.frameUnavailable || ''));
       }
-      tools.appendChild(error);
-    }
-    const names = frame.layers.map(one => one.name).filter(Boolean);
-    if (names.length > 1) tools.appendChild(aViewLayerDropdown(said.viewLayer || '', names, shown.name || said.viewLayer || '', steps, name => {steps.pick = name;drawn();}));
-    else if (names.length === 1) {
-      const alone = document.createElement('p');alone.className = 'sn';theValueIsDrawnInto(alone,names[0]);tools.appendChild(alone);
+      underTheFrame.appendChild(error);
     }
     if (missing) {
       const gone = document.createElement('p');gone.className = 'bar-note';gone.dataset.pvgone = 'yes';
       gone.appendChild(theValueDrawn(steps.pick));gone.appendChild(document.createTextNode(' '));
-      gone.appendChild(document.createTextNode(said.didNotRenderOnThisFrame || ''));tools.appendChild(gone);
+      gone.appendChild(document.createTextNode(said.didNotRenderOnThisFrame || ''));underTheFrame.appendChild(gone);
+    }
+    const caption = document.createElement('p');caption.className = 'pvshown';
+    caption.appendChild(document.createTextNode(said.showingFrame || ''));
+    caption.appendChild(document.createTextNode(' '));caption.appendChild(theValueDrawn(frame.frame));underTheFrame.appendChild(caption);
+    tools.appendChild(underTheFrame);
+    const names = frame.layers.map(one => one.name).filter(Boolean);
+    if (names.length > 1) tools.appendChild(aViewLayerDropdown(said.viewLayer || '', names, shown.name || said.viewLayer || '', steps, name => {steps.pick = name;drawn();}));
+    else if (names.length === 1) {
+      // **One View Layer is named in the dropdown's row, at its height**, so
+      // stepping between frames of one and of several moves nothing below
+      // (finding 32).
+      const row = document.createElement('div');row.className = 'pvvlrow';
+      const label = document.createElement('span');label.className = 'sn';label.textContent = said.viewLayer || '';row.appendChild(label);
+      const alone = document.createElement('span');alone.className = 'pvone';theValueIsDrawnInto(alone,names[0]);row.appendChild(alone);
+      tools.appendChild(row);
     }
     theNoteIsDrawn(tools, said);
     if (large && theLargePreview) {
@@ -2636,7 +2972,7 @@ function thePreviewIsDrawn(side, said, job, screen, opens) {
         const controls = Array.from(panel.querySelectorAll('button,input')).filter(one => !one.disabled && !one.closest('[hidden]'));
         const at = controls.indexOf(document.activeElement);
         if ((press.shiftKey && at <= 0) || (!press.shiftKey && at === controls.length-1)) {
-          press.preventDefault();controls[press.shiftKey ? controls.length-1 : 0].focus();
+          press.preventDefault();theFocusMovesTo(controls[press.shiftKey ? controls.length-1 : 0], { byTab: true });
         }
       }
       if ((press.key === 'ArrowLeft' || press.key === 'ArrowRight') && !press.target.closest('input') && !press.target.closest('textarea') && !press.target.closest('.pick')) {
@@ -2644,7 +2980,7 @@ function thePreviewIsDrawn(side, said, job, screen, opens) {
       }
     });
     theLargePreview = {key, screen, panel, content, title:name, shown:null, close:closeLarge, move};
-    theLargePreviewsHost(group).appendChild(panel);drawInto(content,true);close.focus();
+    theLargePreviewsHost(group).appendChild(panel);drawInto(content,true);theFocusMovesTo(close);
   };
   if (theLargePreview && theLargePreview.key === key) {theLargePreview.close = closeLarge;theLargePreview.move = move;}
   const drawn = () => {
@@ -2668,7 +3004,7 @@ function thePreviewIsDrawn(side, said, job, screen, opens) {
           (focus.label && one.getAttribute("aria-label") === focus.label) || one.textContent === focus.value);
       const restore = () => {
         if (field && field.isConnected) {
-          field.focus();
+          theFocusMovesTo(field);
           if (!focus.control) field.setSelectionRange(focus.start,focus.end);
         }
       };
@@ -2761,6 +3097,8 @@ function theDownloadingIsDrawn(side, said) {
 
 // **Whether the list was open**, kept across the five-second redraws.
 const theTelegramList = { open: false, up: false };
+// **A Telegram choice asked for and not yet answered** (finding 38).
+let theTelegramAsked = null;
 // **The minutes field last drawn, and its job**, for the redraw to keep what
 // is typed in it (`theQueueIsDrawn`).
 let theMinutesField = null;
@@ -2807,7 +3145,12 @@ function theTelegramIsDrawn(side, said) {
     if (picked) one.className = "hd";
     one.addEventListener("click", () => {
       shut();
-      if (!picked) anActIsAskedFor(face, "what-it-reports", { job, from: choice.value });
+      if (picked || face.classList.contains("wk")) return;
+      anActIsAskedFor(face, "what-it-reports", { job, from: choice.value });
+      // **The choice shows the turning mark until the server answers** (UI
+      // consistency, finding 38): it showed nothing.
+      theTelegramAsked = { job, from: choice.value, face };
+      theControlIsWorking(face, true);
     });
     list.appendChild(one);
     return one;
@@ -2826,22 +3169,34 @@ function theTelegramIsDrawn(side, said) {
   else shut();
   face.addEventListener("click", () => (list.hidden ? opened() : shut()));
   pick.addEventListener("keydown", (press) => {
+    // **A choice on its way takes no second one from the keyboard either**
+    // (Sol's point 2): the mark's `.wk` stops the pointer only.
+    if (face.classList.contains("wk")) return;
     const open = !list.hidden;
     if (press.key === "Escape" && open) {
       press.preventDefault();
       shut();
-      face.focus();
+      theFocusMovesTo(face);
     } else if ((press.key === "ArrowDown" || press.key === "ArrowUp") && offered) {
       press.preventDefault();
       if (!open) opened();
       const at = options.indexOf(document.activeElement);
       const first = Math.max(0, choices.findIndex((choice) => choice.value === said.telegramPicked));
       const next = at < 0 ? first : at + (press.key === "ArrowDown" ? 1 : -1);
-      if (options[next]) options[next].focus();
+      if (options[next]) theFocusMovesTo(options[next]);
     } else if (press.key === "Tab" && open) {
       shut();
     }
   });
+  // **A pick still on its way keeps its mark across the page's redraws**,
+  // until the job carries it or the answer says no.
+  if (theTelegramAsked && theTelegramAsked.job === job) {
+    if (said.telegramPicked === theTelegramAsked.from) theTelegramAsked = null;
+    else {
+      theTelegramAsked.face = face;
+      theControlIsWorking(face, true);
+    }
+  }
   const line = document.createElement("div");
   line.className = "sftg";
   line.appendChild(pick);
@@ -2905,8 +3260,16 @@ const THE_BOXES_ABOUT_A_JOB = ["stop", "cancel", "delete"];
 export function theBoxStaysOrIsDrawn(into, said, jobs, groups) {
   const open = theOpenBoxOn(into);
   if (said.boxWhich) {
+    // **A box drawn again keeps the control the keyboard was on**, by its
+    // place among the box's buttons, so a reading arriving while the user
+    // tabs through it does not throw the focus back to the box.
+    const buttons = open ? Array.from(open.querySelectorAll("button")) : [];
+    const on = buttons.indexOf(document.activeElement);
     if (open) open.remove();
     theBoxIsDrawn(into, said);
+    const drawn = theOpenBoxOn(into);
+    const again = drawn && on >= 0 ? drawn.querySelectorAll("button")[on] : null;
+    if (again) theFocusMovesTo(again);
     return;
   }
   if (!open) return;
@@ -3042,6 +3405,12 @@ export function theBoxIsDrawn(into, said) {
 
   modal.appendChild(box);
   into.appendChild(modal);
+  // **A box opens with the focus inside it, on the box itself** —
+  // `Design/Whole app`, *Keyboard shortcuts*, *Tab stays inside the box on
+  // top* (the Creator's twenty-eighth notes, note 2). The first Tab lands on
+  // *Keep*, and Return or Space presses nothing by accident.
+  box.tabIndex = -1;
+  theFocusMovesTo(box);
 }
 
 // ── A rendering job's words, live — `Queue & History` E8, piece 6c ─────────

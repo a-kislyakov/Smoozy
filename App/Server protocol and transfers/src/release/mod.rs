@@ -68,6 +68,7 @@ pub mod composing;
 pub mod fetching;
 pub mod manifest;
 pub mod trust;
+pub mod two_routes;
 pub mod verifying;
 
 /// **The context every manifest signature covers, before the canonical

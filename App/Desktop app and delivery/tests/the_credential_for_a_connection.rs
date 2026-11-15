@@ -847,6 +847,15 @@ fn what_the_box_took_that_opens_nothing_is_never_kept_and_raises_no_second_box()
         half.credentials.the_ask.is_none(),
         "**nothing retries and no second box is raised inside one attempt**"
     );
+    // **`Keys` S19a, the leftovers of the Rough what-if answers (386)**: the
+    // user is told the passphrase did not unlock the key, not only that
+    // Smoozy could not connect.
+    assert_eq!(
+        smoozy_desktop::servers::a_period::the_reason_no_passphrase_was_handed_over(
+            half.credentials.why_nothing_was_supplied.as_ref()
+        ),
+        Some("Could not connect: the passphrase did not unlock the key.")
+    );
 
     let _ = std::fs::remove_dir_all(&area);
 }
@@ -900,6 +909,14 @@ fn a_store_that_will_not_answer_asks_nobody_and_forgets_nothing() {
     assert!(
         half.credentials.the_ask.is_none(),
         "**the user was asked to retype a secret the machine still holds**"
+    );
+    // **`Keys` S19a, the leftovers of the Rough what-if answers (384)**: a
+    // keychain *Deny* is said as what it is, not only *could not connect*.
+    assert_eq!(
+        smoozy_desktop::servers::a_period::the_reason_no_passphrase_was_handed_over(
+            half.credentials.why_nothing_was_supplied.as_ref()
+        ),
+        Some("Could not connect: the saved passphrase could not be read.")
     );
     let held = smoozy_desktop::record::key_rows::all(record.connection())
         .expect("the rows")

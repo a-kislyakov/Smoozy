@@ -35,3 +35,5 @@
 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the job page at every width, and the reorder handle.md`, outside any round — the new token `--main-min` (280, measured), the job page's and the server list's own steps (534 and 806), and the drag grip drawn as six dots, which corrects the stale line calling marks off the type scale (the Creator's twenty-seventh notes, notes 4, 5 and 8). No auditor has seen it.
 
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the three Linux failures before 0.3.1.md`, outside any round — the drag grip on a group's heading sits on its first line, so a heading that wraps in a wider face keeps it there (Linux's Chrome, hosted run 42508904896). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 3, words a user can't act on.md`, outside any round — The amber ending is named *interrupted*, not *abandoned* (scout 3.24). No value changed. No auditor has seen it.

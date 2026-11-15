@@ -109,13 +109,14 @@ pub const THE_WALKTHROUGH: &str = "telegram:the-walkthrough";
 /// section before Telegram is on, and the thirteen of the bot step as drawn
 /// again on 2026-10-24 (the seventeenth notes' piece 7). A test reads them out
 /// of `Preparation/Design/Mockup/Smoozy.html`.
-pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 14] = [
+pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 15] = [
     "set-tgoff",
     "set-bot",
     "set-bot-new",
     "set-bot-existing",
     "set-bot-existingcheck",
     "set-bot-existingbad",
+    "set-bot-existingbusy",
     "set-bot-existingnet",
     "set-bot-replace",
     "set-bot-copyfail",
@@ -153,20 +154,20 @@ mod words {
     pub const EVERYTHING: &str = "Everything";
     pub const EVERYTHING_IS: &str = "progress, frames, a short video and a contact sheet";
     pub const PICTURES_ONLY: &str = "Pictures only";
-    pub const PICTURES_ONLY_IS: &str = "the same, without progress";
+    pub const PICTURES_ONLY_IS: &str = "the same, without server status or sound at job start";
     pub const ONLY_WHAT_NEEDS_YOU: &str = "Alerts only";
-    pub const ONLY_WHAT_NEEDS_YOU_IS: &str = "endings and questions";
+    pub const ONLY_WHAT_NEEDS_YOU_IS: &str = "job results and questions";
     // The five from 2026-10-31 (`Design/Settings § Telegram`, the drawing's
     // `set-tgdefault`): the third reads *A picture every [5] minutes*, its
     // field between the words.
     pub const A_PICTURE_EVERY: &str = "A picture every";
     pub const MINUTES: &str = "minutes";
     pub const MINUTES_BETWEEN_PICTURES: &str = "Minutes between pictures";
-    pub const A_PICTURE_EVERY_FEW_MINUTES_IS: &str = "the same as Everything, with fewer pictures";
+    pub const A_PICTURE_EVERY_FEW_MINUTES_IS: &str = "the same as Everything, with fewer pictures and no sound at job start";
     pub const OFF: &str = "Off";
-    pub const OFF_IS: &str = "nothing, unless you ask";
+    pub const OFF_IS: &str = "no automatic job messages";
     pub const WHOLE_MINUTES_1_TO_60: &str = "Whole minutes, 1 to 60.";
-    pub const ALWAYS_SENT: &str = "All but Off send endings and questions.";
+    pub const ALWAYS_SENT: &str = "Every option except Off sends job results and questions.";
     pub const THIS_IS_THE_DEFAULT: &str = "This is the default.";
     pub const A_JOB_CAN_BE_SET_DIFFERENTLY: &str = "Change it per job when you submit, or for all jobs with /reporting in Telegram.";
     pub const SERVERS_NOT_REACHED: &str = "servers without this change yet:";
@@ -182,8 +183,8 @@ mod words {
     pub const THE_SETTING_DID_NOT_SAVE: &str = "Could not save the setting.";
     // **fix-here item 2 of the same round**: the record does not say a token is stored for
     // the bot on record, so no dots are drawn.
-    pub const THE_TOKEN_IS_NOT_STORED: &str = "Token not stored on this computer.";
-    pub const HOW_TO_STORE_IT: &str = "Replace the token to store it.";
+    pub const THE_TOKEN_IS_NOT_STORED: &str = "Token not saved on this computer.";
+    pub const HOW_TO_STORE_IT: &str = "Replace the token to save it.";
 
     // The mockup's `#stgbot`, drawn again 2026-10-24 (the seventeenth notes'
     // piece 7): the choice alone first, then each route's own steps.
@@ -226,6 +227,9 @@ mod words {
     pub const NOT_ACCEPTED: &str = "Telegram did not accept that token.";
     pub const CHECK_THE_PASTE: &str = "Check the paste and try again.";
     pub const NOT_REACHED: &str = "Could not reach Telegram.";
+    // `Design/Settings § Telegram` as changed 2026-11-13: the wait for Start
+    // refused for conflict (`Telegram` S5).
+    pub const USED_BY_ANOTHER_APP: &str = "This bot is used by another app. Replace its token in @BotFather first.";
     pub const YOUR_PASTE_IS_KEPT: &str = "Your paste is kept.";
     // **Neither reading is drawn for these, and neither may be said for them.**
     pub const NO_TOKEN_IN_THE_PASTE: &str = "No token in that paste.";
@@ -268,10 +272,12 @@ mod words {
     pub const USE_THE_COPY_ICON: &str = "Use the copy icon.";
     pub const PRESS: &str = "Press";
     pub const START: &str = "Start";
-    pub const UNTIL_YOU_DO: &str = "The bot cannot message you until you do.";
+    pub const UNTIL_YOU_DO: &str = "The bot can't message you until you do.";
     pub const WAITING_FOR_START: &str = "Waiting for you to press Start.";
     pub const THE_BOT_REPLIED: &str = "The bot replied.";
     pub const TELEGRAM_IS_SET_UP: &str = "Telegram is set up.";
+    /// Before the chat's name, where the Start named one.
+    pub const CONNECTED_TO: &str = "Connected to";
     pub const DONE: &str = "Done";
 }
 
@@ -378,6 +384,10 @@ pub struct WhatTheSectionHolds {
     /// (`Design/Settings § Telegram`: *"refused outside 1 to 60 the way the
     /// Render Settings field is"*). Gone at the next reading.
     pub the_minutes_refused: Option<&'static str>,
+    /// **`Telegram` F6: each connected server Telegram is refusing**, by the
+    /// name the user reads, with its row's line (`Design/Settings §
+    /// Telegram`). When Telegram refuses, 2026-11-14.
+    pub refusing: Vec<(String, &'static str)>,
 }
 
 /// **The minutes the third row's field shows**: the record's, else 5
@@ -478,6 +488,15 @@ pub fn the_section_says(holds: &WhatTheSectionHolds) -> Event {
         }
         Some(_) => {}
     }
+    // **`Telegram` F6: the servers Telegram is refusing**, each name a value
+    // and its line prose.
+    if !holds.refusing.is_empty() {
+        event = value(event, "refusingCount", holds.refusing.len().to_string());
+        for (at, (name, line)) in holds.refusing.iter().enumerate() {
+            event = value(event, a_name("refusingServer", at), name.clone());
+            event = prose(event, a_name("refusingSaid", at), line);
+        }
+    }
     event
 }
 
@@ -523,6 +542,7 @@ pub fn what_the_section_holds(connection: &rusqlite::Connection, the_answer: Opt
             not_reached: Some(Vec::new()),
             the_answer,
             the_minutes_refused: None,
+            refusing: Vec::new(),
         };
     };
     let keeper = TheProvedBotRecord::over(connection);
@@ -536,6 +556,7 @@ pub fn what_the_section_holds(connection: &rusqlite::Connection, the_answer: Opt
     };
     let not_reached = what_smoozy_tells_now(connection, &settings, proved.as_ref().map(|(_, c)| *c))
         .and_then(|now| the_servers_named_as_not_reached(connection, &now));
+    let refusing = if settings.switched_on { the_servers_telegram_is_refusing(connection) } else { Vec::new() };
     WhatTheSectionHolds {
         the_settings: Some(settings),
         the_bot: proved.map(|(bot, _)| bot),
@@ -543,7 +564,27 @@ pub fn what_the_section_holds(connection: &rusqlite::Connection, the_answer: Opt
         not_reached,
         the_answer,
         the_minutes_refused: None,
+        refusing,
     }
+}
+
+/// **`Telegram` F6: every server whose last reading on this connection says
+/// Telegram is refusing it**, by the name the servers screen gives it, with
+/// the row's own line (`Design/Settings § Telegram`). A server with no
+/// connection has no reading, so it is not named.
+fn the_servers_telegram_is_refusing(connection: &rusqlite::Connection) -> Vec<(String, &'static str)> {
+    let Ok(rows) = crate::record::server_rows::all(connection) else {
+        return Vec::new();
+    };
+    rows.iter()
+        .filter_map(|row| {
+            let trouble = crate::servers::published::telegrams_trouble_on(&row.local_server_identifier)?;
+            Some((
+                crate::surface::servers::what_a_server_is_called(row),
+                crate::surface::servers::what_telegrams_trouble_says(trouble),
+            ))
+        })
+        .collect()
 }
 
 /// **`Telegram` L3's servers, by the name the user reads, or `None` where the
@@ -626,7 +667,13 @@ pub enum TheStage {
     /// wait copies nothing.
     WaitingForStart { username: String, not_reached: bool, copy_the_name: bool },
     /// `set-bot-start`: the reply arrived and the bot is kept.
-    TheBotReplied { username: String },
+    TheBotReplied {
+        username: String,
+        /// **The chat the Start came from**, as the person reads it — the
+        /// Creator's ruling of 2026-11-14 on batch 1: setup names it, so a
+        /// wrong one is seen at once.
+        chat: Option<String>,
+    },
     /// **The Start arrived and hello was said, and keeping did not finish** —
     /// its own stage, with no waiting line (fix-here item 14), and the sentence saying why
     /// (fix-here item 5).
@@ -728,7 +775,13 @@ pub fn the_walkthrough_says(stage: &TheStage, username: Option<&str>) -> Event {
             }
             ("waiting", Some(username))
         }
-        TheStage::TheBotReplied { username } => ("replied", Some(username)),
+        TheStage::TheBotReplied { username, chat } => {
+            if let Some(chat) = chat {
+                event = prose(event, "connectedTo", words::CONNECTED_TO);
+                event = value(event, "theChat", chat.clone());
+            }
+            ("replied", Some(username))
+        }
         TheStage::NotKept { username, sentence } => {
             event = prose(event, "theFailure", sentence);
             event = value(event, "retry", KEEP_AGAIN);
@@ -804,7 +857,7 @@ pub fn the_sentence_for_a_replacement_not_accepted(why: &told_record::WhyTheRepl
 /// posts nothing and stops at its next ask.
 struct Held {
     offer: Option<TheOffer>,
-    kept_again: Option<(TheKeepToRetry, String)>,
+    kept_again: Option<(TheKeepToRetry, String, Option<String>)>,
     /// **`set-bot-replace`: a checked token for the bot this computer already
     /// uses, waiting for *Save token*** (`Telegram` P4, L4). Nothing is stored
     /// until it is pressed; Cancel, Escape and a new opening drop it, and the
@@ -1131,6 +1184,11 @@ fn the_check_runs<R: Runtime>(app: &AppHandle<R>, serial: u64, paste: ThePaste) 
                         whether_telegram_was_reached_is_posted(app, serial, &username, &mut showing_not_reached, true);
                         wait
                     }
+                    // `Telegram` S5: stop competing for another app's bot.
+                    WhatOneAskFound::TheAskFailed(_, why) if another_app_holds_the_bot(&why) => {
+                        the_walkthrough_is_posted(app, serial, the_waiting_stage_after(&username, Some(&why)));
+                        return;
+                    }
                     WhatOneAskFound::TheAskFailed(wait, _) => {
                         whether_telegram_was_reached_is_posted(app, serial, &username, &mut showing_not_reached, false);
                         std::thread::sleep(AFTER_A_FAILED_CALL);
@@ -1156,7 +1214,8 @@ fn the_check_runs<R: Runtime>(app: &AppHandle<R>, serial: u64, paste: ThePaste) 
                     }
                 }
             };
-            the_bot_is_kept(app, serial, TheKeepToRetry::Keep(hello), username);
+            let chat = hello.the_chats_name().map(str::to_string);
+            the_bot_is_kept(app, serial, TheKeepToRetry::Keep(hello), username, chat);
         }
     }
 }
@@ -1262,6 +1321,24 @@ fn the_kept_install_failures_go<R: Runtime>(app: &AppHandle<R>) {
 /// **fix-here item 8: the waiting box is posted again only when whether Telegram was
 /// reached changes**, so a string of empty asks posts nothing — **and none of
 /// those drawings copies the name again** (`Telegram` S6a).
+/// **`Telegram` S5 as changed 2026-11-13 — a wait's ask refused for
+/// conflict**: something else reads the bot's messages; setup stops.
+fn another_app_holds_the_bot(why: &smoozy_telegram::transport::WhyTheCallFailed) -> bool {
+    matches!(why, smoozy_telegram::transport::WhyTheCallFailed::Refused(refusal) if refusal.error_code == Some(409))
+}
+
+/// **What the waiting box shows after one ask**: nothing failed, a conflict
+/// (`Telegram` S5 as changed 2026-11-13), or any other failure (fix-here
+/// item 8).
+fn the_waiting_stage_after(username: &str, failed: Option<&smoozy_telegram::transport::WhyTheCallFailed>) -> TheStage {
+    match failed {
+        Some(why) if another_app_holds_the_bot(why) => TheStage::AFailureAtThePaste {
+            sentence: words::USED_BY_ANOTHER_APP, what_to_do: None, retry: None,
+        },
+        failed => TheStage::WaitingForStart { username: username.to_string(), not_reached: failed.is_some(), copy_the_name: false },
+    }
+}
+
 fn whether_telegram_was_reached_is_posted<R: Runtime>(
     app: &AppHandle<R>,
     serial: u64,
@@ -1281,7 +1358,13 @@ fn whether_telegram_was_reached_is_posted<R: Runtime>(
 
 /// **`Telegram` S4, K1 and §19: the proof recorded, the token stored, the act
 /// written, then the switch.**
-fn the_bot_is_kept<R: Runtime>(app: &AppHandle<R>, serial: u64, retry: TheKeepToRetry, username: String) {
+fn the_bot_is_kept<R: Runtime>(
+    app: &AppHandle<R>,
+    serial: u64,
+    retry: TheKeepToRetry,
+    username: String,
+    chat: Option<String>,
+) {
     if SERIAL.load(Ordering::SeqCst) != serial {
         return;
     }
@@ -1308,7 +1391,7 @@ fn the_bot_is_kept<R: Runtime>(app: &AppHandle<R>, serial: u64, retry: TheKeepTo
     };
     match outcome {
         Ok(()) => {
-            the_walkthrough_is_posted(app, serial, TheStage::TheBotReplied { username });
+            the_walkthrough_is_posted(app, serial, TheStage::TheBotReplied { username, chat });
             the_kept_install_failures_go(app);
             the_section_is_posted_from(app, None);
             // Fault 11: the bot, and the switch on, reach every server
@@ -1317,7 +1400,7 @@ fn the_bot_is_kept<R: Runtime>(app: &AppHandle<R>, serial: u64, retry: TheKeepTo
         }
         Err((retry, sentence)) => {
             if let Ok(mut held) = held().lock() {
-                held.kept_again = Some((retry, username.clone()));
+                held.kept_again = Some((retry, username.clone(), chat));
             }
             the_walkthrough_is_posted(app, serial, TheStage::NotKept { username, sentence });
             // **The section behind the box is drawn again on a failure too.**
@@ -1336,12 +1419,12 @@ fn the_bot_is_kept<R: Runtime>(app: &AppHandle<R>, serial: u64, retry: TheKeepTo
 /// **Keeping again**, after it did not finish — the failure's own control.
 #[tauri::command]
 pub fn the_bot_is_kept_again<R: Runtime>(app: AppHandle<R>) {
-    let Some((hello, username)) = held().lock().ok().and_then(|mut held| held.kept_again.take()) else {
+    let Some((hello, username, chat)) = held().lock().ok().and_then(|mut held| held.kept_again.take()) else {
         return;
     };
     let serial = SERIAL.load(Ordering::SeqCst);
     let app = app.clone();
-    std::thread::spawn(move || the_bot_is_kept(&app, serial, hello, username));
+    std::thread::spawn(move || the_bot_is_kept(&app, serial, hello, username, chat));
 }
 
 /// **`Telegram` V1a: what a job reports by default**, written, read back and
@@ -1446,12 +1529,31 @@ mod tests {
         format!("{event:?}")
     }
 
+    /// **The Creator's ruling of 2026-11-14 on batch 1: setup names the chat
+    /// it connected to**, as a value beside its words; a Start that named no
+    /// one says nothing more.
+    #[test]
+    fn batch_1_ruling_the_reply_names_the_chat() {
+        let named = the_walkthrough_says(
+            &TheStage::TheBotReplied { username: "studio_render_bot".into(), chat: Some("@alex_k".into()) },
+            None,
+        );
+        let said = format!("{named:?}");
+        assert!(said.contains("\"theChat\": Value(Verbatim(\"@alex_k\"))"), "{said}");
+        assert!(said.contains("connectedTo"), "{said}");
+        let unnamed = format!(
+            "{:?}",
+            the_walkthrough_says(&TheStage::TheBotReplied { username: "studio_render_bot".into(), chat: None }, None)
+        );
+        assert!(!unnamed.contains("theChat") && !unnamed.contains("connectedTo"), "{unnamed}");
+    }
+
     /// *(Until 2026-10-31 `one_bot_or_token_control_and_the_three_choices_floor`,
     /// the floor line reading* All three send endings and questions.*)*
     #[test]
     fn one_bot_or_token_control_and_the_floor_under_all_but_off() {
         assert_eq!(words::USE_ANOTHER_BOT, "Change bot or token…");
-        assert_eq!(words::ALWAYS_SENT, "All but Off send endings and questions.");
+        assert_eq!(words::ALWAYS_SENT, "Every option except Off sends job results and questions.");
         let page = include_str!("../../web/telegram.js");
         let row = page.split("const tokenRow =").nth(1).unwrap().split("const whoever").next().unwrap();
         assert!(!row.contains("aControl("), "the token row offers a second button");
@@ -1478,9 +1580,9 @@ mod tests {
         assert!(working.contains("b.waiting.classList.add(\"underway-reading\")"));
     }
 
-    /// **The fourteen are the drawing's own Telegram states in its state list.**
+    /// The drawing's Telegram states, including the token-paste conflict.
     #[test]
-    fn the_fourteen_are_the_drawings_own() {
+    fn the_fifteen_are_the_drawings_own() {
         let drawing = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Preparation/Design/Mockup/Smoozy.html")).unwrap();
         let list = drawing.split("<select id=\"state\"").nth(1).and_then(|rest| rest.split("</select>").next()).unwrap();
         for state in THE_STATES_THIS_PIECE_DRAWS {
@@ -1499,6 +1601,7 @@ mod tests {
             not_reached: Some(Vec::new()),
             the_answer: None,
             the_minutes_refused: None,
+            refusing: Vec::new(),
         });
         let text = said(&event);
         assert!(text.contains("beforeItIsOn") && text.contains("theSwitch"));
@@ -1522,6 +1625,7 @@ mod tests {
             not_reached: Some(vec!["Hetzner box".into(), "Old 4080".into()]),
             the_answer: None,
             the_minutes_refused: None,
+            refusing: Vec::new(),
         });
         let text = said(&event);
         assert!(text.contains(&format!("{:?}", Verbatim::new("@smoozy_a7k2_bot"))));
@@ -1530,6 +1634,40 @@ mod tests {
         assert!(text.contains(&format!("{:?}", Verbatim::new("pictures-only"))));
         assert!(text.contains(&format!("{:?}", Prose::new(words::SERVERS_NOT_REACHED))));
         assert!(!text.contains("beforeItIsOn"));
+    }
+
+    /// **When Telegram refuses — `Design/Settings § Telegram`: each server
+    /// Telegram is refusing is named, its name a value and its row's line
+    /// prose**, and the page draws them. A server with no word is not named.
+    #[test]
+    fn when_telegram_refuses_the_section_names_the_servers_with_their_line() {
+        use smoozy_server_protocol::requests::TheTelegramTrouble;
+        let event = the_section_says(&WhatTheSectionHolds {
+            the_settings: Some(TheTelegramSettings { switched_on: true, ..TheTelegramSettings::default() }),
+            the_bot: None,
+            the_token_is_held: true,
+            not_reached: Some(Vec::new()),
+            the_answer: None,
+            the_minutes_refused: None,
+            refusing: vec![(
+                "Hetzner box".into(),
+                crate::surface::servers::what_telegrams_trouble_says(TheTelegramTrouble::TheChatRefuses),
+            )],
+        });
+        let text = said(&event);
+        assert!(text.contains("refusingCount"));
+        assert!(text.contains(&format!("{:?}", Verbatim::new("Hetzner box"))));
+        assert!(text.contains(&format!(
+            "{:?}",
+            Prose::new("The bot can't message your chat. Unblock it, or create a new bot in Settings.")
+        )));
+        let page = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/web/telegram.js")).unwrap();
+        assert!(page.contains("said.refusingCount") && page.contains("refusingServer") && page.contains("refusingSaid"));
+
+        let (folder, record) = a_record("refusing");
+        assert!(what_the_section_holds(record.connection(), None).refusing.is_empty(), "nobody is named with no reading");
+        drop(record);
+        let _ = fs::remove_dir_all(&folder);
     }
 
     /// **`Design/Settings § Telegram`, the drawing's `set-tgdefault`: five
@@ -1550,19 +1688,20 @@ mod tests {
             not_reached: Some(Vec::new()),
             the_answer: None,
             the_minutes_refused: None,
+            refusing: Vec::new(),
         };
         let text = said(&the_section_says(&on(None, None)));
         for (name, what) in [
             ("Everything", "progress, frames, a short video and a contact sheet"),
-            ("Pictures only", "the same, without progress"),
-            ("A picture every", "the same as Everything, with fewer pictures"),
-            ("Alerts only", "endings and questions"),
-            ("Off", "nothing, unless you ask"),
+            ("Pictures only", "the same, without server status or sound at job start"),
+            ("A picture every", "the same as Everything, with fewer pictures and no sound at job start"),
+            ("Alerts only", "job results and questions"),
+            ("Off", "no automatic job messages"),
         ] {
             assert!(text.contains(&format!("{:?}", Prose::new(name))), "{name}");
             assert!(text.contains(&format!("{:?}", Prose::new(what))), "{what}");
         }
-        assert!(text.contains(&format!("{:?}", Prose::new("All but Off send endings and questions."))));
+        assert!(text.contains(&format!("{:?}", Prose::new("Every option except Off sends job results and questions."))));
         assert!(text.contains(&format!(
             "{:?}",
             Prose::new("Change it per job when you submit, or for all jobs with /reporting in Telegram.")
@@ -1624,6 +1763,7 @@ mod tests {
             not_reached: Some(Vec::new()),
             the_answer: None,
             the_minutes_refused: None,
+            refusing: Vec::new(),
         }));
         assert!(text.contains("theSettingsWouldNotRead"));
         assert!(!text.contains("switchedOn"));
@@ -1993,7 +2133,7 @@ mod tests {
         let WhatComesNext::WaitForStart(wait) = check.what_comes_next(None) else { panic!("a new bot waits") };
         service.then_answers(r#"{"ok":true,"result":[]}"#);
         let WhatOneAskFound::NothingYet(wait) = wait.ask_once(0) else { panic!("still waiting for Start") };
-        service.then_answers(r#"{"ok":true,"result":[{"update_id":1,"message":{"chat":{"id":9001},"text":"/start"}}]}"#);
+        service.then_answers(r#"{"ok":true,"result":[{"update_id":1,"message":{"chat":{"id":9001,"type":"private"},"text":"/start"}}]}"#);
         let WhatOneAskFound::StartArrived(proof) = wait.ask_once(0) else { panic!("Start arrived") };
         service.then_answers(r#"{"ok":true,"result":{"message_id":2}}"#);
         proof.say_hello_back().unwrap()
@@ -2195,6 +2335,31 @@ mod tests {
         assert!(unreached.contains(&format!("{:?}", Verbatim::new("waiting"))));
     }
 
+    /// **Telegram when things aren't ideal, problem 4 (`Telegram` S5 and
+    /// `Design/Settings § Telegram` as changed 2026-11-13): a wait for Start
+    /// refused for conflict says the bot is used by a server**, in the
+    /// waiting box, never *Could not reach Telegram*; any other failed ask
+    /// still says that. Before, both read *Could not reach Telegram*.
+    #[test]
+    fn bad_batch_1_conflict_returns_to_the_paste_and_does_not_wait() {
+        use smoozy_telegram::transport::{ARefusal, WhyTheCallFailed};
+        let conflict = WhyTheCallFailed::Refused(ARefusal {
+            error_code: Some(409),
+            description: Some("Conflict: terminated by other getUpdates request".into()),
+            retry_after: None,
+        });
+        let username = "smoozy_a7k2_bot".to_string();
+        let in_use = said(&the_walkthrough_says(&the_waiting_stage_after(&username, Some(&conflict)), None));
+        assert!(in_use.contains(&format!("{:?}", Prose::new(words::USED_BY_ANOTHER_APP))), "{in_use}");
+        assert!(!in_use.contains(&format!("{:?}", Prose::new(words::NOT_REACHED))));
+        assert!(in_use.contains(&format!("{:?}", Verbatim::new("paste"))));
+        let cut = WhyTheCallFailed::NotReached("the line is cut".into());
+        let unreached = said(&the_walkthrough_says(&the_waiting_stage_after(&username, Some(&cut)), None));
+        assert!(unreached.contains(&format!("{:?}", Prose::new(words::NOT_REACHED))));
+        let fine = said(&the_walkthrough_says(&the_waiting_stage_after(&username, None), None));
+        assert!(!fine.contains("theFailure"));
+    }
+
     /// **fix-here item 13: an over-long or empty paste is answered with the *no token*
     /// stage**; anything else goes to the check.
     #[test]
@@ -2359,7 +2524,7 @@ mod tests {
             for later in [
                 TheStage::WaitingForStart { username: "studio_render_bot".into(), not_reached: true, copy_the_name: false },
                 TheStage::WaitingForStart { username: "studio_render_bot".into(), not_reached: false, copy_the_name: false },
-                TheStage::TheBotReplied { username: "studio_render_bot".into() },
+                TheStage::TheBotReplied { username: "studio_render_bot".into(), chat: Some("@alex_k".into()) },
                 TheStage::NotKept { username: "studio_render_bot".into(), sentence: words::THE_TOKEN_WAS_NOT_CONFIRMED },
             ] {
                 let text = said(&the_walkthrough_says(&later, None));
@@ -2462,7 +2627,7 @@ mod tests {
                 &TheStage::WaitingForStart { username: name.clone(), not_reached: true, copy_the_name: false }, offer)),
             "waitingAgain": as_the_page_gets_it(the_walkthrough_says(
                 &TheStage::WaitingForStart { username: name.clone(), not_reached: false, copy_the_name: false }, offer)),
-            "replied": as_the_page_gets_it(the_walkthrough_says(&TheStage::TheBotReplied { username: name.clone() }, offer)),
+            "replied": as_the_page_gets_it(the_walkthrough_says(&TheStage::TheBotReplied { username: name.clone(), chat: Some("@alex_k".into()) }, offer)),
             "shut": as_the_page_gets_it(the_walkthrough_says(&TheStage::Shut, None)),
         });
 
@@ -2544,8 +2709,8 @@ mod tests {
         };
         let flat = |text: &serde_json::Value| text.as_str().unwrap_or("").replace('\u{a0}', " ");
         let has = |state: &str, which: &str, words: &str| {
-            let text = flat(&at(state)["text"][which]);
-            assert!(text.contains(&words.replace('\u{a0}', " ")), "{state}: the {which} box does not say {words:?}: {text:?}");
+            let text = flat(&at(state)["text"][which]).replace('’', "'");
+            assert!(text.contains(&words.replace('\u{a0}', " ").replace('’', "'")), "{state}: the {which} box does not say {words:?}: {text:?}");
         };
         let lacks = |state: &str, which: &str, words: &str| {
             let text = flat(&at(state)["text"][which]);
@@ -2784,7 +2949,8 @@ try {
     window.__listener({ payload: delivery });
     await settle();
   };
-  const shown = (el) => Boolean(el) && !el.closest("[hidden]") && el.getClientRects().length > 0;
+  // A control whose room is held unseen (UI consistency, finding 18) is not shown.
+  const shown = (el) => Boolean(el) && !el.closest("[hidden]") && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
   const buttons = () => [...document.querySelectorAll("button")].filter(shown);
   const press = async (words) => {
     const control = buttons().find((b) => b.textContent.replace(/\u00a0/g, " ").trim() === words);

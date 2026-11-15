@@ -260,6 +260,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn bad_batch_1_a_second_copy_or_readded_row_cannot_recognise_an_installation() {
+        let original = Identity::issue(IdentityKind::Installation).unwrap();
+        let replacement = Identity::issue(IdentityKind::Installation).unwrap();
+        // Questions 58 and 354: another copy; 128: removed row; 353: replaced install.
+        for (machine, remembered) in [(&original, None), (&original, Some(&replacement)), (&replacement, Some(&original))] {
+            let check = InstallationCheck::from_the_two_halves(Some(machine), remembered, true);
+            assert_eq!(check, InstallationCheck::PresentAndDifferent);
+            assert_eq!(check.what_becomes_of_machine_derived_values(), MachineDerivedValue::Disqualified);
+        }
+    }
+
+    #[test]
     fn two_issued_identities_never_match() {
         let one = Identity::issue(IdentityKind::Job).unwrap();
         let two = Identity::issue(IdentityKind::Job).unwrap();

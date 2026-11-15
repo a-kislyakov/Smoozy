@@ -142,26 +142,125 @@ impl TheKeptReadings {
     }
 }
 
-/// **Files going up to each machine this run**, by either route: how many began
-/// and how many ended. `Dependency Upload & Remap` G17b: a reading is kept only
-/// where none was on its way when it began and none began or ended before what it
-/// stood on was read, since a library landing after Blender looked and before its
-/// four values were read would read as there when Blender did not see it.
+/// **Files going up to each machine this run**, by either route, each with its
+/// landing place and when it began and ended — `Dependency Upload & Remap` G17b
+/// as changed 2026-11-09 (the twenty-eighth notes, note 11): **a reading is not
+/// kept where an upload overlaps the time from the reading's start until all its
+/// four-value reads finish, and targets the file being read or a library
+/// location the reading names, an absent library included; an upload that ended
+/// before those reads finished still counts.** A library landing after Blender
+/// looked and before its four values were read would read as there when Blender
+/// did not see it. Until that day any file going up to the machine kept nothing,
+/// so the readings an upload owes, which run while its textures go up, were none
+/// of them kept and the round after it read every file again.
+///
+/// **Time here is a count**, one tick for each beginning, each ending and each
+/// reading's start, so two events never share a moment.
 #[derive(Default)]
-pub struct TheFilesGoingUp(BTreeMap<String, (u64, u64)>);
+pub struct TheFilesGoingUp {
+    clock: u64,
+    uploads: Vec<AnUploadSeen>,
+    /// **The readings that began and have not been answered**, by their start,
+    /// which is all that keeps an ended upload worth holding.
+    readings: BTreeMap<u64, usize>,
+}
+
+struct AnUploadSeen {
+    machine: String,
+    landing: Vec<u8>,
+    began: u64,
+    ended: Option<u64>,
+}
+
+/// **A reading's start**, handed back when it is answered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AReadingBegan(u64);
 
 impl TheFilesGoingUp {
-    pub fn one_begins(&mut self, machine: &MachineKey) {
-        self.0.entry(machine.server_row.as_text()).or_default().0 += 1;
+    fn tick(&mut self) -> u64 {
+        self.clock += 1;
+        self.clock
     }
 
-    pub fn one_ends(&mut self, machine: &MachineKey) {
-        self.0.entry(machine.server_row.as_text()).or_default().1 += 1;
+    /// **A file begins going up to this machine, to this landing place.**
+    pub fn one_begins(&mut self, machine: &MachineKey, landing: &[u8]) {
+        let began = self.tick();
+        self.uploads.push(AnUploadSeen {
+            machine: machine.server_row.as_text(),
+            landing: landing.to_vec(),
+            began,
+            ended: None,
+        });
     }
 
-    /// **As they stand on this machine**: began, and ended.
-    pub fn on(&self, machine: &MachineKey) -> (u64, u64) {
-        self.0.get(&machine.server_row.as_text()).copied().unwrap_or((0, 0))
+    /// **It has ended, however it ended.** The earliest still going to that place
+    /// is the one that ended.
+    pub fn one_ends(&mut self, machine: &MachineKey, landing: &[u8]) {
+        let ended = self.tick();
+        let machine = machine.server_row.as_text();
+        if let Some(one) = self
+            .uploads
+            .iter_mut()
+            .find(|one| one.ended.is_none() && one.machine == machine && one.landing == landing)
+        {
+            one.ended = Some(ended);
+        }
+        self.what_no_reading_needs_goes();
+    }
+
+    /// **A reading begins**: from here, an upload to a place it rests on means it
+    /// is not kept.
+    pub fn a_reading_begins(&mut self) -> AReadingBegan {
+        let began = self.tick();
+        *self.readings.entry(began).or_default() += 1;
+        AReadingBegan(began)
+    }
+
+    /// **Whether a reading still stands, now that its four-value reads have
+    /// finished**: no upload to this machine, targeting `the_file` or one of
+    /// `the_libraries`, overlapped it. The reading is answered by asking.
+    pub fn it_stood(&mut self, began: AReadingBegan, machine: &MachineKey, the_file: &[u8], the_libraries: &[Vec<u8>]) -> bool {
+        let machine = machine.server_row.as_text();
+        let rests_on = |landing: &[u8]| landing == the_file || the_libraries.iter().any(|one| one.as_slice() == landing);
+        let overlapped = self.uploads.iter().any(|one| {
+            one.machine == machine && one.ended.is_none_or(|ended| ended > began.0) && rests_on(&one.landing)
+        });
+        self.a_reading_is_answered(began);
+        !overlapped
+    }
+
+    /// **A reading that will not be kept is answered without asking.**
+    pub fn a_reading_is_answered(&mut self, began: AReadingBegan) {
+        if let Some(count) = self.readings.get_mut(&began.0) {
+            *count -= 1;
+            if *count == 0 {
+                self.readings.remove(&began.0);
+            }
+        }
+        self.what_no_reading_needs_goes();
+    }
+
+    /// **An ended upload no reading began before is let go**, so what is held
+    /// stays as small as what is going.
+    fn what_no_reading_needs_goes(&mut self) {
+        let oldest = self.readings.keys().next().copied();
+        self.uploads
+            .retain(|one| one.ended.is_none() || oldest.is_some_and(|oldest| one.ended.is_some_and(|ended| ended > oldest)));
+    }
+
+    /// **Whether this very file is going up to this server now** — the
+    /// server's identity as its row writes it, and the file's place there.
+    /// `Design/Whole app § While other work runs` (the Creator's notes on the
+    /// test copy, second round, note 17): reading, checking or rendering a file
+    /// while a new copy of it goes up describes a file about to be replaced.
+    pub fn this_file_is_going_up(&self, server: &str, file: &[u8]) -> bool {
+        self.uploads.iter().any(|one| one.ended.is_none() && one.machine == server && one.landing == file)
+    }
+
+    /// **How many files are going up to this machine now.**
+    pub fn going_now(&self, machine: &MachineKey) -> usize {
+        let machine = machine.server_row.as_text();
+        self.uploads.iter().filter(|one| one.machine == machine && one.ended.is_none()).count()
     }
 }
 
@@ -204,11 +303,13 @@ mod tests {
                     scenes: Attribution::Established(vec!["Scene".to_string()]),
                     source: Some("FILE".to_string()),
                     the_files_own_text: None,
+                    sequence: None,
                 })
                 .collect(),
             flat_list: Vec::new(),
             weak_references: Vec::new(),
             observed_stand_ins: Vec::new(),
+            colour_names_not_found: Vec::new(),
         }
     }
 

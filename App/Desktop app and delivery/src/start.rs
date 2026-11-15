@@ -74,6 +74,14 @@ pub struct Started {
     pub record: Option<LocalRecord>,
     /// Why the record could not be opened, in the machine's own terms.
     pub record_trouble: Option<String>,
+    /// **Whether the record was refused as newer than this copy** —
+    /// `Desktop app and delivery` L9, *where it says so* (2026-11-12): the one
+    /// failure to open that the main window says in a line of its own.
+    pub the_record_is_newer_than_this_copy: bool,
+    /// **Whether the record was refused as damaged** — `Desktop app and
+    /// delivery` L9a: the second failure to open that the main window says in
+    /// a line of its own.
+    pub the_record_is_damaged: bool,
     /// The diary, where its area could be made.
     pub diary: Option<DiaryService>,
     /// **Every feature module's diary declaration, registered at start.**
@@ -149,10 +157,19 @@ pub fn start(queue: &crate::events::TheOneQueue) -> Started {
     the_development_items_are_swept();
 
     // 2. The record, whose opening is what runs the migrations.
-    let (record, record_trouble) = match LocalRecord::open() {
-        Ok(record) => (Some(record), None),
-        Err(failure) => (None, Some(format!("{failure:?}"))),
-    };
+    let (record, record_trouble, the_record_is_newer_than_this_copy, the_record_is_damaged) =
+        match LocalRecord::open() {
+            Ok(record) => (Some(record), None, false, false),
+            // **`Desktop app and delivery` L9, *where it says so* (2026-11-12),
+            // and L9a: the two refusals the main window says in a line of
+            // their own.**
+            Err(failure) => (
+                None,
+                Some(format!("{failure:?}")),
+                the_record_is_newer_than_this_copy_in(&failure),
+                the_record_is_damaged_in(&failure),
+            ),
+        };
 
     // **What the last run's downloads left, settled before any transfer is
     // admitted** — `Server protocol and transfers` S28's second bullet and C13,
@@ -227,6 +244,8 @@ pub fn start(queue: &crate::events::TheOneQueue) -> Started {
         the_sweep_left_behind,
         record,
         record_trouble,
+        the_record_is_newer_than_this_copy,
+        the_record_is_damaged,
         diary,
         declarations,
         what_modules_declare,
@@ -235,6 +254,17 @@ pub fn start(queue: &crate::events::TheOneQueue) -> Started {
         the_previous_run,
 
     }
+}
+
+/// **Whether a failure to open the record is L9's refusal**: the record is
+/// newer than this copy. Every other failure keeps L8a's per-screen failure.
+pub fn the_record_is_newer_than_this_copy_in(failure: &crate::record::RecordFailure) -> bool {
+    matches!(failure, crate::record::RecordFailure::RecordIsNewerThanTheBinary { .. })
+}
+
+/// **Whether a failure to open the record is L9a's**: its file is damaged.
+pub fn the_record_is_damaged_in(failure: &crate::record::RecordFailure) -> bool {
+    matches!(failure, crate::record::RecordFailure::TheRecordIsDamaged { .. })
 }
 
 /// **A throwaway copy's own secret-store items, swept at start — the third
@@ -573,6 +603,12 @@ pub struct WhatTheLastRunLeft {
     pub reservations_removed: usize,
     /// Publication-pending records that could not be settled and still stand.
     pub still_pending: usize,
+    /// Replace-intended publications a run died inside, settled without a
+    /// rename (`Server protocol and transfers` S15's paragraph of 2026-11-12).
+    pub replacements_settled: usize,
+    /// Records an earlier run left with no ending, written *interrupted*
+    /// (`Download` M13's paragraph of 2026-11-12).
+    pub written_interrupted: usize,
     /// Why the record could not be read or written, where it could not.
     pub trouble: Option<String>,
 }
@@ -616,7 +652,7 @@ pub struct WhatTheLastRunLeft {
 ///
 /// **Nothing here stops the window from opening**, the start's own rule: a
 /// record that will not read or write is reported and the start carries on.
-pub(crate) fn what_the_last_run_left_is_settled(record: &LocalRecord) -> WhatTheLastRunLeft {
+pub fn what_the_last_run_left_is_settled(record: &LocalRecord) -> WhatTheLastRunLeft {
     use crate::platform::collision::{
         settle_the_reservation_of, the_record_once_settled, the_reservations_this_run_owes,
         WhatTheNextRunDoes,
@@ -672,6 +708,33 @@ pub(crate) fn what_the_last_run_left_is_settled(record: &LocalRecord) -> WhatThe
         }
     }
 
+    // **`Server protocol and transfers` S15's paragraph of 2026-11-12: a
+    // replace-intended publication a run died inside.** `Desktop app and
+    // delivery` C14 takes no reservation, so the loop above passes it by, and
+    // until this date its mark stood for good and `Download` R6's ordering
+    // refused every auto-download of its server, with nothing said. **Nothing
+    // is renamed here.** Where the staging is gone and the object at the name
+    // is proved to be the staged one, the record is *published*; otherwise the
+    // mark goes and the record is written *interrupted* below, its staged
+    // file the leftover a fresh request takes up. The Fable review's seventh
+    // sitting, fault 4.
+    for at in 0..records.len() {
+        let Some(settled) = a_replacement_a_run_died_inside_is_settled(&records[at], &mut adapter)
+        else {
+            continue;
+        };
+        match transfer_records::put(connection, &settled) {
+            Ok(()) => {
+                left.replacements_settled += 1;
+                records[at] = settled;
+            }
+            Err(failure) => {
+                keep_the_trouble(&mut left, failure);
+                left.still_pending += 1;
+            }
+        }
+    }
+
     // **`Server protocol and transfers` S28's desktop-side sweep.**
     for one in &records {
         let mut not_confirmed = false;
@@ -721,7 +784,74 @@ pub(crate) fn what_the_last_run_left_is_settled(record: &LocalRecord) -> WhatThe
             }
         }
     }
+
+    // **`Download` M13's first bullet and `File Browser` U8: every in-flight
+    // record reads *interrupted*** — their paragraphs of 2026-11-12. `State,
+    // identity and recovery` D6 writes nothing at exit, so a transfer a quit
+    // or a crash cut holds no ending, and the readers of leftovers ask for
+    // *interrupted*. **No transfer of this run exists yet**, so every record
+    // with no ending is an earlier run's. **Last**, after the two acts above
+    // have written their own records. The Fable review's seventh sitting,
+    // fault 3.
+    match transfer_records::the_unended_are_written_interrupted(connection) {
+        Ok(written) => left.written_interrupted = written,
+        Err(failure) => keep_the_trouble(&mut left, failure),
+    }
     left
+}
+
+/// **A replace-intended publication a run died inside, settled** — `Server
+/// protocol and transfers` S15's paragraph of 2026-11-12. `None` where the
+/// record is not one, or where its staging path cannot be looked at, which
+/// leaves the mark for the next start.
+///
+/// **A download, in publication pending, replace-intended, with no ending or
+/// reading *interrupted*.**
+/// The rename is one step, so the staged file is either still at its staging
+/// path or it is not:
+///
+/// - **gone, and the object at the final name proved to be the staged one**
+///   (`Server protocol and transfers` S15's recovery judgement, never a
+///   length alone): the record is *published*;
+/// - **anything else**: the mark goes and the ending is left absent, for the
+///   start's last act to write *interrupted* where it is not there already.
+fn a_replacement_a_run_died_inside_is_settled(
+    record: &smoozy_server_protocol::transfers::TransferRecord,
+    adapter: &mut crate::transfers::ThePlatformFileAdapter,
+) -> Option<smoozy_server_protocol::transfers::TransferRecord> {
+    use smoozy_server_protocol::transfers::moving::TheUsersOwnComputer;
+    use smoozy_server_protocol::transfers::publication::{
+        judge_the_recovery, Intent, RecoveryVerdict,
+    };
+    use smoozy_server_protocol::transfers::{Direction, Ending};
+
+    let pending = record.publication_pending.as_ref()?;
+    // **No ending, or *interrupted***: a start that could not look at the
+    // staging path leaves the mark, and its last act writes *interrupted* —
+    // so the next start has to read that record too (Sol's look, point 5).
+    if record.direction != Direction::Down
+        || !matches!(record.ending, None | Some(Ending::Interrupted))
+        || pending.intent != Intent::ReplaceIntended
+    {
+        return None;
+    }
+    let the_staging_is_gone = match std::fs::symlink_metadata(&pending.staging_path) {
+        Ok(_) => false,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => true,
+        Err(_) => return None,
+    };
+    let mut settled = record.clone();
+    if the_staging_is_gone
+        && judge_the_recovery(
+            pending,
+            false,
+            &adapter.read_the_final_object(&pending.final_path),
+        ) == RecoveryVerdict::ThePublicationHappened
+    {
+        settled.ending = Some(Ending::Published);
+    }
+    settled.publication_pending = None;
+    Some(settled)
 }
 
 /// `Reporting a problem` U3: the launch reads the old mark, then replaces it.
@@ -943,12 +1073,14 @@ mod tests {
              declaration check, so the user ticks *Don't warn me about this \
              again* and the band comes back next time"
         );
-        assert_eq!(
-            declared.every_declared_warning(),
-            vec!["file-browser.delete", "rendering.missing-assets"]
-        );
+        // **`Servers` W20's one, from 2026-11-14** (the Rough what-if
+        // answers, share 2, 130): until then it was undeclared, so the
+        // removal box's switch-off was refused and the warning came back.
+        assert!(declared.the_warning_is_declared("Servers", "servers.disconnected-removal"));
+        let mut every = declared.every_declared_warning();
+        every.sort_unstable();
+        assert_eq!(every, vec!["file-browser.delete", "rendering.missing-assets", "servers.disconnected-removal"]);
         // A7: not a default this document supplies.
-        assert!(!declared.the_warning_is_declared("Servers", "servers.disconnected-removal"));
         assert!(!declared.the_warning_is_declared("File Browser", "file-browser.rename"));
         // And the identity belongs to its own module, never another's.
         assert!(!declared.the_warning_is_declared("File Browser", "rendering.missing-assets"));
@@ -1435,6 +1567,256 @@ mod tests {
             let _ = std::fs::remove_dir_all(holder);
         }
 
+        fn pending_replace_intended(transfer: &mut TransferRecord) {
+            pending_create_intended(transfer);
+            if let Some(pending) = transfer.publication_pending.as_mut() {
+                pending.intent = Intent::ReplaceIntended;
+            }
+        }
+
+        /// **`Download` M13's first bullet, kept at the next start: a
+        /// transfer record an earlier run left with no ending reads
+        /// *interrupted*** — its paragraph of 2026-11-12, and `File Browser`
+        /// U8's. The Fable review's seventh sitting, fault 3.
+        ///
+        /// **The fault as it stood.** Smoozy quit while a file was moving.
+        /// `State, identity and recovery` D6 writes nothing at exit, so the
+        /// record kept no ending, and every reader of leftovers asks for
+        /// *interrupted*: no leftover was told, *Continue* and *Remove* were
+        /// not offered, asking again started a fresh copy, and the part stayed
+        /// in the staging folder for good.
+        #[test]
+        fn the_next_start_writes_interrupted_into_what_a_quit_left_moving() {
+            let (record, holder) = a_local_record("a-quit-left-moving");
+            let destination = holder.join("Downloads");
+            std::fs::create_dir_all(&destination).unwrap();
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+
+            // A download the quit cut, its part in the user's own folder.
+            let mut down = a_download(&server, &destination, "cut.exr");
+            let the_part = staged(&mut down, b"part");
+            // An upload the quit cut; its part is on the server.
+            let mut up = a_download(&server, &destination, "scene.blend");
+            up.direction = Direction::Up;
+            // A transfer that ended is left as it ended.
+            let mut ended = a_download(&server, &destination, "ended.exr");
+            ended.ending = Some(Ending::Published);
+            for one in [&down, &up, &ended] {
+                transfer_records::put(record.connection(), one).unwrap();
+            }
+
+            let settled = what_the_last_run_left_is_settled(&record);
+            assert_eq!(settled.trouble, None);
+
+            let read = |one: &TransferRecord| {
+                transfer_records::read(record.connection(), &one.transfer)
+                    .unwrap()
+                    .unwrap()
+            };
+            assert_eq!(
+                read(&down).ending,
+                Some(Ending::Interrupted),
+                "a download a quit cut holds no ending, so no leftover is told and nothing takes it up"
+            );
+            assert_eq!(
+                read(&up).ending,
+                Some(Ending::Interrupted),
+                "an upload a quit cut holds no ending, so no leftover is told and nothing takes it up"
+            );
+            assert_eq!(read(&ended).ending, Some(Ending::Published));
+            assert!(the_part.exists(), "the leftover the user is promised was removed");
+
+            drop(record);
+            let _ = std::fs::remove_dir_all(holder);
+        }
+
+        /// **`Server protocol and transfers` S15's paragraph of 2026-11-12: a
+        /// replace-intended publication a run died inside is settled at the
+        /// next start, and nothing is renamed for it.** The Fable review's
+        /// seventh sitting, fault 4.
+        ///
+        /// **The fault as it stood.** The user answered *Replace*, and Smoozy
+        /// quit between writing *publication pending* and the record of the
+        /// rename. `Desktop app and delivery` C13's settling reads
+        /// create-intended records alone, so this one kept its mark for good,
+        /// and `Download` R6's ordering refused every auto-download of that
+        /// server at every launch, with nothing said.
+        #[test]
+        fn the_next_start_settles_a_replacement_a_run_died_inside() {
+            let (record, holder) = a_local_record("a-replacement-died");
+            let destination = holder.join("Downloads");
+            std::fs::create_dir_all(&destination).unwrap();
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+
+            // **Died before the rename**: the staged file whole, the user's
+            // older copy still at the name.
+            let mut before = a_download(&server, &destination, "before.exr");
+            let staged_whole = staged(&mut before, TWELVE);
+            pending_replace_intended(&mut before);
+            let the_older_copy = destination.join("before.exr");
+            std::fs::write(&the_older_copy, b"the older copy").unwrap();
+
+            // **Died after the rename**: the staged object stands at the name.
+            let mut after = a_download(&server, &destination, "after.exr");
+            let was_staged = staged(&mut after, TWELVE);
+            pending_replace_intended(&mut after);
+            std::fs::rename(&was_staged, destination.join("after.exr")).unwrap();
+
+            for one in [&before, &after] {
+                transfer_records::put(record.connection(), one).unwrap();
+            }
+            let settled = what_the_last_run_left_is_settled(&record);
+            assert_eq!(settled.trouble, None);
+
+            let read = |one: &TransferRecord| {
+                transfer_records::read(record.connection(), &one.transfer)
+                    .unwrap()
+                    .unwrap()
+            };
+            let standing = transfer_records::the_unended_and_the_pending_without_their_marks(
+                record.connection(),
+                &server,
+            )
+            .unwrap();
+            assert!(
+                smoozy_download::arrangement::transfers_may_be_admitted(&standing),
+                "a replacement a run died inside still refuses every download of its server"
+            );
+
+            // Nothing was renamed: the older copy and the staged file stand.
+            assert_eq!(std::fs::read(&the_older_copy).unwrap(), b"the older copy");
+            assert!(staged_whole.exists(), "the staged file is the leftover, and it went");
+            assert_eq!(read(&before).publication_pending, None);
+            assert_eq!(read(&before).ending, Some(Ending::Interrupted));
+
+            assert_eq!(std::fs::read(destination.join("after.exr")).unwrap(), TWELVE);
+            assert_eq!(read(&after).publication_pending, None);
+            assert_eq!(
+                read(&after).ending,
+                Some(Ending::Published),
+                "a replacement that had happened was not read as published"
+            );
+
+            drop(record);
+            let _ = std::fs::remove_dir_all(holder);
+        }
+
+        /// **`Server protocol and transfers` S15's paragraph of 2026-11-12,
+        /// its last part: a create-intended record with no ending keeps its
+        /// mark only for a reservation that may stand.** The Fable review's
+        /// seventh sitting, fault 4.
+        ///
+        /// **The fault as it stood.** Smoozy quit just after a frame's rename
+        /// and before its record. The user opened the frame and saved it
+        /// again, at another size, before the next launch. `Desktop app and
+        /// delivery` C13 read *something not Smoozy's on a record whose work
+        /// is not over*, left the mark, and asked again at every start — so
+        /// that server's auto-downloads were refused for as long as the file
+        /// stood, with nothing said.
+        #[test]
+        fn the_next_start_lets_the_mark_go_where_a_file_not_smoozys_stands_at_the_name() {
+            let (record, holder) = a_local_record("not-smoozys-at-the-name");
+            let destination = holder.join("Downloads");
+            std::fs::create_dir_all(&destination).unwrap();
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+
+            // The rename happened, the record of it did not, and the file was
+            // saved again since.
+            let mut saved_again = a_download(&server, &destination, "saved-again.exr");
+            pending_create_intended(&mut saved_again);
+            let the_users_copy = destination.join("saved-again.exr");
+            std::fs::write(&the_users_copy, b"the frame, retouched and saved again").unwrap();
+
+            // The user's own file took the name before the rename; the staged
+            // file is whole.
+            let mut taken = a_download(&server, &destination, "taken.exr");
+            let staged_whole = staged(&mut taken, TWELVE);
+            pending_create_intended(&mut taken);
+            let the_users_own = destination.join("taken.exr");
+            std::fs::write(&the_users_own, b"the user's own compositing copy").unwrap();
+
+            for one in [&saved_again, &taken] {
+                transfer_records::put(record.connection(), one).unwrap();
+            }
+            let settled = what_the_last_run_left_is_settled(&record);
+            assert_eq!(settled.trouble, None);
+
+            let standing = transfer_records::the_unended_and_the_pending_without_their_marks(
+                record.connection(),
+                &server,
+            )
+            .unwrap();
+            assert!(
+                smoozy_download::arrangement::transfers_may_be_admitted(&standing),
+                "a file that is not Smoozy's at the name still refuses every download of its server"
+            );
+            let read = |one: &TransferRecord| {
+                transfer_records::read(record.connection(), &one.transfer)
+                    .unwrap()
+                    .unwrap()
+            };
+            // Nothing was touched, nothing completed, nothing read as published.
+            assert_eq!(
+                std::fs::read(&the_users_copy).unwrap(),
+                b"the frame, retouched and saved again"
+            );
+            assert_eq!(
+                std::fs::read(&the_users_own).unwrap(),
+                b"the user's own compositing copy"
+            );
+            assert!(staged_whole.exists(), "the staged file is the leftover, and it went");
+            for one in [&saved_again, &taken] {
+                assert_eq!(read(one).publication_pending, None);
+                assert_eq!(read(one).ending, Some(Ending::Interrupted));
+            }
+            assert_eq!(settled.publications_completed, 0);
+
+            drop(record);
+            let _ = std::fs::remove_dir_all(holder);
+        }
+
+        /// **A replacement whose staging could not be looked at on one start
+        /// is settled on a later one** — Sol's look at the Fable review's
+        /// seventh sitting, point 5. The first start leaves the mark, since it
+        /// cannot tell what stands there, and its last act writes
+        /// *interrupted*. **The fault in the fix as first built**: the
+        /// settling passed by every record that had an ending, so that record
+        /// kept its mark at every start after, and its server's auto-downloads
+        /// stayed refused.
+        #[test]
+        fn a_replacement_left_marked_on_one_start_is_settled_on_the_next() {
+            let (record, holder) = a_local_record("a-replacement-later");
+            let destination = holder.join("Downloads");
+            std::fs::create_dir_all(&destination).unwrap();
+            let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+
+            // As an earlier start left it: marked, and written *interrupted*.
+            let mut later = a_download(&server, &destination, "later.exr");
+            pending_replace_intended(&mut later);
+            later.ending = Some(Ending::Interrupted);
+            transfer_records::put(record.connection(), &later).unwrap();
+
+            let settled = what_the_last_run_left_is_settled(&record);
+            assert_eq!(settled.trouble, None);
+            let standing = transfer_records::the_unended_and_the_pending_without_their_marks(
+                record.connection(),
+                &server,
+            )
+            .unwrap();
+            assert!(
+                smoozy_download::arrangement::transfers_may_be_admitted(&standing),
+                "a replacement an earlier start could not settle is never settled"
+            );
+            let read = transfer_records::read(record.connection(), &later.transfer)
+                .unwrap()
+                .unwrap();
+            assert_eq!(read.publication_pending, None);
+            assert_eq!(read.ending, Some(Ending::Interrupted));
+
+            drop(record);
+            let _ = std::fs::remove_dir_all(holder);
+        }
+
         /// **The start takes the settling, after the record opens and before
         /// it returns** — which is before anything can admit a transfer, since
         /// nothing does until the window is built. Asserted over the start's
@@ -1522,7 +1904,26 @@ pub enum WhatThisLaunchOwesTheProbe {
 /// when it is asked — and
 /// neither makes an offer, which is `crate::surface::reporting`'s, by the
 /// launch mode.
+///
+/// **A start that finds no record removes E18's staging folder** (its build
+/// detail of 2026-11-09, the twenty-eighth notes): the leftover
+/// `/Applications/.Smoozy update/`. Nothing in it is owed with no update in
+/// its probe, and a version found again in this run is fetched again. Never
+/// while a record stands: the probe's two pipes are in it.
 pub fn the_probe_record_is_met(started: &Started, the_probes_token: Option<String>) -> WhatThisLaunchOwesTheProbe {
+    the_probe_record_is_met_with(
+        started,
+        the_probes_token,
+        crate::platform::locations::resolve(crate::platform::locations::Location::TheUpdatesStagingFolder).ok().as_deref(),
+    )
+}
+
+/// The same, with this copy's staging folder named, so a test can hand one.
+pub fn the_probe_record_is_met_with(
+    started: &Started,
+    the_probes_token: Option<String>,
+    the_staging_folder: Option<&std::path::Path>,
+) -> WhatThisLaunchOwesTheProbe {
     use crate::updating::the_probe::{what_the_record_asks, what_the_record_kept_is_cleared, WhatTheRecordAsks};
     let Some(record) = started.record.as_ref() else {
         return WhatThisLaunchOwesTheProbe::Nothing;
@@ -1530,6 +1931,12 @@ pub fn the_probe_record_is_met(started: &Started, the_probes_token: Option<Strin
     let Ok(asks) = what_the_record_asks(record.connection(), crate::updating::checking::THIS_BUILDS_VERSION) else {
         return WhatThisLaunchOwesTheProbe::Nothing;
     };
+    if asks == WhatTheRecordAsks::Nothing {
+        if let Some(staging) = the_staging_folder {
+            let _ = crate::platform::files::a_folder_is_removed_whole(staging);
+        }
+        return WhatThisLaunchOwesTheProbe::Nothing;
+    }
     let probe = match (asks, the_probes_token) {
         (WhatTheRecordAsks::ThisBuildIsTheRelease(probe), Some(token)) => {
             return WhatThisLaunchOwesTheProbe::TheTokenOnceTheWindowIsBuilt { token, probe }
@@ -1540,7 +1947,14 @@ pub fn the_probe_record_is_met(started: &Started, the_probes_token: Option<Strin
     };
     let kept = crate::platform::locations::resolve(crate::platform::locations::Location::ThePreviousBundleKept).ok();
     let running = crate::platform::locations::resolve(crate::platform::locations::Location::TheInstalledBundle).ok();
-    let _ = what_the_record_kept_is_cleared(record.connection(), record.path(), &probe, kept.as_deref(), running.as_deref());
+    let _ = what_the_record_kept_is_cleared(
+        record.connection(),
+        record.path(),
+        &probe,
+        kept.as_deref(),
+        running.as_deref(),
+        the_staging_folder,
+    );
     WhatThisLaunchOwesTheProbe::Nothing
 }
 
@@ -1610,6 +2024,8 @@ mod after_a_crash {
             the_sweep_left_behind: Vec::new(),
             record: Some(record),
             record_trouble: None,
+            the_record_is_newer_than_this_copy: false,
+            the_record_is_damaged: false,
             diary: None,
             declarations: Declarations::new(),
             what_modules_declare: what_the_modules_declare(),
@@ -1650,6 +2066,23 @@ mod after_a_crash {
         assert!(update_trust::the_update_in_probe(connection()).unwrap().is_some(), "a wrong probe cleared");
         assert_eq!(the_probe_record_is_met(&it, None), WhatThisLaunchOwesTheProbe::Nothing);
         assert_eq!(update_trust::the_update_in_probe(connection()).unwrap(), None);
+
+        // **The twenty-eighth notes' leftover folder**: a start that finds no
+        // record removes the staging folder; one that finds a record — a
+        // probe, whose two pipes are in it — never does.
+        let staging = folder.join(".Smoozy update");
+        std::fs::create_dir_all(staging.join("unpacked")).unwrap();
+        std::fs::write(staging.join("Smoozy-macos.zip"), b"13 MB, once").unwrap();
+        update_trust::an_update_goes_into_probe(connection(), &probe(this)).unwrap();
+        assert!(matches!(
+            the_probe_record_is_met_with(&it, Some("t".into()), Some(&staging)),
+            WhatThisLaunchOwesTheProbe::TheTokenOnceTheWindowIsBuilt { .. }
+        ));
+        assert!(staging.exists(), "a probe's start removed the folder its pipes are in");
+        update_trust::the_probe_is_cleared(connection()).unwrap();
+        assert_eq!(the_probe_record_is_met_with(&it, None, Some(&staging)), WhatThisLaunchOwesTheProbe::Nothing);
+        assert!(!staging.exists(), "the leftover update folder outlived a start with no update in its probe");
+        assert_eq!(the_probe_record_is_met_with(&it, None, Some(&staging)), WhatThisLaunchOwesTheProbe::Nothing);
     }
 
     #[test]

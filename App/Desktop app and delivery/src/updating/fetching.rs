@@ -89,6 +89,33 @@ pub enum WhyTheFetchDidNotPass {
     CouldNotBeStaged(String),
 }
 
+impl WhyTheFetchDidNotPass {
+    /// **The step About names** (the four questions, Sol's S5): what did not
+    /// come or could not be written is the download; what came and is not
+    /// what the manifest names is the verification.
+    pub fn the_step(&self) -> super::checking::TheStepThatFailed {
+        use super::checking::TheStepThatFailed as Step;
+        match self {
+            WhyTheFetchDidNotPass::CouldNotBeReached(_) | WhyTheFetchDidNotPass::CouldNotBeStaged(_) => Step::Download,
+            WhyTheFetchDidNotPass::ItsNameIsNotAPlainFileName | WhyTheFetchDidNotPass::ItIsNotTheArtifactNamed(_) => {
+                Step::Verification
+            }
+        }
+    }
+
+    /// **The reason About says after the step**, where one is known (Design
+    /// *Updating*, 2026-11-12).
+    pub fn the_reason(&self) -> Option<super::checking::TheReasonBehind> {
+        use super::checking::TheReasonBehind as Reason;
+        match self {
+            WhyTheFetchDidNotPass::CouldNotBeReached(_) => Some(Reason::ANetworkError),
+            WhyTheFetchDidNotPass::CouldNotBeStaged(_) => Some(Reason::TheDiskRefused),
+            WhyTheFetchDidNotPass::ItIsNotTheArtifactNamed(_) => Some(Reason::NotTheReleasedFile),
+            WhyTheFetchDidNotPass::ItsNameIsNotAPlainFileName => None,
+        }
+    }
+}
+
 /// **A fetched artifact: its bytes on the disk, held to the manifest's entry.**
 /// Only [`the_artifact_is_fetched`] makes one.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,7 +203,7 @@ pub(crate) fn bytes_are_fetched(
     let read = file.read(from, says, most, &mut draw);
     // **R5: the share returns at once**, before anything is checked.
     let _ = draw.the_channel_ended(Instant::now());
-    read.map_err(WhyTheFetchDidNotPass::CouldNotBeReached)
+    read.map_err(|failed| WhyTheFetchDidNotPass::CouldNotBeReached(failed.said))
 }
 
 #[cfg(test)]
@@ -209,13 +236,13 @@ pub(crate) mod tests {
             _says: &WhatTheRequestSays,
             the_most: u64,
             draw: &mut dyn DrawsFromTheSharedBudget,
-        ) -> Result<Vec<u8>, String> {
+        ) -> Result<Vec<u8>, crate::setting_up::ADownloadThatFailed> {
             self.asked.lock().unwrap().push((from.to_string(), the_most));
             let Some(bytes) = self.serves.clone() else {
                 return Err("nothing answered".into());
             };
             let mut reading: &[u8] = &bytes;
-            crate::updating::checking::read_drawing_from_the_budget(&mut reading, the_most, draw)
+            Ok(crate::updating::checking::read_drawing_from_the_budget(&mut reading, the_most, draw)?)
         }
     }
 

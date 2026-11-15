@@ -150,8 +150,8 @@ pub(super) fn the_blenders(wanted: &[&'static str]) -> Vec<(&'static str, PathBu
         ("4.5", "45", "SMOOZY_DESK_BLENDER_45", "/Applications/Blender 4.5.12.app/Contents/MacOS/Blender"),
         ("5.0", "50", "SMOOZY_DESK_BLENDER_50", "/Applications/Blender 5.0.1.app/Contents/MacOS/Blender"),
         ("5.1", "51", "SMOOZY_DESK_BLENDER_51", "/Applications/Blender 5.1.2.app/Contents/MacOS/Blender"),
-        ("5.2", "52", "SMOOZY_DESK_BLENDER_52", "/Applications/Blender.app/Contents/MacOS/Blender"),
-        ("5.3", "53", "SMOOZY_DESK_BLENDER_53", "/Applications/Blender 5.3b.app/Contents/MacOS/Blender"),
+        ("5.2", "52", "SMOOZY_DESK_BLENDER_52", "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender"),
+        ("5.3", "53", "SMOOZY_DESK_BLENDER_53", "/Applications/Blender 5.3.app/Contents/MacOS/Blender"),
         ("5.4", "54", "SMOOZY_DESK_BLENDER_54", "/Applications/Blender 5.4a.app/Contents/MacOS/Blender"),
     ]
     .into_iter()

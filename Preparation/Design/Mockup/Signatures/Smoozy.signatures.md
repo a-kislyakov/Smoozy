@@ -223,3 +223,101 @@ The mockup had no companion signatures file before this one. It is a document un
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the focus ring on the control.md`, outside any round — the rail's seam and the two lists' seams carry `tabindex="-1"`, as the preview's already did: a drag handle is not a Tab stop (the Creator's twenty-seventh notes, note 1). No auditor has seen it.
 
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the three Linux failures before 0.3.1.md`, outside any round — `.qgh .qgrip` sits on the heading's first line rather than the middle of the block (Linux's Chrome, hosted run 42508904896, where a wider face wraps the heading). No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 2, Server output keeps everything.md`, outside any round — `su-dl` and `su-dllog` drawn; *What the server said* gone from `su-step` and `su-stepten`; `.suout.alone` and `.lbody .lmark`. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 3, updates by the user's choice and the Dock.md`, outside any round — `#updbox` is every system's update box; `upd-running`, `upd-linux` and `upd-pagefail` added; `about-new-linux` and `about-held` removed; About's new-version reading and resting line changed; `.about .upd-new`; three updating notes rewritten. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 5, the report's address.md`, outside any round — `#rpbox`'s saved readings: the address is a link-styled button in `.rp-addrrow` with the copy icon beside it; `.rp-addr` restyled, `.rp-addrrow` and `.rp-addr:focus-visible` added. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 6, the dependency check.md`, outside any round — the check: `#i-up` and *To upload*'s arrow (`.cgrp .cup`); the group *Not used by any scene* with *Include all* (`.cside > summary .lnk`) and *Include*; the kitchen's figures; the shift in one sentence. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 11, linked files go first.md`, outside any round — the check: `chk-linked` before the press, `chk-sending` redrawn as the upload reading its linked files; Transfers: `t-growing` and `t-grown`. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 7, Files: refresh and the upload's progress.md`, outside any round — Files: `#i-refresh` and the refresh icon at the path's right end, turning in `fb-reading`; `fb-counting` and `fb-uploading`, the upload's line above the list; the check: the rows alternate ground (`.rows .row.alt`, `ckGround`). No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 8, the Queue's dot and the first-frame buttons.md`, outside any round — the pair's part dot (`.ffpart`); `q-checkstop`, `q-firstcancel`, `tg-checkcancel` and `tg-checkstop` added; `q-checkjob`, `q-first`, `tg-check` and `tg-stopwait` changed. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 9, Render settings with many view layers.md`, outside any round — note 17: the held version line, the View Layer rows, the counted grey samples lines, the list by folder with its groups, the body folding to two columns by the panel's own width (`.sheet` a container); `res-many`, `res-manygrp`, `res-manygrpopen` and `res-manynarrow` added; `bl-below` changed. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 10, Telegram's one message per job, the code.md`, outside any round — notes 18 and 19: `tg-start`, `tg-album`, `tg-stop`, `tg-stopwait`, `tg-checkstop`, `tg-ended`, `tg-done`, `tg-check` and `tg-live` changed for the job's own message, its cut and replies; frame pictures and the moving picture carry no Stop; `.tg-quote` added; no state added. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — the drawing pass.md`, outside any round — notes 2, 5, 6, 8, 9, 10 and 12: `q-manyfolders`, `q-manyfoldersopen`, `fmt-many`, `fb-viewalpha` and `res-noscene` added; Refresh moved to the toolbar (`browse`, `fb-check`, `fb-reading`); the `.blend` link on Transfers' dependency rows; *Updated 12 seconds ago* on `tg-start` and `tg-live`. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece E, no foot strip, the words for a failed reconnect.md`, outside any round — the server row's failure line in `one` and `both` reads *Could not reconnect.*, the Specs' words since the final words sweep of 2026-10-28 (it read *The connection is down and could not be restored.*). No state added. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), on the Creator's word of 2026-11-11 — About's notice reads *Smoozy is free and open source.* (was *Smoozy is free software.*), the standard term everywhere Smoozy says it
+
+2026-11-11 — GPT-6 (Codex) — Drew a connected server with Not set up on its row.
+
+2026-11-11 — GPT-6.1 (Codex) — Drew the Queue and phone words for a job run again.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Thirtieth notes/Brief — the folded blur.md`, outside any round — the pinned note's rows are a blur inside a folded quotation, with an arrow to unfold it, and the Design note *Everything after the head is a spoiler* says so (Architecture `Telegram` B25a). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — the *THE UI AT EVERY SIZE* block at the stylesheet's end, mirrored in the app's drawing; Queue's notices inside the scrolling list, the chosen engine's row `.radx`, the group heading's `.qghn`, the submitted line's note. No auditor has seen it.
+
+2026-11-11 — GPT-6.1 (Codex), second UI builder — Kept file tags, status sentences, rename feedback and hover details readable at the window edges.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — the third builder's block at the stylesheet's end, the server row's and Files' row's base widths, and the note after the stylesheet. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — the D-11 line taken out of the block and its note. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 5, updates.md`, outside any round — the update box's *Skip this version*, its notes, and the note on About's installation-failed line. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — the dependency band's first-frame button reads *Submit one frame first*. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — History's failed entry: *Blender's output may say why.* in place of *Cause unknown.* No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — *Add existing key…* on Keys; *OpenSSH not installed. Keys can't be created or checked without it.* on Keys, Servers and the `pane-notool` state. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — Settings' Search folders line opens *Missing textures and other linked files are searched for here.* No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), second builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — the update box's running line adds *Auto-downloads resume on the next connection. Other transfers do not.*; `#buunpack` says installing the tool beside these jobs is untested; the check's two upload buttons lose `data-go="t"`. No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Changed the unpack tool warning to state that jobs are running.
+
+2026-11-11 — GPT-6 (Codex), third part continued — Matched the restart wait, Resume and changed-identity words.
+
+2026-11-11 — GPT-6 (Codex) — Added the read’s elapsed line and Stop.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: the version line's reason, the already-there box's two lines and a refused file's *failed*.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), the builder holding `Audits/Build/The four questions/Brief — a house on the home folder.md` — the house icon `#i-home`, drawn before the home folder's name in the path bar. No state added. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, sixth part: The stylesheet's three folder-span rules replaced by `.writes .wcounts` (D-11). No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the admin fresh look, logs in Telegram, and the empty screen.md` — *A job that failed*: the log is drawn folded, with *Copy last line* under it (Telegram E3e, Creator-stated); its design note. No state added. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the admin fresh look, logs in Telegram, and the empty screen.md` — *No servers yet*: the renting step names the image to pick (Creator-stated). One state added, *An older Smoozy on a newer record* (`older`), under *The whole app*: the one line, drawn as the too-small panel is. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+- 2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — Telegram settings' floor line, both copies: *Every option except Off sends job results and questions.* No auditor has seen it.
+
+- 2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — a History state, *…one whose render went on without files*: two *Missing:* lines under a finished entry's times. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, the window.md`, outside any round — `fb-home`, the home folder named in grey at the server's top. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, the window.md`, outside any round — `pane-disconnect`, the heading's control under the pointer, one width and red. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — reading the file, past a minute.md`, outside any round — Render Settings' read endings and the check's failed-read boxes carry their cross at the top right (`.rdfail > p:first-child > .fx`); *Could not reach the server.* gains *Read the file again.*; the *Connection lost* band goes and `res-lost` draws the failed read's box alone (*…after a read that could not reach the server*); while the file is read, *Read again* keeps its words and reads unavailable and the turning mark starts the line under the header (`.rdline .spin`, in place of `.rdwait`). No state added. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the window notes, Sol's points.md`, outside any round — the dependency check: *Stop* beside *Reading the file…* (`chk-reading`) and beside *Reading files linked from `props.blend`*. No state added. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, second round.md`, outside any round — `res-readframes`, `chk-addedrun`, `chk-fileup`; the check's *Stop* as `.mini.inl` and its header mark as `.ckline .spin`; `.cstate .q`. 398 states. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Website/Brief — Help, the Creator's picks.md`, outside any round — *Help* in the Smoozy menu before *Report a problem…*; a *Help* text link (`.lnkb.help-link`) after *Could not connect to this server.* on `suconnectfail`, after the two driver warnings on `su-drvold` and `su-nooptix`, and after each step line of the admin password box; no state added. No auditor has seen it.
+
+- 2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep of the app and the website: the drawn words changed with the screens' (Files, Keys, Transfers, Render Settings, Queue & History, Servers, Set up, Settings, the report box, the sidebar handle, the phone); no state added or removed. Every line is in `Audits/Build/The word sweep, the app and the website — what landed.md`. No auditor has seen it.
+
+- 2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep, Codex's points: the read line's *Stop* drawn as `.mini.inl`; the dependency band's replaced case, History's interrupted-twice line and Settings' Telegram choices reworded; no state added or removed. Every line is in `Audits/Build/The word sweep, Codex's points — what landed.md`. No auditor has seen it.
+
+- 2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — UI consistency, the fixes: the stylesheet's block *UI CONSISTENCY (2026-11-13)*, one size of reset cross, a refused name's weight, the narrow sidebar badge, the transfer stripes; in the markup the read line in the held line, the held cross, the preview's one line and View Layer row, the arrows piece, the Advanced row, the Texture Limit width, the check's held crosses and its selection bar under the rows, file figures in the ordinary face. No state added or removed. Every line is in `Audits/Build/UI consistency, the fixes — what landed.md`. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Batch 1: address checks, single Add press and Telegram setup and retry corrections.
+2026-11-14 — GPT-6.1-Sol (Codex) — Drew the batch 2 disk, queue-record and download-folder messages.
+2026-11-14 — Claude Opus 5.5 — drew delete-own, fb-live-ssh and damaged (batch 2).
+2026-11-14 — Claude Opus 5.5 — drew su-other, su-discard and the chat named on set-bot-start (the Creator's batch 1 rulings).
+2026-11-14 — Claude Opus 5.5 — drew the copy's offer in damaged (the Creator's ruling on 97, Rough share 1).
+2026-11-14 — Claude Opus 5.5 — drew the no-answer ending in svsc (Rough share 1, 73).
+2026-11-14 — Claude Opus 5.5 — drew the billing line in svsc (Rough share 2, 129).
+2026-11-14 — Claude Opus 5.5 — noted Force stop beside the timed-out stop's note (Rough share 3, 287).
+2026-11-14 — Claude Opus 5.5 — drew the first-settings line in qpart and its note (Rough share 3, 462).
+2026-11-14 — Claude Opus 5.5 — drew `upd-setup`, the update box while a server is being set up (Rough share 5, 424).
+2026-11-14 — Claude Opus 5.5 — `q-driver`: the box names transfers (the leftovers of the Rough what-if answers, 144).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: seven lines reworded in place (damaged record, blocked folder, part banner, full disk at the ending, no-answer ending, the replace and discard boxes); no state added or removed.
+2026-11-15 — Claude Opus 5.5 — the runner's rulings on Codex's word check: the blocked folder's line reworded in place; no state added or removed.
+2026-11-15 — Claude Opus 5.5 (Claude Code) — before 0.4.0's second try (hosted run 43727887590): Files' Kind column 126 → 134 pixels and History's ending column 120 → 130 so both read whole in Linux's wider face; Telegram's five choices share one set of columns (subgrid), so a wider name moves all five descriptions together; the sample error line's address is `Smoozy-releases`. No state added or removed. No auditor has seen it.
+2026-11-15 — Claude Opus 5.5 (Claude Code subagent), a builder — finding 49's inline button takes back its whole height, so it adds nothing to its line in Windows' faces either (hosted run 43746222478).

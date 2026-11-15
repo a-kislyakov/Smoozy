@@ -50,8 +50,14 @@ input.fld,
   background: none;
 }
 input.fld { background: var(--bg); }
+/* Host, Port and Username are in the address's fixed-width face, as the
+ * drawing draws them; `font: inherit` above had taken it away (the UI at every
+ * size, B-15). */
+input.fld.mono { font-family: var(--face-mono); }
 .svnamefield { display: flex; align-items: center; cursor: text; }
-.svnamefield input { border: 0; padding: 0; min-width: 0; flex: 0 1 12em; }
+/* The name takes the field's width, so a typed name is not cut while there is
+ * room, and *optional* sits at the field's end (B-15). */
+.svnamefield input { border: 0; padding: 0; min-width: 0; flex: 1 1 12em; }
 .svnamefield input:focus-visible { outline: none; }
 .svkeyfield { flex: 1; min-width: 0; width: 100%; }
 
@@ -108,3 +114,32 @@ button.sw { padding: 0; font: inherit; border-color: transparent; }
 body > .svdialogs > .modal { position: fixed; }
 
 body > .svdialogs > .svnotyet { position: fixed; left: 8px; bottom: 8px; z-index: 30; }
+
+/* ── 6. The row's failure line, as the drawing lays out `.svfail` ───────────
+ *
+ * **The runner's ruling on the twenty-ninth notes' piece E, 2026-11-10.** The
+ * drawing's line is one run of text: the dot, the words in the failure colour
+ * and the ordinary weight, and the cross straight after them (`.fx`'s own
+ * size, padding and gap). The one shape (`web/the-failure-shape.js`) builds a
+ * line of its own parts, laid out as a row with the cross pushed to the far
+ * end, so here it is set back to the drawing's run. The application hands the
+ * row only the cross (`Room::ACollapsedRow`), so *Could not reconnect.* reads
+ * on one line in the name column.
+ */
+.svextra .failure-row { display: block; }
+.svextra .failure-row .failure-said,
+.svextra .failure-row .failure-acts { display: inline; }
+.svextra .failure-row .failure-said b { font-weight: inherit; }
+.svextra .failure-row .failure-clear {
+  margin-left: 5px;
+  font-size: var(--t-md);
+  padding: 0 3px;
+  border-radius: var(--r-xs);
+}
+.svextra .failure-row .failure-clear:hover { background: var(--sel); }
+
+/* **Renaming leaves the row its height**: the field overhangs its line by
+ * the difference between its height and the name's line, as the drawing's
+ * inline fields do, rather than growing the row by nine pixels (UI
+ * consistency, finding 53). */
+.svname input.fld { margin-block: calc((1.62 * var(--t-base) - (1.62 * var(--t-md) + 10px)) / 2); }

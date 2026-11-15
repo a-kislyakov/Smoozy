@@ -39,3 +39,10 @@
 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — six import nodes up to 5.2 and seven in 5.3. No auditor has seen it.
 2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — kept readings in the check.md`, outside any round — the check reads the file unless it and its libraries are unchanged since this run read them. No auditor has seen it.
 2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a job pressed during a send, and the check beside it.md`, outside any round — One more round after an upload that ends during a check. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 6, the dependency check.md`, outside any round — *Checking a file*: rows no scene uses are grouped and left out of the upload until included, the cost written; the note only on rows of the file checked. *What the user can change*: *Include it*. *Sending them up* and *When the warning stops* follow. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 11, linked files go first.md`, outside any round — *Checking a file*: the check's upload reads each linked `.blend` as it lands and sends what it needs with the same upload, linked files first; the cost before the press said; a deep chain settles inside one upload; *What this module does not do* and *A connection lost during the check* follow. No auditor has seen it.
+2026-11-14 — Claude Opus 5.5 — added Batch 3 — what the check keeps true.
+
+2026-11-15 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/What if — the answers/Brief — colour spaces and image sequences, built from the research.md`, outside any round — *Colour spaces and image sequences*: a picture stored as an image sequence goes up whole, with the files the job's frames need and do not find named and counted as missing; a colour space, view transform or display the server's Blender lacks is said at the check. No auditor has seen it.

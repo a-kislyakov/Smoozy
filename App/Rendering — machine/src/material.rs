@@ -884,6 +884,7 @@ pub mod testing {
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_files_own_scripts_run: None,
                 the_folders_at_the_machines_top: None,
             },
             taken_by: a_blender(),
@@ -906,6 +907,7 @@ pub mod testing {
             simplify: SimplifyEntries::default(),
             the_check_is_written_as_a_picture: false,
             the_check_writes_into: None,
+            the_range_jobs_frames: None,
         }
     }
 

@@ -109,12 +109,12 @@ use crate::events::{Event, Posted, Said, Subject, TheOneQueue};
 use crate::picker::{self, Asking, HowMany, Picked, WhatMayBeChosen};
 use crate::platform::collision::{self, WhyNothingWasPublished};
 use crate::platform::downloads_folder::TheProposal;
-use crate::platform::files::{self, Durability, Recheck};
+use crate::platform::files::{self, Durability, Recheck, Refusal};
 use crate::record::failure_records::{DurableSubject, Kind};
 use crate::reveal::Revealed;
 use crate::start::Started;
 use crate::the_report_take::TheTake;
-use crate::typography::{Prose, Verbatim};
+use crate::typography::{a_figure_with_its_unit, Prose, Verbatim};
 
 /// **The kind the page listens for: the box, in whichever reading it is in.**
 ///
@@ -150,7 +150,7 @@ pub(crate) mod words {
     pub const WHAT_WENT_WRONG: &str = "What went wrong?";
     pub const THE_FILE_HOLDS: &str = "The report contains Smoozy’s log, your servers’ replies, and the names of files, folders, scenes, servers and users.";
     /// The free-software drawing’s own sentence, 2026-10-27.
-    pub const NEVER_YOUR_KEYS: &str = "Never your keys.";
+    pub const NEVER_YOUR_KEYS: &str = "No keys, passphrases or file contents.";
     pub const SMOOZY_SENDS_NOTHING: &str = "You send it yourself.";
     pub const SAVE_IN: &str = "Save in";
     pub const NO_FOLDER_CHOSEN: &str = "No folder chosen";
@@ -165,14 +165,14 @@ pub(crate) mod words {
     /// After the file's name, where the folder is the downloads folder the
     /// system proposed and the reveal said it opened.
     pub const IS_IN_YOUR_DOWNLOADS_FOLDER_WHICH_SMOOZY_HAS_JUST_OPENED: &str =
-        "is in your Downloads folder, which has just opened.";
+        "is in your Downloads folder. The folder is open.";
     /// After the file's name, before the folder's path — the drawing's
     /// not-opened sentence, and the opened one where the folder is another.
     pub const IS_IN: &str = "is in";
     /// After a folder that is not the downloads folder, where the reveal said
     /// it opened — the drawing's own clause, after the path the drawing names
     /// in its other saved reading.
-    pub const WHICH_SMOOZY_HAS_JUST_OPENED: &str = ", which has just opened.";
+    pub const WHICH_SMOOZY_HAS_JUST_OPENED: &str = ". The folder is open.";
     pub const FULL_STOP: &str = ".";
     pub const SMOOZY_COULD_NOT_OPEN_THE_FOLDER: &str = "Could not open the folder.";
     pub const ATTACH_IT_TO_AN_EMAIL_TO: &str = "Attach it to an email to";
@@ -183,6 +183,25 @@ pub(crate) mod words {
     /// the short form the app's failures use (*Could not read settings.*), and
     /// owed to Design.
     pub const THE_REPORT_WAS_NOT_SAVED: &str = "Could not save the report.";
+    /// **`Reporting a problem` V8a: the reason, where the user can act on
+    /// it** — `Design/Whole app`'s sentences of 2026-11-09 (the twenty-eighth
+    /// notes, note 20), one per class the platform file adapter names, in the
+    /// words Transfers uses for a download folder. Not drawn.
+    pub const NOT_SAVED_THE_FOLDER_IS_GONE: &str = "Could not save the report: folder not found.";
+    pub const NOT_SAVED_THE_DISK_IS_FULL: &str = "Could not save the report: disk is full.";
+    pub const NOT_SAVED_PERMISSION_DENIED: &str = "Could not save the report: permission denied.";
+    pub const NOT_SAVED_DISK_WRITE_ERROR: &str = "Could not save the report: disk write error.";
+    /// **The copy icon's label beside the address** — the drawing's own
+    /// (`#rpbox`, the twenty-eighth notes, note 6).
+    pub const COPY: &str = "Copy";
+    /// After a press, and where the copy did not land — `Design/Whole app`'s
+    /// words of 2026-11-09, not drawn.
+    pub const COPIED: &str = "Copied";
+    pub const NOT_COPIED: &str = "Could not copy";
+    /// **Where K25 could not ask for the mail link**
+    /// (`Reporting a problem` V10) — `Design/Whole app`'s sentence of
+    /// 2026-11-09, not drawn.
+    pub const THE_MAIL_LINK_DID_NOT_OPEN: &str = "Could not open the email link.";
 }
 
 // ── What the box was opened with ────────────────────────────────────────────
@@ -407,8 +426,9 @@ enum ThePhase {
         the_folder_opened: bool,
     },
     /// The write did not land. The box asks again, with the user's sentence
-    /// still in the field.
-    NotSaved,
+    /// still in the field, and says why where the user can act on it
+    /// (`Reporting a problem` V8a).
+    NotSaved { refusal: Option<Refusal> },
 }
 
 /// One open box.
@@ -502,7 +522,7 @@ pub fn a_folder_was_chosen(
         let Some(open) = held.open.as_mut() else {
             return Err(());
         };
-        if !matches!(open.phase, ThePhase::Asking | ThePhase::NotSaved) {
+        if !matches!(open.phase, ThePhase::Asking | ThePhase::NotSaved { .. }) {
             return Err(());
         }
         open.folder = Some(TheFolder::ChosenByTheUser(folder));
@@ -517,7 +537,7 @@ pub fn a_folder_was_chosen(
 pub fn the_save_begins(the_box: &Mutex<TheBoxHeld>) -> Option<(u64, Option<TheFolder>, TheOpening)> {
     let held = held(the_box);
     let open = held.open.as_ref()?;
-    if !matches!(open.phase, ThePhase::Asking | ThePhase::NotSaved) {
+    if !matches!(open.phase, ThePhase::Asking | ThePhase::NotSaved { .. }) {
         return None;
     }
     Some((held.generation, open.folder.clone(), open.opening.clone()))
@@ -589,7 +609,7 @@ pub fn the_save_ended(
                 }),
                 the_folder_opened: *the_folder_opened,
             },
-            WhatTheSaveCameTo::NotSaved { .. } => ThePhase::NotSaved,
+            WhatTheSaveCameTo::NotSaved { refusal, .. } => ThePhase::NotSaved { refusal: *refusal },
         };
         open.clone()
     };
@@ -655,6 +675,21 @@ fn the_saved_sentence(
     }
 }
 
+/// **`Reporting a problem` V8a: what the box says of a save that did not
+/// land** — the reason, in plain words, where the platform file adapter's
+/// class names one the user can act on (`Desktop app and delivery` F3, F4,
+/// F4a), and the bare sentence for any other refusal and every failure before
+/// the write. Nothing more is inferred.
+fn the_not_saved_sentence(refusal: Option<Refusal>) -> &'static str {
+    match refusal {
+        Some(Refusal::DestinationGone) => words::NOT_SAVED_THE_FOLDER_IS_GONE,
+        Some(Refusal::FullVolume) => words::NOT_SAVED_THE_DISK_IS_FULL,
+        Some(Refusal::PermissionRefused) => words::NOT_SAVED_PERMISSION_DENIED,
+        Some(Refusal::WriteFailedAtTheDevice) => words::NOT_SAVED_DISK_WRITE_ERROR,
+        Some(Refusal::Unclassified) | None => words::THE_REPORT_WAS_NOT_SAVED,
+    }
+}
+
 /// **The box, as one event**: every word through the point, every name, path
 /// and figure by the verbatim route (A6, X7, X9), and the reading it is in.
 fn the_box_says(generation: u64, open: &TheOpenBox) -> Event {
@@ -664,7 +699,7 @@ fn the_box_says(generation: u64, open: &TheOpenBox) -> Event {
         ThePhase::Asking => "asking",
         ThePhase::Composing => "composing",
         ThePhase::Saved { .. } => "saved",
-        ThePhase::NotSaved => "not-saved",
+        ThePhase::NotSaved { .. } => "not-saved",
     };
     let mut event = Event::about(Subject::TheRun, THE_REPORT_BOX)
         .saying("reading", value(reading))
@@ -724,6 +759,11 @@ fn the_box_says(generation: u64, open: &TheOpenBox) -> Event {
                 .saying("savedHeading", prose(words::THE_REPORT_IS_SAVED))
                 .saying("attachIt", prose(words::ATTACH_IT_TO_AN_EMAIL_TO))
                 .saying("address", value(THE_ADDRESS))
+                // `Reporting a problem` V10: the mail link and its copy icon.
+                .saying("copy", prose(words::COPY))
+                .saying("copied", prose(words::COPIED))
+                .saying("notCopied", prose(words::NOT_COPIED))
+                .saying("mailLinkFailed", prose(words::THE_MAIL_LINK_DID_NOT_OPEN))
                 .saying("close", prose(words::CLOSE));
             let parts = the_saved_sentence(
                 the_file_name,
@@ -745,8 +785,8 @@ fn the_box_says(generation: u64, open: &TheOpenBox) -> Event {
                 event = event.saying("folderOpened", value("true"));
             }
         }
-        ThePhase::NotSaved => {
-            event = event.saying("notSaved", prose(words::THE_REPORT_WAS_NOT_SAVED));
+        ThePhase::NotSaved { refusal } => {
+            event = event.saying("notSaved", prose(the_not_saved_sentence(*refusal)));
         }
         ThePhase::Asking | ThePhase::Composing => {}
     }
@@ -803,16 +843,18 @@ pub enum WhatTheSaveCameTo {
         /// K22's outcome, as the reveal reported it.
         the_folder_opened: bool,
     },
-    /// Nothing claims a file. `reported` is for the diary of whoever reads
-    /// this code and is never shown.
-    NotSaved { reported: String },
+    /// Nothing claims a file. `refusal` is the platform file adapter's class
+    /// where the write was refused (F4), and nothing where the failure came
+    /// before the write or the system gave no class; `reported` is the whole
+    /// reason, for the diary (`Reporting a problem` V8a), and is never shown.
+    NotSaved { refusal: Option<Refusal>, reported: String },
 }
 
 /// What the write came to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WhatTheWriteCameTo {
     Written { the_file_name: String, path: PathBuf },
-    NotWritten { reported: String },
+    NotWritten { refusal: Option<Refusal>, reported: String },
 }
 
 /// **The most names the write tries before it says it could not.** A folder
@@ -830,6 +872,20 @@ fn the_staged_name() -> Option<String> {
         .map(|one| format!(".smoozy-report-{}.smoozy-part", one.as_text()))
 }
 
+/// **F1's re-check in fixed words**, for the diary's *report not written* line
+/// (`Reporting a problem` §11): what was at the path, never a dump of the
+/// value (`Reporting a problem` J3).
+fn what_the_recheck_found(recheck: &Recheck) -> String {
+    match recheck {
+        Recheck::Present { bytes } => format!("held {}", a_figure_with_its_unit(bytes, "bytes")),
+        Recheck::ShortOrDifferent { bytes, expected } => {
+            format!("held {} of {expected}", a_figure_with_its_unit(bytes, "bytes"))
+        }
+        Recheck::Absent => "was not there".to_string(),
+        Recheck::CouldNotLook { reported } => format!("could not be looked at: {reported}"),
+    }
+}
+
 /// **`Reporting a problem` V6 and `Reporting a problem` V5: the file written
 /// atomically, under a name that never collides, and re-checked by path.**
 ///
@@ -841,6 +897,7 @@ fn the_staged_name() -> Option<String> {
 pub fn the_file_is_written(text: &str, folder: &Path, made_at: SystemTime, utc_offset_seconds: i32) -> WhatTheWriteCameTo {
     let Some(staged_name) = the_staged_name() else {
         return WhatTheWriteCameTo::NotWritten {
+            refusal: None,
             reported: "this computer would not supply random bytes for the staged name".to_string(),
         };
     };
@@ -849,10 +906,14 @@ pub fn the_file_is_written(text: &str, folder: &Path, made_at: SystemTime, utc_o
     let written = files::write_whole_file(&staged, bytes, Durability::ToTheDevice);
     if !written.wrote_the_file() {
         let _ = files::remove_file(&staged);
-        return WhatTheWriteCameTo::NotWritten {
-            reported: match written.first_error {
-                Some(failure) => failure.reported,
-                None => format!("the staged file read back as {:?}", written.recheck),
+        return match written.first_error {
+            Some(failure) => WhatTheWriteCameTo::NotWritten {
+                refusal: Some(failure.refusal),
+                reported: failure.reported,
+            },
+            None => WhatTheWriteCameTo::NotWritten {
+                refusal: None,
+                reported: format!("the staged file, read back, {}", what_the_recheck_found(&written.recheck)),
             },
         };
     }
@@ -869,7 +930,8 @@ pub fn the_file_is_written(text: &str, folder: &Path, made_at: SystemTime, utc_o
                         }
                     }
                     other => WhatTheWriteCameTo::NotWritten {
-                        reported: format!("the published file read back as {other:?}"),
+                        refusal: None,
+                        reported: format!("the published file, read back, {}", what_the_recheck_found(&other)),
                     },
                 };
             }
@@ -877,6 +939,7 @@ pub fn the_file_is_written(text: &str, folder: &Path, made_at: SystemTime, utc_o
             Err(WhyNothingWasPublished::ItWasRefused(failure)) => {
                 let _ = files::remove_file(&staged);
                 return WhatTheWriteCameTo::NotWritten {
+                    refusal: Some(failure.refusal),
                     reported: failure.reported,
                 };
             }
@@ -884,6 +947,7 @@ pub fn the_file_is_written(text: &str, folder: &Path, made_at: SystemTime, utc_o
     }
     let _ = files::remove_file(&staged);
     WhatTheWriteCameTo::NotWritten {
+        refusal: None,
         reported: format!("every one of {THE_MOST_NAMES_TRIED} names was taken"),
     }
 }
@@ -940,7 +1004,7 @@ struct WhatWasReadFirst {
 }
 
 fn what_is_read_first(started: &Mutex<Started>, opening: &TheOpening) -> Result<WhatWasReadFirst, String> {
-    let started = started.lock().map_err(|_| "the start report is poisoned".to_string())?;
+    let started = started.lock().map_err(|_| "the application's start state could not be read".to_string())?;
     let diary = started
         .diary
         .as_ref()
@@ -954,7 +1018,10 @@ fn what_is_read_first(started: &Mutex<Started>, opening: &TheOpening) -> Result<
     let captured = match (&the_job, started.record.as_ref()) {
         (Some(job), Some(record)) => as_the_report_carries_it(
             crate::record::kept_words::the_outcomes_kept_for(record.connection(), job)
-                .map_err(|failure| format!("the kept outcomes would not read: {failure:?}"))?,
+                // Fixed words: the record's own failure is a value dump, which the
+                // diary's *report not written* line may not carry
+                // (`Reporting a problem` J3).
+                .map_err(|_| "the job's kept output outcomes would not read".to_string())?,
         ),
         _ => Vec::new(),
     };
@@ -979,15 +1046,75 @@ pub fn the_save_is_carried_out(
     still_wanted: impl Fn() -> bool,
     request: &TheSaveRequest,
 ) -> WhatTheSaveCameTo {
+    let came_to = the_save_is_tried(started, take, route, &still_wanted, request);
+    // `Reporting a problem` V8a: **the whole reason goes into the diary** —
+    // unless the box was shut meanwhile, which is the user's cancel.
+    if let WhatTheSaveCameTo::NotSaved { reported, .. } = &came_to {
+        if still_wanted() {
+            the_report_not_written_is_kept(started, &request.opening, Some(&request.folder), reported);
+        }
+    }
+    came_to
+}
+
+/// **The identities a report's act line carries** — `Reporting a problem`
+/// §11: the run's own for a crash, the handover's for a failure, none from the
+/// menu.
+fn the_identities_it_carries(opening: &TheOpening) -> Vec<Identity> {
+    match opening {
+        TheOpening::AFailure(handover) => handover.the_identities_it_carries(),
+        TheOpening::TheMenu => Vec::new(),
+        TheOpening::ACrash { run, .. } => vec![run.clone()],
+    }
+}
+
+/// **`Reporting a problem` §11's second act, *a report not written*,** with
+/// the whole reason. **L16: nothing is owed either way** — a line the diary
+/// did not take loses the line and nothing else. With no diary, or no run to
+/// name, nothing is written (`Reporting a problem` U7).
+fn the_report_not_written_is_kept(started: &Mutex<Started>, opening: &TheOpening, folder: Option<&Path>, reported: &str) {
+    let Ok(started) = started.lock() else {
+        return;
+    };
+    let (Some(service), Some(run)) = (started.diary.as_ref(), started.run.clone()) else {
+        return;
+    };
+    let folder = folder.map(|folder| folder.to_string_lossy().into_owned());
+    let line = report_file::the_report_not_written_line(
+        &run,
+        SystemTime::now(),
+        folder.as_deref(),
+        reported,
+        &the_identities_it_carries(opening),
+    );
+    let _ = ModulesDiary {
+        service,
+        declarations: &started.declarations,
+        run,
+        module: THE_MODULE,
+    }
+    .write(&line);
+}
+
+/// The press, tried — everything [`the_save_is_carried_out`] does but keep a
+/// failure's reason.
+fn the_save_is_tried(
+    started: &Mutex<Started>,
+    take: impl FnOnce(Option<&Identity>) -> Option<TheTake>,
+    route: &dyn TheRoute,
+    still_wanted: &dyn Fn() -> bool,
+    request: &TheSaveRequest,
+) -> WhatTheSaveCameTo {
     let read = match what_is_read_first(started, &request.opening) {
         Ok(read) => read,
-        Err(reported) => return WhatTheSaveCameTo::NotSaved { reported },
+        Err(reported) => return WhatTheSaveCameTo::NotSaved { refusal: None, reported },
     };
     // `Reporting a problem` G1: only for a report naming a job, and the take
     // itself answers *unreachable* where the job's server is not connected.
     let adds = take(read.the_job.as_ref()).map(|took| what_the_machine_adds(took, read.captured));
     if !still_wanted() {
         return WhatTheSaveCameTo::NotSaved {
+            refusal: None,
             reported: "the box was shut before the report was written".to_string(),
         };
     }
@@ -1011,16 +1138,12 @@ pub fn the_save_is_carried_out(
         request.utc_offset_seconds,
     ) {
         WhatTheWriteCameTo::Written { the_file_name, path } => (the_file_name, path),
-        WhatTheWriteCameTo::NotWritten { reported } => return WhatTheSaveCameTo::NotSaved { reported },
+        WhatTheWriteCameTo::NotWritten { refusal, reported } => return WhatTheSaveCameTo::NotSaved { refusal, reported },
     };
     // `Reporting a problem` V9 and §11: the act line, once the file is there.
     if let Ok(started) = started.lock() {
         if let Some(service) = started.diary.as_ref() {
-            let identities = match &request.opening {
-                TheOpening::AFailure(handover) => handover.the_identities_it_carries(),
-                TheOpening::TheMenu => Vec::new(),
-                TheOpening::ACrash { run, .. } => vec![run.clone()],
-            };
+            let identities = the_identities_it_carries(&request.opening);
             let line = report_file::the_report_written_line(
                 &read.this_run,
                 SystemTime::now(),
@@ -1104,6 +1227,7 @@ fn the_folder_ask(starting_at: Option<PathBuf>) -> Asking {
         how_many: HowMany::One,
         starting_at,
         title: Prose::new(words::SAVE_IN),
+        the_value_after_the_title: None,
     }
 }
 
@@ -1168,12 +1292,18 @@ pub async fn the_report_is_saved<R: Runtime>(
         0
     };
     if the_users_sentence.len() > THE_LONGEST_USERS_SENTENCE {
+        let reported = "the sentence is longer than the report's ceiling";
+        // `Reporting a problem` V8a: the reason goes into the diary here too.
+        if let Some(started) = app.try_state::<Mutex<Started>>() {
+            the_report_not_written_is_kept(&started, &opening, folder.as_ref().map(TheFolder::path), reported);
+        }
         let _ = the_save_ended(
             &THE_BOX,
             &queue,
             generation,
             &WhatTheSaveCameTo::NotSaved {
-                reported: "the sentence is longer than the report's ceiling".to_string(),
+                refusal: None,
+                reported: reported.to_string(),
             },
         );
         return;
@@ -1195,12 +1325,15 @@ pub async fn the_report_is_saved<R: Runtime>(
     if !the_box_is_underway(&THE_BOX, &queue, generation, folder) {
         return;
     }
+    // Kept for the diary's line should the worker not come back.
+    let (the_opening, the_folder) = (request.opening.clone(), request.folder.clone());
     // **Off the drawing thread**: the take waits on the server's own point,
     // the write forces bytes to the device, and the reveal asks the system.
     let worker = app.clone();
     let came_to = tauri::async_runtime::spawn_blocking(move || {
         let Some(started) = worker.try_state::<Mutex<Started>>() else {
             return WhatTheSaveCameTo::NotSaved {
+                refusal: None,
                 reported: "the start report is not there".to_string(),
             };
         };
@@ -1213,8 +1346,16 @@ pub async fn the_report_is_saved<R: Runtime>(
         )
     })
     .await
-    .unwrap_or_else(|_| WhatTheSaveCameTo::NotSaved {
-        reported: "the worker did not come back".to_string(),
+    .unwrap_or_else(|_| {
+        let reported = "the worker did not come back";
+        // `Reporting a problem` V8a: the reason goes into the diary here too.
+        if let Some(started) = app.try_state::<Mutex<Started>>() {
+            the_report_not_written_is_kept(&started, &the_opening, Some(&the_folder), reported);
+        }
+        WhatTheSaveCameTo::NotSaved {
+            refusal: None,
+            reported: reported.to_string(),
+        }
     });
     let _ = the_save_ended(&THE_BOX, &queue, generation, &came_to);
 }
@@ -1234,6 +1375,35 @@ pub fn the_report_box_is_shut(
     } else { the_box_is_shut_in(&THE_BOX); }
 }
 
+
+/// **What the page is told after a press of the address**, and it is about the
+/// ask rather than about a mail being written — K25 says only that it asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum TheMailLink {
+    ItWasAsked,
+    /// The system would not take the mail link, or this computer has nothing
+    /// to take it; the box says so and the address stays
+    /// (`Reporting a problem` V10).
+    ItCouldNotBeOpened,
+}
+
+/// **The saved box's address, pressed** — `Reporting a problem` V10. **A
+/// closed command**, as About's source link is: it takes nothing, and the
+/// address is K25's fixed mail link, never one from the page.
+#[tauri::command]
+pub fn the_report_address_is_opened() -> TheMailLink {
+    the_mail_link_is_asked_with(crate::the_address_opener::open)
+}
+
+fn the_mail_link_is_asked_with(
+    ask: impl FnOnce(crate::the_address_opener::WhichAddress) -> crate::the_address_opener::Opened,
+) -> TheMailLink {
+    use crate::the_address_opener::{Opened, WhichAddress};
+    match ask(WhichAddress::TheReportAddress) {
+        Opened::ItWasAsked => TheMailLink::ItWasAsked,
+        Opened::ItCouldNotBeOpened => TheMailLink::ItCouldNotBeOpened,
+    }
+}
 
 /// `Reporting a problem` C2 and `Reporting a problem` C4: run-held only; no failure or suppression row.
 #[derive(Default)]
@@ -1337,6 +1507,8 @@ mod tests {
             the_sweep_left_behind: Vec::new(),
             record: Some(crate::record::LocalRecord::open_at(&record_path).expect("a record")),
             record_trouble: None,
+            the_record_is_newer_than_this_copy: false,
+            the_record_is_damaged: false,
             diary: Some(DiaryService::open_at(area.clone()).expect("a diary")),
             declarations: crate::start::the_declarations(),
             what_modules_declare: crate::presentation::declarations::TheDeclarations::default(),
@@ -1970,7 +2142,7 @@ mod tests {
         the_box_opens(&the_box, &queue, TheOpening::TheMenu, TheProposal::TheSystemNamesThisFolder("/nowhere".into())).unwrap();
         let (generation, folder, _) = the_save_begins(&the_box).unwrap();
         the_box_is_underway(&the_box, &queue, generation, folder.unwrap());
-        the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::NotSaved { reported: "full".into() }).unwrap();
+        the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::NotSaved { refusal: None, reported: "full".into() }).unwrap();
         let again = the_last(&kept);
         assert_eq!(said(&again, "reading"), Some("not-saved"));
         assert_eq!(said(&again, "notSaved"), Some(prose(words::THE_REPORT_WAS_NOT_SAVED).as_str()));
@@ -1992,10 +2164,136 @@ mod tests {
         assert!(!the_press_still_stands(&the_box, generation));
         the_box_opens(&the_box, &queue, TheOpening::TheMenu, TheProposal::TheSystemNamesThisFolder("/a".into())).unwrap();
         let posted = kept.lock().unwrap().len();
-        assert!(the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::NotSaved { reported: String::new() }).is_err());
+        assert!(the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::NotSaved { refusal: None, reported: String::new() }).is_err());
         assert!(a_folder_was_chosen(&the_box, &queue, generation, "/b".into()).is_err());
         assert_eq!(kept.lock().unwrap().len(), posted);
         assert_eq!(said(&the_last(&kept), "reading"), Some("asking"));
+    }
+
+    // ── The twenty-eighth notes, notes 6 and 20 ─────────────────────────────
+
+    /// **`Reporting a problem` V8a: a save that did not land says why where the
+    /// user can act on it** — one sentence per class the platform file adapter
+    /// names, the bare sentence for any other — and the system's own words
+    /// never reach the box (the twenty-eighth notes, note 20).
+    #[test]
+    fn twenty_eighth_20_a_save_that_did_not_land_says_why_where_the_user_can_act() {
+        for (refusal, sentence) in [
+            (Some(Refusal::DestinationGone), words::NOT_SAVED_THE_FOLDER_IS_GONE),
+            (Some(Refusal::FullVolume), words::NOT_SAVED_THE_DISK_IS_FULL),
+            (Some(Refusal::PermissionRefused), words::NOT_SAVED_PERMISSION_DENIED),
+            (Some(Refusal::WriteFailedAtTheDevice), words::NOT_SAVED_DISK_WRITE_ERROR),
+            (Some(Refusal::Unclassified), words::THE_REPORT_WAS_NOT_SAVED),
+            (None, words::THE_REPORT_WAS_NOT_SAVED),
+        ] {
+            let the_box = Mutex::new(TheBoxHeld::new());
+            let (queue, kept) = a_queue();
+            the_box_opens(&the_box, &queue, TheOpening::TheMenu, TheProposal::TheSystemNamesThisFolder("/Volumes/Work".into())).unwrap();
+            let (generation, folder, _) = the_save_begins(&the_box).unwrap();
+            the_box_is_underway(&the_box, &queue, generation, folder.unwrap());
+            let reported = "No space left on device (os error 28)";
+            the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::NotSaved { refusal, reported: reported.into() }).unwrap();
+            let again = the_last(&kept);
+            assert_eq!(said(&again, "reading"), Some("not-saved"));
+            assert_eq!(said(&again, "notSaved"), Some(prose(sentence).as_str()), "{refusal:?}");
+            assert!(
+                !again.said.values().any(|one| match one {
+                    Said::Value(value) => value.as_str().contains("os error"),
+                    Said::Prose(words) => words.as_str().contains("os error"),
+                }),
+                "{refusal:?}: the system's own words reached the box"
+            );
+            assert!(the_save_begins(&the_box).is_some(), "{refusal:?}: the box does not ask again");
+        }
+    }
+
+    /// **A folder gone from under the save is said as such, and the whole
+    /// reason goes into the diary** as §11's *report not written* act line —
+    /// `Reporting a problem` V8a, end to end over a real folder that is not
+    /// there (the twenty-eighth notes, note 20).
+    #[test]
+    fn twenty_eighth_20_a_folder_gone_from_under_the_save_is_said_and_its_reason_kept_in_the_diary() {
+        let (started, _, run) = a_started("gone-press");
+        started.lock().unwrap().diary.as_ref().unwrap().write(&a_line(&run, LineKind::Session, "session", vec![run.clone()]));
+        let folder = crate::scratch_folders::a_folder(a_scratch_name("gone-press-folder")).join("removed");
+        let job = an_identity(IdentityKind::Job);
+        let reveal = a_reveal(true);
+        let came_to = the_save_is_carried_out(
+            &started,
+            |_| None,
+            &reveal,
+            || true,
+            &a_request(TheOpening::AFailure(a_history_handover(&job)), &folder),
+        );
+        let WhatTheSaveCameTo::NotSaved { refusal, reported } = came_to else {
+            panic!("{came_to:?}");
+        };
+        assert_eq!(refusal, Some(Refusal::DestinationGone), "{reported}");
+        assert!(!reported.is_empty());
+        assert!(reveal.asked.lock().unwrap().is_empty(), "a file that was not written was revealed");
+        let line = the_diary_holds(&started).pop().expect("a line");
+        assert_eq!(line.kind, LineKind::Act);
+        assert_eq!(line.text, format!("Report not written in {}: {reported}", folder.display()));
+        assert_eq!(line.concerning, vec![job.clone()], "the line carries the handover's subject");
+        assert!(!line.text.contains("arrived"), "the user's sentence reached the diary");
+    }
+
+    /// **A failure before the write with no run to name writes no line** —
+    /// the box still says it did not save, and nothing is written under a run
+    /// the line cannot name (`Reporting a problem` U7).
+    #[test]
+    fn twenty_eighth_20_a_save_with_no_run_to_name_writes_no_line() {
+        let (started, _, run) = a_started("no-record");
+        started.lock().unwrap().diary.as_ref().unwrap().write(&a_line(&run, LineKind::Session, "session", vec![run.clone()]));
+        started.lock().unwrap().run = None;
+        let folder = crate::scratch_folders::a_folder(a_scratch_name("no-record-folder"));
+        let came_to = the_save_is_carried_out(&started, |_| None, &a_reveal(true), || true, &a_request(TheOpening::TheMenu, &folder));
+        assert!(matches!(came_to, WhatTheSaveCameTo::NotSaved { refusal: None, .. }), "{came_to:?}");
+        assert!(the_files_in(&folder).is_empty());
+        assert_eq!(the_diary_holds(&started).len(), 1, "a line was written under no run");
+    }
+
+    /// **`Reporting a problem` V10: the saved reading carries the mail link's
+    /// and the copy icon's words**, and the address the page draws is the bare
+    /// address, nothing composed into it.
+    #[test]
+    fn twenty_eighth_6_the_saved_reading_carries_the_mail_link_and_its_copy_words() {
+        let the_box = Mutex::new(TheBoxHeld::new());
+        let (queue, kept) = a_queue();
+        the_box_opens(&the_box, &queue, TheOpening::TheMenu, TheProposal::TheSystemNamesThisFolder("/Users/artist/Downloads".into())).unwrap();
+        let (generation, folder, _) = the_save_begins(&the_box).unwrap();
+        the_box_is_underway(&the_box, &queue, generation, folder.unwrap());
+        the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::Saved {
+            the_file_name: "smoozy-report-25-aug-14-32.txt".into(),
+            the_folder: "/Users/artist/Downloads".into(),
+            the_folder_opened: true,
+        })
+        .unwrap();
+        let saved = the_last(&kept);
+        assert_eq!(said(&saved, "address"), Some("hello@smoozy.app"));
+        for (key, words) in [
+            ("copy", words::COPY),
+            ("copied", words::COPIED),
+            ("notCopied", words::NOT_COPIED),
+            ("mailLinkFailed", words::THE_MAIL_LINK_DID_NOT_OPEN),
+        ] {
+            assert_eq!(said(&saved, key), Some(prose(words).as_str()), "{key}");
+        }
+    }
+
+    /// **The press asks K25 for the report address by name and for nothing
+    /// else**, through a closed command that takes no argument and is
+    /// registered with the rest.
+    #[test]
+    fn twenty_eighth_6_the_address_press_asks_for_the_mail_link_by_name() {
+        use crate::the_address_opener::{Opened, WhichAddress};
+        for (opened, answer) in [(Opened::ItWasAsked, TheMailLink::ItWasAsked), (Opened::ItCouldNotBeOpened, TheMailLink::ItCouldNotBeOpened)] {
+            let mut asked = Vec::new();
+            assert_eq!(the_mail_link_is_asked_with(|which| { asked.push(which); opened }), answer);
+            assert_eq!(asked, vec![WhichAddress::TheReportAddress]);
+        }
+        assert!(include_str!("reporting.rs").contains("pub fn the_report_address_is_opened() -> TheMailLink {"));
+        assert!(include_str!("mod.rs").contains("reporting::the_report_address_is_opened,"));
     }
 
     // ── The words ───────────────────────────────────────────────────────────
@@ -2072,6 +2370,7 @@ mod tests {
             words::ATTACH_IT_TO_AN_EMAIL_TO,
             words::CLOSE,
             THE_ADDRESS,
+            words::COPY,
         ] {
             assert!(drawn(words), "{words:?} is not the drawing's: {text}");
         }
@@ -2083,6 +2382,26 @@ mod tests {
         // And the one the drawing does not hold says so.
         assert!(!drawn(words::THE_REPORT_WAS_NOT_SAVED));
         assert!(include_str!("reporting.rs").contains("**The one sentence the drawing does not hold.**"));
+        // **The twenty-eighth notes' words, which the drawing does not hold
+        // either, are `Design/Whole app`'s own** (*Reporting a problem*, notes 6
+        // and 20), each word for word.
+        let design = fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Preparation/Design/Whole app.md"),
+        )
+        .expect("the Design document is readable");
+        for words in [
+            words::THE_REPORT_WAS_NOT_SAVED,
+            words::NOT_SAVED_THE_FOLDER_IS_GONE,
+            words::NOT_SAVED_THE_DISK_IS_FULL,
+            words::NOT_SAVED_PERMISSION_DENIED,
+            words::NOT_SAVED_DISK_WRITE_ERROR,
+            words::COPIED,
+            words::NOT_COPIED,
+            words::THE_MAIL_LINK_DID_NOT_OPEN,
+        ] {
+            assert!(!drawn(words), "{words:?} is drawn after all");
+            assert!(design.contains(&format!("*{words}*")), "{words:?} is not Design's");
+        }
     }
 
     /// **The three failure pages hand their handover to the box**, and the
@@ -2237,8 +2556,24 @@ mod tests {
         let (generation, folder, _) = the_save_begins(&the_box).unwrap();
         the_box_is_underway(&the_box, &queue, generation, folder.unwrap());
         keep("composing", &kept);
-        the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::NotSaved { reported: String::new() }).unwrap();
+        the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::NotSaved { refusal: None, reported: String::new() }).unwrap();
         keep("notSaved", &kept);
+        // **The twenty-eighth notes, note 20**: each class the adapter names,
+        // in a box of its own.
+        for (name, refusal) in [
+            ("notSavedGone", Refusal::DestinationGone),
+            ("notSavedFull", Refusal::FullVolume),
+            ("notSavedPermission", Refusal::PermissionRefused),
+            ("notSavedDevice", Refusal::WriteFailedAtTheDevice),
+        ] {
+            let (queue, kept) = a_queue();
+            let the_box = Mutex::new(TheBoxHeld::new());
+            the_box_opens(&the_box, &queue, TheOpening::TheMenu, TheProposal::TheSystemNamesThisFolder(downloads.clone())).unwrap();
+            let (generation, folder, _) = the_save_begins(&the_box).unwrap();
+            the_box_is_underway(&the_box, &queue, generation, folder.unwrap());
+            the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::NotSaved { refusal: Some(refusal), reported: "No such file or directory (os error 2)".into() }).unwrap();
+            keep(name, &kept);
+        }
         let (generation, folder, _) = the_save_begins(&the_box).unwrap();
         the_box_is_underway(&the_box, &queue, generation, folder.unwrap());
         the_save_ended(&the_box, &queue, generation, &WhatTheSaveCameTo::Saved {
@@ -2513,6 +2848,44 @@ mod tests {
             assert_eq!(not_saved["typed"], "The frames aren’t on the drive but Smoozy says they arrived.");
             assert_eq!(not_saved["saveLive"], true);
             lacks("rp-not-saved", words::THE_REPORT_IS_SAVED);
+            // **The twenty-eighth notes, note 20: the reason where the user
+            // can act on it**, in the same failure shape.
+            for (state, sentence) in [
+                ("rp-not-saved-gone", words::NOT_SAVED_THE_FOLDER_IS_GONE),
+                ("rp-not-saved-full", words::NOT_SAVED_THE_DISK_IS_FULL),
+                ("rp-not-saved-permission", words::NOT_SAVED_PERMISSION_DENIED),
+                ("rp-not-saved-device", words::NOT_SAVED_DISK_WRITE_ERROR),
+            ] {
+                assert_eq!(flat(&at(state)["failure"]), plain(&prose(sentence)), "{width} {state}");
+                assert_eq!(at(state)["failureDot"], true, "{width} {state}");
+                lacks(state, "os error");
+            }
+
+            // **The twenty-eighth notes, note 6: the address is a mail link
+            // with the copy icon right beside it.**
+            let link = &out["link"];
+            assert_eq!(link["tag"], "BUTTON", "{width}: the address is not a control: {link}");
+            assert_eq!(link["href"], serde_json::Value::Null, "{width}: the page supplies an address: {link}");
+            assert_eq!(link["iconBeside"], true, "{width}: the copy icon is not right beside the address: {link}");
+            assert_eq!(link["iconShown"], true, "{width}: {link}");
+            assert_eq!(link["sameLine"], true, "{width}: the icon is not on the address's line: {link}");
+            assert_eq!(flat(&link["label"]), plain(&prose(words::COPY)), "{width}: {link}");
+            assert_eq!(flat(&link["name"]), plain(&prose(words::COPY)), "{width}: {link}");
+            assert_eq!(link["selectable"], false, "{width}: a link a click acts on is selectable: {link}");
+            assert_eq!(
+                out["presses"]["address"],
+                serde_json::json!([{"command": "the_report_address_is_opened", "args": {}}]),
+                "{width}: the press names an address or asks twice"
+            );
+            assert_eq!(flat(&link["failureWhenAsked"]), "", "{width}: a mail link that opened is said to have failed");
+            assert_eq!(flat(&link["failure"]), plain(&prose(words::THE_MAIL_LINK_DID_NOT_OPEN)), "{width}: {link}");
+            assert_eq!(link["failureDot"], true, "{width}: {link}");
+            assert_eq!(link["addressAfterFailure"], THE_ADDRESS, "{width}: the address went with the failure");
+            assert_eq!(link["copied"], serde_json::json!([THE_ADDRESS]), "{width}: the bare address was not what was copied");
+            assert_eq!(flat(&link["labelAfterCopy"]), plain(&prose(words::COPIED)), "{width}: {link}");
+            assert_eq!(flat(&link["labelAfterLeaving"]), plain(&prose(words::COPY)), "{width}: {link}");
+            assert_eq!(flat(&link["labelWhenRefused"]), plain(&prose(words::NOT_COPIED)), "{width}: {link}");
+            assert_eq!(flat(&link["failureOnARedraw"]), "", "{width}: the failure outlived a new reading");
 
             // **The presses.**
             let presses = &out["presses"];
@@ -2527,7 +2900,9 @@ mod tests {
             assert_eq!(presses["fresh"], "", "{width}: a box opened anew kept the last sentence");
             assert_eq!(presses["savedAgain"], 0, "{width}: a press reached the application while the report was prepared");
             // **A failure shape's *Report a problem…* opens the box with M33's
-            // handover**, through the shared half's own drawing.
+            // handover**, drawn straight from the shape in its expanded room
+            // (the twenty-ninth notes' piece E took the window's foot away, and
+            // the server row's line carries no report control).
             assert_eq!(
                 presses["fromAFailure"],
                 serde_json::json!({
@@ -2554,17 +2929,23 @@ mod tests {
 <script>
   window.__calls = [];
   window.__TAURI__ = {
-    core: { invoke(command, args) { window.__calls.push({ command, args: args || {} }); return Promise.resolve(null); } },
+    core: { invoke(command, args) { window.__calls.push({ command, args: args || {} }); return Promise.resolve((window.__answers || {})[command] ?? null); } },
     event: { listen(name, back) { window.__listener = back; return Promise.resolve(() => {}); } },
   };
+  window.__copied = [];
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText(text) {
+    if (window.__clipboardRefuses) return Promise.reject(new Error("refused"));
+    window.__copied.push(text); return Promise.resolve();
+  } } });
+  document.execCommand = () => !window.__clipboardRefuses;
   window.__troubles = [];
   console.error = (...said) => window.__troubles.push(said.map((one) => String(one && one.stack || one)).join(" "));
 </script>
 <script type="module">
 import { theRouteIsOpen } from "./event-route.js";
-import "./the-failure-shape.js";
 import "./reporting.js";
 import "./the-escape-key.js";
+import { theFailureShape, theControlsFrom, EXPANDED } from "./the-failure-shape.js";
 import deliveries from "./deliveries.js";
 const out = { states: {}, presses: {} };
 const write = () => { out.troubles = window.__troubles; document.getElementById("out").textContent = JSON.stringify(out); };
@@ -2658,7 +3039,57 @@ try {
   document.getElementById("rpsave").click();
   out.presses.savedAgain = window.__calls.length;
   await tell(deliveries.notSaved); look("rp-not-saved");
+  for (const [name, state] of [["notSavedGone", "rp-not-saved-gone"], ["notSavedFull", "rp-not-saved-full"], ["notSavedPermission", "rp-not-saved-permission"], ["notSavedDevice", "rp-not-saved-device"]]) {
+    await tell(deliveries[name]); look(state);
+  }
   await tell(deliveries.saved); look("rp-saved");
+  {
+    // The twenty-eighth notes, note 6: the mail link and its copy icon.
+    const addr = box().querySelector(".rp-addr");
+    const icon = box().querySelector(".rp-addrrow .ib");
+    const label = () => (icon && icon.querySelector(".ibl") ? icon.querySelector(".ibl").textContent : "");
+    const mailFailure = () => {
+      const one = box().querySelector(".rp-mail-failed .failure-said");
+      return one && shown(one) ? one : null;
+    };
+    const a = addr.getBoundingClientRect(), i = icon ? icon.getBoundingClientRect() : a;
+    out.link = {
+      tag: addr.tagName,
+      href: addr.getAttribute("href"),
+      iconBeside: Boolean(icon) && icon.previousElementSibling === addr,
+      iconShown: shown(icon),
+      sameLine: Boolean(icon) && i.top < a.bottom && i.bottom > a.top && i.left >= a.right,
+      label: label(),
+      name: icon ? icon.getAttribute("aria-label") : "",
+      selectable: getComputedStyle(addr).userSelect !== "none",
+    };
+    window.__answers = { the_report_address_is_opened: "ItWasAsked" };
+    window.__calls.length = 0;
+    addr.click(); await settle();
+    out.presses.address = structuredClone(window.__calls);
+    out.link.failureWhenAsked = mailFailure() ? mailFailure().textContent : "";
+    window.__answers = { the_report_address_is_opened: "ItCouldNotBeOpened" };
+    addr.click(); await settle();
+    out.link.failure = mailFailure() ? mailFailure().textContent : "";
+    out.link.failureDot = Boolean(mailFailure() && mailFailure().querySelector(".fdot"));
+    out.link.addressAfterFailure = shown(addr) ? addr.textContent : "";
+    window.__copied.length = 0;
+    if (icon) icon.click();
+    await settle();
+    out.link.copied = structuredClone(window.__copied);
+    out.link.labelAfterCopy = label();
+    if (icon) icon.dispatchEvent(new MouseEvent("mouseleave"));
+    out.link.labelAfterLeaving = label();
+    window.__clipboardRefuses = true;
+    if (icon) icon.click();
+    await settle();
+    out.link.labelWhenRefused = label();
+    window.__clipboardRefuses = false;
+    if (icon) icon.dispatchEvent(new MouseEvent("mouseleave"));
+    await tell(deliveries.saved);
+    out.link.failureOnARedraw = mailFailure() ? mailFailure().textContent : "";
+    window.__answers = {};
+  }
   window.__calls.length = 0;
   box().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
   out.presses.escape = { command: (window.__calls[0] || {}).command || null, hidden: root().hidden };
@@ -2668,27 +3099,38 @@ try {
   await tell(deliveries.chosen); look("rp-chosen");
   await tell(deliveries.savedElsewhere); look("rp-saved-elsewhere");
 
-  // A failure shape, drawn by the shared half from its own event, and its
-  // Report a problem… pressed.
-  window.__calls.length = 0;
+  // A failure shape in its expanded room, as the screens that keep a report
+  // control draw it, and its Report a problem… pressed. **Built straight from
+  // the shape**: the window's foot, which drew one from the event, is gone
+  // (the twenty-ninth notes' piece E), and the server row's collapsed line
+  // carries no report control (the runner's ruling on piece E). A failure
+  // posted for a server row must not be drawn at the foot either.
   await tell({
     kind: "presentation:a-failure-is-standing",
     subject: "run",
     said: {
-      sentence: "Smoozy could not reach the server.",
-      kind: "condition",
-      subject: "fedcba9876543210fedcba9876543210",
-      subjectKind: "server row",
-      identityOrMark: "0123456789abcdef0123456789abcdef",
-      key: "k",
-      theSentenceForTheReport: "Smoozy could not reach the server.",
-      at: "1754694840",
-      controlCount: "1",
-      control0Is: "report",
-      control0Label: "Report a problem…",
+      sentence: "Could not reconnect.", kind: "condition",
+      subject: "fedcba9876543210fedcba9876543210", subjectKind: "server row",
+      identityOrMark: "0123456789abcdef0123456789abcdef", key: "foot", controlCount: "0",
     },
   });
-  const report = [...document.querySelectorAll("#the-failures .rp-ask button")].find(shown);
+  if (document.getElementById("the-failures")) throw new Error("a failure was drawn at the window's foot");
+  window.__calls.length = 0;
+  const drawnShape = theFailureShape({
+    sentence: "Smoozy could not reach the server.",
+    kind: "condition",
+    subject: "fedcba9876543210fedcba9876543210",
+    subjectKind: "server row",
+    identityOrMark: "0123456789abcdef0123456789abcdef",
+    key: "k",
+    theSentenceForTheReport: "Smoozy could not reach the server.",
+    at: "1754694840",
+    values: [],
+    controls: theControlsFrom({ controlCount: "1", control0Is: "report", control0Label: "Report a problem…" }),
+    room: EXPANDED,
+  });
+  document.getElementById("pane").appendChild(drawnShape);
+  const report = [...drawnShape.querySelectorAll(".rp-ask button")].find(shown);
   if (!report) throw new Error("the failure shape drew no report control");
   report.click();
   out.presses.fromAFailure = window.__calls.find((call) => call.command === "the_report_box_is_opened_from_a_failure") || null;

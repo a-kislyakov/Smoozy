@@ -83,11 +83,14 @@ import "./telegram.js";
 import "./reporting.js";
 import "./the-return-key.js";
 import "./the-escape-key.js";
+import "./the-tab-key.js";
+import "./the-focus-moves.js";
 import "./the-typed-text.js";
 import "./the-scrolled-place.js";
 import "./the-value-drawn.js";
 import "./a-new-job.js";
 import "./a-notification-clicked.js";
+import "./help-links.js";
 
 // Whatever happens, the window is drawn and left standing. A window that shows
 // nothing is Smoozy going quiet, which Rule 8 makes a fault however the trouble

@@ -209,10 +209,10 @@ impl NothingToName {
                 format!("unsupported GPU: {make}")
             }
             NothingToName::NoReadingStoodAtSubmission => {
-                "no GPU reading when the job was sent".to_string()
+                "GPU details unknown when the job was submitted".to_string()
             }
             NothingToName::MoreThanOneMakeOnOneReading { makes } => format!(
-                "GPUs of more than one make ({})",
+                "GPUs from more than one vendor ({})",
                 makes.join(", ")
             ),
         }

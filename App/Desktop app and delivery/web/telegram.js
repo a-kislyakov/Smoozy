@@ -17,6 +17,7 @@ import { whenTold } from "./event-route.js";
 import { theFailureShape, EXPANDED } from "./the-failure-shape.js";
 import { theMarkOnAControl, theMarkComesOffAControl } from "./the-underway-shape.js";
 import { theValueIsDrawnInto } from "./the-value-drawn.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 // **What stands between a figure and the words that count it** — U+00A0, so
 // *3 servers* never parts across two lines. `Design/Whole app § Typography`; the
@@ -196,14 +197,16 @@ export function theTelegramSectionIsBuilt(section, host) {
 
   // `Telegram` L3: the servers not yet reached, named.
   const notReached = made("p", { className: "sunote amber gap" });
+  // `Telegram` F6: the servers Telegram is refusing, each with its row's line.
+  const refusing = made("div", { className: "sunote gap" });
 
-  section.append(heading, before, switchRow, answer, on, notReached);
+  section.append(heading, before, switchRow, answer, on, notReached, refusing);
 
   tg = {
-    heading, before, toggle, switchName, answer, on, botLab, botName, another,
+    heading, before, switchRow, toggle, switchName, answer, on, botLab, botName, another,
     tokenLab, tokenMask, tokenNotStored, whoever, reports, choiceRows, minutesField, minutesAfter, minutesAnswer,
     always, theDefault,
-    idle, idleName, idleAnswer, notReached,
+    idle, idleName, idleAnswer, notReached, refusing,
     boxes: theWalkthroughBoxes(host),
   };
 }
@@ -216,6 +219,9 @@ whenTold(THE_SECTION, (delivery) => {
   const unread = Boolean(said.theSettingsWouldNotRead);
   const on = said.switchedOn === "yes";
   tg.toggle.hidden = unread;
+  // **A frame with nothing in it is not drawn** (the UI at every size, E-06):
+  // the switch's frame goes with the switch.
+  tg.switchRow.hidden = unread;
   tg.switchName.textContent = unread ? "" : said.theSwitch || "";
   tg.toggle.setAttribute("aria-label", said.theSwitchsName || "");
   tg.toggle.classList.toggle("on", on);
@@ -285,12 +291,32 @@ whenTold(THE_SECTION, (delivery) => {
     tg.notReached.appendChild(document.createTextNode(" "));
     for (let at = 0; at < many; at += 1) {
       if (at > 0) tg.notReached.appendChild(document.createTextNode(", "));
-      const server = said[`notReached${at}`] || "";
-      tg.notReached.appendChild(document.createTextNode(server));
+      // **Each name is one piece**, broken only where it is wider than the
+      // line, so a name with hyphens never reads as two (the UI at every
+      // size, E-03).
+      const server = made("span", { className: "tg-srv" });
+      theValueIsDrawnInto(server, said[`notReached${at}`] || "");
+      tg.notReached.appendChild(server);
     }
     // The names close their sentence; the words after are a sentence of their own.
     tg.notReached.appendChild(document.createTextNode(". "));
     tg.notReached.appendChild(document.createTextNode(said.notReachedTail || ""));
+  }
+
+  // **`Telegram` F6: each server Telegram is refusing**, its name a value and
+  // its row's line after it (`Design/Settings § Telegram`, 2026-11-14).
+  const refusingMany = Number(said.refusingCount || 0);
+  tg.refusing.replaceChildren();
+  tg.refusing.hidden = refusingMany === 0;
+  for (let at = 0; at < refusingMany; at += 1) {
+    const line = made("p");
+    const server = made("span", { className: "tg-srv" });
+    theValueIsDrawnInto(server, said[`refusingServer${at}`] || "");
+    line.appendChild(server);
+    line.appendChild(document.createTextNode(": "));
+    const itsLine = said[`refusingSaid${at}`] || "";
+    line.appendChild(document.createTextNode(itsLine));
+    tg.refusing.appendChild(line);
   }
 });
 
@@ -541,7 +567,9 @@ function theWalkthroughBoxes(host) {
   cancel.addEventListener("click", theWalkthroughIsShut);
   const go = aControl({ className: "btn" });
   go.id = "stgbotgo";
-  go.hidden = true;
+  // **Its room is kept before a route is chosen**, the drawing's `.held`, so
+  // Cancel does not slide when it comes (UI consistency, finding 18).
+  go.classList.add("held");
   const held = { label: "", saveLabel: "", route: null, checking: false, theBotsName: "" };
   go.addEventListener("click", () => {
     if (held.checking || !held.route) return;
@@ -560,8 +588,9 @@ function theWalkthroughBoxes(host) {
     makeNew.setAttribute("aria-pressed", held.route === "new" ? "true" : "false");
     useExisting.setAttribute("aria-pressed", held.route === "existing" ? "true" : "false");
     for (const control of [makeNew, useExisting, existingField, newField]) control.disabled = held.checking;
-    go.hidden = !held.route;
-    go.disabled = held.checking;
+    go.classList.toggle("held", !held.route);
+    // Held, it takes no press and no Return (`web/the-return-key.js`).
+    go.disabled = held.checking || !held.route;
   }
 
   function aRouteIsChosen(route) {
@@ -569,7 +598,7 @@ function theWalkthroughBoxes(host) {
     held.route = route;
     failure.replaceChildren();
     theRouteIsDrawn();
-    fieldFor(route).focus();
+    theFocusMovesTo(fieldFor(route));
   }
   makeNew.addEventListener("click", () => aRouteIsChosen("new"));
   useExisting.addEventListener("click", () => aRouteIsChosen("existing"));
@@ -762,8 +791,17 @@ whenTold(THE_WALKTHROUGH, (delivery) => {
   // carries the mark itself"*. Step 10c's tenth-pass fix piece 6, as the
   // ninth-pass fix piece 5 did for Files.
   b.waiting.classList.add("underway-reading");
-  b.waiting.replaceChildren(made("i", { className: "spin" }), document.createTextNode(" "), document.createTextNode(said.waitingForStart || ""));
+  // Its gap is the line mark's own 7 pixels, not a space (UI consistency,
+  // finding 39).
+  b.waiting.replaceChildren(made("i", { className: "spin" }), document.createTextNode(said.waitingForStart || ""));
   b.replied.replaceChildren(bold(said.theBotReplied), document.createTextNode(" "), document.createTextNode(said.telegramIsSetUp || ""));
+  // **The chat it connected to, named** — the Creator's ruling of 2026-11-14
+  // on batch 1: a wrong chat is seen at once.
+  if (said.theChat) {
+    const chat = made("span", { className: "mono" });
+    chat.textContent = said.theChat;
+    b.replied.append(document.createTextNode(" "), document.createTextNode(said.connectedTo || ""), document.createTextNode(" "), chat, document.createTextNode("."));
+  }
   b.okCancel.textContent = said.cancel || "";
   b.done.textContent = said.done || "";
 
@@ -784,8 +822,8 @@ whenTold(THE_WALKTHROUGH, (delivery) => {
     b.ok.root.hidden = true;
     const opening = b.paste.root.hidden;
     b.paste.root.hidden = false;
-    if (wasShut) b.makeNew.focus();
-    else if (opening && b.held.route) b.go.focus();
+    if (wasShut) theFocusMovesTo(b.makeNew);
+    else if (opening && b.held.route) theFocusMovesTo(b.go);
   } else if (stage === "replace") {
     // **`Telegram` P4: no Start, and so nothing to copy.**
     theReadiedCopyIsDropped();
@@ -793,7 +831,7 @@ whenTold(THE_WALKTHROUGH, (delivery) => {
     b.paste.root.hidden = true;
     b.ok.root.hidden = true;
     b.replace.root.hidden = false;
-    b.save.focus();
+    theFocusMovesTo(b.save);
   } else if (stage === "waiting" || stage === "replied" || stage === "notkept") {
     b.theCheckIsOver();
     b.held.theBotsName = said.theBotsName || "";
@@ -814,9 +852,11 @@ whenTold(THE_WALKTHROUGH, (delivery) => {
     // **Start is a step**: while Smoozy waits there is no Done to press.
     b.waiting.hidden = stage !== "waiting";
     b.replied.hidden = stage !== "replied";
-    b.done.hidden = stage !== "replied";
+    // Done's room is kept until the bot replies (finding 18).
+    b.done.classList.toggle("held", stage !== "replied");
+    b.done.disabled = stage !== "replied";
     aFailureIn(b.okFailure, said.theFailure || "", "", retry);
-    if (opening) b.okCancel.focus();
+    if (opening) theFocusMovesTo(b.okCancel);
   } else {
     theReadiedCopyIsDropped();
     b.paste.root.hidden = true;

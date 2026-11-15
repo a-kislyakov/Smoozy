@@ -48,3 +48,24 @@
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the Telegram discussion's two wants, plan and drawing pass.md`, outside any round — *What a job reports*: five radios with the minutes field; a choice from the phone becomes the default. No auditor has seen it.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the search folders' order line. The last words read before the release. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — Telegram's one message per job, the plan text.md`, outside any round — *What a job reports*: each job's own message under every choice but Off, sounds by the Specs table; nothing drawn changes. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — E-06: no empty frame where nothing was read, and an empty search-folder list says *No search folders yet.*; E-03: *Change bot or token…* keeps one line and each server not yet told is one piece; E-04: the choices' descriptions and the Bot and Token boxes line up. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 2, uploads and transfers.md`, outside any round — the word on screen is *limit*, never *cap* (scout 3.36). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — Search folders opens with what they are for (scout 3.44). No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Changed the Telegram hint and Alerts only description in the last words sweep.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — Telegram's floor line: *Every option except Off sends job results and questions.* No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — Telegram when things aren't ideal, the fixes.md`, outside any round — the wait for Start says a server uses the bot. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep of the app and the website: screen words only, as listed in `Audits/Build/The word sweep, the app and the website — what landed.md`. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Batch 1: address checks, single Add press and Telegram setup and retry corrections.
+2026-11-14 — Claude Opus 5.5 — Settings' Telegram section names servers Telegram is refusing (when Telegram refuses).

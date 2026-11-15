@@ -255,7 +255,7 @@ const THE_USERS_OWN_HAND: &str = "the-users-own-hand";
 const THE_ANSWERS_COLUMNS: &str = "holding_kind, holding_source_path, holding_machine_location,
      holding_server_row, holding_installation, reference, resolved_to,
      resolved_to_is_a_folder, how, how_searched_folder, how_arbitrary_pick, how_shift,
-     set_aside, rejected_guess";
+     set_aside, rejected_guess, included";
 
 /// One answer's row and its candidates, written inside a save the caller
 /// holds. **The answer is replaced whole**: its candidates go first, so an
@@ -317,7 +317,7 @@ fn one_answer_is_put(connection: &Connection, answer: &LocatedAnswer) -> Result<
     connection
         .prepare_cached(&format!(
             "INSERT OR REPLACE INTO dependency_located_answer ({THE_ANSWERS_COLUMNS})
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)"
         ))?
         .execute(params![
             holding.kind,
@@ -339,6 +339,8 @@ fn one_answer_is_put(connection: &Connection, answer: &LocatedAnswer) -> Result<
                 .rejected_guess
                 .as_ref()
                 .map(|guess| guess.as_bytes().to_vec()),
+            // `Dependency Upload & Remap` K4's included mark (record version 61).
+            answer.included,
         ])?;
 
     // **`Dependency Upload & Remap` K4's last limb: what the check read the
@@ -417,6 +419,7 @@ struct AnAnswersRow {
     shift: Option<i64>,
     set_aside: bool,
     rejected_guess: Option<Vec<u8>>,
+    included: bool,
 }
 
 fn an_answers_row(row: &Row<'_>) -> rusqlite::Result<AnAnswersRow> {
@@ -445,6 +448,7 @@ fn an_answers_row(row: &Row<'_>) -> rusqlite::Result<AnAnswersRow> {
         shift: row.get(11)?,
         set_aside: row.get(12)?,
         rejected_guess: row.get(13)?,
+        included: row.get(14)?,
     })
 }
 
@@ -584,6 +588,7 @@ fn the_answer_from(
             .rejected_guess
             .as_deref()
             .map(StoredLocation::as_the_system_returned_it),
+        included: row.included,
         read_as: what_it_was_read_as(connection, &row)?,
     })
 }
@@ -1614,6 +1619,7 @@ mod tests {
             resolution,
             set_aside: false,
             rejected_guess: None,
+            included: false,
             read_as: Vec::new(),
         }
     }
@@ -1980,6 +1986,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         jobs.the_fill_in(&ended, &note)
@@ -2202,6 +2209,7 @@ mod tests {
             how: HowResolved::TheRecordedLocationItself,
         });
         let twice = LocatedAnswer {
+            included: false,
             read_as: vec![
                 ReadAs {
                     kind: Kind::MovieClip,
@@ -2215,6 +2223,7 @@ mod tests {
             ..an_answer(&holding, b"//clip.mov", resolved.clone())
         };
         let node = LocatedAnswer {
+            included: false,
             read_as: vec![ReadAs {
                 kind: Kind::ImportNodePath,
                 setting: "inputs[\"Path\"].default_value".to_string(),
@@ -2236,6 +2245,7 @@ mod tests {
 
         // **A later reading carried the clip as a picture only.**
         let once = LocatedAnswer {
+            included: false,
             read_as: vec![ReadAs {
                 kind: Kind::Image,
                 setting: "filepath".to_string(),
@@ -2320,7 +2330,7 @@ pub(crate) fn saved_dependency_sends(connection: &Connection) -> Result<Vec<crat
                 },
             })
         })?.collect::<Result<Vec<_>, _>>()?;
-        sends.push(ASend { request: identity, server, file, files });
+        sends.push(ASend { request: identity, server, file, files, readings: Default::default() });
     }
     Ok(sends)
 }

@@ -49,3 +49,4 @@
 
 - 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — the answered item on the empty preview now quotes *No frames finished.* (was *No frame finished, so there is nothing to show*), with its inline note. No auditor has seen it. Appended by the build runner.
 - 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 2, outside any round — a job that writes nothing is one that owes nothing. No auditor has seen it.
+- 2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 13, an output that writes nothing does not shape the job's folder.md`, outside any round — an output that writes nothing for the job's frames does not decide where the job's folder sits. Changed 2026-11-10, the Creator's twenty-eighth notes (their answer of the morning), runner's pick. No auditor has seen it.

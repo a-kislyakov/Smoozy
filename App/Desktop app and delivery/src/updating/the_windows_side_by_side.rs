@@ -23,10 +23,10 @@
 //!    pass too. Otherwise the signed manifest's exact length and digest are
 //!    sufficient: an unsigned running build can update without a certificate.
 //!    Windows' own execution policy may still block a launch (E8a).
-//! 4. **Held while anything is running** ([`super::the_hold`], Z31) — the
-//!    installed, verified build is kept for the run, and the hold is read
-//!    again at the next check. **Z32's press goes past the hold and past
-//!    nothing else.**
+//! 4. **The update box** ([`super::the_box`], Z33, from 2026-11-09): the
+//!    installed, verified build is kept for the run, and **nothing goes on
+//!    until the user presses *Install now***. *Skip this version* writes the declined
+//!    mark (Z10b). Until then this step was Z31's hold.
 //! 5. **Published** ([`the_verified_build_is_published`]): the window put away
 //!    and the record's one lock taken and kept (Z6's rule, which binds every
 //!    system's publication); L8's copy from an earlier migration discarded; the
@@ -74,7 +74,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use super::checking::{AdmitsTheUpdateFetch, ReadsTheUpdateFile, TheReading, WhatTheRequestSays};
+use super::checking::{AdmitsTheUpdateFetch, ReadsTheUpdateFile, TheReading, TheStepThatFailed, WhatTheRequestSays};
 use super::fetching::{self, WhyTheFetchDidNotPass};
 use super::the_mac::HandsTheHold;
 use super::the_probe;
@@ -283,6 +283,35 @@ pub enum WhyTheUpdateDidNotHappen {
     TheShortcut(String),
     /// **The relaunch helper could not be started** (Z19).
     TheHelper(String),
+}
+
+impl WhyTheUpdateDidNotHappen {
+    /// **The step About names** (Design *Updating*; the four questions,
+    /// Sol's S5).
+    pub fn the_step(&self) -> TheStepThatFailed {
+        use WhyTheUpdateDidNotHappen as Why;
+        match self {
+            Why::TheFetch(failed) => failed.the_step(),
+            Why::TheFolder(_) => TheStepThatFailed::Download,
+            Why::NothingForThisRow | Why::NotAProgram | Why::TheSystemsOwnCheckRefusedIt(_) => {
+                TheStepThatFailed::Verification
+            }
+            Why::NoPlaces(_)
+            | Why::NoFolderForTheVersion
+            | Why::TheRecordBeforePublication(_)
+            | Why::TheShortcut(_)
+            | Why::TheHelper(_) => TheStepThatFailed::Installation,
+        }
+    }
+    /// **The reason About says after the step**, where one is known (Design
+    /// *Updating*, 2026-11-12): the fetch's own, and the system's check.
+    pub fn the_reason(&self) -> Option<super::checking::TheReasonBehind> {
+        match self {
+            Self::TheFetch(failed) => failed.the_reason(),
+            Self::TheSystemsOwnCheckRefusedIt(_) => Some(super::checking::TheReasonBehind::TheSystemRefusedIt),
+            _ => None,
+        }
+    }
 }
 
 /// **A program installed in a new per-user folder, held to the signed
@@ -533,11 +562,13 @@ pub fn what_the_record_kept_is_cleared_here(
 // In the running application
 // ════════════════════════════════════════════════════════════════════════════
 
-/// **The route, kept for the run**: the installed, verified build held while
-/// publication waits (Z31). Made by the update check's sequence and used on
-/// that one sequence alone.
+/// **The route, kept for the run**: the installed, verified build, and the
+/// verified update it was installed from. Made by the update check's sequence
+/// and used on that one sequence alone. **Z33: nothing here publishes but the
+/// box's *Install now*** ([`TheWindowsRoute::answered`]).
 pub struct TheWindowsRoute {
     built: Option<AVerifiedBuild>,
+    offered: Option<AVerifiedUpdate>,
     standing: TheRunningBuildsStanding,
 }
 
@@ -549,71 +580,110 @@ impl Default for TheWindowsRoute {
 
 impl TheWindowsRoute {
     pub fn new() -> TheWindowsRoute {
-        TheWindowsRoute { built: None, standing: TheRunningBuildsStanding::default() }
+        TheWindowsRoute { built: None, offered: None, standing: TheRunningBuildsStanding::default() }
     }
 
-    /// **A check found a newer version**: installed and verified (or the one
-    /// installed for that version kept), then published unless held. The
-    /// reading About is to show, where it changes.
-    pub fn a_newer_version_was_found<R: tauri::Runtime>(
+    /// **A check found a newer version, or About asked for the box** (Z33):
+    /// where the box is due, installed side by side and verified (or the one
+    /// installed for that version kept), then the box offered. The reading
+    /// About is to show, where it changes.
+    pub fn found<R: tauri::Runtime>(
         &mut self,
         handle: &tauri::AppHandle<R>,
         verified: Option<&AVerifiedUpdate>,
+        check: &super::checking::TheUpdateCheck,
+        user_asked: bool,
     ) -> Option<TheReading> {
         if !cfg!(target_os = "windows") {
             return None;
         }
         let verified = verified?;
+        self.offered = Some(verified.clone());
+        let version = verified.manifest.version.clone();
+        if let Err(reading) = super::the_box::the_box_is_due(handle, check, &version, user_asked) {
+            return reading;
+        }
+        if let Err(reading) = self.built_for(handle, verified) {
+            return Some(reading);
+        }
+        super::the_box::the_box_is_shown(handle, check, &version);
+        None
+    }
+
+    /// **About's *Install now…***: the box for the version found, without the
+    /// mark (Z29's ground).
+    pub fn asked<R: tauri::Runtime>(
+        &mut self,
+        handle: &tauri::AppHandle<R>,
+        check: &super::checking::TheUpdateCheck,
+    ) -> Option<TheReading> {
+        let offered = self.offered.clone();
+        self.found(handle, offered.as_ref(), check, true)
+    }
+
+    /// **The box was answered.** *Skip this version* writes the mark (Z10b); *Install now*
+    /// is Z33's one press: Z15a's shortcut rewrite and Z19's relaunch.
+    pub fn answered<R: tauri::Runtime>(
+        &mut self,
+        handle: &tauri::AppHandle<R>,
+        check: &super::checking::TheUpdateCheck,
+        install: bool,
+    ) -> Option<TheReading> {
+        let _ = check;
+        let verified = self.offered.clone()?;
+        if !install {
+            return super::the_box::the_dismissal_is_written(handle, &verified.manifest.version);
+        }
+        if let Err(reading) = self.built_for(handle, &verified) {
+            return Some(reading);
+        }
         let places = match ThePlaces::for_this_copy() {
             Ok(places) => places,
-            Err(_) => return Some(TheReading::CouldNotInstall),
+            Err(_) => return Some(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None)),
         };
+        self.published(handle, places)
+    }
+
+    /// **Steps 1 and 2 for `verified`**, or the build already installed for it
+    /// kept (Z33: the installed unit is kept for the run).
+    fn built_for<R: tauri::Runtime>(
+        &mut self,
+        handle: &tauri::AppHandle<R>,
+        verified: &AVerifiedUpdate,
+    ) -> Result<(), TheReading> {
         let already = self
             .built
             .as_ref()
             .is_some_and(|built| built.version == verified.manifest.version && built.program.exists());
-        if !already {
-            self.built = None;
-            let Some(transfers) = handle_state::<R, Arc<crate::downloading::TheRunsTransfers>>(handle) else {
-                return Some(TheReading::CouldNotInstall);
-            };
-            // **Step 1**, only where no update-in-probe record is uncleared.
-            if !a_probe_record_is_uncleared(handle) {
-                let running_folder = places.running.parent().map(Path::to_path_buf);
-                let keep: Vec<&Path> = running_folder.iter().map(PathBuf::as_path).collect();
-                let _ = the_other_builds_are_removed(&places.builds, &keep);
+        if already {
+            return Ok(());
+        }
+        self.built = None;
+        let places = ThePlaces::for_this_copy()
+            .map_err(|_| TheReading::CouldNotInstall(TheStepThatFailed::Installation, None))?;
+        let transfers = handle_state::<R, Arc<crate::downloading::TheRunsTransfers>>(handle)
+            .ok_or(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None))?;
+        // **Step 1**, only where no update-in-probe record is uncleared.
+        if !a_probe_record_is_uncleared(handle) {
+            let running_folder = places.running.parent().map(Path::to_path_buf);
+            let keep: Vec<&Path> = running_folder.iter().map(PathBuf::as_path).collect();
+            let _ = the_other_builds_are_removed(&places.builds, &keep);
+        }
+        match the_build_is_fetched_and_verified(
+            &super::checking::OverHttps,
+            transfers.as_ref(),
+            verified,
+            &WhatTheRequestSays::for_this_copy(),
+            &places,
+            &TheSystemsSignatureCheck,
+            &self.standing,
+        ) {
+            Ok(built) => {
+                self.built = Some(built);
+                Ok(())
             }
-            match the_build_is_fetched_and_verified(
-                &super::checking::OverHttps,
-                transfers.as_ref(),
-                verified,
-                &WhatTheRequestSays::for_this_copy(),
-                &places,
-                &TheSystemsSignatureCheck,
-                &self.standing,
-            ) {
-                Ok(built) => self.built = Some(built),
-                Err(_) => return Some(TheReading::CouldNotInstall),
-            }
+            Err(why) => Err(TheReading::CouldNotInstall(why.the_step(), why.the_reason())),
         }
-        let version = verified.manifest.version.clone();
-        if super::the_mac::publication_is_held_here(handle) {
-            return Some(TheReading::ANewerVersion { version, held: true });
-        }
-        self.published(handle, places)
-    }
-
-    /// **Z32: the user installs the held update anyway** — Z31's held
-    /// publication and nothing else. Nothing, where nothing is installed.
-    pub fn the_held_update_goes_in<R: tauri::Runtime>(&mut self, handle: &tauri::AppHandle<R>) -> Option<TheReading> {
-        if self.built.is_none() {
-            return None;
-        }
-        let places = match ThePlaces::for_this_copy() {
-            Ok(places) => places,
-            Err(_) => return Some(TheReading::CouldNotInstall),
-        };
-        self.published(handle, places)
     }
 
     fn published<R: tauri::Runtime>(&mut self, handle: &tauri::AppHandle<R>, places: ThePlaces) -> Option<TheReading> {
@@ -644,12 +714,12 @@ impl TheWindowsRoute {
             )),
         };
         match came {
-            WhatThePublicationCameTo::NotPublished(_) => {
+            WhatThePublicationCameTo::NotPublished(why) => {
                 drop(started);
                 if let Some(window) = window.as_ref() {
                     let _ = window.show();
                 }
-                Some(TheReading::CouldNotInstall)
+                Some(TheReading::CouldNotInstall(why.the_step(), why.the_reason()))
             }
             // **The old process's run ends here, writing nothing on the way
             // out** (`Reporting a problem` U3 step 3): the run-mark is the new
@@ -1069,10 +1139,13 @@ mod tests {
     fn the_route_is_wired_into_the_sequence_and_the_clearing() {
         let checking = include_str!("checking.rs");
         assert!(checking.contains(
-            "} else if cfg!(target_os = \"windows\") {\n                            windows.a_newer_version_was_found(&going_on, verified.borrow().as_ref())"
+            "} else if cfg!(target_os = \"windows\") {\n                            windows.found(&going_on, found.as_ref(), &check, false)"
         ));
         assert!(checking.contains(
-            "} else if cfg!(target_os = \"windows\") {\n                            windows.the_held_update_goes_in(&going_on)"
+            "} else if cfg!(target_os = \"windows\") {\n                            windows.asked(&going_on, &check)"
+        ));
+        assert!(checking.contains(
+            "} else if cfg!(target_os = \"windows\") {\n                            windows.answered(&going_on, &check, install)"
         ));
         let probe = include_str!("the_probe.rs");
         let clearing = probe
@@ -1310,5 +1383,29 @@ mod tests {
         std::fs::set_permissions(&builds, std::fs::Permissions::from_mode(0o700)).unwrap();
         assert!(cleared.is_err());
         assert!(update_trust::the_update_in_probe(installation.record.connection()).unwrap().is_some());
+    }
+
+    /// **The four questions, Sol's S5: a failed update names the step it
+    /// stopped at** (Design *Updating*) — every reason the Windows route has.
+    #[test]
+    fn four_questions_s5_each_reason_names_its_step() {
+        use super::super::checking::TheStepThatFailed as Step;
+        use super::super::fetching::WhyTheFetchDidNotPass as Fetch;
+        use WhyTheUpdateDidNotHappen as Why;
+        for (why, step) in [
+            (Why::TheFetch(Fetch::CouldNotBeReached("no answer".into())), Step::Download),
+            (Why::TheFolder("disk full".into()), Step::Download),
+            (Why::TheFetch(Fetch::ItsNameIsNotAPlainFileName), Step::Verification),
+            (Why::NothingForThisRow, Step::Verification),
+            (Why::NotAProgram, Step::Verification),
+            (Why::TheSystemsOwnCheckRefusedIt("unsigned".into()), Step::Verification),
+            (Why::NoPlaces("no folder".into()), Step::Installation),
+            (Why::NoFolderForTheVersion, Step::Installation),
+            (Why::TheRecordBeforePublication("locked".into()), Step::Installation),
+            (Why::TheShortcut("access denied".into()), Step::Installation),
+            (Why::TheHelper("could not start".into()), Step::Installation),
+        ] {
+            assert_eq!(why.the_step(), step, "{why:?}");
+        }
     }
 }

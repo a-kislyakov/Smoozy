@@ -151,6 +151,13 @@ pub struct TheEndingOnTheNote {
     /// from a stream.
     #[serde(default)]
     pub no_render_began: bool,
+    /// **The file names of the paths the remap left unchanged**, as the worker
+    /// reported them (`Rendering` K14c; `Queue & History` §10, the paragraph
+    /// after N3) — what the entry and the phone say as *Missing: <file name>*.
+    /// On any ending. **Empty where there is none**, and on a note written
+    /// before 2026-11-11.
+    #[serde(default)]
+    pub the_files_missing: Vec<String>,
 }
 
 /// The recorded outcomes, in the note's written form.
@@ -465,6 +472,12 @@ pub struct TheNote {
     /// on a note written before this field — which reads back as no reading
     /// recorded, never as a reading of nought.
     pub the_free_space_at_the_ending: Option<TheFreeSpaceAtTheEnding>,
+    /// **The job this one carries on from, where the machine made it from
+    /// another on a phone's *Resume*** — `Queue & History` N15's build detail
+    /// of 2026-11-12 (the four questions, batch 4's leftover), written in the
+    /// act that creates the note and never after. `None` on every other note,
+    /// and on a note written before this field.
+    pub carries_on_from: Option<smoozy_state::identities::Identity>,
 }
 
 impl TheNote {
@@ -486,6 +499,7 @@ impl TheNote {
             the_completeness_statement: None,
             the_files_counted_on_the_answer: None,
             the_free_space_at_the_ending: None,
+            carries_on_from: None,
         }
     }
 
@@ -587,6 +601,12 @@ impl TheNote {
             if ending.no_render_began {
                 fields = fields.and(asked::NO_RENDER_BEGAN_FIELD, asked::IT_IS_YES);
             }
+            // **`Rendering` K14c: sent only where there is one.**
+            if !ending.the_files_missing.is_empty() {
+                if let Ok(written) = serde_json::to_vec(&ending.the_files_missing) {
+                    fields = fields.and(asked::THE_FILES_MISSING_FIELD, written);
+                }
+            }
         }
         for (at, mark) in self.re_run_marks.iter().enumerate() {
             fields = fields.and(
@@ -632,6 +652,11 @@ impl TheNote {
             for (name, value) in free.as_pairs() {
                 fields = fields.and(name, value);
             }
+        }
+        // **`Queue & History` N15's build detail of 2026-11-12: the job a
+        // phone's *Resume* carries on from**, only where there is one.
+        if let Some(earlier) = &self.carries_on_from {
+            fields = fields.and(asked::THE_JOB_IT_CARRIES_ON_FROM_FIELD, earlier.as_text());
         }
         fields
     }
@@ -681,6 +706,10 @@ impl TheNote {
                     .filter(|reason| !reason.is_empty())
                     .map(str::to_string),
                 no_render_began: fields.text(asked::NO_RENDER_BEGAN_FIELD) == Some(asked::IT_IS_YES),
+                the_files_missing: fields
+                    .value(asked::THE_FILES_MISSING_FIELD)
+                    .and_then(|written| serde_json::from_slice(written).ok())
+                    .unwrap_or_default(),
                 the_device_line_as_observed: fields
                     .text(asked::THE_DEVICE_LINE_FIELD)
                     .filter(|line| !line.is_empty())
@@ -688,6 +717,11 @@ impl TheNote {
             }),
         };
         note.attempts = a_count(asked::THE_ATTEMPTS_FIELD).unwrap_or(0);
+        note.carries_on_from = fields
+            .text(asked::THE_JOB_IT_CARRIES_ON_FROM_FIELD)
+            .and_then(|text| {
+                smoozy_state::identities::Identity::read_back(smoozy_state::identities::IdentityKind::Job, text)
+            });
         let re_runs = fields
             .text(asked::HOW_MANY_RE_RUNS_FIELD)
             .and_then(|text| text.parse::<usize>().ok())
@@ -795,6 +829,8 @@ struct TheNoteAsWritten {
     the_completeness_statement: Option<TheStatementAtTheEnding>,
     #[serde(default)]
     the_free_space_at_the_ending: Option<TheFreeSpaceAsWritten>,
+    #[serde(default)]
+    carries_on_from: Option<String>,
 }
 
 /// **`Rented-server runtime` V12's reading as the note writes it**, its moment with the clock it was
@@ -917,6 +953,7 @@ impl TheNoteAsWritten {
                 .as_ref()
                 .map(TheFreeSpaceAsWritten::of)
                 .transpose()?,
+            carries_on_from: note.carries_on_from.as_ref().map(|job| job.as_text().to_string()),
         })
     }
 
@@ -935,6 +972,10 @@ impl TheNoteAsWritten {
             the_free_space_at_the_ending: self
                 .the_free_space_at_the_ending
                 .map(TheFreeSpaceAsWritten::read_back),
+            carries_on_from: self
+                .carries_on_from
+                .as_deref()
+                .and_then(|text| Identity::read_back(IdentityKind::Job, text)),
         }
     }
 }
@@ -1002,7 +1043,21 @@ pub fn the_job_record_and_its_note_in_one_act(
     record: &crate::line::JobRecord,
     label: &str,
 ) -> Result<(), WhatTheStoreSaid> {
-    notes.create(&record.job, label)?;
+    the_job_record_and_its_note_in_one_act_carrying_on(queue, notes, record, label, None)
+}
+
+/// **The same act, for a job that carries on from another** — a phone's
+/// *Resume* (`Queue & History` N15's build detail of 2026-11-12): the note is
+/// created with the earlier job on it, so no later write adds it.
+#[cfg(unix)]
+pub fn the_job_record_and_its_note_in_one_act_carrying_on(
+    queue: &mut crate::acting::queue_store::TheQueueOnTheMachine,
+    notes: &mut ThePerJobNotesOnTheMachine,
+    record: &crate::line::JobRecord,
+    label: &str,
+    carries_on_from: Option<&Identity>,
+) -> Result<(), WhatTheStoreSaid> {
+    notes.create_carrying_on(&record.job, label, carries_on_from)?;
     if let Err(why) = queue.write(record) {
         let _ = notes.remove(&record.job);
         return Err(why);
@@ -1056,7 +1111,19 @@ impl ThePerJobNotesOnTheMachine {
     /// **N1: created in the same act as the job record, with the label and a
     /// null ending.**
     pub fn create(&mut self, job: &Identity, label: &str) -> Result<TheNote, WhatTheStoreSaid> {
-        let note = TheNote::created_with_the_job_record(label);
+        self.create_carrying_on(job, label, None)
+    }
+
+    /// [`Self::create`], with the job it carries on from written in the same
+    /// write (`Queue & History` N15's build detail of 2026-11-12).
+    pub fn create_carrying_on(
+        &mut self,
+        job: &Identity,
+        label: &str,
+        carries_on_from: Option<&Identity>,
+    ) -> Result<TheNote, WhatTheStoreSaid> {
+        let mut note = TheNote::created_with_the_job_record(label);
+        note.carries_on_from = carries_on_from.cloned();
         self.write(job, &note)?;
         Ok(note)
     }
@@ -1417,6 +1484,7 @@ mod tests {
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(160),
@@ -1560,6 +1628,7 @@ mod tests {
                     the_attempt_whose_capture_record_holds_the_words: 2,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(5),
@@ -1586,6 +1655,7 @@ mod tests {
                     the_attempt_whose_capture_record_holds_the_words: 2,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(5),
@@ -1628,6 +1698,7 @@ mod tests {
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(9),
@@ -1740,6 +1811,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 2,
             the_reason_the_machine_recorded: Some(reason.to_string()),
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         let answered = failed.as_the_answers_fields();
@@ -1763,6 +1835,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: Some(line.to_string()),
         });
         let answered = finished.as_the_answers_fields();
@@ -1793,6 +1866,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: Some(String::new()),
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: Some(String::new()),
         });
         let answered = empty.as_the_answers_fields();
@@ -1825,6 +1899,30 @@ mod tests {
     /// **The note's ending says no render began, and only where none did**
     /// (`Queue & History` §10, the paragraph after N3). Absent reads as no, so a note
     /// from an older machine program keeps the words it had.
+    /// **`Rendering` K14c: the names of the files the remap left unchanged
+    /// cross the note's answer and read back**, and a note with none sends
+    /// nothing.
+    #[test]
+    fn the_files_missing_cross_the_answer_and_an_ending_with_none_sends_nothing() {
+        let with = |names: &[&str]| {
+            a_note_that_ended(TheEndingOnTheNote {
+                outcome: TheOutcomeAsWritten::Finished,
+                exit_status: Some(0),
+                the_attempt_whose_capture_record_holds_the_words: 1,
+                the_reason_the_machine_recorded: None,
+                the_device_line_as_observed: None,
+                no_render_began: false,
+                the_files_missing: names.iter().map(|name| name.to_string()).collect(),
+            })
+        };
+        let answered = with(&["wood.png", "Занавеска.exr"]).as_the_answers_fields();
+        let back = TheNote::read_from_the_answer(&answered).expect("it reads back");
+        assert_eq!(back.ending.expect("an ending").the_files_missing, ["wood.png", "Занавеска.exr"]);
+        let none = with(&[]).as_the_answers_fields();
+        assert_eq!(none.value(asked::THE_FILES_MISSING_FIELD), None);
+        assert!(TheNote::read_from_the_answer(&none).expect("it reads").ending.expect("an ending").the_files_missing.is_empty());
+    }
+
     #[test]
     fn the_answer_carries_whether_a_render_began_and_absent_reads_as_it_did() {
         let ended = |no_render_began| {
@@ -1834,6 +1932,7 @@ mod tests {
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: Some("could not copy the bake folder //a/".to_string()),
                 no_render_began,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             })
         };
@@ -1850,6 +1949,36 @@ mod tests {
     /// **A note written before step 10c's fix piece 2 still reads back**, with
     /// no reason and no line recorded — never an empty one, and never a note
     /// that fails to read.
+    #[cfg(unix)]
+    /// **`Queue & History` N15's build detail of 2026-11-12: the job a phone's
+    /// *Resume* carries on from is written on the note in the act that creates
+    /// it, read back from the store, and carried on the answer** (the four
+    /// questions, batch 4's leftover). A note created plainly carries none,
+    /// and its answer has no such field.
+    #[cfg(unix)]
+    #[test]
+    fn sixth_part_a_resumed_jobs_note_names_the_job_it_carries_on_from() {
+        let folder = std::env::temp_dir().join(format!("smoozy-note-carries-on-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let mut notes = ThePerJobNotesOnTheMachine::at(&folder);
+        let earlier = Identity::issue(IdentityKind::Job).expect("randomness");
+        let resumed = Identity::issue(IdentityKind::Job).expect("randomness");
+        let plain = Identity::issue(IdentityKind::Job).expect("randomness");
+        notes.create_carrying_on(&resumed, "Hall", Some(&earlier)).expect("written");
+        notes.create(&plain, "Hall").expect("written");
+        let read = notes.read(&resumed).expect("it reads").expect("it stands");
+        assert_eq!(read.carries_on_from.as_ref(), Some(&earlier));
+        assert_eq!(notes.read(&plain).expect("it reads").expect("it stands").carries_on_from, None);
+        let fields = read.as_the_answers_fields();
+        assert_eq!(fields.text(asked::THE_JOB_IT_CARRIES_ON_FROM_FIELD), Some(earlier.as_text().as_str()));
+        let back = TheNote::read_from_the_answer(&fields).expect("the answer reads");
+        assert_eq!(back.carries_on_from, Some(earlier));
+        let plain_fields = notes.read(&plain).expect("it reads").expect("it stands").as_the_answers_fields();
+        assert_eq!(plain_fields.text(asked::THE_JOB_IT_CARRIES_ON_FROM_FIELD), None);
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_note_written_before_the_two_fields_reads_back_with_neither() {
@@ -1883,6 +2012,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: Some("the render ended with status 1".to_string()),
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: Some("Device: CPU".to_string()),
         };
         notes
@@ -1932,6 +2062,7 @@ mod tests {
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 },
                 on_the_machine(1_700_000_001),

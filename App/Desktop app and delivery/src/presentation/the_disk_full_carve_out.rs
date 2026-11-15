@@ -204,7 +204,12 @@ impl TheCarriedReading {
 /// space on the server and render again.* The scout's *Server disk full.* was
 /// not taken: it names the machine's disk, which M17 forbids, and drops *when
 /// the render ended*, which M16 needs.)*
-pub const THE_DIAGNOSIS: &str = "The output folder was full when the render ended; free space and resubmit.";
+/// *(Reworded 2026-11-11, the four questions, scout 3.23: it read *…; free
+/// space and resubmit.* *Free space* alone reads as the user's own computer,
+/// and *resubmit* is not the app's word for its button.)*
+/// The last words sweep keeps the past tense and one sentence for X10.
+pub const THE_DIAGNOSIS: &str =
+    "The output folder on the server was full; free space, then Submit again.";
 
 /// **M14 and M15a, performed: the second sentence, where and only where the
 /// carried reading says there was no room.**
@@ -350,7 +355,7 @@ mod tests {
     /// it carries its own moment rather than being redrawn as fresh.
     #[test]
     fn the_diagnosis_is_about_the_moment_the_render_ended() {
-        assert!(THE_DIAGNOSIS.contains("when the render ended"));
+        assert!(THE_DIAGNOSIS.contains("was full"));
         for now in ["is full", "currently", "right now", "at the moment"] {
             assert!(
                 !THE_DIAGNOSIS.contains(now),

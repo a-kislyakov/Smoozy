@@ -76,3 +76,13 @@
 .svnamefield:focus-within {
   border-color: var(--accent);
 }
+
+/* ── A box holding the focus itself ─────────────────────────────────────────
+ * Design/Whole app, Keyboard shortcuts — *Tab stays inside the box on top*: a
+ * box that asks for no typing opens with the focus on the box, so the first
+ * Tab lands on its first control. The box is not a control and draws no ring;
+ * the Creator's twenty-eighth notes, note 2. */
+.mbox[tabindex="-1"]:focus,
+.lbox[tabindex="-1"]:focus {
+  outline: none;
+}

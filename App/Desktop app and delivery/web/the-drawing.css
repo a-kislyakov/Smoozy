@@ -18,18 +18,20 @@
    than value**, so no number moved:
 
      1. `.app` no longer carries `container-type: inline-size` or
-        `container-name: win`, and `.qdetail` and `.svlist` no longer carry
-        theirs.
+        `container-name: win`, and `.qdetail`, `.svlist` and `.sheet` no
+        longer carry theirs.
      2. Every `@container win (max-width: Npx)` block is now an ordinary
         selector block keyed to a step mark that `web/panes.js` writes onto
         `.app` — `.app[data-narrow~="s1"]` and so on, at the same 1180, 1020,
         900, 780 and 680 boundaries, with every declaration inside untouched.
-        The job page's own `@container entry (width < 534px)` block and the
-        server list's `@container servers (max-width: 806px)` are keyed the
+        The job page's own `@container entry (width < 534px)` block, the
+        server list's `@container servers (max-width: 806px)` and the
+        settings panel's `@container sheet (width < 916px)` are keyed the
         same way, to the marks `web/panes.js` writes onto the page itself —
-        `.qdetail[data-narrow~="stacked"]` and `.svlist[data-narrow~="folded"]`
-        — at the same numbers. `.qdetail` and `.svlist` drop their
-        `container-type` and `container-name` as `.app` does.
+        `.qdetail[data-narrow~="stacked"]`, `.svlist[data-narrow~="folded"]`
+        and `.sheet[data-narrow~="two"]` — at the same numbers. `.qdetail`,
+        `.svlist` and `.sheet` drop their `container-type` and
+        `container-name` as `.app` does.
 
    **Why the mechanism differs is stated in `smoozy.css`'s own header and
    nowhere else**, which is what the ruling asks. Do not restate it here.
@@ -367,7 +369,9 @@ body { display: flex; flex-direction: column; }
 .fedit .fsel { background: var(--accent-solid); color: var(--on-fill); }
 /* The typed name a rename was refused on. Red is the whole of what says the
    name was refused rather than accepted, and the field is where it goes. */
-.fname .fld.bad { border-color: var(--alert); background: var(--alert-bg); color: var(--alert); font-weight: 600; }
+/* A refused name keeps its weight, so it does not widen and narrow as it is
+   typed (UI consistency, finding 58); the red says it is refused. */
+.fname .fld.bad { border-color: var(--alert); background: var(--alert-bg); color: var(--alert); }
 
 /* Connection down */
 .stale-bar {
@@ -403,6 +407,10 @@ body { display: flex; flex-direction: column; }
   background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-xl);
   box-shadow: 0 14px 44px -14px rgba(0,0,0,.4);
   padding: 20px 22px; display: flex; flex-direction: column; gap: 12px;
+  /* A long name with no spaces breaks inside the box rather than running
+     past its edge (the UI at every size, cause 1: A-17, B-10, B-25, C-15,
+     C-23, E-05). */
+  overflow-wrap: anywhere;
 }
 .mbox h3 { margin: 0; font-size: var(--t-xl); font-weight: 620; letter-spacing: -0.01em; }
 .msub { font-size: var(--t-md); color: var(--ink3); }
@@ -411,6 +419,10 @@ body { display: flex; flex-direction: column; }
 .mwarn b { color: var(--ink); font-weight: 600; }
 .mwarn a { color: var(--accent); font-weight: 550; }
 .clist { font-size: var(--t-sm); color: var(--ink2); background: var(--sunk); border: 1px solid var(--soft); border-radius: var(--r-sm); padding: 9px 11px; max-height: 108px; overflow-y: auto; line-height: 1.7; }
+/* A list of names keeps its height in a box and the box scrolls instead, so
+   the names are seen before the choice (C-14); a long name breaks inside it
+   rather than off to the side (D-19). */
+.clist { flex-shrink: 0; overflow-wrap: anywhere; }
 .mcheck { display: flex; align-items: center; gap: 8px; font-size: var(--t-md); color: var(--ink2); cursor: pointer; }
 .mnote { font-size: var(--t-sm); color: var(--ink3); padding-left: 21px; }
 .mrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 2px; }
@@ -868,6 +880,13 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
    Smoozy cannot confirm, and not a colour, since every colour here carries a
    meaning (the Creator's fourteenth notes, note 4, 2026-10-18). */
 .rqn .rqlead { color: var(--ink2); font-weight: 400; }
+/* A dependency upload's name shortens inside its link where the row is short,
+   and For stays: the link was cut away whole and the row read For … (Design/
+   Transfers; the Creator's notes on the test copy of 2026-11-12, note 12). */
+.rqh .rqn.rqled { display: flex; align-items: baseline; gap: 0 .3em; }
+.rqn.rqled > .rqlead { flex: none; }
+.rqn.rqled > .mono { display: flex; min-width: 0; }
+.rqn.rqled .golink { min-width: 0; }
 .rqm { font-size: var(--t-sm); color: var(--ink2); }
 .rqs { font-size: var(--t-sm); color: var(--ink3); }
 .rqs.amber { color: var(--busy); }
@@ -878,7 +897,10 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 /* Alternating ground. A request carries several lines of its own, so without
    it one request's last file reads as the next request's first. The queue
    list already works this way. */
-#tscroll .req:nth-child(even) { background: var(--sunk); }
+/* Every second request, counted among the requests alone, so a group's
+   heading coming or going never flips the stripes below it (UI consistency,
+   finding 42). */
+#tscroll .req:nth-of-type(even) { background: var(--sunk); }
 #tscroll .req { padding: 12px var(--gutter); border-bottom: 1px solid var(--soft); }
 .rqs.amber2 { color: var(--busy); }
 .rqs.amber2 b { color: var(--busy); font-weight: 700; }
@@ -1092,9 +1114,9 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .lnkb { font: inherit; font-size: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
 .lnkb:hover { text-decoration: underline; }
 .lnkb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--r-xs); }
-.rdwait { display: inline-flex; align-items: center; justify-content: center; width: 60px; color: var(--ink3); cursor: default; }
-.rdwait:hover { text-decoration: none; }
-.rdwait .spin { width: 10px; height: 10px; border: 1.5px solid var(--line); border-top-color: var(--ink3); border-radius: 50%; display: inline-block; animation: sp .7s linear infinite; }
+/* The read's turning mark starts the line under the header, beside the words
+   saying what turns (the Creator's note 3 on the test copy of 2026-11-12). */
+.rdline .spin, .ckline .spin { width: 10px; height: 10px; border: 1.5px solid var(--line); border-top-color: var(--ink3); border-radius: 50%; display: inline-block; vertical-align: -1px; margin-right: 7px; animation: sp .7s linear infinite; }
 /* A read is something a Blender does, so on a machine with none the control
    stays where it was and reads unavailable rather than disappearing. */
 .lnkb[disabled] { color: var(--ink3); cursor: default; }
@@ -1109,6 +1131,11 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 /* The band that says once, at the top, why the page is full of dashes. */
 .noread { margin: 0 0 14px; padding: 9px 13px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--sunk); font-size: var(--t-md); color: var(--ink2); line-height: 1.5; }
 .noread b { color: var(--ink); font-weight: 620; }
+/* A box that runs the full width of its panel has square corners (Design/
+   Whole app, Type and spacing; the Creator's notes on the test copy of
+   2026-11-12, note 6): the File not read band and the box a failed read
+   sits in. */
+.sheet > .noread { border-radius: 0; }
 .rdfail { border-color: var(--line); background: var(--bg); display: flex; flex-direction: column; gap: 8px; }
 /* The sentence is a paragraph, not a row. It was laid out as a row so the dot
    would sit beside the words — but a row makes every child its own column, so
@@ -1117,10 +1144,14 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 .rdfail p { margin: 0; padding-left: 15px; text-indent: -15px; }
 .rdfail .fdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); margin-right: 8px; position: relative; top: -1px; }
 .rdrow { display: flex; align-items: center; gap: 8px; padding-left: 15px; }
+/* The cross at the top right of a box (Design/Whole app, The failure shape,
+   the Creator's note 4 on the test copy of 2026-11-12): first in the box's
+   first line, floated right, never last on a line of its own. */
+.rdfail > p:first-child > .fx { float: right; margin: 0 0 0 12px; text-indent: 0; }
 .rdnote { font-size: var(--t-sm); color: var(--ink3); }
 /* A sentence, laid out as one. Same correction as .rdfail p above: a row here
    made every bold word its own column. */
-.vmm { margin: 0 0 12px; font-size: var(--t-md); color: var(--ink2); }
+.vmm { margin: 0; font-size: var(--t-md); color: var(--ink2); }
 .vmm b { color: var(--ink); font-weight: 620; }
 .mbox.wide { max-width: 560px; }
 .vmg h4 { margin: 12px 0 4px; font-size: var(--t-sm); font-weight: 620; color: var(--ink3); }
@@ -1130,7 +1161,13 @@ button.qmach:focus-visible { outline: 2px solid var(--accent); outline-offset: -
 /* The search's own honesty, at the foot of the list where it is about something. */
 .addon { margin: 6px 0 0; font-size: var(--t-sm); color: var(--ink2); line-height: 1.5; display: flex; gap: 8px; align-items: baseline; }
 .addon b { color: var(--ink); font-weight: 620; }
-.pkline { display: flex; flex-direction: column; gap: 3px; }
+/* The version line is held: whatever it holds is laid over the warning with
+   "Latest on this server." after it, drawn unseen, so the line keeps that
+   height when it is empty and when it holds less (the Creator's twenty-eighth
+   notes, note 17). */
+.pkline { display: grid; }
+.pkline > * { grid-area: 1 / 1; }
+.pkline > .pkheld { visibility: hidden; }
 /* The two the read finds that ask something of the user. Amber, above the
    list, and never blocking Render. The pair of paths is the colliding one's
    whole value, so they are given a line of their own rather than being run
@@ -1250,7 +1287,11 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 /* The address is the only thing on the saved reading worth reading twice, so
    it is the one thing drawn large. */
 .rp-send { font-size: var(--t-md); color: var(--ink2); }
-.rp-addr { font-size: var(--t-xl); font-weight: 600; color: var(--ink); user-select: all; }
+/* From 2026-11-09 (the twenty-eighth notes, note 6) the address is a mail
+   link, drawn as a link and still large, with the copy icon right beside it. */
+.rp-addrrow { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.rp-addr { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; min-width: 0; overflow-wrap: anywhere; font-size: var(--t-xl); font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.rp-addr:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 
 /* ══ KEYS. A list and almost nothing else. The fingerprint is on every row
@@ -1412,6 +1453,10 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 /* ── Servers screen ── */
 #serversview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 #serversview[hidden] { display: none; }
+/* Keys fills the window the same way, so its list scrolls and the rows past
+   the window's bottom can be reached (the UI at every size, B-22). */
+#keysview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+#keysview[hidden] { display: none; }
 #machineview { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 #machineview[hidden] { display: none; }
 
@@ -1429,7 +1474,7 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
    in every row. A column that sized itself to its own row is what had the
    buttons wandering. */
 .svrow {
-  display: grid; grid-template-columns: minmax(0,1.15fr) minmax(104px,0.6fr) minmax(0,1.45fr) 248px;
+  display: grid; grid-template-columns: minmax(0,1fr) minmax(104px,0.6fr) minmax(0,1.6fr) 248px;
   gap: var(--rowgap); align-items: start; padding: 13px var(--gutter);
   border-bottom: 1px solid var(--soft);
 }
@@ -1487,6 +1532,16 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .cbtn.trying .cdot { background: var(--busy-fill); border-color: var(--busy-fill); opacity: .55; }
 .cbtn.dead { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, var(--line)); background: transparent; cursor: not-allowed; opacity: .8; }
 .cbtn.dead .cdot { border-color: var(--bad); }
+/* Connected and Reconnecting… read Disconnect under the pointer or with focus,
+   and the control keeps one width: both labels are laid in one cell and only
+   the one showing is seen. Disconnect takes the red of an act that stops
+   something, as the Queue's Stop does (Design/Servers; the Creator's notes on
+   the test copy of 2026-11-12, note 7). */
+.cwords { display: inline-grid; }
+.cwords > span { grid-area: 1 / 1; text-align: center; }
+.cwords > .cghost { visibility: hidden; }
+.cbtn.cstop, .cbtn.cstop:hover { color: var(--bad); border-color: var(--bad); background: color-mix(in srgb, var(--bad) 9%, var(--bg)); }
+.cbtn.cstop .cdot { background: var(--bad); border-color: var(--bad); }
 .svacts .more { font-size: var(--t-base); color: var(--ink3); cursor: pointer; background: none; border: 0; padding: 2px 5px; font-family: inherit; border-radius: var(--r-sm); }
 .svacts .more:hover { color: var(--ink); background: var(--sel); }
 .svrow[role="button"] { cursor: pointer; }
@@ -1659,8 +1714,17 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .crumbs a { color: var(--accent); text-decoration: none; cursor: pointer; }
 .crumbs a:hover { text-decoration: underline; }
 .crumbs .here { color: var(--ink); font-weight: 550; }
-.crumbs .up { margin-left: auto; display: flex; gap: 6px; }
+/* The login's home folder: a house before its name, grey like every icon
+   (Design/File Browser, The list; the Creator, 2026-11-11). */
+.crumbs .fic { vertical-align: -3px; margin-right: 5px; }
+/* The login's home folder says so in grey after its name, so a folder called
+   home is not taken for it (Design/File Browser, The list; the Creator's notes
+   on the test copy of 2026-11-12, note 0). */
+.fname.fhomed { display: flex; align-items: baseline; gap: 0 8px; }
+.fname.fhomed > .fname-text { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fname.fhomed > .fhome { flex: none; color: var(--ink3); font-size: var(--t-sm); }
 .mini { font: inherit; font-size: var(--t-sm); font-weight: 550; padding: 4px 10px; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+.mini.inl { padding: 0 8px; vertical-align: baseline; }
 .mini:hover { border-color: var(--ink3); }
 .mini:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .mini.danger { color: var(--bad); }
@@ -1681,6 +1745,17 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 /* As tall as an icon, so the row does not grow when the two words appear. */
 .ftools .mini { height: 26px; padding-block: 0; }
 .ftools.notblend .blendonly { display: none; }
+/* Refresh, last on the toolbar (the Creator's twenty-ninth notes, note 2;
+   until 2026-11-10 it sat at the path's right end). Nothing that comes and
+   goes sits after it, so it never moves; its word opens leftward, inside the
+   window. */
+.ftools > .ib:last-child .ibl { left: auto; right: 0; transform: none; }
+/* The line above the list: what an act on this screen came to, said where the
+   user asked, and an upload while it runs, with a thin bar in bytes under the
+   words (the Creator's twenty-eighth notes, note 10). */
+.fnotyet { padding: 8px var(--gutter); border-bottom: 1px solid var(--line); background: var(--sunk); font-size: var(--t-sm); color: var(--ink2); }
+.fnotyet[hidden] { display: none; }
+.fnotyet .bar { height: 4px; margin-top: 6px; max-width: 360px; }
 .ric { width: 15px; height: 15px; flex: none; color: var(--ink3); }
 .rail .item[aria-current="true"] .ric { color: var(--ink); }
 
@@ -1702,6 +1777,10 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
   color: var(--ink2); cursor: pointer; padding: 0; flex: none;
 }
 .ib svg { width: 16px; height: 16px; }
+/* The underway mark is never a grid item, so the icon stays centred in the
+   button's ground whether it turns or not (the twenty-ninth notes, note 2:
+   the empty mark made a second row and pushed the icon up). */
+.ib > .spin { position: absolute; }
 .ib:hover { background: var(--sel); color: var(--ink); }
 .ib:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Greyed: Rename while several rows are chosen (Design/File Browser; the
@@ -1726,11 +1805,14 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 
 .flist { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
 .frow {
-  display: grid; grid-template-columns: 17px minmax(0, 1fr) 110px 100px 130px;
+  display: grid; grid-template-columns: 17px minmax(0, 1fr) 134px 100px 130px;
   gap: 0 var(--rowgap); align-items: baseline; width: 100%; text-align: left;
   padding: 8px var(--gutter); border: 0; background: none; font: inherit; color: inherit;
   cursor: default; border-bottom: 1px solid var(--soft);
 }
+/* Kind is 134 pixels, so Smoozy staging folder reads whole in Linux's wider
+   face as well as the Mac's (C-12; 126 held it only in the Mac's, hosted
+   run 43727887590, 2026-11-15). */
 .frow:hover { background: var(--sunk); }
 .frow[aria-current="true"] { background: var(--sel); }
 .frow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -1841,9 +1923,15 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
    as it, the picked row in the menu's own bold (.ctx button.hd). A pick closes
    it and leaves the control as it looked before it was pressed: the ring above
    is :focus-visible, so it shows only while the keyboard is in use. */
-.pick .ddl { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; width: auto; min-width: 100%; }
+.pick .ddl { position: absolute; top: calc(100% + 4px); left: 0; z-index: 5; width: max-content; min-width: 100%; }
 .pick .ddl[hidden] { display: none; }
-.pick .ddl button { white-space: nowrap; }
+/* A long list is held to the room it has and scrolls inside it; a name wider
+   than the window right of the control wraps there rather than running off
+   (the UI at every size, A-12, B-11, C1). The page sets the two limits as it
+   opens the list. */
+.pick .ddl { overflow-y: auto; max-height: var(--ddl-max-h, none); max-width: var(--ddl-max-w, none); }
+.pick .ddl.left { left: auto; right: 0; }
+.pick .ddl button { white-space: normal; overflow-wrap: anywhere; flex: none; }
 /* A list with no room below it opens upward, the same gap kept above the
    control (Design/Whole app, the Creator's thirteenth notes, note 1). Drawn
    at Render Settings' foot, where Telegram's list opens (2026-10-19). */
@@ -1855,9 +1943,12 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .set.bad .fld, .sftg .fld.bad { border-color: var(--alert); background: var(--alert-bg); color: var(--alert); font-style: normal; font-weight: 600; }
 .set .unit, .set .sep { font-size: var(--t-md); color: var(--ink3); flex: none; }
 .set .after { font-size: var(--t-sm); color: var(--ink3); flex: none; margin-left: 3px; }
+/* One size of reset cross on the page, the size the View Layer rows' 18-pixel
+   slot holds (UI consistency, 2026-11-13: it was 12.5 there and 11.5 on the
+   View Layers and the engine). */
 .clear {
-  font: inherit; font-size: var(--t-md); line-height: 1; color: var(--ink3);
-  background: none; border: 0; cursor: pointer; padding: 3px 5px; border-radius: var(--r-sm); flex: none;
+  font: inherit; font-size: var(--t-sm); font-weight: 400; line-height: 1; color: var(--ink3);
+  background: none; border: 0; cursor: pointer; padding: 2px 4px; border-radius: var(--r-sm); flex: none;
 }
 .clear:hover { color: var(--bad); background: var(--sunk); }
 .clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -1920,7 +2011,27 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .dia { width: 9px; height: 9px; transform: rotate(45deg); flex: none; border: 1.5px solid var(--key); }
 .dia.keyed { background: var(--key); }
 
-.vlrow { display: flex; align-items: center; gap: 4px; }
+/* A scene's box and a View Layer's row: the tick level with the first line. */
+.cols .box { align-items: baseline; }
+.cols .box > i { align-self: flex-start; margin-top: calc((var(--t-md) * 1.62 - 13px) / 2); }
+/* A View Layer's row: the tick and the name, the tick level with the name's
+   first line and a long name wrapping under itself; the layer's own sample
+   count on a second line at the name's indent (the Creator's twenty-eighth
+   notes, note 17). The name is laid over a copy of itself in the pinned
+   box's bold, its mark slot filled, drawn unseen — so the row is as tall as
+   the pinned name and pinning moves nothing below it. A pinned row's cross is
+   drawn over the name's place, after its last word, outside the box. */
+.vlrow { display: grid; grid-template-columns: 13px minmax(0, 1fr); column-gap: 9px; }
+.vlrow > .box { grid-column: 1 / -1; grid-row: 1; display: grid; grid-template-columns: 13px minmax(0, 1fr); column-gap: 9px; align-items: start; }
+.vlrow > .vlx { grid-column: 2; grid-row: 1; pointer-events: none; font-size: var(--t-md); font-weight: 600; }
+.vlrow > .tag { grid-column: 2; grid-row: 2; font-size: var(--t-xs); color: var(--ink3); font-style: italic; }
+.vln { display: grid; min-width: 0; }
+.vln > * { grid-area: 1 / 1; }
+.vln > .vlb { visibility: hidden; font-style: normal; font-weight: 600; }
+.vls { display: inline-block; width: 18px; margin-left: 4px; text-align: center; vertical-align: middle; line-height: 1; }
+.vls .dia { display: inline-block; }
+.vlx .vlt { visibility: hidden; }
+.vlx .vls { visibility: visible; pointer-events: auto; }
 /* More than one scene ticked. The control keeps its place and its label and
    shows no value: with several scenes ticked there is no one scene to read
    from, and a number on the page would be another scene's. A blank inside a
@@ -1942,6 +2053,7 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .cstate { padding: 12px var(--gutter) 12px; display: flex; flex-direction: column; gap: 5px; }
 .cstate p { font-size: var(--t-sm); color: var(--ink2); line-height: 1.5; margin: 0; }
 .cstate b { color: var(--ink); font-weight: 600; }
+.cstate .q { color: var(--ink3); }
 /* One of these statements is a failure rather than a note, so it takes the
    whole failure shape: the red dot in place of the block's grey bullet, the
    plain sentence, and the cross that clears it. The grey bullet is not a
@@ -1990,7 +2102,10 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .grp.greyed .rad[data-eng] { display: none; }
 .grp.greyed .rad.on i { background: transparent; border-color: var(--ink3); }
 .grp.greyed .rads em { font-style: normal; color: inherit; }
-.vlrow .clear { font-size: var(--t-sm); padding: 2px 4px; }
+/* A chosen engine or device with its cross: the choice whole, then the cross
+   after it. It is not a View Layer row, whose first column holds only a tick
+   (the UI at every size, D-08). */
+.radx { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .box.allsc { font-weight: 700; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--soft); }
 
 /* Tooltip — hover or keyboard focus */
@@ -2018,6 +2133,9 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .hint { font-size: var(--t-sm); color: var(--ink2); background: var(--sunk); border-left: 2px solid var(--busy); padding: 9px 11px; border-radius: 0 var(--r-sm) var(--r-sm) 0; }
 .hint b { color: var(--ink); font-weight: 600; }
 .hint.flat { border-left-color: var(--line); }
+/* The line counting the View Layers that keep their own counts keeps its
+   space when it goes: it is drawn again, unseen. */
+.hint.held { visibility: hidden; }
 
 /* ══ The marks on an entry. One line each, and every one of them reads as a
       statement rather than a warning: none is a fault and three of the four
@@ -2043,6 +2161,9 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .jw1 > i { flex: none; width: 4px; height: 4px; margin-top: 8px; border-radius: 50%; background: var(--ink3); }
 .jw1 b { color: var(--ink); font-weight: 600; }
 .jw1 .mono { color: var(--ink2); }
+/* Every folder, opened under the line by its count (the Creator's
+   twenty-ninth notes, notes 8 and 10), sits at the line's own text edge. */
+.jw .writes { margin-left: 13px; }
 .jwheld {
   border: 1px solid var(--busy); background: var(--sunk);
   border-radius: var(--r-md); padding: 11px 12px;
@@ -2089,6 +2210,24 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .writes .f { color: var(--ink3); }
 .writes .tot { color: var(--ink); font-weight: 600; padding-top: 6px; border-top: 1px solid var(--soft); margin-top: 2px; }
 .writes .tot2 { color: var(--ink); font-weight: 600; }
+/* One row per folder (the Creator's twenty-eighth notes, note 17). A path
+   breaks after a slash, and inside a folder's name only where that name is
+   wider than the column: each name is held whole, with the slash after it,
+   unless it cannot fit. Its count stays on its first line. */
+.writes .p bdi bdi { display: inline-block; max-width: 100%; overflow-wrap: anywhere; vertical-align: top; }
+/* Folders with the same parent sit under it, written once; the parent's line
+   opens and closes them, and each row under it shows its last folder. */
+.writes .p.in { padding-left: 16px; }
+/* A folder holding more than one format is one row: its counts sit at its
+   top, each on its own format's line however either wraps (D-11). Until
+   2026-11-12 the folder spanned one line per format, and a tall folder drew
+   its later counts halfway down it. */
+.writes .wcounts { grid-column: 2 / 4; display: grid; grid-template-columns: subgrid; row-gap: 5px; align-items: baseline; }
+.wgrp { display: grid; grid-template-columns: 11px minmax(0, 1fr); column-gap: 5px; align-items: baseline; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: var(--r-xs); }
+.wgrp:hover .mono { color: var(--ink); }
+.wgrp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wgrp[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.wgrp .wfold { margin-left: 6px; font-size: var(--t-sm); color: var(--ink3); white-space: nowrap; }
 
 /* ══ The submit strip is two lines, every group aligned to the top (the
       Creator's tenth notes, note 8). One grid, so the name, the switches and
@@ -2109,7 +2248,7 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .sfoot .field { display: contents; }
 .sfoot .field label { grid-area: nlabel; font-size: var(--t-sm); color: var(--ink3); }
 .sfoot .fnote { grid-area: nhint; margin-top: 3px; font-size: var(--t-xs); color: var(--ink3); }
-.sfoot .fake { grid-area: nfield; justify-self: start; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px 9px; background: var(--bg); font-size: var(--t-md); color: var(--ink3); width: 168px; }
+.sfoot .fake { grid-area: nfield; justify-self: start; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 4px 9px; background: var(--bg); font-size: var(--t-md); color: var(--ink); width: 168px; }
 .sfoot .sfl1 { grid-area: l1; margin-left: 15px; }
 /* The summary overhangs the switch's line rather than growing it, so turning
    download on moves nothing, at any width (the Creator's twentieth notes,
@@ -2141,7 +2280,8 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .sfoot .btn[disabled] { opacity: .45; cursor: default; }
 /* A submission that went, under Render and right-aligned to it: ordinary
    ink, the page's own text size, a check mark, no colour. Where line 2 has no
-   room for it, it drops under, still at the right. */
+   room for it, its sentence is cut short, whole on hover, and Show in Queue
+   stays whole beside it (the UI at every size, D-16 and C9). */
 .rs-sent { font-size: var(--t-base); color: var(--ink); margin-left: auto; white-space: nowrap; }
 .rs-tick { margin-right: 6px; }
 .rs-sent a { color: var(--accent); font-weight: 550; text-decoration: none; margin-left: 4px; }
@@ -2160,10 +2300,14 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .cgrp:first-child { margin-top: 0; }
 .cgrp .k { font-weight: 550; }
 /* The heading says the state once: its dot, its word and how many rows, in
-   the state's colour. To upload takes no colour and no dot,
+   the state's colour. To upload takes no colour,
    because Smoozy uploads those itself and nothing is asked (the Creator's
-   sixth notes, note 4). */
+   sixth notes, note 4), and in place of a dot it carries the up arrow of
+   Files' Upload control, in the heading's own ink: not green, which on this
+   panel means already on the server (the Creator's twenty-eighth notes,
+   note 8, 2026-11-09). */
 .cgrp .cdot { width: 7px; height: 7px; border-radius: 50%; flex: none; align-self: center; background: currentColor; }
+.cgrp .cup { width: 9px; height: 9px; flex: none; align-self: center; }
 .cgrp.bad { color: var(--bad); } .cgrp.bad .cdot { background: var(--bad); }
 .cgrp.busy { color: var(--busy); } .cgrp.busy .cdot { background: var(--busy-fill); }
 .cgrp.ok { color: var(--ok); } .cgrp.ok .cdot { background: var(--ok); }
@@ -2184,6 +2328,10 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .cside[open] > summary .open { color: var(--ink3); }
 .cside[open] > summary .open::after { content: "Close"; }
 .cside > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Include all, on the heading of the rows no scene uses, beside Open (the
+   Creator's twenty-eighth notes, note 14, 2026-11-09). */
+.cside > summary .lnk { font-size: var(--t-sm); color: var(--accent); font-weight: 550; cursor: pointer; background: none; border: 0; padding: 0; margin-right: 6px; font-family: inherit; }
+.cside > summary .lnk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* check toolbar */
 .ctools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px var(--gutter); border-bottom: 1px solid var(--soft); background: var(--sunk); }
@@ -2221,6 +2369,12 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .rows .row .note.bad { color: var(--bad); } .rows .row .note.busy { color: var(--busy); }
 .rows .row .note.ok { color: var(--ok); } .rows .row .note.idle { color: var(--idle); }
 .row .sz { font-size: var(--t-sm); color: var(--ink3); text-align: right; }
+/* The rows alternate ground, as the Queue's and Transfers' do and in the same
+   neutral shade, starting afresh under each group's heading: every second row
+   of a group carries .alt, carried past the row's edges as a chosen row's
+   ground is. The colour stays on the heading (the Creator's twenty-eighth
+   notes, note 21). */
+.rows .row.alt { background: var(--sunk); box-shadow: -8px 0 0 var(--sunk), 8px 0 0 var(--sunk); }
 /* Rows are chosen the way a file manager chooses them, and a chosen row takes
    the selected ground, carried past the row's edges into the gutter. */
 .rows .row.sel { background: var(--sel); box-shadow: -8px 0 0 var(--sel), 8px 0 0 var(--sel); }
@@ -2362,7 +2516,6 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .app[data-narrow~="s2"] .frow { grid-template-columns: 17px minmax(0, 1fr) 100px 130px; }
 .app[data-narrow~="s2"] .frow .fmeta.kind,
 .app[data-narrow~="s2"] .frow .sortb.kind { display: none; }
-.app[data-narrow~="s2"] .cols { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 
 /* The server list folds by its own width too: with the rail dragged wide, a
    window above 1020 can leave the list as narrow as the second step's, 806
@@ -2374,6 +2527,17 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .svlist[data-narrow~="folded"] .svwork { grid-column: 2; grid-row: 1; }
 .svlist[data-narrow~="folded"] .svhw { grid-column: 2; grid-row: 2; margin-top: 5px; font-size: var(--t-sm); color: var(--ink3); }
 .svlist[data-narrow~="folded"] .svacts { grid-column: 3; grid-row: 1 / span 2; align-content: start; }
+
+/* The settings body folds by the panel's own width (the Creator's
+   twenty-eighth notes, note 17). Where three columns of 268 no longer fit
+   beside two gaps of 34 and two gutters — 916 — the body is two columns, and
+   the third column's groups follow the second column's own content, in the
+   second column. Until then the columns fitted themselves and the third went
+   under the first, below a long list of View Layers, with an empty space
+   under Render; at the second step this replaces that step's own fit. */
+.sheet[data-narrow~="two"] .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto 1fr; }
+.sheet[data-narrow~="two"] .cols > .col:first-child { grid-row: 1 / span 2; }
+.sheet[data-narrow~="two"] .cols > .col:nth-child(3) { grid-column: 2; }
 
 .app[data-narrow~="s3"] .body { --rail-w: 168px; --list-w: 300px; }
 .app[data-narrow~="s3"] .frow { grid-template-columns: 17px minmax(0, 1fr) 100px; }
@@ -2394,7 +2558,7 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .app[data-narrow~="s4"] .rail .item .tl { display: none; }
 /* The badge is the row now, so it sizes up and centres. */
 .app[data-narrow~="s4"] .rail .item { position: relative; }
-.app[data-narrow~="s4"] .rail .badge { margin-right: 0; width: 14px; height: 14px; }
+.app[data-narrow~="s4"] .rail .badge { margin: 1px; width: 14px; height: 14px; }
 /* And the row's dot sits on the badge rather than beside it: two blobs side
    by side in a 52-pixel rail pushed the badge off centre and read as one
    lopsided shape. A ring of the rail's own ground keeps the two apart. */
@@ -2416,9 +2580,11 @@ button.qmach { border: 0; border-bottom: 1px solid var(--soft); }
 .app[data-narrow~="s4"] .rhd span { display: none; }
 
 /* Under 680 Smoozy is not asked to hold together, and says so rather than
-   folding into something it was never drawn as. */
+   folding into something it was never drawn as. It starts under the title
+   bar, so the window's own buttons and its drag stay (the UI at every size,
+   A-01). */
 .toosmall {
-  position: absolute; inset: 0; z-index: 60; display: none; place-items: center;
+  position: absolute; inset: var(--title-h) 0 0 0; z-index: 60; display: none; place-items: center;
   background: var(--bg); color: var(--ink2); font-size: var(--t-base);
   padding: 30px; text-align: center;
 }
@@ -2669,6 +2835,14 @@ body.resizing { cursor: col-resize; user-select: none; }
    so a person meets the head and a blur, never the machine content. */
 .tg-spoil { filter: blur(4px); user-select: none; cursor: pointer; }
 .tg-spoil.shown { filter: none; user-select: auto; }
+/* And folded (Creator-stated, 2026-11-11): the blurred rows are one
+   collapsed quotation, cut to its first lines. The arrow unfolds it; a tap
+   on the blur shows it. The head stays plain above it. */
+.tg-fold { position: relative; margin-top: 6px; padding: 0 22px 4px 8px; border-left: 3px solid var(--accent); border-radius: var(--r-sm); background: var(--bg); font-size: var(--t-sm); line-height: 1.5; max-height: calc(4.5em + 6px); overflow: hidden; }
+.tg-fold.open { max-height: none; }
+.tg-unfold { position: absolute; right: 6px; bottom: 4px; color: var(--ink3); cursor: pointer; }
+.tg-unfold svg { display: block; width: 14px; height: 14px; }
+.tg-fold.open .tg-unfold { transform: rotate(180deg); }
 
 .tg-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 11px 11px 14px; background: var(--sunk); }
 .tg-msg {
@@ -2689,6 +2863,9 @@ body.resizing { cursor: col-resize; user-select: none; }
 .tg-line .tg-k { color: var(--ink3); min-width: 74px; }
 .tg-line.wide .tg-k { min-width: 106px; }
 .tg-at { font-size: var(--t-xs); color: var(--ink3); margin-top: 4px; }
+/* A reply's quote of the job's message it answers (Architecture `Telegram`
+   I2; the twenty-eighth notes, note 19). Mirrors the mockup. */
+.tg-quote { border-left: 3px solid var(--accent); background: var(--sunk); border-radius: var(--r-sm); padding: 2px 8px; margin-bottom: 6px; font-size: var(--t-sm); color: var(--ink2); }
 .tg-msg b { font-weight: 600; }
 /* A failure has one shape wherever it attaches, and the phone is no
    exception: the red dot carries the colour and the sentence stays in
@@ -2839,6 +3016,14 @@ body.resizing { cursor: col-resize; user-select: none; }
    text edge, not at the numbered steps' (the Creator's twenty-first notes,
    note 1, 2026-10-29). */
 .sudid + .suout { padding-left: 17px; }
+/* A card with no steps or list above Server output puts the control at the
+   card's own text edge (the Creator's twenty-eighth notes, note 1,
+   2026-11-09). */
+.suout.alone { padding-left: 0; }
+/* In Server output, the line naming an act where its words begin, and the
+   line over Smoozy's own words, are set quieter than the words (the
+   twenty-eighth notes, notes 1 and 7). */
+.lbody .lmark { color: var(--ink3); }
 /* A hidden row, shown because the box is ticked, is drawn grey and is
    otherwise every inch a row (the Creator's twenty-first notes, note 3). */
 .frow.fhidden .fname { color: var(--ink3); }
@@ -2855,10 +3040,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 .fsztip[hidden] { display: none; }
 .log .qlines > span.err { color: var(--ink); }
-/* At the preview column's smallest widths, Show latest drops under the
-   arrows rather than spilling out of the column: it takes its own words'
-   width, so at the column's own width it still sits on the arrows' line
-   (the Creator's twenty-seventh notes, notes 4 and 5). */
+/* Where it does not fit, Show latest drops under the arrows rather than
+   spilling out of the column (the Creator's twenty-seventh notes, notes 4
+   and 5). Since the frame field holds nine characters (A-13) that is the
+   column's own width too; it then starts at the column's left (UI
+   consistency, finding 35, at the end of this sheet). */
 .pvstep { display: flex; align-items: center; gap: 0; flex-wrap: wrap; row-gap: 6px; }
 .pvstep .pvframe { display: contents; }
 .pvstep [data-pvgo="-1"] { order: 1; margin-left: 7px; }
@@ -2880,6 +3066,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 .fbview .fbvsay[hidden] { display: none; }
 .fbview .fbvstep { display: flex; justify-content: center; gap: 6px; }
 .fbview .fbvstep .sb { width: 30px; height: 26px; }
+/* The board under a picture (the Creator's twenty-ninth notes, note 12): the
+   grey-and-white of the server's copies, in squares 8 px on screen whatever
+   the picture's size, drawn under every picture and only over the picture's
+   own area. It keeps its two light colours in the dark theme. */
+.fbview .fbvboard { fill: #ffffff; }
+.fbview .fbvboard .dk { fill: #cccccc; }
 .badge.brm { background: var(--ink3); }
 .hgonehead { background: var(--sunk); border-bottom: 1px solid var(--soft); border-top: 1px solid var(--soft); padding-bottom: 8px; }
 .hgonehead .qmach { position: static; border: 0; background: transparent; }
@@ -2889,10 +3081,14 @@ body.resizing { cursor: col-resize; user-select: none; }
    entry, in Queue and in History (Design/Queue & History, A first-frame check
    and its job; the Creator's nineteenth notes, note 7, 2026-10-27). Under the
    name, one line per part, each with its own dot: filled green when done,
-   pulsing amber while it renders, hollow when not started. */
+   pulsing amber while it renders, hollow when not started. The dot sits on
+   the small letters' middle, 8 px before its words: its foot on the words'
+   baseline, raised to half the letters' height (the Creator's twenty-eighth
+   notes, note 12, 2026-11-09; until then 6 px and centred on the line, which
+   sat it above the letters' middle). */
 .ffparts { grid-column: 2 / -1; display: block; margin-top: calc(3px - var(--rowgap)); min-width: 0; }
-.ffpart { display: flex; align-items: center; gap: 6px; font-size: var(--t-sm); font-weight: 400; color: var(--ink2); line-height: 1.5; min-width: 0; }
-.ffpart::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--ink3); }
+.ffpart { display: flex; align-items: baseline; gap: 8px; font-size: var(--t-sm); font-weight: 400; color: var(--ink2); line-height: 1.5; min-width: 0; }
+.ffpart::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--ink3); position: relative; top: calc(3.5px - 0.5ex); }
 .ffpart.done::before { background: var(--ok); border-color: var(--ok); }
 .ffpart.now::before { background: var(--busy); border-color: var(--busy); animation: working 1.7s ease-in-out infinite; }
 .ffpart .fft { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2919,3 +3115,406 @@ body.resizing { cursor: col-resize; user-select: none; }
    and its two answers; the side column's copy is not drawn then. */
 .jwheld.ffask { display: grid; grid-template-columns: minmax(96px, 40%) minmax(0, 1fr); gap: 12px; align-items: start; }
 .jwheld.ffask .ffq { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+
+/* ══ THE UI AT EVERY SIZE (2026-11-11). What the scout's findings and
+      Codex's audit of them asked of the shared drawing, each line beside its
+      finding's number in `Audits/Build/The UI at every size/`. Nothing below
+      changes a colour, a size or a gap; it says where a long name breaks,
+      what may shrink and what keeps its width. ══ */
+/* A long name with no spaces breaks inside its own column rather than
+   running over the next one or off the window (cause 1). */
+.qdh h2, .qdsub { overflow-wrap: anywhere; }                 /* A-14 */
+.qfail p { overflow-wrap: anywhere; }                        /* A-15 */
+.jw1 { overflow-wrap: anywhere; }                            /* A-16 */
+.jw1 > * { min-width: 0; }
+.svwork { overflow-wrap: anywhere; }                         /* B-01 */
+.ky-name { overflow-wrap: anywhere; }                        /* C3 */
+.mtop h1, .mtop .addr { min-width: 0; overflow-wrap: anywhere; }  /* C4 */
+.owpair { overflow-wrap: anywhere; }                         /* D-12 */
+.cstate p, .ctools .warn { overflow-wrap: anywhere; }        /* D-18 */
+.ctools > * { min-width: 0; }
+.box { overflow-wrap: anywhere; }                            /* D-03 */
+.shead h2 { overflow-wrap: anywhere; }
+.vln > *, .vlx .vlt { overflow-wrap: anywhere; }             /* D-01, D-02 */
+.sfrow .path { min-width: 0; overflow-wrap: anywhere; }      /* E-01 */
+.sfrow .mini { flex: none; }
+.jl { grid-template-columns: minmax(0, max-content) minmax(max-content, 1fr); overflow-wrap: anywhere; }  /* E-10 */
+/* The pick bar's words shrink and break; its way out keeps its width (C-07). */
+.stale-bar { overflow-wrap: anywhere; }
+.stale-bar > * { min-width: 0; }
+.stale-bar > .mini { flex: none; }
+/* A panel's strip stays one line: its words are cut short, the whole of them
+   on hover, and Open keeps its place (D-20, B-17). */
+.strip .t, .strip .d { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip .t { flex: 0 1 auto; }
+.strip .d { flex: 0 10 auto; }
+.strip .open { flex: none; }
+/* The picture viewer's title is cut short, the whole name on hover, so
+   Download and the close button stay in the box (C-13). */
+.pvlarge .pvtitle > * { flex: none; }
+.pvlarge .pvtitle > h3 { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The top path in Files is one line that scrolls, opening at the folder the
+   user is in, so a deep path leaves the list its room (C2). */
+.crumbs { flex-wrap: nowrap; overflow-x: auto; }
+.crumbs > * { flex: none; white-space: nowrap; }
+/* Only the servers scroll in the rail; Queue, History, Transfers, Keys and
+   Settings stay in view however many servers there are (A-03, in Codex's
+   narrowed form: they could be scrolled to, and now they stay seen). */
+.rail { display: flex; flex-direction: column; }
+.rail > * { flex: none; }
+.rail > .rsec:first-child { flex: 0 1 auto; min-height: 96px; overflow-y: auto; }
+/* A notice's words break inside it, so a long job name never pushes Dismiss
+   past the list's edge (A-06). */
+.qbanner { overflow-wrap: anywhere; }
+.qbanner > * { min-width: 0; }
+.qbanner > .cbtns, .qbanner > .qbacts { flex: none; }
+/* A not-submitted row has no entry to open, so its reason wraps and reads
+   whole, and its cross sits after Not submitted. (A-07). */
+.qrow.ns .qs { white-space: normal; overflow-wrap: anywhere; }
+.qrow.ns > .qnsw { display: flex; align-items: baseline; gap: 6px; }
+/* A job's name keeps at least two fifths of its row; a long state is cut
+   short instead, and the row reads whole on hover (A-11). */
+.qrow { grid-template-columns: auto minmax(40%, 1fr) minmax(0, auto); }
+.qrow > .qst { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* A group's heading: the name and its scene count are one piece, cut short
+   where the list is narrow and whole on hover; Cancel all keeps its width
+   (A-08). */
+.qgh .qghn { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qgh .glnk { flex: none; white-space: nowrap; }
+/* A server's heading: a long name is cut short, whole on hover, and the
+   counts and Not updating keep their one line (A-09). Folded, the running
+   job's name keeps room to be read (A-10). */
+.qmach b { flex: 0 1 auto; min-width: 4ch; overflow: hidden; text-overflow: ellipsis; }
+.qmach .qm2.open { flex: none; white-space: nowrap; }
+.qmach .qm2.shut { flex: 0 1 auto; flex-wrap: wrap; row-gap: 2px; }
+.qm2.shut > * { flex: none; }
+.qm2.shut .qmn { flex: 0 1 auto; min-width: 6ch; }
+/* A server that is not updating dims its badge as the rail does (A-22). */
+.qmach.stale .badge { opacity: .38; }
+/* The preview's frame field holds the longest frame Blender takes, with its
+   sign (A-13). */
+.pvstep .pvframe input { width: calc(9ch + 16px); }
+/* A History row: the job's name keeps at least two fifths of the row, the
+   frame count is cut short instead, and the row reads whole on hover (A-19). */
+.hrow { grid-template-columns: minmax(40%, 1fr) minmax(0, auto) auto; }
+.hrow > .hnum { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* Clear all history: a long server name breaks inside its column rather than
+   taking the box's width (A-17). */
+.hcs { grid-template-columns: minmax(0, max-content) auto; }
+/* The held box's buttons are a row of buttons, not a check row: no rule and
+   no padding under them (A-18). */
+.jwheld .row { padding: 0; border-bottom: 0; }
+/* The job page on a very wide window: the main column stops at a readable
+   width rather than taking every pixel the preview does not (A-20). */
+.qdbody { grid-template-columns: minmax(var(--main-min), 1200px) minmax(180px, var(--side-w)); }
+/* A server's badge stays with its name, and a long name breaks beside it
+   rather than leaving the badge alone on a line (B-03, B-24, B-27). */
+.svname { display: flex; align-items: baseline; }
+.svname > bdi { min-width: 0; overflow-wrap: anywhere; }
+.svrow .svname .badge { align-self: flex-start; }
+/* A server's form: the value column may be narrower than what is in it, so a
+   long key name or a missing key's fingerprint is cut short in the key field
+   and New key… stays in the box (B-08, B-09). */
+.frm { grid-template-columns: 78px minmax(0, 1fr); }
+.frm > * { min-width: 0; }
+.krow > a, .krow > button { flex: none; }
+/* A finished request: the destination gives way first and the name after it,
+   so the control at the line's end is never pushed off the window; both read
+   whole on hover (C-18). */
+.req.done .rqh .rqn { flex-shrink: 1; }
+.req.done .rqh .rqs { flex-shrink: 1000; }
+/* The submitted line never takes a line of its own: it takes what line 2
+   has left, its sentence cut short and whole on hover, Show in Queue whole
+   beside it, so Render never moves (D-16, C9). */
+.sfoot .sfl2 > .rs-sent { flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-end; align-items: baseline; }
+.rs-sent > .rs-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rs-sent > a, .rs-sent > .rs-tick { flex: none; }
+/* A setting's value wraps under its value, never under its label: a typed
+   resolution's pixels and a long engine name start at the value column, the
+   notes' own 91 (D-10, and D-09 in its narrowed form). The label hangs into
+   the row's indent, so the first line is drawn as before. */
+.set { padding-left: 91px; }
+.set > .k { margin-left: -91px; }
+/* What it will write: the folder keeps at least half the list's width and a
+   long format name wraps at its space instead, so Multilayer EXR no longer
+   squeezes the folders into a strip (D-11). */
+.writes { grid-template-columns: minmax(50%, 1fr) auto minmax(min-content, max-content); }
+/* A search folder's path and its could-not-be-read mark share one piece: the
+   mark stays on one line, beside the path where there is room and under it
+   where there is not (E-02). */
+.sfrow .sfwhat { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.sfrow .sfwhat .fmsg { white-space: nowrap; }
+/* The Set up card's state stays on one line; the moment and last seen wrap
+   under it where the card is narrow (E-07). */
+.sustat { flex-wrap: wrap; row-gap: 4px; }
+.sustat > .stx { flex: none; white-space: nowrap; }
+/* A failed step's sentence starts beside its red dot and wraps there (E-12). */
+.stfail > b { flex: 1 1 12em; min-width: 0; overflow-wrap: anywhere; }
+/* The server's lines go under the steps when the card itself is too narrow
+   for both, not only when the window is (E-13). */
+.suwork { flex-wrap: wrap; }
+.suwork > .log { flex: 1 1 360px; }
+/* A Blender's warning tag stays whole on one line inside its outline (E-09). */
+.bwarn, .btag { white-space: nowrap; display: inline-block; }
+/* A long engine name breaks inside the value column, so the choices stay
+   beside their label (D-09, narrowed). */
+.set > .rads { flex: 1 1 0; min-width: 12em; }
+.rad, .rad > * { min-width: 0; }
+.rad em { overflow-wrap: anywhere; }
+/* A failure's sentence hangs past its dot, so a wrapped second line starts
+   where the words do, in line with the sentence under it (B-29). */
+.qfail > p:first-child { padding-left: 15px; text-indent: -15px; }
+/* What the server said: the title keeps its one line and the subtitle wraps
+   beside it; the box keeps one height whichever tab is chosen, so the tabs
+   never jump (B-21). */
+.lhead h3 { flex: none; white-space: nowrap; }
+.lhead .lsub { min-width: 0; overflow-wrap: anywhere; }
+.lbox { height: min(640px, 100%); }
+/* On a very wide window a row stops at a readable width, so a name and its
+   controls, or a folder and its count, stay near each other (B-07, C-06,
+   D-06). */
+.svrow, .ky-row { max-width: 1600px; }
+.frow { max-width: 1600px; }
+.cols > .col { max-width: 640px; }
+/* A server's badge and name are one piece on Keys' rows and in its boxes:
+   the badge keeps its 7 to the name, the piece its 12 or 14 to the next, and
+   a long name breaks inside its piece (B-24, B-27). */
+.ky-one { display: inline-flex; align-items: baseline; min-width: 0; overflow-wrap: anywhere; }
+.ky-use .ky-one .badge, .mlist .ky-one .badge { align-self: center; }
+.ky-use .ky-and + .ky-one > .badge { margin-left: 0; }
+.mlist .ky-one:first-child > .badge { margin-left: 0; }
+/* Files' bottom bar is one line: where uploads go is cut short, whole on
+   hover, and the count, the free space and Show hidden files keep their place
+   at its end (C-02). */
+.fbar { flex-wrap: nowrap; }
+.fbar > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fbar > :not(:first-child) { flex: none; }
+/* Files' toolbar stays one line: the two word buttons a .blend adds are cut
+   short where the window is narrow, whole on hover, so the list never moves
+   down when a .blend is chosen (C-01). */
+.ftools { flex-wrap: nowrap; }
+.ftools > :not(.grow) { flex: none; }
+.ftools .blendonly > .mini { flex: 0 1 auto; min-width: 3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* End of the UI at every size. */
+
+/* The UI at every size, second builder: C-03 keeps the saved-with tag beside
+   a shortened name. C-08 is a sentence, with a turning mark before it, never
+   separate columns. C-11 and C6 keep hover details inside the window. */
+.fname.fversion { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; }
+.fname.fversion > .fname-text { display: block; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.fname.fversion > .ver { flex: none; margin-left: 0; }
+.fname.fversion > .deny, .fname.fversion > .fhint { flex: 0 0 100%; }
+.fname.fversion.fediting { display: block; }
+.fwait { padding: 16px; }
+.fwait .fwb { display: block; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.fwait .fwb > .spin { margin-right: 4px; }
+.fsztip { max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); white-space: normal; overflow-wrap: anywhere; overflow: auto; }
+
+
+
+/* C-22: the destination label starts beside the first folder. */
+.transfers-destination { align-items: start; }
+/* E-08: keep the Blender folder ending that names its build. */
+.bup { direction: rtl; text-align: left; }
+
+/* The UI at every size, third builder (2026-11-11), the mockup's lines at
+   `Preparation/Design/Mockup/Smoozy.html`, "third builder", with the
+   window's step written as the mark `web/panes.js` writes. */
+/* B-05: a moment never breaks. B-03: below 780 the actions column takes
+   what Connect and set up needs. */
+.svhw .sub > .mono { white-space: nowrap; }
+.app[data-narrow~="s4"] .svrow { grid-template-columns: minmax(0,1fr) minmax(0,1.25fr) 184px; }
+.app[data-narrow~="s4"] .svacts { grid-template-columns: 102px 48px 22px; }
+/* B-26: a head's buttons keep one line; the sentence beside them breaks. */
+.svhead > .mini, .svhead > .btn { flex: none; white-space: nowrap; }
+.svhead > .qsub { min-width: 0; overflow-wrap: anywhere; }
+/* C-04: Paste's count grows rightward from right of the icon's middle. */
+.ib .pb { right: auto; left: 17px; }
+/* E-03 and E-04: Telegram's button keeps one line, a server not yet told is
+   one piece, and the choices' descriptions and the card's boxes line up. */
+.stgrow > .mini { flex: none; white-space: nowrap; }
+.stgrow > .path { min-width: 0; overflow-wrap: anywhere; }
+.tg-srv { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
+/* The five choices share one set of columns, so the descriptions start at
+   one x in any face: a name wider than 222 pixels, as A picture every [5]
+   minutes is in Linux's face, widens the column for all five rather than
+   for its own row (hosted run 43727887590, 2026-11-15). The first column is
+   the row's own border and padding, 13 pixels, and the radio's 14. */
+.tg-on .fmts { display: grid; grid-template-columns: calc(13px + 14px) minmax(222px, auto) 1fr; gap: 6px 11px; }
+.tg-on .fmt.choice3 { grid-column: 1 / -1; grid-template-columns: subgrid; }
+.sucard .stgrow > .lab { flex: none; min-width: 3.5em; }
+/* E-11: only the Install Blender box's versions scroll. */
+.bulists { flex: 0 1 auto; min-height: 96px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+/* C5: a bridge over the Range help's gap. */
+.tip .bubble::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+
+/* ══ UI CONSISTENCY (2026-11-13). What the check of that day asked of the
+      shared drawing (`Audits/Build/UI consistency — the check, 2026-11-13.md`),
+      each line beside its finding's number. Nothing here changes a colour;
+      it keeps things still when what is around or inside them changes. ══ */
+/* Cause 1: a number that changes while it is read keeps even-width digits in
+   the ordinary face, so what sits after it stays put. */
+.tnum, .tm, .rqm, .rdline, .pn, .steps .stm, .fmeta.when, .hwhen { font-variant-numeric: tabular-nums; }
+/* Finding 7: a request's count is the header's last thing, at its right
+   edge, whatever control sits before it or appears beside it. */
+.rqh > .rqm { order: 1; min-width: 4.5em; text-align: right; }
+/* Render Settings. Finding 15: while a read runs, its line covers the pick
+   line in the held line under the version row, so the page below does not
+   move; the read's line is held there unseen too. */
+.pkline > .rdline:not(.pkheld):not([hidden]) ~ :not(.pkheld) { visibility: hidden; }
+/* Finding 14: the foot's third line keeps one line's room when it has
+   nothing to say, so Render never moves as its words come and go. */
+.sfoot .sfl3 { min-height: calc(8px + 1.62 * var(--t-sm)); }
+/* Finding 24: where there is nothing to hand back, the cross's room is held,
+   so what follows a value stays put when a value is typed. */
+.clear.held { visibility: hidden; }
+/* Finding 62: the Texture Limit dropdown is one width whatever is picked. */
+.w-tex { width: 104px; }
+/* Finding 50: the word after the Telegram minutes is the quiet small grey
+   wherever the minutes are asked, the job page's included. */
+.sftg .hintl { font-size: var(--t-sm); color: var(--ink3); }
+/* Causes 3 and 5: words that change to others hold the width of the widest
+   they can read, the others drawn unseen after them with no height — a
+   rendering row's Rendering and Finishing (finding 3), Cancel setup and
+   Cancelling… (finding 45), a box's main button (finding 18) — so nothing
+   beside them moves as they change. */
+.holds { display: inline-flex; flex-direction: column; align-items: center; }
+.holds::after { content: attr(data-held); height: 0; overflow: hidden; visibility: hidden; white-space: nowrap; }
+.qst.holds { align-items: flex-end; }
+.stx > .holds { align-items: flex-start; }
+/* Finding 4: Blender's estimate is pinned to the end of whichever line it
+   lands on, so a sample count gaining a digit never slides it; once a job
+   has shown one, its room is held while Blender's newest line carries
+   none. */
+.pline > .pest { margin-left: auto; }
+.pline > .unseen { visibility: hidden; }
+/* The job page's preview. Finding 32: what the frame shows, a refused frame
+   number and a View Layer that did not render on this frame share one line,
+   the first said covering the rest, so stepping frames moves nothing below;
+   a frame with one View Layer names it in the dropdown's row, at the
+   dropdown's height. */
+.pvline { display: grid; }
+.pvline > * { grid-area: 1 / 1; }
+.pvline > :not([hidden]) ~ * { visibility: hidden; }
+.pvvlrow > .pvone { flex: 1 1 0; min-width: 0; font-size: var(--t-md); padding: 4px 0; border: 1px solid transparent; overflow-wrap: anywhere; }
+/* Finding 35: the arrows and the frame field are one piece, so where Show
+   latest does not fit beside them it drops under them at the column's left,
+   like everything else, rather than 10 pixels in. */
+.pvarrows { display: flex; align-items: center; flex: none; }
+.pvstep { column-gap: 10px; }
+.pvstep [data-pvlatest] { margin-left: 0; }
+/* Finding 36: the frame field is drawn as Smoozy's fields are, the arrows'
+   height, between them. */
+.pvstep .pvframe input { height: 24px; font-size: var(--t-md); border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--bg); color: var(--ink); }
+.pvstep .pvframe input[aria-invalid="true"] { border-color: var(--bad); }
+/* Cause 6, finding 39: one turning mark on a line, 10 pixels with its foot a
+   pixel under the words' baseline, 7 pixels from its words; on a control,
+   the same 10 pixels over its held label. */
+.qst .spin { margin-left: 7px; }
+.fwait .fwb > .spin { margin-right: 7px; }
+.uway .spin, .wk::after { width: 10px; height: 10px; margin: -5px 0 0 -5px; }
+/* Finding 38: a working control is never dimmed, even where it is also
+   unavailable; a filled button that cannot be pressed looks it, faded, with
+   no pointer and no brightening, as a small one does. */
+.btn[disabled] { opacity: .45; cursor: default; }
+.btn[disabled]:hover { filter: none; }
+.uway:disabled, #stgbotgo.uway:disabled { opacity: 1; }
+/* Server Setup. Finding 8: the steps take a fixed share of the card beside
+   the server's window, so neither a step turning bold, a ticking figure, a
+   turning mark nor a step ending moves the window or drops it under the
+   steps; a long line wraps inside its share (finding 43, the restart
+   note). */
+.suwork > .steps { flex: 0 0 45%; min-width: 0; }
+.suwork > .steps > li { overflow-wrap: anywhere; }
+/* Finding 45: Server output is the one small button beside the server's
+   window as on the card after the run ends. */
+.log button { padding: 4px 10px; border-radius: var(--r-md); }
+/* The rail. Finding 1: a server's badge sits in the middle of the room a
+   place's icon takes, so every name in the rail starts at one x. Finding
+   54: every part of the rail keeps a scroll bar's room where scroll bars
+   take room, so a server row is as wide as a place's row once the servers
+   scroll. */
+.rail .item .badge { margin: 0 2.5px; }
+.rail > .rsec { overflow-y: auto; scrollbar-gutter: stable; }
+/* All servers. Finding 21: the dot in a connect control sits at its left,
+   at one place on every row and in every state, its words after it.
+   Finding 22: on a server's own page the control is one width in every
+   state, the list's narrow column's, so its left edge never jumps. */
+.svacts .cbtn { justify-content: flex-start; }
+.mtop .cbtn { width: 156px; justify-content: flex-start; }
+/* Finding 33: on a server's own page a line about the connection is drawn
+   where the hardware line is, covering it while it stands, so the page does
+   not drop and rise under it. */
+.mhead { display: grid; grid-template-columns: minmax(0, 1fr); }
+.mhead > .mconnectnote, .mhead > .hw { grid-row: 2; grid-column: 1; align-self: start; }
+.mhead > .mconnectnote { margin-top: 0; }
+.mhead > .mconnectnote:not([hidden]) ~ .hw { visibility: hidden; }
+/* Keys. Finding 60: the key type's label sits on its first choice's line. */
+.ky-fi > .rads { margin-top: 5px; }
+/* Files. Finding 10: the bar's filler takes the room again, so Show hidden
+   files sits at the bar's right end in every folder. Finding 11: a .blend's
+   version sits right after its name, as the home folder's word does.
+   Finding 25: where Paste is not offered its room is kept, empty. */
+.fbar > .grow { flex: 1 1 0; }
+.fname.fversion > .fname-text { flex: 0 1 auto; }
+.ib.held { visibility: hidden; }
+/* Finding 56: the list keeps a scroll bar's room whether it scrolls or not,
+   so Kind, Size and Changed stay put from folder to folder; the path's own
+   sideways scroll draws no bar to push the toolbar and the list down. */
+.flist { scrollbar-gutter: stable; }
+.crumbs { scrollbar-width: none; }
+.crumbs::-webkit-scrollbar { display: none; }
+/* Finding 57: a sort mark on a right-aligned header hangs after its word, so
+   Size and Changed do not move left when the list is sorted by them. */
+.sortb.r { position: relative; }
+.sortb.r > .smark { position: absolute; left: 100%; white-space: pre; }
+/* The dependency check. Finding 12: the last column is one width on every
+   row, its controls at its right end with the cross's room kept where there
+   is none, so the sizes and ⋯ sit at one place down the list. */
+.rows .row { grid-template-columns: minmax(0,1fr) 68px minmax(130px, auto); }
+.rows .row > .acts { justify-content: flex-end; }
+.fx.held { visibility: hidden; }
+/* Finding 26: the bar over the chosen rows sits under the rows, over the
+   foot, so choosing never drops the list. */
+.bulk { border-top: 1px solid var(--line); border-bottom: 0; }
+/* Finding 49: the small button inside a line of words is held to the line's
+   height, so Stop coming and going moves nothing below it. Its margins take
+   back its whole height (half its 1.62 line each way, and its border), so it
+   adds nothing to the line in any face: taking back the border alone held on
+   the Mac and left Windows' line 0.58 pixels taller (hosted run 43746222478). */
+.mini.inl { margin-block: calc(-0.81em - 1px); }
+/* History. Finding 13: the ending's column is one width on every row, so
+   the frame counts' right edges line up down the list. 130 pixels hold the
+   longest ending, Unknown if started, in Linux's wider face as well as the
+   Mac's (120 held it only in the Mac's, hosted run 43727887590,
+   2026-11-15). */
+.hrow { grid-template-columns: minmax(40%, 1fr) minmax(0, auto) minmax(130px, auto); }
+/* Boxes. Cause 4, finding 17: a box hangs from a fixed top rather than
+   sitting in the window's middle, so as it grows only its bottom moves, and
+   the button just pressed stays under the pointer. */
+.modal { place-items: start center; padding-top: max(24px, 10vh); }
+/* Cause 5, finding 18: in a box's row of buttons every button is the main
+   button's height, the row sits the same 4 pixels under what is above it in
+   every box, and a button that comes and goes keeps its room. */
+.mrow > .btn, .mact > .btn { min-height: calc(1.62 * var(--t-base) + 18px); }
+.mrow { padding-top: 4px; }
+.mrow > .held, .mact > .held { visibility: hidden; }
+/* Finding 2: a screen's title sits at one place on every screen: 13 pixels
+   down, the header the same height whether or not it carries a button, the
+   button overhanging the header's padding rather than growing it. */
+.svhead { padding-top: 13px; padding-bottom: 13px; align-items: baseline; }
+.svhead .btn, .svhead .mini { margin-block: -8px; }
+/* Finding 63: the Windows and Linux menu is as wide as a right-click menu,
+   and its headings carry the ordinary pointer, not the not-allowed one. */
+.mb .ctx { width: 232px; }
+.mb .ctx button.hd { cursor: default; }
+/* The small ones. A queue row's state sits on its name's line, and its bars
+   start under the name, not under the grip. A folded heading's percentage
+   holds the width of 100%, so what follows it stays put as it climbs. The
+   Submitting again band runs the width of its panel, square, as the File not
+   read band does. */
+.qrow > .qn, .qrow > .qst { align-self: baseline; }
+.qbars { grid-column: 2 / -1; }
+.qm2.shut > .bar + .mono, .qm2.shut > .bar + span > .mono { display: inline-block; min-width: 4ch; text-align: right; }
+.sheet > .agnband { margin-left: 0; margin-right: 0; border-radius: 0; }
+/* End of UI consistency. */

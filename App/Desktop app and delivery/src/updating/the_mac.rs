@@ -20,10 +20,11 @@
 //!    ad-hoc bundle cannot pass it**, and no signed, notarized release exists
 //!    yet, so nothing a user would get from this route has been watched (see
 //!    the account of this piece).
-//! 4. **Held while anything is running** ([`super::the_hold`], Z31) — the
-//!    staged, verified bundle is kept for the run, and the hold is read again
-//!    at the next check. **Z32's press goes past the hold and past nothing
-//!    else.**
+//! 4. **The update box** ([`super::the_box`], Z33, from 2026-11-09): the
+//!    staged, verified bundle is kept for the run, and **nothing goes on
+//!    until the user presses *Install now***. *Skip this version* writes the declined
+//!    mark (Z10b). Until then this step was Z31's hold, and publication went
+//!    on by itself once nothing ran.
 //! 5. **Published** ([`the_verified_bundle_is_published`]): the window put
 //!    away and the record's one lock taken and kept, so no new ordinary work is
 //!    admitted (Z6); L8's copy from an earlier migration discarded, since the
@@ -33,26 +34,28 @@
 //!    written; and **the complete bundle replaced at its installed path with a
 //!    named backup of the complete previous one** (Z5, Z7, Z8, Z24), through
 //!    the platform file adapter.
-//! 6. **The probe** ([`super::the_probe`]): the new bundle started in the
-//!    update-launch mode with a one-use token, the hold handed over (P2), and
-//!    the token watched for until the launch deadline.
+//! 6. **The probe** ([`super::the_probe`]): the new bundle started **through
+//!    the system's own app launcher** (from 2026-11-09,
+//!    [`ThroughTheSystemsLauncher`]) in the update-launch mode with a one-use
+//!    token, the hold handed over (P2), and the token watched for until the
+//!    launch deadline.
 //! 7. **On the token, the old process exits.** **On anything else, the
 //!    rollback** (Z21's macOS bullet): the probe ended, the hold taken back,
 //!    **L8's copy restored first** (L13), the complete named backup put back at
 //!    the installed path, the record cleared as the rollback's last act (Z21a),
 //!    and **the previous bundle started in the update-launch mode alone, so it
-//!    makes no crash offer** (Z21b's last bullet, `Reporting a problem` U5b).
-//!    Then the old process exits.
+//!    makes no crash offer** (Z21b's last bullet, `Reporting a problem` U5b),
+//!    through the launcher too. Then the old process exits.
 //!
 //! **The old process continues only for the handover** (Z6): from step 5 on
 //! it writes nothing but Z21a's record and the rollback's acts, and it never
 //! writes inside either bundle (Z5, Z25).
 //!
 //! **What a publication that does not happen is.** E15's *an update that did
-//! not happen*: nothing is replaced, the probe record is cleared, the window
-//! comes back, and About reads *Update installation failed.* — Design’s
-//! separate reading for a found update that could not be installed. The next
-//! check tries again.
+//! not happen*: nothing is replaced, the probe record is cleared, E18's
+//! staging folder is removed, the window comes back, and About reads *Update
+//! installation failed.* — Design’s separate reading for a found update that
+//! could not be installed. The next check tries again.
 //!
 //! **Markers used below that belong to another document, each with the document
 //! it belongs to.** `State, identity and recovery` I9.
@@ -68,7 +71,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use super::checking::{AdmitsTheUpdateFetch, ReadsTheUpdateFile, TheReading, WhatTheRequestSays};
+use super::checking::{AdmitsTheUpdateFetch, ReadsTheUpdateFile, TheReading, TheStepThatFailed, WhatTheRequestSays};
 use super::fetching::{self, WhyTheFetchDidNotPass};
 use super::the_probe::{self, AProbeUnderWatch, WhatTheProbeCameTo};
 use super::trust::TheUpdateTrustRecord;
@@ -230,6 +233,60 @@ pub enum WhyTheUpdateDidNotHappen {
     TheRecordBeforePublication(String),
     /// The replacement itself failed; the installed bundle is what it was.
     TheReplacement(String),
+    /// **The staging folder could not be made beside the installed bundle
+    /// because that folder will not take one**: its volume is read-only, or
+    /// this login may not write there. Nothing was fetched. Added 2026-11-14,
+    /// the Rough what-if answers, share 5 (426, and 61's update half): until
+    /// then it was [`Self::TheStaging`], which About says with no reason.
+    ItsFolderCannotBeWritten { read_only: bool },
+}
+
+impl WhyTheUpdateDidNotHappen {
+    /// **The step About names** (Design *Updating*; the four questions,
+    /// Sol's S5).
+    pub fn the_step(&self) -> TheStepThatFailed {
+        use WhyTheUpdateDidNotHappen as Why;
+        match self {
+            Why::TheFetch(failed) => failed.the_step(),
+            Why::TheStaging(_) | Why::ItsFolderCannotBeWritten { .. } => TheStepThatFailed::Download,
+            Why::NothingForThisRow | Why::NotOneBundleInTheDownload | Why::TheSystemsOwnCheckRefusedIt(_) => {
+                TheStepThatFailed::Verification
+            }
+            Why::NoPlaces(_) | Why::TheRecordBeforePublication(_) | Why::TheReplacement(_) => {
+                TheStepThatFailed::Installation
+            }
+        }
+    }
+    /// **The reason About says after the step**, where one is known (Design
+    /// *Updating*, 2026-11-12): the fetch's own, and the system's check.
+    pub fn the_reason(&self) -> Option<super::checking::TheReasonBehind> {
+        match self {
+            Self::TheFetch(failed) => failed.the_reason(),
+            Self::TheSystemsOwnCheckRefusedIt(_) => Some(super::checking::TheReasonBehind::TheSystemRefusedIt),
+            Self::ItsFolderCannotBeWritten { read_only: true } => {
+                Some(super::checking::TheReasonBehind::ItsFolderIsReadOnly)
+            }
+            Self::ItsFolderCannotBeWritten { read_only: false } => {
+                Some(super::checking::TheReasonBehind::NoPermissionForItsFolder)
+            }
+            _ => None,
+        }
+    }
+}
+
+/// **Why the staging folder could not be made**, where the folder the
+/// installed bundle sits in will not take one: its volume is read-only, or
+/// the refusal was a permission refusal. Anything else stays
+/// [`WhyTheUpdateDidNotHappen::TheStaging`] with the system's words.
+fn the_staging_folder_was_refused(places: &ThePlaces, failed: files::Failure) -> WhyTheUpdateDidNotHappen {
+    let beside = places.installed.parent().unwrap_or(&places.installed);
+    if files::the_volume_is_read_only(beside) {
+        WhyTheUpdateDidNotHappen::ItsFolderCannotBeWritten { read_only: true }
+    } else if failed.refusal == files::Refusal::PermissionRefused {
+        WhyTheUpdateDidNotHappen::ItsFolderCannotBeWritten { read_only: false }
+    } else {
+        WhyTheUpdateDidNotHappen::TheStaging(failed.reported)
+    }
 }
 
 /// **A complete bundle, staged beside the installed one and accepted by the
@@ -270,8 +327,8 @@ pub fn the_update_is_fetched_and_verified(
 ) -> Result<AVerifiedStagedBundle, WhyTheUpdateDidNotHappen> {
     use WhyTheUpdateDidNotHappen as Why;
     let entry = verified.the_entry_for_this_row.as_ref().ok_or(Why::NothingForThisRow)?;
-    files::a_folder_is_removed_whole(&places.staging).map_err(|failed| Why::TheStaging(failed.reported))?;
-    files::ensure_directory(&places.staging).map_err(|failed| Why::TheStaging(failed.reported))?;
+    files::a_folder_is_removed_whole(&places.staging).map_err(|failed| the_staging_folder_was_refused(places, failed))?;
+    files::ensure_directory(&places.staging).map_err(|failed| the_staging_folder_was_refused(places, failed))?;
     let fetched = fetching::the_artifact_is_fetched(file, admission, entry, says, &places.staging)
         .map_err(Why::TheFetch)?;
     let unpacked = places.staging.join("unpacked");
@@ -314,35 +371,46 @@ pub trait StartsABuild {
 /// `crate::start::LaunchMode` reads.
 pub const THE_UPDATE_LAUNCH_ARGUMENT: &str = crate::start::THE_UPDATE_LAUNCH_ARGUMENT;
 
-/// **The real form: the bundle's own program, started directly.** Its name is
-/// this program's own, which is the one the release bundles.
-pub struct FromTheBundle;
+/// **The real form, from 2026-11-09: the bundle started through the system's
+/// own app launcher** (the Creator's twenty-eighth notes, note 5). Until then
+/// the bundle's program was run directly as a child of the old process, and a
+/// Smoozy kept in the Dock came back as a second icon after an update; a
+/// program the launcher never started is the cause as Part A of those notes
+/// reads it, and that reading is not proved (see the account of piece 3).
+/// **Z21's macOS bullet holds unchanged**: the new bundle is started in P2's
+/// probe mode and watched for the token, now through
+/// [`AProbeUnderWatch::launched`] with its two pipes in E18's staging folder;
+/// and the build a rollback starts is started the same way, with the
+/// argument alone.
+pub struct ThroughTheSystemsLauncher;
 
-impl FromTheBundle {
-    fn the_program_in(bundle: &Path) -> Result<PathBuf, String> {
-        let this = std::env::current_exe().map_err(|failed| failed.to_string())?;
-        let name = this.file_name().ok_or("this program has no name")?;
-        Ok(bundle.join("Contents").join("MacOS").join(name))
-    }
-}
-
-impl StartsABuild for FromTheBundle {
+impl StartsABuild for ThroughTheSystemsLauncher {
     fn the_probe(&self, bundle: &Path, token: &str) -> Result<AProbeUnderWatch, String> {
-        let mut command = Command::new(FromTheBundle::the_program_in(bundle)?);
-        command.arg(THE_UPDATE_LAUNCH_ARGUMENT);
-        AProbeUnderWatch::starts(command, token)
+        let staging = locations::beside_the_installed_bundle(Location::TheUpdatesStagingFolder, bundle);
+        files::ensure_directory(&staging).map_err(|failed| failed.reported)?;
+        #[cfg(unix)]
+        return AProbeUnderWatch::launched(
+            bundle,
+            &[THE_UPDATE_LAUNCH_ARGUMENT],
+            token,
+            &staging,
+            &the_probe::the_bundle_is_opened,
+        );
+        #[cfg(not(unix))]
+        {
+            let _ = token;
+            Err("the system's app launcher is a Mac's".into())
+        }
     }
 
     fn the_previous_build(&self, bundle: &Path) -> Result<(), String> {
-        Command::new(FromTheBundle::the_program_in(bundle)?)
-            .arg(THE_UPDATE_LAUNCH_ARGUMENT)
-            .env_remove(the_probe::THE_PROBES_TOKEN)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
+        // **The argument alone, and no token** (Z21b's last bullet). The
+        // launched app is handed this process's own environment as well as
+        // the one given (observed at the desk, 2026-11-09), and this process
+        // may itself have been a probe, so **each of the probe's variables is
+        // handed empty**, which reads as none.
+        the_probe::the_bundle_is_opened(bundle, &[THE_UPDATE_LAUNCH_ARGUMENT], &the_probe::NONE_OF_THE_PROBES_VARIABLES)
             .map(drop)
-            .map_err(|failed| failed.to_string())
     }
 }
 
@@ -371,7 +439,25 @@ pub enum WhatThePublicationCameTo {
 
 /// **Steps 5 to 7.** `record` is the old process's own open record, whose one
 /// lock the caller holds for the whole of this; nothing else writes it.
+/// **A publication that does not happen removes E18's staging folder** (its
+/// build detail of 2026-11-09): nothing was published, so nothing in it is
+/// owed.
 pub fn the_verified_bundle_is_published(
+    staged: AVerifiedStagedBundle,
+    places: &ThePlaces,
+    record: &LocalRecord,
+    starts: &dyn StartsABuild,
+    hold: &mut dyn HandsTheHold,
+    deadline: Duration,
+) -> WhatThePublicationCameTo {
+    let came = the_publication(staged, places, record, starts, hold, deadline);
+    if matches!(came, WhatThePublicationCameTo::NotPublished(_)) {
+        the_staging_folder_goes(places);
+    }
+    came
+}
+
+fn the_publication(
     staged: AVerifiedStagedBundle,
     places: &ThePlaces,
     record: &LocalRecord,
@@ -482,11 +568,13 @@ fn the_rollback(
 // In the running application
 // ════════════════════════════════════════════════════════════════════════════
 
-/// **The route, kept for the run**: the places, and the staged bundle held
-/// while publication waits (Z31). Made by the update check's sequence and used
-/// on that one sequence alone.
+/// **The route, kept for the run**: the staged bundle, and the verified update
+/// it is staged from. Made by the update check's sequence and used on that one
+/// sequence alone. **Z33: nothing here publishes but the box's *Install
+/// now*** ([`TheMacRoute::answered`]).
 pub struct TheMacRoute {
     staged: Option<AVerifiedStagedBundle>,
+    offered: Option<AVerifiedUpdate>,
 }
 
 impl Default for TheMacRoute {
@@ -497,65 +585,109 @@ impl Default for TheMacRoute {
 
 impl TheMacRoute {
     pub fn new() -> TheMacRoute {
-        TheMacRoute { staged: None }
+        TheMacRoute { staged: None, offered: None }
     }
 
-    /// **A check found a newer version**: staged and verified (or the one
-    /// staged for that version kept), then published unless held. The reading
-    /// About is to show, where it changes.
-    pub fn a_newer_version_was_found<R: tauri::Runtime>(
+    /// **A check found a newer version, or About asked for the box** (Z33):
+    /// where the box is due, staged and verified (or the one staged for that
+    /// version kept), then the box offered. The reading About is to show,
+    /// where it changes.
+    pub fn found<R: tauri::Runtime>(
         &mut self,
         handle: &tauri::AppHandle<R>,
         verified: Option<&AVerifiedUpdate>,
+        check: &super::checking::TheUpdateCheck,
+        user_asked: bool,
     ) -> Option<TheReading> {
         if !cfg!(target_os = "macos") {
             return None;
         }
         let verified = verified?;
+        self.offered = Some(verified.clone());
+        let version = verified.manifest.version.clone();
+        if let Err(reading) = super::the_box::the_box_is_due(handle, check, &version, user_asked) {
+            return reading;
+        }
+        if let Err(reading) = self.staged_for(handle, verified) {
+            return Some(reading);
+        }
+        super::the_box::the_box_is_shown(handle, check, &version);
+        None
+    }
+
+    /// **About's *Install now…***: the box for the version found, without the
+    /// mark (Z29's ground).
+    pub fn asked<R: tauri::Runtime>(
+        &mut self,
+        handle: &tauri::AppHandle<R>,
+        check: &super::checking::TheUpdateCheck,
+    ) -> Option<TheReading> {
+        let offered = self.offered.clone();
+        self.found(handle, offered.as_ref(), check, true)
+    }
+
+    /// **The box was answered.** *Skip this version* writes the mark (Z10b); *Install now*
+    /// is Z33's one press, and publishes. The check has already refused an
+    /// answer for any version but the one on screen.
+    pub fn answered<R: tauri::Runtime>(
+        &mut self,
+        handle: &tauri::AppHandle<R>,
+        check: &super::checking::TheUpdateCheck,
+        install: bool,
+    ) -> Option<TheReading> {
+        let _ = check;
+        let verified = self.offered.clone()?;
+        if !install {
+            return super::the_box::the_dismissal_is_written(handle, &verified.manifest.version);
+        }
+        if let Err(reading) = self.staged_for(handle, &verified) {
+            return Some(reading);
+        }
         let places = match ThePlaces::for_this_copy() {
             Ok(places) => places,
-            Err(_) => return Some(TheReading::CouldNotInstall),
+            Err(_) => return Some(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None)),
         };
+        self.published(handle, places)
+    }
+
+    /// **Steps 1 to 3 for `verified`**, or the one already staged for it kept
+    /// (Z33: the staged unit is kept for the run).
+    fn staged_for<R: tauri::Runtime>(
+        &mut self,
+        handle: &tauri::AppHandle<R>,
+        verified: &AVerifiedUpdate,
+    ) -> Result<(), TheReading> {
         let already = self
             .staged
             .as_ref()
             .is_some_and(|staged| staged.version == verified.manifest.version && staged.bundle.exists());
-        if !already {
-            self.staged = None;
-            let Some(transfers) = handle_state::<R, Arc<crate::downloading::TheRunsTransfers>>(handle) else {
-                return Some(TheReading::CouldNotInstall);
-            };
-            match the_update_is_fetched_and_verified(
-                &super::checking::OverHttps,
-                transfers.as_ref(),
-                verified,
-                &WhatTheRequestSays::for_this_copy(),
-                &places,
-                &TheSystemsOwnCheck,
-            ) {
-                Ok(staged) => self.staged = Some(staged),
-                Err(_) => return Some(TheReading::CouldNotInstall),
+        if already {
+            return Ok(());
+        }
+        self.staged = None;
+        let places = ThePlaces::for_this_copy()
+            .map_err(|_| TheReading::CouldNotInstall(TheStepThatFailed::Installation, None))?;
+        let transfers = handle_state::<R, Arc<crate::downloading::TheRunsTransfers>>(handle)
+            .ok_or(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None))?;
+        match the_update_is_fetched_and_verified(
+            &super::checking::OverHttps,
+            transfers.as_ref(),
+            verified,
+            &WhatTheRequestSays::for_this_copy(),
+            &places,
+            &TheSystemsOwnCheck,
+        ) {
+            Ok(staged) => {
+                self.staged = Some(staged);
+                Ok(())
+            }
+            Err(why) => {
+                // **The leftover folder** (E18's build detail): an update that
+                // did not happen leaves no download behind.
+                the_staging_folder_goes(&places);
+                Err(TheReading::CouldNotInstall(why.the_step(), why.the_reason()))
             }
         }
-        let version = verified.manifest.version.clone();
-        if publication_is_held_here(handle) {
-            return Some(TheReading::ANewerVersion { version, held: true });
-        }
-        self.published(handle, places)
-    }
-
-    /// **Z32: the user installs the held update anyway** — Z31's held
-    /// publication and nothing else; every check binds unchanged. Nothing,
-    /// where nothing is staged.
-    pub fn the_held_update_goes_in<R: tauri::Runtime>(&mut self, handle: &tauri::AppHandle<R>) -> Option<TheReading> {
-        if self.staged.is_none() {
-            return None;
-        }
-        let places = match ThePlaces::for_this_copy() {
-            Ok(places) => places,
-            Err(_) => return Some(TheReading::CouldNotInstall),
-        };
-        self.published(handle, places)
     }
 
     fn published<R: tauri::Runtime>(&mut self, handle: &tauri::AppHandle<R>, places: ThePlaces) -> Option<TheReading> {
@@ -576,7 +708,7 @@ impl TheMacRoute {
                     staged,
                     &places,
                     record,
-                    &FromTheBundle,
+                    &ThroughTheSystemsLauncher,
                     &mut hold,
                     the_probe::THE_LAUNCH_DEADLINE,
                 )
@@ -586,12 +718,12 @@ impl TheMacRoute {
             )),
         };
         match came {
-            WhatThePublicationCameTo::NotPublished(_) => {
+            WhatThePublicationCameTo::NotPublished(why) => {
                 drop(started);
                 if let Some(window) = window.as_ref() {
                     let _ = window.show();
                 }
-                Some(TheReading::CouldNotInstall)
+                Some(TheReading::CouldNotInstall(why.the_step(), why.the_reason()))
             }
             // **The old process's run ends here, writing nothing on the way
             // out** (`Reporting a problem` U3 step 3): the shell's own exit
@@ -603,27 +735,17 @@ impl TheMacRoute {
     }
 }
 
+/// **E18's staging folder removed whole** (its build detail of 2026-11-09,
+/// the twenty-eighth notes): the leftover `/Applications/.Smoozy update/`.
+/// Nothing is said where it will not go; the next start tries again.
+pub fn the_staging_folder_goes(places: &ThePlaces) {
+    let _ = files::a_folder_is_removed_whole(&places.staging);
+}
+
 /// The shell's own managed state, where there is any.
 fn handle_state<R: tauri::Runtime, T: Send + Sync + Clone + 'static>(handle: &tauri::AppHandle<R>) -> Option<T> {
     use tauri::Manager;
     handle.try_state::<T>().map(|state| state.inner().clone())
-}
-
-/// **Z31's reading in the running application**: the record through its one
-/// lock and the run's transfers. Held where either cannot be read.
-pub fn publication_is_held_here<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> bool {
-    use tauri::Manager;
-    let Some(transfers) = handle_state::<R, Arc<crate::downloading::TheRunsTransfers>>(handle) else {
-        return true;
-    };
-    let Some(started) = handle.try_state::<Mutex<crate::start::Started>>() else {
-        return true;
-    };
-    let started = started.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    match started.record.as_ref() {
-        Some(record) => super::the_hold::publication_is_held(record.connection(), transfers.as_ref()),
-        None => true,
-    }
 }
 
 /// **P2's hold, in the shell's own keeping** (`Mutex<ThisRunsHold>`).
@@ -704,11 +826,21 @@ mod tests {
         version: String,
         acts: String,
         previous: Mutex<Vec<(PathBuf, Vec<String>)>>,
+        /// **Started the way the system's launcher starts one** (the
+        /// twenty-eighth notes, note 5): the real form's two pipes, made in
+        /// the staging folder beside the bundle, and nothing piped.
+        launched: bool,
     }
 
     impl StartsABuild for StartsThisTestProgram {
         fn the_probe(&self, bundle: &Path, token: &str) -> Result<AProbeUnderWatch, String> {
             assert!(bundle.ends_with("Smoozy.app"), "the probe is the installed bundle");
+            #[cfg(unix)]
+            if self.launched {
+                let staging = locations::beside_the_installed_bundle(Location::TheUpdatesStagingFolder, bundle);
+                let opens = crate::updating::the_probe::tests::opens_this_test_program(&self.folder, &self.version, &self.acts);
+                return AProbeUnderWatch::launched(bundle, &[THE_UPDATE_LAUNCH_ARGUMENT], token, &staging, &opens);
+            }
             let mut command = the_probe_child_command(&self.folder, &self.version, &self.acts);
             // After `--`, so the test harness reads it as a name and not an
             // option; the probe child holds that it arrived.
@@ -1094,16 +1226,23 @@ mod tests {
     /// process — waits for the handed-over hold, says its token, and once let
     /// go clears the record and removes the named backup. E15's record is kept
     /// before publication.
+    ///
+    /// **Both ways a probe is started**: as this process's child, and the way
+    /// the system's launcher starts one (the twenty-eighth notes, note 5). And
+    /// **E18's staging folder goes with the record** — the leftover
+    /// `/Applications/.Smoozy update/`.
     #[cfg(target_os = "macos")]
     #[test]
     fn the_replace_keeps_its_backup_and_a_passing_probe_clears_its_record() {
-        let installation = an_installation("passes");
+      for launched in [false, true] {
+        let installation = an_installation(if launched { "passes-launched" } else { "passes" });
         let staged = staged_in(&installation, &ACheckThatSays::accepting(true)).unwrap();
         let starts = StartsThisTestProgram {
             folder: installation.folder.clone(),
             version: "0.2.0".into(),
             acts: "starts".into(),
             previous: Mutex::new(Vec::new()),
+            launched,
         };
         let mut hold = TheHoldAt::taken(&installation.folder);
         let came = the_verified_bundle_is_published(
@@ -1133,6 +1272,8 @@ mod tests {
         assert_eq!(getting.recv_timeout(Duration::from_secs(30)), Ok(true), "the probe never let the hold go");
         assert_eq!(update_trust::the_update_in_probe(installation.record.connection()).unwrap(), None);
         assert!(!installation.places.kept.exists(), "Z7's backup outlived the probe's success");
+        assert!(!installation.places.staging.exists(), "the staging folder outlived the probe's success");
+      }
     }
 
     /// **The probe failing, and the rollback restoring the old build**: the
@@ -1145,14 +1286,15 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn a_failing_probe_is_rolled_back_to_the_old_build_with_no_crash_offer() {
-        for acts in ["migrates-and-fails", "hangs"] {
-            let installation = an_installation(acts);
+        for (acts, launched) in [("migrates-and-fails", false), ("hangs", false), ("migrates-and-fails", true), ("hangs", true)] {
+            let installation = an_installation(&format!("{acts}-{launched}"));
             let staged = staged_in(&installation, &ACheckThatSays::accepting(true)).unwrap();
             let starts = StartsThisTestProgram {
                 folder: installation.folder.clone(),
                 version: "0.2.0".into(),
                 acts: acts.into(),
                 previous: Mutex::new(Vec::new()),
+                launched,
             };
             let mut hold = TheHoldAt::taken(&installation.folder);
             let came = the_verified_bundle_is_published(
@@ -1197,21 +1339,26 @@ mod tests {
                 "the rolled-back build offered a crash report"
             );
         }
-        // **The real form starts the previous build with the argument alone and
-        // takes the token off** — read off its own source.
+        // **The real form starts the previous build through the system's
+        // launcher, with the argument alone and nothing in the environment**
+        // — read off its own source (the twenty-eighth notes, note 5).
         let (working, _) = include_str!("the_mac.rs").split_once("#[cfg(test)]").unwrap();
-        let previous = working
-            .split_once("fn the_previous_build(&self, bundle: &Path) -> Result<(), String> {\n        Command::new")
+        let real = working
+            .split_once("impl StartsABuild for ThroughTheSystemsLauncher {")
             .map(|(_, rest)| rest)
-            .and_then(|rest| rest.split_once(".spawn()"))
+            .and_then(|rest| rest.split_once("\n}\n"))
             .map(|(body, _)| body)
-            .expect("the real previous-build start is here");
-        assert!(previous.contains(".arg(THE_UPDATE_LAUNCH_ARGUMENT)"));
-        assert!(previous.contains(".env_remove(the_probe::THE_PROBES_TOKEN)"));
+            .expect("the real form is here");
+        assert!(real.contains("the_probe::the_bundle_is_opened(bundle, &[THE_UPDATE_LAUNCH_ARGUMENT], &the_probe::NONE_OF_THE_PROBES_VARIABLES)"));
+        assert!(real.contains("AProbeUnderWatch::launched("));
+        assert!(!real.contains("Command::new"), "the real form starts a program directly");
+        assert!(working.contains("&ThroughTheSystemsLauncher,\n                    &mut hold,"), "publication does not use the launcher");
     }
 
     /// **A replacement that fails is an update that did not happen**: nothing
     /// is published, the probe record is cleared, and no probe is started.
+    ///
+    /// **And E18's staging folder goes** (the twenty-eighth notes' leftover).
     #[cfg(target_os = "macos")]
     #[test]
     fn a_replacement_that_fails_publishes_nothing_and_clears_its_record() {
@@ -1219,11 +1366,13 @@ mod tests {
         let staged = staged_in(&installation, &ACheckThatSays::accepting(true)).unwrap();
         // The staged bundle goes before publication.
         std::fs::remove_dir_all(staged.bundle()).unwrap();
+        assert!(installation.places.staging.exists());
         let starts = StartsThisTestProgram {
             folder: installation.folder.clone(),
             version: "0.2.0".into(),
             acts: "starts".into(),
             previous: Mutex::new(Vec::new()),
+            launched: false,
         };
         let mut hold = TheHoldAt::taken(&installation.folder);
         let came = the_verified_bundle_is_published(
@@ -1236,7 +1385,97 @@ mod tests {
         );
         assert!(matches!(came, WhatThePublicationCameTo::NotPublished(WhyTheUpdateDidNotHappen::TheReplacement(_))));
         assert_eq!(which(&installation.places.installed), "old");
+        assert!(!installation.places.staging.exists(), "the staging folder outlived an update that did not happen");
         assert_eq!(update_trust::the_update_in_probe(installation.record.connection()).unwrap(), None);
         assert!(hold.held.is_some(), "the hold was handed over for an update that did not happen");
+    }
+
+    /// **The four questions, Sol's S5: a failed update names the step it
+    /// stopped at** (Design *Updating*) — every reason the Mac route has.
+    #[test]
+    fn four_questions_s5_each_reason_names_its_step() {
+        use super::super::checking::TheStepThatFailed as Step;
+        use super::super::fetching::WhyTheFetchDidNotPass as Fetch;
+        use super::super::verifying::WhyTheArtifactIsNotTheOneNamed as NotIt;
+        use WhyTheUpdateDidNotHappen as Why;
+        for (why, step) in [
+            (Why::TheFetch(Fetch::CouldNotBeReached("no answer".into())), Step::Download),
+            (Why::TheFetch(Fetch::CouldNotBeStaged("disk full".into())), Step::Download),
+            (Why::TheStaging("could not unpack".into()), Step::Download),
+            (Why::TheFetch(Fetch::ItsNameIsNotAPlainFileName), Step::Verification),
+            (Why::TheFetch(Fetch::ItIsNotTheArtifactNamed(NotIt::ItsDigestIsNotTheManifests)), Step::Verification),
+            (Why::NothingForThisRow, Step::Verification),
+            (Why::NotOneBundleInTheDownload, Step::Verification),
+            (Why::TheSystemsOwnCheckRefusedIt("rejected".into()), Step::Verification),
+            (Why::NoPlaces("no bundle".into()), Step::Installation),
+            (Why::TheRecordBeforePublication("locked".into()), Step::Installation),
+            (Why::TheReplacement("permission denied".into()), Step::Installation),
+        ] {
+            assert_eq!(why.the_step(), step, "{why:?}");
+        }
+    }
+
+    /// **The Rough what-if answers, share 5 (426, and 61's update half): a
+    /// folder beside the application that will not take the staging folder is
+    /// said, with what to do.** A folder this login may not write in is a
+    /// permission refusal; nothing is fetched, the step is the download, and
+    /// About's reason names the folder. Before, it was the staging's own
+    /// failure, which About says with no reason. **The Mac's alone**, as the
+    /// other staging tests here are: its download is made by the Mac's own
+    /// `/usr/bin/ditto`, which a Linux machine does not have (hosted run
+    /// 43727887590, 2026-11-15, where it was gated for every Unix).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn rough_share_5_a_folder_that_will_not_take_the_staging_is_said() {
+        use super::super::checking::TheReasonBehind as Reason;
+        use std::os::unix::fs::PermissionsExt;
+        let installation = an_installation("rough-5-no-permission");
+        let apps = installation.places.installed.parent().unwrap().to_path_buf();
+        std::fs::set_permissions(&apps, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let staged = staged_in(&installation, &ACheckThatSays::accepting(true));
+        std::fs::set_permissions(&apps, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // **Run as the superuser the folder takes it anyway**, and there is
+        // nothing to say.
+        if staged.is_ok() {
+            eprintln!("SKIPPED: this login writes in a read-only folder");
+            return;
+        }
+        let why = staged.unwrap_err();
+        assert_eq!(why, WhyTheUpdateDidNotHappen::ItsFolderCannotBeWritten { read_only: false });
+        assert_eq!(why.the_step(), TheStepThatFailed::Download);
+        assert_eq!(why.the_reason(), Some(Reason::NoPermissionForItsFolder));
+        assert!(!installation.places.staging.exists(), "something was staged");
+        assert_eq!(which(&installation.places.installed), "old");
+        assert_eq!(
+            WhyTheUpdateDidNotHappen::ItsFolderCannotBeWritten { read_only: true }.the_reason(),
+            Some(Reason::ItsFolderIsReadOnly)
+        );
+        // **The read-only volume is read off the mount**: this Mac's system
+        // volume is mounted read-only, a scratch folder is not.
+        assert!(!files::the_volume_is_read_only(&installation.folder), "a scratch folder read as read-only");
+        assert!(files::the_volume_is_read_only(Path::new("/System")), "the system volume did not read as read-only");
+    }
+
+    /// **The reason About says after the step, where one is known** (Design
+    /// *Updating*, 2026-11-12): the network, the disk, the release's own
+    /// length or digest, and the system's check; nothing for the rest.
+    #[test]
+    fn sixth_part_each_reason_names_what_about_can_say() {
+        use super::super::checking::TheReasonBehind as Reason;
+        use super::super::fetching::WhyTheFetchDidNotPass as Fetch;
+        use super::super::verifying::WhyTheArtifactIsNotTheOneNamed as NotIt;
+        use WhyTheUpdateDidNotHappen as Why;
+        for (why, reason) in [
+            (Why::TheFetch(Fetch::CouldNotBeReached("no answer".into())), Some(Reason::ANetworkError)),
+            (Why::TheFetch(Fetch::CouldNotBeStaged("disk full".into())), Some(Reason::TheDiskRefused)),
+            (Why::TheFetch(Fetch::ItIsNotTheArtifactNamed(NotIt::ItsDigestIsNotTheManifests)), Some(Reason::NotTheReleasedFile)),
+            (Why::TheSystemsOwnCheckRefusedIt("rejected".into()), Some(Reason::TheSystemRefusedIt)),
+            (Why::TheFetch(Fetch::ItsNameIsNotAPlainFileName), None),
+            (Why::TheStaging("could not unpack".into()), None),
+            (Why::NotOneBundleInTheDownload, None),
+            (Why::TheReplacement("permission denied".into()), None),
+        ] {
+            assert_eq!(why.the_reason(), reason, "{why:?}");
+        }
     }
 }

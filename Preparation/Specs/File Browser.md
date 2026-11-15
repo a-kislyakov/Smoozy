@@ -81,7 +81,7 @@ This follows the whole-app principle that *the machine is the user's* (see [Whol
 
 **Deleting is permanent, and Smoozy warns before it does it.** A file deleted on the server is gone — Smoozy keeps no copy and cannot undo it, and the machine itself has no recycle bin to fall back on. Label: **an assumption** (the machine-side point) — see [Sources](Sources/File%20Browser.sources.md). So a deletion is warned about before it happens. That warning is dismissible, and like every dismissible warning it can be switched back on from Settings all at once (see *restoring suppressed warnings* in [Whole app](Whole%20app.md)).
 
-**A move or a copy that would collide is caught the same way** a colliding upload is — landing a file or folder where one of that name already sits is caught, and Smoozy never silently writes over what is there. A colliding move gets **Replace** or **Cancel**. A colliding copy gets **Replace**, **Keep both**, or **Cancel**. A copy leaves the original in place; a move does not. Both stay within the one machine.
+**A move or a copy that would collide is caught the same way** a colliding upload is — landing a file or folder where one of that name already sits is caught, and Smoozy never silently writes over what is there. A colliding move gets **Replace** or **Cancel**. A colliding copy gets **Replace**, **Keep both**, or **Cancel** — and **Skip existing**, which copies only what is not there yet, so a big copy cut off part-way can be pasted again and finish *(added 2026-11-14, Creator-stated: "Every consequent choice — I agree with your gut.", on the Rough what-if answers, 176)*. A copy leaves the original in place; a move does not. Both stay within the one machine.
 
 **A rename that would collide is not allowed in the first place.** Renaming is an in-place change to a single thing, so there is nothing to merge and no second copy to keep — if the new name is already taken in that folder, Smoozy does not accept it, and the user picks another. This follows how a file manager handles renaming, rather than the upload question. Label: **Creator-stated** (2026-07-23).
 
@@ -158,3 +158,21 @@ Settled at Design (2026-08-11 onward) — see [the Transfers Design document](..
 - **How an upload waiting for a dropped connection to be repaired reads, and how it is told apart from one that failed** — [Transfers](../Design/Transfers.md), where waiting and failed are different readings and a paused bar is overall progress standing still.
 - **How a download is started from the browser** — the toolbar's *Download* and the same act in all three right-click menus.
 - **How choosing a `.blend` for rendering is presented and handed off to Render Settings** — double-clicking it opens the settings panel over the server *(changed 2026-10-12, Creator-stated, the Creator's eighth notes (2026-10-11), note 2: one click only chooses a row, a double-click opens it; it read* clicking it*, stale since the third notes of 2026-10-06)*, and its own right-click menu carries *Render settings…* and *Check dependencies…*.
+
+
+## Upload write refusals — batch 2
+
+An upload write refused by the server is a failed upload, not a lost connection. Where a reading at that failure shows no space available at the destination, the failure says the server disk is full. The partial upload keeps its existing Resume and Remove choices.
+
+*2026-11-14 — no auditor has seen this change.*
+
+
+## Smoozy's own files and the login's keys — batch 2
+
+Deleting, renaming or moving Smoozy's own folder on a server — or a folder holding it, or anything in it — says so in the box first: setup and jobs on that server need those files. The same holds for the login's `.ssh` folder, whose keys Smoozy connects with. Both warnings show however the ordinary delete warning is set, and neither stops the act: the user still chooses. A copy takes nothing away and is not warned.
+
+*2026-11-14 — batch 2 of the Bad what-if answers (Claude Opus 5.5). No auditor has seen this change.*
+
+**Deleting inside one of the server's own system folders** — `/usr`, `/etc` and the like — says so in the box first, in a warning that cannot be switched off: deleting there can stop the server from working, and a login with admin access can do it in one press. The same warning stands again beside *Retry with admin access*, where a delete refused there offers it. Label: **Creator-stated** (2026-11-14, the build runner's ruling under the Creator's standing word, *"Every consequent choice — I agree with your gut."*). Label: **Creator-stated** (2026-11-14, *"Every consequent choice — I agree with your gut."*, on the Rough what-if answers, 181).
+
+*2026-11-14 — the leftovers of the Rough what-if answers (Claude Opus 5.5). No auditor has seen this change.*

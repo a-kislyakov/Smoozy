@@ -60,6 +60,7 @@ import {
   thePreviewGoesAway,
   theJobsIn,
 } from "./the-queue.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 // **What stands between a figure and the words that count it** — U+00A0, so
 // *240 frames* never parts across two lines. `Design/Whole app § Typography`; the
@@ -343,12 +344,13 @@ function theHistoryIsDrawn(said) {
 
   // The keyboard stays on the chosen row across the redraw.
   const current = scroll.querySelector(".hrow[aria-current=\"true\"]");
-  if (theKeyboardWasOnARow && current) current.focus();
+  if (theKeyboardWasOnARow && current) theFocusMovesTo(current);
 
   // **The carry-on frame being typed comes back with its caret**, into the same
   // job's entry and no other's: another job's entry is that job's own answer.
   if (theTyping && theAgainGroup && said.entryJob === theJobThatWasShown) {
     theTypingIsPutBackInto(theAgainGroup.querySelector("input.fld"), theTyping);
+    theAgainGroup.theResumeCountIsAskedFor?.();
   }
 
   theRowsFigureIs(THE_HISTORY, "");
@@ -524,6 +526,12 @@ function theRowsAreDrawn(said) {
     // and a blank is what that is.
     when.textContent = held7 === undefined ? "" : theMomentReads(held7);
     row.appendChild(when);
+    // **The row reads whole on hover**: a narrow list cuts its name, frames
+    // and server short (the UI at every size, A-19; `Design/Whole app`: a cell
+    // that does not fit shows whole on hover).
+    row.title = Array.from(row.children, (cell) => (cell.textContent || "").trim())
+      .filter(Boolean)
+      .join(" — ");
 
     if (said["hrow" + at + "Removed"] === "yes") {
       if (!theRemovedRows) theRemovedRows = theRemovedServersGroup(said);
@@ -641,13 +649,42 @@ function theWaysToRenderItAgain(said) {
     const carry = aButton(null, "btn", "quiet");
     carry.textContent = said.carryOn;
     carry.appendChild(document.createTextNode(" "));
-    carry.appendChild(document.createTextNode(said.carryOnFrames || ""));
+    const count = document.createTextNode(said.carryOnFrames || "");
+    const unit = document.createTextNode(said.carryOnFramesWord || "");
+    carry.appendChild(count);
     carry.appendChild(document.createTextNode(BETWEEN_A_FIGURE_AND_ITS_UNIT));
-    carry.appendChild(document.createTextNode(said.carryOnFramesWord || ""));
-    carry.addEventListener("click", () =>
-      anActIsAskedFor(carry, "carry-on", { job, from: field.value }),
-    );
+    carry.appendChild(unit);
+    const countNote = document.createElement("p");
+    countNote.className = "bar-note";
+    countNote.hidden = true;
+    let newest = 0;
+    const update = () => {
+      const from = field.value;
+      const request = ++newest;
+      // **The count that stood stays until the new one comes**, so *Resume*
+      // keeps its width as the frame is typed and the note beside it does not
+      // slide (UI consistency, finding 37: it shrank to *Resume* on every
+      // key). It cannot be pressed meanwhile.
+      carry.disabled = true;
+      countNote.hidden = true;
+      const answered = answer => {
+        if (request !== newest || field.value !== from) return;
+        count.textContent = answer?.frames == null ? "" : String(answer.frames);
+        unit.textContent = answer?.frames == null ? "" : answer.unit;
+        carry.disabled = answer?.frames == null;
+        countNote.textContent = answer?.why || "";
+        countNote.hidden = !answer?.why;
+      };
+      shell.core.invoke("the_resume_count", {job, from}).then(answered)
+        .catch(() => answered({why: said.carryOnCountUnread}));
+    };
+    field.addEventListener("input", update);
+    group.theResumeCountIsAskedFor = update;
+    carry.addEventListener("click", () => {
+      if (!carry.disabled) anActIsAskedFor(carry, "carry-on", { job, from: field.value });
+    });
     pair.appendChild(carry);
+    pair.appendChild(countNote);
 
     // **Only the carry-on says it leaves the frame range in two folders, and it
     // says it on its own line under the pair.**
@@ -749,6 +786,22 @@ function theRenderedGroup(main, said) {
     note.className = "bar-note";
     note.textContent = said.renderedNote;
     group.appendChild(note);
+  }
+  // **`Rendering` K14c: one line for each file the render went on without** —
+  // *Missing: sky_4k.exr* — and, where the server cut the list, *and 7 more.*
+  // Every word and every name is the application's, each line a part this
+  // page only places (A6 and X1).
+  const missing = howMany(said, "missingCount");
+  for (let at = 0; at < missing; at += 1) {
+    const line = document.createElement("p");
+    line.className = "bar-note";
+    if (aPart(line, said, "missing" + at)) group.appendChild(line);
+  }
+  if (missing) {
+    const line = document.createElement("p");
+    line.className = "bar-note";
+    // The figure is plain, as it was; only a name takes the fixed-width face.
+    if (aPart(line, said, "missingMore", true)) group.appendChild(line);
   }
   main.appendChild(group);
 }

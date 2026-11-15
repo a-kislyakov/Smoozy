@@ -105,6 +105,12 @@ pub struct ATapsEvidence {
     /// what the user is told about this entry (R7, Rule 9), never for routing.
     #[serde(default)]
     pub label: Option<String>,
+    /// **`Telegram` V1d as changed 2026-11-13 — when the listener received
+    /// the tap, on Telegram's clock** (C1d), in seconds since 1970, where it
+    /// knew that clock. Left out otherwise, and read by an older program as
+    /// nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pressed_at: Option<i64>,
 }
 
 /// **What a reply gives the listener** (R1a): the typed request and the
@@ -120,8 +126,9 @@ pub struct ATapsEvidence {
 pub struct AReplysEvidence {
     pub conversation: i64,
     pub source_message: i64,
+    /// Signed from 2026-11-13 (`Telegram` R15: a frame below zero).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub frame: Option<u64>,
+    pub frame: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request: Option<ARepliedRequest>,
 }
@@ -214,7 +221,7 @@ pub fn a_frame_request(
     owner: &str,
     job: &str,
     generation: &str,
-    frame: Option<u64>,
+    frame: Option<i64>,
     update: Option<i64>,
     labels: Value,
 ) -> AnEntry {
@@ -255,7 +262,20 @@ pub enum WhyItFailsClosed {
     TheSourceMessageDoesNotMatch,
     TheSubjectHasEnded,
     TheStoreFailed,
+    /// **`Telegram` R1a as added 2026-11-13 — the message is about no job**:
+    /// this machine's register marks it so, or it is this machine's status
+    /// message showing no job. The request is then handled as if typed with
+    /// no reply, never failed closed (the Creator's notes on the test copy,
+    /// note 10).
+    AboutNoJob,
 }
+
+/// **`Telegram` R1a as added 2026-11-13 — the instruction a reply about no
+/// job is replaced with**: addressed to the machine that claimed it, which
+/// handled the request as if typed with no reply; it is acknowledged and does
+/// nothing else, so neither the expiry's fallback nor *Could not tell* is said
+/// as well.
+pub const AS_IF_NOT_A_REPLY: &str = "as if not a reply";
 
 /// **`Telegram` R1 — the generation check, and whose it is.** The issuing
 /// machine compares the live generation of a subject **it owns**. Where the
@@ -314,6 +334,15 @@ pub fn resolve_a_tap(
         return Err(WhyItFailsClosed::TheSubjectHasEnded);
     }
     let mut payload = record.payload.clone();
+    // **V1d as changed 2026-11-13: a tap on the ask takes the later of the
+    // ask's date and the moment the tap was received**, so a choice tapped on
+    // an older ask is the newest (Telegram when things aren't ideal, problem 3).
+    if record.action == CHOOSING_THE_PHONES_CHOICE {
+        if let (Some(pressed_at), Value::Object(fields)) = (evidence.pressed_at, &mut payload) {
+            let asked_at = fields.get("date").and_then(Value::as_i64).unwrap_or_default();
+            fields.insert("date".into(), json!(asked_at.max(pressed_at)));
+        }
+    }
     // A record about no subject — V1d's ask — has no generation to compare.
     if let (Value::Object(fields), Some(_)) = (&mut payload, record.the_subject()) {
         fields.insert("generation".into(), json!(record.generation));
@@ -364,12 +393,12 @@ pub fn resolve_a_reply(
         Ok(Some(ASentMessage { conversation, .. })) if conversation != evidence.conversation => {
             return Err(WhyItFailsClosed::TheConversationDoesNotMatch)
         }
-        Ok(Some(ASentMessage { about: WhatAMessageIsAbout::NoJob, .. })) => return Err(WhyItFailsClosed::NoRecord),
+        Ok(Some(ASentMessage { about: WhatAMessageIsAbout::NoJob, .. })) => return Err(WhyItFailsClosed::AboutNoJob),
         Ok(Some(ASentMessage { about: WhatAMessageIsAbout::AJob { job, generation, frame, .. }, .. })) => {
             (me.to_string(), job, generation, frame, json!({}))
         }
         Ok(None) if store.the_status_message().ok().flatten() == Some(evidence.source_message) => {
-            let shown = the_job_the_status_shows(&jobs).ok_or(WhyItFailsClosed::NoRecord)?;
+            let shown = the_job_the_status_shows(&jobs).ok_or(WhyItFailsClosed::AboutNoJob)?;
             (me.to_string(), shown.job.clone(), Some(shown.generation.clone()), None, json!({}))
         }
         Ok(None) => {
@@ -478,6 +507,12 @@ impl<S: TheTelegramWorkersState + ?Sized> TheTelegramWorkersState for Arc<Mutex<
     fn record_the_update_position(&mut self, next: i64) -> Result<(), WhyTheStoreFailed> {
         held(self).record_the_update_position(next)
     }
+    fn the_update_positions_moment(&self) -> Result<Option<u64>, WhyTheStoreFailed> {
+        held(self).the_update_positions_moment()
+    }
+    fn record_the_update_position_at(&mut self, next: i64, at: u64) -> Result<(), WhyTheStoreFailed> {
+        held(self).record_the_update_position_at(next, at)
+    }
     fn the_board(&self) -> Result<Option<i64>, WhyTheStoreFailed> {
         held(self).the_board()
     }
@@ -544,8 +579,23 @@ impl<S: TheTelegramWorkersState + ?Sized> TheTelegramWorkersState for Arc<Mutex<
     fn record_the_phones_choice(&mut self, choice: ThePhonesChoice) -> Result<bool, WhyTheStoreFailed> {
         held(self).record_the_phones_choice(choice)
     }
+    fn the_entries_last_held(&self) -> Result<Option<String>, WhyTheStoreFailed> {
+        held(self).the_entries_last_held()
+    }
+    fn record_the_entries_last_held(&mut self, written: Option<String>) -> Result<(), WhyTheStoreFailed> {
+        held(self).record_the_entries_last_held(written)
+    }
     fn speaks_for_the_message(&self, message: i64) -> bool {
         held(self).speaks_for_the_message(message)
+    }
+    fn the_jobs_messages(&self) -> Result<Vec<crate::worker_state::AJobsMessage>, WhyTheStoreFailed> {
+        held(self).the_jobs_messages()
+    }
+    fn record_a_jobs_message(&mut self, record: crate::worker_state::AJobsMessage) -> Result<(), WhyTheStoreFailed> {
+        held(self).record_a_jobs_message(record)
+    }
+    fn the_jobs_message_ends(&mut self, job: &str) -> Result<(), WhyTheStoreFailed> {
+        held(self).the_jobs_message_ends(job)
     }
 }
 
@@ -569,7 +619,7 @@ mod tests {
     }
 
     fn a_tap(record: &AnActionContextRecord, conversation: i64, message: i64) -> AnEntry {
-        let evidence = ATapsEvidence { token: record.token.clone(), callback: "cb-1".into(), conversation, source_message: message, label: None };
+        let evidence = ATapsEvidence { token: record.token.clone(), callback: "cb-1".into(), conversation, source_message: message, label: None, pressed_at: None };
         a_taps_resolution(&evidence, 500, &WhatATokenNames::read(&record.token).unwrap())
     }
 
@@ -631,7 +681,7 @@ mod tests {
     fn two_presses_are_two_operations() {
         let record = a_record("m1");
         let names = WhatATokenNames::read(&record.token).unwrap();
-        let one = ATapsEvidence { token: record.token.clone(), callback: "a".into(), conversation: CHAT, source_message: 77, label: None };
+        let one = ATapsEvidence { token: record.token.clone(), callback: "a".into(), conversation: CHAT, source_message: 77, label: None, pressed_at: None };
         let two = ATapsEvidence { callback: "b".into(), ..one.clone() };
         assert_ne!(a_taps_resolution(&one, 1, &names).operation, a_taps_resolution(&two, 2, &names).operation);
         assert_eq!(a_taps_resolution(&one, 1, &names).operation, a_taps_resolution(&one, 1, &names).operation);
@@ -663,7 +713,7 @@ mod tests {
                     label: format!("{job} label"),
                     generation: "g1".into(),
                     record_directory: true,
-                    rendering: rendering.then_some(crate::routing::gather::TheProgress { frame: 3, of: 9, percent: 33 }),
+                    rendering: rendering.then_some(crate::routing::gather::TheProgress { frame: 3, of: 9, percent: 33, finishing: false }),
                     waiting: None,
                 })
                 .collect()
@@ -673,7 +723,7 @@ mod tests {
         }
     }
 
-    fn a_reply(source_message: i64, frame: Option<u64>, request: Option<ARepliedRequest>, update: i64) -> AnEntry {
+    fn a_reply(source_message: i64, frame: Option<i64>, request: Option<ARepliedRequest>, update: i64) -> AnEntry {
         a_replys_resolution(&AReplysEvidence { conversation: CHAT, source_message, frame, request }, update)
     }
 
@@ -726,7 +776,8 @@ mod tests {
 
     /// **R1a, widened, and R1b: a job's message, by its register line** — a
     /// reply's `frame`, `stop` and `reporting` each act on that job; a picture
-    /// gives its own frame; a line about no job claims nothing.
+    /// gives its own frame; a line about no job is about no job (R1a as
+    /// changed 2026-11-13: handled as no reply, never failed closed).
     #[test]
     fn a_reply_to_a_registered_message_acts_on_its_job() {
         let mut store = InMemory::with_routing_key(KEY);
@@ -756,7 +807,7 @@ mod tests {
         let ask = resolve_a_reply(&a_reply(80, None, Some(ARepliedRequest::Reporting { minutes: None }), 7), "m1", &store, &holds).unwrap();
         assert_eq!(ask.payload["value"], Value::Null, "no value: that job's own ask");
 
-        assert_eq!(resolve_a_reply(&a_reply(82, None, Some(ARepliedRequest::Stop), 8), "m1", &store, &holds), Err(WhyItFailsClosed::NoRecord));
+        assert_eq!(resolve_a_reply(&a_reply(82, None, Some(ARepliedRequest::Stop), 8), "m1", &store, &holds), Err(WhyItFailsClosed::AboutNoJob));
         assert_eq!(resolve_a_reply(&a_reply(99, None, Some(ARepliedRequest::Stop), 9), "m1", &store, &holds), Err(WhyItFailsClosed::NoRecord));
     }
 
@@ -782,9 +833,10 @@ mod tests {
         let holds = Holding(vec![("job-1", false), ("job-2", true)]);
         let full = resolve_a_reply(&a_reply(77, None, Some(ARepliedRequest::Frame), 1), "m1", &store, &holds).unwrap();
         assert_eq!(full.subjects, vec!["job-2".to_string()]);
-        // Idle, the status message is about no job.
+        // Idle, the status message is about no job (R1a as changed
+        // 2026-11-13: handled as no reply).
         let idle = Holding(vec![("job-1", false), ("job-2", false)]);
-        assert_eq!(resolve_a_reply(&a_reply(77, None, Some(ARepliedRequest::Stop), 2), "m1", &store, &idle), Err(WhyItFailsClosed::NoRecord));
+        assert_eq!(resolve_a_reply(&a_reply(77, None, Some(ARepliedRequest::Stop), 2), "m1", &store, &idle), Err(WhyItFailsClosed::AboutNoJob));
         // And an older message with no line: the record whose Stop was taken
         // off no longer speaks for it.
         let mut older = InMemory::with_routing_key(KEY);

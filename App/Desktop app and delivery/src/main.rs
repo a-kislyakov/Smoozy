@@ -232,6 +232,17 @@ fn main() {
         the_one_instance::ThisLaunch::Ends => std::process::exit(0),
     };
 
+    // **`Desktop app and delivery` Z21, *a probe reads Z21a's record before it
+    // opens the record*** (2026-11-11, the Fable review's fourth sitting,
+    // fault 1): a launch carrying the token that no update-in-probe record
+    // names ends here, holding the hold and having opened nothing. Its update
+    // was already rolled back, and the start below would migrate the record
+    // the previous build was handed. The exit lets the hold go, for the build
+    // a rollback started to take.
+    if the_probes_token.is_some() && !smoozy_desktop::updating::the_probe::the_record_names_this_probe() {
+        std::process::exit(0);
+    }
+
     // `Desktop app and delivery` Z10a: a Linux rollback debt is met before
     // the shell's start or an ordinary module can read the migrated record.
     // **Where the reinstall is owed, or the rest could not finish, the launch
@@ -415,6 +426,10 @@ fn main() {
             // a copy older than the record opens none and never takes the
             // Start menu from the build that moved it forward.
             let the_record_opened = started.record.is_some();
+            // **`Desktop app and delivery` L9, *where it says so*
+            // (2026-11-12): a copy older than its record offers no update**,
+            // since installing needs the record open.
+            let the_record_is_newer_than_this_copy = started.the_record_is_newer_than_this_copy;
             app.manage(std::sync::Mutex::new(started));
 
             // **The update check, and P10's one standing timer** — Z23's check
@@ -426,7 +441,7 @@ fn main() {
             // stop a window opening. **A copy that never checks starts no
             // sequence** (E10a). `smoozy_desktop::updating::checking` carries
             // the rest.
-            let update_check = smoozy_desktop::updating::checking::TheUpdateCheck::for_this_copy();
+            let update_check = smoozy_desktop::updating::checking::TheUpdateCheck::for_this_copy_in_front_of(the_record_is_newer_than_this_copy);
             app.manage(update_check.clone());
             smoozy_desktop::updating::checking::the_sequence_starts(
                 app.handle().clone(),
@@ -454,6 +469,10 @@ fn main() {
             smoozy_desktop::servers::the_machines_work::a_held_back_step_nine_follows_every_run(
                 app.handle().clone(),
             );
+            // **`Server Setup` Y9a item 11: what waited behind Smoozy's own
+            // update of a server's program begins when the update ends**
+            // (2026-11-11).
+            smoozy_desktop::surface::set_up::the_line_an_update_began_is_driven(app.handle().clone());
 
             // **T1's machinery, made at the application's first successful
             // start** — `Desktop app and delivery` §19 E3, which puts it
@@ -534,12 +553,20 @@ fn main() {
                                         smoozy_desktop::platform::locations::Location::TheInstalledBundle,
                                     )
                                     .ok();
+                                    // **E18's staging folder goes too**, its
+                                    // two pipes done with (the twenty-eighth
+                                    // notes' leftover folder).
+                                    let staging = smoozy_desktop::platform::locations::resolve(
+                                        smoozy_desktop::platform::locations::Location::TheUpdatesStagingFolder,
+                                    )
+                                    .ok();
                                     let _ = smoozy_desktop::updating::the_probe::what_the_record_kept_is_cleared(
                                         record.connection(),
                                         record.path(),
                                         &probe,
                                         kept.as_deref(),
                                         running.as_deref(),
+                                        staging.as_deref(),
                                     );
                                 }
                             }
@@ -580,9 +607,10 @@ fn main() {
                 }
                 if let Some(started) = window.try_state::<std::sync::Mutex<start::Started>>() {
                     if let Ok(started) = started.lock() {
-                        #[cfg(target_os = "linux")]
+                        // **Z10b on every system from Z33**: quitting with
+                        // the update box open is *Skip this version*.
                         if let (Some(record), Some(check)) = (started.record.as_ref(), window.try_state::<Arc<smoozy_desktop::updating::checking::TheUpdateCheck>>()) {
-                            let _ = check.dismiss_linux_on_quit(record.connection());
+                            let _ = check.dismiss_on_quit(record.connection());
                         }
                         start::the_user_asked_to_quit(&started);
                     }
@@ -614,9 +642,8 @@ fn main() {
             ) {
                 if let Some(started) = handle.try_state::<std::sync::Mutex<start::Started>>() {
                     if let Ok(started) = started.lock() {
-                        #[cfg(target_os = "linux")]
                         if let (Some(record), Some(check)) = (started.record.as_ref(), handle.try_state::<Arc<smoozy_desktop::updating::checking::TheUpdateCheck>>()) {
-                            let _ = check.dismiss_linux_on_quit(record.connection());
+                            let _ = check.dismiss_on_quit(record.connection());
                         }
                         start::the_user_asked_to_quit(&started);
                     }

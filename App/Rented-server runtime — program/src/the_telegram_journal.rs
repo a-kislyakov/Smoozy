@@ -119,7 +119,7 @@ use smoozy_telegram::actions::{
 };
 use smoozy_telegram::job_messages::{
     some_events_were_missed, the_drop_for_a_removed_blender, the_drop_message, the_failure_message,
-    the_finishing_message, the_given_up_message, the_job_reports, the_start_message,
+    the_finishing_message, the_given_up_message, the_job_reports, it_makes_a_sound, AJobsSend,
     the_stops_outcome, what_the_group_says, ACollectionOutcome, AFailedJob, AFinishedJob,
     AGivenUpJob, AKindOfReport, AMember, AMembersEnding, AStopsOutcome, AStream,
     ASubmissionsOutcome, AWaitingJob, TheAnswer, TheCause, TheDependencyEnded, TheIdleMessage,
@@ -209,6 +209,12 @@ fn the_files_of(note: &TheNote) -> Option<(u64, u64)> {
     note.the_files_counted().map(|counted| (counted.written, counted.owed))
 }
 
+/// **The file names the note's ending says the remap left unchanged**
+/// (`Rendering` K14c) — none where the note carries no ending.
+fn the_files_missing_on(note: &TheNote) -> &[String] {
+    note.ending.as_ref().map_or(&[], |ending| ending.the_files_missing.as_slice())
+}
+
 impl AVideoAtTheEnding {
     /// **The finished video's words** — `Telegram` M10, said as a finished
     /// job of pictures says its count and time (*Finished. 240 frames in 6
@@ -240,9 +246,9 @@ impl AVideoAtTheEnding {
     /// add that the video's frame count is unknown.
     fn stopped_in_words(&self) -> String {
         let range = match (self.requested.iter().min(), self.requested.iter().max()) {
-            (Some(first), Some(last)) if first == last => format!(" Job range: {first} (1 frame)."),
-            (Some(first), Some(last)) => format!(" Job range: {first}–{last} ({} frames).", self.requested.len()),
-            _ => " Job range unknown.".to_string(),
+            (Some(first), Some(last)) if first == last => format!(" Frame range: {first} (1 frame)."),
+            (Some(first), Some(last)) => format!(" Frame range: {first}–{last} ({} frames).", self.requested.len()),
+            _ => " Frame range unknown.".to_string(),
         };
         format!("{}{range} Video frame count unknown.", self.files_in_words(false))
     }
@@ -252,7 +258,7 @@ impl AVideoAtTheEnding {
     /// send.
     fn files_in_words(&self, the_video_goes: bool) -> String {
         match &self.files {
-            None => "Video file status unknown.".to_string(),
+            None => "Video file not checked.".to_string(),
             Some(files) if files.is_empty() => "Video file missing or empty.".to_string(),
             Some(files) => {
                 let sizes: Option<Vec<u64>> = files.iter().map(|file| file.bytes).collect();
@@ -351,6 +357,51 @@ impl TheRecordsOnThisMachine {
         })
     }
 
+    /// **`Telegram` I2b, added 2026-11-13 — how many of the job's frames
+    /// after `frame`, in its own order, have their main copy published.**
+    pub fn the_later_frames_held(&self, job: &Identity, frame: i64) -> usize {
+        let Some(record) = self.the_job_record(job) else { return 0 };
+        let Some(manifest) = self.the_manifest(&record) else { return 0 };
+        self.the_frames_of(&record, &manifest)
+            .into_iter()
+            .skip_while(|one| *one != frame)
+            .skip(1)
+            .filter(|later| {
+                Path::new(
+                    &smoozy_job_files_machine::main_output::where_a_derivative_is_written_in(&record.record_directory, *later)
+                        .published_at,
+                )
+                .is_file()
+            })
+            .count()
+    }
+
+    /// **`Telegram` R14 as added 2026-11-13 — the newest frame that finished,
+    /// read from the job's records**: the last of the job's frames, in its own
+    /// order, whose preview production closed *published* (`Queue & History`
+    /// P1a's own record of it, as the supervisor reads it to make a cleared
+    /// picture again), **whether or not its picture is still on disk**; where
+    /// those records do not read, the newest picture still held. So a job whose
+    /// pictures were all cleared still answers `/frame`, and its picture is
+    /// made again (`Telegram` I4). Until then only a picture still on disk
+    /// counted (the Creator's notes on the test copy, note 9).
+    pub fn the_newest_frame_finished(&self, job: &Identity) -> Option<i64> {
+        let record = self.the_job_record(job)?;
+        let manifest = self.the_manifest(&record)?;
+        let records = TheOperationRecordsOnTheMachine { area: self.at(THE_AREA_THE_TWO_RECORDS_SIT_IN) };
+        let published: std::collections::BTreeSet<i64> = records
+            .every_operation_record_of_the_kind(smoozy_runtime::the_program::the_word_for(
+                smoozy_runtime::workers::WorkerKind::Preview,
+            ))
+            .map(|productions| the_frames_published(&productions, job))
+            .unwrap_or_default();
+        self.the_frames_of(&record, &manifest)
+            .into_iter()
+            .rev()
+            .find(|frame| published.contains(frame))
+            .or_else(|| self.the_newest_frame_held(job))
+    }
+
     /// **`Telegram` R1b and R1 — whether this machine still holds a job's
     /// record folder**, which is how long the job's register lines and
     /// action-context records are kept.
@@ -438,6 +489,17 @@ impl TheRecordsOnThisMachine {
                     .attempts,
             ),
             _ => None,
+        }
+    }
+
+    /// `Telegram` C1 and `Telegram` C1d: the same durable fact the Queue reading carries.
+    pub fn the_job_is_running_again(&self, record: &JobRecord) -> bool {
+        let QueueState::Rendering { operation } = &record.state else { return false };
+        let records = TheOperationRecordsOnTheMachine { area: self.at(THE_AREA_THE_TWO_RECORDS_SIT_IN) };
+        match records.what_is_held_under(operation) {
+            Ok(WhatTheMachineHoldsUnderAnIdentity::AnOperationRecord(record)) =>
+                crate::the_render_worker::a_render_is_running_again(&record),
+            _ => false,
         }
     }
 
@@ -639,6 +701,30 @@ impl TheRecordsOnThisMachine {
         which_picture_the_records_name(&productions, job, frame)
     }
 
+    /// **Which of the frame's pictures one production's main copy is, as that
+    /// production's own record says** — for an event that left the names to
+    /// the record to fit `State, identity and recovery` E6a's budget (`Queue &
+    /// History` P3 as changed 2026-11-10, the Creator's twenty-ninth notes,
+    /// note 11, piece J). Nothing where that record does not read, or names
+    /// nothing.
+    pub fn which_picture_one_production_names(
+        &self,
+        job: &Identity,
+        frame: i64,
+        production: &str,
+    ) -> Option<WhichPictureItIs> {
+        let records = TheOperationRecordsOnTheMachine { area: self.at(THE_AREA_THE_TWO_RECORDS_SIT_IN) };
+        let productions: Vec<_> = records
+            .every_operation_record_of_the_kind(smoozy_runtime::the_program::the_word_for(
+                smoozy_runtime::workers::WorkerKind::Preview,
+            ))
+            .ok()?
+            .into_iter()
+            .filter(|record| record.operation.as_text() == production)
+            .collect();
+        which_picture_the_records_name(&productions, job, frame)
+    }
+
     /// **`Telegram` I2 as written 2026-10-18 — every copy of a frame the set
     /// holds, in its place in the frame's set**: the main copy first, named
     /// `main_named`, then each other View Layer's copy in place order (`Queue &
@@ -650,7 +736,12 @@ impl TheRecordsOnThisMachine {
     /// **Nothing where the main copy is not published**: that is *cleared*,
     /// and the route that makes it again is the caller's (`Telegram` I4). An
     /// other copy whose file is gone leaves the whole frame cleared, so a
-    /// requested album waits for the preview route (`Telegram` I4). A frame
+    /// requested album waits for the preview route (`Telegram` I4) — **but
+    /// not for a production's own album** (`production` named): there it is
+    /// left out with a line in the server's record and the rest go
+    /// (`Telegram` I2 as changed 2026-11-10, the twenty-ninth notes, note 11),
+    /// since giving the album up left the chat with no frame picture and no
+    /// word of why. A frame
     /// of one copy, or one whose production has no record here, gives the
     /// main copy alone, as before.
     pub fn the_frames_copies(
@@ -668,6 +759,7 @@ impl TheRecordsOnThisMachine {
         }
         main.which_picture = main_named;
         let mut copies = vec![main];
+        let mut not_read = Vec::new();
         let records = TheOperationRecordsOnTheMachine { area: self.at(THE_AREA_THE_TWO_RECORDS_SIT_IN) };
         let productions = records
             .every_operation_record_of_the_kind(smoozy_runtime::the_program::the_word_for(
@@ -681,19 +773,34 @@ impl TheRecordsOnThisMachine {
                 place,
             )
             .published_at;
-            let bytes = std::fs::read(&at).ok()?;
-            if bytes.is_empty() {
-                return None;
-            }
+            let bytes = match std::fs::read(&at) {
+                Ok(bytes) if !bytes.is_empty() => bytes,
+                _ if production.is_some() => {
+                    eprintln!(
+                        "smoozy-server: the Telegram worker: frame {frame} of {}: the copy at place \
+                         {place} could not be read, so the frame's album goes without it",
+                        job.as_text()
+                    );
+                    // **`Telegram` I2 as changed 2026-11-11 (the four
+                    // questions, batch 4, Sol's S6): the album's first
+                    // picture names it**, an empty name for one its record
+                    // does not name.
+                    not_read.push(which_picture.as_ref().map(WhichPictureItIs::as_said).unwrap_or_default());
+                    continue;
+                }
+                _ => return None,
+            };
             copies.push(ADerivative {
                 job: job.as_text(),
                 job_label: label.to_string(),
-                frame: u64::try_from(frame).unwrap_or(0),
+                frame,
                 file_name: format!("{frame}-layer-{place}.png"),
                 bytes,
                 which_picture,
+                not_read: Vec::new(),
             });
         }
+        copies[0].not_read = not_read;
         Some(copies)
     }
 
@@ -735,10 +842,11 @@ impl TheRecordsOnThisMachine {
                     copies.push(ADerivative {
                         job: job.as_text(),
                         job_label: label.into(),
-                        frame: u64::try_from(frame).unwrap_or(0),
+                        frame,
                         file_name: format!("{frame}-layer-{place}.png"),
                         bytes,
                         which_picture,
+                        not_read: Vec::new(),
                     });
                 }
             }
@@ -871,10 +979,11 @@ impl TheRecordsOnThisMachine {
         Some(ADerivative {
             job: job.as_text(),
             job_label: label.to_string(),
-            frame: u64::try_from(frame).unwrap_or(0),
+            frame,
             file_name: format!("{}.png", frame),
             bytes,
             which_picture: None,
+            not_read: Vec::new(),
         })
     }
 }
@@ -911,7 +1020,7 @@ fn what_the_stream_came_to(attempt: Option<&OneAttemptsCapture>, stream: AStream
         return ACollectionOutcome::NeverEstablished;
     };
     if attempt.collection_incomplete_by_reconciliation {
-        return ACollectionOutcome::CollectionIncomplete;
+        return the_cut_stream_as_told(attempt, stream);
     }
     let words = attempt.ending.as_ref().and_then(|ending| match stream {
         AStream::TheOrdinaryOutput => ending.ordinary.as_deref(),
@@ -920,8 +1029,33 @@ fn what_the_stream_came_to(attempt: Option<&OneAttemptsCapture>, stream: AStream
     match words.and_then(CollectionOutcome::from_words) {
         Some(CollectionOutcome::Collected) => ACollectionOutcome::Collected,
         Some(CollectionOutcome::CollectedAndTheStreamWasEmpty) => ACollectionOutcome::CollectedAndTheStreamWasEmpty,
-        Some(CollectionOutcome::CollectionIncomplete) => ACollectionOutcome::CollectionIncomplete,
+        Some(CollectionOutcome::CollectionIncomplete) => the_cut_stream_as_told(attempt, stream),
         _ => ACollectionOutcome::NeverEstablished,
+    }
+}
+
+/// **`Telegram` E3 as amended 2026-11-12: a cut stream that captured nothing
+/// is told as an empty one** — no button, and the empty stream's sentence.
+/// The second live pass's fault 5: on a job interrupted twice, the re-run's
+/// Errors log was cut and held nothing, and *Send Errors log* answered only
+/// *Errors log, incomplete.* **Nothing or white space alone** (`Telegram` E3e) is
+/// empty; a file that cannot be read stays *collection incomplete*. A file
+/// over a page is read no further than its size: it is not empty.
+fn the_cut_stream_as_told(attempt: &OneAttemptsCapture, stream: AStream) -> ACollectionOutcome {
+    let sink = match stream {
+        AStream::TheOrdinaryOutput => &attempt.ordinary_sink,
+        AStream::TheComplaints => &attempt.complaints_sink,
+    };
+    let empty = std::fs::metadata(sink).ok().is_some_and(|held| {
+        held.is_file()
+            && (held.len() == 0
+                || (held.len() <= 4096
+                    && std::fs::read(sink).is_ok_and(|bytes| bytes.iter().all(u8::is_ascii_whitespace))))
+    });
+    if empty {
+        ACollectionOutcome::CollectedAndTheStreamWasEmpty
+    } else {
+        ACollectionOutcome::CollectionIncomplete
     }
 }
 
@@ -1004,6 +1138,11 @@ pub const HOW_LONG_A_WAITING_MESSAGE_WAITS_FOR_ITS_PICTURE: Duration = Duration:
 /// is sized on it**; later events are not held for it — only the cursor is.
 pub const HOW_LONG_A_CONTACT_SHEET_WAITS_FOR_ITS_PICTURES: Duration = Duration::from_secs(10 * 60);
 
+/// **`Telegram` I2b, added 2026-11-13 — how many later frames a frame's
+/// picture may wait behind** before it is skipped for the newest. A Build
+/// figure, and nothing is sized on it.
+pub const THE_MOST_LATER_FRAMES_A_PICTURE_WAITS_BEHIND: usize = 3;
+
 /// **`Telegram` I2a — one paced job, as this run holds it**: the moment its
 /// last frame picture was sent, on the worker's own clock (the listener's
 /// monotonic one, never the wall clock and never the desktop's: `State,
@@ -1046,6 +1185,32 @@ enum TheWork {
     /// Not yet, but later events go on: a waiting message waits for its
     /// picture. The cursor stays at this event.
     NotYet,
+}
+
+/// **`Telegram` C1e as changed 2026-11-12 — how many refusals in a row of
+/// one job's cut end it** (the Fable review, sitting 6). Until then a cut Telegram
+/// refused for any reason but *cannot be edited* was tried on every turn for
+/// good: the cursor never passed its ending, and a restart sent every later
+/// message again.
+const HOW_MANY_REFUSALS_END_A_CUT: u8 = 3;
+
+/// **`Telegram` C1e — the word a job's message is cut to at its ending**: as
+/// `Telegram` R7a words each ending, and *Reporting off.* for a job whose choice is
+/// `Nothing` by then (`Telegram` V1c). **Nothing where the note holds no ending**: the
+/// message is not cut to a word that may be untrue, and its record ends with
+/// its folder (`Telegram` C7a).
+fn the_word_an_ending_is_cut_to(choice: TheReportingChoice, outcome: Option<TheOutcomeAsWritten>) -> &'static str {
+    use smoozy_telegram::job_messages::{AN_ABANDONED_ENDING, A_FAILED_ENDING, A_FINISHED_ENDING, A_STOPPED_ENDING, REPORTING_OFF};
+    if choice == TheReportingChoice::Nothing {
+        return REPORTING_OFF;
+    }
+    match outcome {
+        Some(TheOutcomeAsWritten::Finished) => A_FINISHED_ENDING,
+        Some(TheOutcomeAsWritten::Failed) | Some(TheOutcomeAsWritten::NoStatusWasReaped) => A_FAILED_ENDING,
+        Some(TheOutcomeAsWritten::GivenUp) => AN_ABANDONED_ENDING,
+        Some(TheOutcomeAsWritten::LeftStopped) => A_STOPPED_ENDING,
+        None => "",
+    }
 }
 
 /// `Telegram` F3a/`Telegram` R7a's notice, with offsets counted as Telegram's entity calls require.
@@ -1139,8 +1304,20 @@ pub struct TheJournalReader {
     /// on for its last frame ([`Self::the_last_frames_picture_is_awaited`]).
     pictures_done: HashSet<(String, i64)>,
     tries: HashMap<u64, TheTriesOfASend>,
+    /// **`Telegram` F3a as changed 2026-11-12 — the tries of the message that
+    /// says some events were missed** (`State, identity and recovery` E5).
+    /// Memory only, as every other count of tries.
+    the_gaps_tries: TheTriesOfASend,
     unsent_notices: BTreeMap<u64, AnUnsentNotice>,
     holds_failed_this_turn: HashSet<String>,
+    /// **`Telegram` C1d, `Telegram` C1e and `Telegram` C7a — each job's own message**, shared with
+    /// the clock's tick and the owner's acts. Added 2026-11-09, the
+    /// twenty-eighth notes, notes 18 and 19.
+    jobs: smoozy_telegram::status::TheJobsOwnMessages,
+    /// **`Telegram` C1e as changed 2026-11-12 — how many times each job's
+    /// cut was refused**, by the job's identity. Memory only: a restart
+    /// counts again.
+    cuts_refused: HashMap<String, u8>,
     notes: SaysOnItsComplaintsStream,
     /// **A test's way to pose a worker killed between its sends and its
     /// cursor's move**: the next turn sends and then moves nothing.
@@ -1165,6 +1342,9 @@ pub struct WhatTheReaderIsHanded {
     /// **The worker's own clock**, the listener's — a clock a test moves on
     /// itself in the tests — for `Telegram` I2a's minutes.
     pub clock: Arc<dyn ReadsItsOwnClock>,
+    /// **`Telegram` C1d — the keeper of each job's own message**, the one the
+    /// clock and the owner's acts hold too.
+    pub jobs: smoozy_telegram::status::TheJobsOwnMessages,
     pub notes: SaysOnItsComplaintsStream,
 }
 
@@ -1201,8 +1381,11 @@ impl TheJournalReader {
             paced: HashMap::new(),
             pictures_done: HashSet::new(),
             tries: HashMap::new(),
+            the_gaps_tries: TheTriesOfASend::default(),
             unsent_notices: BTreeMap::new(),
             holds_failed_this_turn: HashSet::new(),
+            jobs: handed.jobs,
+            cuts_refused: HashMap::new(),
             notes: handed.notes,
             #[cfg(test)]
             the_next_cursor_move_is_lost: false,
@@ -1292,6 +1475,19 @@ impl TheJournalReader {
         }
     }
 
+    /// **`Telegram` C7a — a job's message record ends when the machine no
+    /// longer holds the job's record folder**, with nothing sent or edited.
+    /// **After the turn's events**, so a release or a removal read in the same
+    /// turn tells its answer on the message first (`Telegram` A3, `Telegram` C1e).
+    fn the_jobs_messages_whose_folder_went_end(&mut self) {
+        let Ok(recorded) = self.messages.store.the_jobs_messages() else { return };
+        for record in recorded.into_iter().filter(|record| !self.records.holds_the_record_folder_of(&record.job)) {
+            if let Err(why) = self.messages.store.the_jobs_message_ends(&record.job) {
+                self.note(&format!("the job's message record of {} did not end: {}", record.job, why.0));
+            }
+        }
+    }
+
     /// **One turn**: read forward, do each event's work, move the cursor to
     /// the first event not done, and then the idle message.
     pub fn a_turn(&mut self) {
@@ -1316,6 +1512,14 @@ impl TheJournalReader {
             self.note(&why);
         }
         self.forget_what_has_no_folder_left();
+        // **`Telegram` I4 as changed 2026-11-13 (the Creator's addition): a
+        // *being made again* goes once its answer was sent**; one that reached
+        // nothing is tried again next turn, and one refused stays.
+        for message in self.frames.the_words_to_delete() {
+            if let HowASendEnded::HandedBack(WhyTheCallFailed::NotReached(_)) = self.messages.delete_an_in_between_message(message) {
+                self.frames.still_to_delete(message);
+            }
+        }
         let cursor = match self.store.the_journal_cursor() {
             Ok(cursor) => cursor,
             Err(why) => return self.note(&format!("the cursor could not be read: {}", why.0)),
@@ -1341,8 +1545,29 @@ impl TheJournalReader {
             let key = format!("the gap below {oldest}");
             if !self.done.contains(&key) {
                 match self.send_text(some_events_were_missed(&self.server)) {
-                    TheWork::TheLineReachedNothing => return,
+                    // **`Telegram` F3a as changed 2026-11-12 (the Fable
+                    // review's sitting 6 follow-up, its left item 4): this
+                    // message is tried by the same three counted tries**, and
+                    // then passed and only logged. Until then it ended every
+                    // turn while not reached, and nothing past it was sent.
+                    TheWork::TheLineReachedNothing => {
+                        let after = self.messages.queue.how_many_calls_reached_telegram();
+                        let passed = self.the_gaps_tries.after_a_failure(after);
+                        self.note(&format!(
+                            "the message that events were missed below {oldest} was not reached; counted tries {}",
+                            self.the_gaps_tries.counted
+                        ));
+                        if !passed {
+                            return;
+                        }
+                        self.note(&format!(
+                            "the message that events were missed below {oldest} passed after 3 counted tries; not sent"
+                        ));
+                        self.the_gaps_tries = TheTriesOfASend::default();
+                        self.done.insert(key);
+                    }
                     _ => {
+                        self.the_gaps_tries = TheTriesOfASend::default();
                         self.done.insert(key);
                     }
                 }
@@ -1399,6 +1624,7 @@ impl TheJournalReader {
             }
         }
         self.the_unsent_notices();
+        self.the_jobs_messages_whose_folder_went_end();
         self.messages.queue.the_event_being_sent("outside a journal event".into());
         self.read_from = Some(past_the_read);
         let reached = self.owed.keys().chain(self.unsent_notices.keys()).min().copied()
@@ -1526,14 +1752,26 @@ impl TheJournalReader {
             self.note(&format!("frame {} of {} was cleared before its picture was read", frame.frame, job.as_text()));
             return (TheWork::Done, false);
         };
-        // **`Telegram` C1b: Stop only while the job is live** — a last frame's
-        // picture read after the ending goes with none, and no companion.
-        let stop = self.it_is_live(job).then(|| self.the_subject_of_a_job(job, record));
-        match self.pictures.send_a_frame_with_its_stop(
+        // **`Telegram` I2 and `Telegram` C1b as changed 2026-11-09 (the twenty-eighth
+        // notes, note 19: *"One message, Stop on job"*): a frame's picture or
+        // album goes as a reply to the job's message, with no Stop and nothing
+        // after it.** Where no job's message is recorded — a job started under
+        // an older release — it goes with no reply. `Telegram` I3's refusal is a line on
+        // the job's message while the job is live (`Telegram` C1d), and a silent message
+        // of its own after the ending (`Telegram` V1e).
+        let live = self.it_is_live(job);
+        let reply_to = self.jobs.the_message_of(self.messages.store.as_ref(), &job.as_text());
+        let way = smoozy_telegram::pictures::AFramesWay {
+            stop: None,
+            reply_to,
+            the_jobs_messages: Some(&self.jobs),
+            after_the_ending: !live,
+        };
+        match self.pictures.send_a_frame_as(
             &mut self.messages,
             copies,
             AClassOfSend::FramePicturesAndMedia,
-            stop.as_ref(),
+            way,
         ) {
             APictureSent::Sent { .. } => (TheWork::Done, true),
             APictureSent::NotSentAndSaid | APictureSent::NotSentAlreadySaid => (TheWork::Done, false),
@@ -1556,11 +1794,7 @@ impl TheJournalReader {
             let label = Identity::read_back(IdentityKind::Job, &job)
                 .map(|identity| self.records.what_the_job_is_called(&identity))
                 .unwrap_or_default();
-            let text = a_frames_picture_could_not_be_made(
-                &self.server,
-                &label,
-                u64::try_from(frame).unwrap_or(0),
-            );
+            let text = a_frames_picture_could_not_be_made(&self.server, &label, frame);
             let subject = self.subject_named(&job, &job);
             let live = Identity::read_back(IdentityKind::Job, &job).is_some_and(|job| self.it_is_live(&job));
             let ended = smoozy_telegram::actions::message_result(self.messages.send_about_while(
@@ -1604,6 +1838,19 @@ impl TheJournalReader {
     fn send_text(&mut self, text: AMarkedText) -> TheWork {
         let ended = self.messages.send(text);
         self.sent(ended)
+    }
+
+    /// **A message with no buttons and no sound** — `Telegram` V1e's *after
+    /// the ending*: a finished video too large to send, a contact sheet
+    /// Telegram refused (the twenty-eighth notes, note 18).
+    fn send_text_silently(&mut self, text: AMarkedText) -> TheWork {
+        let (conversation, queue) = (self.messages.conversation, self.messages.queue.clone());
+        let how = smoozy_telegram::transport::HowItIsSent::silent(true);
+        let told = queue.offer(
+            AClassOfSend::EndingsHoldsAndDrops,
+            Box::new(move |client| client.send_marked_message_as(conversation, &text, None, how)),
+        );
+        self.sent(smoozy_telegram::actions::wait_for(&queue, told))
     }
 
     /// **The same, for a message about one job with no buttons** — an
@@ -1664,7 +1911,12 @@ impl TheJournalReader {
             asked::THE_JOB_RECORD_REMOVED_EVENT => self.a_removal(event),
             asked::THE_JOB_RECORD_WRITTEN_EVENT => self.a_job_written(event),
             asked::THE_RENDER_ATTEMPT_STARTED_EVENT => self.a_started_job(event),
-            asked::THE_PREVIEW_PUBLISHED_EVENT => self.a_preview_published(event),
+            // **`Telegram` I2 as changed 2026-11-10 (the twenty-ninth notes,
+            // note 11): the frame's set event is the one trigger**; the main
+            // copy's own event is journalled before the other copies exist,
+            // and no *a preview was published* event sends anything.
+            asked::THE_PREVIEW_SET_MADE_EVENT => self.a_preview_published(event),
+            asked::THE_PREVIEW_PUBLISHED_EVENT => TheWork::Done,
             asked::THE_TELEGRAM_CHOICE_CHANGED_EVENT => self.a_choice_changed(event),
             _ => TheWork::Done,
         }
@@ -1687,12 +1939,18 @@ impl TheJournalReader {
         let label = self.records.what_the_job_is_called(&job);
         let server = self.server.clone();
         let subject = self.subject_named(&job.as_text(), &job.as_text());
+        // ***Resume*'s answer says where it started** (`Telegram` Y4a as
+        // changed 2026-11-11).
+        let outcome = match the_job_and_frame_a_resumption_names(&event.says) {
+            Some((_, from)) => ASubmissionsOutcome::Resumed { from },
+            None => ASubmissionsOutcome::Submitted,
+        };
         self.once(event, "the resubmission", |reader| {
             let reported = reader.reporter.report_about(
                 AJournalledOutcome::ASubmission {
                     server: server.clone(),
                     label: label.clone(),
-                    outcome: ASubmissionsOutcome::Submitted,
+                    outcome: outcome.clone(),
                 },
                 &subject,
                 &server,
@@ -1727,18 +1985,31 @@ impl TheJournalReader {
         }
         // **`Telegram` C1b: a start read after its job ended carries no Stop.**
         let live = self.it_is_live(&job);
+        // **`Telegram` C1a and `Telegram` C1d, from 2026-11-09: the start is the job's own
+        // message**, recorded once Telegram accepts it (`Telegram` C7a) and edited as the
+        // job moves; **its sound is `Telegram` V1e's**, under `Everything` alone. A job
+        // whose message is already recorded — a held range's question, an
+        // earlier attempt's, one sent before a restart — gets none (`Telegram` C1a).
+        let silent = !it_makes_a_sound(self.records.the_choice_in_force(&record), AJobsSend::TheStart);
+        let says = smoozy_telegram::status::WhatAJobsMessageSays {
+            subject,
+            server: self.server.clone(),
+            label,
+            state: if self.records.the_job_is_running_again(&record) {
+                smoozy_telegram::status::AJobsState::RunningAgain
+            } else {
+                smoozy_telegram::status::AJobsState::Rendering { frame: 0, of: 0, percent: 0, a_frame_is_finished: false, finishing: false }
+            },
+            at: None,
+        };
+        // **A start read once its job has ended sends nothing** (Sol's fresh
+        // look, round 2): its ending tells it, and a job's message sent now
+        // would stand after the ending with nothing left to cut it.
+        if !live {
+            return TheWork::Done;
+        }
         self.once(event, "the start", |reader| {
-            let sent = reader.messages.send_about_while(
-                live,
-                &smoozy_telegram::job_messages::AComposedMessage {
-                    text: the_start_message(&reader.server, &label),
-                    buttons: vec![],
-                },
-                &subject,
-                &reader.server,
-                &label,
-                AClassOfSend::EndingsHoldsAndDrops,
-            );
+            let sent = reader.jobs.the_start(&mut reader.messages, &says, live, silent);
             reader.sent_with_buttons(sent)
         })
     }
@@ -1826,6 +2097,24 @@ impl TheJournalReader {
             pacing.held = None;
         }
         let ended_at = note.ended.as_ref().and_then(|ended| seconds_of(ended.taken_at())).or(event.happened_at);
+        // **`Telegram` C1e as changed 2026-11-10 — the job's message shows its
+        // ending line at once** (the twenty-ninth notes, note 11, the dig's
+        // piece 4): before the ending's own message and whatever that waits
+        // for, so it no longer says *Rendering* through the wait below. **An
+        // edit of its own, not the cut moved earlier**: the job's message
+        // stays recorded, so the last frame's pictures still reply to it
+        // (`Telegram` I2), and the cut below ends the record. A first-frame
+        // check's is cut by its question, as before.
+        let the_word = the_word_an_ending_is_cut_to(choice, outcome);
+        let a_check = self.it_is_a_first_frame_check(&job);
+        if !a_check {
+            let told = self.once(event, "its job's message told its ending", |reader| {
+                reader.the_jobs_message_is_cut_or_told(&job, &label, the_word, false)
+            });
+            if told == TheWork::TheLineReachedNothing {
+                return told;
+            }
+        }
         // **The finished message waits for the job's last frame's pictures**
         // (the runner's ruling of 2026-10-19): the ending is journalled before
         // the last frame's preview is made (`Queue & History` P1b), so without
@@ -1850,6 +2139,33 @@ impl TheJournalReader {
         if theirs != TheWork::Done {
             return theirs;
         }
+        // **`Telegram` D2 as changed 2026-11-13 (the Creator's addition) —
+        // what was said in between goes once the ending is told**: a stop's
+        // question that became *Stop sent.*.
+        let job_text = job.as_text();
+        let in_between = self.once(event, "its in-between messages", |reader| {
+            match reader.messages.the_in_between_messages_go(&job_text) {
+                Ok(_) => TheWork::Done,
+                Err(why) => {
+                    reader.note(&why);
+                    TheWork::TheLineReachedNothing
+                }
+            }
+        });
+        if in_between != TheWork::Done {
+            return in_between;
+        }
+        // **`Telegram` C1e — the job's message cut to one line, after its
+        // ending's own message went** (a group's member at its ending, which
+        // sends none of its own). **A first-frame check's is cut once its
+        // question is accepted** (`Telegram` C1d), below, since the check's pictures reply
+        // to it (`Telegram` I2).
+        if !a_check {
+            let cut = self.once(event, "its job's message cut", |reader| reader.the_jobs_message_is_cut(&job, &label, the_word));
+            if cut != TheWork::Done {
+                return cut;
+            }
+        }
         let the_groups = self.once(event, "its group's message", |reader| reader.the_group(&record, &manifest));
         if the_groups != TheWork::Done {
             return the_groups;
@@ -1860,6 +2176,12 @@ impl TheJournalReader {
         let the_holds = self.the_holds_waiting_on(&job, event.happened_at);
         if the_holds == TheWork::TheLineReachedNothing {
             return the_holds;
+        }
+        if a_check && the_holds == TheWork::Done {
+            let cut = self.once(event, "its job's message cut", |reader| reader.the_jobs_message_is_cut(&job, &label, the_word));
+            if cut != TheWork::Done {
+                return cut;
+            }
         }
         // **`Telegram` M2 — the contact sheet at the job's end**, the map's
         // piece 6, after the job's own message and its group's.
@@ -1880,6 +2202,76 @@ impl TheJournalReader {
         }
     }
 
+    /// **`Telegram` C1e — one job's message cut**, where one is recorded. A
+    /// line that reached nothing keeps the event owed; any other refusal is
+    /// tried again on later turns, later events going on meanwhile, **and
+    /// given up at the third** ([`HOW_MANY_REFUSALS_END_A_CUT`]).
+    fn the_jobs_message_is_cut(&mut self, job: &Identity, label: &str, word: &str) -> TheWork {
+        self.the_jobs_message_is_cut_or_told(job, label, word, true)
+    }
+
+    /// **The same line, either as the cut** (`ends`: its record ends) **or
+    /// as the ending told at once** (`Telegram` C1e as changed 2026-11-10):
+    /// the line and no buttons, the record kept for the pictures' replies. A
+    /// told ending that is refused is left to the cut, which still comes.
+    fn the_jobs_message_is_cut_or_told(&mut self, job: &Identity, label: &str, word: &str, ends: bool) -> TheWork {
+        use smoozy_telegram::status::WhatTheEditCameTo;
+        if word.is_empty() {
+            return TheWork::Done;
+        }
+        // **`Telegram` I3's line no edit has shown yet goes as a message of its own,
+        // without a sound** (`Telegram` C1d, `Telegram` V1e), before the cut takes it away
+        // (Sol's fresh look, round 1).
+        for line in self.jobs.the_lines_never_shown(&job.as_text()) {
+            let text = a_user_message(&self.server, label, "", &line);
+            if self.send_text_silently(text) == TheWork::TheLineReachedNothing {
+                return TheWork::TheLineReachedNothing;
+            }
+        }
+        // **Said once**, however often the cut below is tried again (Sol's
+        // fresh look, round 2).
+        self.jobs.the_lines_are_said(&job.as_text());
+        let came_to = if ends {
+            self.jobs.the_cut(&mut self.messages, &job.as_text(), &self.server, label, word)
+        } else {
+            self.jobs.the_ending_told(&mut self.messages, &job.as_text(), &self.server, label, word)
+        };
+        match came_to {
+            WhatTheEditCameTo::Done | WhatTheEditCameTo::NoJobsMessage | WhatTheEditCameTo::ItCannotBeEdited => {
+                // The refusals are counted in a row (Sol's look at sitting 6).
+                if ends {
+                    self.cuts_refused.remove(&job.as_text());
+                }
+                TheWork::Done
+            }
+            WhatTheEditCameTo::TheLineReachedNothing => TheWork::TheLineReachedNothing,
+            WhatTheEditCameTo::Refused(why) if !ends => {
+                self.note(&format!("the job's message of {} was not told its ending; the cut will be: {why:?}", job.as_text()));
+                TheWork::Done
+            }
+            WhatTheEditCameTo::Refused(why) => {
+                let refused = self.cuts_refused.entry(job.as_text()).or_default();
+                *refused = refused.saturating_add(1);
+                let refused = *refused;
+                self.note(&format!("the job's message of {} was not cut, refusal {refused}: {why:?}", job.as_text()));
+                if refused < HOW_MANY_REFUSALS_END_A_CUT {
+                    return TheWork::NotYet;
+                }
+                // **`Telegram` C1e as changed 2026-11-12: given up.** Its record ends
+                // and the ending's work is done, so the cursor passes it.
+                if !self.jobs.the_cut_is_given_up(&mut self.messages, &job.as_text()) {
+                    return TheWork::NotYet;
+                }
+                self.cuts_refused.remove(&job.as_text());
+                self.note(&format!(
+                    "the cut of the job's message of {} was given up after {refused} refusals; its record ended (`Telegram` C1e)",
+                    job.as_text()
+                ));
+                TheWork::Done
+            }
+        }
+    }
+
     fn finished(&mut self, record: &JobRecord, note: &TheNote, label: &str, choice: TheReportingChoice) -> TheWork {
         if record.group.is_some() || !the_job_reports(choice, AKindOfReport::Finished) {
             return TheWork::Done;
@@ -1894,7 +2286,10 @@ impl TheJournalReader {
                 })
                 .map(smoozy_telegram::job_messages::how_long_in_words);
             return self.send_text_about(
-                a_user_message(&self.server, label, "", &video.finished_in_words(took)),
+                smoozy_telegram::job_messages::with_the_files_missing(
+                    a_user_message(&self.server, label, "", &video.finished_in_words(took)),
+                    the_files_missing_on(note),
+                ),
                 &record.job,
             );
         }
@@ -1916,7 +2311,12 @@ impl TheJournalReader {
             files: the_files_of(note),
         };
         match the_finishing_message(&finished) {
-            Some(text) => self.send_text_about(text, &record.job),
+            // **`Telegram` E1a's sentence of 2026-11-11: *Missing:* for each
+            // file the note's ending names** (`Rendering` K14c).
+            Some(text) => self.send_text_about(
+                smoozy_telegram::job_messages::with_the_files_missing(text, the_files_missing_on(note)),
+                &record.job,
+            ),
             None => TheWork::Done,
         }
     }
@@ -1930,11 +2330,19 @@ impl TheJournalReader {
         let attempts = self.records.the_attempts(job).unwrap_or_default();
         let attempt = attempts.iter().find(|one| one.attempt == attempt_number);
         let (there, not_there) = self.records.the_frames_at_the_ending(record, note);
+        // **A frame below zero keeps its number** (`Specs/Render Settings`;
+        // the four questions, batch 4's S2 leftover).
         let at_frame = note
             .last_frame_figure
-            .and_then(|frame| u64::try_from(frame).ok())
             .map(|frame| (frame, there + not_there))
             .filter(|(_, of)| *of > 0);
+        // **`Telegram` Y4a as changed 2026-11-11 (the four questions, scout
+        // 1.5): the app's two ways.** *Submit again* counts the frames the job
+        // asked for; *Resume* starts at the note's `Queue & History` N6 figure,
+        // the one the app's History starts at, and holds every asked frame
+        // from it on (`Rendering` A4, A5, A6: not offered where there is no
+        // figure or no frame from it on).
+        let (frames_asked, resume) = self.the_two_ways_of(record, note);
         let failed = AFailedJob {
             server: self.server.clone(),
             job: job.as_text(),
@@ -1958,12 +2366,32 @@ impl TheJournalReader {
                 .map(|read| read.available_bytes),
             no_render_began: ending.is_some_and(|ending| ending.no_render_began),
             the_reason_the_machine_recorded: ending.and_then(|ending| ending.the_reason_the_machine_recorded.clone()),
+            frames_asked,
+            resume,
         };
         // **`Telegram` C1b: an ending carries no Stop**; the words and *try it
         // again* stay.
         let subject = self.the_subject_of_a_job(job, record);
         let sent = self.messages.send_with_buttons(&the_failure_message(&failed), &subject);
         self.sent_with_buttons(sent)
+    }
+
+    /// **`Telegram` Y4a: the app's two ways, as the app's History reckons
+    /// them.** *Submit again* counts the frames the job asked for; *Resume*
+    /// starts at the note's `Queue & History` N6 figure and holds every asked
+    /// frame from it on (`Rendering` A4, A5, A6: none where there is no figure
+    /// or no frame from it on).
+    fn the_two_ways_of(&self, record: &JobRecord, note: &TheNote) -> (u64, Option<smoozy_telegram::job_messages::AResume>) {
+        let asked: Vec<i64> = self
+            .records
+            .the_manifest(record)
+            .map(|manifest| self.records.the_frames_of(record, &manifest))
+            .unwrap_or_default();
+        let resume = note.last_frame_figure.and_then(|from| {
+            let at = asked.iter().position(|frame| *frame >= from)?;
+            Some(smoozy_telegram::job_messages::AResume { from, frames: (asked.len() - at) as u64 })
+        });
+        (asked.len() as u64, resume)
     }
 
     fn given_up(&mut self, job: &Identity, record: &JobRecord, note: &TheNote, label: &str, choice: TheReportingChoice) -> TheWork {
@@ -1973,6 +2401,8 @@ impl TheJournalReader {
         let attempt_number = note.ending.as_ref().map_or(1, |ending| ending.the_attempt_whose_capture_record_holds_the_words);
         let attempts = self.records.the_attempts(job).unwrap_or_default();
         let attempt = attempts.iter().find(|one| one.attempt == attempt_number);
+        // **`Telegram` Y4a as changed 2026-11-12: the app's two ways here too.**
+        let (frames_asked, resume) = self.the_two_ways_of(record, note);
         let given_up = AGivenUpJob {
             server: self.server.clone(),
             job: job.as_text(),
@@ -1982,6 +2412,8 @@ impl TheJournalReader {
             frames_on_the_server: self.records.the_frames_at_the_ending(record, note).0,
             ordinary_output: what_the_stream_came_to(attempt, AStream::TheOrdinaryOutput),
             complaints: what_the_stream_came_to(attempt, AStream::TheComplaints),
+            frames_asked,
+            resume,
         };
         let subject = self.the_subject_of_a_job(job, record);
         let sent = self.messages.send_with_buttons(&the_given_up_message(&given_up), &subject);
@@ -2099,11 +2531,14 @@ impl TheJournalReader {
     /// other View Layers' copies are the desktop's alone).~~ **Since 2026-10-18
     /// every copy of the frame goes, on the main copy's event** (`Telegram`
     /// I2, `Queue & History` P10 as written that day, the Creator's fourteenth
-    /// notes, note 7): the supervisor journals all of a production's copies in
-    /// one go, so the main copy's event sends the frame's set as its production
+    /// notes, note 7) ~~: the supervisor journals all of a production's copies in
+    /// one go, so the main copy's event sends the frame's set~~ **— on the
+    /// frame's *set made* event since 2026-11-10** (`Telegram` I2, `Queue &
+    /// History` P3, the twenty-ninth notes, note 11: the main copy's own event
+    /// now goes before the other copies exist), as its production
     /// published it ([`TheRecordsOnThisMachine::the_frames_copies`]) — one
     /// album, each picture named, or one picture for a frame of one copy — and
-    /// **the other copies' events send nothing**. Sent where the
+    /// **no *a preview was published* event sends anything**. Sent where the
     /// job's reporting choice sends pictures (`Telegram` V1), with *Stop this
     /// job* while it renders (`Telegram` D1); **sent as an answer where the user
     /// asked for this frame** (`Telegram` I4), whatever the choice; and not repeated where it
@@ -2165,7 +2600,15 @@ impl TheJournalReader {
         let this_frame = APacedFrame {
             frame: published.frame,
             operation: published.operation.clone(),
-            which_picture: which_picture_the_event_names(&published),
+            // **Where the event left the names to the production's record**
+            // (`Queue & History` P3 as changed 2026-11-10, piece J), the
+            // caption reads them there, off the one production it names.
+            which_picture: which_picture_the_event_names(&published).or_else(|| {
+                published
+                    .the_names_are_in_the_record
+                    .then(|| self.records.which_picture_one_production_names(&job, published.frame, &published.operation))
+                    .flatten()
+            }),
         };
         if asked {
             let label = self.records.what_the_job_is_called(&job);
@@ -2197,11 +2640,14 @@ impl TheJournalReader {
                     .or_insert_with(|| {
                         ThePictures::for_a_request(reader.messages.conversation, &server)
                     });
-                let result = pictures.send_a_frame_with_its_stop(
+                // **`Telegram` I2: an answer too is a reply to the job's message**,
+                // with no Stop on the picture (`Telegram` C1b; Sol's fresh look, round 1).
+                let reply_to = reader.jobs.the_message_of(reader.messages.store.as_ref(), &job.as_text());
+                let result = pictures.send_a_frame_as(
                     &mut reader.messages,
                     copies,
                     AClassOfSend::RoutedAnswersAndAcknowledgements,
-                    subject.as_ref(),
+                    smoozy_telegram::pictures::AFramesWay { stop: subject.as_ref(), reply_to, the_jobs_messages: None, after_the_ending: false },
                 );
                 if let APictureSent::NotAccepted(ended) = result {
                     if !the_work_is_done(&ended) {
@@ -2216,6 +2662,21 @@ impl TheJournalReader {
 
         // **`Telegram` I2a: held, or the newest sent at once.**
         let interval = choice.the_interval_between_pictures();
+        // **`Telegram` I2b, added 2026-11-13: the backlog is bounded** —
+        // a frame not asked for, under a choice that sends every frame, is not
+        // sent where more than three later frames are ready, or where the job
+        // has ended and any later frame is. The newest is sent instead.
+        if interval.is_none() {
+            let later = self.records.the_later_frames_held(&job, this_frame.frame);
+            if later > THE_MOST_LATER_FRAMES_A_PICTURE_WAITS_BEHIND || (later > 0 && !self.it_is_live(&job)) {
+                self.note(&format!(
+                    "frame {} of {} is not sent: {later} later frames are ready (`Telegram` I2b)",
+                    this_frame.frame,
+                    job.as_text()
+                ));
+                return TheWork::Done;
+            }
+        }
         let now = self.clock.now();
         let mut sending = this_frame.clone();
         if let Some(interval) = interval {
@@ -2369,13 +2830,10 @@ impl TheJournalReader {
         let Some(manifest) = manifest else {
             return TheWork::Done;
         };
-        let frames: Vec<u64> = self
-            .records
-            .the_frames_of(record, manifest)
-            .into_iter()
-            .filter_map(|frame| u64::try_from(frame).ok())
-            .collect();
-        let chosen: Vec<i64> = the_contact_sheet(&frames).into_iter().filter_map(|frame| i64::try_from(frame).ok()).collect();
+        // **Frames below zero are chosen like any other** (Sol's S2, the four
+        // questions, batch 4): they were dropped before choosing.
+        let frames: Vec<i64> = self.records.the_frames_of(record, manifest);
+        let chosen: Vec<i64> = the_contact_sheet(&frames);
         let copies = self.records.the_copies_of_the_sheets_frames(record, job, &chosen);
         let sheets = the_sheets_of(&copies);
         let named = sheets.len() > 1;
@@ -2411,7 +2869,7 @@ impl TheJournalReader {
         // server's record and the user told nothing).
         if self.sheets_refused.contains(&job.as_text()) {
             let text = a_user_message(&self.server, label, "", "Telegram rejected the contact sheet.");
-            return self.once(event, "its contact sheet refused", |reader| reader.send_text(text));
+            return self.once(event, "its contact sheet refused", |reader| reader.send_text_silently(text));
         }
         TheWork::Done
     }
@@ -2452,10 +2910,11 @@ impl TheJournalReader {
                 Some(ADerivative {
                     job: job.as_text(),
                     job_label: label.to_string(),
-                    frame: u64::try_from(copy.frame).unwrap_or(0),
+                    frame: copy.frame,
                     file_name: copy.file_name.clone(),
                     bytes,
                     which_picture: copy.layer.clone(),
+                    not_read: Vec::new(),
                 })
             })
             .filter(|picture| whether_it_fits(&picture.bytes) != WhetherItFits::OutsideTheLimits)
@@ -2542,7 +3001,7 @@ impl TheJournalReader {
             if said {
                 return TheWork::Done;
             }
-            return self.send_text(the_finished_video_is_too_big(&self.server, label, &file.name, bytes));
+            return self.send_text_silently(the_finished_video_is_too_big(&self.server, label, &file.name, bytes));
         }
         let contents = match std::fs::read(&file.path) {
             Ok(contents) => contents,
@@ -2679,10 +3138,14 @@ impl TheJournalReader {
     }
 
     fn the_waiting_message_now(&mut self, hold: &HoldRecord, the_frames_end: Option<u64>) -> TheWork {
+        // **A hold answered, or gone with its job** — removed by `Queue &
+        // History` L19a's pair stop, a cancel or a clear — asks nothing (Sol's
+        // fresh look at the twenty-eighth notes' piece 8, 2026-11-09: a
+        // question was sent for a range already removed).
         if self
             .records
             .the_hold(&hold.hold)
-            .is_some_and(|now| now.release.is_some())
+            .is_none_or(|now| now.release.is_some())
         {
             return TheWork::Done;
         }
@@ -2693,6 +3156,12 @@ impl TheJournalReader {
             return TheWork::Done;
         };
         if self.records.the_hold_reports_nothing(hold, &held) { return TheWork::Done; }
+        // **A question already recorded as the held job's message is not
+        // asked again** — a restart replaying the ending (`Telegram` C7a; Sol's fresh
+        // look, round 1).
+        if self.messages.store.the_jobs_message_of(&held_job.as_text()).is_some() {
+            return TheWork::Done;
+        }
         let manifest = self.records.the_manifest(&held);
         let label = match (self.records.the_note(held_job), manifest.as_ref()) {
             (Some(note), manifest) => note.what_the_job_is_called(manifest),
@@ -2762,7 +3231,7 @@ impl TheJournalReader {
             hold: hold.hold.as_text(),
             generation: hold.hold.as_text(),
             waits_for: Self::what_it_waits_for(hold),
-            the_frame_shown: the_frame_shown.and_then(|frame| u64::try_from(frame).ok()).unwrap_or(1),
+            the_frame_shown: the_frame_shown.unwrap_or(1),
             frames_held,
             the_frames,
         };
@@ -2774,6 +3243,12 @@ impl TheJournalReader {
         };
         let copies = pictures.unwrap_or_default();
         let no_picture = copies.is_empty();
+        // **`Telegram` I2 and `Telegram` A3a as changed 2026-11-09: the check's pictures
+        // reply to the check job's message**, with their sound (`Telegram` V1e).
+        let the_check = hold.dependency.as_ref().map(|dependency| dependency.work.clone());
+        let reply_to = the_check
+            .as_ref()
+            .and_then(|check| self.jobs.the_message_of(self.messages.store.as_ref(), &check.as_text()));
         for (part, batch) in smoozy_telegram::pictures::the_sends_of_a_frame(copies)
             .into_iter()
             .enumerate()
@@ -2782,12 +3257,8 @@ impl TheJournalReader {
             if self.done.contains(&key) {
                 continue;
             }
-            match self.pictures.send_a_frame_with_its_stop(
-                &mut self.messages,
-                batch,
-                AClassOfSend::EndingsHoldsAndDrops,
-                None,
-            ) {
+            let way = smoozy_telegram::pictures::AFramesWay { stop: None, reply_to, the_jobs_messages: None, after_the_ending: true };
+            match self.pictures.send_a_frame_as(&mut self.messages, batch, AClassOfSend::EndingsHoldsAndDrops, way) {
                 APictureSent::NotAccepted(ended) if !the_work_is_done(&ended) => {
                     return TheWork::TheLineReachedNothing
                 }
@@ -2797,10 +3268,36 @@ impl TheJournalReader {
             }
         }
         // Picture batches already accepted stay done when this text reaches nothing.
-        match self
-            .messages
-            .send_the_waiting_question(&waiting, no_picture, &subject)
-        {
+        let asked = self.messages.send_the_waiting_question(&waiting, no_picture, &subject);
+        // **`Telegram` C1d and `Telegram` C7a: once the question is accepted it is the held
+        // range's job's message**, and the check job's own is cut (`Telegram` C1e).
+        let accepted = match &asked {
+            Ok(Some(question))
+            | Err(WhyAMessageWasNotSent::SentWithoutItsButtons { message: question })
+            | Err(WhyAMessageWasNotSent::TheButtonsWereNotAdded { message: question }) => Some(*question),
+            _ => None,
+        };
+        if let Some(question) = &accepted {
+            let record = smoozy_telegram::worker_state::AJobsMessage {
+                job: held_job.as_text(),
+                generation: self.records.action_generation(&held),
+                message: *question,
+            };
+            if let Err(why) = self.messages.store.record_a_jobs_message(record) {
+                self.note(&format!("the question {question} was not recorded as the job's message: {}", why.0));
+            }
+            if let Some(check) = &the_check {
+                let word = the_word_an_ending_is_cut_to(
+                    TheReportingChoice::Everything,
+                    self.records.the_note(check).and_then(|note| note.ending).map(|ending| ending.outcome),
+                );
+                let label = self.records.what_the_job_is_called(check);
+                if self.the_jobs_message_is_cut(check, &label, word) == TheWork::TheLineReachedNothing {
+                    self.note(&format!("the check's job's message of {} was not cut this turn", check.as_text()));
+                }
+            }
+        }
+        match asked {
             Ok(_) => TheWork::Done,
             Err(why) => self.sent_with_buttons(Err(why)),
         }
@@ -2867,7 +3364,6 @@ impl TheJournalReader {
                 let the_frame_shown = entry
                     .the_first_frame
                     .or(remembered.as_ref().and_then(|(_, _, frame)| *frame))
-                    .and_then(|frame| u64::try_from(frame).ok())
                     .unwrap_or(1);
                 let text = the_drop_message(
                     &self.server,
@@ -2876,7 +3372,8 @@ impl TheJournalReader {
                     the_frame_shown,
                     why_it_was_dropped(&entry.reason),
                 );
-                return self.once(event, "the drop", |reader| reader.send_text(text));
+                let held = subject.as_ref().and_then(|subject| subject.job.clone());
+                return self.once(event, "the drop", |reader| reader.told_in_place_or_sent(held.as_deref(), text, false));
             }
         }
         // **What the phone was shown first**: a *no* removes its subject and
@@ -2917,16 +3414,27 @@ impl TheJournalReader {
                 .as_ref()
                 .and_then(|(_, _, frame)| *frame)
                 .or_else(|| record.as_ref().and_then(|record| self.the_first_frame_of(record)))
-                .and_then(|frame| u64::try_from(frame).ok())
                 .unwrap_or(1);
             let text = the_drop_message(&self.server, &label, frames_held, the_frame_shown, why);
-            return self.once(event, "the drop", |reader| reader.send_text(text));
+            let held = subject.as_ref().and_then(|subject| subject.job.clone());
+            return self.once(event, "the drop", |reader| reader.told_in_place_or_sent(held.as_deref(), text, false));
         }
         let answer = match word {
             "released" => TheAnswer::GoOn,
             "stopped" => TheAnswer::Dont,
             _ => return TheWork::Done,
         };
+        // **`Telegram` A3 as changed 2026-11-09: the answer applied is told by
+        // an edit of the question**, which is the held range's job's message;
+        // on a *yes* it stays the job's message (`Telegram` C1d), on a *no* that edit is
+        // its last. A question an older release sent is answered as before.
+        let held = subject.as_ref().and_then(|subject| subject.job.clone());
+        if let Some(held) = held.filter(|held| self.messages.store.the_jobs_message_of(held).is_some()) {
+            let text = smoozy_telegram::job_messages::the_answer_was_applied(&self.server, &label, answer, frames_held);
+            return self.once(event, "the answer applied", |reader| {
+                reader.told_in_place_or_sent(Some(&held), text, answer == TheAnswer::GoOn)
+            });
+        }
         self.once(event, "the answer applied", |reader| {
             let report = AJournalledOutcome::ARelease {
                 server: reader.server.clone(),
@@ -2946,6 +3454,31 @@ impl TheJournalReader {
             };
             reported.map_or(TheWork::Done, |ended| reader.sent(ended))
         })
+    }
+
+    /// **`Telegram` A3 and `Telegram` C1d — an answer or a drop told by an edit of the
+    /// question**, where the held range's job's message is recorded (`Telegram` C7a);
+    /// otherwise sent as its own message, as before. `it_stays` on a *yes*.
+    fn told_in_place_or_sent(&mut self, held: Option<&str>, text: AMarkedText, it_stays: bool) -> TheWork {
+        use smoozy_telegram::status::WhatTheEditCameTo;
+        let Some(held) = held else { return self.send_text(text) };
+        match self.jobs.the_answer_in_place(&mut self.messages, held, text.clone(), it_stays) {
+            WhatTheEditCameTo::NoJobsMessage => self.send_text(text),
+            WhatTheEditCameTo::TheLineReachedNothing => TheWork::TheLineReachedNothing,
+            WhatTheEditCameTo::Done => TheWork::Done,
+            // **`Telegram` A3 as changed 2026-11-12 (the Fable review's
+            // sitting 6 follow-up, its left item 5): an edit refused, or a
+            // question that can no longer be edited, and the sentence goes as
+            // its own message.** Until then it was only logged.
+            WhatTheEditCameTo::ItCannotBeEdited => {
+                self.note(&format!("the answer could not be told in place on {held}'s message; sent as its own message (A3)"));
+                self.send_text(text)
+            }
+            WhatTheEditCameTo::Refused(why) => {
+                self.note(&format!("the answer was not told in place on {held}'s message: {why:?}; sent as its own message (A3)"));
+                self.send_text(text)
+            }
+        }
     }
 
     /// **The first frame a hold waits on** — its dependency's first frame,
@@ -2991,6 +3524,52 @@ impl TheJournalReader {
         TheWork::Done
     }
 
+    /// **Every question about `job` loses its buttons** — found by the
+    /// answers' own records, which name the held job.
+    fn the_questions_about_a_job_go(&mut self, job: &str) -> TheWork {
+        let Ok(records) = self.messages.store.the_action_contexts() else {
+            return TheWork::Done;
+        };
+        let questions: std::collections::BTreeSet<i64> = records
+            .iter()
+            .filter(|record| {
+                record.conversation == self.messages.conversation
+                    && record.action == ANSWER_A_WAITING_JOB
+                    && record.payload["job"].as_str() == Some(job)
+                    && record.payload["stop_removed"] != serde_json::json!(true)
+            })
+            .filter_map(|record| record.source_message)
+            .collect();
+        for message in questions {
+            match self.messages.remove_every_button_on(message, AClassOfSend::EndingsHoldsAndDrops) {
+                Ok(_) => {}
+                Err(why) if why.the_line_reached_nothing() => return TheWork::TheLineReachedNothing,
+                Err(why) => self.note(&format!("the question about {job} kept its buttons: {why:?}")),
+            }
+        }
+        TheWork::Done
+    }
+
+    /// **The name a job's message goes by**: the job's own, read off its
+    /// records, or — once they are gone — the label its buttons' records
+    /// carry, which a removal leaves standing until the next turn.
+    fn the_label_of_a_jobs_message(&self, job: &Identity) -> String {
+        let called = self.records.what_the_job_is_called(job);
+        if !called.trim().is_empty() {
+            return called;
+        }
+        if let Some(shown) = self.jobs.the_label_last_shown_for(&job.as_text()) {
+            return shown;
+        }
+        let Some(record) = self.messages.store.the_jobs_message_of(&job.as_text()) else { return called };
+        self.messages
+            .store
+            .the_action_contexts_bound_to(record.message)
+            .ok()
+            .and_then(|records| records.into_iter().find_map(|r| r.payload["labels"]["label"].as_str().map(str::to_string)))
+            .unwrap_or(called)
+    }
+
     /// A held job's name and count, read off its records.
     fn the_label_and_count_of(&self, hold: &HoldRecord) -> (String, u64) {
         self.records.the_label_and_count_of(hold)
@@ -3019,6 +3598,41 @@ impl TheJournalReader {
         let Some(record) = self.records.the_job_record(&job) else {
             return TheWork::Done;
         };
+        // **`Telegram` V1c and `Telegram` C1e, from 2026-11-09: a change to `Nothing` cuts
+        // the job's message to one line ending *Reporting off.*; a change away
+        // from it while the job renders sends a new job's message, without a
+        // sound (`Telegram` V1e), recorded by `Telegram` C7a.** The event carries the new value
+        // only, so a rendering job with no job's message recorded is sent one
+        // whatever it was changed from — a job started under an older release
+        // included.
+        // **A job held on its question keeps it** (Sol's fresh look, round 1):
+        // a question already sent is not sent again on the change back, so
+        // cutting it would leave the hold with nothing to answer it by.
+        if self.records.the_job_reports_nothing(&record) && !matches!(record.state, QueueState::Held { .. }) {
+            let label = self.records.what_the_job_is_called(&job);
+            return self.once(event, "its job's message cut", |reader| {
+                reader.the_jobs_message_is_cut(&job, &label, smoozy_telegram::job_messages::REPORTING_OFF)
+            });
+        }
+        if matches!(record.state, QueueState::Rendering { .. })
+            && self.messages.store.the_jobs_message_of(&job.as_text()).is_none()
+        {
+            let says = smoozy_telegram::status::WhatAJobsMessageSays {
+                subject: self.the_subject_of_a_job(&job, &record),
+                server: self.server.clone(),
+                label: self.records.what_the_job_is_called(&job),
+                state: if self.records.the_job_is_running_again(&record) {
+                    smoozy_telegram::status::AJobsState::RunningAgain
+                } else {
+                    smoozy_telegram::status::AJobsState::Rendering { frame: 0, of: 0, percent: 0, a_frame_is_finished: false, finishing: false }
+                },
+                at: None,
+            };
+            return self.once(event, "its job's message again", |reader| {
+                let sent = reader.jobs.the_start(&mut reader.messages, &says, true, true);
+                reader.sent_with_buttons(sent)
+            });
+        }
         let QueueState::Held { hold } = &record.state else {
             return TheWork::Done;
         };
@@ -3037,6 +3651,29 @@ impl TheJournalReader {
     /// removed**, told off the event alone. A cancel or a clear is the user's
     /// own act, and nothing in `Telegram` tells the phone of it.
     fn a_removal(&mut self, event: &AnEventRead) -> TheWork {
+        // **A question already sent about the removed job loses its buttons**:
+        // the job is gone — the user's own stop of its pair (`Queue & History`
+        // L19a), a cancel or a clear — and a tap could only meet nothing. Sol's
+        // fresh look at the twenty-eighth notes' piece 8, 2026-11-09.
+        if let Some(job) = event.about.as_deref() {
+            let gone = self.the_questions_about_a_job_go(job);
+            if gone != TheWork::Done {
+                return gone;
+            }
+            // **A removed job's message is cut too** — a cancel, a clear or a
+            // drop — so it no longer says *Queued.* (Specs `Telegram`, *One
+            // message per job*). `Telegram` C1e names no word for it; *Removed.* is the
+            // build's (the twenty-eighth notes, note 18).
+            if let Some(identity) = Identity::read_back(IdentityKind::Job, job) {
+                let label = self.the_label_of_a_jobs_message(&identity);
+                let cut = self.once(event, "its job's message cut", |reader| {
+                    reader.the_jobs_message_is_cut(&identity, &label, smoozy_telegram::job_messages::A_REMOVED_JOB)
+                });
+                if cut != TheWork::Done {
+                    return cut;
+                }
+            }
+        }
         let Some((version, label)) = asked::what_a_drop_says(&event.says) else {
             return TheWork::Done;
         };
@@ -3113,19 +3750,37 @@ pub struct ADropAsJournalled {
 /// first and the label last before the tail, so a label holding anything
 /// reads back whole; numbers nobody could read are written empty, never as
 /// a nought.
+///
+/// **The label is cut further where the entry would not fit** `State,
+/// identity and recovery` E6a's budget as it is written — a label's quotation
+/// marks and backslashes are written twice over, so a bound counted in bytes
+/// is no bound on the entry. Measured under [`asked::THE_RELEASE_EVENT`], about
+/// a hold. Added 2026-11-10, the Creator's twenty-ninth notes, note 11 (piece
+/// J): until then a long label made the drop's entry too long and it was
+/// refused, so the phone never heard of the drop.
 pub fn the_drops_entry(drop: &ADropAsJournalled) -> String {
     let mut end = drop.label.len().min(THE_BOUND_ON_A_DROPPED_LABEL);
     while !drop.label.is_char_boundary(end) {
         end -= 1;
     }
-    format!(
-        "{}{}: {}: {}: {}: {THE_TAIL_OF_A_DROPS_ENTRY}",
-        if drop.the_phone_is_silent { "Telegram off: " } else { "" },
-        drop.reason,
-        drop.frames_held.map(|n| n.to_string()).unwrap_or_default(),
-        drop.the_first_frame.map(|n| n.to_string()).unwrap_or_default(),
-        &drop.label[..end],
-    )
+    let with = |label: &str| {
+        format!(
+            "{}{}: {}: {}: {}: {THE_TAIL_OF_A_DROPS_ENTRY}",
+            if drop.the_phone_is_silent { "Telegram off: " } else { "" },
+            drop.reason,
+            drop.frames_held.map(|n| n.to_string()).unwrap_or_default(),
+            drop.the_first_frame.map(|n| n.to_string()).unwrap_or_default(),
+            label,
+        )
+    };
+    let label = smoozy_runtime::written_form::the_measure_of_an_entry::the_longest_start_that_fits(&drop.label[..end], |label| {
+        smoozy_runtime::written_form::the_measure_of_an_entry::words_of_this_kind_fit(
+            asked::THE_RELEASE_EVENT,
+            Some(IdentityKind::Operation),
+            &with(label),
+        )
+    });
+    with(&label)
 }
 
 /// **[`the_drops_entry`], read back** — or nothing where the entry is any
@@ -3165,38 +3820,15 @@ fn why_it_was_dropped(reason: &str) -> TheDependencyEnded {
     }
 }
 
-/// **The words between the queue state and the failed job in the event a
-/// machine-made job's record is journalled under** — the smallest mark that
-/// tells a job this machine made for itself, on a phone's *try it again*
-/// (`Telegram` Y1), from one the desktop sent. Added 2026-10-16, the Telegram
-/// worker's piece 5.
-///
-/// **Why the event, and why its words.** The resubmission is told to the phone
-/// off the journal, like every other outcome (`Telegram` F3), so a worker
-/// started after the job was made still tells it. The event is the one every
-/// job's record is journalled under (`Queue & History` Q3), so every reader
-/// that counts the line's moves goes on counting this one. **What it says is
-/// Build's own words** — `State, identity and recovery` E1's *what happened*,
-/// which no plan words for this kind — and the desktop reads this kind by its
-/// name and the job it is about, never by what it says. **It says the queue
-/// state first, as every such event does**, then this, then the failed job.
-/// Nothing in the job record, the note or the manifest carries the fact, and
-/// each of those is a plan's own list.
-pub const SUBMITTED_AGAIN_BY_THIS_MACHINE_FROM: &str = "submitted again by this machine from";
-
-/// **What a machine-made job's event says**: its queue state, the mark, and
-/// the job it was made from.
-pub fn what_a_resubmissions_event_says(state: &str, failed: &Identity) -> String {
-    format!("{state}: {SUBMITTED_AGAIN_BY_THIS_MACHINE_FROM} {}", failed.as_text())
-}
-
-/// **[`what_a_resubmissions_event_says`], read back**: the job it was made
-/// from, or nothing where the event says anything else — which is what every
-/// job the desktop sent says.
-pub fn the_job_a_resubmission_was_made_from(says: &str) -> Option<Identity> {
-    let (_, after) = says.split_once(&format!(": {SUBMITTED_AGAIN_BY_THIS_MACHINE_FROM} "))?;
-    Identity::read_back(IdentityKind::Job, after)
-}
+/// **The machine's mark on a job it made for itself, and its read-back**
+/// (`Telegram` Y1, `Telegram` Y4a) — kept in `smoozy_framing::requests` since
+/// 2026-11-12, so the desk reads the same words this program writes
+/// (`Queue & History` A5's paragraph of that date: a job made from a job the
+/// desk tracks joins its Queue by itself).
+pub use smoozy_framing::requests::{
+    the_job_a_resubmission_was_made_from, the_job_and_frame_a_resumption_names,
+    what_a_resubmissions_event_says, what_a_resumptions_event_says,
+};
 
 /// **The base generation a button about a job is valid in** (`Telegram` R1): the
 /// identity the job's queue state carries — the render while it runs, the
@@ -3219,7 +3851,9 @@ pub fn the_generation_of(record: &JobRecord) -> String {
 /// `Job files and outputs` B31a recorded. **Both are carried only for a frame
 /// of more than one View Layer**, so a frame of one names nothing; nor does an
 /// event from before, or one whose name was left to the record for length
-/// (`Queue & History` P3). A name is the artist's bytes, said as they read.
+/// (`Queue & History` P3) — whose name the caller reads off that record
+/// (`TheRecordsOnThisMachine::which_picture_one_production_names`). A name is
+/// the artist's bytes, said as they read.
 pub fn which_picture_the_event_names(
     published: &smoozy_queue_history_machine::previews::ThePublishedPreview,
 ) -> Option<WhichPictureItIs> {
@@ -3308,6 +3942,30 @@ fn the_other_copies_named(
 /// alike**: the records carry no moment to tell which wrote the file there
 /// now, so a disagreement names nothing rather than guess. A frame of one
 /// View Layer, whose record carries neither name nor source, names nothing.
+/// **The frames of one job whose preview production closed *published***,
+/// read off the productions' own records the way the supervisor reads them
+/// (`Queue & History` P1a): the record's outcome, and the frame its field
+/// names. Added 2026-11-13 for `Telegram` R14's newest finished frame.
+pub fn the_frames_published(
+    productions: &[smoozy_state::machine_operations::OperationRecord],
+    job: &Identity,
+) -> std::collections::BTreeSet<i64> {
+    use crate::the_preview_worker::{ThePreviewKindsOwnField, WhatTheProductionCameTo};
+    productions
+        .iter()
+        .filter(|record| &record.subject == job)
+        .filter(|record| {
+            matches!(
+                record.recorded_outcome(),
+                Some(smoozy_state::machine_operations::RecordedOutcome::TheKindsOwn(word))
+                    if WhatTheProductionCameTo::of_the_word(word) == Some(WhatTheProductionCameTo::Published)
+            )
+        })
+        .filter_map(|record| ThePreviewKindsOwnField::read_back(record.the_kinds_safe_boundary_marker.as_deref()?))
+        .map(|field| field.frame)
+        .collect()
+}
+
 pub fn which_picture_the_records_name(
     productions: &[smoozy_state::machine_operations::OperationRecord],
     job: &Identity,
@@ -3552,6 +4210,7 @@ mod tests {
             main: true,
             place: 0,
             source: None,
+            the_names_are_in_the_record: false,
         };
         let read = |published: ThePublishedPreview| {
             which_picture_the_event_names(&ThePublishedPreview::read_back(&published.as_says()).expect("it reads"))
@@ -3625,6 +4284,7 @@ mod tests {
                         words: None,
                         the_other_layers: Vec::new(),
                     }),
+                    the_main_copy_told_early: None,
                 }
                 .as_written(),
             );
@@ -3704,6 +4364,7 @@ mod tests {
             complaints_sink: String::new(),
             available_bytes: 0,
             render_process: None,
+            reading_process: None,
             ending: None,
             collection_incomplete_by_reconciliation: true,
             the_termination_was_issued: false,
@@ -3728,6 +4389,7 @@ mod tests {
             something_followed_the_marker: None,
             device_line: None,
             no_render_began: false,
+            missing: Vec::new(),
         });
         assert_eq!(the_cause_of(Some(&one)), TheCause::TheMachinesOwn);
         assert_eq!(what_the_stream_came_to(Some(&one), AStream::TheOrdinaryOutput), ACollectionOutcome::Collected);
@@ -3735,5 +4397,49 @@ mod tests {
             what_the_stream_came_to(Some(&one), AStream::TheComplaints),
             ACollectionOutcome::CollectedAndTheStreamWasEmpty
         );
+    }
+
+    /// **The second live pass's fault 5: a cut stream whose file holds
+    /// nothing is told as an empty one** (`Telegram` E3 as amended
+    /// 2026-11-12). On a job interrupted twice, the re-run's Errors log was
+    /// cut, so marked incomplete, and held nothing: *Send Errors log* answered
+    /// only *Errors log, incomplete.* A cut stream that holds words stays
+    /// incomplete, and one whose file cannot be read stays incomplete too.
+    #[test]
+    fn a_cut_stream_that_captured_nothing_is_told_as_empty() {
+        let folder = std::env::temp_dir().join(format!("smoozy-cut-empty-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let empty = folder.join("complaints");
+        let blank = folder.join("blank");
+        let words = folder.join("ordinary");
+        std::fs::write(&empty, b"").unwrap();
+        std::fs::write(&blank, b" \n\t\n").unwrap();
+        std::fs::write(&words, b"Fra:7 Mem:310M | Rendering 12 / 64 samples\n").unwrap();
+        let cut = |ordinary: &std::path::Path, complaints: &std::path::Path| OneAttemptsCapture {
+            attempt: 2,
+            ordinary_sink: ordinary.to_string_lossy().into_owned(),
+            complaints_sink: complaints.to_string_lossy().into_owned(),
+            available_bytes: 0,
+            render_process: None,
+            reading_process: None,
+            ending: None,
+            collection_incomplete_by_reconciliation: true,
+            the_termination_was_issued: false,
+            the_stops_on_it: Vec::new(),
+        };
+        let one = cut(&words, &empty);
+        assert_eq!(what_the_stream_came_to(Some(&one), AStream::TheOrdinaryOutput), ACollectionOutcome::CollectionIncomplete);
+        assert_eq!(
+            what_the_stream_came_to(Some(&one), AStream::TheComplaints),
+            ACollectionOutcome::CollectedAndTheStreamWasEmpty
+        );
+        let one = cut(&words, &blank);
+        assert_eq!(
+            what_the_stream_came_to(Some(&one), AStream::TheComplaints),
+            ACollectionOutcome::CollectedAndTheStreamWasEmpty
+        );
+        let one = cut(&words, &folder.join("never-written"));
+        assert_eq!(what_the_stream_came_to(Some(&one), AStream::TheComplaints), ACollectionOutcome::CollectionIncomplete);
+        let _ = std::fs::remove_dir_all(&folder);
     }
 }

@@ -80,7 +80,8 @@ use smoozy_dependencies::acting::checking::{
 };
 use smoozy_dependencies::bytes::{folder_of, MachineLocation, RecordedLocation, StoredLocation};
 use smoozy_dependencies::check::{
-    group_into_rows, how_the_render_reads_it, judge, linked_item_statements,
+    group_into_rows, how_a_sequence_is_read, how_the_render_reads_it, judge, linked_item_statements,
+    the_files_the_jobs_frames_need,
     the_bake_output_path_makes_no_row, tidied, HowTheRenderReadsIt, ReadReference,
     TheBakeFolderNotWorkedOut,
     Attribution, Kind, Reading, ReadingDocument, ReferenceToGroup,
@@ -161,9 +162,18 @@ impl TheCheckReachesTheRecord for OverOneConnection<'_> {
 /// machine's digest, neither of which this file drives (this file's head).
 pub struct TheUsersOwnComputer;
 
+/// `Design/Dependency Upload & Remap § A slow local read on macOS`.
+/// Windows and Linux keep their existing reads without a timer or focus request.
+pub(crate) fn local_read<T>(path: &[u8], folder: bool, read: impl FnOnce() -> T) -> T {
+    #[cfg(target_os = "macos")]
+    { crate::platform::macos_file_access::local_read(path, folder, read) }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = (path, folder); read() }
+}
+
 impl Readings for TheUsersOwnComputer {
     fn the_local_files_content_identity(&self, file: &StoredLocation) -> Option<ContentIdentity> {
-        smoozy_dependencies::adapter::TheUsersOwnDisk.the_local_files_content_identity(file)
+        local_read(file.as_bytes(), false, || smoozy_dependencies::adapter::TheUsersOwnDisk.the_local_files_content_identity(file))
     }
 
     fn the_four_values_now(
@@ -183,19 +193,19 @@ impl Readings for TheUsersOwnComputer {
     }
 
     fn enumerate_folder(&self, folder: &[u8]) -> FolderListing {
-        smoozy_dependencies::adapter::TheUsersOwnDisk.enumerate_folder(folder)
+        local_read(folder, true, || smoozy_dependencies::adapter::TheUsersOwnDisk.enumerate_folder(folder))
     }
 
     fn enumeration_casing_of(&self, folder: &[u8]) -> EnumerationCasing {
-        smoozy_dependencies::adapter::TheUsersOwnDisk.enumeration_casing_of(folder)
+        local_read(folder, true, || smoozy_dependencies::adapter::TheUsersOwnDisk.enumeration_casing_of(folder))
     }
 
     fn the_stored_name_reading(&self, path: &[u8]) -> StoredNameAnswer {
-        smoozy_dependencies::adapter::TheUsersOwnDisk.the_stored_name_reading(path)
+        local_read(path, false, || smoozy_dependencies::adapter::TheUsersOwnDisk.the_stored_name_reading(path))
     }
 
     fn the_sources_prefix_digest(&self, source: &StoredLocation, up_to: u64) -> Option<Digest> {
-        smoozy_dependencies::adapter::TheUsersOwnDisk.the_sources_prefix_digest(source, up_to)
+        local_read(source.as_bytes(), false, || smoozy_dependencies::adapter::TheUsersOwnDisk.the_sources_prefix_digest(source, up_to))
     }
 }
 
@@ -243,6 +253,11 @@ pub fn the_source_folder(holding: &HoldingFile) -> Option<Vec<u8>> {
 pub struct WhatTheRenderOpens {
     pub the_version: (u32, u32),
     pub the_blend_name: Option<Vec<u8>>,
+    /// **The frames the job renders**, as `Render Settings` held them when the
+    /// check started (*Colour spaces and image sequences*), or nothing where
+    /// they are not known yet. What a picture stored as a sequence needs is
+    /// worked out over these.
+    pub the_jobs_frames: Option<Vec<i64>>,
 }
 
 impl WhatTheRenderOpens {
@@ -250,6 +265,15 @@ impl WhatTheRenderOpens {
         WhatTheRenderOpens {
             the_version: (with.version.major, with.version.minor),
             the_blend_name: root.the_blend_name(),
+            the_jobs_frames: None,
+        }
+    }
+
+    /// The same, with the job's frames this panel holds for the sitting.
+    fn of_the_sitting(sitting: &TheSittingIsOf, held: &Mutex<WhatTheRunHolds>, key: &str) -> WhatTheRenderOpens {
+        WhatTheRenderOpens {
+            the_jobs_frames: held.lock().ok().and_then(|held| held.the_jobs_frames.get(key).cloned()),
+            ..WhatTheRenderOpens::of(&sitting.holding, &sitting.with)
         }
     }
 }
@@ -286,6 +310,9 @@ pub struct OneReadingLanded {
     pub linked_items: Vec<smoozy_dependencies::check::LinkedItemStatement>,
     /// **`Dependency Upload & Remap` G9a's statements.**
     pub the_bake_folders_not_worked_out: Vec<TheBakeFolderNotWorkedOut>,
+    /// **A colour name the reading Blender said it does not have**
+    /// (`Dependency Upload & Remap`, *Colour spaces and image sequences*).
+    pub the_colour_names_not_found: Vec<smoozy_dependencies::check::AColourNameNotFound>,
 }
 
 /// **`Dependency Upload & Remap` K4's answer for one reference**, as the record
@@ -300,6 +327,7 @@ fn the_answer_held_for(known: &[LocatedAnswer], key: &LocatedAnswerKey) -> Locat
             resolution: None,
             set_aside: false,
             rejected_guess: None,
+            included: false,
             read_as: Vec::new(),
         })
 }
@@ -390,24 +418,39 @@ fn the_folders_figures(resolution: Option<&Resolution>) -> Option<(usize, u64)> 
     crate::the_found_files_sent::what_a_folder_row_sends(at)
 }
 
-/// **A row's two figures, from its answers** — `Dependency Upload & Remap` G23
+/// **A row's figures, from its answers** — `Dependency Upload & Remap` G23
 /// for a set, `Dependency Upload & Remap` F28's line of 2026-11-02 for a folder,
-/// a file's own length otherwise. **Taken when a check lands and at every later write of its
-/// answers** ([`the_rows_answers_are_written`]), so no route leaves them behind.
+/// a file's own length otherwise; **and, for a picture stored as a sequence,
+/// the files the job's frames need that its folder does not hold**
+/// (*Colour spaces and image sequences*). **Taken when a check lands and at
+/// every later write of its answers** ([`the_rows_answers_are_written`]), so no
+/// route leaves them behind.
+type TheRowsFigures = (Option<usize>, Option<u64>, Vec<Vec<u8>>);
+
 fn the_rows_figures(
     answers: &[LocatedAnswer],
     wanted: &[Outstanding],
+    needed: Option<&[Vec<u8>]>,
     readings: &dyn Readings,
-) -> (Option<usize>, Option<u64>) {
+) -> TheRowsFigures {
     let resolution = answers.first().and_then(|answer| answer.resolution.as_ref());
     let members = match (resolution, wanted.first().and_then(Outstanding::the_sets_pattern)) {
         (Some(resolution), Some(pattern)) => the_sets_members_in(resolution.to.location(), pattern, readings),
         _ => None,
     };
+    // **Said only where the folder answered and was listed**: a row not found is
+    // missing whole, and a folder that will not list says nothing about its files.
+    let not_there = match (needed, &members) {
+        (Some(needed), Some(members)) => {
+            needed.iter().filter(|one| !members.contains(one)).cloned().collect()
+        }
+        _ => Vec::new(),
+    };
     let a_folder = the_folders_figures(resolution);
     (
         members.as_ref().map(Vec::len).or(a_folder.map(|(files, _)| files)),
         a_folder.map(|(_, bytes)| bytes).or_else(|| the_size_of(resolution, members.as_deref())),
+        not_there,
     )
 }
 
@@ -443,7 +486,9 @@ pub fn the_rows_of_one_reading(
             what_the_render_opens.the_version,
             what_the_render_opens.the_blend_name.as_deref(),
         ) {
-            HowTheRenderReadsIt::AsRecorded => references.push((reference, None)),
+            // **A picture stored as a sequence is read as a set**
+            // (*Colour spaces and image sequences*, with `Dependency Upload & Remap` G9 and `Dependency Upload & Remap` G22).
+            HowTheRenderReadsIt::AsRecorded => references.push((reference, how_a_sequence_is_read(reference))),
             HowTheRenderReadsIt::WithItsTemplatePutIn(read) => references.push((reference, Some(read))),
             HowTheRenderReadsIt::NotWorkedOut { the_expression } => {
                 if !the_bake_folders_not_worked_out.iter().any(|one| one.recorded == reference.recorded) {
@@ -485,6 +530,18 @@ pub fn the_rows_of_one_reading(
             reference.kind,
             reference.stored_source(),
         );
+        // **A sequence's answer written before it was read as a set** names one
+        // file of it, and is read as that file's folder (*Colour spaces and image
+        // sequences*), so the record's answer is kept rather than looked for again.
+        if one.shape == WantedShape::ASetsFolder && how_a_sequence_is_read(reference).is_some() {
+            if let Some(resolution) = answer.resolution.as_mut() {
+                if let ResolvedTo::AWholeLocation(file) = &resolution.to {
+                    resolution.to = ResolvedTo::AFolderForASetRow(StoredLocation::as_the_system_returned_it(
+                        &folder_of(file.as_bytes()),
+                    ));
+                }
+            }
+        }
         if answer.resolution.is_none() && !answer.set_aside {
             // **`Dependency Upload & Remap` F27: the recorded location itself,
             // before any search.**
@@ -572,17 +629,26 @@ pub fn the_rows_of_one_reading(
     // `.blend`'s own folder as the holder folder so DW0-2 can fire
     // (`Dependency Upload & Remap` G6).
     let holder_folder = the_holder_folder(holding);
+    // **A set answered with a folder groups by its folder and its pattern**, as
+    // `Dependency Upload & Remap` G11b's real file does: two sequences in one
+    // folder are two rows, each sent and remapped as itself (Sol's look at
+    // *Colour spaces and image sequences*, point 1).
     let to_group: Vec<ReferenceToGroup> = references
         .iter()
         .zip(&answers)
-        .map(|((reference, _), answer)| ReferenceToGroup {
+        .zip(&wanted)
+        .map(|(((reference, _), answer), one)| ReferenceToGroup {
             kind: reference.kind,
             recorded: reference.recorded.clone(),
             holder_folder: holder_folder.clone(),
-            resolved: answer
-                .resolution
-                .as_ref()
-                .map(|resolution| resolution.to.location().clone()),
+            resolved: the_file_a_row_is_grouped_by(answer.resolution.as_ref()).map(|found| {
+                match (answer.resolution.as_ref().map(|resolution| &resolution.to), one.the_sets_pattern()) {
+                    (Some(ResolvedTo::AFolderForASetRow(_)), Some(pattern)) => {
+                        StoredLocation::as_the_system_returned_it(&[found.as_bytes(), &[0], pattern].concat())
+                    }
+                    _ => found,
+                }
+            }),
         })
         .collect();
     let mut rows = Vec::new();
@@ -618,7 +684,27 @@ pub fn the_rows_of_one_reading(
             }
         }
         let state = the_state_of(&its_answers);
-        let (members, size) = the_rows_figures(&its_answers, &its_wanted, readings);
+        // **What the job's frames need of a picture stored as a sequence**, over
+        // every reference of the row (*Colour spaces and image sequences*).
+        // Every reference recording one of the row's locations, and not only the
+        // first, since two pictures can record one name with different settings
+        // (Sol's look, point 2).
+        let mut needed: Option<Vec<Vec<u8>>> = None;
+        for (one, _) in references.iter().filter(|(one, _)| row.references.contains(&one.recorded)) {
+            if let Some(files) = the_files_the_jobs_frames_need(one, what_the_render_opens.the_jobs_frames.as_deref()) {
+                let all = needed.get_or_insert_with(Vec::new);
+                for file in files {
+                    if !all.contains(&file) {
+                        all.push(file);
+                    }
+                }
+            }
+        }
+        if let Some(all) = needed.as_mut() {
+            all.sort();
+        }
+        let (members, size, the_files_not_in_its_folder) =
+            the_rows_figures(&its_answers, &its_wanted, needed.as_deref(), readings);
         let proposal = row
             .references
             .iter()
@@ -638,10 +724,13 @@ pub fn the_rows_of_one_reading(
             proposal,
             members,
             size,
+            the_files_the_jobs_frames_need: needed,
+            the_files_not_in_its_folder,
             why_it_did_not_go_up: None,
             its_failure_was_cleared: false,
             its_remap_waits_for_its_linked_files: false,
             the_part_already_up: None,
+            during_the_upload: Default::default(),
             row,
         });
     }
@@ -663,6 +752,7 @@ pub fn the_rows_of_one_reading(
         stopped,
         linked_items: linked_item_statements(document),
         the_bake_folders_not_worked_out,
+        the_colour_names_not_found: document.colour_names_not_found.clone(),
     }
 }
 
@@ -761,6 +851,35 @@ fn a_stop_was_asked(held: &Mutex<WhatTheRunHolds>, key: &str) -> bool {
         .unwrap_or(true)
 }
 
+/// **Ends once the user asks this sitting to stop**, looking every tenth of a
+/// second, as the readings' own waits do.
+async fn until_a_stop_is_asked(held: &Mutex<WhatTheRunHolds>, key: &str) {
+    while !a_stop_was_asked(held, key) {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
+
+/// **`Dependency Upload & Remap` G15's waits as changed later on 2026-11-13:
+/// one wait on the server, watching Stop** — `None` where Stop came first
+/// (Sol's look at the scout's list, point 6: the four-value reads that test a
+/// kept reading and keep a new one waited with no eye on Stop).
+async fn unless_stopped<T>(
+    work: impl std::future::Future<Output = T>,
+    stopped: &mut (dyn FnMut() -> bool + Send),
+) -> Option<T> {
+    tokio::pin!(work);
+    loop {
+        if stopped() {
+            return None;
+        }
+        tokio::select! {
+            biased;
+            done = &mut work => return Some(done),
+            () = tokio::time::sleep(std::time::Duration::from_millis(100)) => {}
+        }
+    }
+}
+
 /// **One save through the keeper**, answering whether it was written.
 fn written(
     record: &dyn TheCheckReachesTheRecord,
@@ -847,23 +966,48 @@ where
     None
 }
 
+/// **`Dependency Upload & Remap` G17b: a reading is watched from its start**, so
+/// an upload to a place it rests on can be seen when its four values are read.
+/// **Answered however the reading ends**, so a reading that is not kept holds
+/// nothing back.
+pub(crate) struct AReadingWatched<'h> {
+    held: &'h Mutex<WhatTheRunHolds>,
+    began: Option<crate::kept_readings::AReadingBegan>,
+}
+
+impl<'h> AReadingWatched<'h> {
+    pub(crate) fn begins(held: &'h Mutex<WhatTheRunHolds>) -> AReadingWatched<'h> {
+        let began = held.lock().ok().map(|mut held| held.the_files_going_up.a_reading_begins());
+        AReadingWatched { held, began }
+    }
+}
+
+impl Drop for AReadingWatched<'_> {
+    fn drop(&mut self) {
+        if let Some(began) = self.began.take() {
+            if let Ok(mut held) = self.held.lock() {
+                held.the_files_going_up.a_reading_is_answered(began);
+            }
+        }
+    }
+}
+
 /// **`Dependency Upload & Remap` G17b: a reading that ended in a document is kept**,
-/// with what it stood on, unless a file was going up to this machine while it was
-/// taken, or the file's four values did not answer.
+/// with what it stood on, unless an upload to this machine targeting the file or
+/// a library location it names overlapped it — from its start until its
+/// four-value reads finished (`Dependency Upload & Remap` G17b as changed 2026-11-09) — or the file's four
+/// values did not answer.
 async fn the_reading_is_kept<M>(
     machine: &mut M,
     held: &Mutex<WhatTheRunHolds>,
     of: (&MachineKey, &WhichReading, &MachineLocation),
     document: &ReadingDocument,
-    the_files_going_up_before: (u64, u64),
+    watched: &mut AReadingWatched<'_>,
     read: &mut BTreeMap<Vec<u8>, Option<SourceReading>>,
 ) where
     M: TheMachineAFileIsReadOn + Send,
 {
     let (on, which, file) = of;
-    if the_files_going_up_before.0 != the_files_going_up_before.1 {
-        return;
-    }
     let Some(the_file) = the_four_values_once(machine, read, file.as_bytes()).await else {
         return;
     };
@@ -875,8 +1019,12 @@ async fn the_reading_is_kept<M>(
         let values = the_four_values_once(machine, read, &at).await;
         the_libraries.push((at, values));
     }
+    let Some(began) = watched.began.take() else {
+        return;
+    };
     if let Ok(mut held) = held.lock() {
-        if held.the_files_going_up.on(on) == the_files_going_up_before {
+        let rests_on: Vec<Vec<u8>> = the_libraries.iter().map(|(at, _)| at.clone()).collect();
+        if held.the_files_going_up.it_stood(began, on, file.as_bytes(), &rests_on) {
             held.the_kept_readings.keep(which.clone(), document.clone(), WhatItStoodOn { the_file, the_libraries });
         }
     }
@@ -947,6 +1095,7 @@ where
                 } else {
                     held.checks_running.remove(&key);
                     held.files_being_read.remove(&key);
+                    held.folders_added_while_it_runs.remove(&key);
                 }
                 another_round
             }
@@ -975,7 +1124,18 @@ where
     let the_press = std::time::Instant::now();
     // **1. The root's four values, as the reading takes it** (`Dependency
     // Upload & Remap` V10).
-    let root_four_values: SourceReading = match machine.the_four_values_of(&sitting.file).await {
+    //    **Stop is watched while it waits** (Sol's look at the window and read
+    //    points, point 1, 2026-11-13): a server that did not answer this held
+    //    the check after Stop. Nothing is on the machine to be stopped yet, so
+    //    nothing is sent, and the panel says the read was stopped.
+    let four_values = tokio::select! {
+        biased;
+        four_values = machine.the_four_values_of(&sitting.file) => four_values,
+        () = until_a_stop_is_asked(held, key) => {
+            return TheCheckCameTo::ItGaveNothing(Ending::SmoozyStoppedIt)
+        }
+    };
+    let root_four_values: SourceReading = match four_values {
         FourValuesNow::Answered(values) => values,
         FourValuesNow::TheChannelCannotAnswer => {
             return TheCheckCameTo::ItGaveNothing(Ending::TheMachineCouldNotBeReached)
@@ -1030,6 +1190,8 @@ where
     if let Ok(mut held) = held.lock() {
         held.endings.remove(key);
         held.selections.remove(key);
+        // **A fresh check reads what an upload left unknown** (`Dependency Upload & Remap` G14b).
+        held.the_uploads_left_something_unknown.remove(key);
         held.sittings.insert(
             key.to_string(),
             ASitting {
@@ -1040,6 +1202,7 @@ where
                 completion: None,
                 linked_items: Vec::new(),
                 the_bake_folders_not_worked_out: Vec::new(),
+                the_colour_names_not_found: Vec::new(),
                 sent_up_as_a_dependency_before: sent_up_before,
                 the_search: None,
                 the_shift: None,
@@ -1057,7 +1220,7 @@ where
     }
     told();
 
-    let what_the_render_opens = WhatTheRenderOpens::of(&sitting.holding, &sitting.with);
+    let what_the_render_opens = WhatTheRenderOpens::of_the_sitting(sitting, held, key);
 
     // **2. to 5. The loop** (`Dependency Upload & Remap` G13 to `Dependency Upload & Remap` G17).
     let mut the_loop = TheLoop::over(sitting.root.clone());
@@ -1083,11 +1246,23 @@ where
         // it is not read again**, and everything below is as it would be for a
         // fresh reading.
         let which = WhichReading::of(&sitting.machine, &file, &sitting.with);
-        let the_files_going_up_before = held
-            .lock()
-            .map(|held| held.the_files_going_up.on(&sitting.machine))
-            .unwrap_or((0, 1));
-        let document = if let Some(kept) = the_reading_kept(machine, held, &which, &file, &mut four_values_read).await {
+        let mut watched = AReadingWatched::begins(held);
+        // **Stop is watched while a kept reading is tested** (`Dependency Upload & Remap` G15's waits as
+        // changed later on 2026-11-13): at the root nothing was read, so the
+        // panel says the read was stopped; below it the sitting stands stopped.
+        let Some(kept) = unless_stopped(
+            the_reading_kept(machine, held, &which, &file, &mut four_values_read),
+            &mut || a_stop_was_asked(held, key),
+        )
+        .await
+        else {
+            if is_the_root {
+                return TheCheckCameTo::ItGaveNothing(Ending::SmoozyStoppedIt);
+            }
+            completion = Completion::StoppedByTheUser;
+            break;
+        };
+        let document = if let Some(kept) = kept {
             // **`Design/Dependency Upload & Remap`: *Reading the file…* stands long
             // enough to be read.**
             if is_the_root {
@@ -1138,6 +1313,7 @@ where
                     TheReadingDidNotRun::TheRequestDidNotReachTheMachine
                     | TheReadingDidNotRun::NoAnswerCameBack
                     | TheReadingDidNotRun::ItPassedTheTimeLimit
+                    | TheReadingDidNotRun::AnAskWentUnanswered
                     | TheReadingDidNotRun::TheStreamsCouldNotBeReadBack(_),
                 ) => {
                     if is_the_root {
@@ -1170,15 +1346,25 @@ where
                     continue;
                 }
             };
-            the_reading_is_kept(
-                machine,
-                held,
-                (&sitting.machine, &which, &file),
-                &document,
-                the_files_going_up_before,
-                &mut four_values_read,
+            // **And while a new one is kept**: a reading being kept when Stop
+            // came is not kept, and the sitting stands stopped.
+            if unless_stopped(
+                the_reading_is_kept(
+                    machine,
+                    held,
+                    (&sitting.machine, &which, &file),
+                    &document,
+                    &mut watched,
+                    &mut four_values_read,
+                ),
+                &mut || a_stop_was_asked(held, key),
             )
-            .await;
+            .await
+            .is_none()
+            {
+                completion = Completion::StoppedByTheUser;
+                break;
+            }
             document
         };
         // **`Dependency Upload & Remap` G6, 2026-11-07: a physics cache's default
@@ -1316,6 +1502,11 @@ where
                         for one in landed.the_bake_folders_not_worked_out {
                             if !standing.the_bake_folders_not_worked_out.iter().any(|said| said.recorded == one.recorded) {
                                 standing.the_bake_folders_not_worked_out.push(one);
+                            }
+                        }
+                        for one in landed.the_colour_names_not_found {
+                            if !standing.the_colour_names_not_found.contains(&one) {
+                                standing.the_colour_names_not_found.push(one);
                             }
                         }
                         if landed.the_search.is_some() {
@@ -1461,12 +1652,16 @@ where
                 standing.completion = Some(completion);
                 standing.still_reading_below = None;
                 standing.the_walk = None;
-                let counts = crate::surface::the_dependency_check::the_warning_counts(&standing.rows, Default::default());
+                let counts = crate::surface::the_dependency_check::the_warning_counts(standing, Default::default());
+                let standing = &*standing;
                 let rows = standing
                     .rows
                     .iter()
-                    .map(|row| RowAtCompletion {
-                        state: row.state,
+                    .enumerate()
+                    .map(|(at, row)| RowAtCompletion {
+                        // **`Dependency Upload & Remap` V11 and V12: a row
+                        // left out counts as set aside** (2026-11-09).
+                        state: crate::surface::the_dependency_check::the_state_the_standing_counts(standing, at),
                         inside_a_linked_blend: (row.holding != sitting.holding)
                             .then(|| the_fixing_of(&row.holding)),
                     })
@@ -1477,6 +1672,19 @@ where
         },
         Err(_) => (Vec::new(), Default::default()),
     };
+    // **`Dependency Upload & Remap` V14's *replaced since*, kept across the
+    // sitting** (batch 3 of the Bad what-if answers, 260): the
+    // file's four values are read again at the end, and a file that moved
+    // while it was read writes its standing already marked, so the warning
+    // stays for a file this sitting did not read. A reading that does not
+    // answer claims nothing.
+    let replaced_while_it_was_read = tokio::select! {
+        biased;
+        now = machine.the_four_values_of(&sitting.file) => {
+            matches!(now, FourValuesNow::Answered(now) if now != root_four_values)
+        }
+        () = until_a_stop_is_asked(held, key) => false,
+    };
     let mut standing = CheckStanding::at_the_sittings_end(
         sitting.root.clone(),
         sitting.machine.clone(),
@@ -1486,6 +1694,7 @@ where
         &rows_at_completion,
         root_four_values,
     );
+    standing.replaced_since_check |= replaced_while_it_was_read;
     standing.counts = smoozy_dependencies::standing::Counts {
         confirmed: standing.counts.confirmed,
         set_aside: standing.counts.set_aside,
@@ -1511,6 +1720,202 @@ where
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// One reading a send owes — `Dependency Upload & Remap` G14b
+// ════════════════════════════════════════════════════════════════════════════
+
+/// **What one reading a send owes came to** (`Dependency Upload & Remap` G14b).
+pub(crate) enum ALinkedReadingCameTo {
+    /// **Read**: its rows, each with its place on the panel where it landed, or
+    /// `usize::MAX` where it did not (a check running walks the tree itself).
+    Read(Vec<(usize, ACheckedRow)>),
+    /// **It landed and could not be read**, and why.
+    CouldNotBeRead(crate::surface::the_dependency_check::WhyItCouldNotBeRead),
+    /// **The line went under it**, or nothing came back: the send looks whether
+    /// the line went down and takes it again when it is back (`Dependency Upload & Remap` G17's exception).
+    TheLineWasCut,
+    /// **The send was stopped** (`Dependency Upload & Remap` G15): nothing it found joins.
+    Stopped,
+}
+
+/// **One linked `.blend` a send owes a reading of, read at its landing place** —
+/// `Dependency Upload & Remap` G14b, its own reading and its own operation (`Dependency Upload & Remap` G1,
+/// `Dependency Upload & Remap` G2), with the Blender the sitting reads with. **The steps are the sitting's
+/// own for one file**: `Dependency Upload & Remap` G17b's kept reading where nothing it stood on changed,
+/// and kept where nothing it rests on went up while it was taken; `Dependency Upload & Remap` G6's cache
+/// folders named after the file; its references looked for on the user's
+/// computer from what the record holds (`Dependency Upload & Remap` G17, `Dependency Upload & Remap` F27, `Dependency Upload & Remap` F1, `Dependency Upload & Remap` F3); `Dependency Upload & Remap` Q5 over the rows; the
+/// answers written in one save (`Dependency Upload & Remap` G16, `Dependency Upload & Remap` K4). **Its rows then join the sitting
+/// standing**, at the foot of their groups ([`crate::surface::the_dependency_check::the_rows_of_a_reading_land`]).
+/// Nothing names it on the panel's walk line: the send's own line says it.
+/// The twenty-eighth notes, note 11.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn a_linked_file_of_a_send_is_read<M, R, D>(
+    machine: &mut M,
+    record: &R,
+    readings: &D,
+    held: &Mutex<WhatTheRunHolds>,
+    sitting: &TheSittingIsOf,
+    file: &MachineLocation,
+    holding: HoldingFile,
+    local_digests: &mut crate::the_found_files_sent::TheLocalDigests,
+    stopped: &mut (dyn FnMut() -> bool + Send),
+    before_the_rows_land: &mut (dyn FnMut(&[ACheckedRow]) + Send),
+) -> ALinkedReadingCameTo
+where
+    M: TheMachineAFileIsReadOn + Send,
+    R: TheCheckReachesTheRecord,
+    D: Readings,
+{
+    use crate::surface::the_dependency_check::WhyItCouldNotBeRead;
+    let key = keyed(&sitting.server, &sitting.file);
+    // **Each reading reads the four values afresh**: a file the reading above it
+    // named may have been replaced on the server since (Sol's fresh look,
+    // 2026-11-09, finding 1), and `Dependency Upload & Remap` G17b compares against what stands now.
+    let mut four_values_read: BTreeMap<Vec<u8>, Option<SourceReading>> = BTreeMap::new();
+    let four_values_read = &mut four_values_read;
+    let which = WhichReading::of(&sitting.machine, file, &sitting.with);
+    let mut watched = AReadingWatched::begins(held);
+    // **Stop is watched while a kept reading is tested**
+    // (`Dependency Upload & Remap` G15's waits as changed later on 2026-11-13).
+    let Some(kept) = unless_stopped(the_reading_kept(machine, held, &which, file, four_values_read), stopped).await
+    else {
+        return ALinkedReadingCameTo::Stopped;
+    };
+    let document = if let Some(kept) = kept {
+        kept
+    } else {
+        let Some(reading) = OneReading::of(file, &sitting.with) else {
+            return ALinkedReadingCameTo::CouldNotBeRead(WhyItCouldNotBeRead::TheServerTookNoReading);
+        };
+        let left = drive_one_reading_until_stopped(machine, &reading, &mut || stopped()).await;
+        if stopped() {
+            return ALinkedReadingCameTo::Stopped;
+        }
+        let document = match left {
+            Ok(left) => match judge(left, &sitting.with) {
+                Reading::Read(document) => document,
+                Reading::CouldNotBeRead { .. } => {
+                    return ALinkedReadingCameTo::CouldNotBeRead(WhyItCouldNotBeRead::ThisBlenderCouldNotOpenIt)
+                }
+            },
+            Err(
+                TheReadingDidNotRun::TheRequestDidNotReachTheMachine
+                | TheReadingDidNotRun::NoAnswerCameBack
+                | TheReadingDidNotRun::ItPassedTheTimeLimit
+                | TheReadingDidNotRun::AnAskWentUnanswered
+                | TheReadingDidNotRun::TheStreamsCouldNotBeReadBack(_),
+            ) => return ALinkedReadingCameTo::TheLineWasCut,
+            Err(TheReadingDidNotRun::TheMachinesProgramDoesNotTakeIt | TheReadingDidNotRun::TheMachineRefusedIt(_)) => {
+                return ALinkedReadingCameTo::CouldNotBeRead(WhyItCouldNotBeRead::TheServerTookNoReading)
+            }
+            Err(TheReadingDidNotRun::SmoozyEndedIt | TheReadingDidNotRun::TheUserStoppedIt) => {
+                return ALinkedReadingCameTo::Stopped
+            }
+        };
+        if unless_stopped(
+            the_reading_is_kept(machine, held, (&sitting.machine, &which, file), &document, &mut watched, four_values_read),
+            stopped,
+        )
+        .await
+        .is_none()
+        {
+            return ALinkedReadingCameTo::Stopped;
+        }
+        document
+    };
+    drop(watched);
+    let mut document = document;
+    smoozy_dependencies::check::the_default_cache_folders_named_after_the_file_on_the_computer(
+        &mut document,
+        file,
+        &holding,
+    );
+
+    // **Looked for on the user's computer**, from what the record holds and
+    // through Settings' list as it stands now.
+    let mut known = Vec::new();
+    let mut list = SearchedFolderList::default();
+    let mut the_record_read = true;
+    record.with_the_record(&mut |connection| {
+        match TheDependencyRecord::over(connection).the_answers_of(&holding) {
+            Ok(read) => known = read,
+            Err(_) => the_record_read = false,
+        }
+        match the_searched_folder_list::read(connection) {
+            Ok(read) => list = read,
+            Err(_) => the_record_read = false,
+        }
+    });
+    if !the_record_read {
+        return ALinkedReadingCameTo::CouldNotBeRead(WhyItCouldNotBeRead::TheRecordWouldNotRead);
+    }
+    let what_the_render_opens = WhatTheRenderOpens::of_the_sitting(sitting, held, &key);
+    let mut landed = the_rows_of_one_reading(
+        &document,
+        &holding,
+        &what_the_render_opens,
+        &known,
+        &list,
+        readings,
+        &mut || stopped(),
+        SystemTime::now(),
+    );
+    // **`Dependency Upload & Remap` Q5 over its rows**, so a file already placed
+    // reads *already on the server* and is not sent.
+    let mut nothing_counted = |_: usize, _: usize| {};
+    let mut stop = || stopped();
+    let snapshot = crate::the_found_files_sent::the_snapshot(record, &sitting.machine);
+    let _ = crate::the_found_files_sent::what_is_already_on_the_server_over(
+        machine,
+        snapshot,
+        sitting,
+        &mut landed.rows,
+        four_values_read,
+        &mut crate::the_found_files_sent::TheWalkIsWatched {
+            stopped: &mut stop,
+            counted: &mut nothing_counted,
+            digests: local_digests,
+        },
+    )
+    .await;
+    if stopped() {
+        return ALinkedReadingCameTo::Stopped;
+    }
+    // **`Dependency Upload & Remap` G16 and `Dependency Upload & Remap` K4: written in one save.** A refused write leaves the rows on
+    // screen and not kept, as a sitting's does.
+    let _ = written(record, |keeper| keeper.the_answers_are_written(&landed.answers).is_ok());
+    // **What the send may take of these rows is on its way before they land**,
+    // so no drawing finds a found file outside the upload (the twenty-eighth
+    // notes, piece 12).
+    before_the_rows_land(&landed.rows);
+    let placed = crate::surface::the_dependency_check::the_rows_of_a_reading_land(
+        held,
+        &key,
+        landed.rows,
+        landed.linked_items,
+        landed.the_bake_folders_not_worked_out,
+        &mut || stopped(),
+    );
+    // **A colour name a linked file names and the server's Blender lacks**
+    // (`Dependency Upload & Remap`, *Colour spaces and image sequences*), said
+    // with the rest of the sitting's, where its rows landed.
+    // **Also where it brought no row** (Sol's look, point 4): only rows offered
+    // and none landed means the sitting is not this reading's.
+    if placed.is_empty() || placed.iter().any(|(at, _)| *at != usize::MAX) {
+        if let Ok(mut held) = held.lock() {
+            if let Some(sitting) = held.sittings.get_mut(&key) {
+                for one in landed.the_colour_names_not_found {
+                    if !sitting.the_colour_names_not_found.contains(&one) {
+                        sitting.the_colour_names_not_found.push(one);
+                    }
+                }
+            }
+        }
+    }
+    ALinkedReadingCameTo::Read(placed)
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Every decision about the user's own computer, saved
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -1522,6 +1927,12 @@ where
 pub enum ADecision {
     SetAside,
     Restore,
+    /// **`Dependency Upload & Remap` K4's included mark on the row's
+    /// answers** — a row no scene uses put back among the files that upload
+    /// (the twenty-eighth notes, note 14).
+    Include,
+    /// **The same over every row left out** — *Include all*.
+    IncludeAll,
     /// **Reject match** (once *Undo Smoozy's guess*): the found location becomes `Dependency Upload &
     /// Remap` K4's rejected guess and the row is not found.
     UndoTheGuess,
@@ -1569,7 +1980,8 @@ fn the_rows_answers_are_written(
         return false;
     }
     row.state = the_state_of(&answers);
-    (row.members, row.size) = the_rows_figures(&answers, &row.wanted, readings);
+    (row.members, row.size, row.the_files_not_in_its_folder) =
+        the_rows_figures(&answers, &row.wanted, row.the_files_the_jobs_frames_need.as_deref(), readings);
     row.the_part_already_up = None;
     row.answers = answers;
     row.proposal = proposal;
@@ -1586,6 +1998,7 @@ struct ARowTaken {
     the_real_file: Vec<u8>,
     answers: Vec<LocatedAnswer>,
     wanted: Vec<Outstanding>,
+    needed: Option<Vec<Vec<u8>>>,
 }
 
 impl ARowTaken {
@@ -1597,6 +2010,7 @@ impl ARowTaken {
             the_real_file: one.the_real_file(),
             answers: one.answers.clone(),
             wanted: one.wanted.clone(),
+            needed: one.the_files_the_jobs_frames_need.clone(),
         }
     }
 }
@@ -1617,7 +2031,7 @@ struct WhatARowsSearchFound {
     the_real_file: Vec<u8>,
     answers: Option<Vec<LocatedAnswer>>,
     proposal: Option<StoredLocation>,
-    figures: (Option<usize>, Option<u64>),
+    figures: TheRowsFigures,
 }
 
 /// **What the search came to.**
@@ -1718,8 +2132,8 @@ fn the_add_searches(in_hand: &TheAddInHand, readings: &dyn Readings, stop: &mut 
             });
             let figures = answers
                 .as_ref()
-                .map(|answers| the_rows_figures(answers, &one.wanted, readings))
-                .unwrap_or((None, None));
+                .map(|answers| the_rows_figures(answers, &one.wanted, one.needed.as_deref(), readings))
+                .unwrap_or((None, None, Vec::new()));
             WhatARowsSearchFound {
                 at: one.at,
                 holding: one.holding.clone(),
@@ -1771,7 +2185,7 @@ fn the_add_lands(held: &mut WhatTheRunHolds, key: &str, folder: Vec<u8>, list: &
             Some(answers) => {
                 came_up.insert(one.the_real_file);
                 row.state = the_state_of(&answers);
-                (row.members, row.size) = one.figures;
+                (row.members, row.size, row.the_files_not_in_its_folder) = one.figures;
                 row.answers = answers;
                 row.proposal = None;
                 // **`Design/Dependency Upload & Remap`: adding a search folder is
@@ -1850,6 +2264,23 @@ pub fn the_chosen_folder_is_added(
     let Some(list) = the_folder_goes_on_the_list(&folder, record) else {
         return WhatADecisionCameTo::NotSaved;
     };
+    // **Added while a check runs: shown at once** (the Creator's notes on the
+    // test copy, second round, note 14). That check searches it: rows that
+    // land after this are read against the new list (`Dependency Upload &
+    // Remap` G17a), and the rows already missing are searched below.
+    let while_it_runs = held
+        .lock()
+        .map(|mut held| {
+            let running = held.checks_running.contains_key(key) || held.files_being_read.contains(key);
+            if running {
+                held.folders_added_while_it_runs.entry(key.to_string()).or_default().push(folder.clone());
+            }
+            running
+        })
+        .unwrap_or(false);
+    if while_it_runs {
+        told();
+    }
     let Ok(Some(in_hand)) = held.lock().map(|mut held| the_rows_still_missing_are_taken(&mut held, key, folder, list)) else {
         return WhatADecisionCameTo::NothingToTake;
     };
@@ -1876,11 +2307,33 @@ pub fn the_chosen_folder_is_added(
     }
     if let Ok(mut held) = held.lock() {
         the_add_lands(&mut held, key, in_hand.folder, &in_hand.list, found);
+        // **The add's own count is not said for a search the check is still
+        // making**: the check's rows say what it found.
+        if while_it_runs {
+            if let Some(sitting) = held.sittings.get_mut(key) {
+                sitting.the_folder_added = None;
+            }
+        }
     }
     WhatADecisionCameTo::Taken
 }
 
 // ── `Dependency Upload & Remap` F1c: *Locate…* and *Choose a folder…* ──────────
+
+/// **What a reference is grouped by once it is resolved** (`Dependency Upload &
+/// Remap` G10 and `Dependency Upload & Remap` G11) — **never a search's
+/// arbitrary pick** (batch 3 of the
+/// Bad what-if answers, 455). Two references that met several files of one
+/// name in one searched folder were each handed the first; grouped by it,
+/// they became one row and could never be given different files. Such a
+/// reference keeps its own row, grouped by its own text.
+pub(crate) fn the_file_a_row_is_grouped_by(
+    resolution: Option<&smoozy_dependencies::record::Resolution>,
+) -> Option<StoredLocation> {
+    resolution
+        .filter(|resolution| !resolution.is_an_arbitrary_pick())
+        .map(|resolution| resolution.to.location().clone())
+}
 
 /// **The rows a decision reaches**: the row pressed, or the selection where the
 /// act came from the bar (`Dependency Upload & Remap` F22), and **every row of each real file among them**,
@@ -1920,7 +2373,7 @@ struct ARowsAnswer {
     only_while_missing: bool,
     answers: Option<Vec<LocatedAnswer>>,
     proposal: Option<StoredLocation>,
-    figures: (Option<usize>, Option<u64>),
+    figures: TheRowsFigures,
 }
 
 /// **`Dependency Upload & Remap` F22: each row's write is its own, with the
@@ -1934,7 +2387,7 @@ fn a_rows_answer_is_written(one: &ARowTaken, answers: Vec<LocatedAnswer>, only_w
         holding: one.holding.clone(),
         reference: one.reference.clone(),
         only_while_missing,
-        figures: the_rows_figures(&answers, &one.wanted, readings),
+        figures: the_rows_figures(&answers, &one.wanted, one.needed.as_deref(), readings),
         answers: Some(answers),
         proposal: None,
     })
@@ -1954,7 +2407,7 @@ fn the_answers_land(sitting: &mut ASitting, rows: Vec<ARowsAnswer>) {
         match one.answers {
             Some(answers) => {
                 row.state = the_state_of(&answers);
-                (row.members, row.size) = one.figures;
+                (row.members, row.size, row.the_files_not_in_its_folder) = one.figures;
                 row.answers = answers;
                 row.proposal = one.proposal;
             }
@@ -2157,7 +2610,7 @@ fn the_choice_looks(rows: &[ARowTaken], folder: &[u8], record: &dyn TheCheckReac
                     only_while_missing: true,
                     answers: None,
                     proposal: Some(StoredLocation::as_the_system_returned_it(&path)),
-                    figures: (None, None),
+                    figures: (None, None, Vec::new()),
                 });
                 found.came_to = WhatADecisionCameTo::Taken;
             }
@@ -2259,7 +2712,16 @@ pub fn a_decision_is_taken(
         }
         _ => {}
     }
-    let reached = the_rows_reached(held, key, row);
+    // ***Include all* reaches every row left out** (the twenty-eighth notes,
+    // note 14), never the selection.
+    let reached = match decision {
+        ADecision::IncludeAll => held
+            .sittings
+            .get(key)
+            .map(|sitting| crate::surface::the_dependency_check::the_rows_left_out(sitting).into_iter().collect())
+            .unwrap_or_default(),
+        _ => the_rows_reached(held, key, row),
+    };
     let Some(sitting) = held.sittings.get_mut(key) else {
         return WhatADecisionCameTo::NothingToTake;
     };
@@ -2388,6 +2850,30 @@ pub fn a_decision_is_taken(
                 }
             }
             took = true;
+        }
+        // **`Dependency Upload & Remap` K4's included mark, one write per row**
+        // — the twenty-eighth notes, note 14. The row goes back to its own
+        // group at once and uploads like any other.
+        ADecision::Include | ADecision::IncludeAll => {
+            for at in reached {
+                let Some(one) = sitting.rows.get_mut(at) else {
+                    continue;
+                };
+                let answers = one
+                    .answers
+                    .iter()
+                    .cloned()
+                    .map(|mut answer| {
+                        answer.included = true;
+                        answer
+                    })
+                    .collect();
+                let proposal = one.proposal.clone();
+                if !the_rows_answers_are_written(one, answers, proposal, record, readings) {
+                    return WhatADecisionCameTo::NotSaved;
+                }
+                took = true;
+            }
         }
         // **Taken above**, before the sitting is held.
         ADecision::AddTheChosenSearchFolder | ADecision::Locate(_) | ADecision::ChooseAFolder(_) => {}
@@ -2582,6 +3068,13 @@ mod tests {
         the_line_goes_after: Option<usize>,
         no_four_values: bool,
         after_each_reading: Option<Arc<dyn Fn() + Send + Sync>>,
+        /// The `.blend` is replaced on the machine once its first four values
+        /// are read: every later reading answers a different file.
+        replaced_after_the_first_four_values: bool,
+        four_values_read: usize,
+        /// **What Blender itself prints before the document**, on the ordinary
+        /// stream — a colour name it lacks, say.
+        blenders_own_lines: Vec<u8>,
     }
 
     impl smoozy_dependencies::acting::checking::TheMachineAReadingIsAskedOf for AScriptedMachine {
@@ -2605,6 +3098,7 @@ mod tests {
             let (stream, status) = match self.documents.get(&blend) {
                 Some(Some(document)) => (
                     [
+                        self.blenders_own_lines.as_slice(),
                         b"Blender quit\n".as_slice(),
                         smoozy_dependencies::acting::blender::THE_OPENING_SENTINEL,
                         &serde_json::to_vec(document).expect("it writes"),
@@ -2657,8 +3151,10 @@ mod tests {
             if self.no_four_values {
                 return FourValuesNow::TheChannelCannotAnswer;
             }
+            self.four_values_read += 1;
+            let replaced = self.replaced_after_the_first_four_values && self.four_values_read > 1;
             FourValuesNow::Answered(SourceReading {
-                size: 1,
+                size: if replaced { 2 } else { 1 },
                 inode: "7".to_string(),
                 modification_time: 1,
                 change_time: 1,
@@ -2677,6 +3173,7 @@ mod tests {
             scenes: Attribution::Established(vec!["Scene".to_string()]),
             source: (kind == Kind::Image).then(|| "FILE".to_string()),
             the_files_own_text: None,
+            sequence: None,
         }
     }
 
@@ -2686,6 +3183,7 @@ mod tests {
             flat_list: Vec::new(),
             weak_references: Vec::new(),
             observed_stand_ins: Vec::new(),
+            colour_names_not_found: Vec::new(),
         }
     }
 
@@ -2819,6 +3317,183 @@ mod tests {
         );
         let held = held.lock().expect("the run");
         assert!(held.checks_running.is_empty() && held.files_being_read.is_empty());
+    }
+
+    /// **A server that never answers the check's first request** — the
+    /// root's four values (`Dependency Upload & Remap` V10).
+    struct AFirstRequestNeverAnswered;
+
+    impl smoozy_dependencies::acting::checking::TheMachineAReadingIsAskedOf for AFirstRequestNeverAnswered {
+        async fn ask(&mut self, _: &Request) -> WhatCameBack {
+            std::future::pending().await
+        }
+
+        async fn read_the_stream_back(&mut self, _: &[u8], _: u64) -> Result<Vec<u8>, String> {
+            std::future::pending().await
+        }
+    }
+
+    impl TheMachineAFileIsReadOn for AFirstRequestNeverAnswered {
+        async fn the_four_values_of(&mut self, _the_blend: &str) -> FourValuesNow {
+            std::future::pending().await
+        }
+    }
+
+    /// **Sol's look at the window and read points, point 1 (the scout's
+    /// list, item 6): Stop ends the check while its first request is
+    /// unanswered**, and the panel says the read was stopped. The first
+    /// request waited without watching Stop, so a server that did not answer
+    /// it held the check after Stop.
+    #[cfg(unix)]
+    #[test]
+    fn stop_ends_the_check_while_its_first_request_is_unanswered() {
+        let folder = AFolder::made("first-unanswered");
+        folder.holds("project/scene.blend", b"blend");
+        let sitting = a_sitting_of(&folder, "project/scene.blend");
+        let record = a_record(&folder);
+        let held = Arc::new(Mutex::new(WhatTheRunHolds::default()));
+        let key = keyed(&sitting.server, &sitting.file);
+        let pressing = Arc::clone(&held);
+        let press = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            pressing.lock().expect("the run").checks_running.insert(key, true);
+        });
+        let started = std::time::Instant::now();
+        let came_to = run(async {
+            tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                the_check_runs(
+                    &mut AFirstRequestNeverAnswered,
+                    &OverOneConnection(record.connection()),
+                    &TheUsersOwnComputer,
+                    &held,
+                    &sitting,
+                    &|| {},
+                ),
+            )
+            .await
+        });
+        press.join().expect("the press");
+        assert_eq!(came_to, Ok(TheCheckCameTo::ItGaveNothing(Ending::SmoozyStoppedIt)), "Stop did not end the wait");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
+    }
+
+    /// **A machine whose four-value reads answer for the file the check
+    /// opened and never for anything else** — every other location's read
+    /// waits for good, the way a server that stops answering holds one.
+    struct OnlyTheRootsValuesAnswer {
+        inner: AScriptedMachine,
+        root: String,
+    }
+
+    impl smoozy_dependencies::acting::checking::TheMachineAReadingIsAskedOf for OnlyTheRootsValuesAnswer {
+        async fn ask(&mut self, request: &Request) -> WhatCameBack {
+            self.inner.ask(request).await
+        }
+
+        async fn read_the_stream_back(&mut self, path: &[u8], length: u64) -> Result<Vec<u8>, String> {
+            self.inner.read_the_stream_back(path, length).await
+        }
+    }
+
+    impl TheMachineAFileIsReadOn for OnlyTheRootsValuesAnswer {
+        async fn the_four_values_of(&mut self, the_blend: &str) -> FourValuesNow {
+            if the_blend != self.root {
+                std::future::pending::<()>().await;
+            }
+            self.inner.the_four_values_of(the_blend).await
+        }
+    }
+
+    /// **A root reading naming one linked library**, as the scripted machine
+    /// answers it.
+    fn a_machine_naming_a_library(sitting: &TheSittingIsOf) -> AScriptedMachine {
+        let mut machine = AScriptedMachine::default();
+        machine.documents.insert(
+            sitting.root.as_bytes().to_vec(),
+            Some(a_document(vec![a_reference(Kind::Library, b"//lib.blend")])),
+        );
+        machine
+    }
+
+    /// **Stop pressed 300 ms in, from another thread, as a user would.**
+    fn a_stop_pressed_soon(held: &Arc<Mutex<WhatTheRunHolds>>, key: String) -> std::thread::JoinHandle<()> {
+        let pressing = Arc::clone(held);
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            pressing.lock().expect("the run").checks_running.insert(key, true);
+        })
+    }
+
+    /// **Sol's look at the scout's list, point 6: Stop ends the check while
+    /// the four values a new reading is kept with go unanswered.** Saving a
+    /// reading asked the linked file's details with no eye on Stop, so a server
+    /// that did not answer held the panel after Stop.
+    #[cfg(unix)]
+    #[test]
+    fn stop_ends_the_check_while_a_reading_being_kept_waits_on_the_server() {
+        let folder = AFolder::made("keeping-unanswered");
+        folder.holds("project/scene.blend", b"blend");
+        let sitting = a_sitting_of(&folder, "project/scene.blend");
+        let record = a_record(&folder);
+        let held = Arc::new(Mutex::new(WhatTheRunHolds::default()));
+        let press = a_stop_pressed_soon(&held, keyed(&sitting.server, &sitting.file));
+        let mut machine = OnlyTheRootsValuesAnswer { inner: a_machine_naming_a_library(&sitting), root: sitting.file.clone() };
+        let started = std::time::Instant::now();
+        let came_to = run(async {
+            tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                the_check_runs(&mut machine, &OverOneConnection(record.connection()), &TheUsersOwnComputer, &held, &sitting, &|| {}),
+            )
+            .await
+        });
+        press.join().expect("the press");
+        assert_eq!(came_to, Ok(TheCheckCameTo::TheSittingStands(Completion::StoppedByTheUser)), "Stop did not end the wait");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
+        let which = WhichReading::of(&sitting.machine, &sitting.root, &sitting.with);
+        assert!(
+            held.lock().expect("the run").the_kept_readings.the_one_for(&which).is_none(),
+            "a reading being kept when Stop came is not kept"
+        );
+    }
+
+    /// **Sol's look at the scout's list, point 6: Stop ends the check while
+    /// the four values a kept reading is tested with go unanswered.** The
+    /// first check keeps the root's reading; the second asks whether it still
+    /// stands, and the server never answers for the library.
+    #[cfg(unix)]
+    #[test]
+    fn stop_ends_the_check_while_a_kept_reading_is_tested_against_the_server() {
+        let folder = AFolder::made("kept-unanswered");
+        folder.holds("project/scene.blend", b"blend");
+        let sitting = a_sitting_of(&folder, "project/scene.blend");
+        let record = a_record(&folder);
+        let held = Arc::new(Mutex::new(WhatTheRunHolds::default()));
+        let first = run(the_check_runs(
+            &mut a_machine_naming_a_library(&sitting),
+            &OverOneConnection(record.connection()),
+            &TheUsersOwnComputer,
+            &held,
+            &sitting,
+            &|| {},
+        ));
+        assert_eq!(first, TheCheckCameTo::TheSittingStands(Completion::Completed));
+        let which = WhichReading::of(&sitting.machine, &sitting.root, &sitting.with);
+        assert!(held.lock().expect("the run").the_kept_readings.the_one_for(&which).is_some(), "the first check keeps its reading");
+
+        let press = a_stop_pressed_soon(&held, keyed(&sitting.server, &sitting.file));
+        let mut machine = OnlyTheRootsValuesAnswer { inner: a_machine_naming_a_library(&sitting), root: sitting.file.clone() };
+        let started = std::time::Instant::now();
+        let came_to = run(async {
+            tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                the_check_runs(&mut machine, &OverOneConnection(record.connection()), &TheUsersOwnComputer, &held, &sitting, &|| {}),
+            )
+            .await
+        });
+        press.join().expect("the press");
+        assert_eq!(came_to, Ok(TheCheckCameTo::ItGaveNothing(Ending::SmoozyStoppedIt)), "Stop did not end the wait");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "{:?}", started.elapsed());
     }
 
     /// **`Dependency Upload & Remap` G9a: on 5.3 a bake folder's `{blend_name}` is read as the render reads
@@ -3195,6 +3870,11 @@ mod tests {
         assert_eq!(came_to, TheCheckCameTo::TheSittingStands(Completion::Completed));
         let reading = "Reading the file… | table none | tools false | foot false | nothing was read false";
         let landed = "no line | table 1 | tools true | foot false | nothing was read false";
+        // **While the check still runs after the root's rows land, its line
+        // says so** (`§ While it is still reading below a linked file`,
+        // 2026-11-10, the twenty-eighth notes, piece 12); until then this step
+        // drew no line at all. Once the sitting stands, no line.
+        let landed_and_running = "Checking dependencies… | table 1 | tools true | foot false | nothing was read false";
         assert_eq!(
             seen.lock().expect("seen").as_slice(),
             [
@@ -3203,8 +3883,8 @@ mod tests {
                 reading.to_string(),
                 // The machine has answered, and the reading has not landed.
                 reading.to_string(),
-                // Told: the root's reading landed.
-                landed.to_string(),
+                // Told: the root's reading landed, and the check still runs.
+                landed_and_running.to_string(),
             ],
             "while the file itself was read, and once its reading landed"
         );
@@ -3338,6 +4018,81 @@ mod tests {
                 &a_blender()
             ),
             smoozy_rendering::warning::TheWarningsCase::Absent,
+        );
+    }
+
+    /// **Batch 3 of the Bad what-if answers, 455: two references handed the
+    /// same arbitrary pick stay two rows**, so each can be given its own
+    /// file; a pick that was the only file of its name still groups them, as
+    /// G10 says. Before this, both arbitrary answers grouped into one row.
+    #[test]
+    fn bad_batch_3_references_sharing_an_arbitrary_pick_stay_two_rows() {
+        use smoozy_dependencies::check::{group_into_rows, ReferenceToGroup};
+        use smoozy_dependencies::record::{ArbitraryPick, HowResolved, Resolution, ResolvedTo};
+        let picked = StoredLocation::as_the_system_returned_it(b"/Users/a/Textures/kitchen/metallic.png");
+        let other = StoredLocation::as_the_system_returned_it(b"/Users/a/Textures/bath/metallic.png");
+        let resolved = |arbitrary: bool| Resolution {
+            to: ResolvedTo::AWholeLocation(picked.clone()),
+            how: HowResolved::TheSearch {
+                from_folder: b"/Users/a/Textures".to_vec(),
+                arbitrary: arbitrary.then(|| ArbitraryPick { taken: picked.clone(), among: vec![picked.clone(), other.clone()] }),
+            },
+        };
+        let rows = |arbitrary: bool| {
+            let references: Vec<ReferenceToGroup> = [b"//kitchen/metallic.png".as_slice(), b"//bath/metallic.png"]
+                .iter()
+                .map(|recorded| ReferenceToGroup {
+                    kind: Kind::Image,
+                    recorded: RecordedLocation::as_the_reading_carried_it(recorded),
+                    holder_folder: b"/Users/a/Scenes".to_vec(),
+                    resolved: the_file_a_row_is_grouped_by(Some(&resolved(arbitrary))),
+                })
+                .collect();
+            group_into_rows(&references).len()
+        };
+        assert_eq!(rows(true), 2, "an arbitrary pick merged two projects' textures");
+        assert_eq!(rows(false), 1, "one real file is still one row");
+    }
+
+    /// **Batch 3 of the Bad what-if answers, 260: a `.blend` replaced while
+    /// its check reads it keeps the warning.** The sitting read the file as it
+    /// stood at its start; its standing is written marked *replaced since*, so
+    /// Render Settings still warns. Before this, the end wrote a clean
+    /// standing over the mark and the warning went.
+    #[test]
+    fn bad_batch_3_a_blend_replaced_while_its_check_runs_keeps_the_warning() {
+        let folder = AFolder::made("replaced-while-read");
+        folder.holds("scene.blend", b"blend");
+        let sitting = a_sitting_of(&folder, "scene.blend");
+        let mut machine = AScriptedMachine {
+            replaced_after_the_first_four_values: true,
+            ..AScriptedMachine::default()
+        };
+        machine.documents.insert(
+            sitting.root.as_bytes().to_vec(),
+            Some(a_document(vec![a_reference(Kind::BakeFolder, b"//")])),
+        );
+        let record = a_record(&folder);
+        let held = Mutex::new(WhatTheRunHolds::default());
+        run(the_check_runs(
+            &mut machine,
+            &OverOneConnection(record.connection()),
+            &TheUsersOwnComputer,
+            &held,
+            &sitting,
+            &|| {},
+        ));
+        let standing = TheDependencyRecord::over(record.connection())
+            .the_standing(&sitting.root, &sitting.machine)
+            .expect("it reads")
+            .expect("written");
+        assert!(standing.replaced_since_check, "the file moved under the check");
+        assert_eq!(
+            smoozy_rendering::warning::evaluate(
+                &WhatTheRecordSays::AStanding(Box::new(standing)),
+                &a_blender()
+            ),
+            smoozy_rendering::warning::TheWarningsCase::AcheckWasRunAndTheFileHasBeenReplacedSince,
         );
     }
 
@@ -3818,6 +4573,172 @@ mod tests {
         assert!(location.contains("//../../../gone/"), "{location}");
     }
 
+    /// **`Dependency Upload & Remap`, *Colour spaces and image sequences*: a
+    /// picture stored as a sequence goes up whole, the files the job's frames
+    /// need and its folder does not hold are said and counted as missing, and a
+    /// colour name the server's Blender lacks is said above the rows.** The
+    /// sequence is `b_0001.png` with its fourth file gone, shown by one Image
+    /// Texture node with Start 1, Offset 0, Frames 6, rendered at frames 1 to 6.
+    #[cfg(unix)]
+    #[test]
+    fn a_sequence_goes_up_whole_and_what_it_lacks_is_said() {
+        use smoozy_dependencies::check::{ASequencesUser, TheSequencesUsers};
+        let reads = |words: &crate::surface::files::Words| {
+            let mut out = String::new();
+            for (at, piece) in words.pieces.iter().enumerate() {
+                if at > 0 && !piece.joins {
+                    out.push(' ');
+                }
+                if let Some(said) = &piece.said {
+                    out.push_str(said.as_str());
+                }
+                if let Some(value) = &piece.value {
+                    out.push_str(value.as_str());
+                }
+            }
+            out.replace('\u{a0}', " ")
+        };
+        let folder = AFolder::made("a-sequence-whole");
+        folder.holds("scene.blend", b"blend");
+        for number in [1, 2, 3, 5, 6, 7] {
+            folder.holds(&format!("plates/b_{number:04}.png"), &[1u8; 10]);
+        }
+        let sitting = a_sitting_of(&folder, "scene.blend");
+        let document = a_document(vec![ReadReference {
+            source: Some("SEQUENCE".to_string()),
+            sequence: Some(TheSequencesUsers {
+                users: vec![ASequencesUser { start: 1, offset: 0, frames: 6, cyclic: false }],
+                other_users: false,
+            }),
+            ..a_reference(Kind::Image, b"//plates/b_0001.png")
+        }]);
+        let mut machine = AScriptedMachine::default();
+        // Test 3's line, as 5.3 printed it.
+        machine.blenders_own_lines = b"00:00.368  color_management | WARNING image colorspace \"Smoozy Orphan\" not found, will use default instead.\n".to_vec();
+        machine.documents.insert(sitting.root.as_bytes().to_vec(), Some(document));
+        let record = a_record(&folder);
+        let held = Mutex::new(WhatTheRunHolds::default());
+        let key = keyed(&sitting.server, &sitting.file);
+        held.lock().expect("the run").the_jobs_frames.insert(key.clone(), (1..=6).collect());
+        let door = OverOneConnection(record.connection());
+        let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &held, &sitting, &|| {}));
+        let held = held.lock().expect("the run");
+        let standing = &held.sittings[&key];
+        assert_eq!(standing.rows.len(), 1, "one row for the sequence");
+        let row = &standing.rows[0];
+        assert_eq!(row.state, RowState::FoundOnYourComputer);
+        assert_eq!(row.members, Some(6), "every file of it in its folder goes up");
+        assert_eq!(row.size, Some(60));
+        assert_eq!(row.the_files_not_in_its_folder, vec![b"b_0004.png".to_vec()]);
+        assert!(matches!(
+            row.answers[0].resolution.as_ref().map(|found| &found.to),
+            Some(ResolvedTo::AFolderForASetRow(_))
+        ));
+        let panel = crate::surface::the_dependency_check::the_panel(&held, &sitting.server, &sitting.file, None);
+        let the_row = panel.the_table.as_ref().expect("rows").groups.iter().flat_map(|group| group.rows.iter()).next().expect("the row");
+        let notes: Vec<String> = the_row.notes.iter().map(|note| reads(&note.said)).collect();
+        assert!(notes.contains(&"1 file missing: b_0004.png.".to_string()), "{notes:?}");
+        let summary: Vec<String> = panel.the_summary.as_ref().expect("a summary").parts.iter().map(|part| reads(&part.said)).collect();
+        assert_eq!(summary.first().map(String::as_str), Some("1 missing"), "{summary:?}");
+        let said: Vec<String> = panel
+            .the_statements
+            .iter()
+            .filter(|one| one.which.as_str() == "a-colour-space-not-on-the-server")
+            .map(|one| reads(&one.said))
+            .collect();
+        assert_eq!(said, vec!["This server’s Blender has no colour space Smoozy Orphan. It will use its default.".to_string()]);
+    }
+
+    /// **Two sequences in one folder are two rows** (Sol's look at *Colour spaces
+    /// and image sequences*, point 1), each with its own files, and nothing is
+    /// said missing that the other holds.
+    #[cfg(unix)]
+    #[test]
+    fn two_sequences_in_one_folder_are_two_rows() {
+        use smoozy_dependencies::check::{ASequencesUser, TheSequencesUsers};
+        let folder = AFolder::made("two-sequences");
+        folder.holds("scene.blend", b"blend");
+        for number in 1..=3 {
+            folder.holds(&format!("plates/a_{number:04}.png"), &[1u8; 10]);
+            folder.holds(&format!("plates/b_{number:04}.png"), &[1u8; 20]);
+        }
+        let sitting = a_sitting_of(&folder, "scene.blend");
+        let a_sequence = |recorded: &[u8]| ReadReference {
+            source: Some("SEQUENCE".to_string()),
+            sequence: Some(TheSequencesUsers {
+                users: vec![ASequencesUser { start: 1, offset: 0, frames: 3, cyclic: false }],
+                other_users: false,
+            }),
+            ..a_reference(Kind::Image, recorded)
+        };
+        let mut machine = AScriptedMachine::default();
+        machine.documents.insert(
+            sitting.root.as_bytes().to_vec(),
+            Some(a_document(vec![a_sequence(b"//plates/a_0001.png"), a_sequence(b"//plates/b_0001.png")])),
+        );
+        let record = a_record(&folder);
+        let held = Mutex::new(WhatTheRunHolds::default());
+        let key = keyed(&sitting.server, &sitting.file);
+        held.lock().expect("the run").the_jobs_frames.insert(key.clone(), vec![1, 2, 3]);
+        let door = OverOneConnection(record.connection());
+        let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &held, &sitting, &|| {}));
+        let held = held.lock().expect("the run");
+        let rows = &held.sittings[&key].rows;
+        assert_eq!(rows.len(), 2, "one row each");
+        for row in rows {
+            assert_eq!(row.members, Some(3));
+            assert!(row.the_files_not_in_its_folder.is_empty(), "{:?}", row.the_files_not_in_its_folder);
+        }
+        assert_eq!(rows.iter().filter_map(|row| row.size).sum::<u64>(), 90);
+    }
+
+    /// **A sequence's answer written before it was read as a set names one of
+    /// its files**, and is read as that file's folder rather than looked for
+    /// again (*Colour spaces and image sequences*); with no frames known,
+    /// nothing is said about missing files.
+    #[cfg(unix)]
+    #[test]
+    fn a_sequences_answer_from_before_is_read_as_its_folder() {
+        let folder = AFolder::made("a-sequence-from-before");
+        folder.holds("scene.blend", b"blend");
+        folder.holds("elsewhere/b_0001.png", &[1u8; 10]);
+        folder.holds("elsewhere/b_0002.png", &[1u8; 10]);
+        let sitting = a_sitting_of(&folder, "scene.blend");
+        let reference = ReadReference {
+            source: Some("SEQUENCE".to_string()),
+            sequence: Some(smoozy_dependencies::check::TheSequencesUsers::default()),
+            ..a_reference(Kind::Image, b"//gone/b_0001.png")
+        };
+        let record = a_record(&folder);
+        TheDependencyRecord::over(record.connection())
+            .the_answers_are_written(&[LocatedAnswer {
+                key: LocatedAnswerKey { holding_file: sitting.holding.clone(), reference: reference.recorded.clone() },
+                resolution: Some(Resolution {
+                    to: ResolvedTo::AWholeLocation(StoredLocation::as_the_system_returned_it(&folder.bytes("elsewhere/b_0001.png"))),
+                    how: HowResolved::TheUsersOwnHand,
+                }),
+                set_aside: false,
+                rejected_guess: None,
+                included: false,
+                read_as: Vec::new(),
+            }])
+            .expect("the answer is written");
+        let mut machine = AScriptedMachine::default();
+        machine.documents.insert(sitting.root.as_bytes().to_vec(), Some(a_document(vec![reference])));
+        let held = Mutex::new(WhatTheRunHolds::default());
+        let door = OverOneConnection(record.connection());
+        let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &held, &sitting, &|| {}));
+        let held = held.lock().expect("the run");
+        let row = &held.sittings[&keyed(&sitting.server, &sitting.file)].rows[0];
+        assert_eq!(row.state, RowState::FoundOnYourComputer);
+        assert_eq!(row.members, Some(2));
+        assert!(row.the_files_not_in_its_folder.is_empty());
+        assert_eq!(
+            row.answers[0].resolution.as_ref().map(|found| found.to.clone()),
+            Some(ResolvedTo::AFolderForASetRow(StoredLocation::as_the_system_returned_it(&folder.bytes("elsewhere"))))
+        );
+    }
+
     /// **`Dependency Upload & Remap` F28's bullet of 2026-11-02 and
     /// `Design/Dependency Upload & Remap`'s exception: adding a search folder
     /// reads as *Check again* would**, the live pass on real production files:
@@ -3992,6 +4913,47 @@ mod tests {
         let held = held_as_the_app_holds_it.lock().expect("the run");
         assert_eq!(held.sittings[&key].rows[0].state, RowState::FoundOnYourComputer);
         assert!(!held.sittings[&key].the_search.as_ref().expect("the search").running);
+    }
+
+    /// **The Creator's notes on the test copy, second round, note 14: a search
+    /// folder added while the check reads the file shows at once**, named with
+    /// *Searched in this check.* beside it, and the add's own count is not said
+    /// for a search the check is still making. Before, nothing showed it until
+    /// the check ended.
+    #[cfg(unix)]
+    #[test]
+    fn a_search_folder_added_while_the_check_reads_the_file_shows_at_once() {
+        let folder = AFolder::made("added-while-it-runs");
+        folder.holds("scene.blend", b"blend");
+        folder.holds("library/stone.png", b"stone");
+        let sitting = a_sitting_of(&folder, "scene.blend");
+        let mut machine = AScriptedMachine::default();
+        machine.documents.insert(
+            sitting.root.as_bytes().to_vec(),
+            Some(a_document(vec![a_reference(Kind::Image, b"//maps/stone.png")])),
+        );
+        let the_record = a_record(&folder);
+        let held = Mutex::new(WhatTheRunHolds::default());
+        let _ = run(the_check_runs(&mut machine, &OverOneConnection(the_record.connection()), &TheUsersOwnComputer, &held, &sitting, &|| {}));
+        let key = keyed(&sitting.server, &sitting.file);
+        {
+            // **Check again, pressed**: a check runs and is reading the file.
+            let mut held = held.lock().expect("the run");
+            held.checks_running.insert(key.clone(), false);
+            held.files_being_read.insert(key.clone());
+            held.sittings.get_mut(&key).expect("the sitting").the_chosen_search_folder = Some(folder.bytes("library"));
+        }
+        let told = std::sync::atomic::AtomicUsize::new(0);
+        let _ = the_chosen_folder_is_added(&held, &key, &OverOneConnection(the_record.connection()), &TheUsersOwnComputer, &|| {
+            told.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        });
+        assert!(told.load(std::sync::atomic::Ordering::SeqCst) >= 1, "the panel is told at once");
+        let held = held.lock().expect("the run");
+        let panel = crate::surface::the_dependency_check::the_panel(&held, &sitting.server, &sitting.file, None);
+        let drawn = serde_json::to_string(&panel).expect("it serialises").replace('\u{a0}', " ");
+        assert!(drawn.contains("Searched in this check."), "the added folder is not shown while the check reads: {drawn}");
+        assert!(drawn.contains("library"), "{drawn}");
+        assert!(!drawn.contains("Nothing more found"), "the add counted a search the check is still making: {drawn}");
     }
 
     /// **`Dependency Upload & Remap` F1c: no draw waits on *Locate…*'s look**, the
@@ -4784,7 +5746,11 @@ mod tests {
         let told = || {
             let mut held = held.lock().expect("the run");
             let panel = crate::surface::the_dependency_check::the_panel(&held, &sitting.server, &sitting.file, None);
-            if panel.the_walks_stop.is_some() {
+            // **The walk's own count**, since *Stop* now stands beside every
+            // line of a running check (`Design/Dependency Upload & Remap § While
+            // it is still reading below a linked file`, 2026-11-13).
+            if panel.the_line_counts {
+                assert!(panel.the_walks_stop.is_some(), "Stop beside the count");
                 let line = panel.still_reading.expect("the count's line");
                 seen.lock().expect("seen").push(format!("{line:?}"));
                 *held.checks_running.get_mut(&key).expect("it runs") = true;
@@ -4905,9 +5871,9 @@ mod tests {
         machine.inner.after_each_reading = Some(Arc::new(move || {
             if !once.swap(true, std::sync::atomic::Ordering::SeqCst) {
                 let mut held = held_then.lock().expect("the run");
-                held.the_files_going_up.one_begins(&machine_key);
+                held.the_files_going_up.one_begins(&machine_key, &a);
                 files.lands(&a, &[&b], &[]);
-                held.the_files_going_up.one_ends(&machine_key);
+                held.the_files_going_up.one_ends(&machine_key, &a);
             }
         }));
         let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &*held, &sitting, &|| {}));
@@ -4919,15 +5885,111 @@ mod tests {
 
         // **One that began before the reading and has not ended.**
         held.lock().expect("the run").the_kept_readings = Default::default();
-        held.lock().expect("the run").the_files_going_up.one_begins(&sitting.machine);
+        held.lock().expect("the run").the_files_going_up.one_begins(&sitting.machine, &shot.a);
         let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &*held, &sitting, &|| {}));
         assert_eq!(machine.the_files_read(), ["a.blend", "b.blend", "top.blend"]);
-        assert_eq!(held.lock().expect("the run").the_kept_readings.how_many(), 0, "nothing is kept while one is on its way");
-        held.lock().expect("the run").the_files_going_up.one_ends(&sitting.machine);
+        assert_eq!(held.lock().expect("the run").the_kept_readings.how_many(), 0, "nothing resting on it is kept while it is on its way");
+        held.lock().expect("the run").the_files_going_up.one_ends(&sitting.machine, &shot.a);
         let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &*held, &sitting, &|| {}));
         assert_eq!(machine.the_files_read(), ["a.blend", "b.blend", "top.blend"]);
         let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &*held, &sitting, &|| {}));
         assert_eq!(machine.the_files_read(), ["b.blend"], "the one still not there is tried");
+    }
+
+    /// **`Dependency Upload & Remap` G17b as changed 2026-11-09 (the twenty-eighth
+    /// notes, note 11): an upload to a place the reading does not rest on keeps
+    /// nothing back.** A texture going up while the file above it is read is not
+    /// the file and not a library it names, so the reading is kept and the round
+    /// after reads nothing again. **An upload that ended inside the reading, to a
+    /// library it names, still counts.** Until that day any file going up to the
+    /// machine kept nothing, and textures landing cost the end round a Blender
+    /// start for every file.
+    #[cfg(unix)]
+    #[test]
+    fn twenty_eighth_11_an_upload_the_reading_does_not_rest_on_keeps_nothing_back() {
+        let shot = a_shot("going-up-elsewhere");
+        let there = TheFilesThere::default();
+        there.lands(&shot.top, &[&shot.a], &[]);
+        there.lands(&shot.a, &[], &[]);
+        let sitting = a_sitting_of(&shot.folder, "shot/top.blend");
+        let record = a_record(&shot.folder);
+        let door = OverOneConnection(record.connection());
+        let held = Arc::new(Mutex::new(WhatTheRunHolds::default()));
+        let mut machine = AMachineThatLoads::over(&there);
+        let texture = shot.folder.bytes("shot/textures/wood.png");
+
+        // **A texture begins and lands inside every reading.**
+        let (held_then, machine_key, landing) = (Arc::clone(&held), sitting.machine.clone(), texture.clone());
+        machine.inner.after_each_reading = Some(Arc::new(move || {
+            let mut held = held_then.lock().expect("the run");
+            held.the_files_going_up.one_begins(&machine_key, &landing);
+            held.the_files_going_up.one_ends(&machine_key, &landing);
+        }));
+        let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &*held, &sitting, &|| {}));
+        assert_eq!(machine.the_files_read(), ["a.blend", "top.blend"]);
+        assert_eq!(held.lock().expect("the run").the_kept_readings.how_many(), 2, "a texture's upload kept a reading back");
+        let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &*held, &sitting, &|| {}));
+        assert!(machine.the_files_read().is_empty(), "the round after the textures read a file again");
+
+        // **One still going to the texture's place keeps nothing back either.**
+        held.lock().expect("the run").the_kept_readings = Default::default();
+        machine.inner.after_each_reading = None;
+        held.lock().expect("the run").the_files_going_up.one_begins(&sitting.machine, &texture);
+        let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &*held, &sitting, &|| {}));
+        assert_eq!(machine.the_files_read(), ["a.blend", "top.blend"]);
+        assert_eq!(held.lock().expect("the run").the_kept_readings.how_many(), 2);
+        held.lock().expect("the run").the_files_going_up.one_ends(&sitting.machine, &texture);
+
+        // **An upload to the library, begun and ended inside the reading of the
+        // file above it, still counts**: that reading is not kept.
+        held.lock().expect("the run").the_kept_readings = Default::default();
+        let (held_then, machine_key, a) = (Arc::clone(&held), sitting.machine.clone(), shot.a.clone());
+        let once = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        machine.inner.after_each_reading = Some(Arc::new(move || {
+            if !once.swap(true, std::sync::atomic::Ordering::SeqCst) {
+                let mut held = held_then.lock().expect("the run");
+                held.the_files_going_up.one_begins(&machine_key, &a);
+                held.the_files_going_up.one_ends(&machine_key, &a);
+            }
+        }));
+        let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &*held, &sitting, &|| {}));
+        assert_eq!(machine.the_files_read(), ["a.blend", "top.blend"]);
+        assert_eq!(held.lock().expect("the run").the_kept_readings.how_many(), 1, "the file above the library was kept");
+        assert_eq!(held.lock().expect("the run").the_files_going_up.going_now(&sitting.machine), 0);
+    }
+
+    /// **Sol's fresh look, 2026-11-09, finding 1: a linked file replaced on the
+    /// server while its upload ran is read again, not taken from what this run
+    /// kept.** The reading of the file above it named it and read its values as
+    /// they stood before it landed; a later reading must not compare against
+    /// those.
+    #[cfg(unix)]
+    #[test]
+    fn twenty_eighth_11_a_linked_file_replaced_during_the_upload_is_read_again() {
+        let shot = a_shot("replaced-library");
+        let there = TheFilesThere::default();
+        there.lands(&shot.a, &[&shot.b], &[]);
+        there.lands(&shot.b, &[], &[]);
+        let sitting = a_sitting_of(&shot.folder, "shot/top.blend");
+        let record = a_record(&shot.folder);
+        let door = OverOneConnection(record.connection());
+        let held = Mutex::new(WhatTheRunHolds::default());
+        let mut machine = AMachineThatLoads::over(&there);
+        let mut digests = crate::the_found_files_sent::TheLocalDigests::default();
+        let holding = |at: &[u8]| HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(at));
+        for (at, wanted) in [(&shot.b, ["b.blend"]), (&shot.a, ["a.blend"])] {
+            let _ = run(a_linked_file_of_a_send_is_read(
+                &mut machine, &door, &TheUsersOwnComputer, &held, &sitting,
+                &MachineLocation::composed(at.clone()), holding(at), &mut digests, &mut || false, &mut |_| {},
+            ));
+            assert_eq!(machine.the_files_read(), wanted);
+        }
+        there.change(&shot.b, |file| file.values = four(2));
+        let _ = run(a_linked_file_of_a_send_is_read(
+            &mut machine, &door, &TheUsersOwnComputer, &held, &sitting,
+            &MachineLocation::composed(shot.b.clone()), holding(&shot.b), &mut digests, &mut || false, &mut |_| {},
+        ));
+        assert_eq!(machine.the_files_read(), ["b.blend"], "the replaced file's old reading was used");
     }
 
     /// **`Design/Dependency Upload & Remap`: *Check again* on a file already read
@@ -4962,7 +6024,10 @@ mod tests {
             let held = held_then.lock().expect("the run");
             let panel = crate::surface::the_dependency_check::the_panel(&held, &server, &file, None);
             let said = panel.still_reading.map(|words| words.said().replace('\u{a0}', " "));
-            if said.is_none() {
+            // **The rows have landed once *Reading the file…* has gone** — to no
+            // line, or, while the check still runs, to *Checking dependencies…*
+            // (the twenty-eighth notes, piece 12).
+            if said.as_deref() != Some("Reading the file…") {
                 landed_then.lock().expect("the time").get_or_insert(began.elapsed());
             }
             seen_then.lock().expect("seen").push(said);
@@ -4972,6 +6037,101 @@ mod tests {
         assert_eq!(seen.first(), Some(&Some("Reading the file…".to_string())), "{seen:?}");
         assert!(landed_at.lock().expect("the time").expect("the rows landed") >= THE_LEAST_A_KEPT_READING_SHOWS);
         assert_eq!(the_words(&held.lock().expect("the run")), the_first_round);
+    }
+
+    /// **Note 14: *Include* and *Include all* write `Dependency Upload &
+    /// Remap` K4's included mark, a later check keeps it, and the standing
+    /// counts a row left out as set aside** (V11, V12 of 2026-11-09) — the
+    /// Creator's twenty-eighth notes, note 14: *"off for upload by default but
+    /// still uploadable"*.
+    ///
+    /// **macOS and Linux only**, as the other tests over a real folder here.
+    #[cfg(unix)]
+    #[test]
+    fn twenty_eighth_14_include_is_kept_and_the_standing_leaves_out_what_the_panel_leaves_out() {
+        use crate::surface::the_dependency_check::the_rows_left_out;
+        use crate::the_found_files_sent::the_rows_the_upload_sends;
+        let folder = AFolder::made("no-scene");
+        folder.holds("scene.blend", b"blend");
+        folder.holds("maps/stone.png", b"stone");
+        folder.holds("maps/old.png", b"old");
+        let sitting = a_sitting_of(&folder, "scene.blend");
+        let no_scene = |recorded: &[u8]| {
+            let mut one = a_reference(Kind::Image, recorded);
+            one.scenes = Attribution::Established(Vec::new());
+            one
+        };
+        let mut machine = AScriptedMachine::default();
+        machine.documents.insert(
+            sitting.root.as_bytes().to_vec(),
+            Some(a_document(vec![
+                a_reference(Kind::Image, b"//maps/stone.png"),
+                no_scene(b"//maps/old.png"),
+                no_scene(b"//maps/gone.png"),
+            ])),
+        );
+        let record = a_record(&folder);
+        let held = Mutex::new(WhatTheRunHolds::default());
+        let door = OverOneConnection(record.connection());
+        let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &held, &sitting, &|| {}));
+        let key = keyed(&sitting.server, &sitting.file);
+        let at = |held: &WhatTheRunHolds, recorded: &[u8]| {
+            held.sittings[&key]
+                .rows
+                .iter()
+                .position(|row| row.row.ordering_key().as_bytes() == recorded)
+                .expect("the row")
+        };
+        let names = |held: &WhatTheRunHolds, places: Vec<usize>| -> Vec<Vec<u8>> {
+            let mut out: Vec<Vec<u8>> =
+                places.into_iter().map(|one| held.sittings[&key].rows[one].row.ordering_key().as_bytes().to_vec()).collect();
+            out.sort();
+            out
+        };
+        {
+            let held = held.lock().expect("the run");
+            let sitting_now = &held.sittings[&key];
+            assert_eq!(names(&held, the_rows_left_out(sitting_now).into_iter().collect()), vec![b"//maps/gone.png".to_vec(), b"//maps/old.png".to_vec()]);
+            assert_eq!(names(&held, the_rows_the_upload_sends(sitting_now)), vec![b"//maps/stone.png".to_vec()]);
+        }
+        // **V11 and V12: the standing does not count the two left out.**
+        let standing = TheDependencyRecord::over(record.connection())
+            .the_standing(&sitting.root, &sitting.machine)
+            .expect("it reads")
+            .expect("a standing");
+        assert_eq!((standing.counts.not_found, standing.counts.found_but_not_sent), (0, 1));
+
+        // ***Include* on one row writes its mark.**
+        {
+            let mut held = held.lock().expect("the run");
+            let old = at(&held, b"//maps/old.png");
+            assert_eq!(
+                a_decision_is_taken(&mut held, &key, ADecision::Include, Some(old), &door, &TheUsersOwnComputer),
+                WhatADecisionCameTo::Taken
+            );
+            assert_eq!(names(&held, the_rows_the_upload_sends(&held.sittings[&key])), vec![b"//maps/old.png".to_vec(), b"//maps/stone.png".to_vec()]);
+        }
+        let answers = TheDependencyRecord::over(record.connection()).the_answers_of(&sitting.holding).expect("they read");
+        let included = |recorded: &[u8]| {
+            answers.iter().find(|answer| answer.key.reference.as_bytes() == recorded).map(|answer| answer.included)
+        };
+        assert_eq!(included(b"//maps/old.png"), Some(true));
+        assert_eq!(included(b"//maps/gone.png"), Some(false));
+
+        // **A later check keeps it.**
+        let _ = run(the_check_runs(&mut machine, &door, &TheUsersOwnComputer, &held, &sitting, &|| {}));
+        {
+            let mut held = held.lock().expect("the run");
+            assert_eq!(names(&held, the_rows_left_out(&held.sittings[&key]).into_iter().collect()), vec![b"//maps/gone.png".to_vec()]);
+            // ***Include all* takes the rest.**
+            assert_eq!(
+                a_decision_is_taken(&mut held, &key, ADecision::IncludeAll, None, &door, &TheUsersOwnComputer),
+                WhatADecisionCameTo::Taken
+            );
+            assert!(the_rows_left_out(&held.sittings[&key]).is_empty());
+        }
+        let answers = TheDependencyRecord::over(record.connection()).the_answers_of(&sitting.holding).expect("they read");
+        assert!(answers.iter().find(|answer| answer.key.reference.as_bytes() == b"//maps/gone.png").expect("gone").included);
     }
 
     #[allow(dead_code)]

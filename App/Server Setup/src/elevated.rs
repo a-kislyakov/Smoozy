@@ -53,7 +53,7 @@ use smoozy_security_and_licence::plaintext::Origin;
 use smoozy_server_protocol::transport::{CarriesAValueOnACommandsStandardInput, CommandString};
 use smoozy_servers::readings::CommandChannel;
 
-use crate::elevation::{what_a_failed_validate_means, WhatTheStepMet, THE_VALIDATE_FORM};
+use crate::elevation::{what_a_failed_validate_means, WhatTheStepMet};
 use crate::kind::Probe;
 
 /// **The elevating command's own non-interactive form**, which is what every
@@ -64,7 +64,9 @@ use crate::kind::Probe;
 /// run, sudo will display an error message and exit."* The same option is word
 /// for word in the second implementation Ubuntu 25.10 and later install by
 /// default, so **neither form is at risk** (M3's own record of both readings).
-pub const THE_NON_INTERACTIVE_PREFIX: &str = "sudo -n ";
+/// **From 2026-11-12 behind `-k`** (E3 as changed that day): a credential
+/// another program cached on the login is not used.
+pub const THE_NON_INTERACTIVE_PREFIX: &str = "sudo -k -n ";
 
 /// **E3's own form: the elevating command reading the password from standard
 /// input.**
@@ -77,7 +79,24 @@ pub const THE_NON_INTERACTIVE_PREFIX: &str = "sudo -n ";
 /// command argument is readable by any other login on the machine** (Fact 60),
 /// and `Server protocol and transfers` §1.3 fixed this route before this
 /// document was written.
-pub const THE_STANDARD_INPUT_PREFIX: &str = "sudo -S ";
+///
+/// **E3 and E4 as changed 2026-11-12 (the Fable review's sitting 6
+/// follow-up): `sudo -k -S`, and the step behind `sh -c`.** `-k`: *"will
+/// cause sudo to ignore the user's cached credentials"* … *"and will not
+/// update the user's cached credentials"* (`sudo(8)`,
+/// `https://www.sudo.ws/docs/man/sudo.man/`, as read 2026-11-12 for `File
+/// Browser` P6b). So the password, sent once, is read by the elevating command
+/// itself at every step, and no cached credential is used or made. The `sh -c`
+/// runs the step as its arguments and, only where the step ran and failed,
+/// writes [`THE_COMMAND_FAILED_LINE`] and ends with the step's own status.
+pub const THE_STANDARD_INPUT_PREFIX: &str = "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh ";
+
+/// **E4 as changed 2026-11-12 — the line the standard-input form writes to
+/// the complaint stream where the step itself ran and failed**, and only then.
+/// A failed step without it was refused by the elevating command before
+/// anything ran. Smoozy's own, taken off the machine's words before they are
+/// kept. Added by the Fable review's sitting 6 follow-up.
+pub const THE_COMMAND_FAILED_LINE: &str = "smoozy-elevated: the command failed";
 
 /// One elevated step, in all three forms.
 ///
@@ -157,12 +176,14 @@ pub const THE_HAND_OVER_OF_THE_ROOT: AnElevatedStep = AnElevatedStep {
     // to name.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: crate::placement::THE_RECURSIVE_HAND_OVER,
-    elevated: CommandString::constant(
-        "sudo -n chown -R -H \"$(id -u):$(id -g)\" ~/.smoozy-carriage/hand-over-root",
-    ),
-    elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S chown -R -H \"$(id -u):$(id -g)\" ~/.smoozy-carriage/hand-over-root",
-    ),
+    elevated: CommandString::constant(concat!(
+        "sudo -k -n ",
+        crate::placement::the_guarded_hand_over!("~/.smoozy-carriage/hand-over-root"),
+    )),
+    elevated_reading_the_password_from_standard_input: CommandString::constant(concat!(
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh ",
+        crate::placement::the_guarded_hand_over!("~/.smoozy-carriage/hand-over-root"),
+    )),
 };
 
 /// **R7a's second carriage, where `Job files and outputs` L4a placed the
@@ -176,12 +197,14 @@ pub const THE_HAND_OVER_OF_THE_PACKAGE_AREA: AnElevatedStep = AnElevatedStep {
     // **Y1's class for this act.** The same act on the second mount.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: crate::placement::THE_RECURSIVE_HAND_OVER_OF_THE_PACKAGE_AREA,
-    elevated: CommandString::constant(
-        "sudo -n chown -R -H \"$(id -u):$(id -g)\" ~/.smoozy-carriage/hand-over-package-area",
-    ),
-    elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S chown -R -H \"$(id -u):$(id -g)\" ~/.smoozy-carriage/hand-over-package-area",
-    ),
+    elevated: CommandString::constant(concat!(
+        "sudo -k -n ",
+        crate::placement::the_guarded_hand_over!("~/.smoozy-carriage/hand-over-package-area"),
+    )),
+    elevated_reading_the_password_from_standard_input: CommandString::constant(concat!(
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh ",
+        crate::placement::the_guarded_hand_over!("~/.smoozy-carriage/hand-over-package-area"),
+    )),
 };
 
 /// **R7's creation of the root's own directory, where the plain create over the
@@ -200,9 +223,9 @@ pub const THE_CREATION_OF_THE_ROOT: AnElevatedStep = AnElevatedStep {
     // three**, and it runs before any setup run exists to name.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: crate::placement::THE_ROOTS_CREATION,
-    elevated: CommandString::constant("sudo -n mkdir ~/.smoozy-carriage/create-root/smoozy"),
+    elevated: CommandString::constant("sudo -k -n mkdir ~/.smoozy-carriage/create-root/smoozy"),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S mkdir ~/.smoozy-carriage/create-root/smoozy",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh mkdir ~/.smoozy-carriage/create-root/smoozy",
     ),
 };
 
@@ -214,11 +237,24 @@ pub const THE_CREATION_OF_THE_PACKAGE_AREAS_LOCATION: AnElevatedStep = AnElevate
     // **Y1's class for this act.** The same act on the second mount.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: crate::placement::THE_CREATION_OF_THE_PACKAGE_AREAS_LOCATION,
-    elevated: CommandString::constant("sudo -n mkdir ~/.smoozy-carriage/create-package-area/smoozy"),
+    elevated: CommandString::constant("sudo -k -n mkdir ~/.smoozy-carriage/create-package-area/smoozy"),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S mkdir ~/.smoozy-carriage/create-package-area/smoozy",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh mkdir ~/.smoozy-carriage/create-package-area/smoozy",
     ),
 };
+
+/// **S7b's refusal for a lock still held when the bounded wait ended** —
+/// apt's own words, as `Server Setup` S7b quotes them from apt's source:
+/// *"Unable to acquire the dpkg frontend lock (%s), is another process using
+/// it?"*. The part before the lock's path is matched, and nothing wider.
+pub const THE_LOCK_WAS_STILL_HELD: &str = "Unable to acquire the dpkg frontend lock";
+
+/// **S7b's *busy*, read off a failed step's words** — so the step is said as
+/// *the machine is busy with its own updates* rather than in the package
+/// tool's words alone (the Rough what-if answers, share 2, 139).
+pub fn the_machine_was_busy_with_its_own_updates(words: &str) -> bool {
+    words.contains(THE_LOCK_WAS_STILL_HELD)
+}
 
 /// **R1 item 3's tooling install** — the one unpack tool Blender's archives
 /// need, a constant package name, installed where absent.
@@ -234,10 +270,10 @@ pub const THE_TOOLING_INSTALL: AnElevatedStep = AnElevatedStep {
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::AnElevatedPackageInstall,
     plain: CommandString::constant("apt-get -o DPkg::Lock::Timeout=120 install -y xz-utils"),
     elevated: CommandString::constant(
-        "sudo -n apt-get -o DPkg::Lock::Timeout=120 install -y xz-utils",
+        "sudo -k -n apt-get -o DPkg::Lock::Timeout=120 install -y xz-utils",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S apt-get -o DPkg::Lock::Timeout=120 install -y xz-utils",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh apt-get -o DPkg::Lock::Timeout=120 install -y xz-utils",
     ),
 };
 
@@ -270,11 +306,11 @@ pub const THE_LIBRARIES_INSTALL_FOR_THE_FIRST_ENTRY: AnElevatedStep = AnElevated
          libxrender1 libgl1 libegl1 libsm6 libice6 libxkbcommon0 libxext6",
     ),
     elevated: CommandString::constant(
-        "sudo -n apt-get -o DPkg::Lock::Timeout=120 install -y libx11-6 libxi6 libxxf86vm1 \
+        "sudo -k -n apt-get -o DPkg::Lock::Timeout=120 install -y libx11-6 libxi6 libxxf86vm1 \
          libxfixes3 libxrender1 libgl1 libegl1 libsm6 libice6 libxkbcommon0 libxext6",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S apt-get -o DPkg::Lock::Timeout=120 install -y libx11-6 libxi6 libxxf86vm1 \
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh apt-get -o DPkg::Lock::Timeout=120 install -y libx11-6 libxi6 libxxf86vm1 \
          libxfixes3 libxrender1 libgl1 libegl1 libsm6 libice6 libxkbcommon0 libxext6",
     ),
 };
@@ -298,10 +334,10 @@ pub const THE_UBUNTU_DRIVER_TOOL_INSTALL: AnElevatedStep = AnElevatedStep {
         "apt-get -o DPkg::Lock::Timeout=120 install -y ubuntu-drivers-common",
     ),
     elevated: CommandString::constant(
-        "sudo -n apt-get -o DPkg::Lock::Timeout=120 install -y ubuntu-drivers-common",
+        "sudo -k -n apt-get -o DPkg::Lock::Timeout=120 install -y ubuntu-drivers-common",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S apt-get -o DPkg::Lock::Timeout=120 install -y ubuntu-drivers-common",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh apt-get -o DPkg::Lock::Timeout=120 install -y ubuntu-drivers-common",
     ),
 };
 
@@ -333,8 +369,8 @@ pub const THE_UBUNTU_DRIVER_INSTALL: AnElevatedStep = AnElevatedStep {
     // **Y1's class for this act.** R1 item 5's Ubuntu route.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::ADriverAct,
     plain: CommandString::constant("ubuntu-drivers install --gpgpu"),
-    elevated: CommandString::constant("sudo -n ubuntu-drivers install --gpgpu"),
-    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -S ubuntu-drivers install --gpgpu"),
+    elevated: CommandString::constant("sudo -k -n ubuntu-drivers install --gpgpu"),
+    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh ubuntu-drivers install --gpgpu"),
 };
 
 /// **M1b's Ubuntu driver route, its last act: the driver support binaries the
@@ -472,13 +508,13 @@ pub const THE_UBUNTU_DRIVER_SUPPORT_BINARIES_INSTALL: AnElevatedStep = AnElevate
          sed -e \"s/^.*-\\([0-9][0-9]*\\)/\\1/\" -e \"s/-open//\")\"'",
     ),
     elevated: CommandString::constant(
-        "sudo -n sh -c 'apt-get -o DPkg::Lock::Timeout=120 install -y \
+        "sudo -k -n sh -c 'apt-get -o DPkg::Lock::Timeout=120 install -y \
          \"nvidia-utils-$(dpkg-query -W -f \"\\${db:Status-Abbrev}\\${Package}\\n\" \
          \"nvidia-headless-no-dkms-*\" | grep \"^.i\" | head -n 1 | \
          sed -e \"s/^.*-\\([0-9][0-9]*\\)/\\1/\" -e \"s/-open//\")\"'",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S sh -c 'apt-get -o DPkg::Lock::Timeout=120 install -y \
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh sh -c 'apt-get -o DPkg::Lock::Timeout=120 install -y \
          \"nvidia-utils-$(dpkg-query -W -f \"\\${db:Status-Abbrev}\\${Package}\\n\" \
          \"nvidia-headless-no-dkms-*\" | grep \"^.i\" | head -n 1 | \
          sed -e \"s/^.*-\\([0-9][0-9]*\\)/\\1/\" -e \"s/-open//\")\"'",
@@ -558,7 +594,7 @@ pub const THE_UBUNTU_OPTIX_LIBRARY_INSTALL: AnElevatedStep = AnElevatedStep {
          sed -e \"s/^.*-\\([0-9][0-9]*\\)/\\1/\" -e \"s/-open//\")\"'",
     ),
     elevated: CommandString::constant(
-        "sudo -n sh -c 'LD_TRACE_LOADED_OBJECTS=1 LD_PRELOAD=libnvoptix.so.1 sh 2>/dev/null \
+        "sudo -k -n sh -c 'LD_TRACE_LOADED_OBJECTS=1 LD_PRELOAD=libnvoptix.so.1 sh 2>/dev/null \
          | grep -F -q \"libnvoptix.so.1 => /\" || \
          apt-get -o DPkg::Lock::Timeout=120 install -y \
          \"libnvidia-gl-$(dpkg-query -W -f \"\\${db:Status-Abbrev}\\${Package}\\n\" \
@@ -566,7 +602,7 @@ pub const THE_UBUNTU_OPTIX_LIBRARY_INSTALL: AnElevatedStep = AnElevatedStep {
          sed -e \"s/^.*-\\([0-9][0-9]*\\)/\\1/\" -e \"s/-open//\")\"'",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S sh -c 'LD_TRACE_LOADED_OBJECTS=1 LD_PRELOAD=libnvoptix.so.1 sh 2>/dev/null \
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh sh -c 'LD_TRACE_LOADED_OBJECTS=1 LD_PRELOAD=libnvoptix.so.1 sh 2>/dev/null \
          | grep -F -q \"libnvoptix.so.1 => /\" || \
          apt-get -o DPkg::Lock::Timeout=120 install -y \
          \"libnvidia-gl-$(dpkg-query -W -f \"\\${db:Status-Abbrev}\\${Package}\\n\" \
@@ -680,9 +716,9 @@ pub const THE_UBUNTU_DRIVER_SWAPS_FINISH: AnElevatedStep = AnElevatedStep {
     // **Y1's class for this act.** R1 item 5's driver route.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::ADriverAct,
     plain: CommandString::constant(the_ubuntu_driver_swaps_finish!()),
-    elevated: CommandString::constant(concat!("sudo -n ", the_ubuntu_driver_swaps_finish!())),
+    elevated: CommandString::constant(concat!("sudo -k -n ", the_ubuntu_driver_swaps_finish!())),
     elevated_reading_the_password_from_standard_input: CommandString::constant(concat!(
-        "sudo -S ",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh ",
         the_ubuntu_driver_swaps_finish!()
     )),
 };
@@ -807,9 +843,9 @@ pub const THE_UBUNTU_DRIVER_SWAP: AnElevatedStep = AnElevatedStep {
     // installs a driver.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::ADriverAct,
     plain: CommandString::constant(the_ubuntu_driver_swap!()),
-    elevated: CommandString::constant(concat!("sudo -n ", the_ubuntu_driver_swap!())),
+    elevated: CommandString::constant(concat!("sudo -k -n ", the_ubuntu_driver_swap!())),
     elevated_reading_the_password_from_standard_input: CommandString::constant(concat!(
-        "sudo -S ",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh ",
         the_ubuntu_driver_swap!()
     )),
 };
@@ -824,10 +860,10 @@ pub const THE_DEBIAN_DRIVER_INSTALL: AnElevatedStep = AnElevatedStep {
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::ADriverAct,
     plain: CommandString::constant("apt-get -o DPkg::Lock::Timeout=120 install nvidia-driver"),
     elevated: CommandString::constant(
-        "sudo -n apt-get -o DPkg::Lock::Timeout=120 install nvidia-driver",
+        "sudo -k -n apt-get -o DPkg::Lock::Timeout=120 install nvidia-driver",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S apt-get -o DPkg::Lock::Timeout=120 install nvidia-driver",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh apt-get -o DPkg::Lock::Timeout=120 install nvidia-driver",
     ),
 };
 
@@ -853,8 +889,8 @@ pub const THE_LIST_UPDATE: AnElevatedStep = AnElevatedStep {
     // that install's own class before anything goes out.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::ADriverAct,
     plain: CommandString::constant("apt-get -o DPkg::Lock::Timeout=120 update"),
-    elevated: CommandString::constant("sudo -n apt-get -o DPkg::Lock::Timeout=120 update"),
-    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -S apt-get -o DPkg::Lock::Timeout=120 update"),
+    elevated: CommandString::constant("sudo -k -n apt-get -o DPkg::Lock::Timeout=120 update"),
+    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh apt-get -o DPkg::Lock::Timeout=120 update"),
 };
 
 /// **S7d: every package install of a setup run, on either family, is preceded
@@ -895,9 +931,10 @@ pub const THE_LIST_UPDATE: AnElevatedStep = AnElevatedStep {
 ///   binaries' two reasons: it is issued in the same step directly after them,
 ///   and its lookup, its read and its install are one command. Added
 ///   2026-10-03.
-/// - [`THE_REPAIRS_SECOND_COMMAND`] — not in this list: S7's repair, which no
-///   route issues, and whether a refresh may go in front of the repair of an
-///   interrupted transaction is not read.
+/// - [`THE_REPAIRS_SECOND_COMMAND`] — not in this list: S7's repair, ~~which no
+///   route issues~~ which [`issue`] sends itself from 2026-11-11, after a step
+///   apt refused over an interrupted dpkg; and whether a refresh may go in
+///   front of the repair of an interrupted transaction is not read.
 /// - [`THE_MANAGER_ROUTE_REMOVAL`] — a removal, and not through `apt-get`.
 ///
 /// **Held by [`tests::every_apt_install_is_refreshed_first_or_says_why_not`].**
@@ -924,10 +961,10 @@ pub const THE_COMPONENTS_WRITE: AnElevatedStep = AnElevatedStep {
         "cp ~/.smoozy-carriage/debian-sources /etc/apt/sources.list.d/debian.sources",
     ),
     elevated: CommandString::constant(
-        "sudo -n cp ~/.smoozy-carriage/debian-sources /etc/apt/sources.list.d/debian.sources",
+        "sudo -k -n cp ~/.smoozy-carriage/debian-sources /etc/apt/sources.list.d/debian.sources",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S cp ~/.smoozy-carriage/debian-sources /etc/apt/sources.list.d/debian.sources",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh cp ~/.smoozy-carriage/debian-sources /etc/apt/sources.list.d/debian.sources",
     ),
 };
 
@@ -940,11 +977,21 @@ pub const THE_REPAIRS_FIRST_COMMAND: AnElevatedStep = AnElevatedStep {
     // however the command is spelled.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::AnElevatedPackageInstall,
     plain: crate::recovery::THE_REPAIR_OPERATION[0],
-    elevated: CommandString::constant("sudo -n dpkg --configure -a"),
-    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -S dpkg --configure -a"),
+    elevated: CommandString::constant("sudo -k -n dpkg --configure -a"),
+    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh dpkg --configure -a"),
 };
 
-/// **S7's repair operation, second command.**
+/// **S7's repair operation, second command — and the repair apt itself names
+/// where it refuses over unmet dependencies.**
+///
+/// `apt-get(8)`, apt 2.8.3,
+/// `https://manpages.ubuntu.com/manpages/noble/en/man8/apt-get.8.html`, read
+/// 2026-11-12, of `-f, --fix-broken`: *"Fix; attempt to correct a system with
+/// broken dependencies in place. This option, when used with install/remove,
+/// can omit any packages to permit APT to deduce a likely solution."* **It
+/// carries `-y` from that date**, quoted at
+/// `smoozy_server_setup_machine`'s `recovery::THE_REPAIR_OPERATION`: assent,
+/// and nothing forced.
 pub const THE_REPAIRS_SECOND_COMMAND: AnElevatedStep = AnElevatedStep {
     what_it_does: "fix what the interrupted transaction broke",
     // **Y1's class for this act.** S7's repair, second command, and the same
@@ -952,12 +999,89 @@ pub const THE_REPAIRS_SECOND_COMMAND: AnElevatedStep = AnElevatedStep {
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::AnElevatedPackageInstall,
     plain: crate::recovery::THE_REPAIR_OPERATION[1],
     elevated: CommandString::constant(
-        "sudo -n apt-get -o DPkg::Lock::Timeout=120 --fix-broken install",
+        "sudo -k -n apt-get -o DPkg::Lock::Timeout=120 --fix-broken install -y",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S apt-get -o DPkg::Lock::Timeout=120 --fix-broken install",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh apt-get -o DPkg::Lock::Timeout=120 --fix-broken install -y",
     ),
 };
+
+/// **S7's repair for a driver act that stopped on a file two packages claim:
+/// apt's own repair, with dpkg told to overwrite.** Added 2026-11-12, the live
+/// pass's new fault 1.
+///
+/// **What the pass met.** The app was closed during the driver swap's removal.
+/// The removal ran on by itself: the old driver went, and apt pulled in
+/// `libnvidia-cfg1` of a newer driver from NVIDIA's own archive on the image.
+/// The next setup's driver install was refused by dpkg (*trying to overwrite
+/// '/usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1', which is also in package
+/// libnvidia-cfg1:amd64 620.70.06-1ubuntu1*), apt then refused over unmet
+/// dependencies, and [`THE_REPAIRS_SECOND_COMMAND`] stopped on the same file.
+/// Every later setup did the same, on a server with no driver.
+///
+/// **What the publications say, all read 2026-11-12.**
+///
+/// - Debian Policy 4.7.4.1, §7.6.1,
+///   `https://www.debian.org/doc/debian-policy/ch-relationships.html`: *"It is
+///   usually an error for a package to contain files which are on the system
+///   in another package."* The declared way round it is the package's own
+///   `Replaces`, which these two packages from two archives do not carry.
+/// - apt-get(8), apt 2.6.1,
+///   `https://manpages.debian.org/bookworm/apt/apt-get.8.en.html`, of
+///   `--fix-broken`: *"It is possible that a system's dependency structure can
+///   be so corrupt as to require manual intervention (which usually means
+///   using dpkg --remove to eliminate some of the offending packages)."* So
+///   apt's repair is not promised to mend this, and it did not.
+/// - dpkg(1), dpkg 1.22.6ubuntu6.6,
+///   `https://manpages.ubuntu.com/manpages/noble/en/man1/dpkg.1.html`, of the
+///   force option `overwrite`: *"Overwrite one package's file with another's
+///   file."* And of every force option: *"These options are mostly intended to
+///   be used by experts only. Using them without fully understanding their
+///   effects may break your whole system."*
+///
+/// **Why the overwrite, and not removing the other package.** The package to
+/// remove is named only in the machine's own words, and no machine-origin
+/// value enters a command string (`Server protocol and transfers` §1.1). The
+/// overwrite is the same option the swap's removal and install already carry
+/// for this same file ([`THE_UBUNTU_DRIVER_SWAP`], points 6 and 7), **observed**
+/// by hand on a half-removed machine on 2026-11-03 to end at exit 0 with the
+/// driver answering after a restart. **It is not observed for this repair**:
+/// the next live pass is what proves it.
+///
+/// **How narrow it is.** Sent only after a driver act, and only where the act
+/// or apt's plain repair printed dpkg's own sentence
+/// ([`DPKGS_REFUSAL_OVER_A_FILE_TWO_PACKAGES_CLAIM_HOLDS`]). Never for a
+/// package step that is not a driver act.
+pub const THE_DRIVER_REPAIR_OVER_A_FILE_TWO_PACKAGES_CLAIM: AnElevatedStep = AnElevatedStep {
+    what_it_does: "fix a driver install that stopped on a file two packages claim",
+    // **Y1's class for this act.** S7's repair, on a driver route.
+    what_it_does_to_the_machine: WhatAnActDoesToTheMachine::AnElevatedPackageInstall,
+    plain: CommandString::constant(
+        "apt-get -o DPkg::Lock::Timeout=120 -o Dpkg::Options::=--force-overwrite --fix-broken install -y",
+    ),
+    elevated: CommandString::constant(
+        "sudo -k -n apt-get -o DPkg::Lock::Timeout=120 -o Dpkg::Options::=--force-overwrite --fix-broken install -y",
+    ),
+    elevated_reading_the_password_from_standard_input: CommandString::constant(
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh apt-get -o DPkg::Lock::Timeout=120 -o Dpkg::Options::=--force-overwrite --fix-broken install -y",
+    ),
+};
+
+/// **The fixed part of dpkg's refusal of a file another package holds.**
+/// Added 2026-11-12, the live pass's new fault 1.
+///
+/// dpkg's own source, `src/main/archives.c`, read 2026-11-12 at
+/// `https://salsa.debian.org/dpkg-team/dpkg/-/raw/main/src/main/archives.c`:
+/// `forcibleerr(FORCE_OVERWRITE, _("trying to overwrite '%s', " "which is also
+/// in package %s (%s)"), ...)`. **Observed** on a rented Ubuntu 22.04 machine
+/// the same day in an older spelling of the end, *"…', which is also in
+/// package libnvidia-cfg1:amd64 620.70.06-1ubuntu1"*, so what is matched is
+/// the part the two share.
+///
+/// **One exact constant is matched, or nothing is concluded** (`Security and
+/// licence` §13 rule 5). In another language it is not met and the plain
+/// repair's failure stays the answer.
+pub const DPKGS_REFUSAL_OVER_A_FILE_TWO_PACKAGES_CLAIM_HOLDS: &str = "which is also in package";
 
 /// **T1's restart**, issued over the connection Smoozy already holds, only on
 /// the systemd kind, and only as part of a setup step that needs it.
@@ -967,8 +1091,8 @@ pub const THE_RESTART: AnElevatedStep = AnElevatedStep {
     // `Rented-server runtime` P4 requires the state to be durable before.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::ARestart,
     plain: crate::restart::THE_RESTART,
-    elevated: CommandString::constant("sudo -n systemctl reboot"),
-    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -S systemctl reboot"),
+    elevated: CommandString::constant("sudo -k -n systemctl reboot"),
+    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh systemctl reboot"),
 };
 
 /// **B15's manager-route removal, under the one package name this module may
@@ -984,8 +1108,8 @@ pub const THE_MANAGER_ROUTE_REMOVAL: AnElevatedStep = AnElevatedStep {
     // not help with it.
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: CommandString::constant("snap remove blender"),
-    elevated: CommandString::constant("sudo -n snap remove blender"),
-    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -S snap remove blender"),
+    elevated: CommandString::constant("sudo -k -n snap remove blender"),
+    elevated_reading_the_password_from_standard_input: CommandString::constant("sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh snap remove blender"),
 };
 
 /// **B11's elevated search retry** — *"the same constant search command as the
@@ -1012,10 +1136,10 @@ pub const THE_ELEVATED_SEARCH: AnElevatedStep = AnElevatedStep {
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: crate::readings::THE_SEARCH,
     elevated: CommandString::constant(
-        "sudo -n find / -path /proc -prune -o -path /sys -prune -o -name blender ! -type d -print",
+        "sudo -k -n find / -path /proc -prune -o -path /sys -prune -o -name blender ! -type d -print",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S find / -path /proc -prune -o -path /sys -prune -o -name blender ! -type d -print",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh find / -path /proc -prune -o -path /sys -prune -o -name blender ! -type d -print",
     ),
 };
 
@@ -1048,10 +1172,10 @@ pub const THE_CONTAINER_HOOKS_COPY: AnElevatedStep = AnElevatedStep {
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: CommandString::constant("cp ~/.smoozy-carriage/container-hook /root/onstart.sh"),
     elevated: CommandString::constant(
-        "sudo -n cp ~/.smoozy-carriage/container-hook /root/onstart.sh",
+        "sudo -k -n cp ~/.smoozy-carriage/container-hook /root/onstart.sh",
     ),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S cp ~/.smoozy-carriage/container-hook /root/onstart.sh",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh cp ~/.smoozy-carriage/container-hook /root/onstart.sh",
     ),
 };
 
@@ -1068,9 +1192,9 @@ pub const THE_CONTAINER_HOOK_MADE_READABLE: AnElevatedStep = AnElevatedStep {
     // **Y1's class for this act.** A mode change. **Not one of Y1's three.**
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: CommandString::constant("chmod a+r /root/onstart.sh"),
-    elevated: CommandString::constant("sudo -n chmod a+r /root/onstart.sh"),
+    elevated: CommandString::constant("sudo -k -n chmod a+r /root/onstart.sh"),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S chmod a+r /root/onstart.sh",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh chmod a+r /root/onstart.sh",
     ),
 };
 
@@ -1085,9 +1209,9 @@ pub const THE_CONTAINER_HOOKS_DIRECTORY_MADE_REACHABLE: AnElevatedStep = AnEleva
     // **Y1's class for this act.** A mode change. **Not one of Y1's three.**
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: CommandString::constant("chmod a+x /root"),
-    elevated: CommandString::constant("sudo -n chmod a+x /root"),
+    elevated: CommandString::constant("sudo -k -n chmod a+x /root"),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S chmod a+x /root",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh chmod a+x /root",
     ),
 };
 
@@ -1105,9 +1229,9 @@ pub const THE_CONTAINER_HOOKS_READ: AnElevatedStep = AnElevatedStep {
     // **Y1's class for this act.** A reading. **It changes nothing.**
     what_it_does_to_the_machine: WhatAnActDoesToTheMachine::NoneOfY1sThree,
     plain: CommandString::constant("cat /root/onstart.sh"),
-    elevated: CommandString::constant("sudo -n cat /root/onstart.sh"),
+    elevated: CommandString::constant("sudo -k -n cat /root/onstart.sh"),
     elevated_reading_the_password_from_standard_input: CommandString::constant(
-        "sudo -S cat /root/onstart.sh",
+        "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh cat /root/onstart.sh",
     ),
 };
 
@@ -1340,10 +1464,22 @@ pub struct WhatTheElevatedStepSaid {
 /// no second attempt on either — rate limiting corrupts the diagnosis
 /// (`Security and licence` §4).
 ///
-/// **An elevated command's process is the connection's child**, so a connection
-/// lost mid-step kills the step mid-flight and the boundary then honestly names
-/// the last one passed — which is Y7's own sentence and Fact 49's hard-cut
-/// shape.
+/// **An elevated command's process is the connection's child.** Y7's own
+/// sentence goes on: a connection lost mid-step kills the step mid-flight, and
+/// the boundary then honestly names the last one passed (Fact 49's hard-cut
+/// shape). **That the step is killed is not established** (Y8, *whether the
+/// step on the machine ends*, 2026-11-12): no terminal is asked for and no
+/// signal is sent, a stop only closes the channel, and OpenSSH's manuals say
+/// when a session ends, not what becomes of a command whose session went.
+/// What holds without it: the run ends at the last boundary passed, and a
+/// package step sent beside one still running waits on the package system's
+/// own lock (S7b).
+///
+/// **S7: a package step or a driver act that apt refuses over an interrupted
+/// dpkg is followed by the repair operation and sent once more.** Added
+/// 2026-11-11. It is done here for the reason S7d's refresh is: this is the one
+/// place every elevated command leaves from. [`apt_refused_it_over_an_interrupted_dpkg`]
+/// is the reading.
 ///
 /// **S7d: an install in [`THE_INSTALLS_THE_LISTS_ARE_REFRESHED_BEFORE`] is
 /// preceded by [`THE_LIST_UPDATE`], in the same form.** Added 2026-09-22. It is
@@ -1369,7 +1505,204 @@ pub async fn issue(
             return Ok(refreshed);
         }
     }
-    issue_one(channel, step, how).await
+    let said = issue_one(channel, step, how).await?;
+    // **S7's second sentence: unmet dependencies.** The repair apt names is
+    // the whole repair there, so where it fails it is the answer; a failed
+    // validate is a failure too, so E6 is kept by the same line.
+    // **Where one refusal holds both sentences the interrupted one decides**,
+    // since apt's repair cannot run over a dirty journal: the whole repair
+    // below goes out, whose second command is this one.
+    // **S7 as added 2026-11-12: a driver act that stopped on a file two
+    // packages claim.** apt's plain repair stops on the same file, so it is
+    // not sent: the repair with the overwrite goes out, and the act once
+    // more. Where that repair fails it is the answer. An interrupted dpkg
+    // still decides first.
+    if dpkg_refused_a_file_two_packages_claim(step, &said)
+        && !apt_refused_it_over_an_interrupted_dpkg(step, &said)
+    {
+        let forced =
+            issue_one(channel, THE_DRIVER_REPAIR_OVER_A_FILE_TWO_PACKAGES_CLAIM, how).await?;
+        if !forced.it_ended_cleanly {
+            return Ok(forced);
+        }
+        return issue_one(channel, step, how).await;
+    }
+    if apt_refused_it_over_unmet_dependencies(step, &said)
+        && !apt_refused_it_over_an_interrupted_dpkg(step, &said)
+    {
+        let fixed = issue_one(channel, THE_REPAIRS_SECOND_COMMAND, how).await?;
+        if !fixed.it_ended_cleanly {
+            // **Where it is the plain repair that printed dpkg's sentence**,
+            // which is what a second *Set up again* meets: apt refuses the
+            // act before dpkg runs, and the file shows only here.
+            if !the_plain_repair_stopped_on_a_file_two_packages_claim(step, &fixed) {
+                return Ok(fixed);
+            }
+            let forced =
+                issue_one(channel, THE_DRIVER_REPAIR_OVER_A_FILE_TWO_PACKAGES_CLAIM, how).await?;
+            if !forced.it_ended_cleanly {
+                return Ok(forced);
+            }
+        }
+        return issue_one(channel, step, how).await;
+    }
+    if !apt_refused_it_over_an_interrupted_dpkg(step, &said) {
+        return Ok(said);
+    }
+    // **S7's repair, and the step once more.** The first command clears
+    // dpkg's journal, so where it fails it is the answer and the step is not
+    // sent again. The second's own failure does not hold the step back: the
+    // step's own package command then says what is still wrong.
+    let configured = issue_one(channel, THE_REPAIRS_FIRST_COMMAND, how).await?;
+    if !configured.it_ended_cleanly {
+        return Ok(configured);
+    }
+    let fixed = issue_one(channel, THE_REPAIRS_SECOND_COMMAND, how).await?;
+    // **E6: a validate that failed is the answer, and nothing carrying the
+    // password follows it.** Only the operation's own failure is let through.
+    if !matches!(
+        fixed.what_it_met,
+        WhatTheStepMet::ASuccessfulOperationAfterASuccessfulValidate
+            | WhatTheStepMet::AFailedOperationAfterASuccessfulValidate
+    ) {
+        return Ok(fixed);
+    }
+    let again = issue_one(channel, step, how).await?;
+    // **S7 as added 2026-11-12, after an interrupted dpkg too** (Sol's look,
+    // that day): the journal is cleared, and the file two packages claim
+    // shows in the plain repair's words or in the act's second sending. The
+    // overwrite repair then goes out and the act is sent a last time.
+    if dpkg_refused_a_file_two_packages_claim(step, &again)
+        || (the_repair_may_follow(step, &again)
+            && the_plain_repair_stopped_on_a_file_two_packages_claim(step, &fixed))
+    {
+        let forced =
+            issue_one(channel, THE_DRIVER_REPAIR_OVER_A_FILE_TWO_PACKAGES_CLAIM, how).await?;
+        if !forced.it_ended_cleanly {
+            return Ok(forced);
+        }
+        return issue_one(channel, step, how).await;
+    }
+    Ok(again)
+}
+
+/// **The fixed opening of apt's refusal over an interrupted dpkg**, S7's
+/// *the package system reports itself interrupted*.
+///
+/// apt's own source, `apt-pkg/deb/debsystem.cc`, read 2026-11-11 at
+/// `https://salsa.debian.org/apt-team/apt/-/raw/main/apt-pkg/deb/debsystem.cc`:
+/// `debSystem::Lock` — *"// See if we need to abort with a dirty journal"*,
+/// `if (CheckUpdates() == true)` — ends in
+/// `_error->Error(_("dpkg was interrupted, you must manually " "run '%s' to
+/// correct the problem. "), cmd)`, where `cmd` is `"sudo dpkg --configure -a"`
+/// if `getenv("SUDO_USER") != NULL` and `"dpkg --configure -a"` otherwise.
+/// **So the command inside the sentence differs under the elevating command,
+/// and what is matched is the part in front of it.**
+///
+/// **One exact constant is matched, or nothing is concluded** (`Security and
+/// licence` §13 rule 5). The sentence is apt's to translate; in another
+/// language it is not met and no repair is sent, which is how every route
+/// stood before 2026-11-11.
+pub const APTS_REFUSAL_OVER_AN_INTERRUPTED_DPKG_OPENS: &str =
+    "dpkg was interrupted, you must manually run '";
+
+/// **The fixed part of apt's refusal over unmet dependencies**, S7's second
+/// sentence. Added 2026-11-12, the night pass's new fault 1.
+///
+/// apt's own source, `apt-private/private-install.cc`, read 2026-11-12 at
+/// `https://salsa.debian.org/apt-team/apt/-/raw/main/apt-private/private-install.cc`:
+/// *"If we are in the Broken fixing mode we do not attempt to fix the
+/// problems. This is if the user invoked install without -f and gave
+/// packages"* — `if (BrokenFix == true && Cache->BrokenCount() != 0)` — and
+/// `_error->Error(_("Unmet dependencies. Try 'apt --fix-broken install' with
+/// no packages (or specify a solution)."))`. **Observed** in those words on a
+/// rented machine, 2026-11-11 (the pass's picture 04).
+///
+/// **One exact constant is matched, or nothing is concluded** (`Security and
+/// licence` §13 rule 5), as for the sentence below.
+pub const APTS_REFUSAL_OVER_UNMET_DEPENDENCIES_HOLDS: &str =
+    "Unmet dependencies. Try 'apt --fix-broken install'";
+
+/// **S7: whether a step that ended unclean is one apt refused over unmet
+/// dependencies**, on the same terms as
+/// [`apt_refused_it_over_an_interrupted_dpkg`].
+fn apt_refused_it_over_unmet_dependencies(
+    step: AnElevatedStep,
+    said: &WhatTheElevatedStepSaid,
+) -> bool {
+    the_repair_may_follow(step, said)
+        && said
+            .the_machines_own_words
+            .contains(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES_HOLDS)
+}
+
+/// **S7: whether a step that ended unclean is the one the repair is for.**
+/// Added 2026-11-11, the Fable review's third sitting.
+///
+/// Only a package step or a driver act, never the repair's own two commands,
+/// and only on [`APTS_REFUSAL_OVER_AN_INTERRUPTED_DPKG_OPENS`] in the step's
+/// complaint stream. S7b's *busy* is another sentence and is repaired by
+/// nothing.
+fn apt_refused_it_over_an_interrupted_dpkg(
+    step: AnElevatedStep,
+    said: &WhatTheElevatedStepSaid,
+) -> bool {
+    the_repair_may_follow(step, said)
+        && said
+            .the_machines_own_words
+            .contains(APTS_REFUSAL_OVER_AN_INTERRUPTED_DPKG_OPENS)
+}
+
+/// **S7 as added 2026-11-12: whether a driver act that ended unclean printed
+/// dpkg's refusal of a file another package holds**
+/// ([`DPKGS_REFUSAL_OVER_A_FILE_TWO_PACKAGES_CLAIM_HOLDS`]). **A driver act
+/// only**: no other package step is ever sent the overwrite.
+fn dpkg_refused_a_file_two_packages_claim(
+    step: AnElevatedStep,
+    said: &WhatTheElevatedStepSaid,
+) -> bool {
+    the_repair_may_follow(step, said)
+        && step.what_it_does_to_the_machine == WhatAnActDoesToTheMachine::ADriverAct
+        && dpkgs_sentence_is_on_either_stream(said)
+}
+
+/// **S7, *where dpkg's sentence is printed* (added 2026-11-12, the second
+/// live pass's fault 1): on either stream.** apt runs dpkg on a
+/// pseudo-terminal and writes what dpkg prints to apt's own standard output,
+/// so under apt the sentence is on the standard output and only apt's `E:`
+/// lines are on the complaint stream. The complaint stream alone was read
+/// until that pass, which saw the plain repair sent on every run and the
+/// overwrite never.
+fn dpkgs_sentence_is_on_either_stream(said: &WhatTheElevatedStepSaid) -> bool {
+    said.the_machines_own_words
+        .contains(DPKGS_REFUSAL_OVER_A_FILE_TWO_PACKAGES_CLAIM_HOLDS)
+        || String::from_utf8_lossy(&said.the_standard_output)
+            .contains(DPKGS_REFUSAL_OVER_A_FILE_TWO_PACKAGES_CLAIM_HOLDS)
+}
+
+/// The same sentence, printed by apt's plain repair sent after a driver act.
+fn the_plain_repair_stopped_on_a_file_two_packages_claim(
+    step: AnElevatedStep,
+    repair_said: &WhatTheElevatedStepSaid,
+) -> bool {
+    step.what_it_does_to_the_machine == WhatAnActDoesToTheMachine::ADriverAct
+        && repair_said.what_it_met == WhatTheStepMet::AFailedOperationAfterASuccessfulValidate
+        && dpkgs_sentence_is_on_either_stream(repair_said)
+}
+
+/// What both of S7's sentences share: the operation itself failed, on a
+/// package step or a driver act that is not one of the repair's own.
+fn the_repair_may_follow(step: AnElevatedStep, said: &WhatTheElevatedStepSaid) -> bool {
+    !said.it_ended_cleanly
+        && said.what_it_met == WhatTheStepMet::AFailedOperationAfterASuccessfulValidate
+        && matches!(
+            step.what_it_does_to_the_machine,
+            WhatAnActDoesToTheMachine::AnElevatedPackageInstall
+                | WhatAnActDoesToTheMachine::ADriverAct
+        )
+        && step != THE_REPAIRS_FIRST_COMMAND
+        && step != THE_REPAIRS_SECOND_COMMAND
+        && step != THE_DRIVER_REPAIR_OVER_A_FILE_TWO_PACKAGES_CLAIM
 }
 
 /// **One elevated command, in E4's order, and nothing in front of it.**
@@ -1399,51 +1732,63 @@ async fn issue_one(
             }),
             Err(_) => Err(WhyTheStepDidNotRun::TheRequestDidNotReachTheMachine),
         },
+        // **E3 and E4 as changed 2026-11-12: the password goes once, to the
+        // step itself, under `sudo -k`, and no validate is sent.** A failed
+        // step that wrote [`THE_COMMAND_FAILED_LINE`] ran and failed; one
+        // that did not was refused by the elevating command before anything
+        // ran, and its text is read as a failed validate's was.
         HowElevationIsObtained::APasswordIsHeld(password) => {
-            let validate = channel
-                .run_carrying_a_value_on_its_standard_input(
-                    THE_VALIDATE_FORM,
-                    password.for_a_destination(),
-                )
-                .await
-                .map_err(|_| WhyTheStepDidNotRun::TheRequestDidNotReachTheMachine)?;
-
-            if !validate.ended_cleanly() {
-                let words = String::from_utf8_lossy(&validate.complaint).into_owned();
-                return Ok(WhatTheElevatedStepSaid {
-                    // **Nothing ran.** The validate runs no command, so the step
-                    // did not end cleanly and did not end at all.
-                    it_ended_cleanly: false,
-                    the_standard_output: Vec::new(),
-                    // **The reading of the captured text is `Security and
-                    // licence` §13 rule 5's** and is made in that crate, not
-                    // here: one exact constant is matched, or nothing is
-                    // concluded.
-                    what_it_met: what_a_failed_validate_means(true, false, false, &words),
-                    the_machines_own_words: words,
-                });
-            }
-
-            match channel
+            let result = channel
                 .run_carrying_a_value_on_its_standard_input(
                     step.elevated_reading_the_password_from_standard_input,
                     password.for_a_destination(),
                 )
                 .await
-            {
-                Ok(result) => Ok(WhatTheElevatedStepSaid {
-                    it_ended_cleanly: result.ended_cleanly(),
-                    // **E4's third bullet.** The validate passed, so whatever
-                    // the operation did is the operation's, and it forgets
-                    // nothing either way.
-                    what_it_met: what_the_operation_met(result.ended_cleanly()),
+                .map_err(|_| WhyTheStepDidNotRun::TheRequestDidNotReachTheMachine)?;
+            let words = String::from_utf8_lossy(&result.complaint).into_owned();
+            if result.ended_cleanly() {
+                return Ok(WhatTheElevatedStepSaid {
+                    it_ended_cleanly: true,
+                    what_it_met: what_the_operation_met(true),
                     the_standard_output: result.output,
-                    the_machines_own_words: String::from_utf8_lossy(&result.complaint).into_owned(),
+                    the_machines_own_words: words,
+                });
+            }
+            match the_words_without_the_failed_line(&words) {
+                // **E4's third bullet.** The step ran, so whatever it did is
+                // the operation's, and it forgets nothing.
+                Some(the_steps_own) => Ok(WhatTheElevatedStepSaid {
+                    it_ended_cleanly: false,
+                    what_it_met: what_the_operation_met(false),
+                    the_standard_output: result.output,
+                    the_machines_own_words: the_steps_own,
                 }),
-                Err(_) => Err(WhyTheStepDidNotRun::TheRequestDidNotReachTheMachine),
+                // **E4's first two bullets.** Nothing ran. **The reading of
+                // the captured text is `Security and licence` §13 rule 5's**
+                // and is made in that crate: one exact constant is matched,
+                // or nothing is concluded.
+                None => Ok(WhatTheElevatedStepSaid {
+                    it_ended_cleanly: false,
+                    the_standard_output: Vec::new(),
+                    what_it_met: what_a_failed_validate_means(true, false, false, &words),
+                    the_machines_own_words: words,
+                }),
             }
         }
     }
+}
+
+/// **E4 as changed 2026-11-12 — the step's own words, with
+/// [`THE_COMMAND_FAILED_LINE`] taken off**, or nothing where the line is not
+/// there and so the step never ran. The line is the last thing the step's
+/// `sh -c` writes, so it is looked for as a whole line, last.
+fn the_words_without_the_failed_line(words: &str) -> Option<String> {
+    let trimmed = words.trim_end_matches(['\n', '\r']);
+    let before = trimmed.strip_suffix(THE_COMMAND_FAILED_LINE)?;
+    if !(before.is_empty() || before.ends_with('\n')) {
+        return None;
+    }
+    Some(before.to_string())
 }
 
 /// **E4: what the step met once the authentication is out of the way**, which
@@ -1838,6 +2183,12 @@ mod tests {
         // running kernel's release for its headers. **Both are this one act's**
         // and the test below says so.
         let the_swaps_readings = ["$(nvidia-smi --query-gpu=driver_version", "$(uname -r)"];
+        // **The hand-over takes the same carriage for its two readings, added
+        // 2026-11-12** (E7's hand-over bullet as extended that day; R7, *what
+        // already stands at the root's name*): the token's target and that
+        // directory's owner, read on the machine before anything is changed.
+        // **Both are this one act's**, on either mount.
+        let the_hand_overs_readings = ["$(readlink \"$2\")", "$(stat -c %u \"$d\")"];
         for step in THE_ELEVATED_STEPS.iter().chain([&THE_ELEVATED_SEARCH]) {
             for (text, prefix) in [
                 (step.elevated.as_str(), THE_NON_INTERACTIVE_PREFIX),
@@ -1852,11 +2203,15 @@ mod tests {
                     let rest = &text[substitution.0..];
                     let the_swaps_own = (step == &THE_UBUNTU_DRIVER_SWAP || step == &THE_UBUNTU_DRIVER_SWAPS_FINISH)
                         && the_swaps_readings.iter().any(|reading| rest.starts_with(reading));
+                    let the_hand_overs_own = (step == &THE_HAND_OVER_OF_THE_ROOT
+                        || step == &THE_HAND_OVER_OF_THE_PACKAGE_AREA)
+                        && the_hand_overs_readings.iter().any(|reading| rest.starts_with(reading));
                     assert!(
                         rest.starts_with("$(id -u)")
                             || rest.starts_with("$(id -g)")
                             || rest.starts_with(the_fifth_carriage)
-                            || the_swaps_own,
+                            || the_swaps_own
+                            || the_hand_overs_own,
                         "{text} carries a substitution that is no declared carriage"
                     );
                 }
@@ -1935,7 +2290,7 @@ mod tests {
             (
                 THE_UBUNTU_OPTIX_LIBRARY_INSTALL.elevated.as_str(),
                 THE_UBUNTU_DRIVER_SUPPORT_BINARIES_INSTALL.elevated.as_str(),
-                "sudo -n ",
+                "sudo -k -n ",
             ),
             (
                 THE_UBUNTU_OPTIX_LIBRARY_INSTALL
@@ -1944,7 +2299,7 @@ mod tests {
                 THE_UBUNTU_DRIVER_SUPPORT_BINARIES_INSTALL
                     .elevated_reading_the_password_from_standard_input
                     .as_str(),
-                "sudo -S ",
+                "sudo -k -S sh -c '\"$@\" || { s=$?; echo \"smoozy-elevated: the command failed\" >&2; exit $s; }' sh ",
             ),
         ] {
             // **The lookup first, whole, and the install only after `||`.**
@@ -1956,6 +2311,101 @@ mod tests {
             assert!(fifth.contains("apt-get -o DPkg::Lock::Timeout=120 install -y "));
             assert_eq!(the_read(fifth), the_read(fourth));
         }
+    }
+
+    /// **R7, *what already stands at the root's name*: the hand-over run in a
+    /// real shell, over stand-ins for `stat` and `chown`.** Fable's fresh look
+    /// at the admin password, finding 1 (2026-11-12): the owner was changed
+    /// whatever stood at the root's name. A link there, or another login's
+    /// folder, now ends the command with its own sentence and `chown` never
+    /// runs.
+    #[cfg(unix)]
+    #[test]
+    fn fresh_look_1_the_hand_over_changes_nothing_at_a_link_or_at_another_logins_folder() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let here = std::env::temp_dir().join(format!(
+            "smoozy-hand-over-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&here);
+        std::fs::create_dir_all(here.join("bin")).expect("a folder for the stand-ins");
+        let stand_in = |name: &str, body: &str| {
+            let path = here.join("bin").join(name);
+            std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("a stand-in");
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+                .expect("the stand-in made runnable");
+        };
+        // **`stat -c %u` answers the owner the case names**; `chown` only
+        // writes down what it was asked.
+        stand_in("stat", "cat \"$HERE/owner\"");
+        stand_in("chown", "printf '%s\\n' \"$*\" > \"$HERE/chowned\"");
+
+        // The disk, the root on it, a second disk, and a root that is a link
+        // to that second disk.
+        let root = here.join("data").join("smoozy");
+        let raid = here.join("raid");
+        let linked = here.join("linked").join("smoozy");
+        std::fs::create_dir_all(&root).expect("the root");
+        std::fs::create_dir_all(&raid).expect("the second disk");
+        std::fs::create_dir_all(here.join("linked")).expect("the linked disk");
+        std::os::unix::fs::symlink(&raid, &linked).expect("the root as a link");
+
+        for step in [THE_HAND_OVER_OF_THE_ROOT, THE_HAND_OVER_OF_THE_PACKAGE_AREA] {
+            let plain = step.plain.as_str();
+            let inside = plain
+                .strip_prefix("sh -c '")
+                .and_then(|rest| rest.split_once("' sh \"$(id -u):$(id -g)\" "))
+                .map(|(inside, _)| inside)
+                .unwrap_or_else(|| panic!("the hand-over reads nothing before it changes the owner: {plain}"));
+            let the_hand_over_of = |target: &std::path::Path, owner: &str| -> (Option<i32>, String, Option<String>) {
+                let token = here.join("token");
+                let _ = std::fs::remove_file(&token);
+                let _ = std::fs::remove_file(here.join("chowned"));
+                std::os::unix::fs::symlink(target, &token).expect("the planted token");
+                std::fs::write(here.join("owner"), owner).expect("the owner");
+                let path = format!(
+                    "{}:{}",
+                    here.join("bin").display(),
+                    std::env::var("PATH").unwrap_or_default()
+                );
+                let ran = std::process::Command::new("/bin/sh")
+                    .arg("-c")
+                    .arg(inside)
+                    .arg("sh")
+                    .arg("1000:1000")
+                    .arg(&token)
+                    .env("PATH", path)
+                    .env("HERE", &here)
+                    .output()
+                    .expect("the shell ran");
+                (
+                    ran.status.code(),
+                    String::from_utf8_lossy(&ran.stderr).trim().to_string(),
+                    std::fs::read_to_string(here.join("chowned")).ok().map(|said| said.trim().to_string()),
+                )
+            };
+            let token = here.join("token");
+            let handed_over = Some(format!("-R -H 1000:1000 {}", token.display()));
+
+            // **The login's own folder, and one the elevated create just
+            // made: handed over, on the token.**
+            assert_eq!(the_hand_over_of(&root, "1000"), (Some(0), String::new(), handed_over.clone()));
+            assert_eq!(the_hand_over_of(&root, "0"), (Some(0), String::new(), handed_over));
+            // **Another login's folder: nothing is changed, and it says so.**
+            let (status, said, chowned) = the_hand_over_of(&root, "2000");
+            assert_ne!(status, Some(0));
+            assert_eq!(said, format!("{} belongs to another user. Nothing was changed.", root.display()));
+            assert_eq!(chowned, None);
+            // **A link at the root's name: nothing is changed, and it says so.**
+            let (status, said, chowned) = the_hand_over_of(&linked, "1000");
+            assert_ne!(status, Some(0));
+            assert_eq!(said, format!("{} is a link, not a folder. Nothing was changed.", linked.display()));
+            assert_eq!(chowned, None);
+        }
+
+        let _ = std::fs::remove_dir_all(&here);
     }
 
     /// **The fifth act run in a real shell, over a stand-in loader listing and
@@ -2430,13 +2880,13 @@ mod tests {
         assert!(!plain.contains("-type f"), "a link to a build must stay a candidate");
         assert_eq!(
             THE_ELEVATED_SEARCH.elevated.as_str(),
-            format!("sudo -n {plain}")
+            format!("{THE_NON_INTERACTIVE_PREFIX}{plain}")
         );
         assert_eq!(
             THE_ELEVATED_SEARCH
                 .elevated_reading_the_password_from_standard_input
                 .as_str(),
-            format!("sudo -S {plain}")
+            format!("{THE_STANDARD_INPUT_PREFIX}{plain}")
         );
     }
 
@@ -2457,7 +2907,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
 
         let form = THE_UBUNTU_DRIVER_SUPPORT_BINARIES_INSTALL.elevated.as_str();
-        assert!(form.starts_with("sudo -n sh -c 'apt-get "));
+        assert!(form.starts_with("sudo -k -n sh -c 'apt-get "));
         // **S7b's bounded wait rides it like every other apt install.**
         assert!(form.contains("-o DPkg::Lock::Timeout=120"));
         assert!(
@@ -2700,14 +3150,18 @@ mod tests {
 
     // ------------------------------------------- E3's route, now that it exists
 
-    /// **E3 and E4 together, performed.** The validate goes first, the step
-    /// follows, both carry the password on standard input, and **neither
-    /// command string holds any part of it.**
+    /// **E3 and E4 as changed 2026-11-12, performed: the password goes once,
+    /// to the step itself, under `sudo -k`, and no validate is sent.** S7d's
+    /// refresh is an operation of its own in front of the install, sent the
+    /// same way. **Neither command string holds any part of the password.**
+    /// Until this date the validate went first and made a cached credential,
+    /// and each step carried the password again.
     #[test]
-    fn the_password_form_validates_first_and_then_runs_the_step() {
+    fn the_password_goes_once_to_the_step_itself_under_k() {
+        assert!(THE_STANDARD_INPUT_PREFIX.starts_with("sudo -k -S "), "{THE_STANDARD_INPUT_PREFIX}");
+        assert!(THE_NON_INTERACTIVE_PREFIX.starts_with("sudo -k -n "), "{THE_NON_INTERACTIVE_PREFIX}");
         let password = Origin::what_the_user_typed("hunter2");
         let mut machine = AMachine::answering(vec![
-            (THE_VALIDATE_FORM.as_str(), said("", 0)),
             (
                 THE_LIST_UPDATE
                     .elevated_reading_the_password_from_standard_input
@@ -2733,29 +3187,20 @@ mod tests {
             said_it.what_it_met,
             WhatTheStepMet::ASuccessfulOperationAfterASuccessfulValidate
         );
-        assert!(!said_it.what_it_met.erases_the_remembered_password());
         assert!(said_it.what_it_met.the_password_is_kept());
-
-        // **The order is the clause.** Validate first, operation second — and
-        // **S7d's refresh is an operation of its own in front of the install**,
-        // validated the same way.
         assert_eq!(
             machine.asked,
             vec![
-                THE_VALIDATE_FORM.as_str(),
                 THE_LIST_UPDATE
                     .elevated_reading_the_password_from_standard_input
                     .as_str(),
-                THE_VALIDATE_FORM.as_str(),
                 THE_TOOLING_INSTALL
                     .elevated_reading_the_password_from_standard_input
                     .as_str(),
-            ]
+            ],
+            "no validate, and each operation once"
         );
-        // **Twice per operation, because the credential cache is not relied
-        // on** — E4's own limit, and
-        // [`crate::elevation::the_credential_cache_is_relied_on`] says so.
-        assert_eq!(machine.carried_on_standard_input.len(), 4);
+        assert_eq!(machine.carried_on_standard_input.len(), 2, "once per operation");
         for (command, carried) in &machine.carried_on_standard_input {
             assert_eq!(carried, b"hunter2");
             assert!(
@@ -2766,29 +3211,38 @@ mod tests {
         password.the_act_ended();
     }
 
-    /// **E4's whole point: a failed validate is never an operation's failure.**
-    /// The step is not attempted at all, and the wrong-password ending — matched
-    /// as an exact constant by `Security and licence` §13 rule 5's exception —
-    /// is what erases the remembered password.
+    /// **E4 as changed 2026-11-12: a refusal by the elevating command is
+    /// never an operation's failure.** The step's answer carries no
+    /// [`THE_COMMAND_FAILED_LINE`], so nothing ran, and the wrong-password
+    /// ending — matched as an exact constant by `Security and licence` §13
+    /// rule 5's exception — is what erases the remembered password. Nothing
+    /// follows it.
     #[test]
     fn a_wrong_password_stops_before_the_step_and_erases_the_remembered_one() {
         let password = Origin::what_the_user_typed("wrong");
         let mut machine = AMachine::answering(vec![(
-            THE_VALIDATE_FORM.as_str(),
-            complained("sudo: 1 incorrect password attempt", 1),
+            THE_LIST_UPDATE
+                .elevated_reading_the_password_from_standard_input
+                .as_str(),
+            complained("[sudo] password for u: \nsudo: 1 incorrect password attempt", 1),
         )]);
         let said_it = block_on(issue(
             &mut machine,
             THE_TOOLING_INSTALL,
             HowElevationIsObtained::APasswordIsHeld(&password),
         ))
-        .expect("the validate was issued");
+        .expect("the step was issued");
 
         assert!(!said_it.it_ended_cleanly);
         assert_eq!(said_it.what_it_met, WhatTheStepMet::AWrongPassword);
         assert!(said_it.what_it_met.erases_the_remembered_password());
-        // **The operation was never attempted.** Only the validate was asked.
-        assert_eq!(machine.asked, vec![THE_VALIDATE_FORM.as_str()]);
+        assert_eq!(
+            machine.asked,
+            vec![THE_LIST_UPDATE
+                .elevated_reading_the_password_from_standard_input
+                .as_str()],
+            "nothing follows the refusal"
+        );
         assert_eq!(machine.carried_on_standard_input.len(), 1);
         password.the_act_ended();
     }
@@ -2800,7 +3254,9 @@ mod tests {
     fn a_refusal_that_is_not_the_constant_keeps_the_password_and_runs_nothing() {
         let password = Origin::what_the_user_typed("right");
         let mut machine = AMachine::answering(vec![(
-            THE_VALIDATE_FORM.as_str(),
+            THE_LIST_UPDATE
+                .elevated_reading_the_password_from_standard_input
+                .as_str(),
             complained(
                 "Sorry, user smoozynoadmin may not run sudo on a0e7a496ff47.",
                 1,
@@ -2811,7 +3267,7 @@ mod tests {
             THE_TOOLING_INSTALL,
             HowElevationIsObtained::APasswordIsHeld(&password),
         ))
-        .expect("the validate was issued");
+        .expect("the step was issued");
 
         assert_eq!(
             said_it.what_it_met,
@@ -2819,12 +3275,39 @@ mod tests {
         );
         assert!(said_it.what_it_met.the_password_is_kept());
         assert!(!said_it.what_it_met.erases_the_remembered_password());
-        // **The machine's own words ride it, whole.**
         assert_eq!(
             said_it.the_machines_own_words,
             "Sorry, user smoozynoadmin may not run sudo on a0e7a496ff47."
         );
-        assert_eq!(machine.asked, vec![THE_VALIDATE_FORM.as_str()]);
+        password.the_act_ended();
+    }
+
+    /// **E4 as changed 2026-11-12: a step that ran and failed is the
+    /// operation's failure**, told by [`THE_COMMAND_FAILED_LINE`], which is
+    /// taken off the machine's words. It forgets nothing, even where the
+    /// step's own last line were the wrong-password ending.
+    #[test]
+    fn a_step_that_ran_and_failed_is_the_operations_failure_and_its_line_is_taken_off() {
+        let password = Origin::what_the_user_typed("right");
+        let mut machine = AMachine::answering(vec![(
+            THE_LIST_UPDATE
+                .elevated_reading_the_password_from_standard_input
+                .as_str(),
+            complained(
+                "[sudo] password for u: E: Could not get lock\nsudo: 1 incorrect password attempt\nsmoozy-elevated: the command failed\n",
+                100,
+            ),
+        )]);
+        let said_it = block_on(issue(
+            &mut machine,
+            THE_TOOLING_INSTALL,
+            HowElevationIsObtained::APasswordIsHeld(&password),
+        ))
+        .expect("the step was issued");
+        assert_eq!(said_it.what_it_met, WhatTheStepMet::AFailedOperationAfterASuccessfulValidate);
+        assert!(said_it.what_it_met.the_password_is_kept());
+        assert!(!said_it.the_machines_own_words.contains(THE_COMMAND_FAILED_LINE), "{}", said_it.the_machines_own_words);
+        assert!(said_it.the_machines_own_words.contains("E: Could not get lock"));
         password.the_act_ended();
     }
 
@@ -2839,7 +3322,6 @@ mod tests {
         let password = Origin::what_the_user_typed("a-secret-nobody-may-see");
         for step in THE_ELEVATED_STEPS.iter().chain([&THE_ELEVATED_SEARCH]) {
             let mut machine = AMachine::answering(vec![
-                (THE_VALIDATE_FORM.as_str(), said("", 0)),
                 (
                     THE_LIST_UPDATE
                         .elevated_reading_the_password_from_standard_input
@@ -2865,8 +3347,10 @@ mod tests {
                     "{asked} carries the password in the command string"
                 );
             }
-            // **Twice per operation**, and S7d's refresh is an operation of its
-            // own in front of the installs that carry it.
+            // **Once per operation** (E3 and E4 as changed 2026-11-12; until
+            // then twice, the validate's and the step's), and S7d's refresh
+            // is an operation of its own in front of the installs that carry
+            // it.
             let operations = if THE_INSTALLS_THE_LISTS_ARE_REFRESHED_BEFORE.contains(step) {
                 2
             } else {
@@ -2874,8 +3358,8 @@ mod tests {
             };
             assert_eq!(
                 machine.carried_on_standard_input.len(),
-                2 * operations,
-                "{} did not carry the password on standard input twice per operation",
+                operations,
+                "{} did not carry the password on standard input once per operation",
                 step.what_it_does
             );
         }
@@ -2983,6 +3467,804 @@ mod tests {
         block_on(issue(&mut machine, THE_RESTART, HowElevationIsObtained::Passwordless))
             .expect("the restart was issued");
         assert_eq!(machine.asked, vec![THE_RESTART.elevated.as_str()]);
+    }
+
+    /// A machine that answers each command from a list, in turn: the first
+    /// answer the first time the command comes, the next the next time.
+    #[derive(Default)]
+    struct AMachineThatAnswersInTurn {
+        answers: Vec<(&'static str, smoozy_server_protocol::transport::CommandResult)>,
+        asked: Vec<&'static str>,
+    }
+
+    impl AMachineThatAnswersInTurn {
+        fn the_next_answer_to(
+            &mut self,
+            command: CommandString,
+        ) -> Result<
+            smoozy_server_protocol::transport::CommandResult,
+            smoozy_server_protocol::transport::ssh::CommandFailure,
+        > {
+            self.asked.push(command.as_str());
+            match self.answers.iter().position(|(named, _)| *named == command.as_str()) {
+                Some(at) => Ok(self.answers.remove(at).1),
+                None => Err(
+                    smoozy_server_protocol::transport::ssh::CommandFailure::TheRequestDidNotReachTheMachine,
+                ),
+            }
+        }
+    }
+
+    impl CommandChannel for AMachineThatAnswersInTurn {
+        async fn run(
+            &mut self,
+            command: CommandString,
+        ) -> Result<
+            smoozy_server_protocol::transport::CommandResult,
+            smoozy_server_protocol::transport::ssh::CommandFailure,
+        > {
+            self.the_next_answer_to(command)
+        }
+    }
+
+    impl CarriesAValueOnACommandsStandardInput for AMachineThatAnswersInTurn {
+        async fn run_carrying_a_value_on_its_standard_input(
+            &mut self,
+            command: CommandString,
+            _value: smoozy_security_and_licence::plaintext::Plaintext,
+        ) -> Result<
+            smoozy_server_protocol::transport::CommandResult,
+            smoozy_server_protocol::transport::ssh::CommandFailure,
+        > {
+            self.the_next_answer_to(command)
+        }
+    }
+
+    /// apt's refusal over an interrupted dpkg, as it reads under `sudo`.
+    const APTS_REFUSAL_UNDER_SUDO: &str = "E: dpkg was interrupted, you must manually run \
+        'sudo dpkg --configure -a' to correct the problem. ";
+
+    /// **S7, performed: a package step apt refuses over an interrupted dpkg is
+    /// repaired and sent once more.** Added 2026-11-11, the Fable review's
+    /// third sitting.
+    ///
+    /// **The story.** The line drops while the driver swap's install is
+    /// unpacking. dpkg goes down with the session and leaves its journal
+    /// behind. *Set up again* finds a driver half put on and sends the act that
+    /// finishes a stopped removal. Its trial runs pass, since a trial run takes
+    /// no lock, and its real removal is refused: apt will change nothing until
+    /// `dpkg --configure -a` has been run. Until this sitting no route sent
+    /// that command, so every *Set up again* ended the same way, on a server
+    /// with no driver.
+    #[test]
+    fn a_package_step_apt_refuses_over_an_interrupted_dpkg_is_repaired_and_sent_once_more() {
+        for step in [THE_UBUNTU_DRIVER_SWAPS_FINISH, THE_UBUNTU_DRIVER_SWAP] {
+            let mut machine = AMachineThatAnswersInTurn {
+                answers: vec![
+                    (step.elevated.as_str(), complained(APTS_REFUSAL_UNDER_SUDO, 100)),
+                    (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("Setting up", 0)),
+                    (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("", 0)),
+                    (step.elevated.as_str(), said("Setting up nvidia-driver-580-server", 0)),
+                ],
+                asked: Vec::new(),
+            };
+            let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+                .expect("the step was issued");
+            assert_eq!(
+                machine.asked,
+                vec![
+                    step.elevated.as_str(),
+                    THE_REPAIRS_FIRST_COMMAND.elevated.as_str(),
+                    THE_REPAIRS_SECOND_COMMAND.elevated.as_str(),
+                    step.elevated.as_str(),
+                ],
+                "{}",
+                step.what_it_does
+            );
+            assert!(said_it.it_ended_cleanly, "{}", said_it.the_machines_own_words);
+        }
+
+        // **An install the lists are refreshed before is repaired the same
+        // way**, and the refresh is not sent a second time.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (THE_LIST_UPDATE.elevated.as_str(), said("", 0)),
+                (THE_TOOLING_INSTALL.elevated.as_str(), complained(APTS_REFUSAL_UNDER_SUDO, 100)),
+                (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("", 0)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("", 0)),
+                (THE_TOOLING_INSTALL.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(
+            &mut machine,
+            THE_TOOLING_INSTALL,
+            HowElevationIsObtained::Passwordless,
+        ))
+        .expect("the step was issued");
+        assert!(said_it.it_ended_cleanly);
+        assert_eq!(machine.asked.len(), 5);
+        assert!(machine.answers.is_empty(), "every answer was used");
+    }
+
+    /// **S7's repair is sent once, and only on apt's own sentence.** A step
+    /// refused a second time is the answer. A step that failed for any other
+    /// reason is repaired by nothing (S7b: busy is not broken). A first repair
+    /// command that fails is the answer, and the step is not sent again. A
+    /// second repair command that fails does not hold the step back.
+    #[test]
+    fn the_repair_is_sent_once_and_only_on_apts_own_sentence() {
+        let step = THE_UBUNTU_DRIVER_SWAPS_FINISH;
+
+        // Refused twice: the second refusal is the answer.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_UNDER_SUDO, 100)),
+                (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("", 0)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), complained(APTS_REFUSAL_UNDER_SUDO, 100)),
+                (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert!(said_it.the_machines_own_words.contains("dpkg was interrupted"));
+        assert_eq!(machine.asked.len(), 4, "{:?}", machine.asked);
+
+        // Another failure: nothing is repaired.
+        for words in [
+            "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 912",
+            "E: Unable to locate package nvidia-driver-580-server",
+        ] {
+            let mut machine = AMachineThatAnswersInTurn {
+                answers: vec![
+                    (step.elevated.as_str(), complained(words, 100)),
+                    (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("", 0)),
+                ],
+                asked: Vec::new(),
+            };
+            let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+                .expect("the step was issued");
+            assert!(!said_it.it_ended_cleanly);
+            assert_eq!(machine.asked, vec![step.elevated.as_str()]);
+        }
+
+        // The first repair command fails: it is the answer.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_UNDER_SUDO, 100)),
+                (
+                    THE_REPAIRS_FIRST_COMMAND.elevated.as_str(),
+                    complained("dpkg: error: dpkg frontend lock was locked by another process", 2),
+                ),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert!(said_it.the_machines_own_words.contains("locked by another process"));
+        assert_eq!(machine.asked.len(), 2);
+
+        // The second repair command fails: the step is still sent again.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_UNDER_SUDO, 100)),
+                (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("", 0)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), complained("Abort.", 1)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(said_it.it_ended_cleanly);
+        assert_eq!(machine.asked.len(), 4);
+
+        // And with a password held, every command of the repair carries it the
+        // way the step does: once, on standard input (E3 and E4 as changed
+        // 2026-11-12; until then each was validated first).
+        let password = Origin::what_the_user_typed("a-secret-nobody-may-see");
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (
+                    step.elevated_reading_the_password_from_standard_input.as_str(),
+                    ran_and_failed(APTS_REFUSAL_UNDER_SUDO, 100),
+                ),
+                (
+                    THE_REPAIRS_FIRST_COMMAND
+                        .elevated_reading_the_password_from_standard_input
+                        .as_str(),
+                    said("", 0),
+                ),
+                (
+                    THE_REPAIRS_SECOND_COMMAND
+                        .elevated_reading_the_password_from_standard_input
+                        .as_str(),
+                    said("", 0),
+                ),
+                (
+                    step.elevated_reading_the_password_from_standard_input.as_str(),
+                    said("", 0),
+                ),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(
+            &mut machine,
+            step,
+            HowElevationIsObtained::APasswordIsHeld(&password),
+        ))
+        .expect("the step was issued");
+        assert!(said_it.it_ended_cleanly);
+        assert!(machine.answers.is_empty(), "every answer was used");
+        for asked in &machine.asked {
+            assert!(!asked.contains("a-secret-nobody-may-see"));
+        }
+        password.the_act_ended();
+    }
+
+    /// **A step that ran under the password form and failed**, as E4 as
+    /// changed 2026-11-12 answers it: its own words, then
+    /// [`THE_COMMAND_FAILED_LINE`].
+    fn ran_and_failed(words: &str, status: u32) -> smoozy_server_protocol::transport::CommandResult {
+        complained(&format!("{words}\n{THE_COMMAND_FAILED_LINE}\n"), status)
+    }
+
+    /// apt's refusal over broken dependencies, as picture 04 of the night
+    /// pass shows it.
+    const APTS_REFUSAL_OVER_UNMET_DEPENDENCIES: &str = "E: Sub-process /usr/bin/dpkg returned an \
+        error code (1)\nE: Unmet dependencies. Try 'apt --fix-broken install' with no packages (or \
+        specify a solution).";
+
+    /// **S7, performed for the second sentence: a package step apt refuses
+    /// over unmet dependencies is followed by the repair apt names, and sent
+    /// once more.** Added 2026-11-12, the night pass's new fault 1.
+    ///
+    /// **The story.** The copy was closed during the driver swap. The removal
+    /// ran on to its end with no line and pulled in a library of a newer
+    /// driver; nothing was installed. Every *Set up again* was then refused in
+    /// these words, on a server with no driver.
+    #[test]
+    fn a_package_step_apt_refuses_over_unmet_dependencies_is_repaired_and_sent_once_more() {
+        // An install the lists are refreshed before: the refresh once, the
+        // install, apt's own repair, the install.
+        let step = THE_UBUNTU_DRIVER_TOOL_INSTALL;
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (THE_LIST_UPDATE.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), complained(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES, 100)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("Setting up", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert_eq!(
+            machine.asked,
+            vec![
+                THE_LIST_UPDATE.elevated.as_str(),
+                step.elevated.as_str(),
+                THE_REPAIRS_SECOND_COMMAND.elevated.as_str(),
+                step.elevated.as_str(),
+            ]
+        );
+        assert!(said_it.it_ended_cleanly, "{}", said_it.the_machines_own_words);
+
+        // Every driver route's own acts have it alike.
+        for step in [
+            THE_UBUNTU_DRIVER_INSTALL,
+            THE_UBUNTU_DRIVER_SWAPS_FINISH,
+            THE_UBUNTU_DRIVER_SWAP,
+            THE_DEBIAN_DRIVER_INSTALL,
+        ] {
+            let mut answers = vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES, 100)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ];
+            if THE_INSTALLS_THE_LISTS_ARE_REFRESHED_BEFORE.contains(&step) {
+                answers.insert(0, (THE_LIST_UPDATE.elevated.as_str(), said("", 0)));
+            }
+            let mut machine = AMachineThatAnswersInTurn { answers, asked: Vec::new() };
+            let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+                .expect("the step was issued");
+            assert!(said_it.it_ended_cleanly, "{}", step.what_it_does);
+            assert!(machine.answers.is_empty(), "{}: {:?}", step.what_it_does, machine.asked);
+        }
+    }
+
+    /// dpkg's refusal of a file another package holds, then apt's, as the
+    /// live pass of 2026-11-12 met them on Ubuntu 22.04.
+    const DPKGS_REFUSAL_OVER_A_CLAIMED_FILE: &str = "dpkg: error processing archive \
+        /var/cache/apt/archives/libnvidia-cfg1-580-server_580.178.04-0ubuntu0.22.04.1_amd64.deb \
+        (--unpack):\n trying to overwrite '/usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1', which is \
+        also in package libnvidia-cfg1:amd64 620.70.06-1ubuntu1\nE: Sub-process /usr/bin/dpkg \
+        returned an error code (1)";
+
+    /// **S7 as added 2026-11-12: a driver act that stopped on a file two
+    /// packages claim is followed by apt's repair with dpkg told to overwrite,
+    /// and sent once more.** The live pass of that date, new fault 1.
+    ///
+    /// **The story.** The app was closed during the driver swap's removal. The
+    /// removal ran on and pulled in a library of a newer driver. The next
+    /// setup's driver install was refused by dpkg over that library's file,
+    /// apt's plain repair stopped on the same file, and every *Set up again*
+    /// ended *Could not install the GPU driver.*
+    #[test]
+    fn a_driver_act_stopped_on_a_file_two_packages_claim_is_repaired_with_the_overwrite() {
+        let step = THE_UBUNTU_DRIVER_INSTALL;
+        let forced = THE_DRIVER_REPAIR_OVER_A_FILE_TWO_PACKAGES_CLAIM;
+        let both = format!("{DPKGS_REFUSAL_OVER_A_CLAIMED_FILE}\n{APTS_REFUSAL_OVER_UNMET_DEPENDENCIES}");
+
+        // The first setup after the cut: the install itself prints dpkg's
+        // sentence. apt's plain repair is not sent: it stops on the same file.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(&both, 100)),
+                (forced.elevated.as_str(), said("Setting up", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert_eq!(
+            machine.asked,
+            vec![step.elevated.as_str(), forced.elevated.as_str(), step.elevated.as_str()]
+        );
+        assert!(said_it.it_ended_cleanly, "{}", said_it.the_machines_own_words);
+
+        // *Set up again*: apt refuses the install at once over unmet
+        // dependencies, and it is its plain repair that prints dpkg's sentence.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES, 100)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), complained(DPKGS_REFUSAL_OVER_A_CLAIMED_FILE, 100)),
+                (forced.elevated.as_str(), said("Setting up", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(said_it.it_ended_cleanly, "{}", said_it.the_machines_own_words);
+        assert!(machine.answers.is_empty(), "{:?}", machine.asked);
+
+        // Every Ubuntu driver act has it alike.
+        for step in [THE_UBUNTU_DRIVER_SWAPS_FINISH, THE_UBUNTU_DRIVER_SWAP] {
+            let mut machine = AMachineThatAnswersInTurn {
+                answers: vec![
+                    (step.elevated.as_str(), complained(&both, 100)),
+                    (forced.elevated.as_str(), said("", 0)),
+                    (step.elevated.as_str(), said("", 0)),
+                ],
+                asked: Vec::new(),
+            };
+            let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+                .expect("the step was issued");
+            assert!(said_it.it_ended_cleanly, "{}", step.what_it_does);
+            assert!(machine.answers.is_empty(), "{}: {:?}", step.what_it_does, machine.asked);
+        }
+
+        // The overwrite repair fails: it is the answer, and nothing follows.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(&both, 100)),
+                (forced.elevated.as_str(), complained("E: Unable to correct problems, you have held broken packages.", 100)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert!(said_it.the_machines_own_words.contains("held broken packages"));
+        assert_eq!(machine.asked.len(), 2, "{:?}", machine.asked);
+
+        // Stopped on the file again after the overwrite repair: that is the
+        // answer, with no second repair.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(&both, 100)),
+                (forced.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), complained(&both, 100)),
+                (forced.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert_eq!(machine.asked.len(), 3, "{:?}", machine.asked);
+
+        // **An interrupted dpkg first** (Sol's look, 2026-11-12): the journal
+        // is cleared, the plain repair stops on the file, the act is refused
+        // over unmet dependencies, and the overwrite repair then follows.
+        let step = THE_UBUNTU_DRIVER_INSTALL;
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_UNDER_SUDO, 100)),
+                (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("", 0)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), complained(DPKGS_REFUSAL_OVER_A_CLAIMED_FILE, 100)),
+                (step.elevated.as_str(), complained(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES, 100)),
+                (forced.elevated.as_str(), said("Setting up", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(said_it.it_ended_cleanly, "{}", said_it.the_machines_own_words);
+        assert!(machine.answers.is_empty(), "{:?}", machine.asked);
+
+        // **A package step that is not a driver act is never forced**: apt's
+        // plain repair, and its failure is the answer.
+        let step = THE_TOOLING_INSTALL;
+        assert_eq!(step.what_it_does_to_the_machine, WhatAnActDoesToTheMachine::AnElevatedPackageInstall);
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (THE_LIST_UPDATE.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), complained(&both, 100)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), complained(DPKGS_REFUSAL_OVER_A_CLAIMED_FILE, 100)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert!(machine.asked.iter().all(|asked| !asked.contains("force-overwrite")), "{:?}", machine.asked);
+    }
+
+    /// **What apt prints on each stream when dpkg refuses a file another
+    /// package holds**, as the second live pass of 2026-11-12 met it on
+    /// Ubuntu 22.04. apt gives dpkg a pseudo-terminal and writes what dpkg
+    /// prints to apt's own standard output (`Server Setup` S7, *where dpkg's
+    /// sentence is printed*); apt's own `E:` lines go to its complaint
+    /// stream. The complaint is the pass's picture `03` line for line; dpkg's
+    /// sentence is the one the pass read in the package tool's log, and the
+    /// archive's file name around it is a stand-in.
+    fn apt_printed(output: &str, complaint: &str) -> smoozy_server_protocol::transport::CommandResult {
+        smoozy_server_protocol::transport::CommandResult {
+            output: output.as_bytes().to_vec(),
+            complaint: complaint.as_bytes().to_vec(),
+            status: Some(100),
+        }
+    }
+
+    const DPKG_UNDER_APT_ON_THE_STANDARD_OUTPUT: &str = "Preparing to unpack \
+        .../libnvidia-cfg1-595_595.71.05-0ubuntu1_amd64.deb ...\n\
+        Unpacking libnvidia-cfg1-595:amd64 (595.71.05-0ubuntu1) ...\n\
+        dpkg: error processing archive \
+        /var/cache/apt/archives/libnvidia-cfg1-595_595.71.05-0ubuntu1_amd64.deb (--unpack):\n \
+        trying to overwrite '/usr/lib/x86_64-linux-gnu/libnvidia-cfg.so.1', which is also in \
+        package libnvidia-cfg1:amd64 620.70.06-1ubuntu1\n\
+        Errors were encountered while processing:\n \
+        /var/cache/apt/archives/libnvidia-cfg1-595_595.71.05-0ubuntu1_amd64.deb\n";
+
+    const DEBCONF_WITH_NO_TERMINAL: &str = "debconf: unable to initialize frontend: Dialog\n\
+        debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or \
+        without a controlling terminal.)\n\
+        debconf: falling back to frontend: Readline\n\
+        debconf: unable to initialize frontend: Readline\n\
+        debconf: (This frontend requires a controlling tty.)\n\
+        debconf: falling back to frontend: Teletype\n\
+        dpkg-preconfigure: unable to re-open stdin: \n";
+
+    /// **The second live pass's fault 1, played: dpkg's sentence on apt's
+    /// standard output reaches the repair with the overwrite.** Added
+    /// 2026-11-12.
+    ///
+    /// **The story.** The app was closed during the driver swap's removal,
+    /// as on the first pass. On the first setup after it, the driver install
+    /// was refused by dpkg over the file two packages claim, and apt said
+    /// *Unmet dependencies*. Smoozy sent apt's plain repair, which stopped on
+    /// the same file, and the card read *Could not install the GPU driver.*
+    /// Two *Set up again* presses sent the plain repair again. The overwrite
+    /// was never sent: the sentence was looked for on the complaint stream,
+    /// and apt prints dpkg's words on its standard output.
+    #[test]
+    fn dpkgs_sentence_on_apts_standard_output_reaches_the_overwrite() {
+        let step = THE_UBUNTU_DRIVER_INSTALL;
+        let forced = THE_DRIVER_REPAIR_OVER_A_FILE_TWO_PACKAGES_CLAIM;
+        let the_act_complained = format!(
+            "{DEBCONF_WITH_NO_TERMINAL}E: Sub-process /usr/bin/dpkg returned an error code (1)\n\
+             E: Unmet dependencies. Try 'apt --fix-broken install' with no packages (or specify a \
+             solution).\n"
+        );
+        let the_repair_complained =
+            format!("{DEBCONF_WITH_NO_TERMINAL}E: Sub-process /usr/bin/dpkg returned an error code (1)\n");
+
+        // The first setup after the cut: the install prints dpkg's sentence
+        // on its standard output. The plain repair is not sent.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), apt_printed(DPKG_UNDER_APT_ON_THE_STANDARD_OUTPUT, &the_act_complained)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), apt_printed(DPKG_UNDER_APT_ON_THE_STANDARD_OUTPUT, &the_repair_complained)),
+                (forced.elevated.as_str(), said("Setting up libnvidia-cfg1-595:amd64 (595.71.05-0ubuntu1) ...", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert_eq!(
+            machine.asked,
+            vec![step.elevated.as_str(), forced.elevated.as_str(), step.elevated.as_str()]
+        );
+        assert!(said_it.it_ended_cleanly, "{}", said_it.the_machines_own_words);
+
+        // *Set up again*: apt refuses the install over unmet dependencies,
+        // and the plain repair prints dpkg's sentence on its standard output.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), apt_printed("", APTS_REFUSAL_OVER_UNMET_DEPENDENCIES)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), apt_printed(DPKG_UNDER_APT_ON_THE_STANDARD_OUTPUT, &the_repair_complained)),
+                (forced.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(said_it.it_ended_cleanly, "{}", said_it.the_machines_own_words);
+        assert!(machine.answers.is_empty(), "{:?}", machine.asked);
+
+        // The same with a password held, which goes through the other way a
+        // step is sent.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (
+                    step.elevated_reading_the_password_from_standard_input.as_str(),
+                    apt_printed(
+                        DPKG_UNDER_APT_ON_THE_STANDARD_OUTPUT,
+                        &format!("{the_act_complained}{THE_COMMAND_FAILED_LINE}\n"),
+                    ),
+                ),
+                (forced.elevated_reading_the_password_from_standard_input.as_str(), said("", 0)),
+                (step.elevated_reading_the_password_from_standard_input.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let password = Origin::what_the_user_typed("hunter2");
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::APasswordIsHeld(&password)))
+            .expect("the step was issued");
+        assert!(said_it.it_ended_cleanly, "{}", said_it.the_machines_own_words);
+        assert!(machine.answers.is_empty(), "{:?}", machine.asked);
+
+        // An interrupted dpkg first: the plain repair prints the sentence on
+        // its standard output, the act is refused over unmet dependencies,
+        // and the overwrite follows.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_UNDER_SUDO, 100)),
+                (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("", 0)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), apt_printed(DPKG_UNDER_APT_ON_THE_STANDARD_OUTPUT, &the_repair_complained)),
+                (step.elevated.as_str(), apt_printed("", APTS_REFUSAL_OVER_UNMET_DEPENDENCIES)),
+                (forced.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(said_it.it_ended_cleanly, "{}", said_it.the_machines_own_words);
+        assert!(machine.answers.is_empty(), "{:?}", machine.asked);
+
+        // A package step that is not a driver act is still never forced,
+        // whichever stream holds the sentence.
+        let step = THE_TOOLING_INSTALL;
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (THE_LIST_UPDATE.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), apt_printed(DPKG_UNDER_APT_ON_THE_STANDARD_OUTPUT, &the_act_complained)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), apt_printed(DPKG_UNDER_APT_ON_THE_STANDARD_OUTPUT, &the_repair_complained)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert!(machine.asked.iter().all(|asked| !asked.contains("force-overwrite")), "{:?}", machine.asked);
+    }
+
+    /// **The repair apt names is sent once, and where it fails it is the
+    /// answer.** A step refused the same way after it is the answer too, and a
+    /// password refused before the repair ends everything (E6).
+    #[test]
+    fn the_repair_for_unmet_dependencies_is_sent_once_and_its_failure_is_the_answer() {
+        let step = THE_UBUNTU_DRIVER_SWAPS_FINISH;
+
+        // The repair fails: it is the answer and the step is not sent again.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES, 100)),
+                (
+                    THE_REPAIRS_SECOND_COMMAND.elevated.as_str(),
+                    complained("E: Unable to correct problems, you have held broken packages.", 100),
+                ),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert!(said_it.the_machines_own_words.contains("held broken packages"));
+        assert_eq!(machine.asked.len(), 2, "{:?}", machine.asked);
+
+        // Refused the same way after the repair: that is the answer.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES, 100)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), complained(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES, 100)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert_eq!(machine.asked.len(), 3, "{:?}", machine.asked);
+
+        // An interrupted dpkg whose repair leaves unmet dependencies: the
+        // second sending's refusal is the answer; no third sending.
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(APTS_REFUSAL_UNDER_SUDO, 100)),
+                (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("", 0)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), complained(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES, 100)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert_eq!(machine.asked.len(), 4, "{:?}", machine.asked);
+
+        // A password refused at the repair: nothing follows (E4 as changed
+        // 2026-11-12: the refusal is the repair command's own, with no line).
+        let password = Origin::what_the_user_typed("a-secret-nobody-may-see");
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (
+                    step.elevated_reading_the_password_from_standard_input.as_str(),
+                    ran_and_failed(APTS_REFUSAL_OVER_UNMET_DEPENDENCIES, 100),
+                ),
+                (
+                    THE_REPAIRS_SECOND_COMMAND
+                        .elevated_reading_the_password_from_standard_input
+                        .as_str(),
+                    complained("sudo: 1 incorrect password attempt", 1),
+                ),
+                (
+                    step.elevated_reading_the_password_from_standard_input.as_str(),
+                    said("", 0),
+                ),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(
+            &mut machine,
+            step,
+            HowElevationIsObtained::APasswordIsHeld(&password),
+        ))
+        .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert_eq!(said_it.what_it_met, WhatTheStepMet::AWrongPassword);
+        assert_eq!(machine.asked.len(), 2, "{:?}", machine.asked);
+        password.the_act_ended();
+    }
+
+    /// **Where one refusal holds both sentences, the interrupted one decides.**
+    /// Sol's first point, 2026-11-12. The repair for unmet dependencies cannot
+    /// run while dpkg's journal is dirty, so the whole repair goes out:
+    /// `dpkg --configure -a` first.
+    #[test]
+    fn a_refusal_that_holds_both_sentences_takes_the_whole_repair() {
+        let step = THE_UBUNTU_DRIVER_INSTALL;
+        let both = format!("{APTS_REFUSAL_UNDER_SUDO}\n{APTS_REFUSAL_OVER_UNMET_DEPENDENCIES}");
+        let both: &'static str = Box::leak(both.into_boxed_str());
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (step.elevated.as_str(), complained(both, 100)),
+                (THE_REPAIRS_FIRST_COMMAND.elevated.as_str(), said("", 0)),
+                (THE_REPAIRS_SECOND_COMMAND.elevated.as_str(), said("", 0)),
+                (step.elevated.as_str(), said("", 0)),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(&mut machine, step, HowElevationIsObtained::Passwordless))
+            .expect("the step was issued");
+        assert!(said_it.it_ended_cleanly);
+        assert_eq!(
+            machine.asked,
+            vec![
+                step.elevated.as_str(),
+                THE_REPAIRS_FIRST_COMMAND.elevated.as_str(),
+                THE_REPAIRS_SECOND_COMMAND.elevated.as_str(),
+                step.elevated.as_str(),
+            ]
+        );
+    }
+
+    /// **The repair apt names answers its own question, and forces nothing.**
+    /// It runs with no terminal, so without `-y` it stops at *Do you want to
+    /// continue?* wherever it has something to change, which is every time it
+    /// is needed. `-y` is assent, not force: apt-get(8), quoted at
+    /// [`THE_REPAIRS_SECOND_COMMAND`].
+    #[test]
+    fn the_repair_apt_names_takes_its_own_question_and_forces_nothing() {
+        for form in [
+            THE_REPAIRS_SECOND_COMMAND.plain.as_str(),
+            THE_REPAIRS_SECOND_COMMAND.elevated.as_str(),
+            THE_REPAIRS_SECOND_COMMAND
+                .elevated_reading_the_password_from_standard_input
+                .as_str(),
+        ] {
+            assert!(form.ends_with("--fix-broken install -y"), "{form}");
+            assert!(!form.contains("force"), "{form}");
+        }
+    }
+
+    /// **E6 inside the repair: a refusal by the elevating command part-way
+    /// ends it, and the password is not sent again.** Sol's second point,
+    /// 2026-11-11; from 2026-11-12 the refusal is the repair command's own,
+    /// with no [`THE_COMMAND_FAILED_LINE`] (E4 as changed). The second repair
+    /// command's own failure does not hold the step back; a refused password
+    /// is not that.
+    #[test]
+    fn a_refusal_inside_the_repair_is_the_answer_and_nothing_follows() {
+        let step = THE_UBUNTU_DRIVER_SWAPS_FINISH;
+        let password = Origin::what_the_user_typed("a-secret-nobody-may-see");
+        let mut machine = AMachineThatAnswersInTurn {
+            answers: vec![
+                (
+                    step.elevated_reading_the_password_from_standard_input.as_str(),
+                    ran_and_failed(APTS_REFUSAL_UNDER_SUDO, 100),
+                ),
+                (
+                    THE_REPAIRS_FIRST_COMMAND
+                        .elevated_reading_the_password_from_standard_input
+                        .as_str(),
+                    said("", 0),
+                ),
+                (
+                    THE_REPAIRS_SECOND_COMMAND
+                        .elevated_reading_the_password_from_standard_input
+                        .as_str(),
+                    complained("sudo: 1 incorrect password attempt", 1),
+                ),
+                (
+                    step.elevated_reading_the_password_from_standard_input.as_str(),
+                    said("", 0),
+                ),
+            ],
+            asked: Vec::new(),
+        };
+        let said_it = block_on(issue(
+            &mut machine,
+            step,
+            HowElevationIsObtained::APasswordIsHeld(&password),
+        ))
+        .expect("the step was issued");
+        assert!(!said_it.it_ended_cleanly);
+        assert!(said_it.the_machines_own_words.contains("incorrect password"));
+        assert_eq!(
+            machine.asked.len(),
+            3,
+            "nothing is sent after the refusal: {:?}",
+            machine.asked
+        );
+        password.the_act_ended();
     }
 
     /// **Y7a: the run's words are kept apart by stream and by step**, each

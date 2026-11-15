@@ -262,6 +262,22 @@ impl StagingPath {
 pub struct Checkpoint {
     pub offset: u64,
     pub digest_of_everything_up_to_it: Digest,
+    /// **S12b: the running digest's own state at the offset**, on an upload's
+    /// checkpoint, so a carry-on goes on from here without the prefix's bytes.
+    /// `None` on a download, and on every checkpoint written before S12b.
+    pub running_state: Option<integrity::RunningState>,
+}
+
+impl Checkpoint {
+    /// **A checkpoint at `offset` from the loop's own running digest** — the
+    /// digest always, and on an upload the running state beside it (S12b).
+    pub fn at(offset: u64, running: &integrity::Running, direction: Direction) -> Checkpoint {
+        Checkpoint {
+            offset,
+            digest_of_everything_up_to_it: running.so_far(),
+            running_state: (direction == Direction::Up).then(|| running.the_state()),
+        }
+    }
 }
 
 /// **S18's fourth requirement, and its honest absence.**
@@ -600,6 +616,11 @@ pub enum StartOverCause {
     /// upload side a source that has *changed* no longer starts over at all —
     /// it stops and is reported.
     TheSourceChangedUnderADownload,
+    /// **S12b's third cause, the upload side alone**: the file on the user's
+    /// computer changed before a later request carried its part on (`File
+    /// Browser` K10a), so the start-over is named as the file's change and not
+    /// as a resume that failed.
+    TheFileChangedOnThisComputer,
 }
 
 impl Report {
@@ -817,6 +838,7 @@ mod tests {
         record.checkpoints.push(Checkpoint {
             offset: 1_048_576,
             digest_of_everything_up_to_it: Digest::of(b"whatever"),
+            running_state: None,
         });
         record.start_over();
         assert!(record.checkpoints.is_empty());
@@ -832,6 +854,7 @@ mod tests {
             record.checkpoints.push(Checkpoint {
                 offset,
                 digest_of_everything_up_to_it: Digest::of(&offset.to_be_bytes()),
+                running_state: None,
             });
         }
         assert_eq!(

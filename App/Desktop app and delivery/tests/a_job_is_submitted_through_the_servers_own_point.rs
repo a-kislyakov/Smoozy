@@ -105,7 +105,7 @@ mod on_a_desk_with_a_socket_pair {
         IT_IS_ABSENT, IT_IS_PRESENT, ON_THIS_MACHINE_FIELD, THE_CURSOR_FIELD,
         THE_DOES_THE_MACHINE_HOLD_THIS_JOB_REQUEST, THE_JOB_FIELD, THE_JOB_RECORD_IS_WRITTEN_REQUEST,
         THE_HELD_BEHIND_FIELD, THE_HOLD_REASON_FIELD, THE_LABEL_FIELD, THE_MACHINE_CANNOT_SAY,
-        THE_READ_FORWARD_REQUEST,
+        THE_MACHINES_OWN_WORDS_FIELD, THE_READ_FORWARD_REQUEST,
     };
     use smoozy_server_protocol::transport::{CommandResult, CommandString, Ending};
     use smoozy_state::identities::{Identity, IdentityKind};
@@ -185,6 +185,12 @@ mod on_a_desk_with_a_socket_pair {
         /// taken** — so an act's first job is not in the line and the rest
         /// could be. Step 10c's eleventh-pass fix piece 8.
         RefusesItsFirstJob,
+        /// **The request answered, and the answer says the record was not
+        /// written**: *absent*, with the machine's own words for why — what
+        /// the machine's program answers where its store or the job's material
+        /// refuses (`a_refused_submission`). The Fable review's second
+        /// sitting, fault 1.
+        RefusesWithItsReason,
     }
 
     /// **How the stand-in supervisor answers *does the machine hold this
@@ -666,14 +672,20 @@ mod on_a_desk_with_a_socket_pair {
             let it_takes_it = match self.machine.the_supervisor {
                 TheSupervisor::TakesTheJob => true,
                 TheSupervisor::RefusesItsFirstJob => !the_first_it_was_asked,
-                TheSupervisor::DoesNotTakeJobs | TheSupervisor::SaysNothing => false,
+                TheSupervisor::DoesNotTakeJobs
+                | TheSupervisor::SaysNothing
+                | TheSupervisor::RefusesWithItsReason => false,
             };
             if it_takes_it {
                 self.machine.taken.lock().expect("taken").insert(job.clone());
             }
             match self.machine.the_supervisor {
+                // **The acknowledgement says *present***, as the machine's own
+                // program answers a record it wrote (`Rendering` S8).
                 _ if it_takes_it => CommandResult {
-                    output: write_result_frame(&answered.carrying(Fields::none())),
+                    output: write_result_frame(
+                        &answered.carrying(Fields::none().and(ON_THIS_MACHINE_FIELD, IT_IS_PRESENT)),
+                    ),
                     complaint: Vec::new(),
                     status: Some(0),
                 },
@@ -690,6 +702,22 @@ mod on_a_desk_with_a_socket_pair {
                     output: Vec::new(),
                     complaint: b"the supervisor did not answer".to_vec(),
                     status: Some(1),
+                },
+                // **The machine's own refusal, as its program words it.**
+                TheSupervisor::RefusesWithItsReason => CommandResult {
+                    output: write_result_frame(
+                        &answered.carrying(
+                            Fields::none()
+                                .and(WHAT_BECAME_OF_IT_FIELD, IT_HAS_A_RECORDED_OUTCOME)
+                                .and(ON_THIS_MACHINE_FIELD, IT_IS_ABSENT)
+                                .and(
+                                    THE_MACHINES_OWN_WORDS_FIELD,
+                                    "No space left on device (os error 28)",
+                                ),
+                        ),
+                    ),
+                    complaint: Vec::new(),
+                    status: Some(0),
                 },
             }
         }
@@ -1223,6 +1251,7 @@ mod on_a_desk_with_a_socket_pair {
                 eevee: Some(name("BLENDER_EEVEE")),
             },
             announced_add_on_case: None,
+            the_files_own_scripts_run: None,
             the_folders_at_the_machines_top: None,
         }
     }
@@ -1529,6 +1558,51 @@ mod on_a_desk_with_a_socket_pair {
         assert!(!debts[0].remap_path.is_empty());
         assert!(Path::new(&debts[0].remap_path).exists());
         assert!(debts[0].done[..2].iter().all(|done| !*done), "the material parts are owed, not taken");
+    }
+
+    /// **A machine that answers the job record request and says it did not
+    /// write the record** — its disk full, the job's material unreadable, its
+    /// queue unreadable — **is a refusal, and the user is told so** (`Rendering`
+    /// S8 and S10; `State, identity and recovery` V1 step 2's *the submission
+    /// was refused*). The job is not in the line, the provisional record goes
+    /// with `Rendering` S4b's debt, and the hold ask is not needed: the machine
+    /// has already said. *Until the Fable review's second sitting every answer
+    /// that did not refuse the request by name was read as the
+    /// acknowledgement, so this job read* In the line.*
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_machine_that_answers_it_did_not_write_the_record_is_a_refusal_and_never_in_the_line() {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+
+        let stage = the_stage(program, "refused-in-fields", 1, TheSupervisor::RefusesWithItsReason);
+        let point = APointLending::over(&stage.machine).await;
+        let given = what_the_page_hands_over(&stage, vec![a_payload("1-3")], false);
+        let came_to = the_act(&stage, &point, given).await;
+        let log = stage.machine.what_happened();
+        assert_eq!(
+            came_to,
+            WhatTheActCameTo::TheseJobs(vec![WhatBecameOfOneJob::ItStoppedBeforeTheJobRecord {
+                the_step: smoozy_rendering::submission::THE_ORDERED_UNIT[2],
+            }]),
+            "a job the machine said it did not write is told as not taken: {log:#?}"
+        );
+        assert!(
+            !log.iter().any(|line| line.contains("does the machine hold this job")),
+            "the machine had already answered, so it is not asked again: {log:#?}"
+        );
+        let record = stage.record.record.lock().expect("the record");
+        assert_eq!(
+            how_many(record.connection(), "job_record"),
+            0,
+            "the provisional record of a job the machine refused stands"
+        );
+        let outcome = the_submissions_outcome_record(record.connection());
+        assert_eq!(outcome.units[2].1, Some(UnitOutcome::Failed), "{outcome:?}");
+        assert_eq!(
+            the_material_debts_of(record.connection()).len(),
+            1,
+            "the material it published is never a job, so its removal is owed"
+        );
     }
 
     /// **`Rendering` S9 and `Rendering` S4a: a unit whose record ask brought nothing back is
@@ -2218,6 +2292,18 @@ mod on_a_desk_with_a_socket_pair {
         };
         assert_eq!(writes_into(&jobs[0].1), Some(second.as_text()), "the check names its range job");
         assert_eq!(writes_into(&jobs[1].1), None, "the range job names nobody");
+        // **`Render Settings` Y1d, `Job files and outputs` P6a: the check's
+        // payload names the range's frames**, so its reading steps them and the
+        // two decide where the folder sits by the same frames (the runner's
+        // ruling of 2026-11-10); the range job carries nothing new.
+        let the_range = |manifest: &SubmissionManifest| {
+            smoozy_render_settings::payload::Payload::read_back(&manifest.settings_payload)
+                .expect("the manifest carries a payload")
+                .the_range_jobs_frames
+                .map(|frames| frames.explicit_list())
+        };
+        assert_eq!(the_range(&jobs[0].1), Some(vec![40, 41, 42, 43]), "the check names the range's frames");
+        assert_eq!(the_range(&jobs[1].1), None, "the range job names none");
         let the_folders_name = |manifest: &SubmissionManifest| match &manifest.job_output_folder {
             smoozy_job_files::manifest::WhereTheJobOutputFolderIs::ChosenAtRenderStart {
                 the_folders_name,
@@ -2342,7 +2428,9 @@ mod on_a_desk_with_a_socket_pair {
     }
 
     /// **The page as *Read the file* leaves it** — `settings` read and
-    /// standing, `Render Settings` B1's list answered, nothing ticked and nothing typed — and
+    /// standing, `Render Settings` B1's list answered, the read's own scene
+    /// ticked (`Render Settings` J7's third act, as every landing does; with
+    /// none ticked nothing is sent since 2026-11-10) and nothing typed — and
     /// the server row the page composes against. The reading is keyed by the
     /// stage's own `.blend`, so the page and the act name one file.
     fn the_page_after_a_read(
@@ -2387,6 +2475,7 @@ mod on_a_desk_with_a_socket_pair {
             &four_values,
             std::time::SystemTime::now(),
         );
+        smoozy_desktop::surface::render_settings::the_read_ticks_its_scene(&mut held, &server.as_text(), &file, None);
         held.version_lists.insert(
             server.as_text(),
             smoozy_render_settings::version::TheListThisPageAsksFor {
@@ -2602,8 +2691,14 @@ mod on_a_desk_with_a_socket_pair {
         second.name = smoozy_render_settings::names::ExactName::as_the_reading_produced_it("Exterior");
         two_scenes.scenes.push(second);
         let (held, file, row) = the_page_after_a_read(&stage, two_scenes);
-        let given = what_the_page_composed(&stage, &held, &file, &row, true);
-        assert!(given.scene_jobs[0].scene.is_none(), "several scenes, none ticked, none named");
+        // **A job naming no scene over a reading of several** — since
+        // 2026-11-10 only a page from a history entry whose job named none
+        // composes one after a read (`Render Settings` F5); the page here
+        // ticks the read's scene, so its job's name and range are taken off.
+        let mut given = what_the_page_composed(&stage, &held, &file, &row, true);
+        given.scene_jobs[0].scene = None;
+        given.scene_jobs[0].frame_range = None;
+        assert!(given.the_reading_in_force.is_some(), "a reading of several scenes stands");
         assert_eq!(
             the_act(&stage, &point, given).await,
             WhatTheActCameTo::TheFirstFrameIsNotKnown { a_scene_can_be_ticked: true }
@@ -3261,7 +3356,7 @@ mod on_a_desk_with_a_socket_pair {
     }
 
     /// **The whole of what step 8's milestone asks for at the desk: a job
-    /// submitted with *Download as it renders* on, the local record closed and
+    /// submitted with *Download frames as they render* on, the local record closed and
     /// opened again, and a connected period that brings the frames home with
     /// nobody asking for them.**
     ///
@@ -3744,6 +3839,7 @@ mod on_a_desk_with_a_socket_pair {
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             }),
             attempts: 1,
@@ -3842,8 +3938,8 @@ mod on_a_desk_with_a_socket_pair {
         let said = smoozy_desktop::surface::set_up::what_it_came_to(&came_to).said;
         assert!(
             said.starts_with(&format!(
-                "Setup stopped. Smoozy's server software cannot be replaced: {} from an earlier \
-                 setup need an answer this computer cannot give",
+                "Setup stopped. Smoozy on this server can't be updated: {} from an earlier \
+                 setup are waiting for an answer that can't be given here",
                 smoozy_desktop::typography::a_figure_with_its_unit(2, "jobs")
             )),
             "the card said: {said}"

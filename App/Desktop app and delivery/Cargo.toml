@@ -195,3 +195,9 @@ zstd.workspace = true
 # tree beneath `smoozy-server-protocol`, whose own tests run the same server,
 # so no version moves.
 russh.workspace = true
+# **Tests only, added 2026-11-13 (the Creator's note 4 on the test copy of
+# 2026-11-12).** A read the server is still running past a minute must land, and
+# a test of that waits on the real figures — a minute's wait per ask and a
+# second between asks — so the test runtime's clock is paused and runs at once.
+# **The version is the workspace's own pin**, as `Server Setup`'s tests use it.
+tokio = { workspace = true, features = ["test-util"] }

@@ -760,6 +760,53 @@ mod on_a_desk_with_a_socket_pair {
         drop(lending);
     }
 
+    /// **`Server Setup` S4 item 5 as narrowed 2026-11-12, the Fable scout's
+    /// entry 17: a ready action that stopped with no state standing, driven
+    /// before this copy was opened, is still the run to carry on.** The card
+    /// names it (`Server Setup` Y6b) and draws it as stopped part-way with *Set
+    /// up again*; a copy opened after it holds no list of the runs it drove.
+    /// **Undone, this fails**: with an empty list the take-over finds nothing,
+    /// so a swap's run would begin over it and *Set up again* would open a
+    /// fresh run and fetch everything again.
+    #[tokio::test]
+    async fn a_ready_action_that_stopped_before_this_copy_was_opened_is_still_carried_on() {
+        let Some(machine) = TheMachine::standing("stopped-before-this-copy") else {
+            println!(
+                "SKIPPED: no OpenSSH sftp-server, or the machine's program is not built beside \
+                 this test (`cargo build -p smoozy-server`)."
+            );
+            return;
+        };
+        let (sessions, lending) = connected(&machine).await;
+        let area = machine.area.display().to_string();
+        std::fs::write(machine.home.join("a-driver-answers"), b"").expect("a driver put on");
+        assert!(
+            smoozy_desktop::setting_up::a_swap_may_begin(&sessions, &area, &[]).await,
+            "a driver answers and no setup stands"
+        );
+
+        // **A ready action of the additive class, opened and never finished**:
+        // no machine-level state is set, as a Blender fetch on a server that
+        // holds the rest sets none (`Server Setup` Y1).
+        let mut fields = Fields::none()
+            .and(asked::THE_KIND_OF_SETUP_FIELD, asked::THE_READY_ACTION)
+            .and(asked::HOW_MANY_COMPOSED_BOUNDARIES_FIELD, "2");
+        for (at, boundary) in [asked::THE_BOUNDARY_STARTED, asked::THE_BOUNDARY_DONE].iter().enumerate() {
+            fields = fields.and(
+                &asked::the_field_of_item(asked::A_COMPOSED_BOUNDARY, at, asked::THE_BOUNDARY_FIELD),
+                *boundary,
+            );
+        }
+        machine.ask(&a_request(asked::THE_SETUP_RUN_IS_OPENED_REQUEST, fields));
+
+        // **This copy drove nothing here** — it was opened after the run.
+        assert!(
+            !smoozy_desktop::setting_up::a_swap_may_begin(&sessions, &area, &[]).await,
+            "the stopped ready action the machine names would be replaced"
+        );
+        drop(lending);
+    }
+
     /// **A copy opened after the server was set up — so it drove no run there
     /// and no state stands — draws the setup's steps, never *No setup read
     /// from this server*** (`Server Setup` Y6a, `Server Setup` Y6b; `Open Threads`, *The Set
@@ -810,8 +857,8 @@ mod on_a_desk_with_a_socket_pair {
             value.as_str().unwrap_or_default().replace('\u{a0}', " ")
         };
         // **`Server Setup` W1: a run every step of which had nothing to do
-        // reads *Nothing to prepare***, a finished setup's own ending.
-        assert_eq!(read_as(&card["state"]), "Nothing to prepare", "{card:#}");
+        // reads *Nothing to install***, a finished setup's own ending.
+        assert_eq!(read_as(&card["state"]), "Nothing to install", "{card:#}");
         assert_eq!(card["dot"], "ok", "{card:#}");
         assert!(
             card["what_was_done"].as_array().is_some_and(|steps| !steps.is_empty()),
@@ -1206,7 +1253,7 @@ mod on_a_desk_with_a_socket_pair {
         fn the_current_release(
             &mut self,
             _detected: &smoozy_server_protocol::release::manifest::TargetTuple,
-        ) -> Result<(smoozy_server_protocol::release::verifying::AVerifiedRelease, Vec<u8>), String> {
+        ) -> Result<(smoozy_server_protocol::release::verifying::AVerifiedRelease, Vec<u8>), smoozy_desktop::setting_up::ADownloadThatFailed> {
             panic!("a release is read for a server already set up")
         }
     }

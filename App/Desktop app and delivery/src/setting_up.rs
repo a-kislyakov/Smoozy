@@ -218,17 +218,39 @@ pub enum WhereTheSetUpGot {
     NoRootCouldBeChosen { said: String },
     /// **`Server Setup` R7's hand-over did not land.** The machine's own words
     /// travel.
-    TheHandOverDidNotLand { said: String },
+    TheHandOverDidNotLand {
+        said: String,
+        /// **One free-space reading where the folder goes, taken at the
+        /// failure, showed nothing left** — the Rough what-if answers, share
+        /// 2 (120), in `File Browser`'s upload-refusal rule's shape. A reading
+        /// that does not come back makes no claim.
+        the_disk_is_full: bool,
+    },
     /// The root was handed over and the record of it would not take.
     /// **`Job files and outputs` L1 records it in two places and a machine
     /// missing the first refuses every job**, so a half-written record stops
     /// here rather than going on.
     TheRootCouldNotBeRecorded { said: String },
+    /// **`Server Setup` R6a's change of later on 2026-11-13, items 1 and 4:
+    /// Smoozy's folder, recorded on the machine, could not be established** —
+    /// its record could not be read, or the root does not hold its mark. No
+    /// disk is chosen in its place and nothing is made, in Smoozy's own words
+    /// (Sol's look at the scout's list, points 1 and 2).
+    SmoozysFolderCouldNotBeFound { said: String },
     /// **This build's own release could not be fetched or would not be
     /// admitted** — `Server protocol and transfers` B8d,
     /// `Server protocol and transfers` B9 and `Server protocol and transfers`
-    /// B10. Nothing was placed.
-    TheReleaseWasNotAdmitted { said: String },
+    /// B10. Nothing was placed. **`nothing_answered`: every try came to no
+    /// answer** (`Server protocol and transfers` B10b), so the card says the
+    /// download got no response and to try again in a few minutes.
+    TheReleaseWasNotAdmitted { said: String, nothing_answered: bool },
+    /// **No release is built for this server's processor** — `Server protocol
+    /// and transfers` B8's *"no matching entry is an unsupported machine"*,
+    /// told as that rather than as a refused release, and reached before the
+    /// hand-over so nothing on the machine is touched (`Server Setup` R2 as
+    /// changed 2026-11-11, the four questions, scout 3.3). `named` is the
+    /// processor the server named.
+    TheProcessorIsNotSupported { named: String },
     /// **The placement ran and this is `Rented-server runtime` G3's phase in
     /// the caller's own terms.**
     ThePlacement { reached: WhatThePlacementReached },
@@ -719,14 +741,20 @@ pub async fn the_rentals_tuple<C: AHeldConnection>(
 // `Server Setup` R2, step 3 — the candidate set, the hand-over, the recording
 // ════════════════════════════════════════════════════════════════════════════
 
-/// **`Server Setup` R6's candidate set, as this application can offer it
-/// today — and what that costs is written here rather than left to be
-/// discovered.**
+/// **`Server Setup` R6's candidate set: the home mount, and — since
+/// 2026-11-13, `Server Setup` R6a — the one attached volume larger than it.**
 ///
 /// R6's set is *"the mount the connection login's own home area sits on, plus
-/// every attached volume"*. **The first is offered and the second is not.**
+/// every attached volume"*. **`Server Setup` R6a offers the largest volume whose source is a
+/// device, written to by the login (root, or admin access with no password),
+/// with more available space than the home mount**, read from
+/// `/proc/self/mountinfo`; everything that cannot be read offers nothing more.
+/// The Creator, 2026-11-12: *"If it's available, use it of course."* **The
+/// paragraphs below are what stood until then, kept as written.**
 ///
-/// **Why the second is not.** Enumerating a machine's mounts and telling an
+/// ~~R6's set … **The first is offered and the second is not.**~~
+///
+/// **Why the second was not.** Enumerating a machine's mounts and telling an
 /// attached volume from a memory-backed filesystem, a read-only mount and a
 /// host disk bind-mounted into a container needs a command and an output format
 /// that no document in this project has read and dated. **Rule 2 forbids
@@ -753,17 +781,327 @@ pub async fn the_rentals_tuple<C: AHeldConnection>(
 /// what is offered.
 pub async fn the_locations_this_login_can_offer<C: AHeldConnection>(
     sessions: &ThisServersSessions<C>,
+    home: &str,
+    admin_access_needs_no_password: bool,
 ) -> Vec<AWritableLocation> {
-    let home = match the_logins_own_area(sessions).await {
-        Some(home) => home,
-        None => return Vec::new(),
-    };
-    let reading = the_free_space_at(sessions, &home).await;
-    vec![AWritableLocation {
-        path: home,
+    let reading = the_free_space_at(sessions, home).await;
+    let home = AWritableLocation {
+        path: home.to_string(),
         what_it_is: WhatTheLocationIs::TheMountTheLoginsHomeAreaSitsOn,
         the_reading: reading,
-    }]
+    };
+    let mut offered = vec![home.clone()];
+    if let Some(volume) = the_bigger_disk(sessions, &home, admin_access_needs_no_password).await {
+        offered.push(volume);
+    }
+    offered
+}
+
+/// **`Server Setup` R6a's change of later on 2026-11-13, item 2: how long one
+/// disk inquiry waits** — the area's resolution, a record or mark read, a
+/// mount point's kind, a free-space reading, a test write. A Build figure. One
+/// that does not answer within it ends as the channel being gone, so the point
+/// lets that reading session go (Sol's look at the scout's list, point 4).
+/// Two seconds in the tests, so a server that never answers is met quickly.
+pub const A_DISK_INQUIRY_WAITS_AT_MOST: Duration =
+    if cfg!(test) { Duration::from_secs(2) } else { Duration::from_secs(30) };
+
+/// **One file read whole, within [`A_DISK_INQUIRY_WAITS_AT_MOST`]** — *the
+/// channel is gone* where it does not answer in time.
+async fn a_file_read_within_the_limit<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    path: &str,
+) -> Result<Vec<u8>, readings::WhatTheMachineSaid> {
+    let at = path.to_string();
+    let read = sessions
+        .a_reading(true, move |subsystem| {
+            Box::pin(async move {
+                tokio::time::timeout(A_DISK_INQUIRY_WAITS_AT_MOST, async {
+                    let mut files = smoozy_server_setup::wiring::TheMachinesFiles::on(subsystem);
+                    files.read_whole(&at).await
+                })
+                .await
+                .map_err(|_| smoozy_server_protocol::subsystem::SubsystemFailure::TheChannelIsGone)
+            })
+        })
+        .await;
+    match read {
+        Ok(Ok(said)) => said,
+        Ok(Err(_)) | Err(_) => Err(readings::WhatTheMachineSaid::TheChannelIsGone),
+    }
+}
+
+/// **`Server Setup` R7's one-byte test write, by the login, at `folder`, within
+/// the limit** — what `Server Setup` R6a's change of later on 2026-11-13, item 3, takes as the
+/// login really being able to write to a volume.
+async fn a_test_write_lands_within_the_limit<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    folder: &str,
+) -> bool {
+    let at = folder.to_string();
+    matches!(
+        sessions
+            .a_reading(true, move |subsystem| {
+                Box::pin(async move {
+                    tokio::time::timeout(A_DISK_INQUIRY_WAITS_AT_MOST, async {
+                        let mut files = smoozy_server_setup::wiring::TheMachinesFiles::on(subsystem);
+                        acts::confirm_the_landing(&mut files, &at).await.it_was_carried_out()
+                    })
+                    .await
+                    .map_err(|_| smoozy_server_protocol::subsystem::SubsystemFailure::TheChannelIsGone)
+                })
+            })
+            .await,
+        Ok(Ok(true))
+    )
+}
+
+/// **`Server Setup` R6a: the one attached volume offered beside the home
+/// mount, or nothing.** As changed later on 2026-11-13, item 3 (Sol's look at
+/// the scout's list, point 3): **the login must really be able to write
+/// there** — its own test write lands at the mount point, or admin access
+/// needs no password and `Server Setup` R7's hand-over is what is tried, the home mount
+/// alone following where it does not land ([`TheLayoutChosen::the_home_mount_alone`]).
+/// Neither its source's name nor the login being root decides it. Every
+/// judgement is `smoozy_server_setup::placement`'s; this takes the readings.
+async fn the_bigger_disk<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    home: &AWritableLocation,
+    admin_access_needs_no_password: bool,
+) -> Option<AWritableLocation> {
+    let mut channel = OnThisServersPoint { sessions };
+    let mounts = readings::read_the_mounts(&mut channel).await?;
+    let worth = smoozy_server_setup::placement::the_mount_points_worth_measuring(
+        &smoozy_server_setup::placement::the_mounts_as_read(&mounts),
+        &home.path,
+    );
+    let mut measured = Vec::new();
+    for mount_point in worth {
+        let at = mount_point.clone();
+        let it_is_a_directory = matches!(
+            sessions
+                .a_reading(true, move |subsystem| {
+                    Box::pin(async move {
+                        tokio::time::timeout(A_DISK_INQUIRY_WAITS_AT_MOST, subsystem.stat(at.as_bytes()))
+                            .await
+                            .map_err(|_| smoozy_server_protocol::subsystem::SubsystemFailure::TheChannelIsGone)
+                    })
+                })
+                .await,
+            Ok(Ok(Ok(attributes))) if smoozy_file_browser::listing::Kind::from_mode(attributes.permissions).is_a_folder()
+        );
+        let reading = the_free_space_at(sessions, &mount_point).await;
+        // **The test write only where the rest could offer it**, so no
+        // volume that loses is written to.
+        let worth_a_write = it_is_a_directory
+            && reading.as_ref().zip(home.the_reading.as_ref()).is_some_and(|(volume, home)| {
+                volume.the_path_it_was_taken_against == mount_point && volume.available_bytes > home.available_bytes
+            });
+        let the_login_can_write = worth_a_write
+            && (admin_access_needs_no_password || a_test_write_lands_within_the_limit(sessions, &mount_point).await);
+        measured.push(smoozy_server_setup::placement::AVolumeMeasured {
+            volume: AWritableLocation {
+                path: mount_point,
+                what_it_is: WhatTheLocationIs::AnAttachedVolume,
+                the_reading: reading,
+            },
+            it_is_a_directory,
+            the_login_can_write,
+        });
+    }
+    smoozy_server_setup::placement::the_volume_offered(home, measured)
+}
+
+/// **The check after the restart a setup issued found the GPU still not
+/// answering** — Smoozy's own sentence, carried as a failed driver step's
+/// words. **The Rough what-if answers, share 2 (142, 143): the card says it
+/// whole, with the way on**, since *Set up again* only takes this same check
+/// again (`Server Setup` T5) and a fresh setup is what reads the machine anew.
+pub const THE_GPU_STILL_DOES_NOT_RESPOND: &str = "The server restarted, but its GPU still does not respond.";
+
+/// **`Server Setup` R6a as changed later on 2026-11-13, item 1: the record of
+/// the root, read at the home location before any disk is listed** (Sol's look
+/// at the scout's list, points 2 and 4). `Ok(None)` only where no record is
+/// there; **the reason for anything else**, which stops the setup rather than
+/// choosing a disk again over a root that stands.
+pub async fn the_layout_on_record<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    home: &str,
+) -> Result<Option<TheLayout>, String> {
+    let Some(at) = smoozy_server_setup::placement::the_record_of_the_root_for(home) else {
+        return Ok(None);
+    };
+    let read = a_file_read_within_the_limit(sessions, &at).await;
+    smoozy_server_setup::placement::what_the_record_of_the_root_says(home, &at, read)
+}
+
+/// **A read as the shared mark judges take it.**
+fn as_a_mark_read(read: Result<Vec<u8>, readings::WhatTheMachineSaid>) -> smoozy_job_files::layout::AMarkRead {
+    use smoozy_job_files::layout::AMarkRead;
+    match read {
+        Ok(bytes) => AMarkRead::Read(bytes),
+        Err(readings::WhatTheMachineSaid::ThePathIsNotThere) => AMarkRead::NotThere,
+        Err(other) => AMarkRead::CouldNotBeRead(other.in_words().to_string()),
+    }
+}
+
+/// **`Server Setup` R6a as changed later on 2026-11-13, item 4: a recorded
+/// root holds its mark** before anything is handed over or made — `Ok(true)`
+/// where a mark is recorded and stands, `Ok(false)` where none is recorded (a
+/// root placed before marks), and the reason where it does not stand.
+///
+/// **`Server Setup` R6b, the Creator's ruling of 2026-11-14 on 164: a root
+/// whose mark alone is gone gets it back.** Where the root's mark is not there
+/// and the root still stands holding one of Smoozy's own areas, the recorded
+/// mark is written into it again and the root stands. A root that is not
+/// there, holds none of Smoozy's areas, or holds another mark still stops.
+pub async fn the_roots_mark_is_checked<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    layout: &TheLayout,
+) -> Result<bool, String> {
+    use smoozy_job_files::layout::{
+        the_recorded_mark, the_root_holds_its_mark, AMarkRead, THE_RECORD_OF_THE_ROOTS_MARK, THE_ROOTS_MARK,
+    };
+    let recorded_at = smoozy_server_protocol::placement::records::the_record_at(
+        &layout.area(Area::Package),
+        THE_RECORD_OF_THE_ROOTS_MARK,
+    );
+    let read = a_file_read_within_the_limit(sessions, &recorded_at).await;
+    let Some(recorded) = the_recorded_mark(&recorded_at, as_a_mark_read(read))? else {
+        return Ok(false);
+    };
+    let root = layout.root().as_path();
+    let in_the_root = format!("{root}/{THE_ROOTS_MARK}");
+    let found = as_a_mark_read(a_file_read_within_the_limit(sessions, &in_the_root).await);
+    if found == AMarkRead::NotThere && the_root_holds_smoozys_own_areas(sessions, root).await {
+        let mut files = OnThisServersPoint { sessions };
+        a_mark_is_written_on(&mut files, &in_the_root, &recorded).await?;
+        return Ok(true);
+    }
+    the_root_holds_its_mark(root, &recorded, found).map(|()| true)
+}
+
+/// **`Server Setup` R6b: the root stands and holds at least one of Smoozy's
+/// own areas** (`Job files and outputs` L6's five folders), read within the
+/// limit. Anything else — not there, not a folder, not answering — is no.
+async fn the_root_holds_smoozys_own_areas<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    root: &str,
+) -> bool {
+    let mut files = OnThisServersPoint { sessions };
+    match tokio::time::timeout(A_DISK_INQUIRY_WAITS_AT_MOST, files.list_one_directory(root)).await {
+        Ok(Ok(listed)) => a_listing_holds_smoozys_own_areas(&listed),
+        _ => false,
+    }
+}
+
+/// **`Server Setup` R6b's judge, on a listing of the root.**
+fn a_listing_holds_smoozys_own_areas(listed: &[readings::AListedThing]) -> bool {
+    listed.iter().any(|thing| {
+        thing.it_is_a_directory
+            && smoozy_job_files::layout::EVERY_AREA.iter().any(|area| thing.name == area.segment().as_bytes())
+    })
+}
+
+/// **`Server Setup` R6a as changed later on 2026-11-13, item 4: the mark
+/// written** — a fresh identity into the root, then beside the record, in that
+/// order, so a mark half written reads as none and is written again.
+pub async fn the_roots_mark_is_written<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    layout: &TheLayout,
+) -> Result<(), String> {
+    use smoozy_job_files::layout::{THE_RECORD_OF_THE_ROOTS_MARK, THE_ROOTS_MARK};
+    let mark = Identity::issue(IdentityKind::Operation)
+        .map_err(|_| "Could not generate an ID for Smoozy's folder.".to_string())?
+        .as_text();
+    let mut files = OnThisServersPoint { sessions };
+    let in_the_root = format!("{}/{THE_ROOTS_MARK}", layout.root().as_path());
+    let beside_the_record = smoozy_server_protocol::placement::records::the_record_at(
+        &layout.area(Area::Package),
+        THE_RECORD_OF_THE_ROOTS_MARK,
+    );
+    the_marks_are_written_on(&mut files, &in_the_root, &beside_the_record, mark.as_bytes()).await
+}
+
+/// **[`the_roots_mark_is_written`]'s writes, on any file surface**: into the
+/// root, then beside the record. **`Server Setup` R6a as changed 2026-11-13
+/// (Sol's look at the scout's list, second check): each mark is written whole
+/// to a file beside it, read back, and renamed into place in one step**, so a
+/// connection that drops between making a file and writing its contents
+/// leaves no empty mark under either name. Until then each was written
+/// straight into place, and a drop there left the saved mark empty beside a
+/// full root mark, which stopped every retry.
+async fn the_marks_are_written_on(
+    files: &mut impl TheMachinesFileSurface,
+    in_the_root: &str,
+    beside_the_record: &str,
+    mark: &[u8],
+) -> Result<(), String> {
+    for at in [in_the_root, beside_the_record] {
+        a_mark_is_written_on(files, at, mark).await?;
+    }
+    Ok(())
+}
+
+/// **One mark, written whole beside its name, read back and renamed into
+/// place** — [`the_marks_are_written_on`]'s step, and `Server Setup` R6b's
+/// whole write.
+async fn a_mark_is_written_on(
+    files: &mut impl TheMachinesFileSurface,
+    at: &str,
+    mark: &[u8],
+) -> Result<(), String> {
+    let beside = format!("{at}.part");
+    let in_words = |said: readings::WhatTheMachineSaid| format!("{at}: {}", said.in_words());
+    files.write_whole(&beside, mark).await.map_err(in_words)?;
+    if files.read_whole(&beside).await.map_err(in_words)? != mark {
+        return Err(in_words(readings::WhatTheMachineSaid::TheReplacementCouldNotBeVerified));
+    }
+    files.replace_by_rename(&beside, at).await.map_err(in_words)?;
+    Ok(())
+}
+
+/// **`Server Setup` R6 and `Server Setup` R6a as changed later on 2026-11-13: the layout a
+/// setup places on.**
+pub struct TheLayoutChosen {
+    pub layout: TheLayout,
+    /// **`Server Setup` R6a, item 3: the home mount alone**, where the layout puts the root
+    /// on a volume — what the hand-over falls back to where its own test write
+    /// does not land there. Nothing for a recorded layout, which is never
+    /// re-chosen.
+    pub the_home_mount_alone: Option<TheLayout>,
+    /// **`Server Setup` R6a, item 4: a mark is recorded and stands**, so none is written.
+    pub a_mark_stands: bool,
+}
+
+/// **`Server Setup` R6, `Server Setup` R6a and `Job files and outputs` 1.1, in `Server Setup` R6a's order of
+/// later on 2026-11-13** (Sol's look at the scout's list, points 1, 2 and 4):
+/// the login's area, then the record of the root there and its mark — **before
+/// any disk is listed or measured** — and only where no record is there, the
+/// set and the choice.
+pub async fn the_layout_this_setup_uses<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    admin_access_needs_no_password: bool,
+) -> Result<TheLayoutChosen, WhereTheSetUpGot> {
+    let Some(home) = the_logins_own_area(sessions).await else {
+        return the_layout_this_machine_gets(&[]).map(|layout| TheLayoutChosen {
+            layout,
+            the_home_mount_alone: None,
+            a_mark_stands: false,
+        });
+    };
+    let could_not_find = |said| WhereTheSetUpGot::SmoozysFolderCouldNotBeFound { said };
+    if let Some(layout) = the_layout_on_record(sessions, &home).await.map_err(could_not_find)? {
+        let a_mark_stands = the_roots_mark_is_checked(sessions, &layout).await.map_err(could_not_find)?;
+        return Ok(TheLayoutChosen { layout, the_home_mount_alone: None, a_mark_stands });
+    }
+    let locations = the_locations_this_login_can_offer(sessions, &home, admin_access_needs_no_password).await;
+    let layout = the_layout_this_machine_gets(&locations)?;
+    let the_home_mount_alone = (locations.len() > 1)
+        .then(|| the_layout_this_machine_gets(&locations[..1]).ok())
+        .flatten()
+        .filter(|alone| alone != &layout);
+    Ok(TheLayoutChosen { layout, the_home_mount_alone, a_mark_stands: false })
 }
 
 /// **The login's own area, resolved by the machine rather than composed.**
@@ -775,9 +1113,15 @@ pub async fn the_locations_this_login_can_offer<C: AHeldConnection>(
 async fn the_logins_own_area<C: AHeldConnection>(
     sessions: &ThisServersSessions<C>,
 ) -> Option<String> {
+    // **Within the limit** (`Server Setup` R6a's change of later on
+    // 2026-11-13, item 2).
     let resolved = sessions
         .a_reading(true, move |subsystem| {
-            Box::pin(async move { subsystem.resolve(b".").await })
+            Box::pin(async move {
+                tokio::time::timeout(A_DISK_INQUIRY_WAITS_AT_MOST, subsystem.resolve(b"."))
+                    .await
+                    .unwrap_or(Err(smoozy_server_protocol::subsystem::SubsystemFailure::TheChannelIsGone))
+            })
         })
         .await;
     match resolved {
@@ -788,20 +1132,22 @@ async fn the_logins_own_area<C: AHeldConnection>(
 
 /// **`Job files and outputs` L2's reading, per path, at the candidate's own
 /// path** — through `Server protocol and transfers` §9.1's first route.
-async fn the_free_space_at<C: AHeldConnection>(
+pub(crate) async fn the_free_space_at<C: AHeldConnection>(
     sessions: &ThisServersSessions<C>,
     path: &str,
 ) -> Option<FreeSpaceReading> {
     let at = path.to_string();
+    // **Within the limit** (`Server Setup` R6a's change of later on
+    // 2026-11-13, item 2): a disk that does not answer offers nothing.
     let read = sessions
         .a_reading(true, move |subsystem| {
             Box::pin(async move {
-                Ok(
-                    smoozy_server_protocol::free_space::read_it_at_the_deepest_ancestor_that_exists(
-                        subsystem, &at,
-                    )
-                    .await,
+                tokio::time::timeout(
+                    A_DISK_INQUIRY_WAITS_AT_MOST,
+                    smoozy_server_protocol::free_space::read_it_at_the_deepest_ancestor_that_exists(subsystem, &at),
                 )
+                .await
+                .map_err(|_| smoozy_server_protocol::subsystem::SubsystemFailure::TheChannelIsGone)
             })
         })
         .await;
@@ -865,8 +1211,12 @@ pub async fn the_hand_over<C: AHeldConnection>(
     let mut files = OnThisServersPoint { sessions };
     let placed = acts::carry_out_the_placement(&mut channel, &mut files, layout, how).await;
     if !placed.it_is_complete() {
+        let the_disk_is_full = the_free_space_at(sessions, layout.root().as_path())
+            .await
+            .is_some_and(|reading| reading.available_bytes == 0);
         return Err(WhereTheSetUpGot::TheHandOverDidNotLand {
             said: what_the_hand_over_said(&placed),
+            the_disk_is_full,
         });
     }
     the_root_is_recorded(sessions, row, layout, installation).await
@@ -952,14 +1302,90 @@ pub async fn the_root_is_recorded<C: AHeldConnection>(
 /// length**, so a source offering more than the manifest describes is refused
 /// at the moment it says so rather than after the extra bytes are in memory.
 pub trait FetchesOneSource {
-    fn fetch(&mut self, source: &str, ceiling: u64) -> Result<Vec<u8>, String>;
+    fn fetch(&mut self, source: &str, ceiling: u64) -> Result<Vec<u8>, ADownloadThatFailed>;
 }
 
+/// **A read of Smoozy's releases that did not bring back what was asked
+/// for**, in words, and whether every try came to no answer —
+/// `Server protocol and transfers` B10b's *the download got no response*,
+/// which is what lets the card and the server row say so and to try again in a
+/// few minutes. **Anything else that stops the read** — a refused signature, a
+/// file not published, another version — comes here with `nothing_answered`
+/// false and its own words.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ADownloadThatFailed {
+    /// The last address and its answer, or the refusal, in words.
+    pub said: String,
+    /// Every try came to no answer, a timeout, a 5xx or a 429.
+    pub nothing_answered: bool,
+    /// **The release names no artifact for this server's tuple** —
+    /// `Server protocol and transfers` B8's unsupported machine, kept apart
+    /// from a refused release so it is said as what it is. Added 2026-11-11,
+    /// the four questions, scout 3.3.
+    pub no_release_is_built_for_it: bool,
+}
+
+impl From<String> for ADownloadThatFailed {
+    fn from(said: String) -> Self {
+        ADownloadThatFailed { said, nothing_answered: false, no_release_is_built_for_it: false }
+    }
+}
+
+impl From<&str> for ADownloadThatFailed {
+    fn from(said: &str) -> Self {
+        said.to_string().into()
+    }
+}
+
+impl std::fmt::Display for ADownloadThatFailed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.said)
+    }
+}
+
+/// So the words read as words wherever they are only read.
+impl std::ops::Deref for ADownloadThatFailed {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.said
+    }
+}
+
+impl PartialEq<&str> for ADownloadThatFailed {
+    fn eq(&self, other: &&str) -> bool {
+        self.said == *other
+    }
+}
+
+/// **`Server protocol and transfers` B10b: the plain address, then the API
+/// route, then the plain address again**, over this one client, which says
+/// `Server protocol and transfers` B8's constant name on every route.
 impl FetchesOneSource for smoozy_server_protocol::release::fetching::AFetchOverHttps {
-    fn fetch(&mut self, source: &str, ceiling: u64) -> Result<Vec<u8>, String> {
+    fn fetch(&mut self, source: &str, ceiling: u64) -> Result<Vec<u8>, ADownloadThatFailed> {
+        use smoozy_server_protocol::release::two_routes::{read_by_either_route, TheRealClock};
         self.the_most_bytes_it_will_read = ceiling;
-        self.continue_a_body(source, Vec::new(), ceiling)
-            .map_err(|why| the_fetchs_words(source, &why))
+        read_by_either_route(source, ceiling, self, &mut TheRealClock::from_now())
+            .map_err(|every| the_words_when_every_try_failed(&every))
+    }
+}
+
+/// **What every try at one file came to, in words** — the last address and
+/// its answer (Rule 9's standard words), and how many tries it took, with
+/// whether nothing answered (`Server protocol and transfers` B10b). **Both
+/// ways in say it the same**: setup's reads here, and the update's in
+/// `crate::updating::checking`.
+pub fn the_words_when_every_try_failed(
+    every: &smoozy_server_protocol::release::two_routes::EveryTryFailed,
+) -> ADownloadThatFailed {
+    let last = the_fetchs_words(&every.the_last_address, &every.the_last_answer);
+    ADownloadThatFailed {
+        said: if every.how_many_tries > 1 {
+            format!("{last} Tried {} times.", every.how_many_tries)
+        } else {
+            last
+        },
+        nothing_answered: every.nothing_answered,
+        no_release_is_built_for_it: false,
     }
 }
 
@@ -980,7 +1406,7 @@ pub fn the_current_release(
     store: &mut dyn RemembersTheTrustRecordHere,
     detected: &smoozy_server_protocol::release::manifest::TargetTuple,
     from: &str,
-) -> Result<(AVerifiedRelease, Vec<u8>), String> {
+) -> Result<(AVerifiedRelease, Vec<u8>), ADownloadThatFailed> {
     let verified = the_release_file_admitted(root, fetch, store, detected, from, None)?;
     the_artifact_of(verified, fetch, from)
 }
@@ -1020,7 +1446,7 @@ pub fn this_builds_own_release(
     detected: &smoozy_server_protocol::release::manifest::TargetTuple,
     from: &str,
     own_package_version: &str,
-) -> Result<(AVerifiedRelease, Vec<u8>), String> {
+) -> Result<(AVerifiedRelease, Vec<u8>), ADownloadThatFailed> {
     let verified =
         the_release_file_admitted(root, fetch, store, detected, from, Some(own_package_version))?;
     this_copys_own_release_is_known(own_package_version, verified.manifest.release_sequence);
@@ -1037,7 +1463,7 @@ fn the_release_file_admitted(
     detected: &smoozy_server_protocol::release::manifest::TargetTuple,
     from: &str,
     must_name: Option<&str>,
-) -> Result<AVerifiedRelease, String> {
+) -> Result<AVerifiedRelease, ADownloadThatFailed> {
     let offered = fetch.fetch(from, THE_MOST_THE_RELEASE_FILE_MAY_BE)?;
     let offered = AnOfferedRelease::read(&offered)
         .ok_or_else(|| format!("{from}: not a release file."))?;
@@ -1048,16 +1474,27 @@ fn the_release_file_admitted(
             smoozy_server_protocol::release::manifest::ReleaseManifest::read(&offered.the_manifests_bytes)
         {
             if named.package_version != own {
-                return Err(the_wrong_versions_words(from, &named.package_version, own));
+                return Err(the_wrong_versions_words(from, &named.package_version, own).into());
             }
         }
     }
     let mut store = store;
-    let verified = accept_a_release(root, &mut store, &offered, detected, None)
-        .map_err(|why| the_admissions_words(&why))?;
+    let verified = accept_a_release(root, &mut store, &offered, detected, None).map_err(|why| {
+        ADownloadThatFailed {
+            no_release_is_built_for_it: matches!(
+                why,
+                WhyTheReleaseWasNotAccepted::TheRelease(
+                    smoozy_server_protocol::release::verifying::WhyTheReleaseWasRefused::TheSelection(
+                        smoozy_server_protocol::release::manifest::WhySelectionFailed::ThisMachineIsNotSupported
+                    )
+                )
+            ),
+            ..ADownloadThatFailed::from(the_admissions_words(&why, must_name.is_some()))
+        }
+    })?;
     if let Some(own) = must_name {
         if verified.manifest.package_version != own {
-            return Err(the_wrong_versions_words(from, &verified.manifest.package_version, own));
+            return Err(the_wrong_versions_words(from, &verified.manifest.package_version, own).into());
         }
     }
     Ok(verified)
@@ -1067,7 +1504,7 @@ fn the_release_file_admitted(
 /// words, and only what Smoozy knows.
 fn the_wrong_versions_words(from: &str, named: &str, own: &str) -> String {
     format!(
-        "{from} holds Smoozy {named}, not {own}. Not used."
+        "{from} contains Smoozy {named}, not {own}. Not used."
     )
 }
 
@@ -1077,31 +1514,29 @@ fn the_artifact_of(
     verified: AVerifiedRelease,
     fetch: &mut dyn FetchesOneSource,
     from: &str,
-) -> Result<(AVerifiedRelease, Vec<u8>), String> {
+) -> Result<(AVerifiedRelease, Vec<u8>), ADownloadThatFailed> {
     // **`Server protocol and transfers` B10: the artifact comes from an exact
     // source the verified manifest
-    // named, and from nowhere else.** Every source is tried in the manifest's
-    // own order, and the first whose bytes pass the length and the digest is
-    // the artifact.
-    let mut last = String::new();
+    // named, and from nowhere else** — or, by `Server protocol and transfers`
+    // B10b, the same file through the repository's API listing of that
+    // release, which the fetch tries on its own. Every source is tried in the
+    // manifest's own order, and the first whose bytes pass the length and the
+    // digest is the artifact.
+    let mut last: Option<ADownloadThatFailed> = None;
     for source in verified.selected.sources.clone() {
         let bytes = match fetch.fetch(&source, verified.selected.byte_length) {
             Ok(bytes) => bytes,
-            Err(said) => {
-                last = said;
+            Err(failed) => {
+                last = Some(failed);
                 continue;
             }
         };
         match verify_what_was_downloaded(&verified.selected, &source, &bytes) {
             Ok(()) => return Ok((verified, bytes)),
-            Err(why) => last = the_downloads_words(&source, &why),
+            Err(why) => last = Some(the_downloads_words(&source, &why).into()),
         }
     }
-    Err(if last.is_empty() {
-        format!("{from}: no download for this server's platform.")
-    } else {
-        last
-    })
+    Err(last.unwrap_or_else(|| format!("{from}: no download for this server's platform.").into()))
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1200,7 +1635,7 @@ pub fn this_copys_own_release_sequence(
     store: &mut dyn RemembersTheTrustRecordHere,
     from: &str,
     own_package_version: &str,
-) -> Result<u64, String> {
+) -> Result<u64, ADownloadThatFailed> {
     if let Some(known) = this_copys_own_release_sequence_if_known(own_package_version) {
         return Ok(known);
     }
@@ -1239,6 +1674,7 @@ pub fn this_copys_own_release_sequence_here(
         WHERE_THE_CURRENT_RELEASE_IS_READ_FROM,
         env!("CARGO_PKG_VERSION"),
     )
+    .map_err(|failed| failed.said)
 }
 
 // **The three below say what happened in standard software words and name the
@@ -1264,12 +1700,24 @@ fn the_fetchs_words(source: &str, why: &WhyTheFetchFailed) -> String {
         WhyTheFetchFailed::TheResumeDidNotLineUp { said } => {
             format!("could not resume the download: {}", a_sentence(said))
         }
+        WhyTheFetchFailed::TheReleaseListsNoSuchFile { file } => format!("does not list {file}."),
     };
     format!("{source} {what}")
 }
 
-fn the_admissions_words(why: &WhyTheReleaseWasNotAccepted) -> String {
+/// **A build's own release, refused only because its release sequence is
+/// below the remembered floor** (`Server protocol and transfers` B8d, as
+/// changed 2026-11-11 by the build runner's ruling on the Fable review's
+/// third sitting, fault 3): an older Smoozy installed by hand after a newer
+/// one was used here. The signature is good, so the ordinary sentence was
+/// untrue.
+const THIS_SMOOZY_IS_OLDER_THAN_ONE_USED_HERE: &str = crate::surface::panes::THIS_SMOOZY_IS_OLDER_THAN_ONE_USED_HERE;
+
+fn the_admissions_words(why: &WhyTheReleaseWasNotAccepted, the_builds_own_release: bool) -> String {
     match why {
+        WhyTheReleaseWasNotAccepted::TheRelease(
+            smoozy_server_protocol::release::verifying::WhyTheReleaseWasRefused::ItsReleaseSequenceIsBelowTheFloorInForce,
+        ) if the_builds_own_release => THIS_SMOOZY_IS_OLDER_THAN_ONE_USED_HERE.to_string(),
         WhyTheReleaseWasNotAccepted::TheRelease(_) => {
             "The release failed the signature check.".to_string()
         }
@@ -1311,6 +1759,11 @@ fn the_downloads_words(source: &str, why: &WhyTheDownloadWasRefused) -> String {
 /// where a screen keeps the run's words. Added 2026-10-24, the Creator's
 /// ruling on the sixteenth notes, note 1: until then the readings' words were
 /// kept nowhere, so a run that installed nothing showed nothing.
+fn a_driver_check_without_an_exit_stops_setup(check: &readings::WhatTheDriverCheckSaid) -> Option<TheRunsEnding> {
+    matches!(check, readings::WhatTheDriverCheckSaid::ItDidNot { the_exit: None, .. })
+        .then(|| TheRunsEnding::AStepFailed { step: Step::Driver, said: "GPU check did not finish.".into() })
+}
+
 pub async fn what_this_machine_needs<C: AHeldConnection>(
     sessions: &ThisServersSessions<C>,
     said: &WhatTheOpeningReadingsSaid,
@@ -1477,6 +1930,22 @@ pub struct TheRunBeingDriven<'s, C: AHeldConnection> {
     /// `Rented-server runtime` P7 and `Server Setup` Y8b working rather than
     /// something left undone.
     the_state_stands: bool,
+    /// **An elevated step met `Server Setup` E4's wrong-password ending**, so
+    /// the password the run held stopped working and is forgotten (2026-11-11,
+    /// the four questions, scout 1.1).
+    the_held_password_was_refused: bool,
+    /// **The password in use came from an earlier run's keeping** — *While
+    /// connected* or *Save* — and was not typed at this run's offer
+    /// (`Server Setup` E2, *a kept one that is refused is asked for again*,
+    /// 2026-11-12).
+    the_password_in_use_was_kept_earlier: bool,
+    /// **That kept password was refused by the elevating command in words
+    /// that are not `Server Setup` E4's one sentence**, so the offer is made
+    /// once. It is forgotten only if the password then typed runs a step.
+    the_kept_one_was_refused_in_other_words: bool,
+    /// **A step ran behind the password in use**: it ended cleanly, or
+    /// printed E4's own line for a command that failed.
+    the_password_in_use_ran_a_step: bool,
     /// **The last boundary this side saw the run stand at**, kept only so that
     /// a run whose machine has stopped answering is not reported as standing
     /// where it began.
@@ -1810,7 +2279,7 @@ async fn a_run_is_opened_once<C: AHeldConnection>(
         Some(answered) => answered,
         None => {
             return Err(TheOpeningWasRefused::ForGood(TheRunsEnding::NoRunCouldBeOpened {
-                said: "Smoozy's service on the server did not respond.".to_string(),
+                said: "Smoozy on this server did not respond.".to_string(),
             }))
         }
     };
@@ -1851,8 +2320,7 @@ async fn a_run_is_opened_once<C: AHeldConnection>(
             != Some(asked::THE_RECOVERY_ABANDONS)
     {
         return Err(TheOpeningWasRefused::ForGood(TheRunsEnding::NoRunCouldBeOpened {
-            said: "Smoozy's server software is too old to abandon a setup; it ran a recovery \
-                   instead. Nothing was cleared."
+            said: "Smoozy on this server is too old to end a setup. The setup is still incomplete."
                 .to_string(),
         }));
     }
@@ -1972,6 +2440,10 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
                 // (`Server Setup` Y1): the machine's take-over re-points a
                 // state only where one was there to re-point.
                 the_state_stands: false,
+                the_held_password_was_refused: false,
+                the_password_in_use_was_kept_earlier: false,
+                the_kept_one_was_refused_in_other_words: false,
+                the_password_in_use_ran_a_step: false,
                 the_last_one_seen: None,
                 the_stop_was_written: false,
                 the_restart_step_resumes: None,
@@ -2042,6 +2514,10 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
             // 2), so on one it stands, and only *done* clears it
             // (`Server Setup` S6).
             the_state_stands: taken_over.is_some(),
+            the_held_password_was_refused: false,
+            the_password_in_use_was_kept_earlier: false,
+            the_kept_one_was_refused_in_other_words: false,
+            the_password_in_use_ran_a_step: false,
             the_last_one_seen: None,
             the_stop_was_written: false,
             the_restart_step_resumes: None,
@@ -2272,11 +2748,23 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         // The whole-app three are one action, the connection, and until
         // cleared. **This run is the action**, so *do not remember it* is kept
         // exactly and *while connected*'s own drawn promise — *"a long setup
-        // asks once"* — holds inside the run. **Past the run nothing is kept**:
-        // no hold on the connected period and no put to the secret store is
-        // built, so a later run asks again. That is recorded as owed rather than
-        // passed over.
+        // asks once"* — holds inside the run. *(Until 2026-11-11 nothing was
+        // kept past the run, recorded here as owed; the two longer lifetimes
+        // are kept since, below.)*
+        //
+        // **From 2026-11-11 a password held past a run is tried at the first
+        // step that needs one** (the four questions, scout 1.1): *While
+        // connected* for this connection, *Save* from the secret store. A login
+        // `Server Setup` M3's probe found passwordless never reaches it.
         let mut given: Option<Origin> = None;
+        // **Asked for at the first step that needs a password, and once**, so
+        // a run with no elevated step never reads the store (`Whole app`:
+        // *no step, no question*).
+        let mut the_held_one_was_asked_for = false;
+        // **`Server Setup` E2, *a password is kept only once it worked*
+        // (2026-11-12): a password typed at the offer is told as working
+        // once, after the first step that ran behind it.**
+        let mut the_typed_one_is_not_yet_told_as_working = false;
         asker.a_run_stands(self.kind, &self.run);
         // **`Server Setup` Y7a: this is the next run**, so the screen lets the
         // last run's words go and says where this one's are kept — **unless
@@ -2319,6 +2807,28 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
                 // **A recovery takes the run over mid-step**, so the screen is
                 // told the run as it now is after every step.
                 asker.a_run_stands(self.kind, &self.run);
+                // **`Whole app`: a password that stops working is forgotten
+                // rather than retried** — whichever lifetime held it, and
+                // whether it was held before the run or given at its offer.
+                if std::mem::take(&mut self.the_held_password_was_refused) {
+                    asker.the_held_password_stopped_working();
+                    given = None;
+                    the_typed_one_is_not_yet_told_as_working = false;
+                }
+                // **A step ran behind the typed password, so it is kept as
+                // the user chose** — and a kept one refused before it, in
+                // words nothing was read from, is forgotten first: the typed
+                // one working is what establishes the kept one was wrong.
+                if std::mem::take(&mut self.the_password_in_use_ran_a_step)
+                    && std::mem::take(&mut the_typed_one_is_not_yet_told_as_working)
+                {
+                    if std::mem::take(&mut self.the_kept_one_was_refused_in_other_words) {
+                        asker.the_held_password_stopped_working();
+                    }
+                    if let Some(password) = &given {
+                        asker.the_password_given_worked(password);
+                    }
+                }
                 let ending = match went {
                     None => break,
                     Some(ending) => ending,
@@ -2335,9 +2845,21 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
                 // (`Server Setup` E6): a password that then fails is the step's
                 // own failure, in the machine's own words.
                 if let TheRunsEnding::AStepNeedsAdminAccess { step: refused } = ending {
+                    // **A password held for this server is tried before the
+                    // user is asked**, once per run.
+                    if !the_held_one_was_asked_for {
+                        the_held_one_was_asked_for = true;
+                        if let Some(held) = asker.the_password_held_here() {
+                            given = Some(held);
+                            self.the_password_in_use_was_kept_earlier = true;
+                            continue;
+                        }
+                    }
                     match self.the_password_is_asked_for(refused, asker, stop).await {
                         HowTheAskEnded::Given(password) => {
                             given = Some(password);
+                            self.the_password_in_use_was_kept_earlier = false;
+                            the_typed_one_is_not_yet_told_as_working = true;
                             continue;
                         }
                         HowTheAskEnded::TheUserStoppedTheRun => {
@@ -2483,7 +3005,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         let Some(answered) = ask(self.sessions, &self.package_area, &request).await else {
             return Some(TheRunsEnding::TheServerStoppedAnswering {
                 step,
-                said: "Smoozy's service on the server did not respond while the step's progress was saved.".to_string(),
+                said: "Smoozy on this server did not respond while saving the step's progress.".to_string(),
             });
         };
         if answered.fields.text(asked::WHAT_BECAME_OF_IT_FIELD)
@@ -2880,7 +3402,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         let Some(state) = self.the_runs_state().await else {
             return Err(TheRunsEnding::TheServerStoppedAnswering {
                 step,
-                said: "Smoozy's service on the server stopped responding. The missing libraries \
+                said: "Smoozy on this server stopped responding. The missing libraries \
                        could not be read."
                     .to_string(),
             });
@@ -2972,6 +3494,9 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         // **Row 104: the readings are taken afresh at the step** rather than
         // carried from the composition.
         let check = self.the_driver_check_taken().await;
+        if let Some(ending) = a_driver_check_without_an_exit_stops_setup(&check) {
+            return Some(ending);
+        }
         // **`Server Setup` R1 item 5 as corrected on 2026-09-30: the running
         // kernel's module, read afresh here too**, and only where the check
         // ended at 9. Eleventh-pass fix piece 10.
@@ -3230,8 +3755,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
                 if !self.the_driver_check().await {
                     return Some(TheRunsEnding::AStepFailed {
                         step: Step::Driver,
-                        said: "The server is back, but its GPU still does not respond."
-                            .to_string(),
+                        said: THE_GPU_STILL_DOES_NOT_RESPOND.to_string(),
                     });
                 }
                 self.the_bar_is_read_at_the_last_check().await;
@@ -3286,8 +3810,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         let Some(period) = self.the_period.clone() else {
             return Some(TheRunsEnding::AStepFailed {
                 step: Step::Restart,
-                said: "The server was not restarted: its connection could not be marked for the \
-                       restart."
+                said: "The server was not restarted: could not save the restart to Smoozy's database."
                     .to_string(),
             });
         };
@@ -3528,8 +4051,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         if !self.the_driver_check().await {
             return Some(TheRunsEnding::AStepFailed {
                 step: Step::Driver,
-                said: "The server is back, but its GPU still does not respond."
-                    .to_string(),
+                said: THE_GPU_STILL_DOES_NOT_RESPOND.to_string(),
             });
         }
         self.the_bar_is_read_at_the_last_check().await;
@@ -3706,7 +4228,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         let Some(answered) = answered else {
             return Some(TheRunsEnding::TheServerStoppedAnswering {
                 step,
-                said: "Smoozy's service on the server did not respond to the step.".to_string(),
+                said: "Smoozy on this server did not respond to the step.".to_string(),
             });
         };
         if !it_is_still_in_hand(&answered) {
@@ -3767,7 +4289,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
                 None => {
                     return Some(TheRunsEnding::TheServerStoppedAnswering {
                         step,
-                        said: "Smoozy's service on the server stopped responding."
+                        said: "Smoozy on this server stopped responding."
                             .to_string(),
                     })
                 }
@@ -4007,12 +4529,54 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         if let Some(ending) = self.what_the_admin_step_saw(step, seen).await {
             return Some(ending);
         }
+        let a_password_went = matches!(elevation, HowElevationIsObtained::APasswordIsHeld(_));
         match went {
-            Ok(said) if said.it_ended_cleanly => None,
-            Ok(said) => Some(TheRunsEnding::AStepFailed {
-                step,
-                said: said.the_machines_own_words,
-            }),
+            Ok(said) if said.it_ended_cleanly => {
+                self.the_password_in_use_ran_a_step |= a_password_went;
+                None
+            }
+            Ok(said) => {
+                // **`Server Setup` E4: only the wrong-password ending erases a
+                // held password**; every other refusal keeps it.
+                if said.what_it_met.erases_the_remembered_password() {
+                    self.the_held_password_was_refused = true;
+                }
+                use smoozy_server_setup::elevation::WhatTheStepMet;
+                // **E4's own line for a command that failed: the elevating
+                // command took the password and the step ran.**
+                if a_password_went
+                    && said.what_it_met == WhatTheStepMet::AFailedOperationAfterASuccessfulValidate
+                {
+                    self.the_password_in_use_ran_a_step = true;
+                }
+                // **`Server Setup` E2, *a kept one that is refused is asked
+                // for again* (2026-11-12, Fable's fresh look at the admin
+                // password, finding 2).** A password kept from an earlier run
+                // was refused before the step ran, in words that are not E4's
+                // one sentence — which an elevating command of another make
+                // never prints. Nothing establishes it is wrong, so it is not
+                // erased; the offer is made, once, as if none were held.
+                // Until then the step failed as refused, on every run, and
+                // the box never came back.
+                //
+                // **And for a kept one the server called wrong in E4's own
+                // sentence** (the Rough what-if answers, share 2, 137): it is
+                // erased above, and the offer is made once, here. Until then
+                // the run failed, and only the next *Set up again* asked.
+                if matches!(
+                    said.what_it_met,
+                    WhatTheStepMet::ARefusalNotEstablishedToBeAWrongPassword | WhatTheStepMet::AWrongPassword
+                ) && self.the_password_in_use_was_kept_earlier
+                    && !self.the_kept_one_was_refused_in_other_words
+                {
+                    self.the_kept_one_was_refused_in_other_words = true;
+                    return Some(TheRunsEnding::AStepNeedsAdminAccess { step });
+                }
+                Some(TheRunsEnding::AStepFailed {
+                    step,
+                    said: said.the_machines_own_words,
+                })
+            }
             Err(elevated::WhyTheStepDidNotRun::NoPasswordIsHeldYet) => {
                 Some(TheRunsEnding::AStepNeedsAdminAccess { step })
             }
@@ -4093,7 +4657,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
                     if self.the_runs_state().await.is_none() {
                         return Some(TheRunsEnding::TheServerStoppedAnswering {
                             step,
-                            said: "Smoozy's service on the server stopped responding."
+                            said: "Smoozy on this server stopped responding."
                                 .to_string(),
                         });
                     }
@@ -4222,7 +4786,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         let Some(answered) = ask(self.sessions, &self.package_area, &request).await else {
             return Some(TheRunsEnding::TheServerStoppedAnswering {
                 step,
-                said: "Smoozy's service on the server did not respond. Nothing was changed."
+                said: "Smoozy on this server did not respond. Nothing was changed."
                     .to_string(),
             });
         };
@@ -4334,7 +4898,7 @@ impl<'s, C: AHeldConnection> TheRunBeingDriven<'s, C> {
         let Some(answered) = ask(self.sessions, &self.package_area, &request).await else {
             return Some(TheRunsEnding::TheServerStoppedAnswering {
                 step,
-                said: "Smoozy's service on the server did not respond. Nothing was changed."
+                said: "Smoozy on this server did not respond. Nothing was changed."
                     .to_string(),
             });
         };
@@ -4745,7 +5309,7 @@ pub async fn a_setup_is_abandoned<C: AHeldConnection>(
         None => {
             return WhatTheAbandonCameTo::ItDidNotFinish(TheRunsEnding::AStepFailed {
                 step,
-                said: "Smoozy's service on the server did not respond to the step.".to_string(),
+                said: "Smoozy on this server did not respond to the step.".to_string(),
             })
         }
     }
@@ -4887,8 +5451,7 @@ async fn the_state_is_cleared_by<C: AHeldConnection>(
     let Some(answered) = ask(sessions, package_area, &request).await else {
         return Some(TheRunsEnding::TheServerStoppedAnswering {
             step,
-            said: "Smoozy's service on the server did not respond to the clear. Work on the \
-                   server is still held back."
+            said: "Smoozy on this server did not respond. Setup still blocks jobs from starting."
                 .to_string(),
         });
     };
@@ -4904,10 +5467,9 @@ async fn the_state_is_cleared_by<C: AHeldConnection>(
             step,
             said: match answered.fields.text(asked::THE_SETUP_RUN_FIELD) {
                 Some(whose) => format!(
-                    "The server is holding its work back for another setup run ({whose}). This \
-                     one did not finish."
+                    "Another setup ({whose}) blocks jobs from starting. This setup did not finish."
                 ),
-                None => "The server is still holding its work back. This setup did not finish."
+                None => "Setup still blocks jobs from starting. This setup did not finish."
                     .to_string(),
             },
         });
@@ -5025,6 +5587,30 @@ pub trait AsksForThePassword {
     fn where_the_figure_goes(&mut self, _the_build: Option<&str>) -> Option<TheFigureGoesHere> {
         None
     }
+
+    /// **A machine password already held for this server** — *While
+    /// connected* for this connection, or *Save* in the secret store
+    /// (`Preparation/Specs/Whole app.md`'s three choices; `Security and
+    /// licence` §2 items 3 and 3b). Asked once, at the run's start, and only
+    /// where a password is owed. **Nothing where nothing is held**, and then
+    /// the offer is made at the step that needs one, as before. Added
+    /// 2026-11-11, the four questions, scout 1.1.
+    fn the_password_held_here(&mut self) -> Option<Origin> {
+        None
+    }
+
+    /// **The held password stopped working** — `Server Setup` E4's wrong-
+    /// password ending — **so it is forgotten rather than tried again**:
+    /// the connection's hold and the saved one both go (`Whole app`; the
+    /// erase is `Security and licence` §5.1's). Added 2026-11-11.
+    fn the_held_password_stopped_working(&mut self) {}
+
+    /// **A password typed at the offer ran a step**, so it is kept as the
+    /// user chose (`Server Setup` E2, *a password is kept only once it
+    /// worked*). Told once per password. Added 2026-11-12, Fable's fresh look
+    /// at the admin password, finding 2: until then it was kept at the box,
+    /// before anything used it.
+    fn the_password_given_worked(&mut self, _password: &Origin) {}
 }
 
 /// **Nobody to ask**: every offer is declined. For a run with no screen behind
@@ -5095,6 +5681,13 @@ pub trait ComposesTheTelegramMaterial {
     /// moves on it, so a pair cut off before its *enabled* leaves the server
     /// owed the switch rather than recorded as on (`Telegram` L1, L2).
     fn the_disabled_state_was_acknowledged(&mut self) {}
+
+    /// **`Server Setup` G2 as changed 2026-11-11: the Telegram placement that
+    /// followed a ready action, and what it came to** — held where `Server Setup` G2a holds an
+    /// *Install*'s, so a failure shows on Telegram's own line and never on the
+    /// setup's (the four questions, scout 1.3). A composer with no record
+    /// keeps nothing.
+    fn the_placement_after_the_setup_came_to(&mut self, _came_to: &WhereTheSetUpGot) {}
 }
 
 /// **A run on a machine the user has not asked for Telegram on**, which is
@@ -5539,13 +6132,46 @@ pub async fn a_machine_is_set_up<C: AHeldConnection, P: PlacesTheVerifiedRelease
         _ => return WhereTheSetUpGot::TheRentalWouldNotNameItself,
     };
 
+    // ── 2a. `Server protocol and transfers` B8d's own-release address, then
+    //        `Server protocol and transfers` B9 and
+    //        `Server protocol and transfers` B10's whole admission — **before
+    //        the hand-over**, so a server no release is built for is refused
+    //        with nothing on it touched (`Server Setup` R2 as changed
+    //        2026-11-11, the four questions, scout 3.3). Until then this was
+    //        step 4, after Smoozy's folder was made, and the refusal was said
+    //        as a failed signature check.
+    let (verified, artifact) = match releases.the_current_release(&tuple) {
+        Ok(got) => got,
+        Err(failed) if failed.no_release_is_built_for_it => {
+            return WhereTheSetUpGot::TheProcessorIsNotSupported {
+                named: tuple.processor_architecture.clone(),
+            }
+        }
+        Err(failed) => {
+            return WhereTheSetUpGot::TheReleaseWasNotAdmitted {
+                said: failed.said,
+                nothing_answered: failed.nothing_answered,
+            }
+        }
+    };
+
     // ── 3. `Server Setup` R6's set, `Job files and outputs` 1.1's choice, and
     //       `Server Setup` R7's hand-over with `Server Setup` R7b's recording.
-    let locations = the_locations_this_login_can_offer(sessions).await;
-    let layout = match the_layout_this_machine_gets(&locations) {
-        Ok(layout) => layout,
+    //       **`Server Setup` R6a, 2026-11-13**: the bigger disk is offered,
+    //       and a root the machine already records is kept, never re-chosen.
+    //       **And as changed later that day** (Sol's look at the scout's
+    //       list, points 1 to 4): the record and its mark first, an unreadable
+    //       one stopping, every disk inquiry within its limit.
+    let chosen = match the_layout_this_setup_uses(
+        sessions,
+        elevation == HowElevationIsObtained::Passwordless,
+    )
+    .await
+    {
+        Ok(chosen) => chosen,
         Err(stopped) => return stopped,
     };
+    let mut layout = chosen.layout;
     let installation = match the_installation_a_setup_left_unconfirmed(row) {
         Some(it) => it,
         None => match Identity::issue(IdentityKind::Installation) {
@@ -5559,17 +6185,28 @@ pub async fn a_machine_is_set_up<C: AHeldConnection, P: PlacesTheVerifiedRelease
         },
     };
     if let Err(stopped) = the_hand_over(sessions, row, &layout, &installation, elevation).await {
-        return stopped;
+        // **`Server Setup` R6a's change of later on 2026-11-13, item 3: a
+        // volume the hand-over's own test write does not land on is not
+        // used**, and the home mount alone is handed over in its place.
+        match (&stopped, chosen.the_home_mount_alone) {
+            (WhereTheSetUpGot::TheHandOverDidNotLand { .. }, Some(alone)) => {
+                layout = alone;
+                if let Err(stopped) = the_hand_over(sessions, row, &layout, &installation, elevation).await {
+                    return stopped;
+                }
+            }
+            _ => return stopped,
+        }
+    }
+    // **`Server Setup` R6a, item 4: the root's mark, where none stands yet.**
+    if !chosen.a_mark_stands {
+        if let Err(said) = the_roots_mark_is_written(sessions, &layout).await {
+            return WhereTheSetUpGot::TheRootCouldNotBeRecorded { said };
+        }
     }
 
-    // ── 4. `Server protocol and transfers` B8d's own-release address, then
-    //       `Server protocol and transfers` B9 and
-    //       `Server protocol and transfers` B10's whole admission.
-    let (verified, artifact) = match releases.the_current_release(&tuple) {
-        Ok(got) => got,
-        Err(said) => return WhereTheSetUpGot::TheReleaseWasNotAdmitted { said },
-    };
-
+    // ── 4. (The admission is step 2a since 2026-11-11.)
+    //
     // ── 4a. **`Desktop app and delivery` V14: nothing this desktop sends places
     //        a release below the machine's own**, and `Server Setup` F1 step 2
     //        names this route among the three. The machine is read by
@@ -5583,7 +6220,13 @@ pub async fn a_machine_is_set_up<C: AHeldConnection, P: PlacesTheVerifiedRelease
     //        8.
     let package_area = layout.area(Area::Package);
     let on_the_machine = what_the_package_area_holds(sessions, &package_area).await;
-    if let Some(refused) = what_v14_refuses(&on_the_machine, &verified) {
+    // **The Creator's ruling of 2026-11-14 on batch 1 (437): the user may
+    // discard an older program's job and set up**, said first in the box the
+    // refusal raises; the yes is taken once, for this run.
+    let the_older_programs_job_may_go = row
+        .the_row()
+        .is_some_and(|held| the_older_programs_job_may_go_on(&held.local_server_identifier));
+    if let Some(refused) = what_v14_refuses(&on_the_machine, &verified, the_older_programs_job_may_go) {
         return refused;
     }
     // ── 4b. **`Rented-server runtime` G21's reading, and the real one.** A
@@ -5708,12 +6351,59 @@ pub async fn a_machine_is_set_up<C: AHeldConnection, P: PlacesTheVerifiedRelease
 pub fn what_v14_refuses(
     on_the_machine: &crate::servers::installation::WhatThePackageAreaHolds,
     placing: &AVerifiedRelease,
+    the_older_programs_job_may_go: bool,
 ) -> Option<WhereTheSetUpGot> {
+    // `Server Setup` F1b: incompatibility is no evidence of an empty queue.
+    // Compatible dead-program repair retains its existing path. **Where the
+    // user said its job may go**, the older program is replaced like any
+    // other (the Creator's ruling of 2026-11-14 on batch 1, 437).
+    if !the_older_programs_job_may_go
+        && on_the_machine.its_release_sequence.is_some()
+        && !on_the_machine.the_declared_intervals.is_empty()
+        && !on_the_machine.it_speaks_what_this_build_speaks()
+        && the_direction(on_the_machine.its_release_sequence, placing.manifest.release_sequence)
+            != Some(TheDirection::TheMachineIsNewer)
+    {
+        return Some(WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut {
+            said: AN_OLDER_PROGRAM_HOLDS_WORK.into(),
+        });
+    }
     (the_direction(on_the_machine.its_release_sequence, placing.manifest.release_sequence)
         == Some(TheDirection::TheMachineIsNewer))
     .then(|| WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut {
         said: THE_MACHINE_IS_NEWER.to_string(),
     })
+}
+
+/// **`Server Setup` F1b's refusal, in the words the card shows** — an older
+/// program this build cannot read holds work, so nothing was replaced.
+pub const AN_OLDER_PROGRAM_HOLDS_WORK: &str = "Could not check for running jobs. Nothing was replaced.";
+
+/// Whether a run ended on [`AN_OLDER_PROGRAM_HOLDS_WORK`].
+pub fn an_older_program_holds_work(came_to: &WhereTheSetUpGot) -> bool {
+    matches!(came_to, WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut { said } if said == AN_OLDER_PROGRAM_HOLDS_WORK)
+}
+
+/// **The servers whose older program's job the user said may go**, run-held
+/// and taken by the next run on that server alone (the Creator's ruling of
+/// 2026-11-14 on batch 1, 437).
+fn the_older_programs_jobs_that_may_go() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static HELD: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    HELD.get_or_init(Default::default)
+}
+
+/// The user's yes to *Discard that job and set up*, for this server's next run.
+pub fn the_older_programs_job_may_go(server: &str) {
+    if let Ok(mut held) = the_older_programs_jobs_that_may_go().lock() {
+        held.insert(server.to_string());
+    }
+}
+
+/// The yes, taken: it covers one run.
+fn the_older_programs_job_may_go_on(server: &str) -> bool {
+    the_older_programs_jobs_that_may_go()
+        .lock()
+        .is_ok_and(|mut held| held.remove(server))
 }
 
 /// **The package area of a machine this copy already set up, where the live
@@ -5745,6 +6435,58 @@ fn the_package_area_of_a_set_up_machine(
 /// or the machine was set up already.
 #[allow(clippy::too_many_arguments)]
 async fn the_ready_run_is_opened_and_driven<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    said: &WhatTheOpeningReadingsSaid,
+    package_area: &str,
+    asked_for: &WhatWasAskedFor,
+    elevation: HowElevationIsObtained<'_>,
+    telegram: &mut dyn ComposesTheTelegramMaterial,
+    asker: &mut dyn AsksForThePassword,
+    stop: &dyn AsksToStop,
+    the_period: Option<TheRestartMark>,
+    words: Option<TheWordsGoHere>,
+) -> WhereTheSetUpGot {
+    // **`Server Setup` R1 item 8 and `Server Setup` G2 as changed 2026-11-11: Telegram's
+    // material is not a step of the ready action's own run.** It follows the
+    // run as `Server Setup` G2's own run once the run reaches *done*, so a Telegram failure
+    // can never leave the setup short of *done* — the machine-level state
+    // standing and every job held back for a phone extra (the four questions,
+    // scout 1.3).
+    let the_ready_actions_own = WhatWasAskedFor {
+        telegram_is_on: false,
+        ..asked_for.clone()
+    };
+    let came_to = the_ready_run_alone(
+        sessions,
+        said,
+        package_area,
+        &the_ready_actions_own,
+        elevation,
+        telegram,
+        asker,
+        stop,
+        the_period,
+        words,
+    )
+    .await;
+    if asked_for.telegram_is_on
+        && matches!(
+            came_to,
+            WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }
+        )
+    {
+        let placed =
+            the_telegram_placement_is_driven(sessions, said, package_area, telegram, asker, stop).await;
+        telegram.the_placement_after_the_setup_came_to(&placed);
+    }
+    came_to
+}
+
+/// **The ready action's own run**, composed and driven — what
+/// [`the_ready_run_is_opened_and_driven`] drives before the Telegram placement
+/// that may follow it.
+#[allow(clippy::too_many_arguments)]
+async fn the_ready_run_alone<C: AHeldConnection>(
     sessions: &ThisServersSessions<C>,
     said: &WhatTheOpeningReadingsSaid,
     package_area: &str,
@@ -6010,7 +6752,7 @@ pub async fn the_update_is_placed<C: AHeldConnection, P: PlacesTheVerifiedReleas
     accepted_work: Vec<(String, smoozy_runtime::package::retry::AcceptedWorkStanding)>,
 ) -> Result<WhatThePlacementReached, String> {
     let Some(standing) = held.the_phase_record.as_ref() else {
-        return Err("Could not read the server's record of Smoozy's server software.".to_string());
+        return Err("Could not read Smoozy's installation record on this server.".to_string());
     };
     let attempt = match under {
         Some(recorded) => recorded,
@@ -6092,7 +6834,7 @@ pub trait ReadsTheCurrentRelease {
     fn the_current_release(
         &mut self,
         detected: &smoozy_server_protocol::release::manifest::TargetTuple,
-    ) -> Result<(AVerifiedRelease, Vec<u8>), String>;
+    ) -> Result<(AVerifiedRelease, Vec<u8>), ADownloadThatFailed>;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -6325,10 +7067,10 @@ fn the_ending_where_the_state_was_not_written(
             TheRunsEnding::TheServerStoppedAnswering {
                 step,
                 said: if switching_it_on {
-                    "Smoozy's service on the server did not respond. Telegram was not switched \
+                    "Smoozy on this server did not respond. Telegram was not switched \
                      on for this server."
                 } else {
-                    "Smoozy's service on the server did not respond. Telegram on this server was \
+                    "Smoozy on this server did not respond. Telegram on this server was \
                      not restarted with its new settings."
                 }
                 .to_string(),
@@ -6919,6 +7661,20 @@ pub async fn the_telegram_material_is_placed<C: AHeldConnection>(
     else {
         return WhereTheSetUpGot::TheServerIsNotSetUpYet;
     };
+    the_telegram_placement_is_driven(sessions, &said, &package_area, telegram, asker, stop).await
+}
+
+/// **`Server Setup` G2's run itself**, on a package area already known — the
+/// dedicated entry point's, and since 2026-11-11 the one that follows a ready
+/// action reaching *done* (the four questions, scout 1.3).
+async fn the_telegram_placement_is_driven<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    said: &WhatTheOpeningReadingsSaid,
+    package_area: &str,
+    telegram: &mut dyn ComposesTheTelegramMaterial,
+    asker: &mut dyn AsksForThePassword,
+    stop: &dyn AsksToStop,
+) -> WhereTheSetUpGot {
     let asked_for = WhatWasAskedFor {
         install_this_blender: None,
         telegram_is_on: true,
@@ -7350,12 +8106,19 @@ async fn wait_a_moment(how_long: Duration) {
 /// the one value this seam carries and the reason it is not
 /// [`crate::submitting::OnThisServersPoint`]: that one refuses the carriage by
 /// name, because nothing it drives asks elevated.
-struct TheElevatedChannel<'s, C: AHeldConnection> {
+pub(crate) struct TheElevatedChannel<'s, C: AHeldConnection> {
     sessions: &'s ThisServersSessions<C>,
     /// **`Server Setup` Y7a: the step these commands are, and where what they
     /// print goes as it prints.** Nothing where no screen keeps the run's
     /// words, and then each command is read whole at its end as before.
     words: Option<(Step, TheWordsGoHere)>,
+}
+
+/// **The elevated channel for an act Files retries with admin access** —
+/// `File Browser` P6b, through the same seam setup's elevated steps use, with
+/// no screen keeping its words. Added 2026-11-12.
+pub(crate) fn an_elevated_channel<C: AHeldConnection>(sessions: &ThisServersSessions<C>) -> TheElevatedChannel<'_, C> {
+    TheElevatedChannel { sessions, words: None }
 }
 
 impl<C: AHeldConnection> TheElevatedChannel<'_, C> {
@@ -7727,7 +8490,14 @@ pub fn the_cards_from(scan: smoozy_servers::hardware::BusScan, driver: smoozy_se
 /// **It opens the file-transfer session itself and gives it back with the
 /// act**, which is what `ThePlacementsSurface` is: §1.1's two mechanisms held
 /// together for the length of one transaction.
-pub struct OverTheLentConnection;
+pub struct OverTheLentConnection {
+    /// **Whether the user pressed *Cancel setup*, asked while the new program
+    /// is waited on** — `Rented-server runtime` G13 as added 2026-11-12, so
+    /// the press ends the wait and the previous program is put back. Nothing
+    /// for a run that cannot be cancelled (the app updating its own program
+    /// on the server). The live pass of 2026-11-12, new fault 2.
+    pub gives_up: Option<smoozy_server_protocol::placement::TheCallerGaveUp>,
+}
 
 impl PlacesTheVerifiedRelease<smoozy_server_protocol::transport::ssh::Connection>
     for OverTheLentConnection
@@ -7750,6 +8520,9 @@ impl PlacesTheVerifiedRelease<smoozy_server_protocol::transport::ssh::Connection
                 &mut subsystem,
                 connection,
             );
+            if let Some(gives_up) = self.gives_up.clone() {
+                surface = surface.giving_up_when(gives_up);
+            }
             smoozy_server_protocol::placement::place_a_verified_release(&mut surface, needs).await
         })
     }
@@ -7979,6 +8752,21 @@ impl ComposesTheTelegramMaterial for TheMaterialFromTheRecord<'_> {
     fn the_disabled_state_was_acknowledged(&mut self) {
         self.the_roles_state_was_acknowledged(false);
     }
+
+    /// **Held where an *Install*'s ending is held** (`Server Setup` G2a), so
+    /// the card's Telegram line and Render Settings say it, and gone at the
+    /// next press or the connection's end. *Done* takes any earlier sentence
+    /// away. Added 2026-11-11, the four questions, scout 1.3.
+    fn the_placement_after_the_setup_came_to(&mut self, came_to: &WhereTheSetUpGot) {
+        let done = matches!(
+            came_to,
+            WhereTheSetUpGot::TheRunEnded { ending: TheRunsEnding::ItReachedDone { .. }, .. }
+        );
+        crate::servers::published::the_telegram_install_failed_with(
+            &self.server,
+            (!done).then(|| crate::surface::set_up::what_the_telegram_placement_came_to(came_to).said),
+        );
+    }
 }
 
 /// **The role's desired state as this server acknowledged it**, under the
@@ -8118,13 +8906,11 @@ impl ReadsTheCurrentRelease for TheCurrentReleaseOverHttps<'_> {
     fn the_current_release(
         &mut self,
         detected: &smoozy_server_protocol::release::manifest::TargetTuple,
-    ) -> Result<(AVerifiedRelease, Vec<u8>), String> {
+    ) -> Result<(AVerifiedRelease, Vec<u8>), ADownloadThatFailed> {
         let Some(root) =
             smoozy_server_protocol::release::trust::THE_RELEASE_ROOT_THIS_BUILD_CARRIES
         else {
-            return Err(
-                "This build of Smoozy has no release key.".to_string(),
-            );
+            return Err("This build of Smoozy has no release key.".into());
         };
         // **One fetch for both reads, kept rather than made per request** — it
         // holds a connection pool and the second read is the large one.
@@ -8189,6 +8975,11 @@ struct TheRunsHeld {
     /// 2026-10-08 for installs picked together (the Creator's third notes,
     /// piece H); every card act from 2026-10-27, the nineteenth notes, note 2.
     waiting: Vec<(String, Vec<ASetUpAct>)>,
+    /// **The card act each server's run is now, where a card press or the
+    /// line began it** — so a press asking for the same act again is not
+    /// added behind it (the Rough what-if answers, share 1, 18 and 20).
+    /// Let go when the run is.
+    the_act_now: Vec<(String, ASetUpAct)>,
     /// **The acts a run left waiting when it ended without moving the line**
     /// — `Server Setup` Y9a item 8: `Server Setup` R1b's swap run lets its exclusion go by
     /// [`a_run_ends`], and what joined during it is not begun. Held until its
@@ -8209,6 +9000,12 @@ struct TheRunsHeld {
     /// the last panel it had drawn, and the run's last reading could end the
     /// run before the card asked for it.
     ended: Vec<(String, SetupKind, TheSetupAsRead)>,
+    /// **The servers whose program this copy is updating** — `Desktop app and
+    /// delivery` V11 taking `Server Setup` Y9's turn, from the turn taken to
+    /// the update's ending. **Under this lock**, so a press, a run and the
+    /// update look at one another in one act. Added 2026-11-11, the Fable
+    /// review's second sitting, fault 4.
+    updating: Vec<String>,
 }
 
 /// **What the Set up card says of the build a run downloads and unpacks.**
@@ -8228,8 +9025,9 @@ pub fn a_run_begins(server: &str, kind: SetupKind) -> bool {
     if !a_run_nobody_pressed_for_begins(server, kind) {
         return false;
     }
-    // **`Server Setup` Y7a: the act the user asked for lets the last act's
-    // words go.**
+    // **`Server Setup` Y7a: the act the user asked for begins its words
+    // after the words already kept** (changed 2026-11-09: until then it let
+    // the last act's words go).
     a_runs_words_begin(server);
     true
 }
@@ -8241,11 +9039,111 @@ pub fn a_run_nobody_pressed_for_begins(server: &str, kind: SetupKind) -> bool {
     let Ok(mut held) = the_runs_this_copy_is_driving().lock() else {
         return false;
     };
-    if held.driving.iter().any(|(one, _)| one == server) {
+    // **`Desktop app and delivery` V11: an update holds the server as a run
+    // does**, so a run that does not join the line is refused behind it too
+    // (2026-11-11).
+    if held.driving.iter().any(|(one, _)| one == server) || held.updating.iter().any(|one| one == server) {
         return false;
     }
     a_run_is_begun_in(&mut held, server, kind);
     true
+}
+
+/// **How an update's look at the server came out** — `Desktop app and
+/// delivery` V11 with `Server Setup` Y9.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TheUpdatesTurn {
+    /// **Taken**: nothing else of Smoozy's own stood on the server, and the
+    /// update holds it until [`the_update_lets_the_server_go`].
+    ItIsTaken,
+    /// **A setup run stands on the server**, so the update waits behind it.
+    ASetupRunGoesFirst,
+    /// **Another update already holds it** (`Desktop app and delivery` V4).
+    AnUpdateHoldsIt,
+}
+
+/// **`Desktop app and delivery` V11: the update looks again just before it
+/// begins, and the look and the turn are one act** under the lock every setup
+/// run takes — so no run can begin between them. Added 2026-11-11, the Fable
+/// review's second sitting, fault 4: the update looked once, at step 9's gate,
+/// and a setup step pressed after that began at once.
+pub fn an_update_takes_its_turn(server: &str) -> TheUpdatesTurn {
+    let Ok(mut held) = the_runs_this_copy_is_driving().lock() else {
+        return TheUpdatesTurn::AnUpdateHoldsIt;
+    };
+    if held.updating.iter().any(|one| one == server) {
+        return TheUpdatesTurn::AnUpdateHoldsIt;
+    }
+    if held.driving.iter().any(|(one, _)| one == server) {
+        return TheUpdatesTurn::ASetupRunGoesFirst;
+    }
+    held.updating.push(server.to_string());
+    TheUpdatesTurn::ItIsTaken
+}
+
+/// **Whether this copy is updating Smoozy's program on that server** — the
+/// Set up card's *Queued* list is drawn under the update's line while it is
+/// (`Design/Server Setup § Asking for more while a setup runs`).
+pub fn an_update_holds(server: &str) -> bool {
+    the_runs_this_copy_is_driving()
+        .lock()
+        .is_ok_and(|held| held.updating.iter().any(|one| one == server))
+}
+
+/// **The update ends, however it ends, and lets the server go — and the first
+/// act of the line that waited behind it begins**, under the same lock, so
+/// nothing slips between the two (`Server Setup` Y9a item 11). **Its run is
+/// driven by the hook the Set up tab registers at start**
+/// ([`when_an_update_begins_the_line`]); with none registered, the act stays
+/// begun for whoever asks. Added 2026-11-11, the Fable review's second
+/// sitting, fault 4.
+pub fn the_update_lets_the_server_go(server: &str) {
+    let begun = {
+        let Ok(mut held) = the_runs_this_copy_is_driving().lock() else {
+            return;
+        };
+        held.updating.retain(|one| one != server);
+        if held.driving.iter().any(|(one, _)| one == server) {
+            None
+        } else {
+            let mut line = held
+                .waiting
+                .iter()
+                .position(|(one, _)| one == server)
+                .map(|at| held.waiting.remove(at).1)
+                .unwrap_or_default();
+            if line.is_empty() {
+                None
+            } else {
+                let first = line.remove(0);
+                a_run_is_begun_in(&mut held, server, first.kind());
+                if !line.is_empty() {
+                    held.waiting.push((server.to_string(), line));
+                }
+                Some(first)
+            }
+        }
+    };
+    let Some(first) = begun else {
+        return;
+    };
+    // **The act's words begin under its name**, as a press that began it
+    // would (`Server Setup` Y7a).
+    a_runs_words_begin(server);
+    the_act_is_called_in_the_words(server, &crate::surface::set_up::the_line_an_acts_words_begin_under(&first));
+    if let Some(then) = WHEN_AN_UPDATE_BEGINS_THE_LINE.get() {
+        then(server, first);
+    }
+}
+
+/// **What the app does with the act an ended update began**, registered once
+/// at start. Added 2026-11-11.
+static WHEN_AN_UPDATE_BEGINS_THE_LINE: std::sync::OnceLock<Box<dyn Fn(&str, ASetUpAct) + Send + Sync>> =
+    std::sync::OnceLock::new();
+
+/// **The one hook [`the_update_lets_the_server_go`] calls**, set once.
+pub fn when_an_update_begins_the_line(then: Box<dyn Fn(&str, ASetUpAct) + Send + Sync>) {
+    let _ = WHEN_AN_UPDATE_BEGINS_THE_LINE.set(then);
 }
 
 /// **The run's place taken, under the lock the caller holds**, and whatever
@@ -8382,10 +9280,32 @@ pub fn the_kind_being_driven_on(server: &str) -> Option<SetupKind> {
     })
 }
 
+/// **Whether this copy is driving a setup run on any server now** — any kind
+/// of run, read from the same run-held exclusion (`Server Setup` Y9). What
+/// the update box reads for its setups sentence (`Desktop app and delivery`
+/// Z33, widened 2026-11-14; the Rough what-if answers, share 5, 424): an
+/// install closes Smoozy, and that cuts a run off between its steps.
+pub fn a_setup_run_is_being_driven() -> bool {
+    the_runs_this_copy_is_driving()
+        .lock()
+        .map(|held| !held.driving.is_empty())
+        .unwrap_or(false)
+}
+
 /// The exclusion, given back — **whether the run reached *done*, stopped or
 /// failed**.
 pub fn a_run_ends(server: &str) {
     if let Ok(mut held) = the_runs_this_copy_is_driving().lock() {
+        the_run_is_let_go_in(&mut held, server);
+    }
+    what_follows_a_run_let_go(server);
+}
+
+/// **The run's place on that server, given back under a lock the caller
+/// already holds** — so a caller that looked at the line lets the server go in
+/// the same hold (`Server Setup` Y9a item 7, 2026-11-12).
+fn the_run_is_let_go_in(held: &mut TheRunsHeld, server: &str) {
+    {
         // **The run as it was last told, kept for the card** (2026-10-26,
         // fault 4).
         let kind = held.driving.iter().find(|(one, _)| one == server).map(|(_, kind)| *kind);
@@ -8395,6 +9315,7 @@ pub fn a_run_ends(server: &str) {
             held.ended.push((server.to_string(), kind, last));
         }
         held.driving.retain(|(one, _)| one != server);
+        held.the_act_now.retain(|(one, _)| one != server);
         held.asked_to_stop.retain(|one| one != server);
         held.under_way.retain(|(one, _)| one != server);
         held.a_render_was_running.retain(|one| one != server);
@@ -8409,6 +9330,10 @@ pub fn a_run_ends(server: &str) {
         }
         held.the_builds_figures.retain(|(one, _)| one != server);
     }
+}
+
+/// **What follows a run that was let go, with no lock held.**
+fn what_follows_a_run_let_go(server: &str) {
     // **An act of Smoozy's own ending on this machine is the one event that
     // says what Blenders it holds may have changed**, so the Set up tab's held
     // search is let go and the next opening takes it again
@@ -8446,7 +9371,7 @@ impl ReadsTheCurrentRelease for TheReleaseThisRunPlaces<'_> {
     fn the_current_release(
         &mut self,
         detected: &smoozy_server_protocol::release::manifest::TargetTuple,
-    ) -> Result<(AVerifiedRelease, Vec<u8>), String> {
+    ) -> Result<(AVerifiedRelease, Vec<u8>), ADownloadThatFailed> {
         let got = self.reads.the_current_release(detected);
         if let Ok((verified, _)) = &got {
             self.placed = Some(verified.manifest.release_sequence);
@@ -8558,6 +9483,11 @@ pub fn a_run_is_taken_from_the_card(
     if !a_run_begins(server, kind) {
         return false;
     }
+    // **The act's name for the line its words begin under** (`Server Setup`
+    // Y7a as changed 2026-11-09).
+    if kind == SetupKind::TheReadyAction {
+        the_act_is_called_in_the_words(server, crate::surface::set_up::words::SET_UP_THIS_SERVER);
+    }
     keep(&waiting);
     if kind == SetupKind::ABlenderInstall {
         the_installs_wait_on(server, waiting);
@@ -8593,6 +9523,23 @@ impl ASetUpAct {
             ASetUpAct::ARemoval(_) => SetupKind::ABlenderRemoval,
             ASetUpAct::TheReadyAction { .. } => SetupKind::TheReadyAction,
             ASetUpAct::TheTelegramPlacement => SetupKind::TheTelegramPlacement,
+        }
+    }
+
+    /// **Whether a press asking for this act asks for one already running or
+    /// waiting on that server** — the same Blender from the list, the same
+    /// build file, the same removal, or a second *Set up again* or Telegram
+    /// placement. The Rough what-if answers, share 1 (18, 20): fast presses
+    /// before the card redrew, or one version ticked in two boxes, each joined
+    /// the line and ran again.
+    pub fn is_the_same_act_as(&self, other: &ASetUpAct) -> bool {
+        match (self, other) {
+            (ASetUpAct::AnInstallFromTheList(one), ASetUpAct::AnInstallFromTheList(two)) => one == two,
+            (ASetUpAct::TheUsersBuild(one), ASetUpAct::TheUsersBuild(two)) => one == two,
+            (ASetUpAct::ARemoval(one), ASetUpAct::ARemoval(two)) => one.executable == two.executable,
+            (ASetUpAct::TheReadyAction { .. }, ASetUpAct::TheReadyAction { .. })
+            | (ASetUpAct::TheTelegramPlacement, ASetUpAct::TheTelegramPlacement) => true,
+            _ => false,
         }
     }
 
@@ -8648,13 +9595,40 @@ pub fn the_acts_are_taken_from_the_card(
     acts: Vec<ASetUpAct>,
     keep: &mut dyn FnMut(&[ASetUpAct]),
 ) -> HowThePressWasTaken {
-    let Some(first) = acts.first().cloned() else {
+    if acts.is_empty() {
         return HowThePressWasTaken::ItWaitsItsTurn;
-    };
+    }
     let Ok(mut held) = the_runs_this_copy_is_driving().lock() else {
         return HowThePressWasTaken::ItWaitsItsTurn;
     };
-    let (taken, line) = if held.driving.iter().any(|(one, _)| one == server) {
+    // **`Server Setup` Y9a item 11: Smoozy's own update of its program on the
+    // server is waited behind as a run is** (2026-11-11).
+    let a_run_or_an_update_stands = held.driving.iter().any(|(one, _)| one == server)
+        || held.updating.iter().any(|one| one == server);
+    // **An act already running or waiting on that server is not asked for
+    // twice** (the Rough what-if answers, share 1, 18 and 20).
+    let mut acts = acts;
+    {
+        let mut already: Vec<ASetUpAct> = Vec::new();
+        if a_run_or_an_update_stands {
+            already.extend(held.the_act_now.iter().filter(|(one, _)| one == server).map(|(_, act)| act.clone()));
+            if let Some((_, line)) = held.waiting.iter().find(|(one, _)| one == server) {
+                already.extend(line.iter().cloned());
+            }
+        }
+        acts.retain(|act| {
+            if already.iter().any(|one| one.is_the_same_act_as(act)) {
+                return false;
+            }
+            already.push(act.clone());
+            true
+        });
+    }
+    let Some(first) = acts.first().cloned() else {
+        drop(held);
+        return HowThePressWasTaken::ItWaitsItsTurn;
+    };
+    let (taken, line) = if a_run_or_an_update_stands {
         let line = match held.waiting.iter_mut().find(|(one, _)| one == server) {
             Some((_, line)) => {
                 line.extend(acts);
@@ -8668,6 +9642,8 @@ pub fn the_acts_are_taken_from_the_card(
         (HowThePressWasTaken::ItWaitsItsTurn, line)
     } else {
         a_run_is_begun_in(&mut held, server, first.kind());
+        held.the_act_now.retain(|(one, _)| one != server);
+        held.the_act_now.push((server.to_string(), first.clone()));
         let rest = acts[1..].to_vec();
         held.waiting.retain(|(one, _)| one != server);
         if !rest.is_empty() {
@@ -8677,8 +9653,10 @@ pub fn the_acts_are_taken_from_the_card(
     };
     drop(held);
     if taken == HowThePressWasTaken::ItBegan {
-        // **`Server Setup` Y7a: the next run lets the last run's words go.**
+        // **`Server Setup` Y7a as changed 2026-11-09: the act's words begin
+        // after the words already kept, under its name.**
         a_runs_words_begin(server);
+        the_act_is_called_in_the_words(server, &crate::surface::set_up::the_line_an_acts_words_begin_under(&first));
     }
     keep(&line);
     taken
@@ -8723,8 +9701,19 @@ pub fn a_run_in_the_line_ends(server: &str, it_finished: bool) -> WhatFollowsARu
         .unwrap_or_default();
     let stopped = held.asked_to_stop.iter().any(|one| one == server);
     if !it_finished || stopped || waiting.is_empty() {
+        // **`Server Setup` Y9a item 7, *the ending and the letting go are one
+        // act* (2026-11-12, Sol's finding 3): the server is let go under the
+        // hold that looked at the line.** Until then the lock was let go
+        // between the two, and a press arriving there joined a line this run
+        // then dropped, unnamed.
+        the_run_is_let_go_in(&mut held, server);
         drop(held);
-        a_run_ends(server);
+        // A test's own seam. **Written `any(test)`** so the tests that read
+        // this file's working half, up to the first plain test attribute,
+        // still read all of it.
+        #[cfg(any(test))]
+        tests::as_the_ending_run_lets_its_lock_go();
+        what_follows_a_run_let_go(server);
         return if waiting.is_empty() {
             WhatFollowsARun::NothingWaits
         } else {
@@ -8741,13 +9730,19 @@ pub fn a_run_in_the_line_ends(server: &str, it_finished: bool) -> WhatFollowsARu
     if let Some((_, kind)) = held.driving.iter_mut().find(|(one, _)| one == server) {
         *kind = next.kind();
     }
+    held.the_act_now.retain(|(one, _)| one != server);
+    held.the_act_now.push((server.to_string(), next.clone()));
     held.under_way.retain(|(one, _)| one != server);
     held.a_render_was_running.retain(|one| one != server);
     held.the_builds_figures.retain(|(one, _)| one != server);
     drop(held);
     // **`Server Setup` Y7a: acts in one line keep adding to one record**,
     // each act's words under its own steps — nobody pressed anything now, so
-    // nothing is emptied (changed 2026-10-30, the twenty-third notes, note 3).
+    // nothing is emptied (changed 2026-10-30, the twenty-third notes, note 3)
+    // — **each under its own name** (2026-11-09, the twenty-eighth notes,
+    // note 7).
+    a_runs_words_begin(server);
+    the_act_is_called_in_the_words(server, &crate::surface::set_up::the_line_an_acts_words_begin_under(&next));
     // **The Blender table is read again between two acts**, as at any run's
     // ending (`Server Setup` B12).
     crate::surface::set_up::the_search_is_taken_again_on(server);
@@ -8971,15 +9966,22 @@ fn the_text_so_far(bytes: &[u8]) -> std::borrow::Cow<'_, str> {
     String::from_utf8_lossy(&bytes[..whole])
 }
 
-/// **One run's words on one server, and the window's lines.** Run-held, and
-/// never written anywhere.
+/// **The words on one server, act by act, and the window's lines.** Held in
+/// memory, and never written anywhere.
+///
+/// **`Server Setup` Y7a as changed 2026-11-09, the twenty-eighth notes, note
+/// 7: kept until Smoozy disconnects from that server**, every act adding to
+/// them under its own name, *"Just like in a terminal."* Until then each act
+/// the user asked for emptied them.
 #[derive(Debug, Clone, Default)]
 pub struct TheRunsWords {
-    /// `Server Setup` Y7e: held apart from the server's streams.
-    failure_reason: Option<String>,
-    /// **`Server Setup` Y7a's keeping, apart by stream and by step**, every
-    /// byte as printed (M9).
-    printed: elevated::WhatTheRunPrinted,
+    /// **Each act's words, oldest first** — never empty once anything is kept,
+    /// the last being the act whose words arrive now.
+    acts: Vec<OneActsWords>,
+    /// **`Design/Server Setup § The step that failed` (2026-11-09): the last
+    /// act ended in a failure that carried words**, so *Server output* opens
+    /// on *Errors*. A new act takes it off.
+    the_last_act_failed: bool,
     /// **Each stream's line being printed**, the ordinary stream's first.
     /// Changed 2026-10-25, the eighteenth notes, piece 2c: there was one,
     /// for the ordinary stream alone, and it was never shown.
@@ -8995,6 +9997,44 @@ pub struct TheRunsWords {
     lines_begun: u64,
 }
 
+/// **One act's words** — `Server Setup` Y7a's keeping, apart by stream and
+/// by step, every byte as printed (M9), and `Server Setup` Y7e's: the raw
+/// words its failure carried, after them. Added 2026-11-09, the twenty-eighth
+/// notes, notes 1 and 7.
+#[derive(Debug, Clone, Default)]
+struct OneActsWords {
+    /// **The act's name, for the line its words begin under** — the
+    /// surface's words, handed in once the act is taken. Nothing where the
+    /// words began with no act named: a run taken up again after Smoozy
+    /// reopened, or a failed step's words read back from the server.
+    called: Option<String>,
+    printed: elevated::WhatTheRunPrinted,
+    /// **The raw words the act's failure carried**, where the act's own
+    /// streams did not already hold them.
+    its_failures_words: Option<TheFailuresWords>,
+}
+
+/// **A failure's raw words, and whose they are** — `Server Setup` Y7e as
+/// changed 2026-11-09: the server's as they are, and Smoozy's own under a
+/// line saying so.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TheFailuresWords {
+    pub words: String,
+    /// **The words are this computer's**, not the server's — the release's
+    /// download, the placement's record, the root's record.
+    pub smoozys_own: bool,
+}
+
+/// **One act's words, as *Server output* reads them** — the act's name, each
+/// stream whole, and its failure's words. Added 2026-11-09.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OneActAsKept {
+    pub called: Option<String>,
+    pub the_ordinary_output: String,
+    pub the_complaints: String,
+    pub its_failures_words: Option<TheFailuresWords>,
+}
+
 /// **Which slot of [`TheRunsWords::being_printed`] a stream's line is in.**
 fn the_slot_of(stream: elevated::WhichStream) -> usize {
     match stream {
@@ -9004,6 +10044,68 @@ fn the_slot_of(stream: elevated::WhichStream) -> usize {
 }
 
 impl TheRunsWords {
+    /// **The act whose words arrive now**, begun unnamed where none is.
+    fn the_act_now(&mut self) -> &mut OneActsWords {
+        if self.acts.is_empty() {
+            self.acts.push(OneActsWords::default());
+        }
+        self.acts.last_mut().expect("an act was just begun where none was")
+    }
+
+    /// **`Server Setup` Y7a as changed 2026-11-09: a new act begins, after
+    /// the words already kept**, and the window starts again from nothing —
+    /// it shows the act under way.
+    pub fn an_act_begins(&mut self) {
+        self.acts.push(OneActsWords::default());
+        self.the_last_act_failed = false;
+        self.being_printed = [None, None];
+        self.lines.clear();
+    }
+
+    /// **The act under way is given its name**, once.
+    pub fn the_act_is_called(&mut self, called: &str) {
+        let now = self.the_act_now();
+        if now.called.is_none() {
+            now.called = Some(called.to_string());
+        }
+    }
+
+    /// **`Server Setup` Y7e as changed 2026-11-09: the act's failure, and the
+    /// raw words it carried, kept after what the act printed** — and not where
+    /// the act's own streams already hold them, so nothing is shown twice.
+    /// Nothing is read out of the words: they are looked for whole.
+    pub fn the_act_failed_with(&mut self, words: &str, smoozys_own: bool) {
+        self.the_last_act_failed = true;
+        let words = words.trim_end();
+        if words.trim().is_empty() {
+            return;
+        }
+        let now = self.the_act_now();
+        let printed = |stream| String::from_utf8_lossy(&now.printed.the_whole_of(stream)).into_owned();
+        let already = printed(elevated::WhichStream::TheOrdinaryOutput).contains(words)
+            || printed(elevated::WhichStream::TheComplaints).contains(words);
+        if !already {
+            now.its_failures_words = Some(TheFailuresWords { words: words.to_string(), smoozys_own });
+        }
+    }
+
+    /// **Each act's words, oldest first.**
+    pub fn the_acts(&self) -> Vec<OneActAsKept> {
+        self.acts
+            .iter()
+            .map(|act| OneActAsKept {
+                called: act.called.clone(),
+                the_ordinary_output: String::from_utf8_lossy(
+                    &act.printed.the_whole_of(elevated::WhichStream::TheOrdinaryOutput),
+                )
+                .into_owned(),
+                the_complaints: String::from_utf8_lossy(&act.printed.the_whole_of(elevated::WhichStream::TheComplaints))
+                    .into_owned(),
+                its_failures_words: act.its_failures_words.clone(),
+            })
+            .collect()
+    }
+
     /// **A piece, kept** — under its step and its stream, every byte as
     /// printed, and taken into the window's lines. **From 2026-10-25 both
     /// streams reach the lines**, in the order they arrive, each marked by
@@ -9020,7 +10122,7 @@ impl TheRunsWords {
             APiecePrinted::Output(bytes) => (elevated::WhichStream::TheOrdinaryOutput, bytes),
             APiecePrinted::Complaint(bytes) => (elevated::WhichStream::TheComplaints, bytes),
         };
-        self.printed.printed(step, stream, bytes);
+        self.the_act_now().printed.printed(step, stream, bytes);
         let slot = the_slot_of(stream);
         if self.being_printed[slot].as_ref().is_some_and(|line| line.step != step) {
             self.being_printed[slot] = None;
@@ -9064,12 +10166,12 @@ impl TheRunsWords {
     /// brought back**, kept under it as the mark. **The window's lines are not
     /// touched**: nothing was printed into them. Added 2026-10-24.
     pub fn its_words_were_not_kept(&mut self, step: Step) {
-        self.printed.its_words_were_not_kept(step);
+        self.the_act_now().printed.its_words_were_not_kept(step);
     }
 
     /// **Whether any step's words could not be brought back.**
     pub fn some_words_were_not_kept(&self) -> bool {
-        self.printed.some_words_were_not_kept()
+        self.acts.iter().any(|act| act.printed.some_words_were_not_kept())
     }
 
     /// **The window**: the newest lines the run has printed, from either
@@ -9104,10 +10206,14 @@ impl TheRunsWords {
         self.the_window().into_iter().map(|(_, line)| line).collect()
     }
 
-    /// **One stream, whole: every step's record of it in turn**, every byte
-    /// as printed — what *Copy* takes.
+    /// **One stream, whole: every act's and every step's record of it in
+    /// turn**, every byte as printed, with nothing put between them.
     pub fn the_whole_of(&self, stream: elevated::WhichStream) -> String {
-        String::from_utf8_lossy(&self.printed.the_whole_of(stream)).into_owned()
+        let mut whole = Vec::new();
+        for act in &self.acts {
+            whole.extend_from_slice(&act.printed.the_whole_of(stream));
+        }
+        String::from_utf8_lossy(&whole).into_owned()
     }
 }
 
@@ -9126,15 +10232,86 @@ fn the_swaps_words_kept() -> &'static TheWordsHeld {
     HELD.get_or_init(|| std::sync::Mutex::new(Vec::new()))
 }
 
-/// **`Server Setup` Y7a: the user asked for an act on `server`, so the last
-/// act's words go** and this one's are kept from nothing. **Only an act the
-/// user asked for** (changed 2026-10-30, the twenty-third notes, note 3): the
-/// next act in a line, a run taken up again and the swap never call this.
+/// **`Server Setup` Y7a: an act begins on `server`, and its words are kept
+/// after the words already there.** An act the user asked for, and the next
+/// act in a line, call this; a run taken up again and the swap never do.
+/// *(Changed 2026-11-09, the twenty-eighth notes, note 7: until then the
+/// last act's words went here — "Just like in a terminal.")*
 pub fn a_runs_words_begin(server: &str) {
     if let Ok(mut kept) = the_words_kept().lock() {
-        kept.retain(|(one, _)| one != server);
-        kept.push((server.to_string(), TheRunsWords::default()));
+        match kept.iter_mut().find(|(one, _)| one == server) {
+            Some((_, words)) => words.an_act_begins(),
+            None => {
+                let mut words = TheRunsWords::default();
+                words.an_act_begins();
+                kept.push((server.to_string(), words));
+            }
+        }
     }
+}
+
+/// **The act under way on `server` is given its name** — the surface's
+/// words for the act (`Design/Server Setup § What the last act came to`),
+/// for the line its words begin under. Added 2026-11-09.
+pub fn the_act_is_called_in_the_words(server: &str, called: &str) {
+    kept_in(the_words_kept(), server, |words| words.the_act_is_called(called));
+}
+
+/// **`Server Setup` Y7a as changed 2026-11-09: Smoozy disconnects from
+/// `server`, so its words go** — the user's *Disconnect* and the row's
+/// removal (`Servers` S10 items 1 and 6). A dropped connection, a reconnect
+/// and an edit's save never call this. The swap's words go with them.
+pub fn the_servers_words_go(server: &str) {
+    for held in [the_words_kept(), the_swaps_words_kept()] {
+        if let Ok(mut kept) = held.lock() {
+            kept.retain(|(one, _)| one != server);
+        }
+    }
+}
+
+/// **`Server Setup` Y7e as changed 2026-11-09: an act on `server` failed,
+/// carrying these raw words**, kept after what the act printed; a record is
+/// begun where none is. Nothing where the act's own streams already hold
+/// them.
+pub fn the_failures_words_are_kept(server: &str, words: &str, smoozys_own: bool) {
+    the_words_are_kept_on(the_words_kept(), server);
+    kept_in(the_words_kept(), server, |kept| kept.the_act_failed_with(words, smoozys_own));
+}
+
+/// **`Server Setup` Y7a as changed 2026-11-09: where this copy keeps no
+/// words for `server` — Smoozy reopened — the failed step's words read back
+/// from the server are kept**, under that step, so *Server output* opens
+/// them. False where words are already kept, or there are none.
+pub fn a_failed_steps_words_are_kept_where_none_are(server: &str, step: Step, ordinary: &str, complaints: &str) -> bool {
+    if (ordinary.is_empty() && complaints.is_empty()) || the_words_are_kept_for(server) {
+        return false;
+    }
+    the_words_are_kept_on(the_words_kept(), server);
+    kept_in(the_words_kept(), server, |words| {
+        let now = words.the_act_now();
+        now.printed.printed(step, elevated::WhichStream::TheOrdinaryOutput, ordinary.as_bytes());
+        now.printed.printed(step, elevated::WhichStream::TheComplaints, complaints.as_bytes());
+        words.the_last_act_failed = true;
+    })
+}
+
+/// **Each act's words on `server`, oldest first** — what *Server output*
+/// draws. Added 2026-11-09.
+pub fn the_acts_words_on(server: &str) -> Option<Vec<OneActAsKept>> {
+    let kept = the_words_kept().lock().ok()?;
+    let (_, words) = kept.iter().find(|(one, _)| one == server)?;
+    Some(words.the_acts())
+}
+
+/// **Whether the last act on `server` failed with words** — so *Server
+/// output* opens on *Errors* (`Design/Server Setup § The step that failed`,
+/// 2026-11-09).
+pub fn the_last_act_failed_on(server: &str) -> bool {
+    the_words_kept()
+        .lock()
+        .ok()
+        .and_then(|kept| kept.iter().find(|(one, _)| one == server).map(|(_, words)| words.the_last_act_failed))
+        .unwrap_or(false)
 }
 
 /// **The record a run's words go to on `server`, begun only where none is
@@ -9193,7 +10370,7 @@ pub fn the_whole_of_what_the_swap_printed_on(server: &str) -> Option<(String, St
 pub fn the_words_of_each_step_on(server: &str) -> Option<Vec<elevated::OneStepsWords>> {
     let kept = the_words_kept().lock().ok()?;
     let (_, words) = kept.iter().find(|(one, _)| one == server)?;
-    Some(words.printed.the_steps().to_vec())
+    Some(words.acts.iter().flat_map(|act| act.printed.the_steps().to_vec()).collect())
 }
 
 /// **Whether some of what the run on `server` printed could not be brought
@@ -9248,19 +10425,8 @@ pub fn the_window_on(server: &str) -> Vec<(elevated::WhichStream, String)> {
         .unwrap_or_default()
 }
 
-/// **The whole of what the run on `server` printed**, the ordinary stream and
-/// then the complaints, each whole.
-/// `Server Setup` Y7e: the run's own reason, cleared with a new user's run.
-pub fn the_setup_reason_is_kept(server: &str, reason: String) {
-    the_words_are_kept_on(the_words_kept(), server);
-    kept_in(the_words_kept(), server, |words| words.failure_reason = Some(reason));
-}
-
-pub fn the_setup_reason_on(server: &str) -> Option<String> {
-    the_words_kept().lock().ok()?.iter().find(|(one, _)| one == server)?
-        .1.failure_reason.clone()
-}
-
+/// **The whole of what was printed on `server`**, the ordinary stream and
+/// then the complaints, each whole, every act's in turn.
 pub fn the_whole_of_what_was_printed_on(server: &str) -> Option<(String, String)> {
     let kept = the_words_kept().lock().ok()?;
     let (_, words) = kept.iter().find(|(one, _)| one == server)?;
@@ -9415,7 +10581,12 @@ pub fn the_ready_action_on<R: tauri::Runtime>(
         point,
         &mut taking,
         &mut row,
-        OverTheLentConnection,
+        OverTheLentConnection {
+            gives_up: Some(std::sync::Arc::new({
+                let asked = TheStopThisServerWasAsked { server: server.to_string() };
+                move || asked.the_user_asked_to_stop()
+            })),
+        },
         &mut placing,
         &asked_for,
         // **`Server Setup` E2's flow begins at the moment a step needs a
@@ -9464,13 +10635,11 @@ pub fn the_ready_action_on<R: tauri::Runtime>(
     // composed**, because *not there* forgot the stored fact and the section
     // now draws *not stored* (`Security and licence` §3.0 rules 4 and 6). The
     // Creator's eleventh notes, note 2.
-    if matches!(
-        came_to,
-        WhereTheSetUpGot::TheRunEnded {
-            ending: TheRunsEnding::TheTelegramMaterialWasNotComposed { .. },
-            ..
-        }
-    ) {
+    //
+    // **Since 2026-11-11 the material is placed by `Server Setup` G2's run after *done*** and
+    // its ending is not the setup's (the four questions, scout 1.3), so the
+    // section is posted again wherever Telegram was on and that run failed.
+    if asked_for.telegram_is_on && crate::servers::published::what_the_telegram_install_failed_with(server).is_some() {
         the_telegram_section_is_posted_again(app);
     }
     came_to
@@ -9826,7 +10995,8 @@ fn the_endings_name(came_to: &WhereTheSetUpGot) -> smoozy_server_setup::diary::T
     use smoozy_server_setup::diary::TheEndingsName as Name;
     match came_to {
         WhereTheSetUpGot::TheKindOrTheFamilyWouldNotRead { .. }
-        | WhereTheSetUpGot::TheRentalWouldNotNameItself => Name::NotAKindSmoozyPrepares,
+        | WhereTheSetUpGot::TheRentalWouldNotNameItself
+        | WhereTheSetUpGot::TheProcessorIsNotSupported { .. } => Name::NotAKindSmoozyPrepares,
         WhereTheSetUpGot::TheRunEnded { ending, .. } => match ending {
             TheRunsEnding::ItReachedDone { .. } => Name::Ready,
             TheRunsEnding::AStepNeedsAdminAccess { .. } => Name::Refused,
@@ -9933,23 +11103,37 @@ pub async fn the_setup_as_read<C: AHeldConnection>(
 /// or a step failed. A run that reached *done*, was abandoned, or declined at
 /// the version answer is finished business and a fresh run is what the press
 /// means. **The reading is the machine's and nothing is remembered but the
-/// identity** (`Server Setup` S1, S2).
+/// identity** (`Server Setup` S1, S2). **After the runs this copy drove, the
+/// ready action's retained run the machine names** (`Server Setup` S4 item 5
+/// as narrowed 2026-11-12), so a restart of the app forgets nothing the card
+/// still shows.
 async fn the_run_that_stopped_and_left_no_state<C: AHeldConnection>(
     sessions: &ThisServersSessions<C>,
     package_area: &str,
     drove: &[Identity],
 ) -> Option<Identity> {
     use smoozy_server_setup::recovery::HowTheRunEnded;
-    if drove.is_empty() {
-        return None;
-    }
     if the_run_the_state_stands_for(sessions, package_area)
         .await
         .is_some()
     {
         return None;
     }
-    for run in drove {
+    // **`Server Setup` S4 item 5 as narrowed 2026-11-12: the ready action's
+    // retained run the machine names is the last candidate** — the Fable
+    // scout's entry 17. A copy opened after that run drove nothing here, so
+    // its list is empty, yet the card names the run and draws it as stopped
+    // part-way with *Set up again*; until this the press started over.
+    let mut candidates: Vec<Identity> = drove.to_vec();
+    if let Some(named) = the_cards_reading(sessions, package_area)
+        .await
+        .and_then(|rest| rest.the_ready_actions_run)
+    {
+        if !candidates.contains(&named) {
+            candidates.push(named);
+        }
+    }
+    for run in &candidates {
         let Some(read) = the_state_of_one_run(sessions, package_area, run).await else {
             continue;
         };
@@ -10353,6 +11537,12 @@ pub struct TheCardAsRead {
     /// **The rest of the machine the card reads**, where the machine
     /// answered the request.
     pub the_rest: Option<TheCardsReading>,
+    /// **Smoozy on the server left the card's reading unanswered, on a
+    /// connection that is still live** — `Server protocol and transfers`
+    /// C17a's verdict, so the card says *Smoozy isn't responding.* rather than
+    /// that no setup was found (`Design/Server Setup § This server` as added
+    /// 2026-11-15, the what-if live pass's new faults 2 and 3).
+    pub the_machine_did_not_answer: bool,
 }
 
 /// **The card, read: the run the standing state names, else the ready run
@@ -10365,7 +11555,7 @@ pub async fn the_card_as_read<C: AHeldConnection>(
     package_area: &str,
     remembered: Option<Identity>,
 ) -> TheCardAsRead {
-    let the_rest = the_cards_reading(sessions, package_area).await;
+    let (the_rest, the_machine_did_not_answer) = the_cards_reading_and_whether_it_went_unanswered(sessions, package_area).await;
     let named = the_rest
         .as_ref()
         .and_then(|rest| rest.the_ready_actions_run.clone());
@@ -10375,7 +11565,32 @@ pub async fn the_card_as_read<C: AHeldConnection>(
             the_run = the_state_of_one_run(sessions, package_area, &named).await;
         }
     }
-    TheCardAsRead { the_run, the_rest }
+    TheCardAsRead { the_run, the_rest, the_machine_did_not_answer }
+}
+
+/// **[`the_cards_reading`], and whether Smoozy left it unanswered on a
+/// connection still live** — `Server protocol and transfers` C17a's verdict:
+/// nothing correlated came back and the line is still there. An answer of
+/// any kind, a request never asked, or a line that went says `false`.
+/// Added 2026-11-15, the what-if live pass's new faults 2 and 3.
+async fn the_cards_reading_and_whether_it_went_unanswered<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    package_area: &str,
+) -> (Option<TheCardsReading>, bool) {
+    use smoozy_server_protocol::asking_the_supervisor::WhatCameBack;
+    let Ok(identity) = Identity::issue(IdentityKind::Operation) else {
+        return (None, false);
+    };
+    let request = Request::speaking(
+        THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+        identity,
+        asked::THE_SET_UP_CARDS_READING_REQUEST,
+    );
+    match sessions.ask_the_supervisor(package_area, &request).await {
+        WhatCameBack::ItAnswered(answered) => (the_cards_reading_as_answered(&answered), false),
+        WhatCameBack::NothingCorrelatedCameBack => (None, sessions.a_connection_is_live()),
+        WhatCameBack::ItWasNeverAsked => (None, false),
+    }
 }
 
 /// **The Set up tab's reading of one connected server** — the ready action's
@@ -10584,7 +11799,12 @@ pub fn the_remembered_setup_is_carried_out<R: tauri::Runtime>(
         let point = app
             .try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>()
             .and_then(|periods| periods.the_sessions_of(&server));
-        let came_to = point.map(|point| match the_blender_the_add_asked_for(&options) {
+        // **`Desktop app and delivery` M32b, added 2026-11-13: a list that
+        // could not be read keeps its reason in the diary.**
+        let mut told = |why: &smoozy_server_setup::listing::WhyTheListingCouldNotBeRead| {
+            crate::surface::set_up::the_list_reason_goes_to_the_diary(&app, &server, why)
+        };
+        let came_to = point.map(|point| match the_blender_the_add_asked_for_telling(&options, &mut told) {
             Ok(install_this_blender) => the_ready_action_on(&app, &point, &server, install_this_blender),
             Err(stopped) => stopped,
         });
@@ -10629,6 +11849,15 @@ pub fn the_remembered_setup_is_taken(server: &str, keep: &mut dyn FnMut(&[String
 /// never quietly substitutes a different version — and says so, rather than
 /// running the rest of the setup and leaving the tick silently undone.
 pub fn the_blender_the_add_asked_for(options: &[String]) -> Result<Option<String>, WhereTheSetUpGot> {
+    the_blender_the_add_asked_for_telling(options, &mut |_| {})
+}
+
+/// **The same, and `told` hears why a list could not be read**
+/// (`Desktop app and delivery` M32b, added 2026-11-13).
+pub fn the_blender_the_add_asked_for_telling(
+    options: &[String],
+    told: &mut dyn FnMut(&smoozy_server_setup::listing::WhyTheListingCouldNotBeRead),
+) -> Result<Option<String>, WhereTheSetUpGot> {
     let asked = options
         .iter()
         .any(|one| one == crate::surface::servers::INSTALL_THE_LATEST_STABLE_BLENDER);
@@ -10649,9 +11878,12 @@ pub fn the_blender_the_add_asked_for(options: &[String]) -> Result<Option<String
             .ok_or(WhereTheSetUpGot::TheBlenderListCouldNotBeRead {
                 said: "Blender's download list has no stable release.".to_string(),
             }),
-        Err(why) => Err(WhereTheSetUpGot::TheBlenderListCouldNotBeRead {
-            said: crate::surface::set_up::why_the_list_could_not_be_read(&why),
-        }),
+        Err(why) => {
+            told(&why);
+            Err(WhereTheSetUpGot::TheBlenderListCouldNotBeRead {
+                said: crate::surface::set_up::why_the_list_could_not_be_read(&why),
+            })
+        }
     }
 }
 
@@ -10679,6 +11911,44 @@ pub struct TheSetUpTabAsks<R: tauri::Runtime> {
 }
 
 impl<R: tauri::Runtime> AsksForThePassword for TheSetUpTabAsks<R> {
+    fn the_password_held_here(&mut self) -> Option<Origin> {
+        use tauri::Manager;
+        let started = self.app.try_state::<std::sync::Mutex<crate::start::Started>>()?;
+        let record = crate::keys::TheRunsRecord { started: started.inner() };
+        let store = crate::surface::keys::the_store_for_this_system();
+        the_password_held_for(&record, store.as_deref(), &self.server)
+    }
+
+    /// **Forgotten rather than tried again**: the connection's hold, and the
+    /// saved one through the Edit page's own erase (`Servers` D18).
+    fn the_held_password_stopped_working(&mut self) {
+        use tauri::Manager;
+        the_connections_password_goes(&self.server);
+        let Some(started) = self.app.try_state::<std::sync::Mutex<crate::start::Started>>() else {
+            return;
+        };
+        let store = crate::surface::keys::the_store_for_this_system();
+        let held = started.lock();
+        if let Ok(held) = held.as_deref() {
+            let _ = crate::surface::servers::the_password_is_forgotten(held, store.as_deref(), &self.server);
+        }
+    }
+
+    /// **Kept as the box's choice says, off the run's own thread**: *Save* is
+    /// a store call, which may wait on the system's own prompt.
+    fn the_password_given_worked(&mut self, password: &Origin) {
+        use tauri::Manager;
+        let (app, server) = (self.app.clone(), self.server.clone());
+        let password = Origin::what_the_user_typed(password.for_a_destination().expose(|bytes| bytes.to_vec()));
+        std::thread::spawn(move || {
+            if let Some(started) = app.try_state::<std::sync::Mutex<crate::start::Started>>() {
+                let record = crate::keys::TheRunsRecord { started: started.inner() };
+                let store = crate::surface::keys::the_store_for_this_system();
+                the_password_that_worked_is_kept_as_noted(&record, store.as_deref(), &server, &password);
+            }
+        });
+    }
+
     fn the_cut_run_is_being_waited_for(&mut self, waiting: bool) {
         crate::surface::set_up::the_wait_for_the_cut_run_is_kept(&self.server, waiting);
         crate::surface::set_up::the_run_under_way_is_told(&self.app, &self.server);
@@ -10690,8 +11960,8 @@ impl<R: tauri::Runtime> AsksForThePassword for TheSetUpTabAsks<R> {
             // **One offer per server.** An earlier one still standing has
             // nobody waiting on it, and dropping its way back answers it
             // *declined*.
-            standing.retain(|(server, _)| server != &self.server);
-            standing.push((self.server.clone(), answer));
+            standing.retain(|(server, ..)| server != &self.server);
+            standing.push((self.server.clone(), the_next_offers_number(), answer));
         }
         crate::surface::set_up::the_offer_is_made(&self.app, &self.server, step);
         Box::pin(async move { answered.await.ok().flatten() })
@@ -10927,13 +12197,59 @@ pub fn the_last_run_this_copy_drove(
 
 type TheWayBack = tokio::sync::oneshot::Sender<Option<Origin>>;
 
+/// **Which offer it is**, counted up in this run of Smoozy: an answer is
+/// handed only to the offer it was given for (`Server Setup` E2, 2026-11-12).
+fn the_next_offers_number() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The offers standing now, one per server, each with its way back. **Run-held
 /// and never durable**, and it holds no password: a password passes through
 /// once, on its way to the run that asked.
-fn the_offers_standing() -> &'static std::sync::Mutex<Vec<(String, TheWayBack)>> {
-    static STANDING: std::sync::OnceLock<std::sync::Mutex<Vec<(String, TheWayBack)>>> =
+fn the_offers_standing() -> &'static std::sync::Mutex<Vec<(String, u64, TheWayBack)>> {
+    static STANDING: std::sync::OnceLock<std::sync::Mutex<Vec<(String, u64, TheWayBack)>>> =
         std::sync::OnceLock::new();
     STANDING.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// **The offer a run still waits on, on that server** — `Server Setup` E2,
+/// *an answer that comes after its run ended* (2026-11-12). A run that ended
+/// let go of its end of the way back, and then there is nobody to hand a
+/// password to; nothing where no offer stands or its run has ended.
+pub fn the_offer_a_run_still_waits_on(server: &str) -> Option<u64> {
+    the_offers_standing().lock().ok().and_then(|standing| {
+        standing
+            .iter()
+            .find(|(one, _, way_back)| one == server && !way_back.is_closed())
+            .map(|(_, which, _)| *which)
+    })
+}
+
+/// **The answer, handed to that very offer** — and to no other: where the
+/// run ended meanwhile and another run's offer now stands on the server, it
+/// is not handed over and the other offer stays (Sol's look at this fix).
+pub fn that_offer_is_answered(server: &str, which: u64, answer: Option<Origin>) -> bool {
+    let way_back = the_offers_standing().lock().ok().and_then(|mut standing| {
+        let at = standing.iter().position(|(one, its, _)| one == server && *its == which)?;
+        Some(standing.remove(at).2)
+    });
+    match way_back {
+        Some(way_back) => way_back.send(answer).is_ok(),
+        None => false,
+    }
+}
+
+/// **An offer stood for a test**, with the end its run would wait on.
+/// Written `any(test)` for the same reason as the seam in
+/// [`a_run_in_the_line_ends`].
+#[cfg(any(test))]
+pub(crate) fn an_offer_stands_for_a_test(server: &str) -> tokio::sync::oneshot::Receiver<Option<Origin>> {
+    let (answer, answered) = tokio::sync::oneshot::channel();
+    let mut standing = the_offers_standing().lock().expect("the offers");
+    standing.retain(|(one, ..)| one != server);
+    standing.push((server.to_string(), the_next_offers_number(), answer));
+    answered
 }
 
 /// **The offer, answered** — a password, or nothing where the user declined.
@@ -10941,12 +12257,178 @@ fn the_offers_standing() -> &'static std::sync::Mutex<Vec<(String, TheWayBack)>>
 /// was left open after the run it asked for ended.
 pub fn the_offer_is_answered(server: &str, answer: Option<Origin>) -> bool {
     let way_back = the_offers_standing().lock().ok().and_then(|mut standing| {
-        let at = standing.iter().position(|(one, _)| one == server)?;
-        Some(standing.remove(at).1)
+        let at = standing.iter().position(|(one, ..)| one == server)?;
+        Some(standing.remove(at).2)
     });
     match way_back {
         Some(way_back) => way_back.send(answer).is_ok(),
         None => false,
+    }
+}
+
+// ── A machine password kept past its run — `Whole app`'s three choices ────
+//
+// **`Preparation/Specs/Whole app.md`: *Don't save*, *While connected* and
+// *Save* each do what they say.** Added 2026-11-11, the four questions, scout
+// 1.1: until then the choice was drawn and never sent, and every run asked
+// again. *Don't save* is the run's own hold ([`TheRunBeingDriven::driven`]);
+// *While connected* is `Security and licence` §2 item 3b's process-memory hold,
+// kept for the connected period through a restart Smoozy's own setup caused
+// (`Server Setup` E5) and erased when the connection ends any other way
+// (§5.2); *Save* is item 3, the secret store against the server's own
+// subject, which the Edit page clears and a removal erases (`Servers` D18).
+
+/// **The connection's hold**, one per server, in process memory and never
+/// written anywhere.
+fn the_connections_hold(
+) -> &'static std::sync::Mutex<smoozy_security_and_licence::held::UnstoredHolder<String>> {
+    static HELD: std::sync::OnceLock<
+        std::sync::Mutex<smoozy_security_and_licence::held::UnstoredHolder<String>>,
+    > = std::sync::OnceLock::new();
+    HELD.get_or_init(|| {
+        std::sync::Mutex::new(smoozy_security_and_licence::held::UnstoredHolder::new(
+            smoozy_security_and_licence::held::UnstoredHold::ForThisConnection,
+        ))
+    })
+}
+
+/// **How long a store call is waited on** — the figure the Edit page's own
+/// erase uses for the same item.
+const THE_MACHINE_PASSWORDS_STORE_DEADLINE: Duration = Duration::from_secs(5);
+
+/// **The password the user gave at the offer, kept as they chose.** *Save*
+/// is also held for the connection, so this connection never reads the store
+/// for it. **The store's reference is written before the value**, so a value
+/// is never in the store with nothing in the record able to erase it.
+pub fn the_password_is_kept_as_chosen(
+    record: &dyn crate::keys::LendsTheRecord,
+    store: Option<&dyn smoozy_security_and_licence::secret_store::SecretStore>,
+    server: &str,
+    password: &Origin,
+    choice: smoozy_security_and_licence::standing::MachinePasswordChoice,
+) {
+    use smoozy_security_and_licence::standing::MachinePasswordChoice as Choice;
+    if choice == Choice::DoNotRememberIt {
+        return;
+    }
+    if let Ok(mut held) = the_connections_hold().lock() {
+        held.hold(server.to_string(), password.for_a_destination());
+    }
+    if choice != Choice::RememberIt {
+        return;
+    }
+    let Some(store) = store else {
+        return;
+    };
+    let mut subject = None;
+    record.lend(&mut |connection| {
+        let Ok(Some(mut row)) = crate::record::server_rows::one(connection, server) else {
+            return;
+        };
+        let it = row.machine_password_subject.clone().unwrap_or_else(|| {
+            smoozy_security_and_licence::held::Subject::issued_by_the_local_record(
+                &row.local_server_identifier,
+            )
+        });
+        if row.machine_password_subject.is_none() {
+            row.machine_password_subject = Some(it.clone());
+            if crate::record::server_rows::write(connection, &row).is_err() {
+                return;
+            }
+        }
+        subject = Some(it);
+    });
+    if let Some(subject) = subject {
+        let item = smoozy_security_and_licence::held::HeldSecret::new(
+            smoozy_security_and_licence::held::StoredKind::MachinePassword,
+            subject,
+        );
+        let _ = store.put(&item, password.for_a_destination(), THE_MACHINE_PASSWORDS_STORE_DEADLINE);
+    }
+}
+
+/// **The choice under the box's field, noted for the run that was handed the
+/// password** — the choice alone, never the password. Nothing where no choice
+/// was made, which also lets an earlier note go.
+///
+/// **`Server Setup` E2, *a password is kept only once it worked*
+/// (2026-11-12, Fable's fresh look at the admin password, finding 2).** Until
+/// then the password itself was kept here, before anything used it, so a
+/// mistyped one was stored and sent again.
+pub fn the_choice_at_the_offer_is_noted(
+    server: &str,
+    choice: Option<smoozy_security_and_licence::standing::MachinePasswordChoice>,
+) {
+    if let Ok(mut noted) = the_choices_noted().lock() {
+        noted.retain(|(one, _)| one != server);
+        if let Some(choice) = choice {
+            noted.push((server.to_string(), choice));
+        }
+    }
+}
+
+/// The choices noted at an offer, one per server, until the password runs a
+/// step or another answer replaces it.
+fn the_choices_noted(
+) -> &'static std::sync::Mutex<Vec<(String, smoozy_security_and_licence::standing::MachinePasswordChoice)>> {
+    static NOTED: std::sync::OnceLock<
+        std::sync::Mutex<Vec<(String, smoozy_security_and_licence::standing::MachinePasswordChoice)>>,
+    > = std::sync::OnceLock::new();
+    NOTED.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+/// **The password that ran a step, kept as the noted choice says**, and the
+/// note is used up.
+pub fn the_password_that_worked_is_kept_as_noted(
+    record: &dyn crate::keys::LendsTheRecord,
+    store: Option<&dyn smoozy_security_and_licence::secret_store::SecretStore>,
+    server: &str,
+    password: &Origin,
+) {
+    let choice = the_choices_noted().lock().ok().and_then(|mut noted| {
+        let at = noted.iter().position(|(one, _)| one == server)?;
+        Some(noted.remove(at).1)
+    });
+    if let Some(choice) = choice {
+        the_password_is_kept_as_chosen(record, store, server, password, choice);
+    }
+}
+
+/// **The password held for this server, where one is**: this connection's
+/// hold first, then the saved one. A saved one that will not read is no
+/// password, and the offer is made as before.
+pub fn the_password_held_for(
+    record: &dyn crate::keys::LendsTheRecord,
+    store: Option<&dyn smoozy_security_and_licence::secret_store::SecretStore>,
+    server: &str,
+) -> Option<Origin> {
+    if let Ok(mut held) = the_connections_hold().lock() {
+        if let Some(value) = held.take(&server.to_string()) {
+            let bytes = value.expose(|bytes| bytes.to_vec());
+            held.hold(server.to_string(), smoozy_security_and_licence::plaintext::Plaintext::new(bytes.clone()));
+            return Some(Origin::what_the_user_typed(bytes));
+        }
+    }
+    let store = store?;
+    let mut subject = None;
+    record.lend(&mut |connection| {
+        if let Ok(Some(row)) = crate::record::server_rows::one(connection, server) {
+            subject = row.machine_password_subject;
+        }
+    });
+    let item = smoozy_security_and_licence::held::HeldSecret::new(
+        smoozy_security_and_licence::held::StoredKind::MachinePassword,
+        subject?,
+    );
+    let value = store.get(&item, THE_MACHINE_PASSWORDS_STORE_DEADLINE).ok()?;
+    Some(Origin::what_the_user_typed(value.expose(|bytes| bytes.to_vec())))
+}
+
+/// **The connection ended other than by Smoozy's own restart**: its hold goes
+/// (`Server Setup` E5, `Security and licence` §5.2).
+pub fn the_connections_password_goes(server: &str) {
+    if let Ok(mut held) = the_connections_hold().lock() {
+        held.owner_ended(&server.to_string());
     }
 }
 
@@ -11092,10 +12574,15 @@ impl<R: tauri::Runtime> TheUploadRoute<R> {
         {
             return Err(not_started());
         }
-        let the_run = self
+        // **An answer that goes keeps the request held until its run holds
+        // it**, so where there is no run it is let go here.
+        let Some(the_run) = self
             .app
             .try_state::<std::sync::Arc<crate::downloading::TheRunsTransfers>>()
-            .ok_or_else(not_started)?;
+        else {
+            crate::uploading::it_will_not_go_under_way(&ready.request.record);
+            return Err(not_started());
+        };
         let request = ready.request.record.clone();
         let door = std::sync::Arc::new(door);
         let came_to = crate::uploading::the_upload_runs(
@@ -11603,6 +13090,154 @@ pub fn the_users_build_line(
 pub(crate) mod tests {
     use super::*;
 
+    #[test]
+    fn bad_batch_2_a_hung_gpu_check_never_enters_driver_install_or_restart() {
+        let failed = |exit| readings::WhatTheDriverCheckSaid::ItDidNot {
+            the_exit: exit, the_machines_own_words: String::new(), what_it_wrote_to_standard_output: String::new(),
+        };
+        assert!(matches!(a_driver_check_without_an_exit_stops_setup(&failed(None)),
+            Some(TheRunsEnding::AStepFailed { step: Step::Driver, .. })));
+        assert!(a_driver_check_without_an_exit_stops_setup(&failed(Some(127))).is_none());
+        assert!(a_driver_check_without_an_exit_stops_setup(&readings::WhatTheDriverCheckSaid::ItAnswered).is_none());
+    }
+
+    /// **`Whole app`'s three choices for an admin password, each doing what
+    /// it says** — the four questions, scout 1.1, 2026-11-11. *Don't save*
+    /// keeps nothing past the run; *While connected* is held until the
+    /// connection ends; *Save* is in the secret store against the server's own
+    /// subject, read back by a later connection, and the row names it so the
+    /// Edit page can clear it. **Before the fix none of the three was kept**.
+    #[test]
+    fn the_three_password_choices_each_do_what_they_say() {
+        use smoozy_security_and_licence::held::HeldSecret;
+        use smoozy_security_and_licence::plaintext::Plaintext;
+        use smoozy_security_and_licence::secret_store::{GetFailure, ProbeOutcome, SecretStore, StoreFailure};
+        use smoozy_security_and_licence::standing::MachinePasswordChoice as Choice;
+        use std::cell::RefCell;
+
+        struct ARecordInHand(rusqlite::Connection);
+        impl crate::keys::LendsTheRecord for ARecordInHand {
+            fn lend(&self, act: &mut dyn FnMut(&rusqlite::Connection)) {
+                act(&self.0)
+            }
+            fn write_a_diary_line(&self, _act: &smoozy_keys::diary::Act) {}
+        }
+        #[derive(Default)]
+        struct AStore(RefCell<std::collections::HashMap<HeldSecret, Vec<u8>>>);
+        impl SecretStore for AStore {
+            fn put(&self, item: &HeldSecret, value: Plaintext, _: Duration) -> Result<(), StoreFailure> {
+                self.0.borrow_mut().insert(item.clone(), value.expose(|bytes| bytes.to_vec()));
+                Ok(())
+            }
+            fn get(&self, item: &HeldSecret, _: Duration) -> Result<Plaintext, GetFailure> {
+                self.0.borrow().get(item).cloned().map(Plaintext::new).ok_or(GetFailure::NotThere)
+            }
+            fn erase(&self, item: &HeldSecret, _: Duration) -> Result<(), StoreFailure> {
+                self.0.borrow_mut().remove(item);
+                Ok(())
+            }
+            fn probe(&self, _: Duration) -> ProbeOutcome {
+                ProbeOutcome::RoundTripWorked
+            }
+            fn enumerate(&self, _: Duration) -> Result<Vec<HeldSecret>, StoreFailure> {
+                Ok(Vec::new())
+            }
+        }
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        for migration in crate::record::migrations::ALL {
+            if let crate::record::migrations::WhatItRuns::TheseStatements(statements) = migration.what_it_runs {
+                for statement in statements {
+                    connection.execute(statement, []).unwrap();
+                }
+            }
+        }
+        let record = ARecordInHand(connection);
+        let a_server = |record: &ARecordInHand| {
+            let row = smoozy_servers::store::ServerRow::saved(
+                Identity::issue(IdentityKind::LocalServer).unwrap().as_text(),
+                smoozy_servers::identity::Host::what_the_user_typed("5.180.183.77").unwrap(),
+                smoozy_servers::identity::Port::what_the_user_typed(22).unwrap(),
+                smoozy_servers::identity::Username::what_the_user_typed("ubuntu").unwrap(),
+                smoozy_servers::identity::KeyReference {
+                    local_key_identifier: "key-1".into(),
+                    fingerprint: "SHA256:aaa".into(),
+                },
+            );
+            crate::record::server_rows::add(&record.0, &row).unwrap();
+            row.local_server_identifier
+        };
+        let store = AStore::default();
+        let typed = |text: &str| Origin::what_the_user_typed(text.as_bytes().to_vec());
+        let read = |origin: Option<Origin>| origin.map(|it| it.for_a_destination().expose(|bytes| bytes.to_vec()));
+
+        // **Don't save**: nothing is held past the run.
+        let server = a_server(&record);
+        the_password_is_kept_as_chosen(&record, Some(&store), &server, &typed("once"), Choice::DoNotRememberIt);
+        assert_eq!(read(the_password_held_for(&record, Some(&store), &server)), None);
+
+        // **While connected**: held, and more than once, until the connection ends.
+        let server = a_server(&record);
+        the_password_is_kept_as_chosen(&record, Some(&store), &server, &typed("this-connection"), Choice::WhileThisConnectionLasts);
+        assert_eq!(read(the_password_held_for(&record, Some(&store), &server)), Some(b"this-connection".to_vec()));
+        assert_eq!(read(the_password_held_for(&record, Some(&store), &server)), Some(b"this-connection".to_vec()));
+        assert!(store.0.borrow().is_empty(), "*While connected* reached the store");
+        the_connections_password_goes(&server);
+        assert_eq!(read(the_password_held_for(&record, Some(&store), &server)), None);
+
+        // **Save**: in the store against the row's subject, and read back by a
+        // later connection.
+        let server = a_server(&record);
+        the_password_is_kept_as_chosen(&record, Some(&store), &server, &typed("kept"), Choice::RememberIt);
+        the_connections_password_goes(&server);
+        assert_eq!(read(the_password_held_for(&record, Some(&store), &server)), Some(b"kept".to_vec()));
+        let row = crate::record::server_rows::one(&record.0, &server).unwrap().unwrap();
+        assert!(row.machine_password_subject.is_some(), "the row names nothing for the Edit page to clear");
+        assert_eq!(store.0.borrow().len(), 1);
+    }
+
+    /// **`Server Setup` E2, *a password is kept only once it worked*
+    /// (2026-11-12, Fable's fresh look at the admin password, finding 2).**
+    /// The box notes the choice and keeps nothing; the run says the password
+    /// ran a step, and only then is it kept as chosen, once.
+    #[test]
+    fn fresh_look_2_a_password_given_at_the_offer_is_kept_only_once_it_worked() {
+        use smoozy_security_and_licence::standing::MachinePasswordChoice as Choice;
+        struct ARecordInHand(rusqlite::Connection);
+        impl crate::keys::LendsTheRecord for ARecordInHand {
+            fn lend(&self, act: &mut dyn FnMut(&rusqlite::Connection)) {
+                act(&self.0)
+            }
+            fn write_a_diary_line(&self, _act: &smoozy_keys::diary::Act) {}
+        }
+        let record = ARecordInHand(rusqlite::Connection::open_in_memory().unwrap());
+        let typed = |text: &str| Origin::what_the_user_typed(text.as_bytes().to_vec());
+        let read = |origin: Option<Origin>| origin.map(|it| it.for_a_destination().expose(|bytes| bytes.to_vec()));
+        let server = "fresh-look-2-kept-once-it-worked";
+
+        // **At the box: the choice is noted and nothing is kept.**
+        the_choice_at_the_offer_is_noted(server, Some(Choice::WhileThisConnectionLasts));
+        assert_eq!(read(the_password_held_for(&record, None, server)), None, "kept before anything used it");
+        // **A step ran behind it: kept as chosen.**
+        the_password_that_worked_is_kept_as_noted(&record, None, server, &typed("it-works"));
+        assert_eq!(
+            read(the_password_held_for(&record, None, server)),
+            Some(b"it-works".to_vec()),
+            "a password that ran a step was not kept as chosen"
+        );
+        // **The note is used up**: a later password is not kept on it.
+        the_connections_password_goes(server);
+        the_password_that_worked_is_kept_as_noted(&record, None, server, &typed("another"));
+        assert_eq!(read(the_password_held_for(&record, None, server)), None);
+        // **No choice lets an earlier note go, and *Don't save* keeps nothing.**
+        the_choice_at_the_offer_is_noted(server, Some(Choice::WhileThisConnectionLasts));
+        the_choice_at_the_offer_is_noted(server, None);
+        the_password_that_worked_is_kept_as_noted(&record, None, server, &typed("no-choice"));
+        assert_eq!(read(the_password_held_for(&record, None, server)), None);
+        the_choice_at_the_offer_is_noted(server, Some(Choice::DoNotRememberIt));
+        the_password_that_worked_is_kept_as_noted(&record, None, server, &typed("dont-save"));
+        assert_eq!(read(the_password_held_for(&record, None, server)), None);
+    }
+
     /// **The demo's fault 2: a failed Telegram *Install* writes its diary line
     /// too** — `Server Setup` §12, one per use of the dedicated entry point —
     /// saying the desired state was not confirmed. *Done* says it was set.
@@ -11824,6 +13459,113 @@ pub(crate) mod tests {
         assert!(!the_add.contains("a_run_begins("), "the add still takes its run by a_run_begins alone");
         drop(record);
         let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    thread_local! {
+        /// What a test does at the moment an ending run lets its lock go.
+        static AS_THE_LOCK_IS_LET_GO: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = const { std::cell::RefCell::new(None) };
+    }
+
+    /// The seam [`a_run_in_the_line_ends`] calls in tests, on its own thread.
+    pub(super) fn as_the_ending_run_lets_its_lock_go() {
+        if let Some(then) = AS_THE_LOCK_IS_LET_GO.with(|held| held.borrow_mut().take()) {
+            then();
+        }
+    }
+
+    /// **`Server Setup` Y9a item 7, *the ending and the letting go are one
+    /// act* (2026-11-12, Sol's look at the double-check ideas, finding 3): a
+    /// press that arrives as a run ends is never lost.** A run ends with
+    /// nothing waiting, and *Set up again* is pressed in the moment the ending
+    /// run lets its lock go. The press begins its own run. **It failed before
+    /// the fix**: the ending run looked at its line, let the lock go, and only
+    /// then let the server go; the press found a run still standing, joined
+    /// its line, and was taken off it by that run, whose caller was told
+    /// nothing waited — so the press neither ran nor was named.
+    #[test]
+    fn double_check_sol_3_a_press_as_a_run_ends_is_not_lost() {
+        let server = "sol-3-a-press-in-the-gap";
+        let pressed = std::rc::Rc::new(std::cell::Cell::new(None));
+        for it_finished in [true, false] {
+            assert!(a_run_begins(server, SetupKind::ABlenderInstall));
+            let taken = std::rc::Rc::clone(&pressed);
+            AS_THE_LOCK_IS_LET_GO.with(|held| {
+                *held.borrow_mut() = Some(Box::new(move || {
+                    taken.set(Some(the_acts_are_taken_from_the_card(
+                        server,
+                        vec![ASetUpAct::TheReadyAction { a_render_was_running: false }],
+                        &mut |_| {},
+                    )));
+                }));
+            });
+            assert_eq!(a_run_in_the_line_ends(server, it_finished), WhatFollowsARun::NothingWaits);
+            assert_eq!(pressed.take(), Some(HowThePressWasTaken::ItBegan), "the press began its own run");
+            assert_eq!(the_kind_being_driven_on(server), Some(SetupKind::TheReadyAction), "and it is the run on the server");
+            assert!(the_line_stopped_on(server).is_empty(), "nothing was put aside unnamed");
+            a_run_ends(server);
+        }
+    }
+
+    /// **And the line that press wrote down is not emptied by the run that
+    /// was ending** (Sol's look at the double-check fixes): the press began
+    /// *Set up again* with an install behind it and wrote that install down;
+    /// the ending run then writes nothing over it.
+    #[test]
+    fn double_check_sol_3_an_ending_run_does_not_empty_the_line_a_press_just_wrote() {
+        let server = "sol-3-the-line-a-press-wrote";
+        let behind = ASetUpAct::AnInstallFromTheList("4.5.14".to_string());
+        let kept = std::rc::Rc::new(std::cell::RefCell::new(vec![ASetUpAct::TheTelegramPlacement]));
+        assert!(a_run_begins(server, SetupKind::ABlenderInstall));
+        let (the_presss, pressed) = (std::rc::Rc::clone(&kept), behind.clone());
+        AS_THE_LOCK_IS_LET_GO.with(|held| {
+            *held.borrow_mut() = Some(Box::new(move || {
+                the_acts_are_taken_from_the_card(
+                    server,
+                    vec![ASetUpAct::TheReadyAction { a_render_was_running: false }, pressed],
+                    &mut |line| *the_presss.borrow_mut() = line.to_vec(),
+                );
+            }));
+        });
+        let the_runs = std::rc::Rc::clone(&kept);
+        crate::surface::set_up::the_acts_are_driven_in_turn(
+            server,
+            ASetUpAct::AnInstallFromTheList("5.2.3".to_string()),
+            &mut |_| WhereTheSetUpGot::TheBlenderListCouldNotBeRead { said: "no list".to_string() },
+            &mut |_| None,
+            &mut |_| {},
+            &mut |line| *the_runs.borrow_mut() = line.to_vec(),
+        );
+        assert_eq!(*kept.borrow(), vec![behind], "the press's own line stands");
+        a_run_ends(server);
+    }
+
+    /// **An act already running or waiting is not added again** — the Rough
+    /// what-if answers, share 1 (18, 20). Five fast presses of *Set up again*
+    /// were five runs back to back, and one Blender ticked in two boxes was
+    /// installed twice. A different act still joins the line.
+    #[test]
+    fn rough_share_1_a_repeated_act_does_not_join_the_line_twice() {
+        let server = "rough-1-the-same-act-twice";
+        let again = || ASetUpAct::TheReadyAction { a_render_was_running: false };
+        let install = |version: &str| ASetUpAct::AnInstallFromTheList(version.to_string());
+        let kept = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let mut keep = |line: &[ASetUpAct]| *kept.borrow_mut() = line.to_vec();
+        assert_eq!(the_acts_are_taken_from_the_card(server, vec![again()], &mut keep), HowThePressWasTaken::ItBegan);
+        for _ in 0..4 {
+            the_acts_are_taken_from_the_card(server, vec![again()], &mut keep);
+        }
+        assert!(the_acts_still_waiting_on(server).is_empty(), "the run already standing is not asked for again");
+        the_acts_are_taken_from_the_card(server, vec![install("5.2.3")], &mut keep);
+        the_acts_are_taken_from_the_card(server, vec![install("5.2.3"), install("4.5.14")], &mut keep);
+        assert_eq!(the_acts_still_waiting_on(server), vec![install("5.2.3"), install("4.5.14")]);
+        assert_eq!(*kept.borrow(), vec![install("5.2.3"), install("4.5.14")]);
+        // The install now running is not asked for again either.
+        assert_eq!(a_run_in_the_line_ends(server, true), WhatFollowsARun::TheNextBegins(install("5.2.3")));
+        the_acts_are_taken_from_the_card(server, vec![install("5.2.3"), again()], &mut keep);
+        assert_eq!(the_acts_still_waiting_on(server), vec![install("4.5.14"), again()]);
+        the_user_asked_to_stop(server);
+        a_run_in_the_line_ends(server, true);
+        assert_eq!(the_kind_being_driven_on(server), None);
     }
 
     /// **Several Blenders picked: the next begins only where the last one
@@ -12327,12 +14069,12 @@ pub(crate) mod tests {
     struct HostingHere(Vec<(String, Vec<u8>)>);
 
     impl FetchesOneSource for HostingHere {
-        fn fetch(&mut self, source: &str, _ceiling: u64) -> Result<Vec<u8>, String> {
+        fn fetch(&mut self, source: &str, _ceiling: u64) -> Result<Vec<u8>, ADownloadThatFailed> {
             self.0
                 .iter()
                 .find(|(named, _)| named == source)
                 .map(|(_, bytes)| bytes.clone())
-                .ok_or_else(|| format!("{source}: nothing answers there"))
+                .ok_or_else(|| format!("{source}: nothing answers there").into())
         }
     }
 
@@ -12363,6 +14105,43 @@ pub(crate) mod tests {
 
     fn the_next_sequence() -> u64 {
         smoozy_server_protocol::release::trust::THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE + 1
+    }
+
+    /// **`Server protocol and transfers` B10b: what every try came to, in
+    /// words** — the last address and its answer, how many tries, and whether
+    /// nothing answered, which is what the card and the row read.
+    #[test]
+    fn every_try_failing_is_said_with_the_last_address_and_answer() {
+        use smoozy_server_protocol::release::two_routes::EveryTryFailed;
+        let plain = "https://github.com/a-kislyakov/Smoozy-releases/releases/download/v0.3.1/release";
+        let said = the_words_when_every_try_failed(&EveryTryFailed {
+            the_last_address: plain.into(),
+            the_last_answer: WhyTheFetchFailed::TheSourceAnsweredWith { status: 504 },
+            nothing_answered: true,
+            how_many_tries: 5,
+        });
+        assert_eq!(
+            said,
+            ADownloadThatFailed {
+                said: format!("{plain} returned HTTP 504. Tried 5 times."),
+                nothing_answered: true,
+                no_release_is_built_for_it: false,
+            }
+        );
+        let once = the_words_when_every_try_failed(&EveryTryFailed {
+            the_last_address: plain.into(),
+            the_last_answer: WhyTheFetchFailed::TheSourceHasNoSuchThing,
+            nothing_answered: false,
+            how_many_tries: 1,
+        });
+        assert_eq!(once, ADownloadThatFailed::from(format!("{plain} was not found (HTTP 404).")));
+        let unlisted = the_words_when_every_try_failed(&EveryTryFailed {
+            the_last_address: "https://api.github.com/repos/a-kislyakov/Smoozy-releases/releases/tags/v0.3.1".into(),
+            the_last_answer: WhyTheFetchFailed::TheReleaseListsNoSuchFile { file: "release".into() },
+            nothing_answered: false,
+            how_many_tries: 2,
+        });
+        assert!(unlisted.said.ends_with("does not list release. Tried 2 times."), "{unlisted}");
     }
 
     /// **`Server protocol and transfers` B8d: a manifest naming another package
@@ -12408,10 +14187,13 @@ pub(crate) mod tests {
     }
 
     /// **`Server protocol and transfers` B8d's one edge case: a copy whose
-    /// remembered floor is above its own release refuses its own manifest**,
-    /// with the ordinary verification failure, and places nothing.
+    /// remembered floor is above its own release refuses its own manifest**
+    /// and places nothing, **and says why in its own sentence** (that clause
+    /// as changed 2026-11-11, the build runner's ruling on the Fable review's
+    /// third sitting, fault 3; it read *with the ordinary verification
+    /// failure*, which was untrue of a release whose signature is good).
     #[test]
-    fn a_remembered_floor_above_its_own_release_refuses_with_the_ordinary_failure() {
+    fn a_remembered_floor_above_its_own_release_refuses_in_its_own_words() {
         // A newer release accepted earlier, by the latest address…
         let (newer, root, newer_artifact) = a_release_of("0.0.9-newer", the_next_sequence() + 5);
         let mut store = TrustHere::default();
@@ -12434,7 +14216,7 @@ pub(crate) mod tests {
             "0.0.3-own",
         )
         .expect_err("a copy placed its own release beneath a floor it remembers");
-        assert_eq!(refused, "The release failed the signature check.");
+        assert_eq!(refused, "Saved data is from a newer version. Install the latest version.");
         assert_eq!(this_copys_own_release_sequence_if_known("0.0.3-own"), None);
     }
 
@@ -12469,16 +14251,28 @@ pub(crate) mod tests {
             its_release_sequence: sequence,
             ..Default::default()
         };
+        let mut incompatible = holding(Some(verified.manifest.release_sequence.saturating_sub(1)));
+        incompatible.the_declared_intervals = vec![(0, 0)];
+        assert!(what_v14_refuses(&incompatible, &verified, false).is_some(),
+            "an incompatible program's unreadable held jobs would be treated as no jobs");
+        // **The Creator's ruling of 2026-11-14 on batch 1, 437**: the refusal
+        // is known by its words, and the user's yes lets it go — once.
+        assert!(an_older_program_holds_work(&what_v14_refuses(&incompatible, &verified, false).unwrap()));
+        assert_eq!(what_v14_refuses(&incompatible, &verified, true), None, "the user said its job may go");
+        the_older_programs_job_may_go("batch-1-ruling-server");
+        assert!(the_older_programs_job_may_go_on("batch-1-ruling-server"));
+        assert!(!the_older_programs_job_may_go_on("batch-1-ruling-server"), "the yes covers one run");
+        assert!(!the_older_programs_job_may_go_on("another-server"));
         let own = the_next_sequence();
         assert_eq!(
-            what_v14_refuses(&holding(Some(own + 1)), &verified),
+            what_v14_refuses(&holding(Some(own + 1)), &verified, false),
             Some(WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut {
                 said: THE_MACHINE_IS_NEWER.to_string()
             })
         );
-        assert_eq!(what_v14_refuses(&holding(Some(own)), &verified), None);
-        assert_eq!(what_v14_refuses(&holding(Some(own - 1)), &verified), None);
-        assert_eq!(what_v14_refuses(&holding(None), &verified), None);
+        assert_eq!(what_v14_refuses(&holding(Some(own)), &verified, false), None);
+        assert_eq!(what_v14_refuses(&holding(Some(own - 1)), &verified, false), None);
+        assert_eq!(what_v14_refuses(&holding(None), &verified, false), None);
     }
 
     /// **W0-2 at `Server Setup` R2's placement: a shortcut copy neither refuses
@@ -12507,12 +14301,12 @@ pub(crate) mod tests {
         .expect("a desk program");
         let desk_placed = holding(Some(crate::the_desk_program::THE_SEQUENCE_A_DESK_PROGRAM_IS_PLACED_UNDER));
         assert_eq!(
-            what_v14_refuses(&desk_placed, &the_desk_programs),
+            what_v14_refuses(&desk_placed, &the_desk_programs, false),
             None,
             "a shortcut copy refused its own desk program"
         );
         assert!(
-            what_v14_refuses(&holding(Some(own)), &the_desk_programs).is_some(),
+            what_v14_refuses(&holding(Some(own)), &the_desk_programs, false).is_some(),
             "a shortcut copy would place its desk program over a published release"
         );
     }
@@ -12534,12 +14328,12 @@ pub(crate) mod tests {
             fn the_current_release(
                 &mut self,
                 detected: &smoozy_server_protocol::release::manifest::TargetTuple,
-            ) -> Result<(AVerifiedRelease, Vec<u8>), String> {
+            ) -> Result<(AVerifiedRelease, Vec<u8>), ADownloadThatFailed> {
                 let mut an_elf = vec![0x7f, b'E', b'L', b'F', 2, 1, 1, 0];
                 an_elf.resize(16, 0);
                 an_elf.extend_from_slice(&3u16.to_le_bytes());
                 an_elf.extend_from_slice(&62u16.to_le_bytes());
-                crate::the_desk_program::the_desk_programs_release(&an_elf, detected)
+                Ok(crate::the_desk_program::the_desk_programs_release(&an_elf, detected)?)
             }
         }
         let done = WhereTheSetUpGot::TheRunEnded {
@@ -13259,7 +15053,7 @@ smoozy-supervisor.service\" for details.";
             "the record is whole and unedited, the unfinished and rewritten line included"
         );
         assert_eq!(words.the_whole_of(elevated::WhichStream::TheComplaints), "E: a complaint\ngoing down\n");
-        let steps: Vec<Step> = words.printed.the_steps().iter().map(|one| one.step).collect();
+        let steps: Vec<Step> = words.acts[0].printed.the_steps().iter().map(|one| one.step).collect();
         assert_eq!(steps, vec![Step::Driver, Step::Restart], "kept apart by step");
 
         // **A character whose bytes have not all arrived waits for the rest.**
@@ -13350,11 +15144,11 @@ smoozy-supervisor.service\" for details.";
         a_run_ends(server);
     }
 
-    /// **The words are kept from the run being taken until the next run**:
-    /// taking a run lets the last one's go, and a server with no run taken
-    /// keeps nothing.
+    /// **The words are kept from the run being taken**, and a server with no
+    /// run taken keeps nothing. *(Until 2026-11-09 taking the next run let
+    /// the last one's go; see the twenty-eighth notes' test below.)*
     #[test]
-    fn y7a_a_runs_words_are_kept_until_the_next_run() {
+    fn y7a_a_runs_words_are_kept_from_the_run_being_taken() {
         let server = "piece-h-the-words-kept";
         assert!(!the_words_are_kept_for(server));
         assert!(!a_piece_is_kept(server, Step::Driver, &APiecePrinted::Output(b"x\n".to_vec())));
@@ -13369,13 +15163,86 @@ smoozy-supervisor.service\" for details.";
             the_whole_of_what_was_printed_on(server),
             Some(("one\n".to_string(), String::new()))
         );
-        assert!(a_run_begins(server, SetupKind::ABlenderInstall));
+        the_servers_words_go(server);
+    }
+
+    /// **The Creator's twenty-eighth notes, note 7: *Server output* is kept
+    /// until Smoozy disconnects from the server, "just like in a terminal"** —
+    /// `Server Setup` Y7a as changed 2026-11-09. A setup, a Blender install
+    /// and a second setup each add their words after the last act's, each
+    /// under its own name; the window starts again with each act; a run
+    /// ending keeps them; and only Smoozy disconnecting lets them go. **Before
+    /// this piece each act the user asked for emptied the words**, so this
+    /// fails at the second act.
+    #[test]
+    fn twenty_eighth_7_every_act_adds_to_the_words_until_smoozy_disconnects() {
+        let server = "twenty-eighth-7-the-words-kept-like-a-terminal";
+        let mut keep = |_: &[ASetUpAct]| {};
+        let acts = [
+            ASetUpAct::TheReadyAction { a_render_was_running: false },
+            ASetUpAct::AnInstallFromTheList("5.2.2".to_string()),
+            ASetUpAct::TheReadyAction { a_render_was_running: false },
+        ];
+        let printed = [("x86_64\n", ""), ("blender-5.2.2-linux-x64.tar.xz: 352 MB downloaded in 19 s\n", "a warning\n"), ("x86_64\n", "")];
+        for (act, (ordinary, complaints)) in acts.iter().zip(printed) {
+            assert_eq!(
+                the_acts_are_taken_from_the_card(server, vec![act.clone()], &mut keep),
+                HowThePressWasTaken::ItBegan
+            );
+            assert!(the_newest_lines_on(server).is_empty(), "the last act's lines stood in the window of the next");
+            assert!(a_piece_is_kept(server, Step::Readings, &APiecePrinted::Output(ordinary.as_bytes().to_vec())));
+            if !complaints.is_empty() {
+                assert!(a_piece_is_kept(server, Step::Fetch, &APiecePrinted::Complaint(complaints.as_bytes().to_vec())));
+            }
+            a_run_ends(server);
+        }
+        let kept = the_acts_words_on(server).expect("the words are kept");
+        let named: Vec<Option<&str>> = kept.iter().map(|act| act.called.as_deref()).collect();
+        assert_eq!(
+            named,
+            vec![Some("Set up this server"), Some("Install Blender 5.2.2"), Some("Set up this server")],
+            "each act's words are not under its own name"
+        );
         assert_eq!(
             the_whole_of_what_was_printed_on(server),
-            Some((String::new(), String::new())),
-            "the next run lets the last run's words go"
+            Some((
+                "x86_64\nblender-5.2.2-linux-x64.tar.xz: 352 MB downloaded in 19 s\nx86_64\n".to_string(),
+                "a warning\n".to_string()
+            )),
+            "an act emptied the words before it"
         );
+        // **A dropped connection and a reconnect do not touch them**; only
+        // Smoozy disconnecting does (`Servers` S10 items 1 and 6).
+        the_servers_words_go(server);
+        assert!(!the_words_are_kept_for(server), "disconnecting kept the words");
+        assert!(the_acts_words_on(server).is_none());
+    }
+
+    /// **The next act in a line begins its own words, under its own name** —
+    /// after the act before it, never instead of it (`Server Setup` Y7a as
+    /// changed 2026-11-09).
+    #[test]
+    fn twenty_eighth_7_the_next_act_in_a_line_is_named_after_the_one_before() {
+        let server = "twenty-eighth-7-the-line";
+        let mut keep = |_: &[ASetUpAct]| {};
+        assert_eq!(
+            the_acts_are_taken_from_the_card(
+                server,
+                vec![ASetUpAct::AnInstallFromTheList("5.2.2".to_string()), ASetUpAct::AnInstallFromTheList("4.5.14".to_string())],
+                &mut keep,
+            ),
+            HowThePressWasTaken::ItBegan
+        );
+        assert!(a_piece_is_kept(server, Step::Fetch, &APiecePrinted::Output(b"first\n".to_vec())));
+        assert!(matches!(a_run_in_the_line_ends(server, true), WhatFollowsARun::TheNextBegins(_)));
+        assert!(a_piece_is_kept(server, Step::Fetch, &APiecePrinted::Output(b"second\n".to_vec())));
+        let kept = the_acts_words_on(server).expect("kept");
+        assert_eq!(kept.len(), 2);
+        assert_eq!(kept[1].called.as_deref(), Some("Install Blender 4.5.14"));
+        assert_eq!(kept[0].the_ordinary_output, "first\n");
+        assert_eq!(kept[1].the_ordinary_output, "second\n");
         a_run_ends(server);
+        the_servers_words_go(server);
     }
 
     // ── `Server Setup` Y7a as changed — the sixteenth notes, note 1, 2026-10-24
@@ -13544,7 +15411,6 @@ smoozy-supervisor.service\" for details.";
             every.push(step.elevated.as_str().to_string());
             every.push(step.elevated_reading_the_password_from_standard_input.as_str().to_string());
         }
-        every.push(smoozy_server_setup::elevation::THE_VALIDATE_FORM.as_str().to_string());
         every.push(smoozy_server_setup::kind::THE_NON_INTERACTIVE_PROBE.as_str().to_string());
         every.push(smoozy_server_setup::restart::THE_RESTART.as_str().to_string());
         every.extend(
@@ -13710,5 +15576,392 @@ smoozy-supervisor.service\" for details.";
         assert_eq!(under_way.asked("one", "fourth"), Some("fourth"), "and the next starts at once");
         under_way.not_started("one");
         assert_eq!(under_way.asked("one", "fifth"), Some("fifth"), "a telling that never started holds nothing");
+    }
+}
+
+/// **`Server Setup` R6a's change of later on 2026-11-13: the layout a setup
+/// uses, read through the real point from OpenSSH's own `sftp-server`** over a
+/// Unix socket pair, in a folder standing for the login's home. The commands
+/// are a stand-in that writes down what was asked and answers the mounts from
+/// a reading the test gives.
+#[cfg(all(test, unix))]
+mod the_layout_a_setup_uses {
+    use std::os::fd::OwnedFd;
+    use std::path::{Path, PathBuf};
+    use std::process::{Command, Stdio};
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
+
+    use smoozy_server_protocol::transport::{CommandResult, CommandString, Ending};
+
+    use super::{TheLayoutChosen, WhereTheSetUpGot};
+    use crate::servers::sessions::{
+        lend_until_it_ends, ACommandRunning, AHeldConnection, NoSession, TheAdditionalConnection,
+        ThisServersSessions,
+    };
+
+    const WHERE_SFTP_SERVER_LIVES: &[&str] = &[
+        "/usr/libexec/sftp-server",
+        "/usr/lib/openssh/sftp-server",
+        "/usr/libexec/openssh/sftp-server",
+        "/usr/lib/ssh/sftp-server",
+    ];
+
+    struct AMachine {
+        sftp_server: PathBuf,
+        home: PathBuf,
+        asked: Mutex<Vec<String>>,
+    }
+
+    impl AMachine {
+        fn standing(named: &str) -> Option<Arc<AMachine>> {
+            let sftp_server = WHERE_SFTP_SERVER_LIVES.iter().map(PathBuf::from).find(|path| path.exists())?;
+            // **Never under `/tmp`**, which `Job files and outputs` L3 keeps
+            // every root out of: beside this test's own program instead.
+            let home = std::env::current_exe()
+                .expect("this test's own program")
+                .parent()
+                .expect("its folder")
+                .join(format!("smzy-r6a-{named}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&home);
+            std::fs::create_dir_all(&home).expect("the login's home");
+            let home = std::fs::canonicalize(&home).expect("the home is there");
+            Some(Arc::new(AMachine { sftp_server, home, asked: Mutex::new(Vec::new()) }))
+        }
+
+        fn the_command_runs(&self, command: &str) -> CommandResult {
+            self.asked.lock().unwrap().push(command.to_string());
+            let answer = |output: &str, status| CommandResult {
+                output: output.as_bytes().to_vec(),
+                complaint: Vec::new(),
+                status: Some(status),
+            };
+            match command {
+                // **One mount, the home folder's**, so nothing more is offered.
+                "cat /proc/self/mountinfo" => answer("22 1 252:1 / / rw,relatime shared:1 - ext4 /dev/vda1 rw\n", 0),
+                "id -u" => answer("1000\n", 0),
+                _ => answer("", 127),
+            }
+        }
+
+        fn the_mounts_were_read(&self) -> bool {
+            self.asked.lock().unwrap().iter().any(|asked| asked.contains("mountinfo"))
+        }
+
+        fn at(&self, path: &str) -> PathBuf {
+            self.home.join(path)
+        }
+    }
+
+    impl Drop for AMachine {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.home);
+        }
+    }
+
+    struct AConnectionToIt(Arc<AMachine>);
+
+    impl AHeldConnection for AConnectionToIt {
+        type Channel = tokio::net::UnixStream;
+
+        async fn open_a_session(&mut self) -> Result<tokio::net::UnixStream, NoSession> {
+            let (ours, theirs) = std::os::unix::net::UnixStream::pair().expect("a socket pair");
+            ours.set_nonblocking(true).expect("the end we drive");
+            let reading: OwnedFd = theirs.try_clone().expect("its reading end").into();
+            let writing: OwnedFd = theirs.into();
+            let mut child = Command::new(&self.0.sftp_server)
+                .current_dir(&self.0.home)
+                .stdin(Stdio::from(reading))
+                .stdout(Stdio::from(writing))
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("the machine's own file-transfer server starts");
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            Ok(tokio::net::UnixStream::from_std(ours).expect("the end we drive"))
+        }
+
+        async fn a_command(&mut self, command: CommandString, _frame: Option<Vec<u8>>) -> Result<CommandResult, NoSession> {
+            Ok(self.0.the_command_runs(command.as_str()))
+        }
+
+        async fn a_command_begun(&mut self, command: CommandString, _frame: Option<Vec<u8>>) -> Result<ACommandRunning, NoSession> {
+            let machine = Arc::clone(&self.0);
+            Ok(ACommandRunning::to_be_run(async move { Ok(machine.the_command_runs(command.as_str())) }))
+        }
+
+        async fn until_it_ends(&mut self) -> Ending {
+            std::future::pending().await
+        }
+
+        async fn torn_down(self) -> Ending {
+            Ending::TornDownBySmoozy
+        }
+    }
+
+    /// **The layout this setup would use, read through a point lending the
+    /// stand-in** — given the test's own 20 seconds, which a read that never
+    /// answers ran into before the limit.
+    fn the_layout_read_from(machine: &Arc<AMachine>) -> Result<Result<TheLayoutChosen, WhereTheSetUpGot>, ()> {
+        let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().expect("a runtime");
+        runtime.block_on(async {
+            let sessions = ThisServersSessions::<AConnectionToIt>::for_one_server();
+            let more = Arc::clone(machine);
+            let additional: TheAdditionalConnection<AConnectionToIt> = Arc::new(move || {
+                let more = Arc::clone(&more);
+                Box::pin(async move { Some(AConnectionToIt(more)) })
+            });
+            let mut primary = AConnectionToIt(Arc::clone(machine));
+            let lending = tokio::spawn({
+                let sessions = sessions.clone();
+                async move { lend_until_it_ends(&sessions, &mut primary, &additional).await }
+            });
+            while !sessions.a_connection_is_live() {
+                tokio::task::yield_now().await;
+            }
+            let chosen = tokio::time::timeout(Duration::from_secs(20), super::the_layout_this_setup_uses(&sessions, false))
+                .await
+                .map_err(|_| ());
+            lending.abort();
+            chosen
+        })
+    }
+
+    fn the_record_holds(machine: &AMachine, root: &Path) {
+        std::fs::create_dir_all(machine.at("smoozy/package")).expect("the package area");
+        std::fs::write(machine.at("smoozy/package/root"), root.display().to_string()).expect("the record");
+    }
+
+    fn the_reason(came: Result<Result<TheLayoutChosen, WhereTheSetUpGot>, ()>) -> String {
+        match came {
+            Ok(Err(WhereTheSetUpGot::SmoozysFolderCouldNotBeFound { said })) => said,
+            Ok(Err(other)) => panic!("stopped another way: {other:?}"),
+            Ok(Ok(chosen)) => panic!("a layout was used: {}", chosen.layout.root().as_path()),
+            Err(()) => panic!("it never answered"),
+        }
+    }
+
+    /// **Sol's look at the scout's list, point 2: a record that cannot be
+    /// read stops the setup**, rather than being taken as no record and a
+    /// disk chosen again over the root that stands.
+    #[test]
+    fn a_record_that_cannot_be_read_stops_the_setup_with_its_reason() {
+        let Some(machine) = AMachine::standing("unreadable") else { return };
+        std::fs::create_dir_all(machine.at("smoozy/package/root")).expect("a folder where the record is");
+        let said = the_reason(the_layout_read_from(&machine));
+        assert!(said.starts_with(&format!("Could not read {}", machine.at("smoozy/package/root").display())), "{said}");
+    }
+
+    /// **Sol's look at the scout's list, point 4: a read that never answers
+    /// is given up at the limit**, and stops the setup too. A record that is
+    /// a named pipe nobody writes to holds the server's read for good.
+    #[test]
+    fn a_record_read_that_never_answers_is_given_up_at_the_limit() {
+        let Some(machine) = AMachine::standing("never-answers") else { return };
+        std::fs::create_dir_all(machine.at("smoozy/package")).expect("the package area");
+        let pipe = machine.at("smoozy/package/root");
+        let made = Command::new("mkfifo").arg(&pipe).status().expect("mkfifo runs");
+        assert!(made.success());
+        let started = std::time::Instant::now();
+        let came = the_layout_read_from(&machine);
+        // **Let the stand-in's server go**, its open answered.
+        std::thread::spawn(move || {
+            let _ = std::fs::OpenOptions::new().write(true).open(&pipe);
+        });
+        let said = the_reason(came);
+        assert!(said.contains("the server stopped responding") || said.starts_with("Could not read"), "{said}");
+        assert!(started.elapsed() < Duration::from_secs(10), "{:?}", started.elapsed());
+    }
+
+    /// **Sol's look at the scout's list, point 4: the existing installation is
+    /// found first** — a server with a record reads no mount at all.
+    #[test]
+    fn a_recorded_root_is_found_before_any_disk_is_listed() {
+        let Some(machine) = AMachine::standing("found-first") else { return };
+        let root = machine.at("smoozy");
+        the_record_holds(&machine, &root);
+        let chosen = the_layout_read_from(&machine).expect("an answer").expect("the recorded layout");
+        assert_eq!(chosen.layout.root().as_path(), root.display().to_string());
+        assert!(!machine.the_mounts_were_read(), "{:?}", machine.asked.lock().unwrap());
+    }
+
+    /// **Sol's look at the scout's list, point 1: a recorded root that does
+    /// not hold its mark stops the setup** — its disk not mounted, or
+    /// replaced — and nothing is made in its place. A root that holds it is
+    /// used, and one placed before marks is used as it was.
+    #[test]
+    fn a_recorded_root_is_used_only_where_its_mark_stands() {
+        let Some(machine) = AMachine::standing("marked") else { return };
+        let root = machine.at("ephemeral/smoozy");
+        std::fs::create_dir_all(machine.at("ephemeral")).expect("the mount point");
+        the_record_holds(&machine, &root);
+        std::fs::write(machine.at("smoozy/package/root-mark"), "the-mark").expect("the mark is recorded");
+
+        let said = the_reason(the_layout_read_from(&machine));
+        assert_eq!(said, format!("Could not find {}/.smoozy-root. Smoozy's folder or its disk may be missing.", root.display()));
+        assert!(!root.exists());
+
+        std::fs::create_dir_all(&root).expect("a folder of the same name");
+        std::fs::write(root.join(".smoozy-root"), "another").expect("another mark");
+        let said = the_reason(the_layout_read_from(&machine));
+        assert!(said.contains("is not the one set up here"), "{said}");
+
+        std::fs::write(root.join(".smoozy-root"), "the-mark\n").expect("its own mark");
+        let chosen = the_layout_read_from(&machine).expect("an answer").expect("the layout");
+        assert!(chosen.a_mark_stands);
+
+        std::fs::remove_file(machine.at("smoozy/package/root-mark")).expect("no mark recorded");
+        let chosen = the_layout_read_from(&machine).expect("an answer").expect("the layout");
+        assert!(!chosen.a_mark_stands, "a root placed before marks is used as it was, and marked");
+    }
+
+    /// **The Rough what-if answers, share 2: the Creator's ruling on 164 —
+    /// Set up writes a lost mark back** (`Server Setup` R6b). A root that
+    /// stands and holds one of Smoozy's areas, with only its mark deleted,
+    /// gets the recorded mark again and is used. One holding none of
+    /// Smoozy's areas still stops, and nothing is written into it.
+    #[test]
+    fn rough_share_2_a_root_that_lost_only_its_mark_gets_it_back() {
+        let Some(machine) = AMachine::standing("mark-back") else { return };
+        let root = machine.at("ephemeral/smoozy");
+        std::fs::create_dir_all(&root).expect("Smoozy's folder");
+        the_record_holds(&machine, &root);
+        std::fs::write(machine.at("smoozy/package/root-mark"), "the-mark\n").expect("the mark is recorded");
+
+        let said = the_reason(the_layout_read_from(&machine));
+        assert_eq!(said, format!("Could not find {}/.smoozy-root. Smoozy's folder or its disk may be missing.", root.display()));
+        assert!(!root.join(".smoozy-root").exists(), "a mark was written into a folder holding none of Smoozy's areas");
+
+        std::fs::create_dir_all(root.join("blender")).expect("one of Smoozy's areas");
+        let chosen = the_layout_read_from(&machine).expect("an answer").expect("the layout");
+        assert!(chosen.a_mark_stands);
+        assert_eq!(std::fs::read_to_string(root.join(".smoozy-root")).expect("the mark is back"), "the-mark");
+        assert!(!root.join(".smoozy-root.part").exists());
+    }
+
+    /// **`Server Setup` R6b's judge**: a folder of Smoozy's own areas counts,
+    /// a file of the same name or any other folder does not.
+    #[test]
+    fn rough_share_2_only_a_folder_of_smoozys_own_areas_counts() {
+        use smoozy_server_setup::readings::AListedThing;
+        let a = |name: &str, it_is_a_directory| AListedThing { name: name.as_bytes().to_vec(), it_is_a_directory };
+        assert!(super::a_listing_holds_smoozys_own_areas(&[a("photos", true), a("job-records", true)]));
+        assert!(!super::a_listing_holds_smoozys_own_areas(&[a("blender", false), a("photos", true)]));
+        assert!(!super::a_listing_holds_smoozys_own_areas(&[]));
+    }
+}
+
+/// **`Server Setup` R6a as changed 2026-11-13 (Sol's look at the scout's
+/// list, second check): a connection that drops while a mark is written never
+/// leaves setup locked.** A stand-in file surface whose connection drops once,
+/// after a write has made its file and before any of its contents arrive.
+#[cfg(test)]
+mod a_mark_cut_off {
+    use std::collections::HashMap;
+
+    use smoozy_job_files::layout::{the_recorded_mark, the_root_holds_its_mark, AMarkRead};
+    use smoozy_server_setup::readings::{TheMachinesFileSurface, WhatTheMachineSaid};
+
+    use super::the_marks_are_written_on;
+
+    const ROOT: &str = "/data/smoozy";
+    const IN_THE_ROOT: &str = "/data/smoozy/.smoozy-root";
+    const BESIDE_THE_RECORD: &str = "/home/user/smoozy/package/root-mark";
+
+    #[derive(Default)]
+    struct AMachine {
+        files: HashMap<String, Vec<u8>>,
+        /// The write whose connection drops once its file is made.
+        drops_at: Option<String>,
+    }
+
+    impl TheMachinesFileSurface for AMachine {
+        async fn read_whole(&mut self, path: &str) -> Result<Vec<u8>, WhatTheMachineSaid> {
+            self.files.get(path).cloned().ok_or(WhatTheMachineSaid::ThePathIsNotThere)
+        }
+        async fn write_whole(&mut self, path: &str, bytes: &[u8]) -> Result<(), WhatTheMachineSaid> {
+            if self.drops_at.as_deref().is_some_and(|at| path.starts_with(at)) {
+                self.drops_at = None;
+                self.files.insert(path.to_string(), Vec::new());
+                return Err(WhatTheMachineSaid::TheChannelIsGone);
+            }
+            self.files.insert(path.to_string(), bytes.to_vec());
+            Ok(())
+        }
+        async fn replace_by_rename(&mut self, from: &str, to: &str) -> Result<(), WhatTheMachineSaid> {
+            let bytes = self.files.remove(from).ok_or(WhatTheMachineSaid::ThePathIsNotThere)?;
+            self.files.insert(to.to_string(), bytes);
+            Ok(())
+        }
+        async fn make_one_directory(&mut self, _: &str) -> Result<(), WhatTheMachineSaid> {
+            Err(WhatTheMachineSaid::ItRefused)
+        }
+        async fn remove_one_file(&mut self, path: &str) -> Result<(), WhatTheMachineSaid> {
+            self.files.remove(path).map(|_| ()).ok_or(WhatTheMachineSaid::ThePathIsNotThere)
+        }
+        async fn remove_one_empty_directory(&mut self, _: &str) -> Result<(), WhatTheMachineSaid> {
+            Err(WhatTheMachineSaid::ItRefused)
+        }
+        async fn list_one_directory(&mut self, _: &str) -> Result<Vec<smoozy_server_setup::readings::AListedThing>, WhatTheMachineSaid> {
+            Err(WhatTheMachineSaid::ItRefused)
+        }
+        async fn plant_a_link(&mut self, _: &str, _: &str) -> Result<(), WhatTheMachineSaid> {
+            Err(WhatTheMachineSaid::ItRefused)
+        }
+    }
+
+    fn read(machine: &AMachine, at: &str) -> AMarkRead {
+        machine.files.get(at).map_or(AMarkRead::NotThere, |bytes| AMarkRead::Read(bytes.clone()))
+    }
+
+    /// What the check before the hand-over makes of the machine: a mark that
+    /// stands, none recorded, or the reason it stops.
+    fn the_check(machine: &AMachine) -> Result<bool, String> {
+        let Some(recorded) = the_recorded_mark(BESIDE_THE_RECORD, read(machine, BESIDE_THE_RECORD))? else {
+            return Ok(false);
+        };
+        the_root_holds_its_mark(ROOT, &recorded, read(machine, IN_THE_ROOT)).map(|()| true)
+    }
+
+    fn written(machine: &mut AMachine, mark: &str) -> Result<(), String> {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("a runtime")
+            .block_on(the_marks_are_written_on(machine, IN_THE_ROOT, BESIDE_THE_RECORD, mark.as_bytes()))
+    }
+
+    /// **The saved mark's write drops after its file is made.** The setup
+    /// stops; the next check must not stop it again, and the retry's marks
+    /// must stand. **Failed before the fix**: the saved mark was left empty,
+    /// and every check after said the folder is not the one set up here.
+    #[test]
+    fn a_drop_while_the_saved_mark_is_written_does_not_lock_setup() {
+        let mut machine = AMachine { drops_at: Some(BESIDE_THE_RECORD.into()), ..AMachine::default() };
+        assert!(written(&mut machine, "first-mark").is_err(), "the drop stops this setup");
+        assert_eq!(the_check(&machine), Ok(false), "no mark recorded, so the retry writes one: {:?}", machine.files);
+        written(&mut machine, "second-mark").expect("the retry writes both marks");
+        assert_eq!(the_check(&machine), Ok(true), "the retry's mark stands");
+    }
+
+    /// **The root's mark drops after its file is made**: nothing is
+    /// recorded, so the retry writes both again and they stand.
+    #[test]
+    fn a_drop_while_the_roots_mark_is_written_does_not_lock_setup() {
+        let mut machine = AMachine { drops_at: Some(IN_THE_ROOT.into()), ..AMachine::default() };
+        assert!(written(&mut machine, "first-mark").is_err());
+        assert_eq!(the_check(&machine), Ok(false), "{:?}", machine.files);
+        written(&mut machine, "second-mark").expect("the retry writes both marks");
+        assert_eq!(the_check(&machine), Ok(true));
+    }
+
+    /// **A saved mark left empty by an earlier release** is taken as none, so
+    /// setup writes the marks again rather than stopping at every retry.
+    #[test]
+    fn an_empty_saved_mark_is_none() {
+        let mut machine = AMachine::default();
+        machine.files.insert(IN_THE_ROOT.into(), b"old-mark".to_vec());
+        machine.files.insert(BESIDE_THE_RECORD.into(), Vec::new());
+        assert_eq!(the_check(&machine), Ok(false));
     }
 }

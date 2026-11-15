@@ -1336,6 +1336,39 @@ pub fn the_reading_started_in(stream: &[u8]) -> bool {
     find(stream, THE_STARTED_MARK).is_some() || find(stream, THE_OPENING_SENTINEL).is_some()
 }
 
+/// **The walk's step mark** — `Render Settings` Q5's build detail of
+/// 2026-11-13 (the Creator's notes on the test copy, second round, note 15).
+/// While the reading moves a scene through its frames it writes this mark, the
+/// step it is on and how many there are, on a line of its own:
+/// `<<<SMOOZY-READING-FRAME>>>120 250`. **It holds neither of the document's
+/// marks**, so a stream carrying it is never mistaken for one carrying the
+/// document.
+pub const THE_WALKS_MARK: &[u8] = b"<<<SMOOZY-READING-FRAME>>>";
+
+/// **The last step the walk wrote**, as (step, steps), from any piece of the
+/// reading's ordinary stream that holds its last line; nothing where no whole
+/// step line stands. A line cut short at the end of the piece is passed over
+/// for the one before it.
+pub fn the_walks_last_step_in(stream: &[u8]) -> Option<(u64, u64)> {
+    let mut rest = stream;
+    let mut last = None;
+    while let Some(at) = find(rest, THE_WALKS_MARK) {
+        let after = &rest[at + THE_WALKS_MARK.len()..];
+        if let Some(ends) = after.iter().position(|one| *one == b'\n') {
+            let line = std::str::from_utf8(&after[..ends]).ok();
+            let step = line.and_then(|line| {
+                let (step, steps) = line.trim().split_once(' ')?;
+                Some((step.parse().ok()?, steps.parse().ok()?))
+            });
+            if step.is_some() {
+                last = step;
+            }
+        }
+        rest = after;
+    }
+    last
+}
+
 /// Why a reading's stream carried no document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WhyTheDocumentWasNotRead {

@@ -1122,13 +1122,13 @@ impl WhetherThePlacementIsConfirmed {
                 "it was written and read back as what was written".to_string()
             }
             WhetherThePlacementIsConfirmed::ItCouldNotBePlaced { why } => {
-                format!("write failed: {why}")
+                why.clone()
             }
             WhetherThePlacementIsConfirmed::TheRendersLoginCouldNotReadIt => {
-                "the render's user cannot read it".to_string()
+                "the user Blender runs as cannot read it".to_string()
             }
             WhetherThePlacementIsConfirmed::ItReadBackAsSomethingElse => {
-                "it read back different".to_string()
+                "it changed after it was written".to_string()
             }
         }
     }
@@ -1841,7 +1841,7 @@ mod wait_count_tests {
         let script = root.join("desk.py");
         std::fs::write(&script, include_str!("cloth_and_shutter_at_the_desk.py")).unwrap();
         let blender = std::env::var("SMOOZY_DESK_BLENDER")
-            .unwrap_or_else(|_| "/Applications/Blender 5.3b.app/Contents/MacOS/Blender".into());
+            .unwrap_or_else(|_| "/Applications/Blender 5.3.app/Contents/MacOS/Blender".into());
         let out = std::process::Command::new("python3").arg(script)
             .arg("--blender").arg(blender).arg("--out").arg(&root)
             .arg("--material").arg(material).output().unwrap();
@@ -1855,7 +1855,7 @@ mod wait_count_tests {
         let root = std::env::var_os("SMOOZY_DESK_OUT").map(std::path::PathBuf::from)
             .unwrap_or_else(|| std::env::temp_dir().join("smoozy-cloth-and-shutter"));
         let blender = std::env::var("SMOOZY_DESK_BLENDER")
-            .unwrap_or_else(|_| "/Applications/Blender 5.3b.app/Contents/MacOS/Blender".into());
+            .unwrap_or_else(|_| "/Applications/Blender 5.3.app/Contents/MacOS/Blender".into());
         let payload = crate::material::tests::an_untouched_payload();
         for kind in ["early", "linked", "override"] {
             let job_root = root.join(format!("worker-{kind}"));

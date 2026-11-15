@@ -324,7 +324,12 @@ where
     let Ok(ended) = super::checking::asked_until_it_ends(
         machine,
         &digest.the_request(),
-        super::blender::THE_TIME_LIMIT_A_BLENDER_RUN_CARRIES,
+        // **A minute on each ask, and half an hour over the whole contents reading**:
+        // it goes on while the server says it is still working, and no user
+        // can stop it (G15's build detail as changed 2026-11-13, the runner's
+        // ruling 1).
+        super::checking::THE_LONGEST_AN_ASK_WAITS,
+        Some(super::checking::THE_OUTER_LIMIT_ON_A_CONTENTS_READING_OR_A_FIXING),
         super::checking::BETWEEN_TWO_ASKS_OF_ONE_READING,
         &mut || false,
     )

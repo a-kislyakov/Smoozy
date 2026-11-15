@@ -23,7 +23,7 @@
 //!   `sv-port`, `sv-dupname`, `sv-sc`, `sv-scoff`, `sv-menus`, `sv-remove`,
 //!   `sv-rmnone`, `sv-ident`, `sv-keyed`, `sv-both`, `sv-nostore`, `sv-notool`,
 //!   `sv-upd`, `sv-updnow`, `sv-rename`, `sv-paste`, `sv-fallbad`, `sv-addkey`.
-//!   **Twenty-three, and the drawing has no twenty-fourth in the `sv-` set.**
+//!   **Twenty-four including `sv-jobcheck`, the failed running-job check.**
 //!   *(Twenty-two until 2026-10-16: `sv-addkey`, the Add dialog with its key
 //!   list open — Smoozy's own dropdown of the usable keys, each by name with
 //!   its fingerprint's start, and *Open Keys…* last — drawn by the plan and
@@ -124,10 +124,15 @@
 //! `App/Servers/` where the ending is the opening attempt's own**: its driving
 //! half answers with the step that stopped the attempt, `src/servers/a_period.rs`
 //! reads that into what the driving left, and `the_period_ended` below turns it
-//! into the answer. **The other eight reasons, `Servers` Q13 outcome 3 among
-//! them, still answer with the sentence that claims nothing about why** —
-//! [`TheAnswer::TheConnectionWasNotMade`] — because `Preparation/Specs/Whole
-//! app.md` forbids the claim whether or not Smoozy knows which of them it met.
+//! into the answer. **Since 2026-11-11 a reason the attempt itself knows is
+//! said** — the key refused, the host not found, the port refused, no answer,
+//! timed out, the key not loaded ([`TheAnswer::TheConnectionWasNotMadeBecause`],
+//! `Design/Server Setup § This server`, the four questions, scout 3.1). **The
+//! rest, `Servers` Q13 outcome 3 among them, still answer with the sentence
+//! that claims nothing about why** — [`TheAnswer::TheConnectionWasNotMade`].
+//! *(Until that day every reason took it, on a reading of
+//! `Preparation/Specs/Whole app.md`'s lost-connection rule as covering an
+//! opening attempt too.)*
 //!
 //! ## How a clause marker is written in this crate
 //!
@@ -164,6 +169,7 @@ use crate::surface::the_queue::{WhatAServerIsDoing, WhatTheServersAreDoing};
 use crate::record::{key_rows, server_rows};
 use crate::start::Started;
 use crate::typography::{Prose, Verbatim};
+use crate::servers::published::WhereTheUpdateFailed;
 
 /// **The one kind this piece posts**, declared here beside the service that
 /// posts it and copied into `web/servers.js`. Nothing holds the two together,
@@ -229,6 +235,25 @@ pub const THE_SUBJECT_A_ROW_IS_ABOUT: &str = "server row";
 // draws *"Another server is already called Overnight box."*; what leaves here
 // is the words, then the name, and the page sets them beside each other.
 
+/// **One reason a first connection was not made: the clause the line above the
+/// list says after the server's name, and the sentence the row and the card
+/// say**, made from the one clause so the two cannot drift. Added 2026-11-11,
+/// the four questions, scout 3.1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AReason {
+    pub sentence: &'static str,
+    pub clause: &'static str,
+}
+
+macro_rules! could_not_connect_because {
+    ($clause:literal) => {
+        $crate::surface::servers::AReason {
+            sentence: concat!("Could not connect: ", $clause),
+            clause: $clause,
+        }
+    };
+}
+
 /// **Crate-visible because one sentence here is two screens'** — step 10a, the
 /// screens round's loose ends, L6. Transfers says *Could not read your
 /// servers.* for the same fact, and Design's *one fact gets one wording* makes
@@ -251,6 +276,8 @@ pub(crate) mod words {
     // `crate::presentation::the_repairing_server::WhatTheColumnSays` rather
     // than written again here — see `the_work_column`.
     pub const RESTARTING: &str = "Restarting";
+    // `Design/Servers § A row`, the runner's ruling of 2026-11-11.
+    pub const NOT_SET_UP: &str = crate::surface::set_up::words::NOT_SET_UP;
     // `Design/Servers § A row`: *"While a setup runs on a server, the column
     // says Setting up."* — the Creator's note 3 on 0.1.7. **The Set up card's
     // own state line for a running setup is the same word**, so it has one
@@ -263,7 +290,27 @@ pub(crate) mod words {
     // up card's state line** (`Design/Server Setup § This server`) and the
     // condition's own sentence wherever the failure shape draws it, so they
     // have one home. Added 2026-09-27, step 10c's eighth-pass fix piece 6.
+    // **Scout 3.7**: batch 3 of the four questions (2026-11-11) made it
+    // *Smoozy on this server isn't responding.*; batch 4 put the Creator's
+    // shortening back the same day, on the build runner's word, since the
+    // line sits on the server's own row.
     pub const SMOOZY_ISNT_RESPONDING: &str = "Smoozy isn't responding.";
+    // `Specs/Whole app` (*A lost connection is a fact about the connection*):
+    // *"When a connection drops and Smoozy can't restore it, what it says is
+    // what it knows: it could not reconnect."* `Design/Servers § A row` takes
+    // the line's words from there, and `Design/Whole app` uses the same words
+    // for the notification. **This is the row's line for `Servers` N5's
+    // connection condition**, wherever the failure shape draws it. Until the
+    // twenty-ninth notes' piece E it read the plumbing's stand-in, *Error.*,
+    // at the window's foot.
+    pub const COULD_NOT_RECONNECT: &str = "Could not reconnect.";
+    // `Design/Servers § A row`: *"Where a server's queue has stopped because
+    // Smoozy can't read one of its own records there, the row's extra line
+    // says Queue stopped: could not read a record on this server."* — the
+    // build runner's ruling of 2026-11-10 under Rule 10. **This is the row's
+    // line for `State, identity and recovery` F12a's condition**, wherever
+    // the failure shape draws it.
+    pub const THE_QUEUE_IS_STOPPED: &str = "Queue stopped: could not read a record on this server.";
 
     // `Design/Servers § A row`: **Smoozy on a server older or newer than the
     // app** — `Desktop app and delivery` V13's conditions, whose words were
@@ -274,12 +321,26 @@ pub(crate) mod words {
     pub const UPDATE_NOW: &str = "Update now…";
     pub const UPDATING: &str = "Updating Smoozy on this server…";
     pub const COULD_NOT_BE_UPDATED: &str = "Smoozy on this server could not be updated.";
+    // `Design/Servers § A row`: **`Desktop app and delivery` V3c's two lines**,
+    // in place of *Smoozy isn't responding.* — the automatic repair, under
+    // way and not landed. Added 2026-11-14.
+    pub const REPAIRING: &str = "Repairing Smoozy on this server…";
+    pub const COULD_NOT_REPAIR: &str = "Could not repair Smoozy on this server. Set up again.";
+    /// **Every try at the download came to no answer** — `Server protocol and
+    /// transfers` B10b, the Creator's twenty-eighth notes, note 3. **It says
+    /// how to try again** (the Rough what-if answers, share 1, 81): the row
+    /// has no Retry, and the update is tried again only at a later connection
+    /// or reading, so *Try again in a few minutes.* named nothing to press.
+    pub const THE_UPDATES_DOWNLOAD_GOT_NO_RESPONSE: &str =
+        "Could not download the update for Smoozy on this server: no response. Reconnect to try again.";
     pub const TOO_OLD_ITS_JOBS: &str = "Smoozy on this server is out of date. Reconnect after its jobs finish to update it.";
     // **The sixth line, the build runner's ruling of 2026-09-28**: where
     // `Server protocol and transfers` P3b's reading of the records cannot
     // answer, V11 holds the server as one with work on it, and the line above
     // would say jobs stand when that is not known (Rule 8).
-    pub const TOO_OLD_CANNOT_TELL: &str = "Out of date. Not updated: could not read its job list.";
+    // **Scout 3.6, 2026-11-11**: it read *Out of date. Not updated: could not
+    // read its job list.*, a reading fault rather than a version gap.
+    pub const TOO_OLD_CANNOT_TELL: &str = "Smoozy on this server is out of date. Not updated: could not check for running jobs.";
     // **V14's words have one home**, where the Set up refusal says them.
     pub const TOO_NEW: &str = crate::servers::published::THE_MACHINE_IS_NEWER;
     // The `sv-updnow` box: *"Update Smoozy on RunPod 4090 now?"*, then the
@@ -300,6 +361,13 @@ pub(crate) mod words {
     pub const TRYING_AGAIN_IN: &str = "retrying in";
     pub const WAITING_SO_FAR: &str = "waiting so far";
     pub const SETUP_STOPPED_PART_WAY: &str = "Setup stopped part-way";
+    // `Design/Servers § A row`, added 2026-11-14 (when Telegram refuses):
+    // `Telegram` F6's three words, each with what to do. Settings' Telegram
+    // section says the same.
+    pub const TELEGRAM_REJECTED_THE_TOKEN: &str = "Telegram rejected the bot token. Change it in Settings.";
+    pub const TELEGRAM_REFUSES_THE_CHAT: &str =
+        "The bot can't message your chat. Unblock it, or create a new bot in Settings.";
+    pub const TELEGRAM_IS_NOT_REACHED: &str = "This server can't reach Telegram. Messages will be sent when Telegram is reachable again.";
 
     // `Design/Servers § A row`, the hardware column. **Rule 9: the industry's
     // words.** *"the GPUs and their VRAM, then the server's RAM and its free
@@ -316,7 +384,6 @@ pub(crate) mod words {
     pub const NOTHING_IS_KNOWN_YET: &str = "Hardware not read yet";
     pub const CARDS_UNREADABLE: &str = "Could not read the GPUs";
     pub const NO_CARD: &str = "No GPU";
-    pub const MEMORY_UNKNOWN: &str = "Could not read RAM";
 
     // `Design/Servers § Connected and needing a new key at once` — the line
     // *"says what it costs rather than what happened"*.
@@ -328,9 +395,9 @@ pub(crate) mod words {
     // and the second otherwise. **A permanent condition is never worded as a
     // passing one**, which is S10's whole bound. Mockup state `sv-nostore`.
     pub const THE_PASSPHRASE_CANNOT_BE_KEPT: &str =
-        "No automatic reconnect: this computer cannot save passphrases.";
+        "No automatic reconnect: this computer can't save passphrases.";
     pub const THE_PASSPHRASE_IS_NOT_HELD: &str =
-        "No automatic reconnect until you connect: passphrase not saved.";
+        "Automatic reconnect starts after you connect with the passphrase.";
 
     // The connect control. `Design/Servers § Actions on a row` and
     // `Design/Whole app § Where things live`.
@@ -357,7 +424,11 @@ pub(crate) mod words {
     pub const STEP_3_LEAD: &str = "Add the public key at your provider";
     pub const STEP_3_REST: &str = ", before you rent the server.";
     pub const STEP_4_LEAD: &str = "Rent an Ubuntu or Debian Linux server.";
-    pub const STEP_4_REST: &str = " Others are not supported.";
+    /// **And which image, from 2026-11-12** (`Design/Servers § No servers
+    /// yet`, Creator-stated): a provider that asks for an image or a template
+    /// is answered here. No port and no provider is named.
+    pub const STEP_4_REST: &str =
+        " Others are not supported. Pick a plain Ubuntu image with SSH, and NVIDIA driver 580 or newer.";
     pub const STEP_5_LEAD: &str = "Add the server here";
     pub const STEP_5_REST: &str = " with its host, port and username.";
 
@@ -375,7 +446,10 @@ pub(crate) mod words {
         "The first unused colour.";
     pub const GET_READY: &str = "Get the server ready to render";
     pub const INSTALL_BLENDER: &str = "Install the latest stable Blender";
-    pub const TICKING_EITHER: &str = "Either option connects immediately.";
+    /// **`Design/Servers` as added 2026-11-11: and that setup may restart the
+    /// server** — either tick runs the whole setup. The four questions, scout
+    /// 1.11 as Sol narrowed it.
+    pub const TICKING_EITHER: &str = "Either option connects immediately. Setup may restart the server.";
     pub const CANCEL: &str = "Cancel";
     pub const ADD: &str = "Add";
     pub const ADD_AND_SET_UP: &str = "Add and set up";
@@ -396,9 +470,12 @@ pub(crate) mod words {
     // Adding a server` and the drawing's `sv-blank` (the placeholder) and
     // `sv-paste` (the line under Host, in the form's grey). The Creator's
     // second notes, piece 15; `Servers` §13.3.
-    pub const HOST_OR_PASTE: &str = "Host, or paste the ssh line";
-    pub const NO_USERNAME_IN_THAT_LINE: &str = "No username in that line.";
-    pub const NO_HOST_IN_THAT_LINE: &str = "No host in that line.";
+    pub const HOST_OR_PASTE: &str = "Host, or paste the SSH command";
+    pub const ROOT_OR_UBUNTU: &str = "root or ubuntu";
+    pub const NO_USERNAME_IN_THAT_LINE: &str = "No username in that command.";
+    pub const NO_HOST_IN_THAT_LINE: &str = "No host in that command.";
+    // **`Servers` PL2a** — the leftovers of the Rough what-if answers (112).
+    pub const JUMP_HOSTS_ARE_NOT_SUPPORTED: &str = "Jump hosts are not supported.";
     // **The one form of the line that cannot carry files**, from the provider
     // reading of 2026-10-07 (`Servers` PL3). *SSH over exposed TCP* is the
     // name Runpod's own console gives its direct line.
@@ -438,10 +515,16 @@ pub(crate) mod words {
 
     // `Servers` W34: the warning names **jobs Smoozy has not seen end**, never
     // jobs queued or running, and *"the wording must carry that"*.
-    pub const POINTS_AT_A_DIFFERENT_SERVER: &str = "This points at a different server.";
+    pub const POINTS_AT_A_DIFFERENT_SERVER: &str = "This may point at a different server.";
     pub const HAVE_NOT_ENDED_ONE: &str = "job on the old server has not ended.";
     pub const HAVE_NOT_ENDED_MANY: &str = "jobs on the old server have not ended.";
     pub const LEFT_WHERE_THEY_ARE: &str = "They stay there.";
+    // The names between, joined as `Design/Servers § The Edit dialog` draws
+    // them — commas, *and* before the last, a full stop after it (the UI at
+    // every size, B-13: they ran together with spaces only).
+    pub const NAMES_COMMA: &str = ",";
+    pub const NAMES_AND: &str = "and";
+    pub const NAMES_FULL_STOP: &str = ".";
     // `Design/Servers § The Edit dialog`'s username case (the Gemini catch-up
     // of step 10a, Area 5, U-1 and F-1): the jobs stay on this machine, and
     // Smoozy can no longer reach them.
@@ -456,7 +539,7 @@ pub(crate) mod words {
         "Removes the server from Smoozy. Nothing on the server changes.";
     pub const LEAVE_IT_RUNNING: &str = "Leave it running";
     pub const LEAVE_IT_RUNNING_SAID: &str =
-        "The render and queue keep running, untracked.";
+        "The render and queue keep running on the server.";
     pub const STOP_AND_CLEAR: &str = "Stop and clear first";
     pub const STOP_AND_CLEAR_SAID_ONE: &str = "Clears the waiting job, then stops the render. The current frame may not be saved; rendered frames stay on the server.";
     pub const STOP_AND_CLEAR_SAID_MANY: &str = "waiting jobs, then stops the render. The current frame may not be saved; rendered frames stay on the server.";
@@ -493,26 +576,32 @@ pub(crate) mod words {
     pub const ONE_JOB_WAS_WAITING: &str = "job was waiting.";
     pub const JOBS_WERE_WAITING: &str = "jobs were waiting.";
     pub const LEAVE_IT_RUNNING_SAID_LAST_KNOWN: &str =
-        "Whatever is still running keeps running, untracked.";
+        "Running jobs keep running on the server.";
     pub const DONT_WARN_AGAIN: &str = "Don't warn me again";
     pub const WHAT_IT_COVERS: &str =
         "Applies to all disconnected servers. Turn back on in Settings.";
 
     // `Design/Servers § When stop and clear does not work`, and the mockup's
     // `#svsc`. **Three endings and not two** — `Servers` W21, whose three rows
-    // are `Queue & History` L17's verbatim.
-    pub const STOPPING_WORK_ON: &str = "Stopping work on";
+    // are `Queue & History` L17's verbatim — **and a fourth, *no answer***,
+    // `Servers` W21a (the Rough what-if answers, share 1, 73).
+    pub const STOPPING_WORK_ON: &str = "Stopping jobs on";
     // **The lead names no cause** — `Servers` W21's last paragraph, the stop
     // and clear plan pass's SC-2: a program that refuses the pair by name was
     // reached, so *could not reach the server* would be false of it. It said
     // exactly that until step 10c's S2, which is the piece that first sends
     // the pair to a program that may refuse it.
     pub const COULD_NOT_BEGIN: &str = "Could not stop and clear the jobs on this server.";
-    pub const COULD_NOT_BEGIN_REST: &str = "Nothing changed.";
+    pub const COULD_NOT_BEGIN_REST: &str = "Nothing was changed.";
     pub const CLEAR_REFUSED: &str = "Could not clear the waiting jobs.";
     pub const CLEAR_REFUSED_REST: &str = "The render was not stopped.";
     pub const HALF_WORKED: &str = "The waiting jobs were cleared.";
     pub const HALF_WORKED_REST: &str = "The render is still running.";
+    // **A wait that ended with no answer** — the Rough what-if answers, share
+    // 1 (73). The request may have reached the server, which then carries it
+    // out with nobody connected, so *Nothing was changed.* would be false.
+    pub const NO_ANSWER: &str = "No response from the server.";
+    pub const NO_ANSWER_REST: &str = "The jobs may have been stopped and cleared.";
     pub const TRY_AGAIN: &str = "Retry";
     pub const REMOVE_ANYWAY: &str = "Remove anyway";
 
@@ -520,7 +609,7 @@ pub(crate) mod words {
     // **No fingerprint is shown, anywhere** — `Servers` D9 and the spec's own
     // policy agreeing.
     pub const IDENTITY_CHANGED: &str = "— host key changed";
-    pub const IDENTITY_CHANGED_SAID: &str = "The server may have been rebuilt, or another machine may be at its address.";
+    pub const IDENTITY_CHANGED_SAID: &str = "This address now has a different host key.";
     pub const ACCEPTING_IS_A_DECISION: &str =
         "Accepting trusts the server without verifying it.";
     pub const DO_NOT_CONNECT: &str = "Do not connect";
@@ -591,6 +680,21 @@ pub(crate) mod words {
     // begins (X7), and the page sets the full stop after the name as it does
     // for *Another server is already called …*.
     pub const COULD_NOT_CONNECT_TO: &str = "Could not connect to";
+    // **A failed first connection says why where the attempt knows** —
+    // `Design/Server Setup § This server` and `Design/Servers § Adding a
+    // server`, changed 2026-11-11 (the four questions, scout 3.1). The row and
+    // the card say the sentence; the line above the list says *Could not
+    // connect to* the server's name, then the reason after a colon. **Each
+    // reason is written once**, and its sentence is made from it.
+    pub const THE_KEY_WAS_REFUSED: super::AReason =
+        could_not_connect_because!("the server refused the key for this username.");
+    pub const THE_HOST_WAS_NOT_FOUND: super::AReason = could_not_connect_because!("host not found.");
+    pub const THE_PORT_REFUSED: super::AReason =
+        could_not_connect_because!("the server refused the connection on this port.");
+    pub const NOTHING_ANSWERED: super::AReason = could_not_connect_because!("no answer from this address.");
+    pub const IT_TIMED_OUT: super::AReason = could_not_connect_because!("timed out.");
+    pub const THE_KEY_COULD_NOT_BE_LOADED: super::AReason =
+        could_not_connect_because!("the key could not be loaded.");
     // **`Servers` Q13 outcome 2, and Design's owed words at this place.** The
     // clause is *"says plainly that it is not a Linux machine"* and this is
     // that sentence: what Smoozy found, then why it stops there. **The second
@@ -749,6 +853,12 @@ pub struct AControl {
     /// Whether the control is drawn unavailable. **Design: each menu shows the
     /// actions it cannot do rather than hiding them.**
     pub unavailable: bool,
+    /// **What the control reads under the pointer or with focus, where that
+    /// differs from its label** — `Design/Servers` as added 2026-11-11:
+    /// *Connected* and *Reconnecting…* read *Disconnect*, the act a press
+    /// takes. Nothing on every other control. The four questions, scout 1.10.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_hover: Option<Prose>,
 }
 
 impl AControl {
@@ -757,6 +867,7 @@ impl AControl {
             label: Prose::new(label),
             act: Verbatim::new(act),
             unavailable: false,
+            on_hover: None,
         }
     }
 
@@ -765,6 +876,7 @@ impl AControl {
             label: Prose::new(label),
             act: Verbatim::new(act),
             unavailable: true,
+            on_hover: None,
         }
     }
 }
@@ -849,9 +961,14 @@ pub struct AServerRow {
     /// to keep a passphrase`). **Drawn whether or not the mark has the line**,
     /// because it is said once.
     pub the_sentence: Option<Prose>,
-    /// **A setup that stopped part-way**, where `Server Setup` has read one.
-    /// Absent today: that reading is taken on a connection.
+    /// **A setup that stopped part-way**, where the connection's queue
+    /// reading names one holding the machine's line (`Queue & History` A1 as
+    /// changed 2026-11-14) and this computer is not driving a setup there.
     pub the_setup_line: Option<Words>,
+    /// **`Telegram` F6's word, as `Design/Servers § A row` says it** — on a
+    /// connected server whose last reading carried one. The last of the
+    /// row's extra lines. When Telegram refuses, 2026-11-14.
+    pub the_telegram_line: Option<Words>,
     /// **Smoozy on this server older or newer than the app** — one of
     /// `Desktop app and delivery` V13's conditions, in `Design/Servers § A
     /// row`'s words, **only while the server is connected**: each is a reading
@@ -905,8 +1022,10 @@ pub struct AServerRow {
 /// either way and takes the line back afterwards.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct TheUpdateLine {
-    /// **Which of the six**, for the page to key on. A value: `waits`,
-    /// `under-way`, `failed`, `too-old`, `too-old-unknown`, `too-new`.
+    /// **Which of the eight**, for the page to key on. A value: `waits`,
+    /// `under-way`, `failed`, `too-old`, `too-old-unknown`, `too-new`, and
+    /// since 2026-11-14 the automatic repair's `repairing` and `repair-failed`
+    /// (`Desktop app and delivery` V3c).
     pub which: Verbatim,
     /// The line.
     pub said: Words,
@@ -924,6 +1043,11 @@ pub struct TheUpdateLine {
     /// **The server's own words behind the failed line**, as every failure
     /// carries them — the transaction's own words (V13), and the cross.
     pub the_servers_words: Option<TheServersWords>,
+    /// **The standing failure this line takes the place of** — the identity of
+    /// V1's condition, where the repair's lines or *too new* say more about
+    /// the same silence (`Desktop app and delivery` V3c). Every other standing
+    /// failure is still drawn. Added 2026-11-14, out of Sol's look.
+    pub replaces: Option<Verbatim>,
 }
 
 /// **V15's box** — `Design/Servers § A row` and the drawing's `sv-updnow`: the
@@ -966,6 +1090,8 @@ pub struct TheNextAttempt {
     pub due_at: Verbatim,
     pub trying_again_in: Prose,
     pub trying_again_now: Prose,
+    /// The unit after the seconds (the UI at every size, B-06).
+    pub seconds: Prose,
 }
 
 /// The footer under the list.
@@ -1012,6 +1138,10 @@ pub struct TheBoxesAConnectionRaises {
     /// **Removing anyway stays available in all three** — `Design/Servers`.
     pub try_again: Prose,
     pub remove_anyway: Prose,
+    /// **`Servers` W40b: the add's billing statement again, above *Remove anyway***, which
+    /// forgets a server whose work may still be running (the Rough what-if
+    /// answers, share 2, 129).
+    pub still_bills: Prose,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -1152,6 +1282,9 @@ pub struct TheAddDialog {
     /// **The host field's placeholder says the paste works** —
     /// `Design/Servers § Adding a server`, drawn in `sv-blank`.
     pub host_placeholder: Prose,
+    /// **Username's placeholder** — `Design/Servers § Adding a server`,
+    /// added 2026-11-12 (the four questions, scout 2.12).
+    pub username_placeholder: Prose,
     pub port: Prose,
     pub username: Prose,
     pub key: Prose,
@@ -1419,16 +1552,21 @@ pub enum TheAnswer {
     /// **`Servers` S10 item 5: the connection the act was to make never became
     /// live**, and Smoozy says so.
     ///
-    /// **It claims nothing about why, and that is not a shortcut.**
-    /// `Preparation/Specs/Whole app.md` forbids the claim — Smoozy cannot tell
-    /// a network problem from a machine switched off from a machine that no
-    /// longer exists.
+    /// **It claims nothing about why**, and since 2026-11-11 it is said only
+    /// where the attempt names no reason —
+    /// [`TheAnswer::TheConnectionWasNotMadeBecause`] carries the rest.
     ///
     /// *(Corrected 2026-09-18. This said `Servers`' driving half does not
     /// report which step stopped the attempt, which it now does. **That
     /// changes nothing here**: the claim is forbidden for these eight reasons
     /// whether or not Smoozy knows which of them it met.)*
     TheConnectionWasNotMade,
+    /// **The same, where the attempt says why it stopped** —
+    /// `Design/Server Setup § This server`, changed 2026-11-11 (the four
+    /// questions, scout 3.1). The Whole app rule above is about a connection
+    /// made and then lost; an opening attempt that stopped at a step knows
+    /// which step, and saying it is what the user needs on the first day.
+    TheConnectionWasNotMadeBecause(crate::servers::a_period::WhyTheConnectionWasNotMade),
     /// **`Servers` Q13 outcome 2: the machine named an operating system that is
     /// not Linux**, so Smoozy says plainly that it is not a Linux machine and
     /// leaves the server disconnected.
@@ -1602,6 +1740,7 @@ pub fn the_work_column_is_told_again<R: Runtime>(app: &AppHandle<R>) {
                     started.record.as_ref(),
                 ),
                 the_rows(&started).as_deref().unwrap_or_default(),
+                periods.the_machines_work(),
             ),
             crate::surface::the_rail::a_job_in_the_queue_needs_your_answer(
                 periods.the_machines_work(),
@@ -1609,10 +1748,26 @@ pub fn the_work_column_is_told_again<R: Runtime>(app: &AppHandle<R>) {
             ),
         )
     };
+    let troubles: Vec<(String, Option<smoozy_server_protocol::requests::TheTelegramTrouble>)> = now
+        .0
+        .1
+        .iter()
+        .map(|told| (told.0.clone(), told.4))
+        .collect();
     if the_work_moved(&THE_WORK_LAST_TOLD, now) {
         the_queue_is_told(&queue, Event::about(About::TheRun, THE_WORK_MOVED));
     }
+    // **`Telegram` F6: Settings' Telegram section names the same servers**,
+    // so it is drawn again where a word moved.
+    if the_work_moved(&TELEGRAMS_TROUBLE_LAST_TOLD, troubles) {
+        crate::surface::telegram::the_section_is_told_again(app);
+    }
 }
+
+/// What each server's `Telegram` F6 word was last told as, for Settings.
+static TELEGRAMS_TROUBLE_LAST_TOLD: Mutex<
+    Option<Vec<(String, Option<smoozy_server_protocol::requests::TheTelegramTrouble>)>>,
+> = Mutex::new(None);
 
 /// **What the row's work and its V13 line are told from**: each server's work,
 /// and the condition `Desktop app and delivery` V13 has each carry.
@@ -1624,12 +1779,29 @@ pub fn the_work_column_is_told_again<R: Runtime>(app: &AppHandle<R>) {
 ///
 /// **And whether a setup is being driven there**, which moves the row's
 /// *Setting up* on its own — the Creator's notes piece 3, 2026-10-02.
+///
+/// **And whether a setup that stopped part-way holds its line**, which moves
+/// the row's *Setup stopped part-way* on its own (the Rough what-if answers,
+/// share 4, 310).
+///
+/// **And `Telegram` F6's word**, which moves the row's Telegram line on its
+/// own (when Telegram refuses, 2026-11-14).
 type WhatIsTold = (
     WhatTheServersAreDoing,
-    Vec<(String, Option<crate::servers::published::WhatSmoozyOnTheServerIs>, bool)>,
+    Vec<(
+        String,
+        Option<crate::servers::published::WhatSmoozyOnTheServerIs>,
+        bool,
+        bool,
+        Option<smoozy_server_protocol::requests::TheTelegramTrouble>,
+    )>,
 );
 
-fn what_is_told(doing: WhatTheServersAreDoing, rows: &[ServerRow]) -> WhatIsTold {
+fn what_is_told(
+    doing: WhatTheServersAreDoing,
+    rows: &[ServerRow],
+    holds: &crate::servers::the_machines_work::WhatThisRunHolds,
+) -> WhatIsTold {
     let carried = rows
         .iter()
         .map(|row| {
@@ -1637,10 +1809,41 @@ fn what_is_told(doing: WhatTheServersAreDoing, rows: &[ServerRow]) -> WhatIsTold
                 row.local_server_identifier.clone(),
                 crate::servers::published::what_the_server_carries(&row.local_server_identifier),
                 a_setup_runs_on(&row.local_server_identifier),
+                holds.a_setup_holds_the_line_on(&row.local_server_identifier),
+                crate::servers::published::telegrams_trouble_on(&row.local_server_identifier),
             )
         })
         .collect();
     (doing, carried)
+}
+
+/// **`Design/Servers § A row`'s Telegram line** — `Telegram` F6's word with
+/// what to do, on a connected server. When Telegram refuses, 2026-11-14.
+pub(crate) fn the_telegram_line(
+    connected: bool,
+    trouble: Option<smoozy_server_protocol::requests::TheTelegramTrouble>,
+) -> Option<Words> {
+    Some(Words::plain(what_telegrams_trouble_says(trouble.filter(|_| connected)?)))
+}
+
+/// **`Telegram` F6's word, as `Design/Servers § A row` says it** — one home
+/// for the three sentences, which Settings' Telegram section says too.
+pub(crate) fn what_telegrams_trouble_says(
+    trouble: smoozy_server_protocol::requests::TheTelegramTrouble,
+) -> &'static str {
+    use smoozy_server_protocol::requests::TheTelegramTrouble;
+    match trouble {
+        TheTelegramTrouble::TheTokenIsRejected => words::TELEGRAM_REJECTED_THE_TOKEN,
+        TheTelegramTrouble::TheChatRefuses => words::TELEGRAM_REFUSES_THE_CHAT,
+        TheTelegramTrouble::TelegramIsNotReached => words::TELEGRAM_IS_NOT_REACHED,
+    }
+}
+
+/// **`Design/Servers § A row`'s *Setup stopped part-way***: on a connected
+/// server whose reading names a setup holding the line, while this computer
+/// is not driving one there. The Rough what-if answers, share 4 (310).
+fn the_setup_line(connected: bool, a_setup_holds_the_line: bool, a_setup_runs: bool) -> Option<Words> {
+    (connected && a_setup_holds_the_line && !a_setup_runs).then(|| Words::plain(words::SETUP_STOPPED_PART_WAY))
 }
 
 /// **Whether this copy is driving a setup run on that server now** — any kind
@@ -1807,15 +2010,10 @@ fn the_dialogs_keys_are_checked<R: Runtime>(app: &AppHandle<R>, ask: &str, asked
     // when the Keys screen drew, so on a first open a key already in the usual
     // location was not on this list. Where it wrote a row the list is asked for
     // again, and that ask's verdicts replace this one's.
-    let discovered = crate::surface::keys::the_discovery_pass(
+    let _ = crate::surface::keys::the_discovery_pass(
         app,
         &crate::keys::readings::OnThisComputer::over(area.clone()),
     );
-    if !discovered.is_empty() {
-        let event = a_dialog_keys_list_grew(ask);
-        let _ = queue.read_then_post::<(), std::convert::Infallible>(|| Ok(()), |_| event.clone());
-        return;
-    }
     // **The rows are read under the lock and checked after it is let go** — a
     // check is a filesystem read and a tool run.
     let rows = {
@@ -1827,6 +2025,17 @@ fn the_dialogs_keys_are_checked<R: Runtime>(app: &AppHandle<R>, ask: &str, asked
         };
         the_key_rows(&started).unwrap_or_default()
     };
+    // **The list grew behind its draw whoever wrote the row** — this pass, the
+    // Keys screen's own, or the pass of an ask this one replaced. Until the
+    // twenty-eighth notes, piece 12, only a row this pass wrote said so: where
+    // another pass wrote it between the list's read and this one, the list
+    // stayed as drawn, with no verdict for the key, and the Add dialog's Key
+    // stayed empty with the one usable key in the copy.
+    if the_list_grew_behind_its_draw(asked, &rows) {
+        let event = a_dialog_keys_list_grew(ask);
+        let _ = queue.read_then_post::<(), std::convert::Infallible>(|| Ok(()), |_| event.clone());
+        return;
+    }
     let readings = crate::keys::readings::OnThisComputer::over(area);
     for key in asked {
         // **A key whose row went since the list was drawn cannot be used**, and
@@ -1839,6 +2048,17 @@ fn the_dialogs_keys_are_checked<R: Runtime>(app: &AppHandle<R>, ask: &str, asked
         let event = a_dialog_keys_verdict(ask, key, &verdict);
         let _ = queue.read_then_post::<(), std::convert::Infallible>(|| Ok(()), |_| event.clone());
     }
+}
+
+/// **Whether the list a dialog would draw now holds a key its ask did not
+/// name** — the rows read after `Keys` U1 set 2's pass, against the keys the
+/// list was drawn with. A key gone since is not growth: its verdict reads
+/// unusable and it leaves the list.
+pub fn the_list_grew_behind_its_draw(asked: &[String], rows_now: &[smoozy_keys::rows::KeyRow]) -> bool {
+    the_keys_a_dialog_offers_from(rows_now)
+        .keys
+        .iter()
+        .any(|offer| !asked.iter().any(|key| key == offer.key.as_str()))
 }
 
 /// **The list, composed from the key rows handed in.**
@@ -2135,7 +2355,10 @@ pub fn the_edit_warning_said(event: Event, warning: Option<&TheEditWarning>) -> 
         .saying(
             "theEditWarningWhatBecomesOfThem",
             Said::Prose(warning.what_becomes_of_them.clone()),
-        );
+        )
+        .saying("theEditWarningComma", Said::Prose(Prose::new(words::NAMES_COMMA)))
+        .saying("theEditWarningAnd", Said::Prose(Prose::new(words::NAMES_AND)))
+        .saying("theEditWarningFullStop", Said::Prose(Prose::new(words::NAMES_FULL_STOP)));
     for (at, named) in warning.named.iter().enumerate() {
         event = event.saying(
             crate::surface::keys::the_name("theEditWarningNamed", at, ""),
@@ -2463,8 +2686,24 @@ pub(crate) fn the_act_is_performed<R: Runtime>(
     act: &str,
     server: &str,
 ) -> Option<TheAnswer> {
+    // **Any connect act of the user's drops the Set up card's own wait** —
+    // `Architecture/Servers`' build detail of 2026-11-12 (the four questions,
+    // scout 4.6): a setup is run at the lending only where the card asked.
+    if matches!(
+        where_an_act_goes(act),
+        WhereAnActGoes::ABeginning
+            | WhereAnActGoes::AReconnection
+            | WhereAnActGoes::TheSetupIsDropped
+            | WhereAnActGoes::AnEnding
+    ) {
+        crate::surface::set_up::the_cards_wait_is_dropped(server);
+    }
     match where_an_act_goes(act) {
         WhereAnActGoes::ABeginning => the_users_connect_is_begun(app, server),
+        WhereAnActGoes::AReconnection => {
+            let queued = the_periods_of(app).is_some_and(|periods| periods.the_user_reconnects(server));
+            if queued { None } else { the_users_connect_is_begun(app, server) }
+        }
         WhereAnActGoes::TheSetupIsDropped => {
             // **Dropped first, in its own durable write, and connected only
             // where the write landed** — a connect begun over a bit still
@@ -2515,9 +2754,12 @@ pub(crate) fn the_act_is_performed<R: Runtime>(
         }
         WhereAnActGoes::TheUpdateFailureIsCleared => {
             use crate::servers::published::{the_server_carries, what_the_server_carries};
+            // **And the repair's, since 2026-11-14** (`Desktop app and
+            // delivery` V3c: it ends at the user's cross too).
             if matches!(
                 what_the_server_carries(server),
                 Some(crate::servers::published::WhatSmoozyOnTheServerIs::TheUpdateFailed { .. })
+                    | Some(crate::servers::published::WhatSmoozyOnTheServerIs::TheRepairFailed { .. })
             ) {
                 the_server_carries(server, None);
             }
@@ -2546,13 +2788,17 @@ pub enum TheRemovalsEnding {
     CouldNotBegin,
     TheClearWasRefused,
     ItHalfWorked,
+    /// **The wait ended with no answer**, so whether anything changed is not
+    /// known (the Rough what-if answers, share 1, 73).
+    NoAnswer,
 }
 
 impl TheRemovalsEnding {
-    const ALL: [TheRemovalsEnding; 3] = [
+    const ALL: [TheRemovalsEnding; 4] = [
         TheRemovalsEnding::CouldNotBegin,
         TheRemovalsEnding::TheClearWasRefused,
         TheRemovalsEnding::ItHalfWorked,
+        TheRemovalsEnding::NoAnswer,
     ];
 
     /// The ending as the page keys it, and its two sentences.
@@ -2567,6 +2813,7 @@ impl TheRemovalsEnding {
             TheRemovalsEnding::ItHalfWorked => {
                 ("it-half-worked", words::HALF_WORKED, words::HALF_WORKED_REST)
             }
+            TheRemovalsEnding::NoAnswer => ("no-answer", words::NO_ANSWER, words::NO_ANSWER_REST),
         };
         TheStopAndClearEnding {
             which: Verbatim::new(which),
@@ -2619,19 +2866,22 @@ impl<R: Runtime> TheOverridesEnds for TheRemovalsOwnPath<'_, R> {
 /// ending that says nothing happened for the user to go on from. **What is
 /// not true of it is the record**: the sender leaves both halves unwritten,
 /// because the request may have reached the machine and the machine then
-/// carries the pair out with nobody connected (`Queue & History` L13). *This is
-/// the one place the words may claim more than Smoozy knows, and it is
-/// recorded as S2's residual rather than fixed here: no drawn ending says
-/// "Smoozy does not know yet".*
+/// carries the pair out with nobody connected (`Queue & History` L13). *This
+/// was the one place the words could claim more than Smoozy knew, recorded as
+/// S2's residual.* **Since the Rough what-if answers, share 1 (73), a wait
+/// that ended with nothing back is its own ending**, *No answer from the
+/// server. The jobs may have been stopped and cleared.*, and *Nothing was
+/// changed.* is said only where the server said so.
 pub(crate) fn the_ending_of(
     came_to: crate::servers::stop_and_clear::WhatThePairCameTo,
 ) -> TheStopAndClearEnded {
     use crate::servers::stop_and_clear::WhatThePairCameTo as Came;
     match came_to {
         Came::ClearedAndStopped => TheStopAndClearEnded::ClearedAndStopped,
-        Came::NothingWasChanged | Came::NothingCameBack => {
+        Came::NothingWasChanged | Came::TheProgramIsOlder => {
             TheStopAndClearEnded::Otherwise(TheRemovalsEnding::CouldNotBegin)
         }
+        Came::NothingCameBack => TheStopAndClearEnded::Otherwise(TheRemovalsEnding::NoAnswer),
         Came::TheClearWasRefused => TheStopAndClearEnded::Otherwise(TheRemovalsEnding::TheClearWasRefused),
         Came::TheRenderHadNotStopped => TheStopAndClearEnded::Otherwise(TheRemovalsEnding::ItHalfWorked),
     }
@@ -2836,6 +3086,7 @@ impl<R: Runtime> TheMachineReachingRemovalsEnds for TheRemovalsOwnEnds<'_, R> {
         let carries = WhatThePairCarries {
             group: None,
             the_render_the_desktop_last_saw: self.the_render_last_seen(server),
+            first_frame_check: None,
         };
         let mut machine = self.the_machine(server);
         let record = crate::keys::TheRunsRecord { started: started.inner() };
@@ -2987,6 +3238,7 @@ pub(crate) enum WhereAnActGoes {
     /// **`Servers` S5's first opening act, `Servers` O1: the user's connect
     /// action on a saved server.**
     ABeginning,
+    AReconnection,
     /// **`Servers` S10 item 1: the user disconnects.** Available for as long as
     /// a period stands, and **taking it stops the repair**.
     AnEnding,
@@ -3016,6 +3268,7 @@ pub(crate) fn where_an_act_goes(act: &str) -> WhereAnActGoes {
         // the setup at `Servers` B2's instant and hands it to `Server Setup` at
         // `Servers` Q1 step 8 (`src/servers/a_period.rs`). Step 10c's piece 4.
         "connect" | "connect-and-set-up" => WhereAnActGoes::ABeginning,
+        "reconnect" => WhereAnActGoes::AReconnection,
         "drop-the-setup" => WhereAnActGoes::TheSetupIsDropped,
         "disconnect" => WhereAnActGoes::AnEnding,
         "accept-the-identity" => WhereAnActGoes::TheAcceptedIdentity,
@@ -3041,6 +3294,14 @@ pub(crate) fn the_beginning_is_answered(went: HowItWent) -> Option<TheAnswer> {
         HowItWent::TheServerIsGone => Some(TheAnswer::TheServerIsGone),
         HowItWent::TheRecordWouldNotRead => Some(TheAnswer::TheListCouldNotBeRead),
     }
+}
+
+/// **The Set up card's *Connect and set up*: the user's `Servers` O1
+/// connect**, begun
+/// without dropping the card's own wait (`Architecture/Servers`' build detail
+/// of 2026-11-12; the four questions, scout 4.6).
+pub(crate) fn the_cards_connect_is_begun<R: Runtime>(app: &AppHandle<R>, server: &str) -> Option<TheAnswer> {
+    the_users_connect_is_begun(app, server)
 }
 
 /// **`Servers` O1: the user's connect action on a saved server** — *Connect*,
@@ -3452,20 +3713,6 @@ fn a_row(
     work: &WhatTheServersAreDoing,
 ) -> AServerRow {
     let needing_a_new_key = the_key_mark(row, keys, said);
-    // **Whether the live connection's check found no Smoozy of this
-    // installation on the machine** — `State, identity and recovery` Y9's
-    // absent or different branch, where `Queue & History` A1 reads nothing on
-    // the machine as Smoozy's at all. Only then does a connected server with
-    // no reading read *Idle*. Step 10c's eleventh-pass fix piece 6.
-    let nothing_of_smoozys_is_there = periods
-        .and_then(|periods| periods.what_the_last_connection_read(&row.local_server_identifier))
-        .is_some_and(|read| {
-            read.on_the_connection_that_is_live
-                && matches!(
-                    read.check,
-                    InstallationCheck::Absent | InstallationCheck::PresentAndDifferent
-                )
-        });
     let the_connect_is_underway = THE_USERS_CONNECTS.is_underway(&row.local_server_identifier, of);
     // **`Desktop app and delivery` V13's condition, where this server carries
     // one** — raised and withdrawn by `src/servers/published.rs` and drawn
@@ -3497,20 +3744,41 @@ fn a_row(
         the_sentence: periods
             .is_some_and(|periods| periods.the_row_carries_the_sentence(&row.local_server_identifier))
             .then(|| Prose::new(crate::surface::keys::NOWHERE_TO_KEEP_THEM)),
-        // **`Server Setup` reads this state fresh from the machine on every
-        // connection**, so a server with no connection says nothing about a
-        // setup at all — `Design/Servers § A row`. **A connection is made, but
-        // nothing on it reads the setup's state yet**: `Server Setup`'s reading
-        // is not called from a period, so this is absent rather than guessed.
-        // *(Corrected 2026-09-18, step 10b's audit round's loose ends, L5. This
-        // said nothing connects, which step 10b made untrue.)*
-        the_setup_line: None,
+        // **`Design/Servers § A row`: a setup that stopped part-way is a line
+        // on the row**, read fresh from the machine on every connection, so a
+        // server with no connection says nothing about a setup at all. **The
+        // connection's queue reading names it** (`Queue & History` A1 as
+        // changed 2026-11-14), and while this computer drives a setup there
+        // the column says *Setting up* instead. *(Until 2026-11-14 this was
+        // always absent: nothing on a connection read the state. The Rough
+        // what-if answers, share 4, 310.)*
+        the_setup_line: the_setup_line(
+            condition::presentation(of) == Presentation::Connected,
+            periods.is_some_and(|periods| {
+                periods.the_machines_work().a_setup_holds_the_line_on(&row.local_server_identifier)
+            }),
+            a_setup_runs_on(&row.local_server_identifier),
+        ),
+        the_telegram_line: the_telegram_line(
+            condition::presentation(of) == Presentation::Connected,
+            crate::servers::published::telegrams_trouble_on(&row.local_server_identifier),
+        ),
         the_update_line: the_update_line(
             carries.as_ref(),
             of,
             &what_a_server_is_called_among(row, all),
             work.get(&row.local_server_identifier),
-        ),
+        )
+        .map(|mut line| {
+            // **`Desktop app and delivery` V3c: the repair's lines and *too
+            // new* take the place of V1's condition, and of no other failure.**
+            if matches!(line.which.as_str(), "repairing" | "repair-failed" | "too-new") {
+                line.replaces = periods
+                    .and_then(|periods| periods.the_condition_smoozy_does_not_answer_under(&row.local_server_identifier))
+                    .map(Verbatim::new);
+            }
+            line
+        }),
         // **While the user's own connect is being made the column takes the
         // dash**, not *Reconnecting…*: nothing has been reached to read, and
         // the word says a repair that is not happening. Design gives the dash
@@ -3546,8 +3814,17 @@ fn a_row(
             // replaced, or speaks no protocol this build speaks, so no reading
             // of its work stands. Step 10c's transfer wave piece 9.
             vec![the_dash()]
+        } else if condition::presentation(of) == Presentation::Connected
+            && the_live_check_reads_not_set_up(
+                periods.and_then(|periods| periods.what_the_last_connection_read(&row.local_server_identifier)),
+            )
+        {
+            // `Design/Servers § A row`, the runner's ruling of 2026-11-11:
+            // a confirmed missing installation reads Not set up. `Servers`
+            // H1a keeps an earlier connection's check from deciding this one.
+            vec![Words::plain(words::NOT_SET_UP)]
         } else {
-            the_work_column(of, work.get(&row.local_server_identifier), nothing_of_smoozys_is_there)
+            the_work_column(of, work.get(&row.local_server_identifier))
         }, a_setup_runs_on(&row.local_server_identifier)),
         the_next_attempt: the_next_attempt(of, the_repair_is_due),
         the_hardware: the_hardware_as_the_run_knows_it(
@@ -3747,6 +4024,7 @@ fn the_next_attempt(
         due_at: Verbatim::new(seconds.to_string()),
         trying_again_in: Prose::new(crate::surface::the_underway_shape::TRYING_AGAIN_IN),
         trying_again_now: Prose::new(crate::surface::the_underway_shape::TRYING_AGAIN_NOW),
+        seconds: Prose::new(crate::surface::the_underway_shape::SECONDS),
     })
 }
 
@@ -3774,7 +4052,6 @@ fn the_next_attempt(
 fn the_work_column(
     of: WhatIsTrueOfTheServer,
     doing: Option<&WhatAServerIsDoing>,
-    nothing_of_smoozys_is_there: bool,
 ) -> Vec<Words> {
     match condition::presentation(of) {
         // **`Servers` K8: *restarting* is a fourth presentation and not a
@@ -3812,26 +4089,8 @@ fn the_work_column(
                 the_rest_joins: false,
             }],
             Some(WhatAServerIsDoing::ItCannotBeSaid) => vec![the_dash()],
-            // **No reading is held: *Idle* only where Smoozy knows the server
-            // is idle.** Where the live connection's check found no Smoozy of
-            // this installation on the machine — none placed, or another
-            // installation's — nothing on it is read as Smoozy's at all
-            // (`Queue & History` A1), so no work of Smoozy's is there. **Every
-            // other connected server with no reading takes the dash until one
-            // lands**: the check not yet settled, step 7's reading owed, or the
-            // check read on a connection that is no longer the live one.
-            //
-            // **Written for one case and now meeting the other.** It read
-            // *Idle* wherever step 7 was not already known to owe a reading,
-            // which was written for `Queue & History` A1's machine and also
-            // met the stretch between a *Connect* going live and its check
-            // settling — where nothing had been read at all. Step 10c's
-            // eleventh pass read *Idle* there with a job rendering (*Smaller*
-            // 1), and once where the page header read the dash (*Smaller* 2).
-            // Step 10c's eleventh-pass fix piece 6.
-            None if nothing_of_smoozys_is_there => {
-                vec![Words::plain(WhatTheColumnSays::Idle.the_word())]
-            }
+            // No reading is held: the dash. The row handles a confirmed
+            // missing installation above, before asking for its work.
             None => vec![the_dash()],
         },
         // **The dash.** Smoozy cannot say what a server it has never reached is
@@ -3851,9 +4110,23 @@ fn the_work_takes_the_dash_under(
     matches!(
         carries,
         Some(Carries::TheUpdateIsUnderWay)
+            | Some(Carries::TheRepairIsUnderWay)
             | Some(Carries::TooOldAndItsWorkCannotBeControlledFromHere)
             | Some(Carries::TooNew)
     )
+}
+
+/// **The line a run waits behind while Smoozy's own act holds the server** —
+/// the update's, or since 2026-11-14 the automatic repair's
+/// (`Desktop app and delivery` V3b takes the same `Server Setup` Y9 turn).
+pub fn the_line_while_smoozys_own_act_holds(server: &str) -> &'static str {
+    if crate::servers::published::what_the_server_carries(server)
+        == Some(crate::servers::published::WhatSmoozyOnTheServerIs::TheRepairIsUnderWay)
+    {
+        words::REPAIRING
+    } else {
+        words::UPDATING
+    }
 }
 
 /// **V15: *Update now…* is offered only where the update waits and the
@@ -3916,6 +4189,7 @@ pub(crate) fn the_update_line(
         update_now: None,
         the_box: None,
         the_servers_words: None,
+        replaces: None,
     };
     Some(match carries? {
         Carries::TheUpdateWaits => TheUpdateLine {
@@ -3926,10 +4200,16 @@ pub(crate) fn the_update_line(
             ..a_line("waits", Words::plain(words::THE_UPDATE_WAITS))
         },
         Carries::TheUpdateIsUnderWay => a_line("under-way", Words::plain(words::UPDATING)),
-        Carries::TheUpdateFailed { said } => TheUpdateLine {
+        Carries::TheUpdateFailed { said, at } => TheUpdateLine {
             a_failure: true,
             the_servers_words: Some(TheServersWords {
-                label: Prose::new(crate::surface::transfers::words::WHAT_THE_SERVER_SAID),
+                // **Whose words they are** (`Server protocol and transfers`
+                // B10b): a download that failed is Smoozy's own, never the
+                // server's.
+                label: Prose::new(match at {
+                    WhereTheUpdateFailed::OnTheServer => crate::surface::transfers::words::WHAT_THE_SERVER_SAID,
+                    WhereTheUpdateFailed::InTheDownload { .. } => crate::surface::set_up::words::DOWNLOAD_DETAILS,
+                }),
                 words: Verbatim::new(said.clone()),
                 close: Prose::new(crate::surface::the_machines_own_words::CLOSE),
                 clear: AControl::live(
@@ -3937,13 +4217,42 @@ pub(crate) fn the_update_line(
                     THE_UPDATE_FAILURE_IS_CLEARED,
                 ),
             }),
-            ..a_line("failed", Words::plain(words::COULD_NOT_BE_UPDATED))
+            ..a_line(
+                "failed",
+                Words::plain(match at {
+                    WhereTheUpdateFailed::InTheDownload { nothing_answered: true } => {
+                        words::THE_UPDATES_DOWNLOAD_GOT_NO_RESPONSE
+                    }
+                    _ => words::COULD_NOT_BE_UPDATED,
+                }),
+            )
         },
         Carries::TooOldAndItsWorkCannotBeControlledFromHere => {
             let (which, said) = the_too_old_line(false);
             a_line(which, said)
         }
         Carries::TooNew => a_line("too-new", Words::plain(words::TOO_NEW)),
+        // **`Desktop app and delivery` V3c**: the repair under way, in the
+        // ordinary face, and the repair that did not land, in the failure face
+        // with whose words they are behind it — both in the place
+        // *Smoozy isn't responding.* would take (the page keys on `which`).
+        Carries::TheRepairIsUnderWay => a_line("repairing", Words::plain(words::REPAIRING)),
+        Carries::TheRepairFailed { said, at } => TheUpdateLine {
+            a_failure: true,
+            the_servers_words: Some(TheServersWords {
+                label: Prose::new(match at {
+                    WhereTheUpdateFailed::OnTheServer => crate::surface::transfers::words::WHAT_THE_SERVER_SAID,
+                    WhereTheUpdateFailed::InTheDownload { .. } => crate::surface::set_up::words::DOWNLOAD_DETAILS,
+                }),
+                words: Verbatim::new(said.clone()),
+                close: Prose::new(crate::surface::the_machines_own_words::CLOSE),
+                clear: AControl::live(
+                    crate::presentation::the_failure_shape::CLEAR_THIS,
+                    THE_UPDATE_FAILURE_IS_CLEARED,
+                ),
+            }),
+            ..a_line("repair-failed", Words::plain(words::COULD_NOT_REPAIR))
+        },
     })
 }
 
@@ -4002,7 +4311,7 @@ fn the_stop_and_clear_statement(rendering: usize, waiting: usize) -> Words {
 /// **The dash** — the mark `Design values` gives app-wide for a value Smoozy
 /// cannot confirm, and `Design/Servers § A row`'s for a server whose doing
 /// Smoozy cannot say. A value, since it is a mark and not a word.
-fn the_dash() -> Words {
+pub(crate) fn the_dash() -> Words {
     Words {
         lead: Prose::new(""),
         values: vec![Verbatim::new("—")],
@@ -4218,14 +4527,17 @@ fn the_card_reads(card: &smoozy_servers::hardware::Card) -> String {
 /// figure**:
 /// on a slice that figure is the host's, and a reader that reaches it because
 /// the cgroup was silent gets the host's answer while believing it got the
-/// rental's. So an allocation that could not be established says so.
+/// rental's. **So an allocation that could not be established shows no RAM
+/// at all** (`Design/Servers`, *What it has to render with*, changed
+/// 2026-11-13, the night's live pass, fault 5): it read *Could not read RAM*,
+/// which the user can do nothing about.
 fn the_memory(held: &HardwareReading) -> Option<Words> {
     use smoozy_servers::hardware::MachineMemory;
     match held.machine_memory {
         MachineMemory::TheAllocation(bytes) | MachineMemory::TheWholeMachine(bytes) => {
             Some(Words::after(in_gigabytes(bytes), words::RAM))
         }
-        MachineMemory::CouldNotBeEstablished => Some(Words::plain(words::MEMORY_UNKNOWN)),
+        MachineMemory::CouldNotBeEstablished => None,
     }
 }
 
@@ -4398,13 +4710,20 @@ fn the_connect_control(
     of: WhatIsTrueOfTheServer,
     needing_a_new_key: bool,
 ) -> AControl {
+    // **`Design/Servers` as added 2026-11-11: *Connected* and *Reconnecting…*
+    // read *Disconnect* under the pointer or with focus**, the act a press
+    // takes. The four questions, scout 1.10.
+    let reads_disconnect_on_hover = |control: AControl| AControl {
+        on_hover: Some(Prose::new(words::DISCONNECT)),
+        ..control
+    };
     match condition::presentation(of) {
-        Presentation::Connected => AControl::live(words::CONNECTED, "disconnect"),
+        Presentation::Connected => reads_disconnect_on_hover(AControl::live(words::CONNECTED, "disconnect")),
         Presentation::Restarting => AControl::shown_unavailable(words::RESTARTING, "disconnect"),
-        Presentation::Repairing => AControl::live(
+        Presentation::Repairing => reads_disconnect_on_hover(AControl::live(
             WhatTheColumnSays::Reconnecting.the_word(),
             "disconnect",
-        ),
+        )),
         Presentation::Disconnected if needing_a_new_key => {
             AControl::shown_unavailable(words::CONNECT, "connect")
         }
@@ -4582,6 +4901,7 @@ fn the_boxes() -> TheBoxesAConnectionRaises {
         stopping_work_on: Prose::new(words::STOPPING_WORK_ON),
         try_again: Prose::new(words::TRY_AGAIN),
         remove_anyway: Prose::new(words::REMOVE_ANYWAY),
+        still_bills: Prose::new(words::RUNS_AND_BILLS),
     }
 }
 
@@ -4597,6 +4917,7 @@ pub fn the_add_dialog_from(rows: &[ServerRow]) -> TheAddDialog {
         the_guidance_again: Prose::new(words::THE_GUIDANCE_AGAIN),
         host: Prose::new(words::HOST),
         host_placeholder: Prose::new(words::HOST_OR_PASTE),
+        username_placeholder: Prose::new(words::ROOT_OR_UBUNTU),
         port: Prose::new(words::PORT),
         username: Prose::new(words::USERNAME),
         key: Prose::new(words::KEY),
@@ -4649,6 +4970,11 @@ pub fn the_pasted_line_from(line: &str) -> ThePastedLine {
             }
             if username.is_none() {
                 the_line_under.push(Prose::new(words::NO_USERNAME_IN_THAT_LINE));
+            }
+            // **`Servers` PL2a: a line through another server says so**, since
+            // the host it fills is one Smoozy then connects to directly.
+            if smoozy_servers::pasted_line::the_line_names_a_jump_host(line) {
+                the_line_under.push(Prose::new(words::JUMP_HOSTS_ARE_NOT_SUPPORTED));
             }
             ThePastedLine {
                 fills: true,
@@ -4992,7 +5318,18 @@ pub fn the_removal_box_from(
     reading: TheLastKnownReading,
     already_switched_off: bool,
 ) -> TheRemovalBox {
-    let warning = removal_warning(of, reading.what_it_holds());
+    let mut warning = removal_warning(of, reading.what_it_holds());
+    // **`Servers` W20: a warning the user switched off is not shown** — the
+    // row is a plain confirmation until warnings are restored in Settings
+    // (the Rough what-if answers, share 2, 130). Until then the tick was
+    // refused and the warning came back every time.
+    if warning.may_be_switched_off && already_switched_off {
+        warning = smoozy_servers::work::RemovalWarning {
+            warns: Warns::NotAtAll,
+            offers: Offers::APlainConfirmation,
+            may_be_switched_off: false,
+        };
+    }
     let (rendering, waiting) = match reading {
         TheLastKnownReading::Holds { rendering, waiting } => (rendering, waiting),
         TheLastKnownReading::NoRecordAtAll => (0, 0),
@@ -5435,13 +5772,12 @@ fn apply_what_the_edit_throws_away(
     throws_away: smoozy_servers::edits::WhatTheEditThrowsAway,
 ) {
     use smoozy_servers::edits::Fate;
-    // **`Servers` D13: all four go in the same write** — the hardware reading, the event
-    // cursor, the confirmed installation identity, and the machine's root.
+    // `Servers` D13: drop old readings; keep the expected installation only
+    // for `State, identity and recovery` Y9's comparison on the new connection.
     if matches!(throws_away.the_machine_derived_values, Fate::Dropped) {
         row.remembered_hardware_reading = None;
         row.event_cursor = None;
-        row.last_confirmed_installation_identity = None;
-        row.recorded_machine_root = None;
+        // The root locates the identity check; it is not a live confirmation.
         // **And the driver's missed bar (`Servers` D3's row of 2026-10-11)**:
         // a swap that missed on the old machine says nothing about the new
         // one, so it goes with the reading it was told beside.
@@ -5549,15 +5885,11 @@ pub fn the_removal_is_performed(
     // **The switch-off and the removal are two units and the user asked for
     // both**; a tick that could not be written is not a reason to keep them
     // from the removal they came for. **§15 G5's hosting rule is what may
-    // refuse it**: `Servers` declares no dismissible warning in its own crate
-    // and is not in `start.rs`'s register, so a suppression written for this
-    // identity is refused today. **What that costs is bounded and loud** — the
-    // user ticks the switch-off and the warning comes back next time, which is
-    // visible at once rather than the invisible failure G2 is written about,
-    // and it is the same shape `start.rs` already records for
-    // `rendering.missing-assets`. **What closes it is the declaration, in
-    // `App/Servers/`'s own crate**, and it is recorded rather than reached for
-    // from here.
+    // refuse it**, and from 2026-11-14 it does not: `Servers`' declaration in
+    // `start.rs`'s register carries the identity
+    // (`crate::servers::published::what_servers_declares`; the Rough what-if
+    // answers, share 2, 130). Until then the user ticked the switch-off and
+    // the warning came back next time.
     if dont_warn_again {
         crate::surface::said_once::a_warning_was_switched_off(
             started,
@@ -5758,9 +6090,20 @@ pub fn the_answer_event(answer: TheAnswer) -> Event {
         TheAnswer::ThePasswordWasForgotten => {
             event.saying("what", value("the-password-was-forgotten"))
         }
+        // **Every *Could not connect* carries its Help answer's name**, so
+        // the row, the card and the line above the list put the Help link
+        // beside it (`Design/Whole app § Help links`, 2026-11-13).
         TheAnswer::TheConnectionWasNotMade => event
             .saying("what", value(THE_CONNECTION_WAS_NOT_MADE_ANSWER))
-            .saying("said", prose(words::THE_CONNECTION_WAS_NOT_MADE)),
+            .saying("said", prose(words::THE_CONNECTION_WAS_NOT_MADE))
+            .saying("help", value(THE_HELP_FOR_COULD_NOT_CONNECT)),
+        TheAnswer::TheConnectionWasNotMadeBecause(why) => {
+            let (what, reason) = the_reason(why);
+            event
+                .saying("what", value(what))
+                .saying("said", prose(reason.sentence))
+                .saying("help", value(THE_HELP_FOR_COULD_NOT_CONNECT))
+        }
         TheAnswer::ItIsNotALinuxMachine => event
             .saying("what", value(IT_IS_NOT_A_LINUX_MACHINE_ANSWER))
             .saying("said", prose(words::IT_IS_NOT_A_LINUX_MACHINE)),
@@ -5810,6 +6153,56 @@ pub const THE_CONNECTION_WAS_NOT_MADE_ANSWER: &str = "the-connection-was-not-mad
 pub const IT_IS_NOT_A_LINUX_MACHINE_ANSWER: &str = "it-is-not-a-linux-machine";
 pub const THE_PASSPHRASE_COULD_NOT_BE_USED_ANSWER: &str = "the-passphrase-could-not-be-used";
 
+/// **The answers a connect that never became live ends in where the attempt
+/// says why** — one key per reason, so the Set up card handed a key back says
+/// the same sentence the row did. Added 2026-11-11, the four questions, scout
+/// 3.1. `web/servers.js` and `web/set-up.js` list them too.
+/// ***Could not connect*'s Help answer** — K25's third narrowing.
+const THE_HELP_FOR_COULD_NOT_CONNECT: &str =
+    crate::the_address_opener::TheHelpAnswer::CouldNotConnect.name();
+
+/// **Whether a failed connect's key is a *Could not connect***, plain or with
+/// its reason — the two with a cause of their own are not.
+pub fn a_connect_that_could_not_connect(what: &str) -> bool {
+    what == THE_CONNECTION_WAS_NOT_MADE_ANSWER || A_CONNECT_THAT_WAS_NOT_MADE_SAYS_WHY.contains(&what)
+}
+
+pub const A_CONNECT_THAT_WAS_NOT_MADE_SAYS_WHY: [&str; 6] = [
+    "the-key-was-refused",
+    "the-host-was-not-found",
+    "the-port-refused",
+    "nothing-answered",
+    "it-timed-out",
+    "the-key-could-not-be-loaded",
+];
+
+/// **Every reason, in the keys' order.**
+const EVERY_REASON: [crate::servers::a_period::WhyTheConnectionWasNotMade; 6] = {
+    use crate::servers::a_period::WhyTheConnectionWasNotMade as Why;
+    [
+        Why::TheKeyWasRefused,
+        Why::TheHostWasNotFound,
+        Why::ThePortRefused,
+        Why::NothingAnswered,
+        Why::ItTimedOut,
+        Why::TheKeyCouldNotBeLoaded,
+    ]
+};
+
+/// **Each reason's key and words.**
+pub fn the_reason(why: crate::servers::a_period::WhyTheConnectionWasNotMade) -> (&'static str, AReason) {
+    use crate::servers::a_period::WhyTheConnectionWasNotMade as Why;
+    let keys = A_CONNECT_THAT_WAS_NOT_MADE_SAYS_WHY;
+    match why {
+        Why::TheKeyWasRefused => (keys[0], words::THE_KEY_WAS_REFUSED),
+        Why::TheHostWasNotFound => (keys[1], words::THE_HOST_WAS_NOT_FOUND),
+        Why::ThePortRefused => (keys[2], words::THE_PORT_REFUSED),
+        Why::NothingAnswered => (keys[3], words::NOTHING_ANSWERED),
+        Why::ItTimedOut => (keys[4], words::IT_TIMED_OUT),
+        Why::TheKeyCouldNotBeLoaded => (keys[5], words::THE_KEY_COULD_NOT_BE_LOADED),
+    }
+}
+
 /// **The server a connect was about, as the list names it.** The name is the
 /// row's own — [`what_a_server_is_called_among`] — so the line above the list
 /// and the row under it say the same thing. **Absent where the row could not
@@ -5834,19 +6227,37 @@ pub fn the_answer_about(answer: TheAnswer, about: &TheServerItWasAbout) -> Event
     let names_the_server = matches!(
         answer,
         TheAnswer::TheConnectionWasNotMade
+            | TheAnswer::TheConnectionWasNotMadeBecause(_)
             | TheAnswer::ItIsNotALinuxMachine
             | TheAnswer::TheKeysPassphraseCouldNotBeUsed(_)
     );
-    let claimless = answer == TheAnswer::TheConnectionWasNotMade;
+    // **The line above the list names the server** for the claimless sentence
+    // and for a reason the attempt knows, whose clause then follows the name
+    // (2026-11-11, scout 3.1).
+    let names_it_in_the_lead = match answer {
+        TheAnswer::TheConnectionWasNotMade => Some(None),
+        TheAnswer::TheConnectionWasNotMadeBecause(why) => Some(Some(the_reason(why).1.clause)),
+        _ => None,
+    };
     let event = the_answer_event(answer);
     if !names_the_server {
         return event;
     }
     let event = event.saying("server", value(about.server.clone()));
-    match (&about.name, claimless) {
-        (Some(name), true) => event
-            .saying("couldNotConnectTo", prose(words::COULD_NOT_CONNECT_TO))
-            .saying("couldNotConnectToNamed", value(name.clone())),
+    match (&about.name, names_it_in_the_lead) {
+        (Some(name), Some(because)) => {
+            let event = event
+                .saying("couldNotConnectTo", prose(words::COULD_NOT_CONNECT_TO))
+                .saying("couldNotConnectToNamed", value(name.clone()));
+            match because {
+                Some(clause) => event.saying("because", prose(clause)),
+                None => event,
+            }
+        }
+        // **The other two say which server too** — the name before their own
+        // sentence (the UI at every size, B-14): above a list of servers, a
+        // sentence naming none could be about any of them.
+        (Some(name), None) => event.saying("theServerItWasAbout", value(name.clone())),
         _ => event,
     }
 }
@@ -5867,7 +6278,10 @@ pub fn what_a_failed_connect_said(what: &str) -> Option<&'static str> {
         THE_CONNECTION_WAS_NOT_MADE_ANSWER => Some(words::THE_CONNECTION_WAS_NOT_MADE),
         IT_IS_NOT_A_LINUX_MACHINE_ANSWER => Some(words::IT_IS_NOT_A_LINUX_MACHINE),
         THE_PASSPHRASE_COULD_NOT_BE_USED_ANSWER => Some(THE_PASSPHRASE_SENTENCE_ON_THIS_SYSTEM),
-        _ => None,
+        what => A_CONNECT_THAT_WAS_NOT_MADE_SAYS_WHY
+            .iter()
+            .position(|key| *key == what)
+            .map(|at| the_reason(EVERY_REASON[at]).1.sentence),
     }
 }
 
@@ -5902,6 +6316,14 @@ pub fn what_an_ended_period_says(
         WhatTheDrivingLeft::TheConnectionWasNotMade => Some(match the_passphrase_could_not_be_used {
             Some(said) => TheAnswer::TheKeysPassphraseCouldNotBeUsed(said),
             None => TheAnswer::TheConnectionWasNotMade,
+        }),
+        // **A reason the attempt knows, under the same two rules**: a raised
+        // passphrase box is the answer, and a passphrase the supply could not
+        // hand over is said instead. 2026-11-11, scout 3.1.
+        WhatTheDrivingLeft::TheConnectionWasNotMadeBecause(_) if the_box_was_raised => None,
+        WhatTheDrivingLeft::TheConnectionWasNotMadeBecause(why) => Some(match the_passphrase_could_not_be_used {
+            Some(said) => TheAnswer::TheKeysPassphraseCouldNotBeUsed(said),
+            None => TheAnswer::TheConnectionWasNotMadeBecause(why),
         }),
         // **`Servers` Q6's third path: the changed-identity warning is the
         // answer**, and a sentence beside it would be one act answered twice.
@@ -5942,6 +6364,20 @@ const THE_FIELDS_OWN_KEYS: [(&str, &str); 3] = [
     ("field1", "field1Said"),
     ("field2", "field2Said"),
 ];
+
+/// **The runner's ruling of 2026-11-11 (`Design/Servers § A row`): a
+/// confirmed missing installation reads *Not set up*** — the live
+/// connection's check read no Smoozy, or another installation's. `Servers`
+/// H1a keeps an earlier connection's check from deciding this one. **One rule
+/// for the row, the server's head and its Set up card** (the scout's list,
+/// item 2: after a rollback the head read *Not set up* while the card read
+/// *Ready to render*), so the three never read two ways.
+pub fn the_live_check_reads_not_set_up(read: Option<a_period::WhatTheLastConnectionRead>) -> bool {
+    read.is_some_and(|read| {
+        read.on_the_connection_that_is_live
+            && matches!(read.check, InstallationCheck::Absent | InstallationCheck::PresentAndDifferent)
+    })
+}
 
 #[cfg(test)]
 mod tests {
@@ -6033,6 +6469,45 @@ mod tests {
         }
     }
 
+    /// **`Design/Servers § No servers yet`, *and which image* (2026-11-12,
+    /// Creator-stated): the renting step names the image to pick**, in the
+    /// drawing's own words, with no port and no provider named. **Before
+    /// it** the step said which Linux and nothing about the image or
+    /// template a provider asks for.
+    #[test]
+    fn the_empty_screens_renting_step_names_the_image_to_pick() {
+        let as_read = |text: &str| text.replace(['\u{a0}', '\u{202f}', '\u{2060}'], " ").replace("  ", " ");
+        let step = &the_guidance().steps[3];
+        let said = format!(
+            "{}{}",
+            step.lead.as_str(),
+            step.rest.as_ref().map(|rest| rest.as_str().to_string()).unwrap_or_default()
+        );
+        const THE_STEP: &str = "Rent an Ubuntu or Debian Linux server. Others are not supported. \
+                                Pick a plain Ubuntu image with SSH, and NVIDIA driver 580 or newer.";
+        assert_eq!(as_read(&said), THE_STEP, "the renting step does not name the image to pick");
+        assert!(!said.contains("22"), "a port is named");
+        // **And the drawing says the same.**
+        let mockup = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../Preparation/Design/Mockup/Smoozy.html"),
+        )
+        .expect("the drawing is readable");
+        let opens = mockup.find("id=\"svempty\"").expect("the drawing's empty list");
+        let drawn = &mockup[opens..opens + mockup[opens..].find("</ol>").expect("its steps close")];
+        let mut plain = String::new();
+        let mut inside_a_tag = false;
+        for c in drawn.replace("&nbsp;", " ").replace("&#160;", " ").chars() {
+            match c {
+                '<' => inside_a_tag = true,
+                '>' => inside_a_tag = false,
+                c if !inside_a_tag => plain.push(c),
+                _ => {}
+            }
+        }
+        assert!(plain.contains(THE_STEP), "the drawing's renting step differs: {plain}");
+    }
+
     /// **The twenty-three mockup states this piece draws are the twenty-three
     /// the drawing has, in both directions.** *(Twenty-two until 2026-10-16,
     /// when piece E3 built `sv-addkey`.)*
@@ -6071,7 +6546,7 @@ mod tests {
                 named.push(state.clone());
             }
         }
-        assert_eq!(drawn.len(), 23, "the Servers group has twenty-three states");
+        assert_eq!(drawn.len(), 24, "the Servers group has twenty-four states");
         assert_eq!(
             named, drawn,
             "this file's head names the mockup states it draws and the two lists \
@@ -6202,6 +6677,19 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// **The night's live pass, fault 5: where a container does not say how
+    /// much RAM it was given, no RAM is shown** (`Design/Servers`, *What it
+    /// has to render with*), and the cards and the free disk still are.
+    /// **Failed before the fix**: the line read *Could not read RAM*.
+    #[test]
+    fn night_pass_5_ram_a_container_hides_is_not_shown() {
+        let mut held = a_reading();
+        held.machine_memory = MachineMemory::CouldNotBeEstablished;
+        let drawn = the_hardware(Some(&held));
+        assert_eq!(drawn.memory, None, "no RAM is shown");
+        assert!(drawn.cards.is_some() && drawn.free_disk.is_some());
     }
 
     /// **`Servers` W40a: the line is never empty of both.**
@@ -6571,6 +7059,8 @@ mod tests {
             the_sweep_left_behind: Vec::new(),
             record: Some(record),
             record_trouble: None,
+            the_record_is_newer_than_this_copy: false,
+            the_record_is_damaged: false,
             diary: None,
             declarations: smoozy_reporting::lines::Declarations::new(),
             what_modules_declare: crate::presentation::declarations::TheDeclarations::default(),
@@ -6994,13 +7484,124 @@ mod tests {
 
         let server = "server-setting-up-on-the-row";
         assert!(!a_setup_runs_on(server));
-        let before = what_is_told(WhatTheServersAreDoing::default(), &[a_row_named(server)]);
+        let before = what_is_told(WhatTheServersAreDoing::default(), &[a_row_named(server)], &crate::servers::the_machines_work::WhatThisRunHolds::default());
         assert!(crate::setting_up::a_run_begins(server, smoozy_server_setup::run::SetupKind::TheReadyAction));
         assert!(a_setup_runs_on(server));
-        let during = what_is_told(WhatTheServersAreDoing::default(), &[a_row_named(server)]);
+        let during = what_is_told(WhatTheServersAreDoing::default(), &[a_row_named(server)], &crate::servers::the_machines_work::WhatThisRunHolds::default());
         assert_ne!(before, during, "a setup beginning moves what the column is told");
         crate::setting_up::a_run_ends(server);
         assert!(!a_setup_runs_on(server));
+    }
+
+    /// **When Telegram refuses — `Design/Servers § A row`'s Telegram line**:
+    /// each of `Telegram` F6's words with what to do, on a connected server
+    /// only; and the word moves what the column is told on its own, and the
+    /// page draws it last of the extra lines. *Before, nothing on the row ever
+    /// said Telegram had stopped working there.*
+    #[test]
+    fn when_telegram_refuses_the_row_says_so_with_what_to_do() {
+        use smoozy_server_protocol::requests::TheTelegramTrouble;
+        assert_eq!(
+            the_telegram_line(true, Some(TheTelegramTrouble::TheTokenIsRejected)),
+            Some(Words::plain("Telegram rejected the bot token. Change it in Settings."))
+        );
+        assert_eq!(
+            the_telegram_line(true, Some(TheTelegramTrouble::TheChatRefuses)),
+            Some(Words::plain("The bot can't message your chat. Unblock it, or create a new bot in Settings."))
+        );
+        assert_eq!(
+            the_telegram_line(true, Some(TheTelegramTrouble::TelegramIsNotReached)),
+            Some(Words::plain("This server can't reach Telegram. Messages will be sent when Telegram is reachable again."))
+        );
+        assert_eq!(the_telegram_line(false, Some(TheTelegramTrouble::TheChatRefuses)), None, "no connection, nothing said");
+        assert_eq!(the_telegram_line(true, None), None);
+
+        let server = smoozy_state::identities::Identity::issue(smoozy_state::identities::IdentityKind::LocalServer)
+            .unwrap()
+            .as_text();
+        let holds = crate::servers::the_machines_work::WhatThisRunHolds::default();
+        let connection = holds.a_connection_begins(&server);
+        let a_reading = || {
+            smoozy_state::observed::Reading::taken(
+                smoozy_queue_history::acting::adoption::TheMachinesWorkingState {
+                    jobs: Vec::new(),
+                    the_admission_point_stands_at: None,
+                    notes: Vec::new(),
+                    the_history_copys_count: 0,
+                    the_history_copys_entries: Vec::new(),
+                },
+                std::time::SystemTime::now(),
+                smoozy_state::observed::Clock::ThisComputer,
+            )
+        };
+        holds.a_reading_was_taken(&server, connection, a_reading(), None);
+        let before = what_is_told(WhatTheServersAreDoing::default(), &[a_row_named(&server)], &holds);
+        assert!(holds.the_reading_says_of_telegram(&server, connection, Some(TheTelegramTrouble::TheChatRefuses)));
+        assert!(!holds.the_reading_says_of_telegram(&server, connection, Some(TheTelegramTrouble::TheChatRefuses)), "it did not move");
+        let during = what_is_told(WhatTheServersAreDoing::default(), &[a_row_named(&server)], &holds);
+        assert_ne!(before, during, "the word moves what the column is told");
+        holds.the_connection_ended(&server);
+        assert_eq!(crate::servers::published::telegrams_trouble_on(&server), None, "it goes with the connection");
+        // **Sol's look, point 2: a reading of the ended connection that lands
+        // late puts nothing back.**
+        assert!(!holds.the_reading_says_of_telegram(&server, connection, Some(TheTelegramTrouble::TheChatRefuses)));
+        assert_eq!(crate::servers::published::telegrams_trouble_on(&server), None);
+        let next = holds.a_connection_begins(&server);
+        holds.a_reading_was_taken(&server, next, a_reading(), None);
+        assert!(!holds.the_reading_says_of_telegram(&server, connection, Some(TheTelegramTrouble::TheTokenIsRejected)), "an older connection's reading");
+        assert!(holds.the_reading_says_of_telegram(&server, next, Some(TheTelegramTrouble::TheTokenIsRejected)));
+        assert_eq!(crate::servers::published::telegrams_trouble_on(&server), Some(TheTelegramTrouble::TheTokenIsRejected));
+        assert!(holds.a_connection_begins(&server) > next);
+        assert_eq!(crate::servers::published::telegrams_trouble_on(&server), None, "a new connection starts with no word");
+
+        let page = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/web/servers.js")).unwrap();
+        assert_eq!(page.matches("row.the_telegram_line").count(), 4, "drawn on the list's row and the page's note");
+    }
+
+    /// **The Rough what-if answers, share 4 (310): `Design/Servers § A row`'s
+    /// *Setup stopped part-way* is drawn** on a connected server whose reading
+    /// names a setup holding the line, and not while this computer drives a
+    /// setup there or with no connection. *Until then the field was always
+    /// empty.* **And the reading's word moves the told column on its own.**
+    #[test]
+    fn rough_share_4_a_setup_holding_the_line_draws_the_rows_line() {
+        let line = Some(Words::plain(words::SETUP_STOPPED_PART_WAY));
+        assert_eq!(the_setup_line(true, true, false), line);
+        assert_eq!(the_setup_line(true, true, true), None, "a setup being driven reads Setting up");
+        assert_eq!(the_setup_line(false, true, false), None, "no connection, nothing about a setup");
+        assert_eq!(the_setup_line(true, false, false), None);
+        assert_eq!(words::SETUP_STOPPED_PART_WAY, "Setup stopped part-way");
+
+        let server = smoozy_state::identities::Identity::issue(smoozy_state::identities::IdentityKind::LocalServer)
+            .unwrap();
+        let holds = crate::servers::the_machines_work::WhatThisRunHolds::default();
+        let connection = holds.a_connection_begins(&server.as_text());
+        holds.a_reading_was_taken(
+            &server.as_text(),
+            connection,
+            smoozy_state::observed::Reading::taken(
+                smoozy_queue_history::acting::adoption::TheMachinesWorkingState {
+                    jobs: Vec::new(),
+                    the_admission_point_stands_at: None,
+                    notes: Vec::new(),
+                    the_history_copys_count: 0,
+                    the_history_copys_entries: Vec::new(),
+                },
+                std::time::SystemTime::now(),
+                smoozy_state::observed::Clock::ThisComputer,
+            ),
+            None,
+        );
+        let row = a_row_named(&server.as_text());
+        let before = what_is_told(WhatTheServersAreDoing::default(), std::slice::from_ref(&row), &holds);
+        holds.the_reading_says_a_setup_holds_the_line(
+            &server.as_text(),
+            connection,
+            Some(smoozy_state::identities::Identity::issue(smoozy_state::identities::IdentityKind::Operation).unwrap()),
+        );
+        assert!(holds.a_setup_holds_the_line_on(&server.as_text()));
+        let after = what_is_told(WhatTheServersAreDoing::default(), std::slice::from_ref(&row), &holds);
+        assert_ne!(before, after, "the reading's word moves what the row is told");
     }
 
     /// **The on-screen condition's two new surfaces are told by their pages**,
@@ -7097,7 +7698,7 @@ mod tests {
             // reading held is the dash (step 10c's eleventh-pass fix piece 6
             // turned this argument from *a reading is owed* to its
             // `Queue & History` A1 case).
-            the_work_column(connected, what_the_servers_are_doing(holds, None).get(&server.as_text()), false)
+            the_work_column(connected, what_the_servers_are_doing(holds, None).get(&server.as_text()))
         };
         for (round, at_the_break, at_a_periods_end) in [
             ("as the column was built", false, false),
@@ -7235,7 +7836,7 @@ mod tests {
         assert_eq!(the_work(Some(Carries::TooNew)), dash, "too new");
         assert_eq!(the_work(Some(Carries::TheUpdateWaits)), idle, "the update waits");
         assert_eq!(
-            the_work(Some(Carries::TheUpdateFailed { said: "rolled back".into() })),
+            the_work(Some(Carries::TheUpdateFailed { said: "rolled back".into(), at: WhereTheUpdateFailed::OnTheServer })),
             idle,
             "the update failed"
         );
@@ -7263,7 +7864,7 @@ mod tests {
             serde_json::to_string(&drawn.rows[0]).expect("the row serialises")
         };
         let has = |json: &str, words: &str| json.contains(Prose::new(words).as_str());
-        let cases: [(Carries, &[&str], &[&str]); 5] = [
+        let cases: [(Carries, &[&str], &[&str]); 7] = [
             (
                 Carries::TheUpdateWaits,
                 &[
@@ -7282,13 +7883,39 @@ mod tests {
             ),
             (Carries::TheUpdateIsUnderWay, &["Updating Smoozy on this server…"], &["Update now…"]),
             (
-                Carries::TheUpdateFailed { said: "the new version did not start".into() },
+                Carries::TheUpdateFailed {
+                    said: "the new version did not start".into(),
+                    at: WhereTheUpdateFailed::OnTheServer,
+                },
                 &["Smoozy on this server could not be updated.", "What the server said", "Dismiss"],
-                &["Update now…"],
+                &["Update now…", "Download details"],
+            ),
+            // **`Server protocol and transfers` B10b: the download got no
+            // response**, and the words are Smoozy's own download's.
+            (
+                Carries::TheUpdateFailed {
+                    said: "the new version did not start: …/release returned HTTP 504.".into(),
+                    at: WhereTheUpdateFailed::InTheDownload { nothing_answered: true },
+                },
+                &[
+                    "Could not download the update for Smoozy on this server: no response. Reconnect to try again.",
+                    "Download details",
+                    "Dismiss",
+                ],
+                &["Update now…", "What the server said", "could not be updated."],
+            ),
+            // A download refused for another reason keeps the plain line.
+            (
+                Carries::TheUpdateFailed {
+                    said: "the new version did not start: the release failed the signature check.".into(),
+                    at: WhereTheUpdateFailed::InTheDownload { nothing_answered: false },
+                },
+                &["Smoozy on this server could not be updated.", "Download details", "Dismiss"],
+                &["Update now…", "What the server said", "no response"],
             ),
             (
                 Carries::TooOldAndItsWorkCannotBeControlledFromHere,
-                &["Out of date. Not updated: could not read its job list."],
+                &["Smoozy on this server is out of date. Not updated: could not check for running jobs."],
                 &["Update now…", "after its jobs finish"],
             ),
             (
@@ -7304,7 +7931,7 @@ mod tests {
                 assert!(has(&json, words), "{named}: the row does not say {words:?}: {json}");
             }
             for words in absent {
-                assert!(!json.contains(words), "{named}: the row says {words:?}");
+                assert!(!json.contains(words) && !has(&json, words), "{named}: the row says {words:?}");
             }
             assert!(!json.contains("isn't responding"), "{named}: the row says Smoozy isn't responding");
             assert!(json.contains("the new version did not start") == named.starts_with("TheUpdateFailed"));
@@ -7342,6 +7969,119 @@ mod tests {
         assert_eq!(line.which.as_str(), "too-old-unknown");
     }
 
+    /// **`Desktop app and delivery` V3c: the repair's two lines**, in Design's
+    /// words — under way in the ordinary face with the work column's dash, and
+    /// not landed in the failure face with whose words they are and the cross
+    /// that clears it. **And a run refused behind the repair names the repair.**
+    #[test]
+    fn the_automatic_repair_draws_its_two_lines() {
+        use crate::servers::published::{the_server_carries, what_the_server_carries, WhatSmoozyOnTheServerIs as Carries};
+        let connected = WhatIsTrueOfTheServer {
+            a_period_stands: true,
+            the_primary_connection_is_live: true,
+            a_run_of_attempts_is_in_flight: false,
+            the_restart_mark_stands: false,
+        };
+        let under_way = the_update_line(Some(&Carries::TheRepairIsUnderWay), connected, "box", None).expect("a line");
+        assert_eq!(under_way.which.as_str(), "repairing");
+        assert_eq!(under_way.said.lead, Prose::new("Repairing Smoozy on this server…"));
+        assert!(!under_way.a_failure && under_way.update_now.is_none() && under_way.the_servers_words.is_none());
+        assert!(the_work_takes_the_dash_under(Some(&Carries::TheRepairIsUnderWay)));
+
+        let failed = Carries::TheRepairFailed { said: "No space left on device".into(), at: WhereTheUpdateFailed::OnTheServer };
+        let line = the_update_line(Some(&failed), connected, "box", None).expect("a line");
+        assert_eq!(line.which.as_str(), "repair-failed");
+        assert_eq!(line.said.lead, Prose::new("Could not repair Smoozy on this server. Set up again."));
+        assert!(line.a_failure && line.update_now.is_none());
+        let words = line.the_servers_words.expect("the server's words");
+        assert_eq!(words.words.as_str(), "No space left on device");
+        assert_eq!(words.clear.act.as_str(), THE_UPDATE_FAILURE_IS_CLEARED);
+        let download = Carries::TheRepairFailed { said: "x".into(), at: WhereTheUpdateFailed::InTheDownload { nothing_answered: true } };
+        let line = the_update_line(Some(&download), connected, "box", None).expect("a line");
+        assert_eq!(line.said.lead, Prose::new("Could not repair Smoozy on this server. Set up again."));
+        assert_eq!(
+            line.the_servers_words.expect("words").label,
+            Prose::new(crate::surface::set_up::words::DOWNLOAD_DETAILS)
+        );
+        assert!(the_update_line(Some(&failed), what_is_true_of_a_server_with_no_period(), "box", None).is_none());
+
+        let server = Identity::issue(IdentityKind::LocalServer).expect("randomness").as_text();
+        the_server_carries(&server, Some(Carries::TheRepairIsUnderWay));
+        assert_eq!(the_line_while_smoozys_own_act_holds(&server), "Repairing Smoozy on this server…");
+        the_server_carries(&server, None);
+        assert_eq!(the_line_while_smoozys_own_act_holds(&server), "Updating Smoozy on this server…");
+        assert_eq!(what_the_server_carries(&server), None);
+    }
+
+    /// **The what-if live pass of 2026-11-15, new fault 2: the server's own
+    /// page said *Smoozy isn't responding.* through the whole repair**, and
+    /// only the list's row said *Repairing Smoozy on this server…*. The page's
+    /// head draws the row's line now, in the same place and by the same rule:
+    /// the repair's lines and *too new* take the place of V1's condition and
+    /// of no other failure (`Design/Servers § A row` as added that day).
+    #[test]
+    fn the_servers_own_page_says_the_repair_where_the_row_does() {
+        let page = include_str!("../../web/servers.js");
+        let head = page
+            .split("function theSharedControlsAreDrawn(screen) {")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .expect("the head's drawing");
+        assert!(head.contains("const replaced = theLineSaysMore ? row.the_update_line.replaces : null;"), "{head}");
+        assert!(head.contains("failure.identityOrMark !== replaced"), "{head}");
+        assert!(head.contains("if (theLineSaysMore) note.appendChild(theUpdateLine(row));"), "{head}");
+        // **One rule for both places**: the row and the head ask the same
+        // question of the same line.
+        assert_eq!(page.matches("function theUpdateLineSaysMore(row) {").count(), 1);
+        assert_eq!(page.matches("const theLineSaysMore = theUpdateLineSaysMore(row);").count(), 2);
+
+        // **And run under Node**: a repairing server whose *isn't responding*
+        // stands, beside a second failure, draws the repair line and the other
+        // failure in the head, and not *isn't responding*.
+        let lift = |head: &str| {
+            let from = page.find(head).expect("the function is gone");
+            let to = from + page[from..].find("\n}\n").expect("it closes") + 3;
+            page[from..to].to_string()
+        };
+        let script = format!(
+            r#"
+function aHolder() {{
+  return {{ childNodes: [], hidden: false, textContent: "",
+    replaceChildren() {{ this.childNodes = []; }},
+    appendChild(one) {{ this.childNodes.push(one); return one; }} }};
+}}
+const holder = aHolder();
+const note = aHolder();
+const connectionPlaces = new Map([[holder, {{ note, server: "one" }}]]);
+const failuresByServer = new Map([["one", new Map([
+  ["a", {{ identityOrMark: "silent", said: "isn't responding" }}],
+  ["b", {{ identityOrMark: "other", said: "queue stopped" }}],
+])]]);
+const theConnectsNotMade = new Map();
+const pendingConnections = new Set();
+const drawnFrom = new WeakMap();
+function theConnectControl() {{ return {{ title: "" }}; }}
+function saidInto() {{}}
+function theFailureOnTheRow(failure) {{ return {{ said: failure.said }}; }}
+function theCountdown() {{ return {{}}; }}
+function theUpdateLine(row) {{ return {{ said: row.the_update_line.which }}; }}
+{says_more}
+{head}
+theSharedControlsAreDrawn({{ rows: [{{ server: "one", the_connection: {{ label: "Connected" }},
+  the_update_line: {{ which: "repairing", replaces: "silent" }} }}] }});
+console.log(note.childNodes.map((one) => one.said).join("|"));
+"#,
+            says_more = lift("function theUpdateLineSaysMore(row) {"),
+            head = lift("function theSharedControlsAreDrawn(screen) {"),
+        );
+        let Ok(ran) = std::process::Command::new("node").arg("-e").arg(&script).output() else {
+            eprintln!("SKIPPED: no Node on this computer, so the server page's head was not run");
+            return;
+        };
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "repairing|queue stopped");
+    }
+
     /// **V15: *Update now…* is offered only where the update waits and the
     /// connection is live** — never on *too old*, where the stop cannot reach
     /// the work, and never on a server not connected. **And no line stands on
@@ -7363,7 +8103,7 @@ mod tests {
             Carries::TooOldAndItsWorkCannotBeControlledFromHere,
             Carries::TooNew,
             Carries::TheUpdateIsUnderWay,
-            Carries::TheUpdateFailed { said: "x".into() },
+            Carries::TheUpdateFailed { said: "x".into(), at: WhereTheUpdateFailed::OnTheServer },
         ] {
             assert!(!the_update_now_is_offered(Some(&other), connected), "{other:?}");
             let line = the_update_line(Some(&other), connected, "box", None).expect("a line");
@@ -7525,6 +8265,7 @@ mod tests {
             (TheRemovalsEnding::CouldNotBegin, words::COULD_NOT_BEGIN, words::COULD_NOT_BEGIN_REST),
             (TheRemovalsEnding::TheClearWasRefused, words::CLEAR_REFUSED, words::CLEAR_REFUSED_REST),
             (TheRemovalsEnding::ItHalfWorked, words::HALF_WORKED, words::HALF_WORKED_REST),
+            (TheRemovalsEnding::NoAnswer, words::NO_ANSWER, words::NO_ANSWER_REST),
         ] {
             the_server_carries(&server, Some(Carries::TheUpdateWaits));
             let mut machine = AMachineThatStopsAndClears::answering(Ok(TheStopAndClearEnded::Otherwise(ending)));
@@ -7560,15 +8301,15 @@ mod tests {
         let row = a_row();
         let last = Mutex::new(None);
         let doing = WhatTheServersAreDoing::new();
-        assert!(the_work_moved(&last, what_is_told(doing.clone(), std::slice::from_ref(&row))));
-        assert!(!the_work_moved(&last, what_is_told(doing.clone(), std::slice::from_ref(&row))));
+        assert!(the_work_moved(&last, what_is_told(doing.clone(), std::slice::from_ref(&row), &crate::servers::the_machines_work::WhatThisRunHolds::default())));
+        assert!(!the_work_moved(&last, what_is_told(doing.clone(), std::slice::from_ref(&row), &crate::servers::the_machines_work::WhatThisRunHolds::default())));
         the_server_carries(&row.local_server_identifier, Some(Carries::TheUpdateIsUnderWay));
         assert!(
-            the_work_moved(&last, what_is_told(doing.clone(), std::slice::from_ref(&row))),
+            the_work_moved(&last, what_is_told(doing.clone(), std::slice::from_ref(&row), &crate::servers::the_machines_work::WhatThisRunHolds::default())),
             "the update went under way and the page was not told"
         );
         the_server_carries(&row.local_server_identifier, None);
-        assert!(the_work_moved(&last, what_is_told(doing, std::slice::from_ref(&row))));
+        assert!(the_work_moved(&last, what_is_told(doing, std::slice::from_ref(&row), &crate::servers::the_machines_work::WhatThisRunHolds::default())));
     }
 
     /// **Whether a job in the queue needs your answer moving alone tells the
@@ -7580,7 +8321,7 @@ mod tests {
     fn a_job_needing_an_answer_alone_tells_the_page() {
         let row = a_row();
         let last: Mutex<Option<(WhatIsTold, bool)>> = Mutex::new(None);
-        let told = |asking| (what_is_told(WhatTheServersAreDoing::new(), std::slice::from_ref(&row)), asking);
+        let told = |asking| (what_is_told(WhatTheServersAreDoing::new(), std::slice::from_ref(&row), &crate::servers::the_machines_work::WhatThisRunHolds::default()), asking);
         assert!(the_work_moved(&last, told(true)));
         assert!(!the_work_moved(&last, told(true)));
         assert!(the_work_moved(&last, told(false)), "the job was answered and the page was not told");
@@ -7636,7 +8377,7 @@ mod tests {
                 a_run_of_attempts_is_in_flight: false,
                 the_restart_mark_stands: false,
             };
-            for carries in [Carries::TheUpdateWaits, Carries::TheUpdateFailed { said: "x".into() }] {
+            for carries in [Carries::TheUpdateWaits, Carries::TheUpdateFailed { said: "x".into(), at: WhereTheUpdateFailed::OnTheServer }] {
                 let line = the_update_line(Some(&carries), connected, "box", None).expect("a line");
                 if let Some(now) = &line.update_now {
                     acts.push(now.act.as_str().to_string());
@@ -7871,7 +8612,8 @@ mod tests {
         let body = &after[handled..handled + 200];
         assert!(body.contains("if (press.target === name) return;"));
         assert!(body.contains("press.preventDefault();"));
-        assert!(body.contains("name.focus();"));
+        // Through the one way the focus moves (the twenty-ninth notes, piece A1).
+        assert!(body.contains("theFocusMovesTo(name);"));
         let sheet = include_str!("../../web/servers.css");
         assert!(sheet.contains(".svnamefield { display: flex; align-items: center; cursor: text; }"));
     }
@@ -7923,6 +8665,45 @@ mod tests {
             .find(|menu| menu.which.as_str() == "connected")
             .expect("the connected menu");
         assert_eq!(connected.the_connection.act.as_str(), "disconnect");
+    }
+
+    /// **`Design/Servers` as added 2026-11-11: the Add dialog's setup options
+    /// say setup may restart the server.** The four questions, scout 1.11.
+    #[test]
+    fn four_questions_1_11_the_setup_options_say_the_server_may_restart() {
+        assert_eq!(words::TICKING_EITHER, "Either option connects immediately. Setup may restart the server.");
+    }
+
+    /// **`Design/Servers` as added 2026-11-11: *Connected* and
+    /// *Reconnecting…* read *Disconnect* under the pointer**, the act a press
+    /// takes; *Connect* carries nothing to swap to. The four questions,
+    /// scout 1.10.
+    #[test]
+    fn four_questions_1_10_connected_reads_disconnect_under_the_pointer() {
+        let live = WhatIsTrueOfTheServer {
+            a_period_stands: true,
+            the_primary_connection_is_live: true,
+            a_run_of_attempts_is_in_flight: false,
+            the_restart_mark_stands: false,
+        };
+        let repairing = WhatIsTrueOfTheServer {
+            the_primary_connection_is_live: false,
+            a_run_of_attempts_is_in_flight: true,
+            ..live
+        };
+        for of in [live, repairing] {
+            let control = the_connect_control(&a_row(), of, false);
+            assert_eq!(control.act.as_str(), "disconnect");
+            assert_eq!(control.on_hover.as_ref().map(|said| said.as_str()), Some(words::DISCONNECT));
+        }
+        let control = the_connect_control(&a_row(), what_is_true_of_a_server_with_no_period(), false);
+        assert_eq!(control.on_hover, None);
+        let page = include_str!("../../web/servers.js");
+        let drawn = page.split("function theConnectControl(row, screen) {").nth(1).expect("the control");
+        let drawn = drawn.split("\n}\n").next().unwrap();
+        for wanted in ["on_hover", "mouseenter", "mouseleave", "focus", "blur"] {
+            assert!(drawn.contains(wanted), "the page does not swap the label on {wanted}");
+        }
     }
 
     /// **`Servers` P7: the connect action is withdrawn for a server marked as
@@ -8016,6 +8797,18 @@ mod tests {
         assert_eq!(nothing_known.offers.as_str(), "a-plain-confirmation");
         assert!(nothing_known.the_warning.is_none());
         assert!(nothing_known.remove.is_some());
+
+        // **The Rough what-if answers, share 2 (130): the one row that may be
+        // switched off is not shown once it is**, and the connected warning
+        // still is.
+        let switched_off = the_removal_box_from(&row, &all, stands(false, true), work, true);
+        assert_eq!(switched_off.offers.as_str(), "a-plain-confirmation");
+        assert!(switched_off.the_warning.is_none());
+        assert!(switched_off.leave_it_running.is_none());
+        assert!(switched_off.remove.is_some());
+        let still = the_removal_box_from(&row, &all, stands(true, false), work, true);
+        assert_eq!(still.offers.as_str(), "both");
+        assert!(still.the_warning.is_some());
     }
 
     /// The prose and values of a run of [`Words`], in order, as the page sets
@@ -8200,6 +8993,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         store.the_fill_in(&ended.job, &note).expect("filled in");
@@ -8380,11 +9174,9 @@ mod tests {
         );
     }
 
-    /// **`Servers` D12 and `Servers` D13, applied: a host change drops all four
-    /// machine-derived values in the same write, and the remembered setup
-    /// survives every edit.**
+    /// `Servers` D13: address edits retain the expected installation for comparison.
     #[test]
-    fn a_host_change_drops_all_four_and_the_setup_survives() {
+    fn a_host_change_drops_old_readings_keeps_the_comparison_and_the_setup_survives() {
         let mut row = a_row();
         row.remembered_hardware_reading = Some(a_reading());
         row.event_cursor = Some(9);
@@ -8400,7 +9192,7 @@ mod tests {
         );
         assert!(row.remembered_hardware_reading.is_none());
         assert!(row.event_cursor.is_none());
-        assert!(row.last_confirmed_installation_identity.is_none());
+        assert_eq!(row.last_confirmed_installation_identity.as_deref(), Some("inst"));
         assert!(row.recorded_machine_root.is_none());
         assert!(row.remembered_host_key.is_none());
         assert!(
@@ -8409,6 +9201,67 @@ mod tests {
              is for — an add whose connection failed on a wrong address is put \
              right by editing the address and connecting"
         );
+    }
+
+    #[test]
+    fn bad_batch_1_double_add_sends_once_and_a_refused_add_can_be_retried() {
+        let page = include_str!("../../web/servers.js");
+        let start = page.find("    add.addEventListener(\"click\", () => {").unwrap();
+        let end = start + page[start..].find("    row.appendChild(add);").unwrap();
+        // The same handler, with its dialog values and a delayed command reply.
+        let declaration = &page[page[..start].rfind("    const add =").unwrap()..end];
+        let script = r#"
+          const assert = require('node:assert/strict');
+          let click, calls = 0, finish;
+          const button = {dataset:{},classList:{add(){}},addEventListener(kind, f){if(kind==='click')click=f;}};
+          const document = {createElement(){return button;}};
+          const said = {}, host = {value:'host'}, port = {value:'22'}, username = {value:'user'},
+            key = {key:'key'}, name = {value:''}, picked = '', ready = {on(){return true;},box:{addEventListener(){}}},
+            blender = {on(){return false;},box:{addEventListener(){}}}, kept = null;
+          const shell = {core:{invoke(){calls++; return new Promise(resolve => {finish=resolve;});}}};
+          eval(process.argv[1]);
+          (async () => {
+            click(); click(); click();
+            assert.equal(calls, 1, 'repeated presses saved duplicate rows');
+            finish(); await new Promise(resolve => setImmediate(resolve));
+            click(); assert.equal(calls, 2, 'a refused save cannot be retried'); finish();
+          })().catch(error => {console.error(error); process.exitCode=1;});
+        "#;
+        let output = std::process::Command::new("node").arg("-e").arg(script).arg(declaration).output().expect("Node");
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    #[test]
+    fn bad_batch_1_address_and_port_edits_keep_the_installation_to_compare() {
+        for port in ["22", "2200"] {
+            let started = a_started(&format!("bad-batch-1-{port}"));
+            let connection = started.record.as_ref().unwrap().connection();
+            let key = a_key_row(Some("SHA256:first"));
+            key_rows::add(connection, &key).unwrap();
+            the_add_is_performed(&started, &an_add(&key.identifier.as_text()));
+            let mut row = the_rows_of(&started).remove(0);
+            let installation = Identity::issue(IdentityKind::Installation).unwrap();
+            row.last_confirmed_installation_identity = Some(installation.as_text());
+            row.recorded_machine_root = Some(smoozy_servers::store::RecordedMachineRoot {
+                path: "/ephemeral/smoozy".into(),
+                the_package_areas_own_location: None,
+                read_under: installation.as_text(),
+            });
+            server_rows::write(connection, &row).unwrap();
+            let answer = the_edit_is_performed(&started, None, &row.local_server_identifier,
+                if port == "22" { "203.0.113.42" } else { row.host.as_str() }, port, row.username.as_str(), &key.identifier.as_text(), "", None);
+            assert!(matches!(answer, TheAnswer::ItWasSaved));
+            let saved = the_rows_of(&started).remove(0);
+            assert_eq!(saved.last_confirmed_installation_identity, Some(installation.as_text()));
+            assert_eq!(crate::servers::installation::where_the_package_area_is(&saved),
+                crate::servers::installation::WhereThePackageAreaIs::At("/ephemeral/smoozy/package".into()));
+            assert_eq!(InstallationCheck::from_the_two_halves(Some(&installation),
+                saved.last_confirmed_installation_identity.as_deref().and_then(|id| Identity::read_back(IdentityKind::Installation, id)).as_ref(), true),
+                InstallationCheck::PresentAndEqualConfirmed);
+            let other = Identity::issue(IdentityKind::Installation).unwrap();
+            assert_eq!(InstallationCheck::from_the_two_halves(Some(&other), Some(&installation), true),
+                InstallationCheck::PresentAndDifferent, "a swapped endpoint must not be trusted");
+        }
     }
 
     /// **`Servers` D15: changing the key clears nothing**, and in particular
@@ -8651,6 +9504,8 @@ mod tests {
             the_sweep_left_behind: Vec::new(),
             record: Some(record),
             record_trouble: None,
+            the_record_is_newer_than_this_copy: false,
+            the_record_is_damaged: false,
             diary: None,
             declarations: smoozy_reporting::lines::Declarations::new(),
             what_modules_declare: crate::presentation::declarations::TheDeclarations::default(),
@@ -9014,6 +9869,95 @@ mod tests {
         assert_ne!(said, Prose::new(words::THE_CONNECTION_WAS_NOT_MADE).as_str());
     }
 
+    /// **A failed first connection says why where the attempt knows** —
+    /// `Design/Server Setup § This server` and `Design/Servers § Adding a
+    /// server`, changed 2026-11-11 (the four questions, scout 3.1). The row and
+    /// the card say *Could not connect:* and the reason; the line above the
+    /// list names the server before it. **Every reason has its own answer
+    /// key**, so the card handed the key back says the same sentence.
+    #[test]
+    fn a_reason_the_attempt_knows_is_said_on_the_row_the_card_and_the_list() {
+        use crate::servers::a_period::WhyTheConnectionWasNotMade as Why;
+        let about = TheServerItWasAbout {
+            server: "server-1".to_string(),
+            name: Some("Hyperstack".to_string()),
+        };
+        let mut keys = std::collections::BTreeSet::new();
+        for (why, sentence, clause) in [
+            (
+                Why::TheKeyWasRefused,
+                "Could not connect: the server refused the key for this username.",
+                "the server refused the key for this username.",
+            ),
+            (Why::TheHostWasNotFound, "Could not connect: host not found.", "host not found."),
+            (
+                Why::ThePortRefused,
+                "Could not connect: the server refused the connection on this port.",
+                "the server refused the connection on this port.",
+            ),
+            (
+                Why::NothingAnswered,
+                "Could not connect: no answer from this address.",
+                "no answer from this address.",
+            ),
+            (Why::ItTimedOut, "Could not connect: timed out.", "timed out."),
+            (
+                Why::TheKeyCouldNotBeLoaded,
+                "Could not connect: the key could not be loaded.",
+                "the key could not be loaded.",
+            ),
+        ] {
+            let pairs = the_pairs_of(&the_answer_about(TheAnswer::TheConnectionWasNotMadeBecause(why), &about))
+                .into_iter()
+                .collect::<std::collections::BTreeMap<_, _>>();
+            assert_eq!(pairs["said"], Prose::new(sentence).as_str(), "{why:?}");
+            assert_eq!(pairs["server"], "server-1", "{why:?}");
+            assert_eq!(pairs["couldNotConnectTo"], Prose::new(words::COULD_NOT_CONNECT_TO).as_str());
+            assert_eq!(pairs["couldNotConnectToNamed"], "Hyperstack");
+            assert_eq!(pairs["because"], Prose::new(clause).as_str(), "{why:?}");
+            assert!(keys.insert(pairs["what"].clone()), "{why:?} has a key of its own");
+            assert!(A_CONNECT_THAT_WAS_NOT_MADE_SAYS_WHY.contains(&pairs["what"].as_str()));
+            assert_eq!(what_a_failed_connect_said(&pairs["what"]), Some(sentence), "{why:?}");
+            assert_eq!(
+                what_an_ended_period_says(
+                    crate::servers::a_period::WhatTheDrivingLeft::TheConnectionWasNotMadeBecause(why),
+                    false,
+                    None
+                ),
+                Some(TheAnswer::TheConnectionWasNotMadeBecause(why))
+            );
+        }
+        // **The page's two lists carry every key** (`web/servers.js` and
+        // `web/set-up.js`, which cannot import this file).
+        for page in [include_str!("../../web/servers.js"), include_str!("../../web/set-up.js")] {
+            for key in &keys {
+                assert!(page.contains(&format!("\"{key}\"")), "{key} is missing from a page's list");
+            }
+        }
+    }
+
+    /// **Every *Could not connect* the page draws carries its Help answer's
+    /// name**, so the row, the card and the line above the list put the Help
+    /// link beside it (`Design/Whole app § Help links`, 2026-11-13). **The two
+    /// with a cause of their own carry none**: their answer is not *Could not
+    /// connect*.
+    #[test]
+    fn a_could_not_connect_carries_its_help_and_the_two_others_do_not() {
+        let about = TheServerItWasAbout { server: "server-1".to_string(), name: Some("Night box".to_string()) };
+        let said = |answer: TheAnswer| {
+            the_pairs_of(&the_answer_about(answer, &about)).into_iter().collect::<std::collections::BTreeMap<_, _>>()
+        };
+        let mut answers = vec![TheAnswer::TheConnectionWasNotMade];
+        answers.extend(EVERY_REASON.iter().map(|why| TheAnswer::TheConnectionWasNotMadeBecause(*why)));
+        assert_eq!(answers.len(), 7);
+        for answer in answers {
+            assert_eq!(said(answer.clone()).get("help").map(String::as_str), Some("could-not-connect"), "{answer:?}");
+        }
+        for answer in [TheAnswer::ItIsNotALinuxMachine, TheAnswer::TheKeysPassphraseCouldNotBeUsed("x")] {
+            assert_eq!(said(answer.clone()).get("help"), None, "{answer:?}");
+        }
+    }
+
     /// **The Creator's note 14 on the test copy: a connect that did not
     /// happen names its server**, so the page can say it where the user is —
     /// the line above the list names the server (*Could not connect to
@@ -9174,7 +10118,9 @@ mod tests {
         assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
         let out: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness answers");
         let named = format!("{} Hyperstack.", Prose::new(words::COULD_NOT_CONNECT_TO).as_str());
-        let not_linux = Prose::new(words::IT_IS_NOT_A_LINUX_MACHINE).as_str().to_string();
+        // **The other sentence names its server before it** since the UI at
+        // every size (B-14): above a list, it named none.
+        let not_linux = format!("Vast 4090: {}", Prose::new(words::IT_IS_NOT_A_LINUX_MACHINE).as_str());
         assert_eq!(out["whileAway"], serde_json::json!([named]), "{out}");
         assert_eq!(out["onArriving"], serde_json::json!([named]), "{out}");
         assert_eq!(out["two"], serde_json::json!([named, not_linux]), "{out}");
@@ -9468,6 +10414,200 @@ console.log(JSON.stringify(out));"#;
         );
     }
 
+    /// **The row's failure line is laid out as the drawing lays out
+    /// `.svfail`** — the runner's ruling on the twenty-ninth notes' piece E:
+    /// *Could not reconnect.* on one line in the name column, the cross
+    /// straight after the words, nothing else on the line, and nothing at the
+    /// window's foot. Drawn in headless Chrome from the real `web/servers.js`,
+    /// `web/the-failure-shape.js` and the application's stylesheets, at the
+    /// window's default width, fed the controls the application now hands a
+    /// row (the cross alone). **It failed before the row's rules in
+    /// `web/servers.css`**: the shape's own row layout pushed the cross to the
+    /// far end of the column. Skipped, and says so, where no Chrome is
+    /// installed.
+    #[test]
+    fn the_rows_failure_line_reads_on_one_line_with_the_cross_after_it_in_a_real_browser() {
+        let chrome = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser",
+            "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        ].into_iter().map(std::path::PathBuf::from).find(|path| path.exists());
+        let Some(chrome) = chrome else {
+            eprintln!("SKIPPED: no Chrome; the row's failure line was not measured");
+            return;
+        };
+        let folder = std::env::temp_dir().join(format!("smoozy-the-rows-line-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for entry in std::fs::read_dir(&web).expect("the page folder is readable") {
+            let path = entry.expect("an entry").path();
+            let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if path.is_file() && (extension == "js" || extension == "css") {
+                std::fs::copy(&path, folder.join(path.file_name().unwrap())).expect("the page is copied");
+            }
+        }
+        for (name, text) in THE_STAND_INS {
+            if matches!(name, "the-rail.js" | "a-server.js" | "keys.js") {
+                std::fs::write(folder.join(name), text).expect("a stand-in is written");
+            }
+        }
+        let plain = |lead: &str| serde_json::json!({ "lead": lead, "values": [], "rest": null, "the_rest_joins": false });
+        let screen = serde_json::json!({
+            "the_screens_own_name": "Servers", "add_a_server": "Add a server", "the_tools_statement": null,
+            "rows": [{
+                "server": "b2", "name": "Night box", "address": "root@198.51.100.7:22", "badge": "b4",
+                "the_key_mark": null, "the_setup_line": null, "the_work": [],
+                "the_hardware": { "state": "last-seen", "cards": { "lead": "", "values": ["2 × RTX 3090, 24\u{a0}GB each"], "rest": null, "the_rest_joins": false },
+                    "nothing_to_show": null, "memory": null, "free_disk": null, "last_seen": null },
+                "the_connection": { "label": "Connect", "act": "connect", "unavailable": false },
+                "the_menu": "", "more": "More",
+            }],
+            "footer": { "how_many": plain("1 server"), "how_many_connected": plain("0 connected") },
+            "guidance": { "heading": "", "how_it_goes": "", "steps": [], "open_keys": "", "add_a_server": "" },
+            "menus": [], "the_subject_kind": "server row",
+        });
+        let the_words = Prose::new(words::COULD_NOT_RECONNECT);
+        let failure = serde_json::json!({
+            "sequence": 5, "kind": "presentation:a-failure-is-standing", "subject": "b2", "said": {
+                "sentence": the_words.as_str(), "kind": "condition", "subject": "b2", "subjectKind": "server row",
+                "identityOrMark": "c0ffee", "key": "condition:c0ffee", "theSentenceForTheReport": words::COULD_NOT_RECONNECT,
+                "controlCount": "1", "control0Is": "cross", "control0Label": "Dismiss", "control0Act": "",
+            },
+        });
+        std::fs::write(folder.join("index.html"), format!(r#"<!doctype html><html data-theme="light"><head><meta charset="utf-8">
+<link rel="stylesheet" href="smoozy.css">
+<style>html, body {{ margin:0; height:100%; overflow:hidden; }} #out {{ display:none; }}</style></head>
+<body><div class="app"><div class="titlebar"></div><div class="pane" id="pane"><div class="body"><nav class="rail"></nav><div class="main"></div></div></div></div>
+<pre id="out"></pre>
+<script>
+window.__TAURI__ = {{ core: {{ invoke(c) {{ return Promise.resolve(c === "the_all_servers_screen" ? {screen} : null); }} }},
+  event: {{ listen(n, back) {{ window.__listener = back; return Promise.resolve(() => {{}}); }} }} }};
+</script>
+<script type="module">
+import {{ theRouteIsOpen }} from "./event-route.js";
+import "./servers.js";
+const out = document.getElementById("out");
+try {{
+  const settle = async () => {{ for (let at = 0; at < 20; at += 1) await new Promise((go) => setTimeout(go, 0)); }};
+  await theRouteIsOpen();
+  const host = document.createElement("div"); host.id = "serversview";
+  document.querySelector(".main").appendChild(host);
+  globalThis.screen.itIsDrawn(host);
+  await settle();
+  window.__listener({{ payload: {failure} }});
+  await settle();
+  const line = host.querySelector(".svrow .svextra .failure-row");
+  const words = line.querySelector(".failure-said b");
+  const cross = line.querySelector(".failure-clear");
+  const w = words.getClientRects(), c = cross.getBoundingClientRect(), last = w[w.length - 1];
+  out.textContent = JSON.stringify({{
+    wordsLines: w.length, said: words.textContent, buttons: line.querySelectorAll("button").length,
+    gap: c.left - last.right, sameLine: c.top < last.bottom && c.bottom > last.top,
+    foot: document.getElementById("the-failures") !== null,
+  }});
+}} catch (error) {{ out.textContent = JSON.stringify({{ error: String(error.stack || error) }}); }}
+</script></body></html>"#)).expect("the page is written");
+        let url = format!("file://{}", folder.join("index.html").to_string_lossy().replace('\\', "/").replace(' ', "%20"));
+        let ran = std::process::Command::new(&chrome)
+            .args(["--headless", "--disable-gpu", "--no-first-run", "--allow-file-access-from-files",
+                "--virtual-time-budget=5000", "--window-size=1245,780", "--dump-dom"])
+            .arg(format!("--user-data-dir={}", folder.join("profile").display()))
+            .arg(url)
+            .output();
+        let _ = std::fs::remove_dir_all(&folder);
+        let ran = ran.expect("the browser starts");
+        let dom = String::from_utf8_lossy(&ran.stdout);
+        let result = dom.split("<pre id=\"out\">").nth(1).and_then(|part| part.split("</pre>").next()).unwrap_or("");
+        let measured: serde_json::Value = serde_json::from_str(&result.replace("&nbsp;", "\u{a0}"))
+            .unwrap_or_else(|error| panic!("no measurement: {error}:\n{dom}"));
+        assert!(measured.get("error").is_none(), "{measured}");
+        assert_eq!(measured["said"], the_words.as_str(), "{measured}");
+        assert_eq!(measured["wordsLines"], 1, "the words wrap: {measured}");
+        assert_eq!(measured["buttons"], 1, "the line carries more than the cross: {measured}");
+        assert_eq!(measured["sameLine"], true, "the cross is not on the words' line: {measured}");
+        assert!(measured["gap"].as_f64().unwrap_or(f64::MAX) <= 12.0, "the cross is not straight after the words: {measured}");
+        assert_eq!(measured["foot"], false, "{measured}");
+    }
+
+    /// **A cross pressed on the row that did not clear says so on the row** —
+    /// L8a and F-10's rule that no press may end in nothing being said. The
+    /// application's answer, *Could not clear.*, used to be drawn only beside
+    /// the copy of the failure at the window's foot; **the twenty-ninth notes'
+    /// piece E took the foot away**, so the row draws it under its own failure.
+    /// Runs `web/servers.js` and the real `web/the-failure-shape.js` under
+    /// Node. **It failed before piece E's row half**: nothing on the row said
+    /// the clearing did not land. Skipped, and says so, where no Node is
+    /// installed.
+    #[test]
+    fn a_clearing_that_did_not_land_is_said_on_the_row() {
+        let rows = serde_json::json!([{
+            "server": "one", "name": "", "address": "", "badge": null, "the_key_mark": null,
+            "the_setup_line": null, "the_work": [],
+            "the_hardware": { "state": "never-read", "nothing_to_show": { "lead": "", "values": [], "rest": null, "the_rest_joins": false } },
+            "the_connection": { "label": "", "act": "connect", "unavailable": false },
+            "the_menu": "", "more": "",
+        }])
+        .to_string();
+        let head = THE_UPDATE_LINES_HARNESS.replace("THE_ROWS", &rows);
+        let head = &head[..head.find("await import(").expect("the harness imports the page")];
+        let harness = format!(
+            "{head}{}",
+            r#"const tell = (kind, said) => (globalThis.told.get(kind) || []).forEach((one) => one({ kind, subject: "one", said }));
+await import("./servers.js");
+const host = anElement("div");
+globalThis.screen.itIsDrawn(host);
+await settle();
+tell("presentation:a-failure-is-standing", {
+  sentence: "Could not reconnect.", kind: "condition", subject: "one", subjectKind: "server row",
+  identityOrMark: "c", key: "k", controlCount: "0",
+});
+await settle();
+const before = all(host, []).filter((one) => one.classList && one.classList.contains("svrow")).map(text).join("");
+tell("presentation:a-failure-was-not-cleared", {
+  sentence: "Could not clear.", subject: "one", subjectKind: "server row", identityOrMark: "c", key: "k",
+});
+await settle();
+const after = all(host, []).filter((one) => one.classList && one.classList.contains("svrow")).map(text).join("");
+console.log(JSON.stringify({ before, after }));"#
+        );
+        let folder = std::env::temp_dir().join(format!(
+            "smoozy-servers-not-cleared-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        std::fs::copy(web.join("servers.js"), folder.join("servers.js")).expect("the page is copied");
+        for (name, text) in THE_STAND_INS {
+            let text = match name {
+                "harness.js" => harness.clone(),
+                "the-failure-shape.js" => {
+                    std::fs::read_to_string(web.join(name)).expect("the shape is readable")
+                }
+                _ => text.to_string(),
+            };
+            std::fs::write(folder.join(name), text).expect("a stand-in is written");
+        }
+        let ran = std::process::Command::new("node")
+            .arg(folder.join("harness.js"))
+            .current_dir(&folder)
+            .output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the server list's page was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let out: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness answers");
+        let (before, after) = (out["before"].as_str().unwrap_or(""), out["after"].as_str().unwrap_or(""));
+        assert!(before.contains("Could not reconnect.") && !before.contains("Could not clear."), "{out}");
+        assert!(after.contains("Could not reconnect."), "the failure left the row: {out}");
+        assert!(after.contains("Could not clear."), "the row did not say the clearing did not land: {out}");
+    }
+
     /// **The page draws each of V13's lines, as the application composed it,
     /// and gives it the row's one extra line ahead of the key mark.** Runs
     /// `web/servers.js` under Node beside the same stand-ins, with rows the
@@ -9483,7 +10623,7 @@ console.log(JSON.stringify(out));"#;
         for (at, carries) in [
             Carries::TheUpdateWaits,
             Carries::TheUpdateIsUnderWay,
-            Carries::TheUpdateFailed { said: "rolled back".into() },
+            Carries::TheUpdateFailed { said: "rolled back".into(), at: WhereTheUpdateFailed::OnTheServer },
             Carries::TooOldAndItsWorkCannotBeControlledFromHere,
             Carries::TooNew,
         ]
@@ -9506,6 +10646,7 @@ console.log(JSON.stringify(out));"#;
             update_now: None,
             the_box: None,
             the_servers_words: None,
+            replaces: None,
         });
         rows.push(known);
         // **The update line takes the extra line from the key mark.**
@@ -9651,7 +10792,12 @@ console.log(JSON.stringify(rows.map((row) => {
 })));"#;
 
     /// The stand-ins the harness above loads `web/servers.js` beside.
-    const THE_STAND_INS: [(&str, &str); 10] = [
+    const THE_STAND_INS: [(&str, &str); 12] = [
+        // The real Help links, which the page imports (2026-11-13).
+        ("help-links.js", include_str!("../../web/help-links.js")),
+        // The real one way the focus moves, which the page imports (the
+        // twenty-ninth notes, piece A1).
+        ("the-focus-moves.js", include_str!("../../web/the-focus-moves.js")),
         // The real drawing of a value, which the page imports (step 10c,
         // dependency wave piece 10a).
         ("the-value-drawn.js", include_str!("../../web/the-value-drawn.js")),
@@ -10029,7 +11175,7 @@ console.log(JSON.stringify({
         let boxes = the_boxes();
         for (came_to, which, lead) in [
             (Came::NothingWasChanged, "could-not-begin", words::COULD_NOT_BEGIN),
-            (Came::NothingCameBack, "could-not-begin", words::COULD_NOT_BEGIN),
+            (Came::NothingCameBack, "no-answer", words::NO_ANSWER),
             (Came::TheClearWasRefused, "the-clear-was-refused", words::CLEAR_REFUSED),
             (Came::TheRenderHadNotStopped, "it-half-worked", words::HALF_WORKED),
         ] {
@@ -10183,6 +11329,10 @@ console.log(JSON.stringify({
         let out: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness answers");
         assert_eq!(out["shown"], serde_json::json!(["it-half-worked"]), "{out}");
         assert!(out["heading"].as_str().unwrap_or_default().contains(Prose::new(words::STOPPING_WORK_ON).as_str()), "{out}");
+        // **The Rough what-if answers, share 2, 129: the box says the server
+        // still bills**, above *Remove anyway*, which forgets a server whose
+        // work may still run.
+        assert_eq!(out["bills"], serde_json::json!(Prose::new(words::RUNS_AND_BILLS).as_str()), "{out}");
         assert_eq!(
             out["again"],
             serde_json::json!({ "command": "an_act_that_needs_a_connection", "act": "stop-and-clear", "marked": true, "second": false }),
@@ -10316,6 +11466,7 @@ const shown = box
     })
   : [];
 const heading = box ? text(box.children[0]) : "";
+const bills = box ? all(box, []).find((one) => one.classList && one.classList.contains("svbills")) : null;
 const buttons = box ? all(box, []).filter((one) => one.tag === "button") : [];
 const [again, anyway] = buttons;
 const before = invoked.length;
@@ -10332,6 +11483,7 @@ const pressedAnyway = invoked.slice(beforeAnyway);
 console.log(JSON.stringify({
   shown,
   heading,
+  bills: bills ? text(bills) : null,
   again: { command: pressedAgain[0].command, act: pressedAgain[0].act, marked, second: pressedAgain.length > 1 },
   anyway: { command: pressedAnyway[0].command, reachesTheMachine: pressedAnyway[0].reachesTheMachine },
   afterTheAnswer,
@@ -10549,17 +11701,12 @@ console.log(JSON.stringify({
         );
     }
 
-    /// **Step 10c's eleventh pass, *Smaller* 1–2: the list read *Idle* while a
-    /// job rendered, right after a *Connect*, and the page header read the dash
-    /// where the list read *Idle*.** A connected server with no reading held
-    /// said *Idle* unless step 7 was already known to owe one — so from the
-    /// connect until the check had settled, *Idle* was said of a machine
-    /// nobody had read. **The dash until a reading lands, except where the
-    /// check has said the machine holds no Smoozy of this installation**
-    /// (`Queue & History` A1: nothing on it is read as Smoozy's at all), which
-    /// stays *Idle*. The server's own head reads the same words at every step.
+    /// `Design/Servers § A row`, the runner's ruling of 2026-11-11:
+    /// confirmed absent or another copy's installation reads Not set up.
+    /// Unknown work keeps the dash; an empty queue reads Idle. The list and
+    /// the server's heading must agree throughout.
     #[test]
-    fn a_connected_server_with_no_reading_reads_the_dash_until_one_lands() {
+    fn a_connected_server_with_no_installation_reads_not_set_up_and_unknown_work_reads_the_dash() {
         use crate::servers::a_period::WhatTheLastConnectionRead;
         let row = a_row();
         let server = row.local_server_identifier.clone();
@@ -10581,6 +11728,7 @@ console.log(JSON.stringify({
         };
         let dash = || vec![the_dash()];
         let idle = || vec![Words::plain(WhatTheColumnSays::Idle.the_word())];
+        let not_set_up = || vec![Words::plain("Not set up")];
 
         // **Connected, and the check has not settled**: nothing is known.
         assert_eq!(the_work(), dash(), "connected with nothing read");
@@ -10597,13 +11745,17 @@ console.log(JSON.stringify({
         // **An earlier connection's check is not this one's.**
         register.a_connection_read(&server, read(InstallationCheck::Absent, false));
         assert_eq!(the_work(), dash(), "another connection's absent branch");
+        register.a_connection_read(&server, read(InstallationCheck::PresentAndDifferent, false));
+        assert_eq!(the_work(), dash(), "another connection's different installation");
+        register.a_connection_read(&server, read(InstallationCheck::PresentAndTheSupervisorDidNotAnswer, true));
+        assert_eq!(the_work(), dash(), "a present installation that does not answer");
 
-        // **`Queue & History` A1's case: no Smoozy of this installation on the
-        // machine** — Idle.
+        // `Queue & History` A1 reads no work from another installation.
+        // The runner's wording says why no work can be read here.
         register.a_connection_read(&server, read(InstallationCheck::Absent, true));
-        assert_eq!(the_work(), idle(), "a machine with no Smoozy on it");
+        assert_eq!(the_work(), not_set_up(), "a machine with no Smoozy on it reads Not set up");
         register.a_connection_read(&server, read(InstallationCheck::PresentAndDifferent, true));
-        assert_eq!(the_work(), idle(), "another installation's machine");
+        assert_eq!(the_work(), not_set_up(), "another installation's machine reads Not set up");
 
         // **The reading lands holding nothing live** — Idle, because Smoozy knows.
         register.a_connection_read(&server, read(InstallationCheck::PresentAndEqualConfirmed, true));
@@ -10711,8 +11863,9 @@ console.log(JSON.stringify({
         let _ = std::fs::remove_dir_all(&folder);
         std::fs::create_dir_all(&folder).expect("a scratch folder");
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
-        for page in ["servers.js", "keys.js", "the-value-drawn.js"] {
+        for page in ["servers.js", "keys.js", "the-value-drawn.js", "help-links.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_KEY_CONTROLS_STAND_INS {
             let text = if name == "harness.js" {
@@ -11053,6 +12206,26 @@ export function theRailIsReadAgain() {}"#
             "theGoneKeyIsPressed": { "open": true, "asked": false },
         });
         assert_eq!(got, wanted);
+    }
+
+    /// **The twenty-eighth notes, piece 12: the dialog's list grew behind its
+    /// draw whoever wrote the row.** On a real line the copy's one key sat in
+    /// the usual location before the copy first opened, and the Add dialog's Key
+    /// stayed empty: the list was read before the key's row was written, and the
+    /// row was written by another pass than the dialog's own, so the dialog's
+    /// pass found nothing new, said nothing, and checked only the keys it had
+    /// drawn — none. Now the rows read after the pass are compared with the keys
+    /// drawn. **A key gone is not growth**, and **a row the list does not draw**
+    /// (no fingerprint) never asks again, so the asking cannot go round for good.
+    #[test]
+    fn twenty_eighth_12_the_dialogs_list_grows_whoever_wrote_the_row() {
+        let only = a_named_key("live-28", Some("SHA256:P4fIUKAsqq6pZpeGop"));
+        let unprinted = a_named_key("old", None);
+        let id = only.identifier.as_text();
+        assert!(the_list_grew_behind_its_draw(&[], std::slice::from_ref(&only)), "a row written by another pass");
+        assert!(!the_list_grew_behind_its_draw(std::slice::from_ref(&id), std::slice::from_ref(&only)));
+        assert!(!the_list_grew_behind_its_draw(std::slice::from_ref(&id), &[]), "a key gone is not growth");
+        assert!(!the_list_grew_behind_its_draw(&[], std::slice::from_ref(&unprinted)), "a row the list does not draw");
     }
 
     /// **Where exactly one usable key exists, the Add dialog opens with it
@@ -11936,7 +13109,10 @@ console.log(JSON.stringify(out));
     /// `web/keys.js` beside. **The rail mounts a screen the way
     /// `web/the-rail.js` does** — drawn on its first showing, put away when
     /// another is shown — which is what the New key dialog's opening rests on.
-    const THE_KEY_CONTROLS_STAND_INS: [(&str, &str); 8] = [
+    const THE_KEY_CONTROLS_STAND_INS: [(&str, &str); 9] = [
+        // The real one way the focus moves, which the page imports (the
+        // twenty-ninth notes, piece A1).
+        ("the-focus-moves.js", include_str!("../../web/the-focus-moves.js")),
         ("package.json", r#"{ "type": "module" }"#),
         (
             "a-server.js",
@@ -12157,6 +13333,13 @@ console.log(JSON.stringify(out));"#,
             nothing(vec![Prose::new(words::RUNPODS_PROXIED_LINE)])
         );
         assert_eq!(read("203.0.113.7"), nothing(Vec::new()));
+        // **`Servers` PL2a, the leftovers of the Rough what-if answers (112):
+        // a line through a jump host says so under Host**; before, the jump
+        // was dropped without a word.
+        assert_eq!(
+            read("ssh -J bastion@203.0.113.9 root@10.0.0.5"),
+            filled("10.0.0.5", "22", "root", &["Jump hosts are not supported."])
+        );
         // **The dialog says the paste works.**
         assert_eq!(the_add_dialog_from(&[]).host_placeholder, Prose::new(words::HOST_OR_PASTE));
     }
@@ -12247,6 +13430,120 @@ export function theRailIsReadAgain() {}"#
         });
         assert_eq!(got, wanted);
     }
+
+    /// **The four questions, scout 2.12 (Sol's narrowed form): Username's
+    /// placeholder gives the two usual ones** — `Design/Servers § Adding a
+    /// server`, added 2026-11-12. Before, the field started blank.
+    #[test]
+    fn fifth_part_2_12_username_has_an_example() {
+        assert_eq!(the_add_dialog_from(&[]).username_placeholder, Prose::new("root or ubuntu"));
+        let page = include_str!("../../web/servers.js");
+        assert!(page.contains("username.placeholder = said.username_placeholder;"));
+    }
+
+    /// **The four questions, scout 4.11: the guide link in Add a server keeps
+    /// what was typed** — `Design/Servers`, the guidance bullet, added
+    /// 2026-11-12. The dialog closes and the guidance shows; the next *Add a
+    /// server* opens with the fields and ticks as they were, and only once: a
+    /// dialog opened after *Cancel* is empty. Before, everything typed was
+    /// lost. Run in Node on the real page, as the paste test is; skipped, and
+    /// says so, where no Node is installed.
+    #[test]
+    fn fifth_part_4_11_the_guide_link_keeps_what_was_typed() {
+        let page = include_str!("../../web/servers.js");
+        assert!(page.contains("theAddDialogKept = {"), "the link keeps nothing");
+        let drawn = the_screen_from(&[], &[], None, None, &Default::default());
+        let dialog = the_add_dialog_from(&[]);
+        let prefix = THE_RENAME_HARNESS
+            .split("const theScreen = THE_SCREEN;")
+            .next()
+            .expect("the harness's document");
+        let harness = format!("{prefix}{THE_GUIDE_SCENARIO}")
+            .replace("THE_SCREEN", &serde_json::to_string(&drawn).expect("the screen serialises"))
+            .replace("THE_DIALOG", &serde_json::to_string(&dialog).expect("the dialog serialises"));
+        let folder = std::env::temp_dir().join(format!("smoozy-servers-guide-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let page = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web/servers.js");
+        std::fs::copy(&page, folder.join("servers.js")).expect("the page is copied");
+        for (name, text) in THE_STAND_INS {
+            let text = match name {
+                "harness.js" => harness.clone(),
+                "the-rail.js" => r#"export const ALL_SERVERS = "serversview";
+export const A_SERVER = "machineview";
+export const KEYS = "keysview";
+export function aScreenIsRegistered(screen) { globalThis.screen = screen; }
+export function theCurrentPlace() { return ALL_SERVERS; }
+export function theCurrentPlaceIs(place, which) { (globalThis.went ||= []).push([place, which]); }
+export function theRailIsReadAgain() {}"#
+                    .to_string(),
+                _ => text.to_string(),
+            };
+            std::fs::write(folder.join(name), text).expect("a stand-in is written");
+        }
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the guide link was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness answers");
+        let wanted = serde_json::json!({
+            "theGuideClosedTheDialog": true,
+            "keptAfterTheGuide": ["203.0.113.7", "2222", "ubuntu", "Big one"],
+            "theTickIsKept": true,
+            "emptyAfterCancel": ["", "22", "", ""],
+        });
+        assert_eq!(got, wanted);
+    }
+
+    /// **The scenario for [`fifth_part_4_11_the_guide_link_keeps_what_was_typed`]**.
+    const THE_GUIDE_SCENARIO: &str = r#"const theScreen = THE_SCREEN;
+const theDialog = THE_DIALOG;
+window.__TAURI__ = {
+  core: {
+    invoke(command) {
+      if (command === "the_all_servers_screen") return Promise.resolve(theScreen);
+      if (command === "the_add_dialog") return Promise.resolve(theDialog);
+      return Promise.resolve(null);
+    },
+  },
+};
+const settle = async () => { for (let at = 0; at < 4; at += 1) await new Promise((done) => setImmediate(done)); };
+await import("./servers.js");
+const host = anElement("div");
+globalThis.screen.itIsDrawn(host);
+await settle();
+const theBox = () => all(host).find((one) => one.classList && one.classList.contains("mbox")) || null;
+const theAddIsPressed = async () => {
+  fire(all(host).find((one) => one.tag === "button" && text(one) === theScreen.add_a_server), "click");
+  await settle();
+};
+const theFields = () => all(theBox()).filter((one) => one.tag === "input");
+const theValues = () => theFields().map((one) => one.value);
+const theFirstTick = () => all(theBox()).find((one) => one.classList && one.classList.contains("box") && one.classList.contains("plain"));
+const out = {};
+await theAddIsPressed();
+const [hostField, port, username, name] = theFields();
+hostField.value = "203.0.113.7";
+port.value = "2222";
+username.value = "ubuntu";
+name.value = "Big one";
+fire(theFirstTick(), "click");
+fire(all(theBox()).find((one) => one.tag === "button" && text(one) === theDialog.the_guidance_again), "click");
+await settle();
+out.theGuideClosedTheDialog = theBox() === null;
+await theAddIsPressed();
+out.keptAfterTheGuide = theValues();
+out.theTickIsKept = theFirstTick().classList.contains("on");
+fire(all(theBox()).find((one) => one.tag === "button" && text(one) === theDialog.cancel), "click");
+await settle();
+await theAddIsPressed();
+out.emptyAfterCancel = theValues();
+console.log(JSON.stringify(out));
+"#;
 
     /// **The scenario for
     /// [`the_add_dialog_opens_in_host_and_a_pasted_line_fills_its_fields`]**,
@@ -12351,6 +13648,7 @@ console.log(JSON.stringify(out));
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         crate::record::job_records::JobRecords::over(connection)
@@ -12380,5 +13678,91 @@ console.log(JSON.stringify(out));
         let drawn = history[0];
         assert!(drawn.said.contains_key("hrow0Removed"), "the job is not in Removed servers: {:?}", drawn.said.keys());
         assert!(drawn.said.contains_key("theRemovedServers"));
+    }
+}
+
+/// **The four questions, batch 3: words a user can't act on** (2026-11-11).
+/// Each line is in the user's words, by `Preparation/Groundwork/Rules.md`
+/// Rule 1 and Rule 9. Written before the words changed, and failed first.
+#[cfg(test)]
+mod the_four_questions_batch_3 {
+    use super::*;
+
+    /// Scout 3.6; and 3.7 put back to the Creator's shortening of 2026-09-27
+    /// (the four questions, batch 4, on the build runner's word: the line sits
+    /// on the server's own row).
+    #[test]
+    fn the_row_keeps_the_short_words_and_an_out_of_date_one_says_why() {
+        assert_eq!(words::SMOOZY_ISNT_RESPONDING, "Smoozy isn't responding.");
+        assert_eq!(
+            words::TOO_OLD_CANNOT_TELL,
+            "Smoozy on this server is out of date. Not updated: could not check for running jobs."
+        );
+    }
+}
+
+#[cfg(test)]
+mod third_part_words {
+    use super::*;
+    #[test]
+    fn third_part_3_45_connection_details_say_the_consequence() {
+        assert_eq!(words::THE_PASSPHRASE_IS_NOT_HELD, "Automatic reconnect starts after you connect with the passphrase.");
+        assert_eq!(words::IDENTITY_CHANGED, "— host key changed");
+        assert_eq!(words::IDENTITY_CHANGED_SAID, "This address now has a different host key.");
+        assert_eq!(words::ACCEPTING_IS_A_DECISION, "Accepting trusts the server without verifying it.");
+    }
+}
+
+/// **The second live pass's fault 8: a reading that changes nothing about a
+/// server does not rebuild its *Connect*.** Right after opening, a burst of
+/// readings rebuilt the control several times, and a press that landed on the
+/// button being replaced did nothing. The page's own
+/// `theSharedControlsAreDrawn` is lifted and run under Node: drawn three times
+/// from one screen it builds the control once, and again when the row moves.
+/// **Skipped, and says so, where no Node is installed.**
+#[cfg(test)]
+mod the_second_live_pass {
+    #[test]
+    fn an_unchanged_reading_does_not_rebuild_connect() {
+        let page = include_str!("../../web/servers.js");
+        let at = page.find("const drawnFrom = new WeakMap();").expect("the held drawing is gone");
+        let from = page[at..].find("function theSharedControlsAreDrawn(screen) {").expect("the drawing is gone") + at;
+        let to = from + page[from..].find("\n}\n").expect("it closes") + 3;
+        let lifted = format!("{}\n{}", &page[at..at + "const drawnFrom = new WeakMap();".len()], &page[from..to]);
+        let script = format!(
+            r#"
+function aHolder() {{
+  return {{ childNodes: [], hidden: false, textContent: "",
+    replaceChildren() {{ this.childNodes = []; }},
+    appendChild(one) {{ this.childNodes.push(one); return one; }} }};
+}}
+let built = 0;
+const holder = aHolder();
+const note = aHolder();
+const connectionPlaces = new Map([[holder, {{ note, server: "one" }}]]);
+const failuresByServer = new Map();
+const theConnectsNotMade = new Map();
+const pendingConnections = new Set();
+function theConnectControl() {{ built += 1; return {{ title: "" }}; }}
+function saidInto() {{}}
+function theFailureOnTheRow() {{ return {{}}; }}
+function theCountdown() {{ return {{}}; }}
+function theUpdateLineSaysMore() {{ return false; }}
+function theUpdateLine() {{ return {{}}; }}
+{lifted}
+const screen = {{ rows: [{{ server: "one", the_connection: {{ label: "Connect" }} }}] }};
+for (let i = 0; i < 3; i += 1) theSharedControlsAreDrawn(JSON.parse(JSON.stringify(screen)));
+const moved = {{ rows: [{{ server: "one", the_connection: {{ label: "Connected" }} }}] }};
+theSharedControlsAreDrawn(moved);
+theSharedControlsAreDrawn(moved);
+console.log(built);
+"#
+        );
+        let Ok(ran) = std::process::Command::new("node").arg("-e").arg(&script).output() else {
+            eprintln!("SKIPPED: no Node on this computer, so the Servers page was not run");
+            return;
+        };
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        assert_eq!(String::from_utf8_lossy(&ran.stdout).trim(), "2", "an unchanged reading rebuilt Connect");
     }
 }

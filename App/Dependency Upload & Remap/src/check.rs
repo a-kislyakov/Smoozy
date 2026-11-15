@@ -66,6 +66,16 @@ pub fn the_version_to_read_with(resolution: &Resolution) -> Result<BlenderIdenti
 /// them. Split at step 10c piece 3.
 pub use smoozy_dependencies_machine::check::Kind;
 
+/// **A picture stored as a sequence, and a colour name the reading Blender
+/// lacks** — `Dependency Upload & Remap`, *Colour spaces and image sequences*.
+/// The rules live in `smoozy-dependencies-machine`, beside the script that
+/// carries what they read, so the desk can hold the two together.
+pub use smoozy_dependencies_machine::check::{
+    the_colour_names_not_found, the_file_a_number_reads, the_files_a_sequence_needs,
+    the_number_a_frame_reads, the_sequences_pattern, AColourNameNotFound, ASequencesUser,
+    TheSequencesUsers, WhichColourName,
+};
+
 /// **The three kinds on G6's list the reading produces no reference for**, each
 /// a named absence with what breaks rather than a silent drop.
 ///
@@ -185,6 +195,10 @@ pub struct ReadReference {
     /// the key. **Nothing for every other kind**, and for a reading from a
     /// server program older than this: serde's own rule for an absent field.
     pub the_files_own_text: Option<RecordedLocation>,
+    /// **A picture stored as `SEQUENCE`: every node the reading found showing
+    /// it** (*Colour spaces and image sequences*). Nothing for every other
+    /// reference, and for a reading from a server program older than this.
+    pub sequence: Option<TheSequencesUsers>,
 }
 
 impl ReadReference {
@@ -255,6 +269,12 @@ pub struct ReadingDocument {
     /// observed and never inferred from an absence, so a reading that cannot
     /// see a stand-in leaves this empty and says nothing.
     pub observed_stand_ins: Vec<RecordedLocation>,
+    /// **The colour names the Blender that read the file said it does not
+    /// have** (*Colour spaces and image sequences*), read off the reading's two
+    /// streams by [`crate::acting::checking::what_the_streams_left`] and never
+    /// written by the script: Blender says them, and the script cannot read
+    /// them back.
+    pub colour_names_not_found: Vec<AColourNameNotFound>,
 }
 
 /// What the invocation left behind — the acting half captures it, and
@@ -489,6 +509,38 @@ pub fn how_the_render_reads_it(
             the_expression: the_expression.as_bytes().to_vec(),
         },
     }
+}
+
+/// **A picture stored as `SEQUENCE`, read as a set** (*Colour spaces and image
+/// sequences*, with G9 and G22): its recorded location with the last run of
+/// digits in its name written as that many `#`, which is what G22's listing,
+/// F27, F28, the shift, Q5 and the send then look for. **K4's key stays the
+/// recorded bytes**, as G9a's does. Nothing for every other reference, and for a
+/// name the rule does not reach — no digits, a set's own marks, digits in the
+/// ending — which stays as it was.
+pub fn how_a_sequence_is_read(reference: &ReadReference) -> Option<RecordedLocation> {
+    if reference.kind != Kind::Image || reference.source.as_deref() != Some("SEQUENCE") {
+        return None;
+    }
+    let bytes = reference.recorded.as_bytes();
+    let name = reference.recorded.wanted_name();
+    let pattern = the_sequences_pattern(name)?;
+    let folder = &bytes[..bytes.len() - name.len()];
+    Some(RecordedLocation::as_the_reading_carried_it(&[folder, &pattern[..]].concat()))
+}
+
+/// **The files a picture stored as a sequence needs over the job's frames**
+/// (*Colour spaces and image sequences*): nothing where the job's frames are not
+/// known, where the reference is not one [`how_a_sequence_is_read`] reads as a
+/// set, or where the reading carried no users for it.
+pub fn the_files_the_jobs_frames_need(
+    reference: &ReadReference,
+    the_jobs_frames: Option<&[i64]>,
+) -> Option<Vec<Vec<u8>>> {
+    how_a_sequence_is_read(reference)?;
+    let users = reference.sequence.as_ref()?;
+    the_files_a_sequence_needs(reference.recorded.wanted_name(), users, the_jobs_frames?)
+        .map(|needed| needed.into_iter().collect())
 }
 
 /// **G9a's statement, in V3a's class**: not a row, no action, nothing to
@@ -924,6 +976,10 @@ struct TheDocumentAsTheReadingWroteIt {
     observed_stand_ins: Vec<RecordedLocation>,
     #[serde(default)]
     shipped_with_this_blender: Vec<RecordedLocation>,
+    /// A document written by this crate keeps what the streams said; the
+    /// script's own carries none.
+    #[serde(default)]
+    colour_names_not_found: Vec<AColourNameNotFound>,
 }
 
 impl From<TheDocumentAsTheReadingWroteIt> for ReadingDocument {
@@ -934,6 +990,7 @@ impl From<TheDocumentAsTheReadingWroteIt> for ReadingDocument {
             weak_references,
             observed_stand_ins,
             shipped_with_this_blender,
+            colour_names_not_found,
         } = wrote;
         ReadingDocument {
             references: references
@@ -945,6 +1002,7 @@ impl From<TheDocumentAsTheReadingWroteIt> for ReadingDocument {
             flat_list,
             weak_references,
             observed_stand_ins,
+            colour_names_not_found,
         }
     }
 }
@@ -1049,6 +1107,7 @@ pub mod tests {
             flat_list: Vec::new(),
             weak_references: Vec::new(),
             observed_stand_ins: Vec::new(),
+            colour_names_not_found: Vec::new(),
         };
         let mut document = read(vec![
             a_reference(Kind::PhysicsPointCache, "Cloth", b"//blendcache_cloth (3)/"),
@@ -1099,6 +1158,7 @@ pub mod tests {
             scenes: Attribution::NotEstablished,
             source: None,
             the_files_own_text: None,
+            sequence: None,
         }
     }
 
@@ -1185,6 +1245,7 @@ pub mod tests {
             flat_list: vec![],
             weak_references: vec![],
             observed_stand_ins: vec![],
+            colour_names_not_found: Vec::new(),
         };
         assert_eq!(
             judge(
@@ -1446,7 +1507,7 @@ pub mod tests {
 
     #[test]
     fn the_applications_own_entry_is_recognised_by_presence_and_every_occurrence_is_excluded() {
-        let brushes = recorded(b"/Applications/Blender.app/Contents/Resources/4.5/datafiles/assets/brushes/essentials_brushes-gp_draw.blend");
+        let brushes = recorded(b"/Applications/Blender 5.2.4.app/Contents/Resources/5.2/datafiles/assets/brushes/essentials_brushes-gp_draw.blend");
         let users = recorded(b"//lib/chairs.blend");
         let document = ReadingDocument {
             references: vec![a_reference(Kind::Library, "LIchairs", users.as_bytes())],
@@ -1468,6 +1529,7 @@ pub mod tests {
                 },
             ],
             observed_stand_ins: vec![],
+            colour_names_not_found: Vec::new(),
         };
         let excluded = the_applications_own_entries(&document);
         assert_eq!(excluded.len(), 2);
@@ -1504,7 +1566,7 @@ pub mod tests {
     }
 
     const THE_ESSENTIALS_AS_THE_CREATORS_FILE_RECORDS_IT: &[u8] =
-        b"//../../../Applications/Blender.app/Contents/Resources/5.1/datafiles/assets/nodes/geometry_nodes_essentials.blend";
+        b"//../../../Applications/Blender 5.2.4.app/Contents/Resources/5.2/datafiles/assets/nodes/geometry_nodes_essentials.blend";
 
     /// **G27a, the map's first test**: the Creator's own case, a library
     /// recorded into the Mac's Blender, where the server's Blender holds
@@ -1567,7 +1629,7 @@ pub mod tests {
     fn the_mark_is_never_a_string_test_on_the_path() {
         // A path that looks like an application's is a user's own reference
         // where a datablock holds it.
-        let looks_like_the_app = recorded(b"/Applications/Blender.app/x.blend");
+        let looks_like_the_app = recorded(b"/Applications/Blender 5.2.4.app/x.blend");
         let document = ReadingDocument {
             references: vec![a_reference(
                 Kind::Library,
@@ -1580,6 +1642,7 @@ pub mod tests {
                 id_name: "MAx".to_string(),
             }],
             observed_stand_ins: vec![],
+            colour_names_not_found: Vec::new(),
         };
         assert!(the_applications_own_entries(&document).is_empty());
     }
@@ -1592,6 +1655,7 @@ pub mod tests {
             flat_list: vec![],
             weak_references: vec![],
             observed_stand_ins: vec![],
+            colour_names_not_found: Vec::new(),
         };
         assert!(linked_item_statements(&document).is_empty());
         document.observed_stand_ins.push(library.clone());
@@ -1790,5 +1854,68 @@ pub mod tests {
         assert!(rows
             .iter()
             .any(|row| row.references == vec![recorded(b"//bake/")]));
+    }
+}
+
+#[cfg(test)]
+mod a_picture_stored_as_a_sequence {
+    use super::*;
+
+    fn a_picture(recorded: &[u8], source: &str, sequence: Option<TheSequencesUsers>) -> ReadReference {
+        ReadReference {
+            kind: Kind::Image,
+            datablock: "Seq".to_string(),
+            setting: "filepath".to_string(),
+            recorded: RecordedLocation::as_the_reading_carried_it(recorded),
+            scenes: Attribution::Established(vec!["Scene".to_string()]),
+            source: Some(source.to_string()),
+            the_files_own_text: None,
+            sequence,
+        }
+    }
+
+    /// *Colour spaces and image sequences*: a picture stored as `SEQUENCE` is
+    /// read as a set by its last run of digits; one file, or a name the rule
+    /// does not reach, stays as it was.
+    #[test]
+    fn a_sequence_is_read_as_a_set_and_nothing_else_is() {
+        let read = |reference: &ReadReference| how_a_sequence_is_read(reference).map(|one| one.as_bytes().to_vec());
+        assert_eq!(read(&a_picture(b"//plates/sh010_v2/b_0001.png", "SEQUENCE", None)), Some(b"//plates/sh010_v2/b_####.png".to_vec()));
+        assert_eq!(read(&a_picture(b"//plates/b_0001.png", "FILE", None)), None);
+        assert_eq!(read(&a_picture(b"//plates/plain.png", "SEQUENCE", None)), None);
+        assert_eq!(read(&a_picture(b"//plates/b_####.png", "SEQUENCE", None)), None);
+        let pattern = how_a_sequence_is_read(&a_picture(b"//plates/b_0001.png", "SEQUENCE", None)).unwrap();
+        assert!(matches!(classify(&pattern, StoredSource::NotSaidToBeOneFile), Form::ASet(_)));
+    }
+
+    #[test]
+    fn the_files_the_jobs_frames_need_wait_on_the_frames_and_the_users() {
+        let users = TheSequencesUsers {
+            users: vec![ASequencesUser { start: 5, offset: 2, frames: 6, cyclic: false }],
+            other_users: false,
+        };
+        let seq = a_picture(b"//q/q_0001.png", "SEQUENCE", Some(users));
+        let needed = the_files_the_jobs_frames_need(&seq, Some(&[1, 7, 12])).unwrap();
+        assert_eq!(needed, vec![b"q_0002.png".to_vec(), b"q_0005.png".to_vec(), b"q_0008.png".to_vec()]);
+        assert_eq!(the_files_the_jobs_frames_need(&seq, None), None);
+        assert_eq!(the_files_the_jobs_frames_need(&a_picture(b"//q/q_0001.png", "SEQUENCE", None), Some(&[1])), None);
+    }
+
+    /// The streams' colour names survive a document written and read again, as
+    /// a kept reading's is.
+    #[test]
+    fn a_documents_colour_names_survive_writing_it() {
+        let document = ReadingDocument {
+            references: vec![],
+            flat_list: vec![],
+            weak_references: vec![],
+            observed_stand_ins: vec![],
+            colour_names_not_found: vec![AColourNameNotFound { which: WhichColourName::Display, name: "Smoozy Display".to_string() }],
+        };
+        let back: ReadingDocument = serde_json::from_slice(&serde_json::to_vec(&document).unwrap()).unwrap();
+        assert_eq!(back, document);
+        let scripts: ReadingDocument =
+            serde_json::from_slice(br#"{"references":[],"flat_list":[],"weak_references":[],"observed_stand_ins":[]}"#).unwrap();
+        assert!(scripts.colour_names_not_found.is_empty());
     }
 }

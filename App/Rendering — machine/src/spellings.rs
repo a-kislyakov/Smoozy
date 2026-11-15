@@ -51,9 +51,9 @@
 use crate::versions::TheFourVersions;
 
 /// **The 5.3 lookup of 2026-10-02 — the source of every 5.3 arm below.** The
-/// Creator's own install, `/Applications/Blender 5.3.0a.app`, which answered
+/// Creator's own install, then named `Blender 5.3.0a.app`, which answered
 /// *5.3.0 Alpha*, build hash `68609be8e23b`, built 2026-10-01, run with no
-/// window beside 5.2.2 (`/Applications/Blender.app`, hash `d13f752e3b9c`):
+/// window beside 5.2.2 (then named `Blender.app`, hash `d13f752e3b9c`):
 /// its help text, its whole property lists for every structure the
 /// composition and the launch material reach, and Smoozy's composed line's
 /// shape rendering two frames on the processor. **Every name here, and every
@@ -67,9 +67,10 @@ use crate::versions::TheFourVersions;
 /// under its own entry for this lookup.
 ///
 /// **The same reading off the 5.3.0 Beta, 2026-11-02.** The arms below still cite
-/// the alpha; this says the beta agrees. `/Applications/Blender 5.3b.app`, which
+/// the alpha; this says the beta agrees. The install was then named
+/// `Blender 5.3b.app` and
 /// answered *5.3.0 Beta*, build hash `5d8151335b6b`, built 2026-10-16, run with
-/// no window beside 5.2.3 (`/Applications/Blender.app`, hash `e13b728c6880`): its
+/// no window beside 5.2.3 (then named `Blender.app`, hash `e13b728c6880`): its
 /// help text, the whole property lists of every structure it registers (4,121),
 /// the 23 scene paths and every name in the fifteen files that compose or carry
 /// Blender's names, the composed line's shape rendering two frames on the
@@ -90,7 +91,7 @@ pub const THE_5_3_LOOKUP: &str =
 /// (`blender-5.4.0-alpha+main.3f4216e1bad1-darwin.arm64-release.dmg`), copied
 /// to `/Applications/Blender 5.4a.app`, which answered *5.4.0 Alpha*, build
 /// hash `3f4216e1bad1`, built 2026-10-18, run with no window beside the 5.3.0
-/// Beta (`/Applications/Blender 5.3b.app`, hash `5d8151335b6b`): its help text,
+/// Beta (then named `Blender 5.3b.app`, hash `5d8151335b6b`): its help text,
 /// the whole property lists of every structure either registers, every name
 /// the composition, the launch material and the reading script use, and a real
 /// render through this driver on the processor. **Nothing used was removed or

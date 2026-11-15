@@ -128,7 +128,7 @@ use crate::record::job_records::JobRecords;
 use crate::record::LocalRecord;
 use crate::start::Started;
 use crate::surface::the_queue::{
-    a_name, a_part_is_said_under, by_count, the_box_is_said, the_entry_is_said, AFactOnTheEntry,
+    a_name, a_part_is_said, a_part_is_said_under, by_count, the_box_is_said, the_entry_is_said, AFactOnTheEntry,
     AMarkOnTheEntry, APart, TheActOnAJob, TheBoxThatAsks, TheJobEntry, ThePair, TheRangeInHistory,
     TheSharedWords, ENTRIES_WORD, ENTRY_WORD, FRAMES_WORD, FRAME_WORD,
 };
@@ -157,7 +157,8 @@ const THE_JOB_WORD: &str = "job";
 const FINISHED: &str = "Finished";
 const FAILED: &str = "Failed";
 const STOPPED: &str = "Stopped";
-const GIVEN_UP: &str = "Abandoned";
+/// *Interrupted* since 2026-11-11 (the four questions, scout 3.24).
+const GIVEN_UP: &str = "Interrupted";
 const ENDING_NOT_KNOWN: &str = "Ending unknown";
 /// **Design, *History*: a job Smoozy never heard had started** — item C1,
 /// *Creator-stated, 2026-09-18*. The same grey italic as *Ending unknown*,
@@ -205,7 +206,10 @@ const SUBMITTED_LEAD: &str = "— submitted";
 /// **Design, *The rest of the entry*: the plain sentence of the whole-app
 /// failure shape, one per ending, and none of them names a cause.**
 const THE_RENDER_DID_NOT_FINISH: &str = "The render did not finish.";
-const SMOOZY_DOES_NOT_KNOW_WHY: &str = "Cause unknown.";
+/// **Design, *The plain sentence* as changed 2026-11-11: it points at the
+/// output** — it read *Cause unknown.*, on the one failure with something to
+/// read. The four questions, scout 1.14 as Sol narrowed it.
+const SMOOZY_DOES_NOT_KNOW_WHY: &str = "Blender's output may say why.";
 const NO_FRAME_WAS_COMPLETED: &str =
     "The render did not finish. No frames completed.";
 /// **Design, *Where no render began*: nothing started, so nothing did not finish.**
@@ -220,9 +224,9 @@ const YOU_STOPPED_THIS_RENDER: &str = "You stopped this render.";
 /// holds the two to the same conditional. *(S3's loose ends, item 1,
 /// 2026-09-29: this said *was not saved*, the flat claim R1 took out of the
 /// stop box on 2026-09-17.)*
-const THE_FRAME_IT_WAS_ON_MAY_NOT_BE_SAVED: &str = "The frame it was on may not be saved.";
+const THE_FRAME_IT_WAS_ON_MAY_NOT_BE_SAVED: &str = "The frame being rendered may not be saved.";
 const INTERRUPTED_TWICE_AND_GIVEN_UP: &str =
-    "The render was interrupted twice and abandoned.";
+    "The render was interrupted twice. No more retries.";
 
 /// **Design, *The rest of the entry*: where a failed render's error stream was
 /// empty, this is the plain sentence** — the one the user reads first and the
@@ -244,6 +248,8 @@ const THE_RENDER_FAILED_AND_THE_OUTPUT_MAY_SAY_WHY: &str =
 // SC4 findings this file kept a second sentence of its own, "The disk on this
 // server is full.", which that clause refuses; it went on the runner's
 // ruling.)*
+pub const THE_DISK_WAS_FULL_AT_FINISH: &str = "The server disk was full when rendering ended. Output files may be incomplete.";
+
 use crate::presentation::the_disk_full_carve_out::{what_to_do_about_it, TheCarriedReading, THE_DIAGNOSIS};
 
 /// **Design, *The two ways to render it again*.**
@@ -251,7 +257,7 @@ const RENDER_IT_AGAIN: &str = "Render it again";
 const SUBMIT_AGAIN: &str = "Submit again —";
 const CARRY_ON: &str = "Resume —";
 const CARRY_ON_MAKES_A_NEW_JOB: &str =
-    "The frames end up split across two folders.";
+    "The frames will be in two folders.";
 const CARRYING_ON_FROM_FRAME: &str = "Resuming from frame";
 /// **Where the carry-on's figure came from, said only as it is** — must-do
 /// 2(c), and `Rendering` A9: *"a remembered figure is never presented as a
@@ -287,18 +293,32 @@ pub(crate) const THE_SERVER_IS_GONE_SO_NO_CARRY_ON: &str =
 /// **Design, *History*: the entry keeps its times, and where it can be had,
 /// which parts of the server did the work.**
 const RENDERED_HEADING: &str = "Rendered";
+/// **`Rendering` K14c on History's entry: one line for each file the render
+/// went on without** — *Missing: sky_4k.exr* — the words the phone's finished
+/// message uses (`Telegram` E1a), the name travelling as a value beside them
+/// (`Design/Queue & History`, *History*, 2026-11-12).
+const MISSING_WORD: &str = "Missing:";
+/// **A list the worker cut ends with how many more**: *and 7 more.*, the
+/// figure travelling as a value between the two words.
+const AND_WORD: &str = "and";
+const MORE_TRAIL: &str = "more.";
+/// **How many names the worker lets travel before its last entry says how
+/// many more** — `Rendering` K14c's *at most 100*, which the worker writes as
+/// `THE_MOST_MISSING_NAMES_THAT_TRAVEL` in `Rendering — machine`'s copy loop,
+/// followed by one entry reading *N more files*.
+const THE_MOST_MISSING_NAMES_THAT_TRAVEL: usize = 100;
 const LAST_FRAME_FACT: &str = "Last frame";
 const SUBMITTED_FACT: &str = "Submitted";
 const STARTED_FACT: &str = "Started";
 const ENDED_FACT: &str = "Ended";
 const RENDERED_FOR_FACT: &str = "Rendered for";
 const RAN_ON_FACT: &str = "Ran on";
-const NOT_KNOWN: &str = "not known";
+const NOT_KNOWN: &str = "unknown";
 const NONE_FINISHED: &str = "none finished";
 const NOT_CONFIRMED_TRAIL: &str = "not confirmed";
 const THE_FRAME_LEAD: &str = "— frame";
 const THE_SERVER_WAS_DESTROYED: &str =
-    "The server was destroyed before the next connection. Its record of this job is lost.";
+    "The server was removed before this job’s result was received.";
 /// **Design, *History*: the entry's one line for a job Smoozy never heard had
 /// started**, true whether the user removed the server or Smoozy found nothing
 /// of its own left on the machine.
@@ -316,7 +336,7 @@ const DELETE_THIS_ENTRY_AND_ITS_CHECK_QUESTION: &str = "Delete this entry and it
 /// ending goes (the nineteenth notes, note 7).
 const THE_CHECKS_GREY: &str = "e-chk";
 const THE_RECORD_IS_DELETED: &str =
-    "This entry and its settings are deleted permanently, so it cannot be submitted again.";
+    "This entry and its settings are deleted permanently, so it can't be submitted again.";
 /// **What the delete box says is not changed, in one sentence** — *60 frames
 /// on the server and 48 downloaded frames are not changed.* — as the clear
 /// boxes say it. *Changed 2026-11-06, the last words read before the release:
@@ -359,9 +379,9 @@ const CLEAR_LEAD: &str = "Clear";
 const HISTORY_QUESTION_TRAIL: &str = "history?";
 const CLEAR_ALL_HISTORY_QUESTION: &str = "Clear all history?";
 const ITS_ENTRIES_ARE_DELETED: &str =
-    "entries and their settings are deleted permanently, so those jobs cannot be submitted again.";
+    "entries and their settings are deleted permanently, so those jobs can't be submitted again.";
 const ITS_ENTRY_IS_DELETED: &str =
-    "entry and its settings are deleted permanently, so that job cannot be submitted again.";
+    "entry and its settings are deleted permanently, so that job can't be submitted again.";
 const ITS_WORD: &str = "Its";
 const ALL_WORD: &str = "All";
 /// The same word inside a control's own label, where it does not open a
@@ -383,9 +403,9 @@ const KEEP_THEM: &str = "Keep them";
 const CLEAR_THE_HISTORY_OF_REMOVED_SERVERS_QUESTION: &str = "Clear the history of removed servers?";
 const THEIR_WORD: &str = "Their";
 const THEIR_ENTRIES_GO_WITH_SUBMIT_AGAIN: &str =
-    "entries and their settings are deleted permanently, so those jobs cannot be submitted again.";
+    "entries and their settings are deleted permanently, so those jobs can't be submitted again.";
 const ITS_ENTRY_GOES_WITH_SUBMIT_AGAIN: &str =
-    "entry and its settings are deleted permanently, so that job cannot be submitted again.";
+    "entry and its settings are deleted permanently, so that job can't be submitted again.";
 const NOTHING_IS_CHANGED_ON_REMOVED_SERVERS: &str =
     "These servers and downloaded files are not changed.";
 const CLEAR_WORD: &str = "Clear";
@@ -495,7 +515,7 @@ const NOTHING_CHECKED_THIS_FILES_DEPENDENCIES: &str =
 const THE_CHECK_WAS_MADE_WITH_ANOTHER_BLENDER: &str =
     "This file's dependency check was made with a different Blender version.";
 const THE_CHECK_CARRIED_A_REPLACED_MARK: &str =
-    "This file's dependency check already included a replaced file.";
+    "Files were changed after the dependency check.";
 const CARRIES_ON_FROM: &str = "Resumes";
 const SUBMITTED_WITH_NO_SCENE_NAMED: &str = "Submitted with no scene named.";
 const BLENDER_RENDERED_LEAD: &str = "Blender rendered";
@@ -536,7 +556,7 @@ const AND_SMOOZY_COULDNT_UPDATE_IT: &str = "and could not be updated.";
 /// *"The server went down at 00:52 and started the job again at 01:09"*, and
 /// `Queue & History` N1's mark carries neither moment: what it holds is the attempt and the
 /// frame. One line, true of this job, and no moment invented for it.
-const INTERRUPTED_AND_RE_RUN: &str = "Interrupted and re-run";
+const INTERRUPTED_AND_RE_RUN: &str = "Interrupted and retried";
 const FROM_FRAME: &str = "from frame";
 
 /// The setup group's own field names — Design, *The rest of the entry*, and
@@ -914,6 +934,10 @@ pub struct TheHistoryEntry {
     pub rendered: Vec<ARenderedFact>,
     /// One line under the times, where the record can say no more.
     pub rendered_note: Option<&'static str>,
+    /// **`Rendering` K14c: the files the render went on without**, one
+    /// *Missing:* line each under the times, whatever the ending. Record
+    /// version 63. The last three owed, 2026-11-12.
+    pub missing: TheFilesMissing,
     /// **What the delete box says is left untouched**, read off the record with
     /// the rest of the entry — `Design/Queue & History § Deleting an entry`.
     pub what_deleting_leaves: WhatDeletingLeaves,
@@ -927,6 +951,40 @@ pub struct TheHistoryEntry {
     /// together** — its box asks *Delete this entry and its first-frame
     /// check?* (`Queue & History` X1a).
     pub deleted_with_its_check: bool,
+}
+
+/// **The files a render went on without, as History's entry says them**
+/// (`Rendering` K14c) — the names, and where the worker cut the list, how many
+/// more it left out.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TheFilesMissing {
+    pub names: Vec<String>,
+    pub and_more: Option<usize>,
+}
+
+impl TheFilesMissing {
+    /// **Read off the ending the note carried.** The worker's last entry past
+    /// its hundred names is its count, *N more files*, and never a file.
+    fn on(record: &LocalJobRecord) -> TheFilesMissing {
+        let mut names = record
+            .what_the_note_carried
+            .ending
+            .as_ref()
+            .map(|ending| ending.the_files_missing.clone())
+            .unwrap_or_default();
+        let mut and_more = None;
+        if names.len() == THE_MOST_MISSING_NAMES_THAT_TRAVEL + 1 {
+            let counted = names
+                .last()
+                .and_then(|last| last.strip_suffix(" more files"))
+                .and_then(|figure| figure.parse::<usize>().ok());
+            if counted.is_some() {
+                names.pop();
+                and_more = counted;
+            }
+        }
+        TheFilesMissing { names, and_more }
+    }
 }
 
 /// One line of the *Rendered* group.
@@ -1617,6 +1675,18 @@ pub fn the_entry_beside_a_reading(
         .ending
         .as_ref()
         .is_some_and(|ending| ending.no_render_began);
+    // **The full disk is read off the machine**: `Rented-server runtime` V12's
+    // reading, carried with the ending onto this record (`Desktop app and
+    // delivery` M15a), or on the reading beside an ending owed (`Rented-server
+    // runtime` S14a).
+    let the_disk_was_full = the_disk_was_full_on(
+        record,
+        ending,
+        match owed {
+            Some(owed) => owed.the_free_space_at_the_ending.as_ref().and_then(|free| free.the_reading()),
+            None => record.what_the_note_carried.the_free_space_at_the_ending.as_ref(),
+        },
+    );
     TheHistoryEntry {
         entry: TheJobEntry {
             job: record.job.as_text(),
@@ -1639,6 +1709,7 @@ pub fn the_entry_beside_a_reading(
             reach_backs: the_server_stands,
             // **Set by [`what_is_kept_over`] from the connections this run
             // holds**, which this record-only composition does not read.
+            reconnect_server: None,
             the_server_is_not_connected: false,
             the_folder: the_folder_on(record),
             status: the_status_line(ending, figure, rendered_for.as_deref()),
@@ -1653,6 +1724,7 @@ pub fn the_entry_beside_a_reading(
             readings: Vec::new(),
             marks: the_marks_on(record, beside.the_earlier_entry_stands),
             writes: Vec::new(),
+            every_folder: None,
             held: Vec::new(),
             facts: the_setup_on(record, beside.the_setup.as_ref(), beside.the_typed_frames.as_deref()),
             // **The shared entry's own control reads a running job's words**
@@ -1675,13 +1747,18 @@ pub fn the_entry_beside_a_reading(
             // **Design, *The entry's controls*: no job is ever both**, and a
             // history entry is neither — the job has ended.
             stop_or_cancel: None,
+            the_kill_loses: Default::default(),
         },
         // **The standalone control, on the one ending that carries no failure
         // shape to hold it, and only where the words are kept** (`Queue &
         // History` E9). The three that carry one get it from
         // [`TheEndingsFailure::the_controls`], on the same condition, and a
         // second control beside that would be the same act twice.
-        blender_output: ending == AnEnding::Finished && beside.the_words_are_kept(),
+        // **A finish on a full disk carries the shape** (batch 2 of the Bad
+        // what-if answers, 320), and its control is the shape's.
+        blender_output: ending == AnEnding::Finished
+            && beside.the_words_are_kept()
+            && the_disk_was_full.is_none(),
         ending: Some(ending),
         failure: the_failure_for(
             ending,
@@ -1689,20 +1766,9 @@ pub fn the_entry_beside_a_reading(
             // figure is a job that finished no frame** — and an ending owed
             // has its figure owed with it, which is not that.
             figure.is_none() && owed.is_none(),
-            // **The full disk is read off the machine**: `Rented-server
-            // runtime` V12's reading, carried with the ending onto this record
-            // (`Desktop app and delivery` M15a), or on the reading beside an
-            // ending owed (`Rented-server runtime` S14a) — and route (b) fires
-            // only on a render that ended failing and a reading of nothing
-            // available.
-            the_disk_was_full_on(
-                record,
-                ending,
-                match owed {
-                    Some(owed) => owed.the_free_space_at_the_ending.as_ref().and_then(|free| free.the_reading()),
-                    None => record.what_the_note_carried.the_free_space_at_the_ending.as_ref(),
-                },
-            ),
+            // **Route (b)**: a render that ended failing, or finished, on a
+            // reading of nothing available — read above.
+            the_disk_was_full,
             // **Whether the complaints stream came back empty is the ending
             // attempt's own outcome**, kept with the words since record version
             // 34 (`Queue & History` E9) — must-do 9's no-errors sentence, which
@@ -1829,6 +1895,7 @@ pub fn the_entry_beside_a_reading(
         // **Item C1's entry says its one line whether or not a row stands**:
         // its server is gone either way — removed, or found with nothing of
         // Smoozy's left on it — and the line is true of both.
+        missing: TheFilesMissing::on(record),
         rendered_note: match ending {
             AnEnding::StartNotKnown => Some(SMOOZY_NEVER_HEARD_WHETHER_IT_STARTED),
             AnEnding::NotKnown if !the_server_stands => Some(THE_SERVER_WAS_DESTROYED),
@@ -3058,6 +3125,52 @@ pub fn the_act_is_performed(
     )
 }
 
+// `Rendering` A5: a typed boundary counts only the job's own ordered frames.
+fn the_resume_count_in(asked: &smoozy_queue_history::record::TheFramesAsked, typed: &str) -> Option<u64> {
+    let typed = i128::from(typed.trim().parse::<i64>().ok()?);
+    let mut before = 0u64;
+    let total = asked.runs.iter().try_fold(0u64, |sum, run| sum.checked_add(run.how_many))?;
+    for run in &asked.runs {
+        let offset = typed - i128::from(run.first);
+        let step = i128::from(run.step);
+        let at = if step == 0 { (offset == 0).then_some(0) }
+            else { (offset % step == 0).then(|| offset / step) };
+        if let Some(at) = at.filter(|at| *at >= 0 && *at < i128::from(run.how_many)) {
+            return total.checked_sub(before.checked_add(u64::try_from(at).ok()?)?);
+        }
+        before = before.checked_add(run.how_many)?;
+    }
+    None
+}
+
+#[derive(serde::Serialize)]
+pub struct TheResumeCount {
+    frames: Option<u64>,
+    unit: Prose,
+    why: Option<Prose>,
+}
+
+#[tauri::command]
+pub fn the_resume_count(started: State<'_, Mutex<Started>>, job: String, from: String) -> TheResumeCount {
+    let read = || {
+        let started = started.lock().ok()?;
+        let record = started.record.as_ref()?;
+        let job = smoozy_state::identities::Identity::read_back(smoozy_state::identities::IdentityKind::Job, &job)?;
+        let kept = JobRecords::over(record.connection()).read(&job).ok()??;
+        if kept.the_frames.they_cannot_be_counted { return None; }
+        let asked = kept.the_frames.asked?;
+        Some(the_resume_count_in(&asked, &from))
+    };
+    let (frames, why) = match read() {
+        Some(Some(frames)) => (Some(frames), None),
+        Some(None) => (None, Some(crate::a_new_job_from_an_old_one::words::TYPE_A_FRAME_FROM_THE_RANGE)),
+        None => (None, Some(RESUME_COUNT_NOT_READ)),
+    };
+    TheResumeCount { frames, unit: Prose::new(if frames == Some(1) { FRAME_WORD } else { FRAMES_WORD }), why: why.map(Prose::new) }
+}
+
+const RESUME_COUNT_NOT_READ: &str = "Could not read this job’s frame range.";
+
 /// **The page asks what history holds.** P6: the reading arrives as an event.
 ///
 /// **`chosen` is a job's identity and never a place in the list** (must-do 1),
@@ -3514,6 +3627,7 @@ fn the_history_entry_is_said(mut event: Event, entry: &TheHistoryEntry) -> Event
             );
         match &again.carry_on {
             Some(carry_on) => {
+                event = event.saying("carryOnCountUnread", Said::Prose(Prose::new(RESUME_COUNT_NOT_READ)));
                 let from = match carry_on.came_from {
                     WhereTheFigureCameFrom::ReadFromTheServerJustNow => READ_FROM_THE_SERVER_JUST_NOW,
                     WhereTheFigureCameFrom::RecordedWhenTheJobEnded => THE_FRAME_THIS_ENTRY_RECORDED,
@@ -3593,6 +3707,43 @@ fn the_history_entry_is_said(mut event: Event, entry: &TheHistoryEntry) -> Event
     }
     if let Some(note) = entry.rendered_note {
         event = event.saying("renderedNote", Said::Prose(Prose::new(note)));
+    }
+    // **`Rendering` K14c: one *Missing:* line for each file the render went on
+    // without**, the name a value beside the word (X7). **Each line is a part
+    // composed here and only placed by the page** — `Desktop app and
+    // delivery` A6 and X1: the page wrote the space after the word and read
+    // its own key for the name until 2026-11-12, which the surface's
+    // `no_prose_is_written_into_the_page` caught.
+    if !entry.missing.names.is_empty() {
+        event = event.saying(
+            "missingCount",
+            Said::Value(Verbatim::new(entry.missing.names.len().to_string())),
+        );
+        for (at, name) in entry.missing.names.iter().enumerate() {
+            let line = APart {
+                lead: MISSING_WORD,
+                value: name.clone(),
+                trail: "",
+            };
+            event = a_part_is_said_under(event, "missing", at, "", &line);
+        }
+        // *and 7 more.*: the figure and the word after it bound, as every
+        // figure-and-word part is (`Design/Whole app § Typography`).
+        if let Some(more) = entry.missing.and_more {
+            let line = APart {
+                lead: AND_WORD,
+                value: more.to_string(),
+                trail: MORE_TRAIL,
+            };
+            event = a_part_is_said(
+                event,
+                "missingMoreLead",
+                "missingMoreValue",
+                "missingMoreTrail",
+                "missingMoreBinds",
+                &line,
+            );
+        }
     }
     event
 }
@@ -3793,6 +3944,10 @@ pub fn the_clear_removed_box(entries: u32, per_server: &[(String, u32)]) -> TheB
 /// is named, the plain sentence *is* the no-errors one** — the headline Design
 /// gives it, and so the sentence the diary keeps. It was once a second
 /// paragraph under *The render did not finish*, which the diary kept instead.
+///
+/// **A finish on a full disk carries the shape too** — its ending stays
+/// *Finished*, and the sentence says the outputs may be incomplete (batch 2 of
+/// the Bad what-if answers, 320).
 pub fn the_failure_for(
     ending: AnEnding,
     no_frame_was_completed: bool,
@@ -3800,13 +3955,15 @@ pub fn the_failure_for(
     the_complaints_stream_was_empty: bool,
     no_render_began: bool,
 ) -> Option<TheEndingsFailure> {
-    if !ending.carries_the_failure_shape() {
+    if !ending.carries_the_failure_shape() && !(ending == AnEnding::Finished && the_disk_is_full_on.is_some()) {
         return None;
     }
     // **Design, *Where no render began***, ahead of everything below: each of those
     // sentences is about a render, and the disk-full one says *when the render ended*.
     let the_disk_is_full_on = the_disk_is_full_on.filter(|_| !no_render_began);
     let said = match (ending, no_frame_was_completed) {
+        (AnEnding::Finished, _) if the_disk_is_full_on.is_some() =>
+            THE_DISK_WAS_FULL_AT_FINISH.to_string(),
         (AnEnding::Failed, _) if no_render_began => FAILED_BEFORE_RENDERING.to_string(),
         (AnEnding::Failed, _) if the_complaints_stream_was_empty && the_disk_is_full_on.is_none() => {
             THE_RENDER_FAILED_AND_THE_OUTPUT_MAY_SAY_WHY.to_string()
@@ -3861,7 +4018,10 @@ fn the_reason_as_a_sentence(reason: &str) -> String {
 /// **Where the disk-full carve-out fires on this entry, the server's name to
 /// draw beside it** — `Server protocol and transfers` F6's route (b): *"a
 /// render ended failing, and a free-space reading taken against that job's own
-/// output path reports nothing available"*.
+/// output path reports nothing available"*. **A render that finished on such a
+/// reading is read the same way** (`Server protocol and transfers`, batch 2 of
+/// the Bad what-if answers): Blender's success does not prove every output was
+/// written whole.
 ///
 /// **The reading is the one the ending carried and is never taken here**
 /// (`Desktop app and delivery` M15a): History opens no connection. It is the
@@ -3876,7 +4036,7 @@ fn the_disk_was_full_on<'r>(
     ending: AnEnding,
     the_reading_the_ending_carried: Option<&smoozy_queue_history::acting::note::TheFreeSpaceReadAtTheEnding>,
 ) -> Option<&'r str> {
-    if ending != AnEnding::Failed {
+    if !matches!(ending, AnEnding::Failed | AnEnding::Finished) {
         return None;
     }
     let read = the_reading_the_ending_carried?;
@@ -4050,6 +4210,15 @@ pub fn the_rendered_group(
 mod tests {
     use super::*;
 
+    #[test]
+    fn bad_batch_2_a_successful_exit_with_a_full_disk_still_says_so() {
+        let warning = the_failure_for(AnEnding::Finished, false, Some("Render server"), false, false)
+            .expect("a finished render on a full disk needs its warning");
+        assert!(warning.said.contains("disk was full"));
+        assert_eq!(warning.what_to_do_about_it.as_deref(), Some(THE_DIAGNOSIS));
+        assert!(the_failure_for(AnEnding::Finished, false, None, false, false).is_none());
+    }
+
     /// **The 38's piece 10, item 24: a job stopped with frames 1–60 of 1–240
     /// on the server draws *60/240* on its History row** — the note's figure is
     /// the last frame there, 60, and the count runs up to and including it.
@@ -4072,6 +4241,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         record.what_the_note_carried.last_frame_figure = Some(60);
@@ -4343,6 +4513,7 @@ mod tests {
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 });
             }
@@ -4496,6 +4667,7 @@ mod tests {
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 });
             }
@@ -4640,6 +4812,7 @@ mod tests {
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 });
                 note.last_frame_figure = Some(40);
@@ -4842,6 +5015,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         records.the_fill_in(&jobs[2], &note).expect("filled in");
@@ -4926,6 +5100,15 @@ mod tests {
         assert!(the_failure_for(AnEnding::GivenUp, false, None, false, false).is_some());
     }
 
+    /// **Design, *The plain sentence* as changed 2026-11-11: a failure whose
+    /// error stream has words points at the output too**, never *Cause
+    /// unknown.* The four questions, scout 1.14.
+    #[test]
+    fn four_questions_1_14_a_failure_with_errors_points_at_the_output() {
+        let with_errors = the_failure_for(AnEnding::Failed, false, None, false, false).unwrap();
+        assert_eq!(with_errors.said, "The render did not finish. Blender's output may say why.");
+    }
+
     /// **The disk-full carve-out fills the second sentence and takes the
     /// *Cause unknown* half off the first** — M14, and Design's
     /// *Nothing else on a failed entry names a cause*.
@@ -4977,6 +5160,7 @@ mod tests {
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
             record.what_the_note_carried.last_frame_figure = Some(40);
@@ -5161,6 +5345,22 @@ mod tests {
     /// N6. Design's worked example: the figure is 60 of 1 to 240, so the
     /// carry-on starts at 60 and renders 181 frames. Before the fix this said
     /// 180 and named frame 61.
+    #[test]
+    fn third_part_3_20_resume_counts_the_typed_start_in_the_jobs_order() {
+        use smoozy_queue_history::record::TheFramesAsked;
+        let asked = TheFramesAsked::from_the_order(&[-3, -1, 4, 2, 0]).unwrap();
+        for (typed, count) in [("-3", Some(5)), ("4", Some(3)), ("0", Some(1)), ("3", None), ("", None), ("2.5", None)] {
+            assert_eq!(the_resume_count_in(&asked, typed), count, "{typed}");
+        }
+    }
+
+    #[test]
+    fn third_part_3_20_the_resume_band_includes_the_starting_frame() {
+        assert_eq!(crate::surface::render_settings::words::CARRYING_ON_CHECKED, ".");
+        assert_eq!(crate::surface::render_settings::words::CARRYING_ON_SHORT_FILE,
+            "The starting frame is rendered again; it may be incomplete.");
+    }
+
     #[test]
     fn the_carry_on_opens_at_the_boundary_frame() {
         let asked = a_range(1, 240, 1);
@@ -5753,6 +5953,7 @@ mod tests {
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
             store.write_the_provisional_record(&made).expect("written");
@@ -5862,6 +6063,7 @@ mod tests {
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["the-queue.js", "the-history.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in crate::surface::the_queue::tests::THE_BOXES_STAND_INS {
             let text = if name == "harness.js" {
@@ -5935,6 +6137,7 @@ mod tests {
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["the-queue.js", "the-history.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in crate::surface::the_queue::tests::THE_BOXES_STAND_INS {
             let text = if name == "harness.js" {
@@ -6771,6 +6974,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_files_own_scripts_run: None,
                 the_folders_at_the_machines_top: None,
             },
             Some(&picked),
@@ -6862,6 +7066,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: Some(reason.to_string()),
             no_render_began,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         };
         let beside = BesideTheRecord {
@@ -6911,6 +7116,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         let reason = "Smoozy does not know how to render on a NVIDIA GeForce GTX 1650";
@@ -6979,6 +7185,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: the_line.map(str::to_string),
             });
             record
@@ -7042,6 +7249,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: Some(the_line.to_string()),
             });
             the_entry_for(&record, &BesideTheRecord::default(), false, true)
@@ -7125,6 +7333,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
         // **Piece 6d: the control is offered where the words are kept**, and
@@ -7224,6 +7433,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
             the_entry_for(&one, &BesideTheRecord::default(), false, true)
@@ -7268,6 +7478,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
             the_entry_for(&one, &BesideTheRecord::default(), false, true)
@@ -7406,6 +7617,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         store.the_fill_in(&job.job, &note).unwrap();
@@ -7415,7 +7627,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
         let entry = kept.entry.expect("the stopped job's entry");
         assert_eq!(entry.ending, Some(AnEnding::Stopped));
         let said = entry.failure.expect("a stopped entry carries the failure shape").said;
-        assert_eq!(said, "You stopped this render. The frame it was on may not be saved.");
+        assert_eq!(said, "You stopped this render. The frame being rendered may not be saved.");
         for flat in ["was not saved", "is lost", "was lost"] {
             assert!(!said.contains(flat), "History says the frame {flat:?}: {said}");
         }
@@ -7502,6 +7714,7 @@ console.log("the line under the name: " + words(history.querySelector("p.qdsub")
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["the-queue.js", "the-history.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in crate::surface::the_queue::tests::THE_BOXES_STAND_INS {
             let text = if name == "harness.js" {
@@ -7825,6 +8038,7 @@ console.log(JSON.stringify({
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["the-queue.js", "the-history.js", "the-value-drawn.js", "the-machines-own-words.js"] {
             std::fs::copy(web.join(page), folder.join(page)).unwrap();
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in crate::surface::the_queue::tests::THE_BOXES_STAND_INS {
             if name == "the-machines-own-words.js" {
@@ -8078,6 +8292,8 @@ console.log(JSON.stringify({
             the_sweep_left_behind: Vec::new(),
             record: Some(record),
             record_trouble: None,
+            the_record_is_newer_than_this_copy: false,
+            the_record_is_damaged: false,
             diary: None,
             declarations: smoozy_reporting::lines::Declarations::new(),
             what_modules_declare: crate::presentation::declarations::TheDeclarations::default(),
@@ -8094,6 +8310,64 @@ console.log(JSON.stringify({
     /// frames* from the boundary frame it recorded; a finished one offers only
     /// the first; **an entry with no kept setup, or no asked order, draws
     /// neither**, there being nothing to make a new job from or to count.
+    /// **`Rendering` K14c on History's entry: one *Missing:* line for each
+    /// file the render went on without**, under its times, whatever the
+    /// ending (`Design/Queue & History`, *History*, 2026-11-12). The names
+    /// travel as values, never inside the words. **A list the worker cut at
+    /// 100 ends *and 7 more.***, its last entry being the worker's count and
+    /// not a file. None named, nothing said. The last three owed.
+    #[test]
+    fn the_files_a_render_went_on_without_are_named_on_the_entry() {
+        use smoozy_queue_history::acting::note::{TheEndingOnTheNote, TheOutcomeAsWritten};
+        use smoozy_state::identities::IdentityKind;
+        let server = Identity::issue(IdentityKind::LocalServer).unwrap();
+        let mut record = crate::record::deletions::tests::a_record_in_history(&server, "Hall");
+        let ending = |missing: Vec<String>| TheEndingOnTheNote {
+            outcome: TheOutcomeAsWritten::Finished,
+            exit_status: Some(0),
+            the_attempt_whose_capture_record_holds_the_words: 1,
+            the_reason_the_machine_recorded: None,
+            no_render_began: false,
+            the_files_missing: missing,
+            the_device_line_as_observed: None,
+        };
+        let said_of = |record: &LocalJobRecord| {
+            let entry = the_entry_for(record, &BesideTheRecord::default(), false, true);
+            said(&the_history_entry_is_said(Event::about(About::TheRun, THE_HISTORY_SAYS), &entry))
+        };
+
+        record.what_the_note_carried.ending = Some(ending(vec!["sky_4k.exr".into(), "bark_normal.png".into()]));
+        let text = said_of(&record);
+        assert!(text.contains("Missing:"), "{text}");
+        assert!(text.contains("sky_4k.exr") && text.contains("bark_normal.png"), "{text}");
+        assert!(!text.contains("more."), "{text}");
+
+        // The worker's own cut: 100 names, then its count.
+        let mut many: Vec<String> = (1..=100).map(|at| format!("tex_{at}.png")).collect();
+        many.push("7 more files".into());
+        record.what_the_note_carried.ending = Some(ending(many));
+        let text = said_of(&record);
+        assert!(text.contains("tex_100.png"), "{text}");
+        assert!(!text.contains("7 more files"), "the count is not a file: {text}");
+        assert!(text.contains("more."), "{text}");
+
+        record.what_the_note_carried.ending = Some(ending(Vec::new()));
+        assert!(!said_of(&record).contains("Missing:"));
+
+        // **Each line is a part the page only places** (A6 and X1): the word
+        // on its own key, the name on another, and the figure of *and 7
+        // more.* bound to the word after it.
+        let mut with_one = the_entry_for(&record, &BesideTheRecord::default(), false, true);
+        with_one.missing = TheFilesMissing { names: vec!["sky_4k.exr".to_string()], and_more: Some(7) };
+        let text = said(&the_history_entry_is_said(Event::about(About::TheRun, THE_HISTORY_SAYS), &with_one));
+        assert!(text.contains("\"missing0Lead\"") && text.contains("\"missing0Value\""), "{text}");
+        assert!(text.contains("\"missingMoreBinds\""), "{text}");
+
+        // The page draws each one, and writes no word of its own.
+        let page = include_str!("../../web/the-history.js");
+        assert!(page.contains(r#"aPart(line, said, "missing" + at)"#), "the page draws no *Missing:* line");
+    }
+
     #[test]
     fn the_two_ways_to_render_again_are_drawn_from_the_kept_setup_and_the_asked_order() {
         use crate::record::job_records::TheKeptSetup;
@@ -8111,6 +8385,7 @@ console.log(JSON.stringify({
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         record.what_the_note_carried.last_frame_figure = Some(60);
@@ -8198,6 +8473,7 @@ console.log(JSON.stringify({
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
             record.what_the_note_carried.last_frame_figure = figure;
@@ -8347,5 +8623,20 @@ console.log(JSON.stringify({
             .preview
             .expect("the line where the picture was");
         assert!(nothing.nothing_to_show);
+    }
+}
+
+/// **The four questions, batch 3: words a user can't act on** (2026-11-11).
+/// Each line is in the user's words, by `Preparation/Groundwork/Rules.md`
+/// Rule 1 and Rule 9. Written before the words changed, and failed first.
+#[cfg(test)]
+mod the_four_questions_batch_3 {
+    use super::*;
+
+    /// Scout 3.24 as Sol narrowed it: no cause the ending cannot know.
+    #[test]
+    fn a_job_interrupted_twice_is_said_as_that() {
+        assert_eq!(GIVEN_UP, "Interrupted");
+        assert_eq!(INTERRUPTED_TWICE_AND_GIVEN_UP, "The render was interrupted twice. No more retries.");
     }
 }

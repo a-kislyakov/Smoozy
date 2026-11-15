@@ -131,3 +131,17 @@
   right: 100%;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── A finished release already on this server ───────────────────────────────
+ *
+ * `Design/Server Setup § Installing`, changed 2026-11-14 (the Rough what-if
+ * answers, share 4, 20 and 366): **a finished release marked *on this server*
+ * is greyed and has no tick box, so it cannot be picked**. The drawing has no
+ * state for it, so it takes the drawing's own quiet ink and its default
+ * border, and the tick box keeps its place without being drawn. No colour or
+ * size is chosen here.
+ */
+.fmt[aria-disabled="true"] { cursor: default; color: var(--ink3); }
+.fmt[aria-disabled="true"]:hover { border-color: var(--line); }
+.fmt[aria-disabled="true"] .fmn { color: var(--ink3); }
+.fmt[aria-disabled="true"] > .cb { visibility: hidden; }

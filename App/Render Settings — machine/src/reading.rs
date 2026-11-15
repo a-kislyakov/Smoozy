@@ -38,6 +38,15 @@ pub struct SettingsHalf {
     /// server program older than this took the reading**, and nothing is then
     /// assumed: serde's own rule for an absent optional field.
     pub the_folders_at_the_machines_top: Option<Vec<String>>,
+    /// **Item 8: whether the file holds scripts that run as it opens or
+    /// renders** — a text with its *Register* option on, or a driver whose
+    /// expression is Python rather than a simple one (`Render Settings` V3a;
+    /// the leftovers of the Rough what-if answers, 222 and 227). Every read
+    /// and render lets them run (V3), so the page says so for a file that has
+    /// them. **Nothing from a server program older than this**, and nothing is
+    /// then said.
+    #[serde(default)]
+    pub the_files_own_scripts_run: Option<bool>,
 }
 
 /// **Q2 item 1**, per scene.

@@ -12,9 +12,11 @@
 
 **The spec is blunt that nobody comes here on purpose**: a key is made for a provider once and then forgotten. So this screen is not a workspace and gets no panes, no detail column and no filter. It is a list of keys with the two ways of adding one above it.
 
-**Two controls at the top: Choose a key… and New key…** They are the two ways a key enters Smoozy and they are not the same act — one makes files, the other only remembers where files already are. The difference decides what deleting means later, so the two are never one control with a choice inside it.
+**Two controls at the top: Choose a key… and New key…** They are the two ways a key enters Smoozy and they are not the same act — one makes files, the other only remembers where files already are. The difference decides what deleting means later, so the two are never one control with a choice inside it. **The first reads *Add existing key…*** *(changed 2026-11-11, the four questions, scout 3.42: *Choose a key…* is also the empty Key field in Add a server, so one label meant two things; no auditor has seen it; elsewhere in this document *Choose a key…* names this control)*.
 
 **They are the same size, and only the fill says which is which.** Making a key is the loud one and pointing at an existing one is quiet, which the fill carries; a second difference in height and type read as a mistake rather than as emphasis. Label: **Creator-stated** (2026-08-13).
+
+**An empty list says *No keys yet.***, in the grey of a statement, where it was blank; All servers says *No servers yet* the same way (B-28). **The header's two buttons keep their words on one line**, and the *Choosing a key for …* sentence beside them breaks instead (B-26). *Added 2026-11-11, the UI at every size, third builder (Claude Opus 5.5, `Audits/Build/The UI at every size/The fixes — what landed.md`). No auditor has seen it.*
 
 ## A row
 
@@ -52,7 +54,7 @@
 
 **It stays in the list, dimmed, and says what is wrong in the row.** The [spec](../Specs/Keys.md) requires it to be shown rather than hidden — a key that vanished when its drive was unplugged would look like a key that was never there.
 
-**The row carries the two ways out the spec gives, and they are not the same offer.** *Choose its new location* takes the same key, and Smoozy checks the fingerprint matches. *Choose a replacement* takes a different key, and the row says what that costs before it is pressed: the saved passphrase is cleared, and every server holding the old key needs a new one.
+**The row carries the two ways out the spec gives, and they are not the same offer.** *Locate…* takes the same key, and Smoozy checks the fingerprint matches. *Choose a replacement* takes a different key, and the row says what that costs before it is pressed: the saved passphrase is cleared, and every server holding the old key needs a new one.
 
 **The fingerprint stays on screen while the key is unusable.** It is the only thing that can say whether the file the user is about to point at is the same key.
 
@@ -77,7 +79,7 @@
 
 **For a key with no passphrase the fingerprint still reads and the row is still usable.** The [architecture](../Architecture/Keys.md) F1 reads such a key's fingerprint from the private file alone, so a missing public half costs the user the copy and nothing else — the row says that rather than reading as broken.
 
-**For a key with a passphrase it is the other way round, and this screen has to say so.** The [architecture](../Architecture/Keys.md) U7b establishes that the private file's own read is refused for every protected key, and [U7](../Architecture/Keys.md)'s fallback reads the public file instead — so with no public file beside it **there is nothing left to read the fingerprint from, and the row is unusable**. The architecture keeps that verdict as *unreadable* and does not widen its closed set; what it adds is which situation produced it, so this screen can say the true thing rather than *the file could not be read*, which would send the user hunting for damage in a healthy file. **The line says the key has a passphrase, that there is no public key file beside it, and that bringing that file across is what fixes it.** **It is two sentences and they are these:** *Passphrase set and no .pub file beside it.* *Can't be checked without one.* *Words changed 2026-11-06 (was *This key has a passphrase and no public key file beside it.* *It cannot be checked until that file is beside it.*): the last words read before the release. It still names no act, for the reason below. No auditor has seen it.*
+**For a key with a passphrase it is the other way round, and this screen has to say so.** The [architecture](../Architecture/Keys.md) U7b establishes that the private file's own read is refused for every protected key, and [U7](../Architecture/Keys.md)'s fallback reads the public file instead — so with no public file beside it **there is nothing left to read the fingerprint from, and the row is unusable**. The architecture keeps that verdict as *unreadable* and does not widen its closed set; what it adds is which situation produced it, so this screen can say the true thing rather than *the file could not be read*, which would send the user hunting for damage in a healthy file. **The line says the key has a passphrase, that there is no public key file beside it, and that bringing that file across is what fixes it.** **It is two sentences and they are these:** *This key has a passphrase. Its public key file (.pub) is missing.* *Put its .pub file in the same folder to check it.* *Words changed 2026-11-06 (was *This key has a passphrase and no public key file beside it.* *It cannot be checked until that file is beside it.*): the last words read before the release. It still names no act, for the reason below. No auditor has seen it.*
 
 *(Ruled 2026-09-13 at Build step 10a, under the Creator's standing delegation of 2026-08-31, the Design stage being closed. It is the last of the three things this paragraph asks for and the other two were already here; what it adds is the wording, in the shape the paragraph above it already uses for the key with no passphrase. **It says what is missing and what ends the limit, and it names no act the user is told to take** — the file may be on another computer and Smoozy does not know. **It is not a fault of the key and does not read as one**, which is the whole reason the architecture carries the situation beside the verdict rather than letting the row say *the file could not be read*. The reasoning in full is in `Audits/Build/Step 10a/Piece 4 — what landed.md` and in `Audits/Build/Desktop app and delivery/Decisions record.md`. No auditor has seen this change.)*
 
@@ -103,7 +105,7 @@
 
 **Asking again after a remembered one stops working is the same box with one line added.** The [architecture](../Architecture/Keys.md) S5 establishes that from a local load rather than from a failed connection, and erases the remembered one the moment it does — so the line says the saved passphrase no longer works and was cleared. Without that line the user retypes what they think is already stored and cannot tell whether anything changed.
 
-**It never says why it stopped working**, because Smoozy does not know: the [architecture](../Architecture/Keys.md) S5 records that a correct passphrase against a damaged key gives the same answer as a wrong one. Guessing between them would be Smoozy telling the user their key is fine when it may not be.
+**It never says why it stopped working**, because Smoozy does not know: the [architecture](../Architecture/Keys.md) S5 records that a correct passphrase against a damaged key gives the same answer as a wrong one. Guessing between them would be Smoozy telling the user their key is fine when it may not be. **What it does say is what happened at this connect.** A passphrase typed into the box that does not open the key ends the connect with *Could not connect: the passphrase did not unlock the key.*, and a saved passphrase the system's store will not give back (the keychain's *Deny*) with *Could not connect: the saved passphrase could not be read.* — each true whatever lies behind it. *Added 2026-11-14, the leftovers of the Rough what-if answers (386, 384), the [architecture](../Architecture/Keys.md) S19a. No auditor has seen it.*
 
 **And an automatic attempt does not ask at all.** It finds nothing remembered and makes no attempt, which is the [spec](../Specs/Keys.md)'s own rule — the ask waits for the user to start a connect.
 
@@ -117,7 +119,7 @@
 
 **Smoozy says so once, where the user already is, and never again.** The [whole-app spec](../Specs/Whole%20app.md) promises that where a computer has nowhere to keep a secret, Smoozy asks each time it needs one *"and it says so once, so the user knows it is not going to learn rather than thinking it keeps forgetting."* The [architecture](../Architecture/Security%20and%20licence.md) S34 fixes the moment: the first time Smoozy finds out, once for the life of the installation — not once a run, which would be the forgetting the sentence exists to explain.
 
-**The sentence:** *Passwords and passphrases cannot be saved on this computer.* It names the computer as the thing that cannot, because that is what will not change by waiting, and it says both words because the same fact covers a key's passphrase and a server's admin password.
+**The sentence:** *Passwords and passphrases can't be saved on this computer.* It names the computer as the thing that cannot, because that is what will not change by waiting, and it says both words because the same fact covers a key's passphrase and a server's admin password.
 
 **It goes with the act that found out, in that act's own place.** Finding out takes an act that needed a secret, and the sentence is a note in the box or dialog that act already shows — never a dialog of its own:
 
@@ -129,8 +131,8 @@
 
 **The mark on a server Smoozy cannot reconnect on its own for want of a passphrase.** The [architecture](../Architecture/Keys.md) S10 has the server marked with what is wrong, bounded so that a permanent condition is never worded as a passing one, and the words are Design's:
 
-- where the computer has nowhere to keep one, *No automatic reconnect: this computer cannot save passphrases.*
-- otherwise, *No automatic reconnect until you connect: passphrase not saved.*
+- where the computer has nowhere to keep one, *No automatic reconnect: this computer can't save passphrases.*
+- otherwise, *Automatic reconnect starts after you connect with the passphrase.*
 
 **It takes the row's extra line the way the gone-key mark does** ([Servers](Servers.md)): a failure standing on the row takes the line first, and the mark takes it back afterwards. A gone key is the bigger fact and takes the line from this mark. **The once-said sentence is not the mark and is drawn whether or not the mark has the line**, because it is said once and a line it lost to a failure would never be said at all.
 
@@ -148,7 +150,7 @@
 
 **Making a key and checking one both rest on the computer's own SSH tools, and a few computers do not have them.** The [spec](../Specs/Keys.md) has Smoozy make nothing and check nothing there, say so plainly and once, and never call the user's existing keys broken — they are not. The [architecture](../Architecture/Keys.md) U6a and G6 put one statement in each place the readings were needed: this screen and the server list.
 
-**One line above the list, never a message per key.** *SSH tools not installed. Keys can't be created or checked without them.* *(Words changed 2026-11-06 (was *SSH tools not installed. Install them to create or check keys.*): the check after the last fix — the second sentence asked the user to install, which the spec forbids. No auditor has seen it.)* *(Words changed 2026-11-06 (was *SSH tools are not installed on this computer. No key can be created or checked until they are.*): the last words read before the release. No auditor has seen it.)* *(Changed 2026-10-28, Rule 9, the loose ends after the words sweep: the third sentence, *Your keys are not at fault.*, is dropped. Nothing in the line calls the keys broken, so it added nothing. No auditor has seen it.)* The cause is a property of the computer rather than of any key, so it is said once where the whole list is read — the whole-app rule for one cause over many rows. The same line, word for word, is the one the [Servers](Servers.md) list carries.
+**One line above the list, never a message per key.** ~~*SSH tools not installed. Keys can't be created or checked without them.*~~ *OpenSSH not installed. Keys can't be created or checked without it.* *(Changed 2026-11-11, the four questions, scout 3.43: it names what to install. No auditor has seen it.)* *(Words changed 2026-11-06 (was *SSH tools not installed. Install them to create or check keys.*): the check after the last fix — the second sentence asked the user to install, which the spec forbids. No auditor has seen it.)* *(Words changed 2026-11-06 (was *SSH tools are not installed on this computer. No key can be created or checked until they are.*): the last words read before the release. No auditor has seen it.)* *(Changed 2026-10-28, Rule 9, the loose ends after the words sweep: the third sentence, *Your keys are not at fault.*, is dropped. Nothing in the line calls the keys broken, so it added nothing. No auditor has seen it.)* The cause is a property of the computer rather than of any key, so it is said once where the whole list is read — the whole-app rule for one cause over many rows. The same line, word for word, is the one the [Servers](Servers.md) list carries.
 
 **"Without them" says when the limit ends; it does not tell the user to end it.** The [architecture](../Architecture/Keys.md) G6 wrote the phrase *until they are* and then flagged it, because the [spec](../Specs/Keys.md) forbids asking the user to install anything and the phrase could be read as doing exactly that; *without them* says the same and is held to the same judgement. It stays. *(Words changed 2026-11-06 (was *"Until they are"*, which the line no longer says): the check after the last fix. The judgement is unchanged. No auditor has seen it.)* It does not address the user and it names no act they could take, and nothing else on the screen offers one — *New key…* is unavailable with this line as its reason, and there is no install control anywhere near it. Taking the phrase out would make the line worse rather than safer: *Keys can't be created or checked*, stopped there, reads as a permanent limit of the app instead of a condition of this computer, which is not true. The two things the spec bans are asking the user to act and calling their keys broken; this line does neither. The judgement covers the server list's copy of the line as well. Label: **settled at Design** (2026-09-02).
 
@@ -162,7 +164,7 @@
 
 **So the name field leads, and the line under it is the suggestion rather than a rule.** *Use your provider's name.* The field is pre-filled with the default the spec describes, and the suggestion sits beneath as a sentence the user can ignore — which they can, since anything they type is accepted and the default stands if they leave it alone.
 
-**A passphrase is one optional field, not a section.** It is a real choice and a short one.
+**A passphrase is one optional field, not a section.** It is a real choice and a short one. **On Windows the New key box draws no passphrase field**: the Windows limit's sentence stands in its place, so the limit is read before *Create*, not after. *(Added 2026-11-11, the four questions, scout 2.13: the field was offered and the key then refused. No auditor has seen it.)*
 
 **The key type is behind *Advanced* and closed.** The [spec](../Specs/Keys.md) settles that Smoozy picks a sensible modern default and the user can accept it, so putting the choice in front of everybody makes a decision out of something almost nobody has.
 
@@ -222,3 +224,11 @@ Every marker this document once carried is closed, and the answers are kept toge
 
 
 - **Settled at Design (2026-08-23).** There is nothing to show: a second key of the same name takes the next free number rather than asking, so no collision ever reaches the user. The name appears where this document already draws the path — on the row, in the fixed-width face — and the made-key dialog ends by naming the file it wrote, which is the one moment the user has any reason to know it.
+
+**A key fingerprint conflict names both keys.** The refusal says *Key fingerprint conflict*, then *Two different keys have the same fingerprint.* Key identity, Delete versus Remove and the warning about a public key that could not be checked keep their meaning.
+
+## Keeping things still, 2026-11-13
+
+What the UI consistency check of 2026-11-13 asked of this screen. The Creator asked for it: *"alignment issues, sizes and positions of things jumping around if stuff around them or inside them moves"*, and then: *"Yes please, fix them."* Each line names its finding in `Audits/Build/UI consistency — the check, 2026-11-13.md`. Claude Opus 5.5. No auditor has seen it.
+
+- **While a key is checked, its mark sits where the answer will appear and takes no line**, so rows do not shrink one by one as answers arrive. Opened, *Advanced — key type* goes whole, and *Key type* sits on its first choice's line. (Findings 23 and 60.)

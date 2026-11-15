@@ -155,7 +155,10 @@ const THE_LONGEST_A_PASSPHRASE_MAY_BE: usize = 8 * 1024;
 // ── The head and the foot — the drawing's `.svhead` and `.svfoot` ──────────
 
 const KEYS: &str = "Keys";
-const CHOOSE_A_KEY: &str = "Choose a key…";
+/// **`Design/Keys` as changed 2026-11-11: *Add existing key…*** — *Choose a
+/// key…* is also the empty Key field in Add a server. The four questions,
+/// scout 3.42.
+const CHOOSE_A_KEY: &str = "Add existing key…";
 const NEW_KEY: &str = "New key…";
 /// `Design/Keys § Opened from a server dialog`. **Where nothing names the
 /// server the line reads *Choosing a key* and stops** — settled at Design,
@@ -167,6 +170,9 @@ const CHOOSING_A_KEY: &str = "Choosing a key";
 /// item 30.
 const CHOOSING_A_KEY_FOR: &str = "Choosing a key for";
 const WHAT_GOES_TO_A_PROVIDER: &str = "Paste the public key at your provider.";
+/// `Design/Keys § The screen is a list and almost nothing else`: **an empty list says so** (the UI at every size,
+/// B-28) — it was blank under the header.
+const NO_KEYS_YET: &str = "No keys yet.";
 const CANCEL_AND_GO_BACK: &str = "Cancel";
 
 // ── `Design/Keys § On a computer without the SSH tools` ────────────────────
@@ -178,11 +184,13 @@ const CANCEL_AND_GO_BACK: &str = "Cancel";
 
 // **The server list says the same two**, and takes them from here rather
 // than keeping a copy (step 10a round 1, fix-here item 30).
-pub(crate) const THE_TOOLS_ARE_NOT_INSTALLED: &str = "SSH tools not installed.";
+/// **`Design/Keys` as changed 2026-11-11: it names what to install.** The four
+/// questions, scout 3.43.
+pub(crate) const THE_TOOLS_ARE_NOT_INSTALLED: &str = "OpenSSH not installed.";
 /// **It says when the limit ends and names no act**: `Specs/Keys` asks the
 /// user to install nothing. Changed 2026-11-06, the check after the last fix
 /// (it read *Install them to create or check keys.*, which asked).
-pub(crate) const UNTIL_THEY_ARE: &str = "Keys can't be created or checked without them.";
+pub(crate) const UNTIL_THEY_ARE: &str = "Keys can't be created or checked without it.";
 
 // ── A row — `Design/Keys § A row` ──────────────────────────────────────────
 
@@ -267,12 +275,12 @@ const THE_KEY_ITSELF_WORKS: &str = "The key itself works.";
 /// `Keys` carries the situation beside the verdict rather than letting the row
 /// say *the file could not be read*.
 const IT_IS_PROTECTED_AND_HAS_NO_PUBLIC_HALF: &str =
-    "Passphrase set and no .pub file beside it.";
-const UNTIL_THAT_FILE_IS_BESIDE_IT: &str = "Can't be checked without one.";
+    "This key has a passphrase. Its public key file (.pub) is missing.";
+const UNTIL_THAT_FILE_IS_BESIDE_IT: &str = "Put its .pub file in the same folder to check it.";
 
 // ── The two ways out of an unusable row ────────────────────────────────────
 
-const CHOOSE_ITS_NEW_LOCATION: &str = "Choose its new location…";
+const CHOOSE_ITS_NEW_LOCATION: &str = "Locate…";
 const CHOOSE_A_REPLACEMENT: &str = "Choose a replacement…";
 /// **What a replacement costs, said before it is pressed** — `Keys` F9 and F12.
 /// The drawing's own.
@@ -293,12 +301,12 @@ const KEY_TYPE: &str = "Key type";
 const SMOOZYS_USUAL_CHOICE: &str = "Default";
 /// **Where the usual one cannot be made**, the next in the fixed order stands
 /// and this marks it. The drawing's own, at `keys-advfall`.
-const SMOOZYS_CHOICE_HERE: &str = "Default here";
+const SMOOZYS_CHOICE_HERE: &str = "Default on this computer";
 /// **The line a user who opened Advanced is owed**, with the type's own name
 /// travelling beside it as a value — the drawing writes it as one string and
 /// X7 will not have a name inside a sentence.
 const IS_THE_USUAL_CHOICE_AND_CANNOT_BE_MADE: &str =
-    "is the default and this computer cannot create it.";
+    "is the default and this computer can't create it.";
 const MAKE_IT_AND_COPY: &str = "Create and copy public key";
 const CANCEL: &str = "Cancel";
 const DONE: &str = "Done";
@@ -311,7 +319,7 @@ const ITS_PUBLIC_KEY_IS_COPIED: &str = "Public key copied.";
 /// keep a passphrase*, word for word. **One home for it**: the admin access box
 /// on Set up and the All servers row take it from here. Mockup states
 /// `keys-nostore`, `keys-madenostore`, `pw-nostore` and `sv-nostore`.
-pub(crate) const NOWHERE_TO_KEEP_THEM: &str = "Passwords and passphrases cannot be saved on this computer.";
+pub(crate) const NOWHERE_TO_KEEP_THEM: &str = "Passwords and passphrases can't be saved on this computer.";
 const PASTE_IT_AT_THE_PROVIDER: &str = "Paste it at your provider.";
 /// **`Keys` G4: the act is reported failed, plainly.** Words ruled here; the
 /// clause requires the telling and names none.
@@ -335,26 +343,26 @@ const CHOOSE_A_KEY_TYPE: &str = "Choose a key type.";
 
 const THAT_FILE_COULD_NOT_BE_READ: &str = "File unreadable";
 const THAT_IS_NOT_A_KEY: &str = "Not a readable key";
-const SMOOZY_CANNOT_USE_THAT_KEY: &str = "Key cannot be used";
+const SMOOZY_CANNOT_USE_THAT_KEY: &str = "Key can't be used";
 /// The heading over the protected-with-no-public-half refusal. Ruled with the
 /// two sentences above, in the same shape as its neighbours.
-const SMOOZY_CANNOT_CHECK_THAT_KEY: &str = "Key cannot be checked";
-const NOTHING_HAS_CHANGED: &str = "Nothing changed.";
+const SMOOZY_CANNOT_CHECK_THAT_KEY: &str = "Key can't be checked";
+const NOTHING_HAS_CHANGED: &str = "Nothing was changed.";
 const BACK: &str = "Back";
 
 const THAT_IS_A_KEY_AND_NOT_THIS_ONE: &str = "Different key";
 const THIS_ROW_IS_ABOUT_A_DIFFERENT_KEY: &str = "This is not the key in this row.";
-const IT_HOLDS: &str = "It holds";
-const YOU_POINTED_AT: &str = "You pointed at";
+const IT_HOLDS: &str = "Expected";
+const YOU_POINTED_AT: &str = "Selected";
 const USE_CHOOSE_A_REPLACEMENT: &str =
-    "To use the key you pointed at, use Choose a replacement.";
+    "To use the selected key, use Choose a replacement.";
 
 /// **`Keys` F5's refusal, said in those words**: two different blobs under one
 /// fingerprint. The drawing has no state for it and it is ruled here; §13 item 1
 /// carries the residual that makes it reachable at all.
-const TWO_KEYS_SMOOZY_CANNOT_TELL_APART: &str = "Duplicate fingerprint";
+const TWO_KEYS_SMOOZY_CANNOT_TELL_APART: &str = "Key fingerprint conflict";
 const TWO_KEYS_ONE_FINGERPRINT: &str =
-    "Same fingerprint as a different key in the list.";
+    "Two different keys have the same fingerprint.";
 
 const SMOOZY_ALREADY_HAS_THAT_KEY: &str = "Key already added";
 const IT_IS_IN_THE_LIST_AS: &str = "It is listed as";
@@ -363,7 +371,7 @@ const AT: &str = "at";
 /// **`Design/Keys § Where two keys share a name`.** A statement, not a refusal.
 /// The name travels beside it as a value. Mockup state `keys-same`.
 const ANOTHER_KEY_IS_ALREADY_CALLED: &str = "Another key is already called";
-const THE_ONE_ALREADY_IN_THE_LIST_HOLDS: &str = "The one already in the list holds";
+const THE_ONE_ALREADY_IN_THE_LIST_HOLDS: &str = "Existing key:";
 const BOTH_ARE_KEPT: &str = "Both are kept.";
 
 // ── Copying — `Design/Keys § When there is no public key file beside…` ─────
@@ -1226,6 +1234,7 @@ fn the_point_is_taken<R: Runtime>(app: &AppHandle<R>, which: WhichOffer, row: Op
                 .ok(),
             // **X5: the system file picker's own chrome passes the point too.**
             title: Prose::new(CHOOSE_A_KEY),
+            the_value_after_the_title: None,
         },
     );
     let crate::picker::Picked::TheUserChose(chosen) = picked else {
@@ -1756,6 +1765,7 @@ pub fn the_screen_says(says: &TheKeysScreen) -> Event {
         .saying("theHeading", Said::Prose(Prose::new(KEYS)))
         .saying("chooseAKey", Said::Prose(Prose::new(CHOOSE_A_KEY)))
         .saying("newKey", Said::Prose(Prose::new(NEW_KEY)))
+        .saying("noKeysYet", Said::Prose(Prose::new(NO_KEYS_YET)))
         .saying("usedBy", Said::Prose(Prose::new(USED_BY)))
         .saying("and", Said::Prose(Prose::new(AND)))
         .saying(
@@ -2275,6 +2285,10 @@ pub fn the_answer_says(says: &TheAnswer) -> Event {
 
 /// **`Keys` T2 and `Keys` T2a's three readings of the type control.**
 fn the_types_say(event: Event, offered: &OfferedSet) -> Event {
+    the_types_say_where(event, offered, cfg!(unix))
+}
+
+fn the_types_say_where(event: Event, offered: &OfferedSet, a_passphrase_can_be_used: bool) -> Event {
     let event = event
         .saying("answer", Said::Value(Verbatim::new("the-key-types")))
         .saying("newKeyHeading", Said::Prose(Prose::new(NEW_KEY_HEADING)))
@@ -2292,6 +2306,18 @@ fn the_types_say(event: Event, offered: &OfferedSet) -> Event {
         .saying("keyType", Said::Prose(Prose::new(KEY_TYPE)))
         .saying("makeItAndCopy", Said::Prose(Prose::new(MAKE_IT_AND_COPY)))
         .saying("cancel", Said::Prose(Prose::new(CANCEL)));
+    // **`Design/Keys` as added 2026-11-11: on Windows the box draws no
+    // passphrase field, and the limit's sentence stands in its place** — the
+    // channel a passphrase needs is not built there (`Keys` G3a). The four
+    // questions, scout 2.13.
+    let event = if a_passphrase_can_be_used {
+        event
+    } else {
+        event.saying(
+            "thePassphraseCannotBeUsed",
+            Said::Prose(Prose::new(crate::keys::askpass::THE_WINDOWS_LIMIT)),
+        )
+    };
 
     // **`Keys` G6: where the probe answers *no generator*, the dialog is
     // replaced by the statement rather than opened beside it.**
@@ -2976,7 +3002,10 @@ mod tests {
     }
 
     /// The stand-ins the harness above loads `web/keys.js` beside.
-    const THE_STAND_INS: [(&str, &str); 7] = [
+    const THE_STAND_INS: [(&str, &str); 8] = [
+        // The real one way the focus moves, which the page imports (the
+        // twenty-ninth notes, piece A1).
+        ("the-focus-moves.js", include_str!("../../web/the-focus-moves.js")),
         // The real drawing of a value, which the page imports (step 10c,
         // dependency wave piece 10a).
         ("the-value-drawn.js", include_str!("../../web/the-value-drawn.js")),
@@ -3169,6 +3198,34 @@ console.log(JSON.stringify({
             the_rows_fingerprint: Some("SHA256:one".into()),
             the_picked_fingerprint: Some("SHA256:two".into()),
         }
+    }
+
+    /// **`Design/Keys` as changed 2026-11-11: the top control that adds a key
+    /// file reads *Add existing key…***, never the Key field's empty
+    /// *Choose a key…*; and the tools line names OpenSSH. The four questions,
+    /// scouts 3.42 and 3.43.
+    #[test]
+    fn four_questions_3_42_and_3_43_the_words_name_one_thing_each() {
+        assert_eq!(CHOOSE_A_KEY, "Add existing key…");
+        assert_ne!(CHOOSE_A_KEY, crate::surface::servers::words::CHOOSE_A_KEY);
+        assert_eq!(THE_TOOLS_ARE_NOT_INSTALLED, "OpenSSH not installed.");
+        assert_eq!(UNTIL_THEY_ARE, "Keys can't be created or checked without it.");
+    }
+
+    /// **`Design/Keys` as added 2026-11-11: on Windows the New key box draws
+    /// no passphrase field**, and the Windows limit's sentence stands in its
+    /// place; elsewhere the field is offered as before. The four questions,
+    /// scout 2.13.
+    #[test]
+    fn four_questions_2_13_windows_shows_the_limit_in_place_of_the_passphrase_field() {
+        let offered = OfferedSet::Read(vec![KeyType::Ed25519]);
+        let on_windows = format!("{:?}", the_types_say_where(Event::about(About::TheRun, "keys:test"), &offered, false));
+        assert!(on_windows.contains("thePassphraseCannotBeUsed"), "{on_windows}");
+        let the_sentence = format!("{:?}", Prose::new("Keys with a passphrase are not supported on Windows."));
+        assert!(on_windows.contains(&the_sentence), "{on_windows}");
+        let elsewhere = format!("{:?}", the_types_say_where(Event::about(About::TheRun, "keys:test"), &offered, true));
+        assert!(!elsewhere.contains("thePassphraseCannotBeUsed"), "{elsewhere}");
+        assert!(include_str!("../../web/keys.js").contains("said.thePassphraseCannotBeUsed"));
     }
 
     fn the_answers() -> Vec<TheAnswer> {
@@ -3926,5 +3983,17 @@ console.log(JSON.stringify(goes.map((one) => [one.textContent, one.title || ""])
             "two passes over one key left {} rows: {rows:?}",
             rows.len()
         );
+    }
+}
+
+#[cfg(test)]
+mod third_part_words {
+    use super::*;
+    #[test]
+    fn third_part_3_40_missing_public_key_and_fingerprint_conflict_are_plain() {
+        assert_eq!(IT_IS_PROTECTED_AND_HAS_NO_PUBLIC_HALF, "This key has a passphrase. Its public key file (.pub) is missing.");
+        assert_eq!(UNTIL_THAT_FILE_IS_BESIDE_IT, "Put its .pub file in the same folder to check it.");
+        assert_eq!(TWO_KEYS_SMOOZY_CANNOT_TELL_APART, "Key fingerprint conflict");
+        assert_eq!(TWO_KEYS_ONE_FINGERPRINT, "Two different keys have the same fingerprint.");
     }
 }

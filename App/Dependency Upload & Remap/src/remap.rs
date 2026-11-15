@@ -244,7 +244,7 @@ fn one_pair(
         None => crate::landing::mirror_of(layout, resolution.to.location())
             .map_err(NoPairFor::TheMirrorCouldNotBeComposed)?,
     };
-    let machine_copy = the_sets_file_named(machine_copy, resolution, &answer.answer.key.reference)
+    let machine_copy = the_sets_file_named(machine_copy, resolution, &answer.answer.key.reference, answer.kind)
         .map_err(NoPairFor::TheMirrorCouldNotBeComposed)?;
 
     let new = if answer.kind == Kind::Library {
@@ -276,17 +276,22 @@ fn one_pair(
 /// answer is the folder the check looked in (K4, G22), and the setting holds a
 /// file's name. **Only where the recorded location's own last segment carries a
 /// set's marks** (G9): a bake's folder is answered the same way, carries none and
-/// its setting holds a folder.
+/// its setting holds a folder. **And a picture answered with a folder**, which is
+/// one stored as a sequence and read as a set (*Colour spaces and image
+/// sequences*): its setting holds the file's own name, digits and all, from which
+/// Blender reads each frame's file in that folder.
 fn the_sets_file_named(
     machine_copy: MachineLocation,
     resolution: &crate::record::Resolution,
     reference: &RecordedLocation,
+    kind: Kind,
 ) -> Result<MachineLocation, crate::landing::CouldNotBeSent> {
     let a_set = matches!(resolution.to, crate::record::ResolvedTo::AFolderForASetRow(_))
-        && matches!(
-            crate::check::classify(reference, crate::check::StoredSource::NotSaidToBeOneFile),
-            crate::check::Form::ASet(_)
-        );
+        && (kind == Kind::Image
+            || matches!(
+                crate::check::classify(reference, crate::check::StoredSource::NotSaidToBeOneFile),
+                crate::check::Form::ASet(_)
+            ));
     if !a_set {
         return Ok(machine_copy);
     }
@@ -458,6 +463,7 @@ mod tests {
                 }),
                 set_aside: false,
                 rejected_guess: None,
+                included: false,
                 read_as: Vec::new(),
             },
             kind,
@@ -486,6 +492,9 @@ mod tests {
             (b"//maps/set/tile.<UVTILE>.png", b"tile.<UVTILE>.png"),
             (b"//seq/frame_####.exr", b"frame_####.exr"),
             (b"//views/eye_%.png", b"eye_%.png"),
+            // *Colour spaces and image sequences*: a picture stored as a
+            // sequence keeps its own name, digits and all.
+            (b"//seq/b_0001.png", b"b_0001.png"),
         ] {
             let composed = compose_the_pairs(
                 &layout,

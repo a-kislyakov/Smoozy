@@ -89,11 +89,11 @@ impl WhatTheMachineSaid {
     /// one, which reached the screen.
     pub fn in_words(&self) -> &'static str {
         match self {
-            WhatTheMachineSaid::ThePathIsNotThere => "the server said the file or folder is not there",
-            WhatTheMachineSaid::TheLoginMayNot => "the server said permission was denied",
-            WhatTheMachineSaid::ItIsAlreadyThere => "the server said it is already there",
-            WhatTheMachineSaid::TheChannelIsGone => "the connection to the server ended",
-            WhatTheMachineSaid::ItRefused => "the server refused it",
+            WhatTheMachineSaid::ThePathIsNotThere => "not found",
+            WhatTheMachineSaid::TheLoginMayNot => "permission denied",
+            WhatTheMachineSaid::ItIsAlreadyThere => "already exists",
+            WhatTheMachineSaid::TheChannelIsGone => "connection lost",
+            WhatTheMachineSaid::ItRefused => "refused by the server",
             WhatTheMachineSaid::TheReplacementCouldNotBeVerified => "file verification failed",
         }
     }
@@ -408,6 +408,26 @@ pub const NAME_YOUR_PROCESSOR_ARCHITECTURE: CommandString = CommandString::const
 /// for nothing.
 pub const NAME_YOUR_C_LIBRARY: CommandString = CommandString::constant("getconf GNU_LIBC_VERSION");
 
+/// **R6a: the machine's mounts, read from the file the kernel keeps for the
+/// reading process.** Added 2026-11-13 (`Audits/Build/The four questions/Brief
+/// — the scout's list.md`, item 1). The line's eleven kinds of field are
+/// documented — Linux man-pages 6.19, `proc_pid_mountinfo(5)`, read 2026-11-13
+/// at `https://man7.org/linux/man-pages/man5/proc_pid_mountinfo.5.html` — and
+/// what is done with them is [`crate::placement::the_mount_points_worth_measuring`]'s.
+/// `cat` is the coreutils one every supported image carries. **No value rides
+/// it**, as no reading's does.
+pub const READ_THE_MOUNTS: CommandString = CommandString::constant("cat /proc/self/mountinfo");
+
+/// **R6a's reading, taken as text**, and nothing where it was not: a command
+/// that did not end cleanly, a channel that was gone and an answer that is not
+/// text are one outcome, and that outcome offers no volume.
+pub async fn read_the_mounts(channel: &mut impl CommandChannel) -> Option<String> {
+    match channel.run(READ_THE_MOUNTS).await {
+        Ok(result) if result.ended_cleanly() => result.output_as_text().map(str::to_string),
+        _ => None,
+    }
+}
+
 /// Every reading command this crate sends, so a reader sees the set at once and
 /// a test can assert that not one of them carries a value.
 ///
@@ -416,7 +436,7 @@ pub const NAME_YOUR_C_LIBRARY: CommandString = CommandString::constant("getconf 
 /// performed, and the container row's two limbs are `Servers`' and are named at
 /// [`WHAT_SERVERS_SENDS_FOR_THE_CONTAINER_ROW`]. **Between the three lists a
 /// reader has every command this module puts on a machine.**
-pub const EVERY_COMMAND_THIS_MODULE_SENDS: [CommandString; 10] = [
+pub const EVERY_COMMAND_THIS_MODULE_SENDS: [CommandString; 11] = [
     THE_PROBE,
     WHICH_LOGIN_IS_THIS,
     THE_DRIVER_CHECK,
@@ -427,6 +447,7 @@ pub const EVERY_COMMAND_THIS_MODULE_SENDS: [CommandString; 10] = [
     ASK_THE_BUILD_ITS_VERSION,
     NAME_YOUR_PROCESSOR_ARCHITECTURE,
     NAME_YOUR_C_LIBRARY,
+    READ_THE_MOUNTS,
 ];
 
 /// **`Rented-server runtime` K1's second row, read without a command at all.**
@@ -1256,7 +1277,7 @@ pub const THE_EXIT_THAT_MEANS_A_DRIVER_IS_INSTALLED_AND_NOT_LOADED: u32 = 9;
 /// **Fact 80's rule as code**: restart only because this check failed, never on
 /// the package manager's word and never unconditionally.
 pub async fn run_the_driver_check(channel: &mut impl CommandChannel) -> WhatTheDriverCheckSaid {
-    match channel.run(THE_DRIVER_CHECK).await {
+    match smoozy_servers::readings::run_a_bounded_reading(channel, THE_DRIVER_CHECK).await {
         Ok(result) if result.ended_cleanly() => WhatTheDriverCheckSaid::ItAnswered,
         // **Whole or not at all, streams kept apart** — S2a's discipline. **Both
         // are kept**: this reading used to keep the complaint stream alone, on
@@ -1292,6 +1313,20 @@ pub(crate) mod tests {
     use crate::kind::DistributionFamily;
     use smoozy_server_protocol::transport::ssh::CommandFailure;
     use smoozy_server_protocol::transport::CommandResult;
+
+    #[tokio::test(start_paused = true)]
+    async fn bad_batch_2_a_gpu_check_that_never_answers_is_not_a_restart_verdict() {
+        struct NeverAnswers;
+        impl CommandChannel for NeverAnswers {
+            async fn run(&mut self, _: CommandString) -> Result<CommandResult, smoozy_server_protocol::transport::ssh::CommandFailure> {
+                std::future::pending().await
+            }
+        }
+        let answer = tokio::time::timeout(std::time::Duration::from_secs(31), run_the_driver_check(&mut NeverAnswers))
+            .await.expect("the GPU check must end");
+        assert!(!answer.a_driver_is_already_installed(TheRunningKernelsModule::IsThere));
+        assert!(matches!(answer, WhatTheDriverCheckSaid::ItDidNot { the_exit: None, .. }));
+    }
 
     /// A machine whose answers are written by hand, which is what keeps every
     /// act above testable at the desk.

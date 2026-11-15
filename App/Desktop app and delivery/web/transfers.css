@@ -18,26 +18,33 @@
   margin: 4px 0 2px;
 }
 
-/* A file's own bar and figure, which is `theMarkOnARow`'s cell, sitting in the
-   drawing's bar column. */
-.tf > .tb {
-  height: auto;
+/* A file's own bar, which is `theMarkOnARow`'s cell, sitting in the drawing's
+   bar column: **the drawing's 3-pixel bar on its visible track**, so a queued
+   file shows the empty track the drawing shows and a file's bar is never the
+   request's 6-pixel one (UI consistency, finding 20). The track is the
+   drawing's `.tb`; the bar draws only the part done. Its figure sits in the
+   last column (C-17). */
+.tf > .tb .underway-row {
+  display: block;
+  height: 100%;
+}
+.tf > .tb .underway-bar {
+  height: 100%;
+  border-radius: 2px;
   background: none;
 }
-.tf > .tb .underway-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+.tf > .tb .underway-bar::-webkit-progress-bar {
+  background: none;
 }
-.tf > .tb .underway-row progress {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.tf > .tb .underway-row .rqs {
-  margin: 0;
-  white-space: nowrap;
-  font-size: var(--t-sm);
+
+/* A file's open menu sits under its row, over the rows below, so opening it
+   moves nothing (UI consistency, finding 6). */
+.tf { position: relative; }
+.tf > .ctx.transfers-ctx {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 5;
 }
 
 /* The one right-click menu, `§ Stopping one file`, placed under the row it
@@ -82,9 +89,46 @@
  * columns; this does the same for the format rows, keeping 58 pixels as the
  * least. */
 .transfers-formats .fmt {
-  grid-template-columns: 14px minmax(58px, max-content) 1fr auto;
+  grid-template-columns: 14px minmax(58px, max-content) minmax(0, 1fr) auto;
 }
+/* **The folder column may be narrower than its longest folder name**, which
+ * then breaks inside it, so a format's file count stays in its row and the box
+ * never scrolls sideways (the UI at every size, D-14). */
+.transfers-formats .fmt > .fmw { min-width: 0; }
+.transfers-formats .fmt .fmw { overflow-wrap: anywhere; }
 
 /* Transfers' `Server protocol and transfers` S0a starts and the drawing's two groups. */
 .rqstarted { font-size: var(--t-xs); color: var(--ink3); white-space: nowrap; }
 .reqgroup { padding: 12px var(--gutter) 5px; margin: 0; font-size: var(--t-sm); color: var(--ink3); font-weight: 550; }
+
+/* **A file's path is cut at its start, its end kept** — the frame number and
+   the extension that tell rows apart — and reads whole on hover (the UI at
+   every size, C-19). The line runs right to left so its ellipsis falls at the
+   start; the path itself is one left-to-right value inside it
+   (`web/the-value-drawn.js`), so its characters keep their order. */
+.tf > .tn { direction: rtl; text-align: left; }
+
+/* The server filter is no wider than a long name needs to be read; the name
+   is cut short in the closed control (C-19). */
+#tfilter { max-width: 16em; text-overflow: ellipsis; }
+
+/* A file's figure in the last column, with the bar column's whole width left
+   to the bar (C-17). */
+.tf > .tm > .rqs { margin: 0; font-size: var(--t-sm); }
+
+/* **A link is drawn as a link here too** — the accent words the drawing gives
+   `.lnk` inside the check's tools and the selection bar, never the system's
+   grey button (the UI at every size, C-16). */
+#transfersview button.lnk { font: inherit; font-weight: 550; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+#transfersview button.lnk:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* How a request ended, after its name, keeps its width (C-20). */
+.rqh .rqend { flex: none; white-space: nowrap; }
+
+/* The could-not-read failure sits inside the list's gutter, as a request
+   does (C-25). */
+.transfers-failure { margin: 14px var(--gutter); }
+
+/* On a very wide window the list stops at a readable width, so a name, its
+   figures and its controls stay near each other (C-26). */
+#tscroll > .req, #tscroll > .reqgroup { max-width: 1400px; }

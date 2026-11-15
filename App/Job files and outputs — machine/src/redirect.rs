@@ -800,6 +800,7 @@ mod tests {
             .map(|destination| ADestinationToMap {
                 destination,
                 the_longest_name_it_will_write: Some(b"beauty0010.png".to_vec()),
+                it_writes_nothing_for_the_jobs_frames: false,
             })
             .collect();
         compose_the_map(
@@ -1112,6 +1113,7 @@ mod tests {
         let held = [ADestinationToMap {
             destination: &destinations[0],
             the_longest_name_it_will_write: Some(b"x".repeat(300)),
+            it_writes_nothing_for_the_jobs_frames: false,
         }];
         let version = TheVersionInHand::of(5, 2);
         let map = compose_the_map(

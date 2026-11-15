@@ -3849,6 +3849,7 @@ fn the_document_a_reading_prints() -> String {
                         ),
                     },
                 announced_add_on_case: None,
+                the_files_own_scripts_run: None,
                 the_folders_at_the_machines_top: None,
             })
             .expect("the settings half renders"),
@@ -5697,6 +5698,7 @@ fn the_set_up_cards_reading_names_the_ready_run_and_the_last_finished_job_after_
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: Some(the_line.to_string()),
             },
             smoozy_state::observed::Reading::taken(
@@ -6782,7 +6784,8 @@ fn a_reading_whose_build_cannot_be_run_ends_saying_so() {
 ///
 /// **Where the kernel answers for a process** — every rented machine, the
 /// Linux runner, and the desk since 2026-10-24 — the reading's Blender is
-/// recorded as it starts, the interrupt reaches it, and the reading's answer
+/// recorded as it starts, the kill reaches it (the interrupt until
+/// 2026-11-13, `Render Settings` W2), and the reading's answer
 /// says Smoozy ended it. **Where it answers nothing**, no Blender is recorded
 /// and the interrupt cannot be validated: the stop is taken and recorded, and
 /// the reading runs to its own end. That half is asserted rather than skipped.
@@ -7096,7 +7099,7 @@ fn a_real_blender_fixes_the_linked_set_through_the_real_program() {
     let _deadline = TheTestsDeadline::started();
     use smoozy_framing::requests as asked;
     let blender = std::env::var("SMOOZY_DESK_BLENDER")
-        .unwrap_or_else(|_| "/Applications/Blender.app/Contents/MacOS/Blender".to_string());
+        .unwrap_or_else(|_| "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender".to_string());
     let mut area = APackageArea::made();
     area.start_the_supervisor();
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -7272,7 +7275,7 @@ fn a_dropped_package_area_leaves_no_program_it_started_running() {
 /// and ignored** — step 10c's dependency wave piece 2, run by hand:
 ///
 /// ```text
-/// SMOOZY_DESK_BLENDER=/Applications/Blender.app/Contents/MacOS/Blender \
+/// SMOOZY_DESK_BLENDER=/Applications/Blender 5.2.4.app/Contents/MacOS/Blender \
 /// SMOOZY_DESK_BLEND=/path/to/blender-5.2-splash.blend \
 /// SMOOZY_DESK_SPLASH_READING=/path/to/reading-5.2-as.json \
 /// SMOOZY_DESK_VERSION=5.2.2 \
@@ -8808,6 +8811,107 @@ fn a_first_frame_job_stopped_with_no_frame_drops_its_held_job_through_the_real_p
             .any(|(kind, about, _)| kind == asked::THE_RELEASE_EVENT
                 && *about == standing_hold.as_text()),
         "nothing was released for the hold that stands"
+    );
+}
+
+/// **The four questions, batch 4 (scout 1.5), Creator-stated 2026-11-11:
+/// the phone's *Resume*, through the real program** (`Telegram` Y4a as changed
+/// that day). The same request as *Submit again*, carrying the frame to start
+/// at: the new job's manifest is the failed one's copied under the new
+/// identity with the range moved to every asked frame from that frame on, and
+/// the event names the job and the frame. Before, the request took no frame
+/// and the whole range went again.
+#[test]
+fn resume_makes_one_job_from_its_frame_through_the_real_program() {
+    let _deadline = TheTestsDeadline::started();
+    use smoozy_framing::requests as asked;
+    let mut area = APackageArea::made();
+    let workers = a_role_worker_that_asks_when_told(&area);
+    let root = ARoot::recorded_in(&area);
+    let (stand_in, _) = a_stand_in_for_blender(&root);
+    let failed = root.a_job_the_render_worker_can_take(&stand_in);
+    area.start_the_supervisor();
+    submitted(&area, &failed);
+    the_note_once_it_has_ended(&area, &failed);
+    let machine_root =
+        smoozy_job_files_machine::layout::MachineRoot::chosen(root.at.to_str().expect("text"))
+            .expect("a root");
+    let manifest_of = |job: &Identity| {
+        std::fs::read(format!(
+            "{}/{}",
+            smoozy_job_files_machine::publication::the_job_record_directory(&machine_root, job),
+            smoozy_job_files_machine::manifest::MANIFEST_FILE_NAME
+        ))
+    };
+    let original = smoozy_job_files_machine::manifest::SubmissionManifest::read_back(
+        &manifest_of(&failed).expect("the failed job's manifest"),
+    )
+    .expect("it reads");
+    asked_through_the_adapter(
+        &area,
+        &Request::speaking(
+            THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+            Identity::issue(IdentityKind::Operation).expect("randomness"),
+            smoozy_runtime::acting::stores::THE_TELEGRAM_ROLE_IS_ENABLED_REQUEST,
+        ),
+    );
+    std::fs::write(
+        area.at.join("telegram-request"),
+        write_request_frame(
+            &Request::speaking(
+                THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+                Identity::issue(IdentityKind::Operation).expect("randomness"),
+                THE_JOB_IS_SUBMITTED_AGAIN_REQUEST,
+            )
+            .carrying(
+                smoozy_framing::framing::Fields::none()
+                    .and(asked::THE_JOB_FIELD, failed.as_text())
+                    .and("the frame it resumes from", "2"),
+            ),
+        ),
+    )
+    .expect("the press is written");
+    let worker = a_new_role_worker(&workers, &[]);
+    let answered = what_the_worker_was_answered(&workers, &worker);
+    assert_eq!(
+        answered.fields.text("what became of the submission"),
+        Some("submitted now"),
+        "{answered:?} — {}",
+        the_complaints_of(&area)
+    );
+    let job = Identity::read_back(IdentityKind::Job, answered.fields.text("new job").expect("the new job"))
+        .expect("a job identity");
+    let copied = smoozy_job_files_machine::manifest::SubmissionManifest::read_back(
+        &manifest_of(&job).expect("the copy is published"),
+    )
+    .expect("it reads back");
+    let mut expected = original.copied_under(&job, Some("Kitchen")).expect("it fits");
+    expected.frame_range = smoozy_job_files_machine::manifest::FrameRange::TheUsersParsedIntegers(vec![2, 3]);
+    assert_eq!(copied, expected, "the asked frames from frame 2 on, in a new folder");
+    let written: Vec<String> = every_event(&area)
+        .into_iter()
+        .filter(|(kind, about, _)| kind == asked::THE_JOB_RECORD_WRITTEN_EVENT && *about == job.as_text())
+        .map(|(_, _, says)| says)
+        .collect();
+    assert_eq!(
+        written,
+        vec![format!("waiting: resumed by this machine from {} at frame 2", failed.as_text())],
+        "journalled once, naming the job and the frame"
+    );
+    // **`Queue & History` N15's build detail of 2026-11-12: the new note
+    // names the job it carries on from, and its answer carries it** to the
+    // desktop that takes the job in (the four questions, batch 4's leftover).
+    let its_note = asked_through_the_adapter(
+        &area,
+        &a_request_of(
+            asked::THE_PER_JOB_NOTE_READING_REQUEST,
+            smoozy_framing::framing::Fields::none().and(asked::THE_JOB_FIELD, job.as_text()),
+        ),
+    );
+    assert_eq!(
+        its_note.fields.text(asked::THE_JOB_IT_CARRIES_ON_FROM_FIELD),
+        Some(failed.as_text().as_str()),
+        "the resumed job's note does not say which job it carries on from: {its_note:?}"
     );
 }
 

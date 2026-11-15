@@ -78,6 +78,26 @@ pub struct TheBoard {
     pub route: TheRouteMode,
     pub roster: Vec<ARosterEntry>,
     pub instructions: Vec<AnEntry>,
+    /// **`Telegram` R10 as added 2026-11-13 (Sol's look at the Telegram
+    /// fixes, points 1 and 2) — the commands under way**, each from its first
+    /// group until its one answer is sent, so the next holder can run it
+    /// again from the start. Left out of the text where there are none, so a
+    /// board without any reads and writes as it always did; an older reader
+    /// ignores the field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub commands: Vec<ACommandUnderWay>,
+}
+
+/// **`Telegram` R10 as added 2026-11-13 — one command under way**: the
+/// gather's identity, the update it answers, and what it asks, in a
+/// state-request's own words (its action and payload; V1d's choice,
+/// operation and date ride the payload for `reporting`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ACommandUnderWay {
+    pub gather: String,
+    pub update: i64,
+    pub action: String,
+    pub payload: Value,
 }
 
 /// A candidate over B2's bound. **Never sent.**
@@ -159,11 +179,18 @@ pub struct TheUtterance {
     pub proposed: Vec<AnEntry>,
     pub replacing: Vec<AnEntry>,
     pub replies: Vec<Value>,
+    /// **`Telegram` B14 as added 2026-11-13 — this machine's role was
+    /// switched off, and it asks to be taken off the roster.** An older
+    /// holder reads nothing of it, and B14's forgetting removes the machine
+    /// there instead.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub leaving: bool,
 }
 
 impl TheUtterance {
     pub fn has_nothing_to_say(&self) -> bool {
         !self.announce
+            && !self.leaving
             && self.acknowledged.is_empty()
             && self.proposed.is_empty()
             && self.replacing.is_empty()
@@ -220,7 +247,15 @@ pub enum WhatIsPinned {
     /// one — not silently replaced unless it is stale. `text` is kept, compared
     /// for equality only, for B3's stale-board test.
     AnUnreadableBoard { id: i64, text: String },
-    /// Anything else pinned in the conversation.
+    /// **A pin of the user's** (`Telegram` B11 as changed 2026-11-11, the
+    /// four questions, batch 4, Sol's S1): a message not this bot's own, or
+    /// one of this bot's that does not open with the head (B23) — a job's
+    /// message or picture the user pinned. **Never unpinned by
+    /// the janitor**; a claimant lifts it to read beneath and pins it again
+    /// (B3).
+    AUsersPin { id: i64 },
+    /// **Smoozy's own, and not readable by this build**: a machinery message
+    /// of a later version (B9a), unpinned without reading.
     SomethingElse { id: i64 },
 }
 
@@ -231,6 +266,7 @@ impl WhatIsPinned {
             WhatIsPinned::ABoard { id, .. }
             | WhatIsPinned::AMachineryMessage { id, .. }
             | WhatIsPinned::AnUnreadableBoard { id, .. }
+            | WhatIsPinned::AUsersPin { id }
             | WhatIsPinned::SomethingElse { id } => Some(*id),
         }
     }
@@ -268,7 +304,7 @@ fn what_is_pinned_by(chat: &Value, speaks: WhatAReaderSpeaks) -> WhatIsPinned {
     let from_a_bot = pinned.pointer("/from/is_bot").and_then(Value::as_bool) == Some(true);
     let text = pinned.get("text").and_then(Value::as_str).unwrap_or("");
     if !from_a_bot {
-        return WhatIsPinned::SomethingElse { id };
+        return WhatIsPinned::AUsersPin { id };
     }
     let lines: Vec<&str> = text.lines().collect();
     if let Some((at, version)) = the_mark(&lines, A_BOARD_MARK) {
@@ -284,6 +320,13 @@ fn what_is_pinned_by(chat: &Value, speaks: WhatAReaderSpeaks) -> WhatIsPinned {
                 return WhatIsPinned::AMachineryMessage { id, utterance };
             }
         }
+    }
+    // **B11 as changed 2026-11-11: a message of the bot's that does not open
+    // with the head is one the user pinned** — a job's message or picture.
+    // Every message Smoozy pins opens with it (B23), and nothing else Smoozy
+    // sends does (B18).
+    if !text.starts_with(THE_HEAD) && !text.starts_with(THE_HEAD_BEFORE_2026_10_28) {
+        return WhatIsPinned::AUsersPin { id };
     }
     WhatIsPinned::SomethingElse { id }
 }
@@ -358,6 +401,7 @@ pub(crate) mod tests {
             route: TheRouteMode::Asking,
             roster: vec![ARosterEntry { colour: None, machine: holder.into(), display: "RunPod 4090".into() }],
             instructions: vec![],
+            commands: vec![],
         }
     }
 
@@ -394,12 +438,12 @@ pub(crate) mod tests {
         assert_eq!(what_is_pinned(&json!({ "id": 42 })), WhatIsPinned::Nothing);
         let text = a_board("m1").compose().unwrap();
         // A person cannot make a board by typing one.
-        assert_eq!(what_is_pinned(&pinned(3, false, &text)), WhatIsPinned::SomethingElse { id: 3 });
+        assert_eq!(what_is_pinned(&pinned(3, false, &text)), WhatIsPinned::AUsersPin { id: 3 });
         let broken = format!("{THE_HEAD}\n\nsmoozy-board 1\n{{not json");
         assert!(matches!(what_is_pinned(&pinned(4, true, &broken)), WhatIsPinned::AnUnreadableBoard { id: 4, text } if text == broken));
         let later = format!("{THE_HEAD}\n\nsmoozy-board 2\n{{}}");
         assert!(matches!(what_is_pinned(&pinned(5, true, &later)), WhatIsPinned::AnUnreadableBoard { id: 5, text } if text == later));
-        assert_eq!(what_is_pinned(&pinned(6, true, "hello")), WhatIsPinned::SomethingElse { id: 6 });
+        assert_eq!(what_is_pinned(&pinned(6, true, "hello")), WhatIsPinned::AUsersPin { id: 6 }, "a job's message the user pinned");
     }
 
     /// **`Telegram` B2: the bound is counted, and a character outside the
@@ -424,6 +468,12 @@ pub(crate) mod tests {
     /// than calling [`the_spoiler_after_the_head`], so a wrong rule there is
     /// caught here rather than copied. A board or machinery message is told
     /// apart by opening with B23's head, as the silence check does.
+    ///
+    /// **And `Telegram` B25a (2026-11-11): the spoiler sits inside one
+    /// `expandable_blockquote` of exactly its range**, so a test also fails
+    /// where a machinery send or edit is blurred and not folded, where the
+    /// fold is not the spoiler's range, where there is more than one
+    /// quotation, or where a message for the user carries one.
     pub(crate) fn the_spoiler_is_right(method: &str, fields: &Value) {
         if method != "sendMessage" && method != "editMessageText" {
             return;
@@ -435,8 +485,30 @@ pub(crate) mod tests {
             .and_then(Value::as_array)
             .map(|all| all.iter().filter(|e| e["type"] == "spoiler").collect())
             .unwrap_or_default();
+        let quotations: Vec<&Value> = fields
+            .get("entities")
+            .and_then(Value::as_array)
+            .map(|all| all.iter().filter(|e| e["type"] == "expandable_blockquote" || e["type"] == "blockquote").collect())
+            .unwrap_or_default();
         if !text.starts_with(THE_HEAD) {
             assert!(spoilers.is_empty(), "B25: a message for the user carries a spoiler: {fields}");
+            // **`Telegram` E3e (2026-11-12): the one message for the user that
+            // carries a quotation is a log**, whose label line stands just
+            // before the fold; it carries one, folded, and never a blur.
+            let a_log = quotations.len() == 1
+                && quotations[0]["type"] == "expandable_blockquote"
+                && quotations[0]["offset"].as_u64().is_some_and(|offset| {
+                    let before: Vec<u16> = text.encode_utf16().take(offset as usize).collect();
+                    String::from_utf16_lossy(&before)
+                        .trim_end_matches('\n')
+                        .rsplit('\n')
+                        .next()
+                        .is_some_and(|label| label.starts_with("Output log") || label.starts_with("Errors log"))
+                });
+            assert!(
+                quotations.is_empty() || a_log,
+                "B25a: a message for the user carries a folded quotation, and is no log: {fields}"
+            );
             return;
         }
         assert_eq!(spoilers.len(), 1, "B25: a machinery {method} lacks its spoiler: {fields}");
@@ -453,6 +525,22 @@ pub(crate) mod tests {
             text.trim_end().encode_utf16().count(),
             "B25: the spoiler does not run to the end: {fields}"
         );
+        assert_eq!(quotations.len(), 1, "B25a: a machinery {method} lacks its folded quotation: {fields}");
+        assert_eq!(quotations[0]["type"], "expandable_blockquote", "B25a: the quotation is not folded: {fields}");
+        assert_eq!(
+            (quotations[0]["offset"].as_u64(), quotations[0]["length"].as_u64()),
+            (Some(offset as u64), Some(length as u64)),
+            "B25a: the folded quotation is not the spoiler's range: {fields}"
+        );
+    }
+
+    /// **`Telegram` B25 and B25a — the marking a board or machinery message
+    /// carries for a range**: one folded quotation, and the spoiler inside it.
+    pub(crate) fn the_marks(offset: usize, length: usize) -> Value {
+        json!([
+            { "type": "expandable_blockquote", "offset": offset, "length": length },
+            { "type": "spoiler", "offset": offset, "length": length }
+        ])
     }
 
     fn a_send(text: &str, entities: Option<Value>) -> Value {
@@ -473,7 +561,7 @@ pub(crate) mod tests {
         let plain: String = String::from_utf16(&board.encode_utf16().take(offset).collect::<Vec<_>>()).unwrap();
         assert_eq!(plain, format!("{THE_HEAD}\n{THE_BOARDS_SECOND_LINE}\n\n"));
         assert_eq!(offset + length, how_long_it_counts(&board));
-        the_spoiler_is_right("sendMessage", &a_send(&board, Some(json!([{ "type": "spoiler", "offset": offset, "length": length }]))));
+        the_spoiler_is_right("sendMessage", &a_send(&board, Some(the_marks(offset, length))));
 
         let utterance = TheUtterance { machine: "m2".into(), display: "Vast \u{1F3A5}".into(), announce: true, ..Default::default() };
         let text = utterance.compose().unwrap();
@@ -482,7 +570,7 @@ pub(crate) mod tests {
         assert_ne!(offset, text.find("\n\n").unwrap() + 2, "counted in UTF-16 units, not in bytes");
         assert_ne!(offset, text[..text.find("\n\n").unwrap() + 2].chars().count(), "counted in UTF-16 units, not in characters");
         assert_eq!(offset + length, how_long_it_counts(&text));
-        the_spoiler_is_right("editMessageText", &a_send(&text, Some(json!([{ "type": "spoiler", "offset": offset, "length": length }]))));
+        the_spoiler_is_right("editMessageText", &a_send(&text, Some(the_marks(offset, length))));
 
         assert_eq!(the_spoiler_after_the_head("Smoozy \u{2014} server coordination"), None);
         assert_eq!(the_spoiler_after_the_head("Smoozy \u{2014} server coordination\n\n  \n"), None);
@@ -524,6 +612,46 @@ pub(crate) mod tests {
         the_spoiler_is_right("sendMessage", &a_send("Which job?", Some(json!([{ "type": "spoiler", "offset": 0, "length": 5 }]))));
     }
 
+    /// **`Telegram` B25a: blurred and not folded fails.**
+    #[test]
+    #[should_panic(expected = "lacks its folded quotation")]
+    fn the_stand_in_check_fails_a_machinery_send_blurred_and_not_folded() {
+        let text = a_board("m1").compose().unwrap();
+        let (offset, length) = the_spoiler_after_the_head(&text).unwrap();
+        the_spoiler_is_right("sendMessage", &a_send(&text, Some(json!([{ "type": "spoiler", "offset": offset, "length": length }]))));
+    }
+
+    /// **`Telegram` B25a: a fold that is not the spoiler's range fails** — one
+    /// that takes in the head would fold the head away.
+    #[test]
+    #[should_panic(expected = "not the spoiler's range")]
+    fn the_stand_in_check_fails_a_fold_over_the_head() {
+        let text = TheUtterance { machine: "m2".into(), display: "Vast".into(), announce: true, ..Default::default() }.compose().unwrap();
+        let (offset, length) = the_spoiler_after_the_head(&text).unwrap();
+        let mut marks = the_marks(offset, length);
+        marks[0]["offset"] = json!(0);
+        marks[0]["length"] = json!(offset + length);
+        the_spoiler_is_right("editMessageText", &a_send(&text, Some(marks)));
+    }
+
+    /// **`Telegram` B25a: an ordinary quotation is not a folded one.**
+    #[test]
+    #[should_panic(expected = "the quotation is not folded")]
+    fn the_stand_in_check_fails_a_quotation_that_does_not_fold() {
+        let text = a_board("m1").compose().unwrap();
+        let (offset, length) = the_spoiler_after_the_head(&text).unwrap();
+        let mut marks = the_marks(offset, length);
+        marks[0]["type"] = json!("blockquote");
+        the_spoiler_is_right("sendMessage", &a_send(&text, Some(marks)));
+    }
+
+    /// **`Telegram` B25a: nothing written for the user is folded.**
+    #[test]
+    #[should_panic(expected = "for the user carries a folded quotation")]
+    fn the_stand_in_check_fails_a_message_for_the_user_that_is_folded() {
+        the_spoiler_is_right("sendMessage", &a_send("Which job?\n\nKitchen", Some(json!([{ "type": "expandable_blockquote", "offset": 12, "length": 7 }]))));
+    }
+
     #[test]
     #[should_panic(expected = "markup was used")]
     fn the_stand_in_check_fails_markup() {
@@ -540,7 +668,7 @@ pub(crate) mod tests {
         let text = board.compose().unwrap();
         let (offset, length) = the_spoiler_after_the_head(&text).unwrap();
         let mut with = pinned(9, true, &text);
-        with["pinned_message"]["entities"] = json!([{ "type": "spoiler", "offset": offset, "length": length }]);
+        with["pinned_message"]["entities"] = the_marks(offset, length);
         let mut empty = pinned(9, true, &text);
         empty["pinned_message"]["entities"] = json!([]);
         let expected = WhatIsPinned::ABoard { id: 9, board };
@@ -636,6 +764,7 @@ pub(crate) mod tests {
             proposed: vec![stop],
             replacing: vec![],
             replies: vec![json!({ "operation": "gather-7", "jobs": [] })],
+            leaving: false,
         };
         (board, utterance)
     }

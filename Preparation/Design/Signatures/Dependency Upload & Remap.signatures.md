@@ -48,3 +48,34 @@
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the bake folder statement and the absolute-path note. The last words read before the release. No auditor has seen it.
 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the output window, the re-run mark, and the dependency check.md`, outside any round — *Install Blender…* beside *This server has no Blender.*; the waiting remap reason. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 6, the dependency check.md`, outside any round — *To upload*'s up arrow; the group *Not used by any scene* with *Include* and *Include all*; the shift's sentence in files, and no undo where it found none. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 11, linked files go first.md`, outside any round — the summary's count of linked files and *found so far* during the upload; the upload's own figure; the sentence; the button *Upload the 50 found so far (2.1 GB)*; the header's reading line; the two notes; the one rebuild that keeps the row in view. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 7, Files: refresh and the upload's progress.md`, outside any round — § How the rows are grouped and sorted: the rows alternate ground, afresh under each heading, no group tinted (note 21, Creator-stated). No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 12, what the live pass found.md`, outside any round — § While it is still reading below a linked file: *Checking dependencies…* on the header's line while the check runs with nothing else to say. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece A2, the check's rows stay put.md`, outside any round — § Keyboard shortcuts: ↑ and ↓ choose the row above or below, Shift with them widens the choice by one row, a chosen row shows no ring, and the list scrolls only as far as brings the row into view (the twenty-ninth notes, note 4, the runner's ruling under Rule 10). No auditor has seen it.
+
+2026-11-11 — GPT-6.1 Sol (Codex) — Named slow local reads on macOS honestly and made a second check press answer.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 3, words a user can't act on.md`, outside any round — *Remap* is gone from the row notes (scout 3.14), the full-path note says where the fix is made and keeps its *may* (3.15), and the unknown-origin line claims nothing about how the file arrived (3.16), each in Sol's narrowed form. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), second builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — the check's Upload leaves the user on the panel (scout 1.9). No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: *Acting on many rows*: *Retry* and *Verify* over a selection, each taking every chosen row its own row's control would (scout 4.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, sixth part: *A row*: an arbitrary pick lists its matches, and one can be chosen (scout 2.17). No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the live pass's leftovers.md`, outside any round — § A slow local read on macOS: a path that climbs with `..` is named by where it lands, from its names alone. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the window notes, Sol's points.md`, outside any round — *Stop* beside the header's line for the whole check (Sol's look at reading the file past a minute, point 1). No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, second round.md`, outside any round — the small *Stop*, the read line's mark, a folder added while a check runs. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+
+2026-11-15 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/What if — the answers/Brief — colour spaces and image sequences, built from the research.md`, outside any round — *Colour spaces and image sequences, 2026-11-15*: a sequence row's missing files as a red note, counted in the summary; a colour name the server's Blender lacks as a statement above the rows. No auditor has seen it.

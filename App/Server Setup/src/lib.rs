@@ -168,6 +168,10 @@ pub mod readings;
 pub use smoozy_server_setup_machine::recovery;
 pub mod restart;
 pub use smoozy_server_setup_machine::run;
+/// **The status blender.org refused a fetch with, read back from the fetch's
+/// own words** — `Design/Server Setup § The step that failed`'s one
+/// exception, the night's live pass, fault 4.
+pub use smoozy_server_setup_machine::acting::worker::the_status_the_fetch_was_refused_with;
 pub mod search;
 pub mod statements;
 pub mod telegram;

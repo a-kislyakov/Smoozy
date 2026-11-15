@@ -16,16 +16,18 @@
 //! **The order.**
 //!
 //! 1. **Found** ([`LinuxRoute::found`]): a check found a newer version. The
-//!    box is offered where Z10b and Z29 allow it and nothing is running
-//!    (Z31); otherwise About says what stands.
-//! 2. **Answered** on the check's one sequence. *Not now*, Escape, an orderly
+//!    box is offered where Z10b and Z29 allow it — **while jobs run too, from
+//!    2026-11-09** (Z33), with the sentence saying what installing does to
+//!    them ([`super::the_box`]); otherwise About says what stands.
+//! 2. **Answered** on the check's one sequence. *Skip this version*, Escape, an orderly
 //!    quit with the box open and a declined system authentication write the
 //!    declined mark with the offered version (Z10b). **A failed install writes
 //!    none** (step 11's D6b, the runner's ruling): it is not a decline.
 //! 3. **Prepared** ([`prepare`]): the exact running release's signed update
 //!    file and package fetched from that release, verified and retained under
 //!    the per-user cache (Z11); then the new package fetched. Both through the
-//!    shared admitted, budgeted fetch and its length and digest check (E16).
+//!    shared admitted, budgeted fetch and its length and digest check (E16),
+//!    **with the record's lock let go** (Z11's build detail of 2026-11-11).
 //! 4. **Before publication**: L8's stale copy discarded, E15's record kept,
 //!    Z21a's record written naming the retained package.
 //! 5. **The transaction** ([`transact`]): the system's own authentication is
@@ -53,7 +55,7 @@
 //! **Markers used below that belong to another document, each with the
 //! document it belongs to.** `State, identity and recovery` I9.
 
-use super::checking::{self, AdmitsTheUpdateFetch, ReadsTheUpdateFile, TheReading};
+use super::checking::{self, AFailedStep, AdmitsTheUpdateFetch, ReadsTheUpdateFile, TheReading, TheStepThatFailed};
 use super::the_mac::HandsTheHold;
 use super::{fetching, manifest::AnEntry, the_probe, verifying};
 use crate::platform::files;
@@ -65,56 +67,9 @@ use std::sync::{Arc, Mutex};
 // The offer and the mark
 // ════════════════════════════════════════════════════════════════════════════
 
-/// **Whether the box is offered** (Z10b, Z29, Z31): a version above the
-/// running one, nothing held, and — on the automatic route only — above the
-/// version the declined mark names.
-pub fn should_offer(
-    version: &str,
-    running: &str,
-    declined: Option<&str>,
-    user_asked: bool,
-    held: bool,
-) -> bool {
-    !held
-        && checking::a_version_above(version, running)
-        && (user_asked
-            || declined.is_none_or(|declined| checking::a_version_above(version, declined)))
-}
-
-/// **What a found version comes to on Linux.**
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WhatTheFindingComesTo {
-    /// Nothing is offered: on the automatic route, the mark names it. About
-    /// reads the Linux form, never that it will install by itself.
-    Quiet,
-    /// Something is running (Z31): About's held form, and no box.
-    Held,
-    /// The box is offered.
-    TheBox,
-}
-
-/// **The decision [`LinuxRoute::found`] acts on.** `held` is Z31's reading,
-/// asked only where the box would otherwise be offered.
-pub fn what_the_finding_comes_to(
-    version: &str,
-    running: &str,
-    declined: Option<&str>,
-    user_asked: bool,
-    held: &dyn Fn() -> bool,
-) -> WhatTheFindingComesTo {
-    if !should_offer(version, running, declined, user_asked, false) {
-        WhatTheFindingComesTo::Quiet
-    } else if held() {
-        WhatTheFindingComesTo::Held
-    } else {
-        WhatTheFindingComesTo::TheBox
-    }
-}
-
-/// **Z10b's mark, written at the dismissal** with the version offered.
-pub fn dismissed(record: &rusqlite::Connection, version: &str) -> Result<(), String> {
-    update_trust::this_version_was_declined(record, version).map_err(|e| format!("{e:?}"))
-}
+/// **Z10b's mark, written at the dismissal** — the one box's, on every system
+/// from 2026-11-09 (Z33), and so kept in `super::the_box`.
+pub use super::the_box::dismissed;
 
 // ════════════════════════════════════════════════════════════════════════════
 // The transaction, the probe and the reinstall
@@ -233,7 +188,7 @@ pub fn transact(record: &LocalRecord, version: &str, steps: &mut dyn PackageStep
 /// it is written again here only where that write failed. **A failed install
 /// is not a decline**, so it writes none and the automatic route may offer the
 /// version again.
-pub fn the_mark_is_written_after(result: &Result<Outcome, String>) -> bool {
+pub fn the_mark_is_written_after<E>(result: &Result<Outcome, E>) -> bool {
     matches!(result, Ok(Outcome::Failed))
 }
 
@@ -335,7 +290,8 @@ pub struct VerifiedPackages {
 
 /// **Step 3**: the exact running release first, from that release's own
 /// address (E10a's repository, the own-release form `Server protocol and
-/// transfers` B8d uses), then the new package by the ordinary fetch.
+/// transfers` B8d uses), then the new package by the ordinary fetch. **Each
+/// failure names its step** (the four questions, Sol's S5).
 #[allow(clippy::too_many_arguments)]
 pub fn prepare(
     cache: &Cache,
@@ -346,25 +302,32 @@ pub fn prepare(
     update: &verifying::AVerifiedUpdate,
     running: &str,
     row: &str,
-) -> Result<VerifiedPackages, String> {
+) -> Result<VerifiedPackages, AFailedStep> {
+    let download = AFailedStep::at(TheStepThatFailed::Download);
+    let verification = AFailedStep::at(TheStepThatFailed::Verification);
+    let fetch = |failed: fetching::WhyTheFetchDidNotPass| AFailedStep {
+        step: failed.the_step(),
+        reason: failed.the_reason(),
+        why: format!("{failed:?}"),
+    };
     if !checking::a_version_above(&update.manifest.version, running) || !is_linux_row(row) {
-        return Err("the release or Linux row is not eligible".into());
+        return Err(verification("the release or Linux row is not eligible".into()));
     }
     let next_entry = update
         .the_entry_for_this_row
         .as_ref()
         .filter(|e| e.row == row && e.file_name.ends_with(".deb"))
-        .ok_or("no package for this Linux row")?;
-    files::a_folder_is_removed_whole(&cache.root).map_err(|e| e.reported)?;
-    files::ensure_directory_at_mode(&cache.previous(), 0o700).map_err(|e| format!("{e:?}"))?;
-    files::ensure_directory_at_mode(&cache.next(), 0o700).map_err(|e| format!("{e:?}"))?;
+        .ok_or_else(|| verification("no package for this Linux row".into()))?;
+    files::a_folder_is_removed_whole(&cache.root).map_err(|e| download(e.reported))?;
+    files::ensure_directory_at_mode(&cache.previous(), 0o700).map_err(|e| download(format!("{e:?}")))?;
+    files::ensure_directory_at_mode(&cache.next(), 0o700).map_err(|e| download(format!("{e:?}")))?;
     let says = checking::WhatTheRequestSays {
         version: running.into(),
         system: format!("linux:{}", std::env::consts::ARCH),
     };
     let (repository, _) = checking::WHERE_THE_UPDATE_FILE_IS_READ_FROM
         .split_once("/releases/")
-        .ok_or("no release repository")?;
+        .ok_or_else(|| download("no release repository".into()))?;
     let own_file = format!(
         "{repository}/releases/download/v{running}/{}",
         super::THE_UPDATE_FILES_NAME
@@ -376,7 +339,7 @@ pub fn prepare(
         &says,
         checking::THE_MOST_THE_UPDATE_FILE_MAY_BE,
     )
-    .map_err(|e| format!("{e:?}"))?;
+    .map_err(fetch)?;
     // **The rollback-only reading** (Z21a's last paragraph): the running
     // release is below the stored high-water once a refused install raised
     // it, so the floor alone is set aside here. The trusted keys bind, the
@@ -388,18 +351,22 @@ pub fn prepare(
     }
     let previous =
         verifying::verify_an_update_file_against(carried, previous_trust.as_ref(), &bytes, row)
-            .map_err(|e| format!("{e:?}"))?;
+            .map_err(|e| verification(format!("{e:?}")))?;
     if previous.manifest.version != running
         || previous.manifest.release_sequence >= update.manifest.release_sequence
     {
-        return Err("the retained package is not the immediately previous running release".into());
+        return Err(verification(
+            "the retained package is not the immediately previous running release".into(),
+        ));
     }
     let previous_entry = previous
         .the_entry_for_this_row
         .as_ref()
         .filter(|e| e.file_name.ends_with(".deb"))
-        .ok_or("no previous package")?;
-    let (own_folder, _) = own_file.rsplit_once('/').ok_or("no own release folder")?;
+        .ok_or_else(|| verification("no previous package".into()))?;
+    let (own_folder, _) = own_file
+        .rsplit_once('/')
+        .ok_or_else(|| download("no own release folder".into()))?;
     let previous = fetching::the_artifact_is_fetched_from(
         file,
         admission,
@@ -408,10 +375,10 @@ pub fn prepare(
         &cache.previous(),
         &format!("{own_folder}/{}", previous_entry.file_name),
     )
-    .map_err(|e| format!("{e:?}"))?;
-    write(&cache.proof(), &bytes)?;
+    .map_err(fetch)?;
+    write(&cache.proof(), &bytes).map_err(&download)?;
     let next = fetching::the_artifact_is_fetched(file, admission, next_entry, &says, &cache.next())
-        .map_err(|e| format!("{e:?}"))?;
+        .map_err(fetch)?;
     Ok(VerifiedPackages {
         next,
         previous,
@@ -1074,92 +1041,46 @@ pub fn what_this_launch_meets() -> TheLaunchMeets {
 // ════════════════════════════════════════════════════════════════════════════
 
 /// **The route, kept for the run** on the check's one sequence: the version
-/// last found, and whether the box on screen was opened past Z31's hold.
+/// last found.
 #[derive(Default)]
 pub struct LinuxRoute {
     offered: Option<verifying::AVerifiedUpdate>,
-    override_hold: bool,
 }
 
 impl LinuxRoute {
-    /// **A version was found, or asked for again.** `user_asked` is About's
-    /// *Install…* and Z32's press; a check the user asked for, or joined, is
-    /// read from `check` (Z29). `override_hold` is Z32's. The reading About is
-    /// to show, where it changes.
+    /// **A version was found, or asked for again** (Z33): the box offered
+    /// where it is due, while jobs run too. `user_asked` is About's *Install
+    /// now…*; a check the user asked for, or joined, is read from `check`
+    /// (Z29). The reading About is to show, where it changes.
     pub fn found<R: tauri::Runtime>(
         &mut self,
         handle: &tauri::AppHandle<R>,
         update: Option<&verifying::AVerifiedUpdate>,
         check: &checking::TheUpdateCheck,
         user_asked: bool,
-        override_hold: bool,
     ) -> Option<TheReading> {
-        use tauri::Manager;
-        if !cfg!(target_os = "linux") || check.has_linux_offer() {
+        if !cfg!(target_os = "linux") {
             return None;
         }
         let update = update?;
         self.offered = Some(update.clone());
         let version = update.manifest.version.clone();
-        let user_asked =
-            user_asked || override_hold || check.the_completed_check_was_user_asked();
-        let declined = if user_asked {
-            None
-        } else {
-            let started = handle.try_state::<Mutex<crate::start::Started>>()?;
-            let started = started.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            match started.record.as_ref().map(|r| update_trust::the_declined_version(r.connection())) {
-                Some(Ok(declined)) => declined,
-                _ => return Some(TheReading::CouldNotInstall),
-            }
-        };
-        let held = || !override_hold && super::the_mac::publication_is_held_here(handle);
-        match what_the_finding_comes_to(
-            &version,
-            checking::THIS_BUILDS_VERSION,
-            declined.as_deref(),
-            user_asked,
-            &held,
-        ) {
-            WhatTheFindingComesTo::Quiet => {
-                return Some(TheReading::ANewerVersion { version, held: false })
-            }
-            WhatTheFindingComesTo::Held => {
-                return Some(TheReading::ANewerVersion { version, held: true })
-            }
-            WhatTheFindingComesTo::TheBox => {}
+        if let Err(reading) = super::the_box::the_box_is_due(handle, check, &version, user_asked) {
+            return reading;
         }
-        if check.offer_linux_version(&version) {
-            self.override_hold = override_hold;
-            if let Some(queue) = handle.try_state::<Arc<crate::events::TheOneQueue>>() {
-                let _ = queue.read_then_post(
-                    || Ok::<_, ()>(()),
-                    |_| crate::surface::menus::the_linux_offer(&version),
-                );
-            }
-        }
+        super::the_box::the_box_is_shown(handle, check, &version);
         None
     }
 
-    /// **Z32's *Install now…***: the box, past the hold, without the mark.
-    pub fn held<R: tauri::Runtime>(
-        &mut self,
-        handle: &tauri::AppHandle<R>,
-        check: &checking::TheUpdateCheck,
-    ) -> Option<TheReading> {
-        let offered = self.offered.clone();
-        self.found(handle, offered.as_ref(), check, true, true)
-    }
-
-    /// **About's *Install…***: the box for the version found, without the
-    /// mark, and held again if something started running since.
+    /// **About's *Install now…***: the box for the version found, without the
+    /// mark.
     pub fn asked<R: tauri::Runtime>(
         &mut self,
         handle: &tauri::AppHandle<R>,
         check: &checking::TheUpdateCheck,
     ) -> Option<TheReading> {
         let offered = self.offered.clone();
-        self.found(handle, offered.as_ref(), check, true, false)
+        self.found(handle, offered.as_ref(), check, true)
     }
 
     /// **The box was answered.** The check has already refused an answer for
@@ -1194,106 +1115,249 @@ impl LinuxRoute {
     ) -> Option<TheReading> {
         use tauri::Manager;
         let version = update.manifest.version.clone();
-        let started = handle.try_state::<Mutex<crate::start::Started>>()?;
-        // **Z6: the record's one lock, kept through publication and the
-        // probe**, so no ordinary work is admitted once the install begins.
-        let started = started.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let record = started.record.as_ref()?;
+        let held = handle.try_state::<Mutex<crate::start::Started>>()?;
         if !install {
+            let started = held.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let record = started.record.as_ref()?;
             return dismissed(record.connection(), &version)
                 .err()
-                .map(|_| TheReading::CouldNotInstall);
+                .map(|_| TheReading::CouldNotInstall(TheStepThatFailed::Installation, None));
         }
         let Some(transfers) = handle.try_state::<Arc<crate::downloading::TheRunsTransfers>>() else {
-            return Some(TheReading::CouldNotInstall);
+            return Some(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None));
         };
-        // **Z31 read again**: work may have started while the box was open.
-        if !self.override_hold
-            && super::the_hold::publication_is_held(record.connection(), transfers.inner().as_ref())
-        {
-            return Some(TheReading::ANewerVersion { version, held: true });
-        }
+        // **Z33: the press is the install**, whatever runs now; the box said
+        // what that does before it was pressed.
         let window = handle.get_webview_window("main");
-        let result = (|| -> Result<Outcome, String> {
-            // Never erase a cache another update still owes a rollback from.
-            if update_trust::the_update_in_probe(record.connection())
-                .map_err(|e| format!("{e:?}"))?
-                .is_some()
-            {
-                return Err("an update still owes recovery".into());
+        // Read before publication: afterwards the path holds the new build.
+        let (Some(row), Ok(cache), Ok(program)) =
+            (checking::this_copys_row(), Cache::here(), std::env::current_exe())
+        else {
+            return Some(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None));
+        };
+        let carried = super::trust::TheCarriedSet::this_build();
+        // **The bytes read so far, told to the box while the packages
+        // download** (Design *Updating*, 2026-11-12), and once more at the
+        // end, however it ends, so the box closes.
+        let queue = handle.try_state::<Arc<crate::events::TheOneQueue>>().map(|queue| queue.inner().clone());
+        let tell = |read_so_far: Option<u64>| {
+            if let Some(queue) = queue.as_ref() {
+                let _ = queue.read_then_post(
+                    || Ok::<_, ()>(()),
+                    |_| crate::surface::menus::the_update_download(read_so_far),
+                );
             }
-            let row = checking::this_copys_row().ok_or("unlisted Linux system")?;
-            let cache = Cache::here()?;
-            let carried = super::trust::TheCarriedSet::this_build();
-            let remembered = verifying::the_kept_record_as_it_stands(record.connection(), &carried)
-                .map_err(|e| format!("{e:?}"))?;
-            let packages = prepare(
-                &cache,
-                &checking::OverHttps,
-                transfers.inner().as_ref(),
-                &carried,
-                remembered.as_ref(),
-                &update,
-                checking::THIS_BUILDS_VERSION,
-                row,
-            )?;
-            let system = connect()?;
-            system.names(packages.next.path(), &version, row)?;
-            system.names(packages.previous.path(), checking::THIS_BUILDS_VERSION, row)?;
-            // Read before publication: afterwards the path holds the new build.
-            let program = std::env::current_exe().map_err(|e| e.to_string())?;
-            before_publication(record, &packages)?;
-            if let Some(window) = window.as_ref() {
-                let _ = window.hide();
-            }
-            let mut steps = Steps {
-                system: &system,
-                packages: &packages,
-                record_path: record.path().to_path_buf(),
-                cache: &cache,
-                hold: super::the_mac::TheShellsHold { handle },
-                program,
-                owns_hold: true,
-            };
-            let outcome = transact(record, &version, &mut steps);
-            // **Nothing was published**: the cache and the record go, as an
-            // update that did not happen leaves nothing retained (Z10a).
-            if matches!(outcome, Outcome::Declined | Outcome::NotPublished | Outcome::Failed) {
-                let probe = update_trust::the_update_in_probe(record.connection())
-                    .map_err(|e| format!("{e:?}"))?
-                    .ok_or("no probe")?;
-                cleared(record, &cache, &probe)?;
-            }
-            Ok(outcome)
-        })();
-        if the_mark_is_written_after(&result) {
-            let _ = dismissed(record.connection(), &version);
-        }
-        match result {
-            // **The old process's run ends here, writing nothing on the way
-            // out** (`Reporting a problem` U3 step 3). Where a rollback is still
-            // owed, every retained file and the phase stay, and [`transact`]
-            // has started the later launch that shows the box (D6b).
-            Ok(Outcome::Installed | Outcome::RolledBack | Outcome::RecoveryOwed) => {
-                std::process::exit(0)
-            }
-            Ok(Outcome::Declined) => {
+        };
+        let came = the_install_runs(
+            held.inner(),
+            &|started: &crate::start::Started| started.record.as_ref(),
+            &update,
+            &cache,
+            &checking::OverHttps,
+            transfers.inner().as_ref(),
+            &carried,
+            checking::THIS_BUILDS_VERSION,
+            row,
+            connect,
+            &mut |record, system, packages| {
                 if let Some(window) = window.as_ref() {
-                    let _ = window.show();
+                    let _ = window.hide();
                 }
-                None
-            }
+                let mut steps = Steps {
+                    system,
+                    packages,
+                    record_path: record.path().to_path_buf(),
+                    cache: &cache,
+                    hold: super::the_mac::TheShellsHold { handle },
+                    program: program.clone(),
+                    owns_hold: true,
+                };
+                transact(record, &version, &mut steps)
+            },
+            // **The old process's run ends here, writing nothing on the way
+            // out** (`Reporting a problem` U3 step 3), with the record's lock
+            // still held (Z6). Where a rollback is still owed, every retained
+            // file and the phase stay, and [`transact`] has started the later
+            // launch that shows the box (D6b).
+            &mut |came| {
+                if matches!(came, Ok(Outcome::Installed | Outcome::RolledBack | Outcome::RecoveryOwed)) {
+                    std::process::exit(0)
+                }
+            },
+            &|read_so_far| tell(Some(read_so_far)),
+        );
+        tell(None);
+        if let Some(window) = window.as_ref() {
+            let _ = window.show();
+        }
+        match came {
+            Ok(Outcome::Declined) => None,
             // **A failed install is not a decline and writes no mark** (D6b,
             // the runner's ruling): About says it failed, and the automatic
-            // route may offer the version again.
-            Ok(Outcome::NotPublished | Outcome::Failed) | Err(_) => {
-                if let Some(window) = window.as_ref() {
-                    let _ = window.show();
-                }
-                Some(TheReading::CouldNotInstall)
-            }
+            // route may offer the version again. **About names the step**
+            // (the four questions, Sol's S5).
+            Err(failed) => Some(TheReading::CouldNotInstall(failed.step, failed.reason)),
+            Ok(_) => Some(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None)),
         }
     }
+}
+
+/// **Steps 3 to 7 of the order at the head of this file, with the record's
+/// one lock where Z6 puts it** — the lock is any `held` from which
+/// `record_of` reads the record, so the order is tested at the desk.
+///
+/// **Both packages are downloaded and verified with the lock let go** (Z11's
+/// build detail of 2026-11-11; the four questions, Sol's S4), as the Mac and
+/// Windows routes do: the lock is read for a moment before, then taken at
+/// step 4 and kept to the end. `publishes` is step 5 on; `ended` hears the
+/// outcome while the lock is still held. **Each failure names its step**
+/// (Sol's S5).
+#[allow(clippy::too_many_arguments)]
+/// **The bytes read so far, told while the packages download** — Design
+/// *Updating* and Z11's build detail of 2026-11-12 (the four questions, batch
+/// 5's leftover, Sol's S4). Counted off the shared budget's own draws: what a
+/// read draws, less what it gives back unread. **Told at the next draw**, so
+/// what is told has been read, and at most once a mebibyte.
+struct ACountingReader<'a> {
+    inner: &'a dyn ReadsTheUpdateFile,
+    read_so_far: std::sync::atomic::AtomicU64,
+    last_told: std::sync::atomic::AtomicU64,
+    tell: &'a (dyn Fn(u64) + Sync),
+}
+
+impl ACountingReader<'_> {
+    const EVERY: u64 = 1024 * 1024;
+
+    fn moved(&self, drawn: u64, given_back: u64) {
+        use std::sync::atomic::Ordering::Relaxed;
+        // One read at a time, on one thread: a load and a store suffice.
+        let read = self.read_so_far.load(Relaxed);
+        if drawn > 0 {
+            let step = read / Self::EVERY;
+            if step > self.last_told.load(Relaxed) {
+                self.last_told.store(step, Relaxed);
+                (self.tell)(read);
+            }
+        }
+        self.read_so_far.store(read.saturating_add(drawn).saturating_sub(given_back), Relaxed);
+    }
+}
+
+impl ReadsTheUpdateFile for ACountingReader<'_> {
+    fn read(
+        &self,
+        from: &str,
+        says: &checking::WhatTheRequestSays,
+        the_most: u64,
+        draw: &mut dyn smoozy_server_protocol::transfers::moving::DrawsFromTheSharedBudget,
+    ) -> Result<Vec<u8>, crate::setting_up::ADownloadThatFailed> {
+        struct Counting<'b, 'a> {
+            inner: &'b mut dyn smoozy_server_protocol::transfers::moving::DrawsFromTheSharedBudget,
+            reader: &'b ACountingReader<'a>,
+        }
+        impl smoozy_server_protocol::transfers::moving::DrawsFromTheSharedBudget for Counting<'_, '_> {
+            fn draw(&mut self, wanted: usize) -> usize {
+                let got = self.inner.draw(wanted);
+                self.reader.moved(got as u64, 0);
+                got
+            }
+            fn give_back(&mut self, unused: usize) {
+                self.inner.give_back(unused);
+                self.reader.moved(0, unused as u64);
+            }
+        }
+        self.inner.read(from, says, the_most, &mut Counting { inner: draw, reader: self })
+    }
+}
+
+fn the_install_runs<L, P: ThePackageSystem>(
+    held: &Mutex<L>,
+    record_of: &dyn Fn(&L) -> Option<&LocalRecord>,
+    update: &verifying::AVerifiedUpdate,
+    cache: &Cache,
+    file: &dyn ReadsTheUpdateFile,
+    admission: &dyn AdmitsTheUpdateFetch,
+    carried: &super::trust::TheCarriedSet,
+    running: &str,
+    row: &str,
+    connect: &dyn Fn() -> Result<P, String>,
+    publishes: &mut dyn FnMut(&LocalRecord, &P, &VerifiedPackages) -> Outcome,
+    ended: &mut dyn FnMut(&Result<Outcome, AFailedStep>),
+    told: &(dyn Fn(u64) + Sync),
+) -> Result<Outcome, AFailedStep> {
+    let file = &ACountingReader {
+        inner: file,
+        read_so_far: std::sync::atomic::AtomicU64::new(0),
+        last_told: std::sync::atomic::AtomicU64::new(0),
+        tell: told,
+    };
+    let version = update.manifest.version.clone();
+    let installation = AFailedStep::at(TheStepThatFailed::Installation);
+    let verification = AFailedStep::at(TheStepThatFailed::Verification);
+    let lock = || held.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    // Never erase a cache another update still owes a rollback from.
+    let nothing_owes_recovery = |record: &LocalRecord| -> Result<(), AFailedStep> {
+        match update_trust::the_update_in_probe(record.connection()) {
+            Ok(None) => Ok(()),
+            Ok(Some(_)) => Err(installation("an update still owes recovery".into())),
+            Err(e) => Err(installation(format!("{e:?}"))),
+        }
+    };
+    // **What the download needs from the record, read for a moment.**
+    let remembered = {
+        let started = lock();
+        let read = (|| -> Result<_, AFailedStep> {
+            let record = record_of(&started).ok_or_else(|| installation("the record is not open".into()))?;
+            nothing_owes_recovery(record)?;
+            verifying::the_kept_record_as_it_stands(record.connection(), carried)
+                .map_err(|e| installation(format!("{e:?}")))
+        })();
+        match read {
+            Ok(remembered) => remembered,
+            Err(failed) => {
+                let came = Err(failed);
+                ended(&came);
+                return came;
+            }
+        }
+    };
+    // **Step 3, with nothing held.**
+    let prepared = (|| -> Result<(VerifiedPackages, P), AFailedStep> {
+        let packages = prepare(cache, file, admission, carried, remembered.as_ref(), update, running, row)?;
+        let system = connect().map_err(&installation)?;
+        system.names(packages.next.path(), &version, row).map_err(&verification)?;
+        system.names(packages.previous.path(), running, row).map_err(&verification)?;
+        Ok((packages, system))
+    })();
+    // **Z6: the record's one lock from step 4, kept through publication and
+    // the probe**, so no ordinary work is admitted once the install begins.
+    let started = lock();
+    let Some(record) = record_of(&started) else {
+        let came = Err(installation("the record is not open".into()));
+        ended(&came);
+        return came;
+    };
+    let result = (|| -> Result<Outcome, AFailedStep> {
+        let (packages, system) = prepared?;
+        // Read again under the lock: nothing may have started one meanwhile.
+        nothing_owes_recovery(record)?;
+        before_publication(record, &packages).map_err(&installation)?;
+        let outcome = publishes(record, &system, &packages);
+        // **Nothing was published**: the cache and the record go, as an
+        // update that did not happen leaves nothing retained (Z10a).
+        if matches!(outcome, Outcome::Declined | Outcome::NotPublished | Outcome::Failed) {
+            let probe = update_trust::the_update_in_probe(record.connection())
+                .map_err(|e| installation(format!("{e:?}")))?
+                .ok_or_else(|| installation("no probe".into()))?;
+            cleared(record, cache, &probe).map_err(&installation)?;
+        }
+        Ok(outcome)
+    })();
+    if the_mark_is_written_after(&result) {
+        let _ = dismissed(record.connection(), &version);
+    }
+    ended(&result);
+    result
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1465,43 +1529,6 @@ mod tests {
     }
 
     #[test]
-    fn d6_the_offer_is_once_per_version_and_only_when_nothing_runs() {
-        assert!(should_offer("0.3.0", "0.1.8", None, false, false));
-        assert!(!should_offer("0.3.0", "0.1.8", Some("0.3.0"), false, false));
-        assert!(!should_offer("0.2.0", "0.1.8", Some("0.3.0"), false, false));
-        assert!(should_offer("0.4.0", "0.1.8", Some("0.3.0"), false, false));
-        assert!(!should_offer("0.3.0", "0.1.8", None, false, true));
-        assert!(!should_offer("0.1.8", "0.1.8", None, true, false));
-        assert!(!should_offer("bad", "0.1.8", None, true, false));
-    }
-
-    /// **A declined version is quiet on the automatic route even while
-    /// something runs**, so About never says it will install by itself; the
-    /// hold is read only where the box would be offered.
-    #[test]
-    fn d6_a_finding_is_quiet_held_or_the_box() {
-        use WhatTheFindingComesTo::*;
-        let asked = std::cell::Cell::new(0);
-        let running = || {
-            asked.set(asked.get() + 1);
-            true
-        };
-        let nothing_runs = || false;
-        assert_eq!(what_the_finding_comes_to("0.3.0", "0.1.8", Some("0.3.0"), false, &running), Quiet);
-        assert_eq!(asked.get(), 0, "the hold was read for a quiet version");
-        assert_eq!(what_the_finding_comes_to("0.3.0", "0.1.8", Some("0.3.0"), true, &running), Held);
-        assert_eq!(what_the_finding_comes_to("0.3.0", "0.1.8", Some("0.3.0"), true, &nothing_runs), TheBox);
-        assert_eq!(what_the_finding_comes_to("0.4.0", "0.1.8", Some("0.3.0"), false, &nothing_runs), TheBox);
-        assert_eq!(what_the_finding_comes_to("0.4.0", "0.1.8", None, false, &running), Held);
-    }
-
-    #[test]
-    fn d6_a_user_asked_check_ignores_the_declined_mark() {
-        assert!(should_offer("0.3.0", "0.1.8", Some("0.9.0"), true, false));
-        assert!(!should_offer("0.3.0", "0.1.8", Some("0.9.0"), true, true));
-    }
-
-    #[test]
     fn d6_dismissal_is_durable_and_keeps_the_check_moment() {
         let (folder, record) = record("dismissal");
         update_trust::a_check_completed(record.connection(), std::time::UNIX_EPOCH).unwrap();
@@ -1651,11 +1678,11 @@ mod tests {
     /// running version, and a failure before the transaction are not.
     #[test]
     fn d6b_a_failed_install_writes_no_declined_mark() {
-        assert!(!the_mark_is_written_after(&Ok(Outcome::NotPublished)));
-        assert!(!the_mark_is_written_after(&Err("the package could not be fetched".into())));
-        assert!(the_mark_is_written_after(&Ok(Outcome::Failed)));
+        assert!(!the_mark_is_written_after(&Ok::<_, String>(Outcome::NotPublished)));
+        assert!(!the_mark_is_written_after(&Err::<Outcome, String>("the package could not be fetched".into())));
+        assert!(the_mark_is_written_after(&Ok::<_, String>(Outcome::Failed)));
         for ends in [Outcome::Installed, Outcome::RolledBack, Outcome::RecoveryOwed, Outcome::Declined] {
-            assert!(!the_mark_is_written_after(&Ok(ends)));
+            assert!(!the_mark_is_written_after(&Ok::<_, String>(ends)));
         }
         // And the transaction itself writes none for a failed install.
         let (folder, record) = record("failed-install-no-mark");
@@ -1765,7 +1792,7 @@ mod tests {
             _says: &checking::WhatTheRequestSays,
             _most: u64,
             draw: &mut dyn smoozy_server_protocol::transfers::moving::DrawsFromTheSharedBudget,
-        ) -> Result<Vec<u8>, String> {
+        ) -> Result<Vec<u8>, crate::setting_up::ADownloadThatFailed> {
             self.asked.lock().unwrap().push(from.into());
             let bytes = if from.ends_with("desktop-update") {
                 &self.proof
@@ -1774,11 +1801,11 @@ mod tests {
             } else {
                 &self.previous
             };
-            checking::read_drawing_from_the_budget(
+            Ok(checking::read_drawing_from_the_budget(
                 &mut bytes.as_slice(),
                 bytes.len() as u64 + 1,
                 draw,
-            )
+            )?)
         }
     }
     fn staging(
@@ -1810,7 +1837,7 @@ mod tests {
         carried: &super::super::trust::TheCarriedSet,
         hosting: &Hosting,
         update: &verifying::AVerifiedUpdate,
-    ) -> Result<VerifiedPackages, String> {
+    ) -> Result<VerifiedPackages, AFailedStep> {
         prepare(
             cache,
             hosting,
@@ -1955,7 +1982,6 @@ mod tests {
                     })
                 },
                 &mut |_, _, _| {},
-                &|| false,
                 &mut |act| {
                     assert_eq!(act, TheUpdatesAct::ANewerVersionWasFound);
                     assert!(check.the_completed_check_was_user_asked());
@@ -1972,19 +1998,19 @@ mod tests {
     fn d6_a_stale_or_double_answer_is_refused_and_quitting_dismisses_the_open_box() {
         let (folder, record) = record("stale-offer");
         let check = checking::TheUpdateCheck::new(false, std::time::Duration::from_secs(3600));
-        assert!(check.offer_linux_version("0.3.0"));
-        assert!(!check.offer_linux_version("0.4.0"));
-        assert!(!check.answer_linux_offer("0.4.0", true));
-        assert!(check.answer_linux_offer("0.3.0", false));
-        assert!(!check.answer_linux_offer("0.3.0", true));
-        check.dismiss_linux_on_quit(record.connection()).unwrap();
+        assert!(check.offer_version("0.3.0"));
+        assert!(!check.offer_version("0.4.0"));
+        assert!(!check.answer_offer("0.4.0", true));
+        assert!(check.answer_offer("0.3.0", false));
+        assert!(!check.answer_offer("0.3.0", true));
+        check.dismiss_on_quit(record.connection()).unwrap();
         assert_eq!(
             update_trust::the_declined_version(record.connection())
                 .unwrap()
                 .as_deref(),
             Some("0.3.0")
         );
-        assert!(!check.has_linux_offer());
+        assert!(!check.has_offer());
         drop(record);
         std::fs::remove_dir_all(folder).unwrap();
     }
@@ -2562,14 +2588,14 @@ mod tests {
         }
     }
 
-    /// **About's *Install…* opens the box for the version already found, and
-    /// starts no check** (Z26's three triggers). It is taken only from the
-    /// unheld newer-version reading.
+    /// **About's *Install now…* opens the box for the version already found,
+    /// and starts no check** (Z26's three triggers). It is taken only from the
+    /// newer-version reading, and never over a box already open.
     #[test]
     fn d6_abouts_install_reaches_the_box_with_no_second_check() {
         use checking::{TheCheckEnded, TheUpdateCheck, TheUpdatesAct, WhatTheCheckFound};
         let check = TheUpdateCheck::new(false, std::time::Duration::from_secs(3600));
-        assert!(!check.the_user_opens_the_linux_box(), "nothing was found yet");
+        assert!(!check.the_user_opens_the_box(), "nothing was found yet");
         let mut checks = 0;
         let mut pressed = None;
         let mut acts = vec![];
@@ -2579,19 +2605,15 @@ mod tests {
                 TheCheckEnded::Completed(WhatTheCheckFound::ANewerVersion { version: "0.3.0".into() })
             },
             &mut |reading, _, ended| {
-                if ended.is_none()
-                    && pressed.is_none()
-                    && matches!(reading, TheReading::ANewerVersion { held: false, .. })
-                {
-                    pressed = Some(check.the_user_opens_the_linux_box());
+                if ended.is_none() && pressed.is_none() && matches!(reading, TheReading::ANewerVersion { .. }) {
+                    pressed = Some(check.the_user_opens_the_box());
                 }
             },
-            &|| false,
             &mut |act| {
                 acts.push(act);
                 match act {
                     TheUpdatesAct::ANewerVersionWasFound if acts.len() == 1 => {
-                        Some(TheReading::ANewerVersion { version: "0.3.0".into(), held: false })
+                        Some(TheReading::ANewerVersion { version: "0.3.0".into() })
                     }
                     _ => {
                         check.the_run_ends();
@@ -2602,21 +2624,185 @@ mod tests {
         );
         assert_eq!(pressed, Some(true));
         assert_eq!(checks, 1, "the press started a check");
-        assert_eq!(acts, [TheUpdatesAct::ANewerVersionWasFound, TheUpdatesAct::TheLinuxBoxWasAsked]);
+        assert_eq!(acts, [TheUpdatesAct::ANewerVersionWasFound, TheUpdatesAct::TheBoxWasAsked]);
 
-        let held = TheUpdateCheck::new(false, std::time::Duration::from_secs(3600));
-        held.the_sequence_runs_on(
-            &mut || TheCheckEnded::Completed(WhatTheCheckFound::ANewerVersion { version: "0.3.0".into() }),
-            &mut |_, _, _| {},
-            &|| true,
-            &mut |_| {
-                held.the_run_ends();
-                None
-            },
-        );
-        assert!(!held.the_user_opens_the_linux_box(), "the held form has Install now, not Install");
         let open = TheUpdateCheck::new(false, std::time::Duration::from_secs(3600));
-        assert!(open.offer_linux_version("0.3.0"));
-        assert!(!open.the_user_opens_the_linux_box(), "a box is already open");
+        assert!(open.offer_version("0.3.0"));
+        assert!(!open.the_user_opens_the_box(), "a box is already open");
+    }
+
+    /// **The four questions, Sol's S4: a Linux download does not hold the
+    /// record's lock** (Z11's build detail of 2026-11-11). Every fetch of the
+    /// install finds the lock free, so no screen and no quit waits on it;
+    /// publication runs with it held (Z6).
+    ///
+    /// **Unix only, as ten other tests here are**: the install names its
+    /// cache by a Linux path, which only a Unix
+    /// reads back (`path_from_bytes`), so on Windows it stops at *the probe
+    /// does not name this cache* (hosted run 43746222478). The route itself
+    /// runs on Linux alone.
+    #[cfg(unix)]
+    #[test]
+    fn four_questions_s4_the_download_holds_no_lock_and_publication_does() {
+        struct Watching<'a> {
+            hosting: &'a Hosting,
+            held: &'a Mutex<Option<LocalRecord>>,
+            free: Mutex<Vec<bool>>,
+        }
+        impl checking::ReadsTheUpdateFile for Watching<'_> {
+            fn read(
+                &self,
+                from: &str,
+                says: &checking::WhatTheRequestSays,
+                most: u64,
+                draw: &mut dyn smoozy_server_protocol::transfers::moving::DrawsFromTheSharedBudget,
+            ) -> Result<Vec<u8>, crate::setting_up::ADownloadThatFailed> {
+                self.free.lock().unwrap().push(self.held.try_lock().is_ok());
+                self.hosting.read(from, says, most, draw)
+            }
+        }
+        let (folder, record, cache, carried, hosting, update) = staging("s4-lock");
+        let held = Mutex::new(Some(record));
+        let watching = Watching { hosting: &hosting, held: &held, free: Mutex::new(vec![]) };
+        let system = ASystem::answering(Ok(()), Ok(()));
+        let mut published_under_the_lock = None;
+        let mut heard = None;
+        let came = the_install_runs(
+            &held,
+            &|record: &Option<LocalRecord>| record.as_ref(),
+            &update,
+            &cache,
+            &watching,
+            &crate::downloading::TheRunsTransfers::for_this_run(),
+            &carried,
+            "0.2.0",
+            super::super::manifest::THE_DEBIAN_13_ROW,
+            &|| Ok(system.clone()),
+            &mut |_, _, _| {
+                published_under_the_lock = Some(held.try_lock().is_err());
+                Outcome::NotPublished
+            },
+            &mut |came| heard = Some(format!("{came:?}")),
+            &|_| {},
+        );
+        assert_eq!(came, Ok(Outcome::NotPublished));
+        assert_eq!(heard.as_deref(), Some("Ok(NotPublished)"));
+        let free = watching.free.lock().unwrap().clone();
+        assert_eq!(free.len(), 3, "the update file and both packages");
+        assert!(free.iter().all(|&free| free), "a download held the record's lock: {free:?}");
+        assert_eq!(published_under_the_lock, Some(true), "publication ran without the lock");
+        // Nothing was published, so nothing is retained (Z10a).
+        let record = held.into_inner().unwrap().unwrap();
+        assert!(update_trust::the_update_in_probe(record.connection()).unwrap().is_none());
+        assert!(!cache.root.exists());
+        drop(record);
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    /// **The four questions, Sol's S5: a failed Linux update names the step
+    /// it stopped at** (Design *Updating*). A download that got no answer is
+    /// the download; every refusal of what came is the verification.
+    /// **The bytes read so far are told while the packages download**, at most
+    /// once a mebibyte, counted off the budget's draws less what is given
+    /// back (Design *Updating* and Z11's build detail of 2026-11-12; the four
+    /// questions, batch 5's leftover).
+    #[test]
+    fn sixth_part_the_linux_download_tells_the_bytes_read_so_far() {
+        use smoozy_server_protocol::transfers::moving::DrawsFromTheSharedBudget;
+        struct Grants;
+        impl DrawsFromTheSharedBudget for Grants {
+            fn draw(&mut self, wanted: usize) -> usize {
+                wanted
+            }
+            fn give_back(&mut self, _: usize) {}
+        }
+        struct ThreeChunks;
+        impl checking::ReadsTheUpdateFile for ThreeChunks {
+            fn read(
+                &self,
+                _: &str,
+                _: &checking::WhatTheRequestSays,
+                _: u64,
+                draw: &mut dyn DrawsFromTheSharedBudget,
+            ) -> Result<Vec<u8>, crate::setting_up::ADownloadThatFailed> {
+                const MIB: usize = 1024 * 1024;
+                for _ in 0..3 {
+                    let got = draw.draw(MIB);
+                    draw.give_back(got / 4);
+                }
+                Ok(Vec::new())
+            }
+        }
+        let told = Mutex::new(Vec::new());
+        let tell = |bytes: u64| told.lock().unwrap().push(bytes);
+        let counting = ACountingReader {
+            inner: &ThreeChunks,
+            read_so_far: std::sync::atomic::AtomicU64::new(0),
+            last_told: std::sync::atomic::AtomicU64::new(0),
+            tell: &tell,
+        };
+        let says = checking::WhatTheRequestSays { version: "0.2.0".into(), system: "linux:x86_64".into() };
+        for _ in 0..2 {
+            counting.read("https://example.invalid/a.deb", &says, 1, &mut Grants).unwrap();
+        }
+        // Six chunks of a mebibyte, a quarter of each given back: 0.75 MiB
+        // read each. Told at the next draw, as each whole mebibyte is
+        // passed, never twice for one, and never more than was read.
+        let mib = 1024 * 1024u64;
+        let seen = told.lock().unwrap().clone();
+        assert_eq!(seen, vec![mib * 3 / 2, mib * 9 / 4, mib * 3], "{seen:?}");
+    }
+
+    #[test]
+    fn four_questions_s5_a_failed_download_and_a_failed_verification_are_named() {
+        use checking::TheStepThatFailed as Step;
+        for fault in 0..7 {
+            let (folder, record, cache, carried, mut hosting, mut update) =
+                staging(&format!("s5-refusal-{fault}"));
+            match fault {
+                0 => { let last = hosting.proof.len() - 1; hosting.proof[last] ^= 1; },
+                1 => hosting.previous.push(0),
+                2 => hosting.next[0] ^= 1,
+                3 => update.the_entry_for_this_row.as_mut().unwrap().row = super::super::manifest::THE_MAC_ROW.into(),
+                4 => update.manifest.version = "0.1.0".into(),
+                5 => hosting.proof = signed_file("0.1.0", 7, b"previous package").1,
+                _ => update.the_entry_for_this_row.as_mut().unwrap().file_name = "../other.deb".into(),
+            }
+            let failed = stage(&cache, &carried, &hosting, &update).err().expect("a refusal was staged");
+            assert_eq!(failed.step, Step::Verification, "fault {fault}: {failed:?}");
+            drop(record);
+            std::fs::remove_dir_all(folder).unwrap();
+        }
+        struct NothingAnswers;
+        impl checking::ReadsTheUpdateFile for NothingAnswers {
+            fn read(
+                &self,
+                _: &str,
+                _: &checking::WhatTheRequestSays,
+                _: u64,
+                _: &mut dyn smoozy_server_protocol::transfers::moving::DrawsFromTheSharedBudget,
+            ) -> Result<Vec<u8>, crate::setting_up::ADownloadThatFailed> {
+                Err("no answer".into())
+            }
+        }
+        let (folder, record, cache, carried, _, update) = staging("s5-no-answer");
+        let failed = prepare(
+            &cache,
+            &NothingAnswers,
+            &crate::downloading::TheRunsTransfers::for_this_run(),
+            &carried,
+            None,
+            &update,
+            "0.2.0",
+            super::super::manifest::THE_DEBIAN_13_ROW,
+        )
+        .err()
+        .expect("nothing answered, yet it was staged");
+        assert_eq!(failed.step, Step::Download, "{failed:?}");
+        // **And the reason About says after it** (Design *Updating*,
+        // 2026-11-12).
+        assert_eq!(failed.reason, Some(checking::TheReasonBehind::ANetworkError), "{failed:?}");
+        drop(record);
+        std::fs::remove_dir_all(folder).unwrap();
     }
 }

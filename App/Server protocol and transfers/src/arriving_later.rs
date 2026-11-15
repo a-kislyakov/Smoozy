@@ -950,7 +950,35 @@ mod tests {
         // desktop record version 48 saves parent stamps with one allocator;
         // Transfers shows local start times and sorts each group newest first.
         // Dependency-send parents use that same writer, including on reopen.
-        assert_eq!(the_clauses_the_plan_defines().len(), 164);
+        //
+        // **165 from 2026-11-09**, when the twenty-eighth notes' piece 1 gave
+        // the plan **B10b** — every read of the releases repository tries the
+        // API route, then the plain address again, before it gives up.
+        // **Built** in the same sitting, so it goes on no list above: the
+        // helper is `crate::release::two_routes`, `crate::release::fetching`
+        // tries one address on whichever route, and its callers are the
+        // desktop's (`App/Desktop app and delivery/src/setting_up.rs` and
+        // `src/updating/checking.rs`).
+        //
+        // **166 from 2026-11-14**, when the Rough what-if answers, share 3
+        // (commit `7245539e6`), gave the plan **C21a** — a stop may carry one
+        // mark, *forced* (the Creator's ruling on 287, *Force stop*). **Built**
+        // by that share, so it goes on no list above: the field is
+        // `smoozy-framing`'s `requests`, read by the machine program's stop
+        // handling and sent by the desktop's `the_queues_own_acts`. That
+        // share did not run this crate, so the count was moved by the
+        // leftovers sitting.
+        //
+        // **167 from 2026-11-14**, when uploads carry on (the what-if answers
+        // 66, 67, 70, 74) gave the plan **S12b** — an upload carried on has
+        // the machine's own program digest the part it holds, and takes its
+        // running digest from a state the record keeps at each checkpoint.
+        // **Built** in the same sitting, so it goes on no list above:
+        // `crate::transfers::moving`'s `the_machines_check_of_the_part` and
+        // `carry_on_under_a_publication_gate_asking_the_machine`, the state
+        // in `crate::transfers::integrity`, and the desktop's upload as its
+        // caller.
+        assert_eq!(the_clauses_the_plan_defines().len(), 167);
     }
 
     #[test]

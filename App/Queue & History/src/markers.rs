@@ -708,13 +708,33 @@ pub(crate) mod tests {
     /// and reaches a check whose full range is still live by no delete and no
     /// clearing.
     /// **200 from 2026-11-04**: R6a carries simulation progress before rendering.
+    /// **201 from 2026-11-09**: **L19a** — stopping a first-frame check stops
+    /// its pair, L13's machinery scoped to the pair (the Creator's
+    /// twenty-eighth notes, note 16). **Built** by that note's piece 8: the
+    /// machine answers the pair's two requests, and the desk and the phone
+    /// send them. The test's name keeps its old number.
+    /// **202 from 2026-11-10**: **D14a** — three acts written in more than one
+    /// step are finished from the records they left, and a cancel reads the
+    /// operation records first (the Fable review's first sitting). **Built**
+    /// by that sitting, in the program a rented machine runs.
+    /// **203 from 2026-11-14**: **C10a** — a job the server never took, its
+    /// provisional record removed at a connection, is drawn as C10's
+    /// not-submitted row, *Smoozy closed while sending it.* (the Rough what-if
+    /// answers, share 1, question 42; commit `978bf36bc`). **Built** by that
+    /// share on the desk: `submitting`'s `a_submission_was_found_never_taken`,
+    /// called from `servers::the_machines_work`. That share did not run this
+    /// crate, so the count was moved by the leftovers sitting.
+    /// **204 from 2026-11-14, the same sitting**: **H7a** — a *yes* to a
+    /// first-frame check held because it writes nothing releases the range
+    /// behind it (the Rough what-if answers' leftovers, 459). **Built** there,
+    /// in the program a rented machine runs (`the_range_goes_with_its_check`).
     #[test]
     fn the_plan_defines_two_hundred_distinct_clauses() {
         let plan =
             fs::read_to_string(the_architecture_folder().join(format!("{THIS_PLANS_NAME}.md")))
                 .expect("the plan is readable");
         let defined: HashSet<String> = the_clauses_defined_by(&plan).into_iter().collect();
-        assert_eq!(defined.len(), 200, "{:?}", {
+        assert_eq!(defined.len(), 204, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

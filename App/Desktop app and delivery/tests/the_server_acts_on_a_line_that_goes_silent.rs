@@ -1849,6 +1849,7 @@ exit $status;
                     &WhatThePairCarries {
                         group: Some(group),
                         the_render_the_desktop_last_saw: None,
+                        first_frame_check: None,
                     },
                     &[],
                     THE_WAIT_AT_THE_DESK,

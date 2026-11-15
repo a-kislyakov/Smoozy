@@ -1,4 +1,5 @@
 //! **Files — a server's main face, and the largest single screen in the
+//! Current admin-result examples: `fb-admin-password`, `fb-admin-wrong`, `fb-admin-refused`, `fb-admin-failed`, `fb-admin-exists`, `fb-admin-read`, `fb-admin-no-route`, `fb-admin-not-allowed`, `fb-admin-not-list`, `fb-admin-path`, `fb-admin-root`, `fb-admin-busy`, `fb-admin-done`.
 //! drawing.** The page half is `web/files.js`.
 //!
 //! **This file is the surface and not the deciding.** Every judgement below is
@@ -36,7 +37,17 @@
 //!   `fb-renamehint`, `fb-refused`, `fb-refusednone`, `fb-refusedplain`,
 //!   `fb-newname`, `fb-newfolder`, `fb-readnone`, `fb-multi`, `fb-hidden`,
 //!   `fb-check`, `fb-sizemenu`, `fb-size`, `fb-sizeold`, `fb-view`,
-//!   `fb-viewexr`, `fb-viewbig`. *(The last three drawn 2026-10-31 by the
+//!   `fb-viewexr`, `fb-viewbig`, `fb-counting`, `fb-uploading`,
+//!   `fb-viewalpha`, `fb-home`, `delete-own`, `fb-live-ssh`. *(The last two
+//!   drawn and built 2026-11-14, batch 2 of the Bad what-if answers: Smoozy's
+//!   own files and the login's SSH keys named in the delete and rename
+//!   boxes.)* *(`fb-home` drawn and built 2026-11-13: the
+//!   home folder's row says *Home folder* in grey, the Creator's notes on the
+//!   test copy of 2026-11-12, note 0.)* *(The last before it drawn 2026-11-10 by the twenty-ninth notes'
+//!   drawing pass — a picture with transparency over the board, note 12 — and
+//!   built the same day by piece F. The two before it drawn 2026-11-09 by the twenty-eighth notes' piece 7 — an upload
+//!   said on the line above the list, note 10 — and built the same day. The
+//!   three before them drawn 2026-10-31 by the
 //!   plan and drawing pass for the seventeenth notes, note 11 — a picture
 //!   looked at in Files — and built the same day. The three before them
 //!   drawn 2026-10-30 by the twenty-third notes' design pass, note 2, and
@@ -87,11 +98,12 @@
 //!   in `src/servers/a_period.rs`, which is not this screen's. So a listing is
 //!   read afresh on every visit and nothing is shown where no connection is
 //!   live.
-//! - **Delete, rename, move, copy, paste, a new folder, the elevated retry and
-//!   the hand-over to the dependency check.** Each is its own act on the machine
-//!   and none is built. **The offer to try again with admin access is not drawn
-//!   beside a refusal** for the same reason: the retry it would start is not
-//!   built. **Download left this list at step 10c**: the toolbar's control and
+//! - **Delete, rename, move, copy, paste, a new folder and the hand-over to
+//!   the dependency check** were listed here as not built; they have been
+//!   built since. **The retry with admin access was built on 2026-11-12**
+//!   (`File Browser` P5 to `File Browser` P8 and `File Browser` P6b): the offer is drawn beside a folder the
+//!   login could not read, a refused new folder or rename, and a delete
+//!   refused before anything went. **Download left this list at step 10c**: the toolbar's control and
 //!   the two menu items now send what the user picked to Transfers, which
 //!   composes `Download` M1's request over it.
 //! - **The collision box in its readings other than an upload's and a
@@ -290,7 +302,7 @@ pub const A_CONNECTION_IS_NOT_BUILT: &str =
 // `today 09:12`, `5.1` and every job's name are values. Everything below is
 // prose.
 
-mod words {
+pub(crate) mod words {
     // `Design/File Browser § Where it sits`, and the tab strip's own name for
     // this tab, which is piece 5's and is not repeated here.
 
@@ -341,6 +353,10 @@ mod words {
     pub const PASTE_ITEMS: &str = "items";
     pub const PASTE_ONE_ITEM: &str = "item";
     pub const DELETE: &str = "Delete";
+    // `Design/File Browser § The list`, the refresh icon at the path's right
+    // end, its word on hover and on keyboard focus — the Creator's
+    // twenty-eighth notes, note 9.
+    pub const REFRESH: &str = "Refresh";
     // *"How many files are chosen is said at the far end of the toolbar."*
     pub const SELECTED: &str = "selected";
 
@@ -403,7 +419,7 @@ mod words {
     pub const THE_FOLDER_WAS_NOT_READ: &str = "Could not read this folder.";
 
     // L8a's shape, for a read of the local record that did not answer.
-    pub const THE_RECORD_WOULD_NOT_READ: &str = "Could not read Smoozy's database.";
+    pub const THE_RECORD_WOULD_NOT_READ: &str = "Could not read Smoozy's database. Restart Smoozy, or report a problem.";
     pub const NO_SUCH_SERVER: &str = "Server removed.";
 
     // ── The refusals ────────────────────────────────────────────────────────
@@ -412,26 +428,52 @@ mod words {
     // the folder, and where the machine allows one, the offer to try again with
     // admin access is beside it."* **Five rows and five sentences**, and the
     // three that differ do so only in what is beside them.
-    pub const CANNOT_READ_THE_FOLDER: &str = "Permission denied: cannot read this folder.";
+    pub const CANNOT_READ_THE_FOLDER: &str = "Permission denied: can't read this folder.";
     pub const CANNOT_READ_AND_NO_ROUTE: &str =
-        "Permission denied: cannot read this folder. No admin access on this server.";
-    pub const CANNOT_DELETE: &str = "Permission denied: cannot delete this folder.";
+        "Permission denied: can't read this folder. No admin access on this server.";
+    pub const CANNOT_DELETE: &str = "Permission denied: can't delete this folder.";
     pub const CANNOT_DELETE_AND_NO_ROUTE: &str =
-        "Permission denied: cannot delete this folder. No admin access on this server.";
-    pub const CANNOT_MAKE_A_FOLDER: &str = "Permission denied: cannot make a folder here.";
+        "Permission denied: can't delete this folder. No admin access on this server.";
+    pub const CANNOT_MAKE_A_FOLDER: &str = "Permission denied: can't create a folder here.";
     pub const CANNOT_MAKE_AND_NO_ROUTE: &str =
-        "Permission denied: cannot make a folder here. No admin access on this server.";
-    pub const CANNOT_RENAME: &str = "Permission denied: cannot rename this.";
+        "Permission denied: can't create a folder here. No admin access on this server.";
+    pub const CANNOT_RENAME: &str = "Permission denied: can't rename this.";
     pub const CANNOT_RENAME_AND_NO_ROUTE: &str =
-        "Permission denied: cannot rename this. No admin access on this server.";
-    pub const CANNOT_MOVE: &str = "Permission denied: cannot move this.";
+        "Permission denied: can't rename this. No admin access on this server.";
+    pub const CANNOT_MOVE: &str = "Permission denied: can't move this.";
     pub const CANNOT_MOVE_AND_NO_ROUTE: &str =
-        "Permission denied: cannot move this. No admin access on this server.";
-    pub const CANNOT_COPY: &str = "Permission denied: cannot copy this.";
+        "Permission denied: can't move this. No admin access on this server.";
+    pub const CANNOT_COPY: &str = "Permission denied: can't copy this.";
     pub const CANNOT_COPY_AND_NO_ROUTE: &str =
-        "Permission denied: cannot copy this. No admin access on this server.";
+        "Permission denied: can't copy this. No admin access on this server.";
     pub const TRY_WITH_ADMIN: &str = "Retry with admin access";
     pub const DISMISS: &str = "Dismiss";
+
+    // ── The retry with admin access — `Design/File Browser`, the paragraph
+    // after the offer's, added 2026-11-12. Each says what happened and stops.
+    pub const NEEDS_THE_LOGIN_PASSWORD: &str = "This needs the server's login password";
+    pub const WRONG_PASSWORD: &str = "Wrong password. Nothing was changed.";
+    pub const ADMIN_ACCESS_REFUSED: &str = "Admin access refused.";
+    pub const FAILED_WITH_ADMIN: &str = "Failed with admin access:";
+    pub const FAILED_WITH_ADMIN_ALONE: &str = "Failed with admin access.";
+    pub const ALREADY_EXISTS_NOTHING_CHANGED: &str = "Already exists. Nothing was changed.";
+    pub const NOT_READ_WITH_ADMIN: &str = "Could not read this folder with admin access.";
+    pub const NO_ADMIN_ACCESS_HERE: &str = "No admin access on this server.";
+    pub const NOT_DONE_ON_THIS_PATH: &str = "Not done. Admin access is not allowed on this path.";
+    // After Sol's look, 2026-11-12 (`Design/File Browser`, the paragraph
+    // after the answers).
+    pub const NOT_READ_WITH_ADMIN_LEAD: &str = "Could not read this folder with admin access:";
+    pub const NOT_READ_WITH_ADMIN_NOT_A_LIST: &str =
+        "Could not read this folder with admin access: the reply was not a file list.";
+    pub const THE_PATH_GOES_THROUGH_A_LINK: &str = "Not done. The folder path could not be verified.";
+    pub const MADE_BUT_OWNED_BY_ROOT: &str = "Folder created, but owned by root.";
+    pub const ANOTHER_ADMIN_ACTION_RAN: &str = "Not done. Another admin action was running. Try again.";
+    pub const DONE_WITH_ADMIN_REST: &str = "done with admin access.";
+    pub const ITEMS_WERE_REFUSED: &str = "items were refused: permission denied.";
+    // The act, as the box's line names it: *Delete /data/old was refused:
+    // permission denied.* The menus' own words where they have one.
+    pub const OPEN: &str = "Open";
+    pub const MOVE: &str = "Move";
 
     // `File Browser` P4's residue, and `File Browser` P3's two named components. **The
     // message says which of
@@ -461,8 +503,8 @@ mod words {
     // Step 10c's Files' owed acts piece 3.
     pub const A_NEW_FOLDERS_NAME: &str = "New folder";
     pub const TYPE_A_NAME: &str = "Type a name.";
-    pub const A_NAME_HOLDS_NO_SLASH: &str = "Name cannot contain /.";
-    pub const A_NAME_IS_NOT_A_DOT: &str = "Name cannot be . or ..";
+    pub const A_NAME_HOLDS_NO_SLASH: &str = "Name can't contain /.";
+    pub const A_NAME_IS_NOT_A_DOT: &str = "Name can't be . or ..";
     pub const THE_NAME_IS_TOO_LONG: &str = "Name too long.";
     pub const THE_NAME_IS_SMOOZYS_OWN: &str = "Name reserved by Smoozy.";
     pub const SELECT_TO_RENAME: &str = "Select a file or folder to rename.";
@@ -478,7 +520,7 @@ mod words {
     pub const THE_CONNECTION_WENT: &str =
         "Connection lost before the server replied.";
     pub const NOTHING_RENAMED_THE_TELLING: &str =
-        "Could not save to Smoozy's database. Nothing was renamed.";
+        "Could not save. Nothing was renamed. Try again, or report a problem.";
     pub const NOT_CONNECTED_FOR_AN_ACT: &str = "Server not connected.";
     // A delete, under way and ended (step 10c's Files' owed acts piece 4).
     pub const DELETING: &str = "Deleting";
@@ -487,15 +529,31 @@ mod words {
     pub const DELETED_COUNT_REST: &str = "deleted,";
     pub const REFUSED_COUNT_REST: &str = "failed,";
     pub const NOT_TRIED_COUNT_REST: &str = "skipped.";
+    // **What did not go, each named** — `Design/File Browser § What the
+    // screen says around an act`, 2026-11-11 (the four questions, batch 2,
+    // fix 7). Each follows the item's path.
+    pub const REFUSED_BY_THE_SERVER: &str = ": refused by the server.";
+    pub const SKIPPED_SOMETHING_INSIDE_STAYED: &str = ": skipped, something inside was not deleted.";
+    pub const SKIPPED_THE_CONNECTION_WENT: &str = ": skipped, connection lost.";
+    pub const SKIPPED_ONE: &str = ": skipped.";
+    pub const NO_REPLY_MAY_BE_DELETED: &str = ": no reply — it may have been deleted.";
+    pub const NO_REPLY_MAY_BE_MOVED: &str = ": no reply — it may have been moved.";
+    pub const NO_REPLY_MAY_BE_COPIED: &str = ": no reply — it may have been copied.";
+    pub const AND_MORE_LEAD: &str = "And";
+    pub const AND_MORE_REST: &str = "more.";
     pub const SOME_NEVER_ANSWERED: &str =
         "Connection lost before the server replied for some items.";
     // A paste after a cut (step 10c's Files' owed acts piece 5).
     pub const SELECT_TO_PASTE: &str = "Cut or copy a file or folder first.";
-    pub const A_FOLDER_INTO_ITSELF: &str = "Cannot paste a folder into itself or its subfolders.";
+    pub const A_FOLDER_INTO_ITSELF: &str = "Can't paste a folder into itself or its subfolders.";
     pub const NOTHING_WAS_MOVED_IT_IS_HERE: &str = "Already in this folder.";
     pub const MOVED_ITEMS_LEAD: &str = "Moved";
     pub const MOVED_COUNT_REST: &str = "moved,";
     pub const NOT_DONE_COUNT_REST: &str = "skipped.";
+    /// **`File Browser` M6b**: a move or a copy refused part-way, where the
+    /// one reading taken at the refusal found no space left there (the
+    /// leftovers of the Rough what-if answers, 449).
+    pub const THE_DISK_IS_FULL_THERE: &str = "Server disk is full.";
     pub const ON_ANOTHER_DISK_REST: &str = "on another disk were not moved.";
     // A paste after a copy (step 10c's Files' owed acts piece 6), and
     // `Design/File Browser § What the screen says around an act`'s two
@@ -503,8 +561,8 @@ mod words {
     pub const COPYING: &str = "Copying";
     pub const COPIED_LEAD: &str = "Copied";
     pub const COPIED_COUNT_REST: &str = "copied,";
-    pub const SET_UP_TO_COPY: &str = "Set up Smoozy on this server to copy files.";
-    pub const SET_UP_TO_MOVE_BETWEEN_DISKS: &str = "Set up Smoozy on this server to move files between disks.";
+    pub const SET_UP_TO_COPY: &str = "Set up this server to copy files.";
+    pub const SET_UP_TO_MOVE_BETWEEN_DISKS: &str = "Set up this server to move files between disks.";
     // Design's *"Where Smoozy there is older than the app, Update replaces Set
     // up"* — step 10c's Files' owed acts piece 7, where the program on the
     // server refuses the copy request by name.
@@ -521,7 +579,7 @@ mod words {
     // Creator's seventeenth notes, note 11. The box's own name, for a screen
     // reader, is the drawing's (`#fbview`'s `aria-label`), and so are the
     // two arrows' and the close button's.
-    pub const A_PICTURE: &str = "Picture";
+    pub const A_PICTURE: &str = "Image";
     pub const LOADING: &str = "Loading…";
     pub const CANNOT_SHOW_LEAD: &str = "Can't preview";
     pub const CANNOT_SHOW_REST: &str = "files.";
@@ -531,8 +589,8 @@ mod words {
     pub const THE_VIEWER_IS_NOT_CONNECTED: &str = "Not connected.";
     pub const RETRY: &str = "Retry";
     pub const CLOSE: &str = "Close";
-    pub const PREVIOUS_PICTURE: &str = "Previous picture";
-    pub const NEXT_PICTURE: &str = "Next picture";
+    pub const PREVIOUS_PICTURE: &str = "Previous image";
+    pub const NEXT_PICTURE: &str = "Next image";
     // The reason under *Could not read the file.* (`File Browser` L29: *"a
     // dropped line, a refusal, a cut"*), in the words this screen already
     // uses for each.
@@ -544,18 +602,18 @@ mod words {
     pub const COUNTED_ONE_FOLDER: &str = "folder";
     pub const COUNTED_FOLDERS: &str = "folders";
     pub const SOME_FOLDERS_COULD_NOT_BE_READ: &str = "Some folders could not be read.";
-    pub const SET_UP_TO_CALCULATE: &str = "Set up Smoozy on this server to calculate folder sizes.";
+    pub const SET_UP_TO_CALCULATE: &str = "Set up this server to calculate folder sizes.";
     pub const UPDATE_TO_CALCULATE: &str = "Update Smoozy on this server to calculate folder sizes.";
     pub const NOT_A_FOLDER_ANY_MORE: &str = "No longer a folder.";
     pub const THE_FOLDER_COULD_NOT_BE_READ: &str = "Could not read this folder.";
     pub const NO_REPLY_TO_THE_COUNT: &str = "Timed out waiting for a reply.";
     pub const UPDATE_TO_MOVE_BETWEEN_DISKS: &str = "Update Smoozy on this server to move files between disks.";
     pub const NOTHING_COPIED_THE_RECORD: &str =
-        "Could not save to Smoozy's database. Nothing was copied.";
+        "Could not save. Nothing was copied. Try again, or report a problem.";
     pub const NOTHING_MOVED_THE_RECORD: &str =
-        "Could not save to Smoozy's database. Nothing was moved.";
+        "Could not save. Nothing was moved. Try again, or report a problem.";
     pub const NOTHING_DELETED_THE_RECORD: &str =
-        "Could not save to Smoozy's database. Nothing was deleted.";
+        "Could not save. Nothing was deleted. Try again, or report a problem.";
 
     // ── Uploading ───────────────────────────────────────────────────────────
 
@@ -567,10 +625,10 @@ mod words {
     // Uploading`, the Creator's note 2 on the test copy. A Mac is not asked.
     #[cfg(target_os = "windows")]
     pub const THE_PICKER_CANNOT_TAKE_BOTH: &str =
-        "The Windows file picker cannot select files and folders together.";
+        "The Windows file picker can't select files and folders together.";
     #[cfg(not(target_os = "windows"))]
     pub const THE_PICKER_CANNOT_TAKE_BOTH: &str =
-        "This computer's file picker cannot select files and folders together.";
+        "This computer's file picker can't select files and folders together.";
     pub const FILES: &str = "Files";
     pub const FOLDERS: &str = "Folders";
 
@@ -613,7 +671,9 @@ mod words {
     pub const ALREADY_THERE_MOVING_ONE_ALONE: &str = "item you are moving is already in";
     pub const ALREADY_THERE_COPYING_ONE_ALONE: &str = "item you are copying is already in";
     // *"One line says what the comparison was, and it stops there."*
-    pub const COMPARED_BY: &str = "Compared by name and location only.";
+    // Changed 2026-11-12, the four questions, scout 3.50: it read *Compared
+    // by name and location only.*
+    pub const COMPARED_BY: &str = "Matched by name; contents not compared.";
     pub const AND_MORE: &str = "more";
 
     // The four answers.
@@ -627,8 +687,9 @@ mod words {
     // beside it.
     pub const PLACED_BY_THE_CHECK_REST: &str = "were uploaded by the dependency check.";
     pub const ONE_PLACED_BY_THE_CHECK_REST: &str = "was uploaded by the dependency check.";
-    pub const PLACED_BY_THE_CHECK_SAID: &str =
-        "Replacing them brings back paths the render cannot find.";
+    // Changed 2026-11-12, scout 3.50: it read *Replacing them brings back
+    // paths the render cannot find.*
+    pub const PLACED_BY_THE_CHECK_SAID: &str = "Replacing them undoes the check's path fixes.";
     pub const CHECK_THEM_INSTEAD: &str = "Check their dependencies instead";
 
     // `File Browser` U9b's reason line. *"The moment named is when a file last finished
@@ -643,10 +704,13 @@ mod words {
     // bound: uniform across files, differentiated across jobs**, and the
     // sentence is a *may* and never a description.
     pub const IS_RENDERING_WITH_THIS_FILE: &str = "is rendering with this file";
+    pub const ARE_RENDERING_WITH_THIS_FILE: &str = "are rendering with this file";
+    /// **A job the record holds no name for** (scout 3.31, 2026-11-11).
+    pub const ANOTHER_JOB: &str = "Another job";
     pub const IS_RENDERING_WITH: &str = "is rendering with";
     pub const OF_THESE_FILES: &str = "of these files";
     pub const IS_WAITING_ON_IT: &str = "is waiting on it.";
-    pub const IS_WAITING_ON_THEM: &str = "is waiting on them.";
+    pub const ARE_WAITING_ON_IT: &str = "are waiting on it.";
     pub const IS_HELD_ON_IT: &str = "is held and waiting on it.";
     pub const AND_ALSO: &str = "and";
     pub const A_RENDER_MAY_FINISH_ANYWAY: &str =
@@ -680,18 +744,32 @@ mod words {
     pub const DELETE_QUESTION_LEAD: &str = "Delete";
     pub const DELETE_QUESTION_MANY_LEAD: &str = "Delete";
     pub const DELETE_QUESTION_MANY_REST: &str = "items?";
-    pub const PERMANENT: &str = "This cannot be undone.";
+    pub const PERMANENT: &str = "This can't be undone.";
     pub const DONT_WARN_AGAIN: &str = "Don't warn me about deleting again";
     // *"the checkbox sits under the permanence warning and says in one line
     // that it does not cover the other."*
     pub const WHAT_IT_DOES_NOT_COVER: &str = "The warning about jobs using the file always shows.";
+    // **What Smoozy and the login rely on, named before it is disturbed** —
+    // `Design/File Browser § Smoozy's own files and the login's keys`, batch 2
+    // of the Bad what-if answers (160, 161, 162, 164, 182). Neither can be
+    // switched off.
+    pub const SMOOZYS_OWN_FILES: &str = "Includes Smoozy's own files.";
+    pub const SMOOZYS_OWN_FILES_SAID: &str = "Setup and jobs on this server need them.";
+    pub const THE_SSH_KEYS: &str = "Includes this server's SSH keys.";
+    pub const THE_SSH_KEYS_SAID: &str = "Smoozy may not be able to connect again.";
+    // **A system folder among what is deleted** — `Design/File Browser §
+    // Smoozy's own files and the login's keys`, the leftovers of the Rough
+    // what-if answers (181). Never switched off.
+    pub const A_SYSTEM_FOLDER: &str = "Includes a system folder.";
+    pub const A_SYSTEM_FOLDER_SAID: &str = "Deleting it can stop the server from working.";
 
     // `Design/File Browser § Disturbing a file nothing live is using`. *"It
     // says what the file is for rather than what the record is."*
-    pub const OTHER_REFERENCES_REST: &str = "other references point at this file.";
-    pub const ONE_OTHER_REFERENCE_REST: &str = "other reference points at this file.";
-    pub const REFERENCES_SAID: &str =
-        "Deleting it breaks them. Their files would need a new dependency check.";
+    // **Scout 3.35 as Sol narrowed it, 2026-11-11**: a counted reference is a
+    // file, not always a scene file.
+    pub const OTHER_REFERENCES_REST: &str = "other files on this server depend on this file.";
+    pub const ONE_OTHER_REFERENCE_REST: &str = "other file on this server depends on this file.";
+    pub const REFERENCES_SAID: &str = "Deleting it breaks them until you check their dependencies again.";
 
     // `File Browser` M3's own extra true thing, where the victim holds live staged
     // material.
@@ -729,7 +807,11 @@ mod words {
     // ── The path ────────────────────────────────────────────────────────────
 
     /// The root of the machine, which has no name of its own to show.
-    pub const THE_TOP_OF_THE_SERVER: &str = "Root";
+    /// *Server*, never *Root* beside a home folder called *root* (scout 3.32).
+    pub const THE_TOP_OF_THE_SERVER: &str = "Server";
+    /// **What the login's home folder says on hover**, beside its house —
+    /// `Design/File Browser § The list` (the Creator, 2026-11-11).
+    pub const HOME_FOLDER: &str = "Home folder";
 
     // ── The one honest answer where an act needs the server instructed ──────
     //
@@ -757,6 +839,15 @@ mod words {
     // runs** — `Design/File Browser § The list`: the bottom bar's transfer
     // count says it is running, and this line says only how it ended.
     pub const UPLOADED: &str = "Uploaded";
+    // **And while it runs, on the same line** — `Design/File Browser § The
+    // list`, the Creator's twenty-eighth notes, note 10: *Counting files…*
+    // until the walk ends, then *Uploading 12 of 40 files to kitchen/*.
+    // **The counting words are Transfers' own**, so the two screens say one
+    // thing.
+    pub const COUNTING_FILES: &str = crate::surface::transfers::words::COUNTING_FILES;
+    pub const UPLOADING: &str = "Uploading";
+    pub const FILES_TO: &str = "files to";
+    pub const ONE_FILE_TO: &str = "file to";
     // **The bottom bar's transfer count** — `Design/File Browser § The list`:
     // *3 transfers*, a link to Transfers. The Creator's notes piece 6.
     pub const TRANSFERS_ON_THIS_SERVER: &str = "transfers";
@@ -784,11 +875,11 @@ mod words {
     pub const COULD_NOT_READ_ON_THIS_COMPUTER: &str =
         "Upload not started. Could not read on your computer:";
     pub const THE_RECORD_WOULD_NOT_TAKE_IT: &str =
-        "Upload not started: could not save it to Smoozy's database.";
+        "Upload not started: could not save it. Try again, or report a problem.";
     // `File Browser` W8: the telling could not be written, so the act is not
     // attempted, naming the telling. Step 10c's Files' owed acts piece 2.
     pub const THE_TELLING_WOULD_NOT_WRITE: &str =
-        "Could not save to Smoozy's database. Nothing was replaced.";
+        "Could not save. Nothing was replaced. Try again, or report a problem.";
     // *Upload it again* or *Try again* from Transfers, where a file now stands
     // at the name and the first request asked nothing (the 38's piece 9).
     pub const A_FILE_STANDS_THERE_NOW: &str =
@@ -863,6 +954,12 @@ fn the_piece_is_not_a_path(is_path: &bool) -> bool {
 impl Words {
     fn empty() -> Words {
         Words { pieces: Vec::new() }
+    }
+
+    /// **Another sentence's pieces on the end**, as they are.
+    pub fn followed_by(mut self, more: Words) -> Words {
+        self.pieces.extend(more.pieces);
+        self
     }
 
     /// Words alone.
@@ -1022,6 +1119,9 @@ pub struct APathPart {
     pub said: Option<Prose>,
     /// The last part, which is where the user is standing and is not a link.
     pub here: bool,
+    /// **The login's home folder: drawn with a house, and this is its word on
+    /// hover** — `Design/File Browser § The list`. Nothing on any other part.
+    pub home: Option<Prose>,
 }
 
 /// **Which icon a row draws.** The name of a shape and not a word a person
@@ -1094,6 +1194,11 @@ pub struct ARow {
     /// `Design/File Browser § Looking at a picture`, added 2026-10-31. Nothing
     /// on a row that is not a picture.
     pub picture: Option<APicture>,
+    /// **The login's home folder: its house in place of the folder icon, and
+    /// this is its word on hover** — `Design/File Browser § The list` (the
+    /// Creator, 2026-11-11). Set by [`the_home_is_marked`]; nothing on any
+    /// other row.
+    pub home: Option<Prose>,
 }
 
 /// **What a picture row's viewer shows** — `File Browser` L29: the ending
@@ -1163,6 +1268,12 @@ pub struct ARefusal {
     pub the_offer: Option<Prose>,
     /// The cross that clears it.
     pub dismiss: Prose,
+    /// **What the offer runs again, where there is an offer** (`File Browser`
+    /// `File Browser` P6b): the page hands it back unchanged with the press.
+    pub retry: Option<AnAdminRetry>,
+    /// **`File Browser` M3c: the red line of `File Browser` M3b beside the offer**, where the
+    /// retry would delete inside a system folder (the runner's ruling on 181).
+    pub the_system_folder: Option<AWarningLine>,
     /// **The greying comes with the refusal rather than standing before it**,
     /// and says the folder cannot be opened and nothing more.
     pub the_row_is_dimmed: bool,
@@ -1209,7 +1320,14 @@ pub enum TheListing {
     /// said in as many words (`File Browser` P2), with the component `File
     /// Browser` P3's walk named where it could name one. **It is not drawn as
     /// an empty list**, which would say the folder is empty.
-    TheFolderWasNotRead { said: Words },
+    TheFolderWasNotRead {
+        said: Words,
+        /// **The offer, where the walk was refused at a folder above the one
+        /// asked for and the machine allows one** — `File Browser` P5 as
+        /// changed after Sol's look (finding 8). Its retry is the elevated
+        /// listing of the folder asked for.
+        refusal: Option<ARefusal>,
+    },
     /// The server is gone from the record.
     NoSuchServer { said: Prose },
 }
@@ -1231,6 +1349,7 @@ pub struct TheToolbar {
     pub rename: Prose,
     pub cut: Prose,
     pub copy: Prose,
+    pub copy_greyed: Option<AGreying>,
     /// **Paste carries a count of what is on it** (Design, Creator-stated), and
     /// **it is offered only where the pasteboard's machine is the one being
     /// browsed** (`File Browser` M15) — *"nowhere else is it greyed, refused or explained;
@@ -1238,6 +1357,12 @@ pub struct TheToolbar {
     /// is not offered at all"*. `None` is that.
     pub paste: Option<Words>,
     pub delete: Prose,
+    /// **The refresh icon's word** — `Design/File Browser § The list`: *"A
+    /// refresh icon sits at the path's right end … Its word on hover is
+    /// Refresh."* Carried with the toolbar's words though it is drawn on the
+    /// path, since the page writes no word of it. The Creator's twenty-eighth
+    /// notes, note 9.
+    pub refresh: Prose,
     /// *"How many files are chosen is said at the far end of the toolbar."*
     pub how_many_chosen: Option<Words>,
     /// **The same words for one file chosen, carried whether or not one is.**
@@ -1288,8 +1413,13 @@ pub fn the_words_around_an_act() -> TheWordsAroundAnAct {
 /// The bar along the bottom.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct TheBottomBar {
-    /// *"a standing line saying where an upload will land"*.
+    /// *"a standing line saying where an upload will land"* — **the folder's
+    /// own name**, *Uploads go to `kitchen/`*, as Design writes it (the UI at
+    /// every size, C-05). The path bar above already carries the whole path.
     pub uploads_go_to: Words,
+    /// **The whole path, read on hover** — the folder's name alone cannot
+    /// tell two `renders/` apart. A value.
+    pub uploads_go_to_whole: String,
     /// *"a count of what is in the folder"*, where there is a listing —
     /// **of what the list shows** (`File Browser` L21, `Design/File Browser §
     /// The list`), so with the hidden names left out while the box is
@@ -1433,6 +1563,10 @@ pub struct TheHeaders {
     pub sorted_by: TheColumn,
     /// **Whether a second press reversed it** — the mark points down.
     pub reversed: bool,
+    /// **What a folder's Kind reads**, for a new folder's row while its name
+    /// is typed, which has no row of its own yet (UI consistency, finding 28:
+    /// its Kind was empty where the drawing reads *Folder*).
+    pub a_folder: Prose,
 }
 
 /// **One of the four columns the list sorts by.** The name of a column and not
@@ -1607,6 +1741,7 @@ fn the_headers(order: TheOrder) -> TheHeaders {
         changed: Prose::new(words::CHANGED),
         sorted_by: order.by,
         reversed: order.reversed,
+        a_folder: Prose::new(words::A_FOLDER),
     }
 }
 
@@ -1687,9 +1822,12 @@ pub enum TheUploadAsk {
     /// **The upload starts, with nothing asked first** — `Design/File Browser
     /// § Uploading`: a pick in the system panel, or a drop on the list, is the
     /// decision (the Creator's note 2 on the test copy). It carries the paths
-    /// the user chose and no words, so the page hands the same ones back to
-    /// `the_upload_is_confirmed` at once.
-    Go { chosen: Vec<APath> },
+    /// the user chose, so the page hands the same ones back to
+    /// `the_upload_is_confirmed` at once, **and the words the line above the
+    /// list says from that moment until the walk ends** — *Counting files…*
+    /// (`Design/File Browser § The list`, the Creator's twenty-eighth notes,
+    /// note 10: the line appears the moment the pick or the drop lands).
+    Go { chosen: Vec<APath>, counting: Words },
     /// The user closed the panel.
     NothingWasChosen,
     /// Legacy closed-act result; ordinary free-software uploads do not raise it.
@@ -1706,9 +1844,12 @@ pub enum TheUploadGoes {
         request: Verbatim,
         question: Box<TheCollisionQuestion>,
     },
-    /// **The files are going.** Nothing is said above the list while they
-    /// do: the bottom bar's transfer count says so (`Design/File Browser §
-    /// The list`, the Creator's notes piece 6).
+    /// **The files are going.** The page asks
+    /// [`the_upload_into_this_folder`] at once and at every move, and the line
+    /// above the list says how far they have got (`Design/File Browser § The
+    /// list`, the Creator's twenty-eighth notes, note 10). *Until then nothing
+    /// was said there while they went, and the bottom bar's count was the one
+    /// sign: the Creator's notes piece 6.*
     Underway { request: Verbatim },
     /// **Nothing moved**, and this says why.
     DidNotStart { said: Words },
@@ -1815,6 +1956,17 @@ pub struct TheDeleteBox {
     /// **`File Browser` M3's own extra true thing**, where the victim holds
     /// live staged material.
     pub staged_material: Option<AWarningLine>,
+    /// **Smoozy's own folder, or the login's SSH keys, among what is
+    /// deleted** — [`WhatThisServerReliesOn`]. Red, and never switched off.
+    pub smoozys_own_files: Option<AWarningLine>,
+    pub the_ssh_keys: Option<AWarningLine>,
+    /// **A system folder among what is deleted** — `File Browser` M3b, the
+    /// leftovers of the Rough what-if answers (181), on the Creator's ruling
+    /// of 2026-11-14. Red, and never switched off. **Said in the delete box,
+    /// which every delete passes through**, so it comes before the refusal
+    /// that offers *Retry with admin access*, and before a delete as a login
+    /// that needs no admin access at all.
+    pub the_system_folder: Option<AWarningLine>,
     /// **The permanence warning, and it can be switched off.**
     pub permanent: Prose,
     pub dont_warn_again: Prose,
@@ -1831,7 +1983,13 @@ pub struct TheDeleteBox {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct TheLiveJobBox {
     pub question: Words,
-    pub live_jobs: TheLiveJobWarning,
+    /// The live-job warning, where a live job is disturbed.
+    pub live_jobs: Option<TheLiveJobWarning>,
+    /// **Smoozy's own folder, or the login's SSH keys, among what a rename or
+    /// a move disturbs** — [`WhatThisServerReliesOn`]. The box is asked for
+    /// any of the three.
+    pub smoozys_own_files: Option<AWarningLine>,
+    pub the_ssh_keys: Option<AWarningLine>,
     pub cancel: Prose,
     pub carry_on: Prose,
 }
@@ -1894,10 +2052,15 @@ pub async fn the_files_tab<R: Runtime>(
         .try_state::<Arc<ThePeriodsThisRun>>()
         .map(|periods| Arc::clone(periods.inner()));
     let there_is = with_what_servers_observed(there_is, periods.as_deref(), &server);
-    let live = the_live_point_of(periods.as_deref(), &server).is_some();
+    let point = the_live_point_of(periods.as_deref(), &server);
+    let live = point.is_some();
     let paste = the_row_of(&app, &server).as_ref().and_then(what_paste_carries_on);
     let mut browser = the_tab_from(there_is, &server, folder, chosen, live, shown);
+    // **The house, from the home already read on this connection** — nothing
+    // is read here, so the answer drawn at once never waits on the machine.
+    the_home_is_marked(&mut browser, point.and_then(|point| point.the_logins_home_as_read()).as_deref());
     paste_is_offered_on(&mut browser, paste);
+    copy_is_offered_on(&mut browser, the_row_of(&app, &server).as_ref().and_then(the_package_area_to_copy_with).is_some());
     calculate_size_is_offered_on(&mut browser, the_row_of(&app, &server).as_ref().map(|row| the_count_stands_on(row, &server)));
     // **The headers say the order held for the run** (hole 8), so the mark
     // does not jump back to *Name* while a folder is read.
@@ -1985,13 +2148,64 @@ pub async fn the_folder_is_read<R: Runtime>(
         observed
     };
     let paste = the_row_of(&app, &server).as_ref().and_then(what_paste_carries_on);
+    let a_row_carries_the_refusal = matches!(found, WhatTheReadingFound::ItsRowCarriesTheRefusal { .. });
+    let refused_on_the_way = matches!(found, WhatTheReadingFound::NotListedForPermission(_));
     let mut browser = the_tab_after_the_reading(order, &server, &folder, chosen.as_deref(), found, observed, shown);
+    // **`File Browser` P5 at a folder the login could not read**: the
+    // readings are taken now, and the row's refusal carries the offer and the
+    // folder it would read.
+    if a_row_carries_the_refusal {
+        let offer = the_offer_at_the_refusal(&point, permission::ElevatableAct::AListing).await;
+        if let TheListing::Rows { rows, .. } = &mut browser.listing {
+            for row in rows.iter_mut().filter(|row| row.refusal.is_some()) {
+                row.refusal = Some(a_refusal_offering(
+                    TheRefusedAct::ReadingAFolder,
+                    offer,
+                    AnAdminRetry {
+                        server: server.clone(),
+                        act: TheRetriedAct::Listing,
+                        paths: vec![row.path.bytes.clone()],
+                    },
+                ));
+            }
+        }
+    }
+    // **`File Browser` P5 at a folder refused on the way to it** (Sol's
+    // finding 8): the readings are taken now, and the sentence carries the
+    // offer and the folder it would read.
+    if refused_on_the_way {
+        let offer = the_offer_at_the_refusal(&point, permission::ElevatableAct::AListing).await;
+        the_offer_stands_beside_the_sentence(&mut browser, &server, offer);
+    }
+    // **The house on the login's home folder** — `Design/File Browser § The
+    // list`: the server's own answer, read once per connection.
+    the_home_is_marked(&mut browser, point.the_logins_home().await.as_deref());
     paste_is_offered_on(&mut browser, paste);
+    copy_is_offered_on(&mut browser, the_row_of(&app, &server).as_ref().and_then(the_package_area_to_copy_with).is_some());
     calculate_size_is_offered_on(&mut browser, the_row_of(&app, &server).as_ref().map(|row| the_count_stands_on(row, &server)));
     // **`File Browser` §12's bar, while a pick is in hand** (the 38's piece 2),
     // or the moved line.
     browser.bar = the_bar_across_the_top(&app, &server, moved);
     browser
+}
+
+/// **`File Browser` P5's offer beside a folder refused on the way to it** —
+/// Sol's finding 8. The sentence keeps its words; the retry is the elevated
+/// listing of the folder asked for, and rides only where there is an offer.
+pub fn the_offer_stands_beside_the_sentence(browser: &mut TheBrowser, server: &str, offer: Offer) {
+    let folder = browser.folder.bytes.clone();
+    if let TheListing::TheFolderWasNotRead { refusal, .. } = &mut browser.listing {
+        let offering = a_refusal_offering(
+            TheRefusedAct::ReadingAFolder,
+            offer,
+            AnAdminRetry {
+                server: server.to_string(),
+                act: TheRetriedAct::Listing,
+                paths: vec![folder],
+            },
+        );
+        *refusal = offering.retry.is_some().then_some(offering);
+    }
 }
 
 /// **How many transfers to or from this server are running or waiting**, as
@@ -2007,6 +2221,54 @@ pub async fn the_folder_is_read<R: Runtime>(
 #[tauri::command]
 pub async fn the_transfers_on_this_server<R: Runtime>(app: AppHandle<R>, server: String) -> Option<Words> {
     the_transfer_count(crate::surface::transfers::how_many_are_running_on(&app, &server)?)
+}
+
+/// **The line above the list while uploads go into the folder shown** —
+/// `Design/File Browser § The list`, the Creator's twenty-eighth notes, note
+/// 10: *Uploading 12 of 40 files to kitchen/*, with a thin bar in bytes under
+/// it. **Files never switches to Transfers for it.**
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TheUploadLine {
+    pub said: Words,
+    /// `File Browser` U11: *"the bar is bytes staged against bytes expected"*.
+    pub bar: crate::surface::transfers::ABar,
+}
+
+/// **How far the uploads into the folder being shown have got**, read from
+/// what Transfers holds for them
+/// ([`crate::surface::transfers::the_uploads_into_on`]) and never counted a
+/// second time. **Several uploads into the folder add up into one line.**
+/// Nothing where none is going there.
+///
+/// **`async`, so it reads the record off the thread that draws**, as the
+/// transfer count does: the page asks again whenever a transfer moves.
+#[tauri::command]
+pub async fn the_upload_into_this_folder<R: Runtime>(
+    app: AppHandle<R>,
+    server: String,
+    folder: Vec<u8>,
+) -> Option<TheUploadLine> {
+    let into = crate::surface::transfers::the_uploads_into_on(&app, &server, &folder)?;
+    Some(the_upload_line(&into, &folder))
+}
+
+/// *Uploading 12 of 40 files to* and the folder, as a path; *1 file* for one.
+/// The figures are `File Browser` U11's: files over the units whose disposition
+/// is to send, and the bar in bytes over the same units.
+pub fn the_upload_line(into: &crate::surface::transfers::TheUploadsInto, folder: &[u8]) -> TheUploadLine {
+    let said = Words::with(words::UPLOADING, into.files_done.to_string())
+        .then(words::OF)
+        .and(into.files_in_the_whole.to_string())
+        .then(if into.files_in_the_whole == 1 { words::ONE_FILE_TO } else { words::FILES_TO })
+        .and_a_path(String::from_utf8_lossy(folder).into_owned());
+    // **A whole of empty files has no bytes to draw**, so the bar goes by
+    // files there rather than standing still at nothing of nothing.
+    let bar = if into.bytes_in_the_whole > 0 {
+        crate::surface::transfers::ABar { value: into.bytes_done, max: into.bytes_in_the_whole }
+    } else {
+        crate::surface::transfers::ABar { value: into.files_done as u64, max: into.files_in_the_whole as u64 }
+    };
+    TheUploadLine { said, bar }
 }
 
 /// *3 transfers*, *1 transfer*, and nothing at none.
@@ -2076,6 +2338,33 @@ pub async fn the_upload_is_confirmed<R: Runtime>(
     folder: Vec<u8>,
     chosen: Vec<Vec<u8>>,
 ) -> TheUploadGoes {
+    an_upload_starts(app, server, folder, chosen, false).await
+}
+
+/// **An upload left over, continued from Transfers** — the same files picked
+/// again into the same folder, answered *Skip existing* where something is
+/// already there, so the files already up are skipped and each partial file is
+/// carried on (`File Browser` U8's second bullet, a fresh user-started
+/// request). `Design/Transfers § What a past sitting left behind`, the
+/// paragraph of 2026-11-11 (the four questions, batch 2, fix 2).
+pub(crate) async fn an_upload_is_continued<R: Runtime>(
+    app: AppHandle<R>,
+    server: String,
+    folder: Vec<u8>,
+    chosen: Vec<Vec<u8>>,
+) -> TheUploadGoes {
+    an_upload_starts(app, server, folder, chosen, true).await
+}
+
+/// [`the_upload_is_confirmed`] and [`an_upload_is_continued`]: the second
+/// answers the already-there question with *Skip existing* itself.
+async fn an_upload_starts<R: Runtime>(
+    app: AppHandle<R>,
+    server: String,
+    folder: Vec<u8>,
+    chosen: Vec<Vec<u8>>,
+    continuing: bool,
+) -> TheUploadGoes {
     let mut row = None;
     let mut run = None;
     if let Some(started) = app.try_state::<Mutex<Started>>() {
@@ -2127,7 +2416,7 @@ pub async fn the_upload_is_confirmed<R: Runtime>(
             }
         }
     };
-    if ready.something_collides() {
+    if ready.something_collides() && !continuing {
         let request = ready.request.record.as_text();
         // **`File Browser` W1b's line and the live-job warning, read from the
         // local record at the pre-flight** (`File Browser` W2). Until step
@@ -2145,14 +2434,28 @@ pub async fn the_upload_is_confirmed<R: Runtime>(
             ready.the_reason_line.as_ref().map(|line| seconds_since_the_epoch(line.the_last_file_it_landed)),
         );
         uploads_waiting_on_their_question().insert(request.clone(), (server, row, ready, named));
+        // **A Stop pressed as the walk ended, before the question was kept**,
+        // found no question to answer: it is answered here (`File Browser` U6;
+        // Sol's second look on the twenty-eighth notes, piece 12).
+        if uploading::it_was_stopped_before_it_went(&request) {
+            if let Some((_, _, mut ready, _)) = uploads_waiting_on_their_question().take(&request) {
+                let _ = uploading::the_stop_is_written_before_it_went(&mut ready.request, &|act| door.with_the_record(act));
+            }
+            return TheUploadGoes::NothingHappened;
+        }
         return TheUploadGoes::TheQuestion {
             request: Verbatim::new(request),
             question: Box::new(question),
         };
     }
     let mut ready = ready;
-    match uploading::the_answer_is_applied(&mut ready, None, &point, &door).await {
+    // **Continuing answers the question itself**: *Skip existing*, which
+    // writes over nothing and so tells nothing (`File Browser` W8).
+    let answer = (continuing && ready.something_collides()).then_some(CollisionAnswer::SkipExisting);
+    match uploading::the_answer_is_applied(&mut ready, answer, &point, &door).await {
         WhatTheAnswerLeft::ItGoes => the_files_go(app, server, &row, ready, point),
+        // **Stopped from Transfers while its walk ran** (`File Browser` U6).
+        WhatTheAnswerLeft::TheUserStoppedIt => TheUploadGoes::NothingHappened,
         _ => TheUploadGoes::DidNotStart {
             said: Words::plain(words::THE_RECORD_WOULD_NOT_TAKE_IT),
         },
@@ -2565,6 +2868,7 @@ pub async fn an_upload_is_asked_for<R: Runtime>(app: AppHandle<R>, what: String)
             how_many: HowMany::Any,
             starting_at: None,
             title: Prose::new(words::PICK_WHAT_TO_UPLOAD),
+            the_value_after_the_title: None,
         },
     )
     .await;
@@ -2626,7 +2930,10 @@ pub fn the_delete_of<R: Runtime>(
                 .and_then(|record| crate::record::transfer_records::all(record.connection()).ok())
         })
         .unwrap_or_default();
-    the_delete_box_over_the_record(&victims, holds.as_ref(), &transfers, switched_off).0
+    let mut the_box = the_delete_box_over_the_record(&victims, holds.as_ref(), &transfers, switched_off).0;
+    (the_box.smoozys_own_files, the_box.the_ssh_keys) =
+        what_this_server_relies_on(&app, &server).the_lines_for(&victims);
+    the_box
 }
 
 /// **The live-job box the rename and the move take** — the same box and the
@@ -2642,7 +2949,8 @@ pub fn what_disturbing_costs<R: Runtime>(
     into: Option<Vec<u8>>,
 ) -> Option<TheLiveJobBox> {
     let holds = what_the_record_holds(&app, &server);
-    the_live_job_box_over_the_record(&act, &paths, into.as_deref(), holds.as_ref()).0
+    let the_box = the_live_job_box_over_the_record(&act, &paths, into.as_deref(), holds.as_ref()).0;
+    what_this_server_relies_on(&app, &server).added_to(the_box, &act, &paths, into.as_deref())
 }
 
 /// **The delete box's *Don't warn me about deleting again*, saved** — must-do
@@ -2685,7 +2993,7 @@ pub fn the_delete_warning_was_switched_off(
 
 /// **Every act that needs the machine, answered rather than met with silence.**
 ///
-/// Delete, rename, move, copy, paste, a new folder, the elevated retry and the
+/// Delete, rename, move, copy, paste, a new folder and the
 /// collision answer all end here today. **Rule 8, and the fault L8a is written
 /// against**: a control that does nothing is Smoozy going quiet. **Download is
 /// no longer among them** — it goes to Transfers with what the user picked and
@@ -2732,6 +3040,11 @@ pub enum AnActsAnswer {
     /// **`File Browser` M8's question comes first**: the box, and the act is
     /// asked again with the answer (step 10c's Files' owed acts piece 5).
     Asks { question: TheCollisionQuestion },
+    /// **A refusal said on the line above the list, with the offer beside it
+    /// where the machine allows one** (`File Browser` P5) — a delete refused
+    /// before anything went. `said` is the refusal's own sentence, kept for an
+    /// answer that arrives while Files is not showing.
+    Refused { said: Words, refusal: ARefusal },
 }
 
 /// **What the page is told after a new folder or a rename** — composed here so
@@ -2873,7 +3186,39 @@ pub async fn a_new_folder_is_made<R: Runtime>(
         &crate::managing_files::inside(&folder, &name),
         &[],
     );
-    what_the_row_says(&came_to, &name, TheRefusedAct::MakingAFolder, hidden_files_are_shown)
+    let answer = what_the_row_says(&came_to, &name, TheRefusedAct::MakingAFolder, hidden_files_are_shown);
+    the_offer_goes_beside_it(
+        &point,
+        &came_to,
+        answer,
+        TheRefusedAct::MakingAFolder,
+        AnAdminRetry {
+            server: server.clone(),
+            act: TheRetriedAct::NewFolder,
+            paths: vec![crate::managing_files::inside(&folder, &name)],
+        },
+    )
+    .await
+}
+
+/// **`File Browser` P5 at an act's own refusal**: where the login may not, the
+/// readings are taken now and the row's refusal carries the offer and what it
+/// runs again. Anything else is the answer as it was.
+async fn the_offer_goes_beside_it(
+    point: &ThisServersSessions,
+    came_to: &crate::managing_files::WhatTheActCameTo,
+    mut answer: AnActsAnswer,
+    what: TheRefusedAct,
+    retry: AnAdminRetry,
+) -> AnActsAnswer {
+    if *came_to != crate::managing_files::WhatTheActCameTo::TheLoginMayNot {
+        return answer;
+    }
+    let offer = the_offer_at_the_refusal(point, retry.the_elevatable_act()).await;
+    if let AnActsAnswer::OnTheRow { refusal: Some(refusal), .. } = &mut answer {
+        *refusal = a_refusal_offering(what, offer, retry);
+    }
+    answer
 }
 
 /// **Rename** — `File Browser` M4. **The live-job box came first on the page
@@ -2906,7 +3251,20 @@ pub async fn a_rename_is_made<R: Runtime>(
         &named
     };
     the_act_goes_in_the_diary(&app, &row, &came_to, smoozy_file_browser::diary::FileAct::Rename, &path, told);
-    what_the_row_says(&came_to, &name, TheRefusedAct::Renaming, hidden_files_are_shown)
+    let answer = what_the_row_says(&came_to, &name, TheRefusedAct::Renaming, hidden_files_are_shown);
+    let to = crate::managing_files::inside(&crate::managing_files::the_folder_holding(&path), &name);
+    the_offer_goes_beside_it(
+        &point,
+        &came_to,
+        answer,
+        TheRefusedAct::Renaming,
+        AnAdminRetry {
+            server: server.clone(),
+            act: TheRetriedAct::Rename,
+            paths: vec![path.clone(), to],
+        },
+    )
+    .await
 }
 
 /// **Delete** — `File Browser` M1 to `File Browser` M3 and `File Browser` X12,
@@ -2980,7 +3338,62 @@ pub async fn a_delete_is_made<R: Runtime>(
     )
     .await;
     the_delete_goes_in_the_diary(&app, &row, &victims, &came_to, &named);
-    what_the_delete_says(&came_to, &victims)
+    // **`File Browser` P5 at a delete refused before anything went**: the
+    // refusal is said on the line, with the offer beside it where the machine
+    // allows one.
+    if came_to
+        == crate::managing_files::WhatTheDeleteCameTo::NothingWasRemoved(
+            crate::managing_files::WhatTheActCameTo::TheLoginMayNot,
+        )
+    {
+        let retry = AnAdminRetry {
+            server: server.clone(),
+            act: TheRetriedAct::Delete,
+            paths: victims.clone(),
+        };
+        let offer = the_offer_at_the_refusal(&point, retry.the_elevatable_act()).await;
+        let refusal = a_refusal_offering(TheRefusedAct::Deleting, offer, retry);
+        return AnActsAnswer::Refused {
+            said: refusal.said.clone(),
+            refusal,
+        };
+    }
+    let answer = what_the_delete_says(&came_to, &victims);
+    let answer = match &came_to {
+        crate::managing_files::WhatTheDeleteCameTo::Ran { record, .. } => {
+            let from = victims.first().and_then(|one| the_folder_above(one)).unwrap_or_default();
+            and_what_did_not_go(answer, record, &door, &from, crate::record::file_acts::WhichAct::Delete)
+        }
+        _ => answer,
+    };
+    // **`Design/File Browser`, 2026-11-12: a delete refused part-way inside a
+    // folder, all for permission, carries the offer after its report**, and
+    // the retry deletes what the user chose (the live pass's new fault 6).
+    if let (AnActsAnswer::Said { said }, true) = (&answer, a_part_way_delete_earns_the_offer(&came_to)) {
+        let retry = AnAdminRetry {
+            server: server.clone(),
+            act: TheRetriedAct::Delete,
+            paths: victims.clone(),
+        };
+        let offer = the_offer_at_the_refusal(&point, retry.the_elevatable_act()).await;
+        let mut refusal = a_refusal_offering(TheRefusedAct::Deleting, offer, retry);
+        if refusal.the_offer.is_some() {
+            refusal.said = said.clone();
+            return AnActsAnswer::Refused { said: said.clone(), refusal };
+        }
+    }
+    answer
+}
+
+/// **`Design/File Browser`, 2026-11-12: whether a delete that ran earns the
+/// offer after its report** — something was refused, and every refusal was
+/// for permission. The live pass of that date, new fault 6.
+pub fn a_part_way_delete_earns_the_offer(came_to: &crate::managing_files::WhatTheDeleteCameTo) -> bool {
+    matches!(
+        came_to,
+        crate::managing_files::WhatTheDeleteCameTo::Ran { refused, refused_for_permission, .. }
+            if *refused > 0 && refused == refused_for_permission
+    )
 }
 
 /// **How far an act has got**, as the line above the list says it: the act's
@@ -3049,6 +3462,77 @@ pub fn what_the_delete_says(
             }
             AnActsAnswer::Said { said }
         }
+    }
+}
+
+/// **The items of an act that did not go, each with its reason** — three at
+/// most, then how many more. `Design/File Browser § What the screen says
+/// around an act`, 2026-11-11 (the four questions, batch 2, fix 7). Each is
+/// named by its path under `from`, the folder the act was in. **A failure is
+/// the server's refusal** — the outcome holds nothing more — **a skip says
+/// what stopped it, and an item never answered for may have gone.**
+pub fn what_did_not_go(
+    units: &[(crate::record::file_acts::AUnit, Option<smoozy_state::outcomes::UnitOutcome>)],
+    from: &[u8],
+    act: crate::record::file_acts::WhichAct,
+) -> Option<Words> {
+    use crate::managing_files::{SOMETHING_INSIDE_IT_STAYED, THE_CONNECTION_WENT_FIRST};
+    use crate::record::file_acts::WhichAct;
+    use smoozy_state::outcomes::UnitOutcome;
+    const AT_MOST: usize = 3;
+    let not_done: Vec<_> = units.iter().filter(|(_, outcome)| *outcome != Some(UnitOutcome::Done)).collect();
+    if not_done.is_empty() {
+        return None;
+    }
+    let mut under = from.strip_suffix(b"/").unwrap_or(from).to_vec();
+    under.push(b'/');
+    let mut said = Words::empty();
+    for (unit, outcome) in not_done.iter().take(AT_MOST) {
+        let reason = match outcome {
+            Some(UnitOutcome::NotAttempted { stopped_by }) if stopped_by == SOMETHING_INSIDE_IT_STAYED => {
+                words::SKIPPED_SOMETHING_INSIDE_STAYED
+            }
+            Some(UnitOutcome::NotAttempted { stopped_by }) if stopped_by == THE_CONNECTION_WENT_FIRST => {
+                words::SKIPPED_THE_CONNECTION_WENT
+            }
+            Some(UnitOutcome::NotAttempted { .. }) => words::SKIPPED_ONE,
+            None => match act {
+                WhichAct::Delete => words::NO_REPLY_MAY_BE_DELETED,
+                WhichAct::Move => words::NO_REPLY_MAY_BE_MOVED,
+                WhichAct::Copy => words::NO_REPLY_MAY_BE_COPIED,
+            },
+            _ => words::REFUSED_BY_THE_SERVER,
+        };
+        let name = unit.source.strip_prefix(under.as_slice()).unwrap_or(&unit.source);
+        said = said.and(String::from_utf8_lossy(name).into_owned()).then(reason).joined();
+    }
+    if not_done.len() > AT_MOST {
+        said = said.then(words::AND_MORE_LEAD).and((not_done.len() - AT_MOST).to_string()).then(words::AND_MORE_REST);
+    }
+    Some(said)
+}
+
+/// **A partial act's line, with what did not go named after it** — read
+/// from the act's own record (`File Browser` §11's units and their outcomes).
+fn and_what_did_not_go(
+    answer: AnActsAnswer,
+    record: &Identity,
+    door: &dyn crate::uploading::TheRecordAnUploadWrites,
+    from: &[u8],
+    act: crate::record::file_acts::WhichAct,
+) -> AnActsAnswer {
+    let AnActsAnswer::Said { said } = answer else {
+        return answer;
+    };
+    let mut units = Vec::new();
+    crate::uploading::TheRecordAnUploadWrites::with_the_record(door, &mut |connection| {
+        if let Ok(Some(read)) = crate::record::file_acts::FileActs::over(connection).read(record) {
+            units = read.units;
+        }
+    });
+    match what_did_not_go(&units, from, act) {
+        Some(named) => AnActsAnswer::Said { said: said.followed_by(named) },
+        None => AnActsAnswer::Said { said },
     }
 }
 
@@ -3238,7 +3722,8 @@ pub fn what_a_paste_costs<R: Runtime>(app: AppHandle<R>, server: String, into: V
         CutOrCopy::Cut => "move",
         CutOrCopy::Copy => "copy",
     };
-    the_live_job_box_over_the_record(act, &pasteboard.entries, Some(&into), holds.as_ref()).0
+    let the_box = the_live_job_box_over_the_record(act, &pasteboard.entries, Some(&into), holds.as_ref()).0;
+    what_this_server_relies_on(&app, &server).added_to(the_box, act, &pasteboard.entries, Some(&into))
 }
 
 /// **Paste** — `File Browser` M5, `File Browser` M8, `File Browser` M14 and `File Browser` M15. `answer` is the box's,
@@ -3307,15 +3792,24 @@ pub async fn a_paste_is_made<R: Runtime>(
     }
     crate::managing_files::the_paste_has_come_to(&server, &pasteboard, &came_to);
     let labels = holds.as_ref().map(|holds| holds.the_labels()).unwrap_or_default();
-    what_the_paste_says(&came_to, &pasteboard.entries, &into, &named, &labels, TheCollidingAct::APasteAfterACut)
+    let answer = what_the_paste_says(&came_to, &pasteboard.entries, &into, &named, &labels, TheCollidingAct::APasteAfterACut);
+    // **What did not go, named** (the four questions, batch 2, fix 7).
+    match &came_to {
+        crate::managing_files::WhatThePasteCameTo::Ran { record, .. } => {
+            let from = pasteboard.entries.first().and_then(|one| the_folder_above(one)).unwrap_or_default();
+            and_what_did_not_go(answer, record, &door, &from, crate::record::file_acts::WhichAct::Move)
+        }
+        _ => answer,
+    }
 }
 
-/// **The box's answer, as the page sends it** — Replace, Keep both, or
-/// anything else read as Cancel.
+/// **The box's answer, as the page sends it** — Replace, Keep both, Skip
+/// existing (a copy's, `File Browser` M8a), or anything else read as Cancel.
 fn the_answer_from(answer: Option<&str>) -> Option<CollisionAnswer> {
     match answer? {
         "replace" => Some(CollisionAnswer::Replace),
         "keep-both" => Some(CollisionAnswer::KeepBoth),
+        "skip-existing" => Some(CollisionAnswer::SkipExisting),
         _ => Some(CollisionAnswer::Stop),
     }
 }
@@ -3387,7 +3881,15 @@ async fn a_paste_after_a_copy<R: Runtime>(
         );
     }
     let labels = holds.as_ref().map(|holds| holds.the_labels()).unwrap_or_default();
-    what_the_copy_says(&came_to, &pasteboard.entries, into, &named, &labels)
+    let answer = what_the_copy_says(&came_to, &pasteboard.entries, into, &named, &labels);
+    // **What did not go, named** (the four questions, batch 2, fix 7).
+    match &came_to {
+        crate::managing_files::WhatTheCopyCameTo::Ran { record, .. } => {
+            let from = pasteboard.entries.first().and_then(|one| the_folder_above(one)).unwrap_or_default();
+            and_what_did_not_go(answer, record, &door, &from, crate::record::file_acts::WhichAct::Copy)
+        }
+        _ => answer,
+    }
 }
 
 /// **Where Smoozy's own program sits on this row's server**, for a copy where
@@ -3456,17 +3958,22 @@ pub fn what_the_copy_says(
             }),
         },
         Copy::Ran {
+            record,
             done,
             refused,
             not_done,
             never_learned,
-            ..
         } => {
             let mut said = Words::after(done.to_string(), words::COPIED_COUNT_REST)
                 .and(refused.to_string())
                 .then(words::REFUSED_COUNT_REST)
                 .and(not_done.to_string())
                 .then(words::NOT_DONE_COUNT_REST);
+            // **`File Browser` M6b: the disk it lands on is full** (the
+            // leftovers of the Rough what-if answers, 449).
+            if crate::managing_files::the_disk_was_full_for(record) {
+                said = said.then(words::THE_DISK_IS_FULL_THERE);
+            }
             if *never_learned > 0 {
                 said = said.then(words::SOME_NEVER_ANSWERED);
             }
@@ -3539,19 +4046,25 @@ pub fn what_the_paste_says(
             }),
         },
         Paste::Ran {
+            record,
             done,
             refused,
             not_done,
             never_learned,
             crossings,
             crossings_want_an_update,
-            ..
         } => {
             let mut said = Words::after(done.to_string(), words::MOVED_COUNT_REST)
                 .and(refused.to_string())
                 .then(words::REFUSED_COUNT_REST)
                 .and(not_done.to_string())
                 .then(words::NOT_DONE_COUNT_REST);
+            // **`File Browser` M6b: the disk it lands on is full** (the
+            // leftovers of the Rough what-if answers, 449) — a move to
+            // another disk that filled half way.
+            if crate::managing_files::the_disk_was_full_for(record) {
+                said = said.then(words::THE_DISK_IS_FULL_THERE);
+            }
             if *crossings > 0 {
                 said = said
                     .and(crossings.to_string())
@@ -3769,6 +4282,11 @@ pub enum WhatTheReadingFound {
     /// **Not listed, and the words say which of `File Browser` P1's answers it
     /// met** — or that the reading did not come back whole.
     NotListed(Words),
+    /// **Not listed because the login was refused on the way** — at the
+    /// folder itself where its parent could not be listed, or at a folder
+    /// above it. The words are the walk's, as for [`Self::NotListed`];
+    /// `File Browser` P5's offer may stand beside them (Sol's finding 8).
+    NotListedForPermission(Words),
     /// **The point lent nothing** — the connection went while the reading
     /// waited.
     NothingWasLent,
@@ -3871,6 +4389,12 @@ pub async fn a_folder_is_read<C: AHeldConnection>(
                         }
                     }
                 }
+                // **A refusal the walk met above the folder, or one it could
+                // not place**, is told apart so P5's offer can stand beside it
+                // (Sol's finding 8).
+                if matches!(walked, WalkOutcome::RefusedAt(_) | WalkOutcome::CouldNotSayWhere(WhatSmoozyMet::Refused)) {
+                    return Ok(WhatTheReadingFound::NotListedForPermission(what_the_walk_said(&walked)));
+                }
                 Ok(WhatTheReadingFound::NotListed(what_the_walk_said(&walked)))
             })
         })
@@ -3924,8 +4448,8 @@ pub fn the_tab_after_the_reading(
                 Some(free),
             )
         }
-        WhatTheReadingFound::NotListed(said) => {
-            (folder.to_vec(), TheListing::TheFolderWasNotRead { said }, None)
+        WhatTheReadingFound::NotListed(said) | WhatTheReadingFound::NotListedForPermission(said) => {
+            (folder.to_vec(), TheListing::TheFolderWasNotRead { said, refusal: None }, None)
         }
         WhatTheReadingFound::NothingWasLent => (
             folder.to_vec(),
@@ -4578,6 +5102,7 @@ pub fn the_path(folder: &[u8]) -> Vec<APathPart> {
         shown: Verbatim::new(String::new()),
         said: Some(Prose::new(words::THE_TOP_OF_THE_SERVER)),
         here: trimmed == b"/" || trimmed.is_empty(),
+        home: None,
     }];
     let mut so_far: Vec<u8> = Vec::new();
     let components: Vec<&[u8]> = trimmed
@@ -4592,9 +5117,37 @@ pub fn the_path(folder: &[u8]) -> Vec<APathPart> {
             shown: Verbatim::new(String::from_utf8_lossy(component).into_owned()),
             said: None,
             here: at + 1 == components.len(),
+            home: None,
         });
     }
     parts
+}
+
+/// **The login's home folder carries a house** — `Design/File Browser § The
+/// list`, the Creator's ask of 2026-11-11: *"How about we give some 100% safe
+/// folder a different icon, like a house?"* Its row, where the folder above it
+/// is listed, and its part of the path, where the user is in it or below it.
+/// **`home` is the server's own answer**
+/// ([`ThisServersSessions::the_logins_home`]), compared on the bytes;
+/// **where none was read, nothing is marked**. A file is never marked, and
+/// nothing else about the row or the part changes.
+pub fn the_home_is_marked(browser: &mut TheBrowser, home: Option<&[u8]>) {
+    let Some(home) = home.filter(|home| home.first() == Some(&b'/')) else {
+        return;
+    };
+    let home = trim_trailing_slashes(home);
+    for part in browser.path.iter_mut() {
+        if trim_trailing_slashes(&part.folder.bytes) == home {
+            part.home = Some(Prose::new(words::HOME_FOLDER));
+        }
+    }
+    if let TheListing::Rows { rows, .. } = &mut browser.listing {
+        for row in rows.iter_mut() {
+            if matches!(row.icon, AnIcon::Folder) && trim_trailing_slashes(&row.path.bytes) == home {
+                row.home = Some(Prose::new(words::HOME_FOLDER));
+            }
+        }
+    }
 }
 
 fn the_stale_bar(listing: &TheListing) -> TheStaleBar {
@@ -4607,8 +5160,12 @@ fn the_stale_bar(listing: &TheListing) -> TheStaleBar {
             // **The moment is the machine's own clock** (`File Browser` L4,
             // `State, identity and recovery` D5), rendered by
             // the page from the epoch value. It travels as a value.
+            // The moment ends its sentence with a full stop, as the drawing
+            // has it (the UI at every size, C-9).
             Some(seconds) => Words::plain(words::NOT_LIVE_LEAD)
                 .and_a_moment(seconds)
+                .then(".")
+                .joined()
                 .then(words::NOT_LIVE_REST),
             None => Words::plain(words::NOT_LIVE_REST),
         },
@@ -4629,6 +5186,7 @@ fn the_toolbar(chosen: Option<&ARow>) -> TheToolbar {
         rename: Prose::new(words::RENAME),
         cut: Prose::new(words::CUT),
         copy: Prose::new(words::COPY),
+        copy_greyed: None,
         // **`File Browser` M15: paste is offered only where the pasteboard's machine is the
         // one being browsed, and nowhere else is it greyed, refused or
         // explained.** There is no pasteboard in this application — cut and
@@ -4636,6 +5194,7 @@ fn the_toolbar(chosen: Option<&ARow>) -> TheToolbar {
         // kept rather than a control left out.
         paste: None,
         delete: Prose::new(words::DELETE),
+        refresh: Prose::new(words::REFRESH),
         how_many_chosen: chosen.map(|_| the_note_for_one_chosen()),
         one_chosen: the_note_for_one_chosen(),
         around_an_act: the_words_around_an_act(),
@@ -4677,10 +5236,8 @@ fn the_bottom_bar(
     hidden_files_are_shown: bool,
 ) -> TheBottomBar {
     TheBottomBar {
-        uploads_go_to: Words::with(
-            words::UPLOADS_GO_TO,
-            String::from_utf8_lossy(folder).into_owned(),
-        ),
+        uploads_go_to: Words::with(words::UPLOADS_GO_TO, the_folders_own_name(folder)),
+        uploads_go_to_whole: String::from_utf8_lossy(folder).into_owned(),
         what_is_in_the_folder: there_is_a_listing.then(|| the_count(rows, hidden_files_are_shown)),
         what_is_in_the_folder_when_the_box_is_turned: there_is_a_listing
             .then(|| the_count(rows, !hidden_files_are_shown)),
@@ -4697,6 +5254,21 @@ fn the_bottom_bar(
     }
 }
 
+/// **A folder's own name with its slash** — *kitchen/* for
+/// `/home/artist/kitchen` — and `/` for the machine's top, which has no name
+/// (`Design/File Browser § The list`: *Uploads go to `kitchen/`*).
+fn the_folders_own_name(folder: &[u8]) -> String {
+    let trimmed = folder.strip_suffix(b"/").unwrap_or(folder);
+    match trimmed.rsplit(|byte| *byte == b'/').next() {
+        Some(name) if !name.is_empty() => {
+            let mut named = String::from_utf8_lossy(name).into_owned();
+            named.push('/');
+            named
+        }
+        _ => "/".to_string(),
+    }
+}
+
 /// **The count of what the list shows** — `File Browser` L21: *"The bottom
 /// bar's count and 1 selected are composed from the filtered list."*
 fn the_count(rows: &[ARow], hidden_files_are_shown: bool) -> Words {
@@ -4709,15 +5281,17 @@ fn the_count(rows: &[ARow], hidden_files_are_shown: bool) -> Words {
         .filter(|row| !matches!(row.icon, AnIcon::Folder))
         .count();
     let folders = shown.len() - files;
+    // **Counted the way the size's hover counts**, thousands marked: *5,001
+    // files* (the UI at every size, C-12).
     Words::after(
-        files.to_string(),
+        a_count(files as u64),
         if files == 1 {
             words::ONE_FILE_IN_THE_FOLDER
         } else {
             words::FILES_IN_THE_FOLDER
         },
     )
-    .and(folders.to_string())
+    .and(a_count(folders as u64))
     .then(if folders == 1 {
         words::ONE_FOLDER_IN_THE_FOLDER
     } else {
@@ -4779,6 +5353,7 @@ pub fn a_row(folder: &[u8], entry: &ListedEntry, saved_with: Option<&str>) -> AR
         picture: (entry.kind != Kind::Folder)
             .then(|| the_picture_on(name, entry.size.bytes()))
             .flatten(),
+        home: None,
     }
 }
 
@@ -4860,7 +5435,7 @@ fn the_size(entry: &ListedEntry) -> String {
 /// A byte count, in the same units a row's size reads in — **so the free-space
 /// figure beside the list reads the way the list does** (`File Browser` L11's
 /// figure, shown the way `File Browser` L5's are).
-fn the_size_of(bytes: u64) -> String {
+pub(crate) fn the_size_of(bytes: u64) -> String {
     use crate::typography::a_figure_with_its_unit;
     const UNITS: [&str; 5] = ["bytes", "KB", "MB", "GB", "TB"];
     if bytes < 1024 {
@@ -4919,6 +5494,8 @@ pub fn a_refusal(what: TheRefusedAct, offer: Offer) -> ARefusal {
         said: Words::plain(said),
         the_offer,
         dismiss: Prose::new(words::DISMISS),
+        retry: None,
+        the_system_folder: None,
         the_row_is_dimmed: what == TheRefusedAct::ReadingAFolder,
     }
 }
@@ -4947,6 +5524,523 @@ pub enum TheRefusedAct {
     Renaming,
     Moving,
     Copying,
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// The retry with admin access — `File Browser` P5 to `File Browser` P8 and `File Browser` P6b
+// ════════════════════════════════════════════════════════════════════════════
+
+/// **Which act the offer runs again.** A rename is a move to a new name in
+/// the same folder, which is what the machine's `mv` is (`File Browser` P6b).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TheRetriedAct {
+    Listing,
+    Delete,
+    NewFolder,
+    Rename,
+}
+
+/// **What the offer runs again**, carried on the refusal and handed back by
+/// the page with the press. `paths` is the folder (a listing), the victims (a
+/// delete), the new folder's whole path, or a rename's old and new paths.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AnAdminRetry {
+    /// **The server the refusal was met on** — `File Browser` P5 as changed
+    /// after Sol's look (finding 2): the press runs on this server and no
+    /// other.
+    pub server: String,
+    pub act: TheRetriedAct,
+    pub paths: Vec<Vec<u8>>,
+}
+
+impl AnAdminRetry {
+    /// **`File Browser` P6's name for the act**, which `File Browser` P5's offer is composed
+    /// for.
+    pub fn the_elevatable_act(&self) -> permission::ElevatableAct {
+        match self.act {
+            TheRetriedAct::Listing => permission::ElevatableAct::AListing,
+            TheRetriedAct::Delete => permission::ElevatableAct::Remove,
+            TheRetriedAct::NewFolder => permission::ElevatableAct::MakeDirectory,
+            TheRetriedAct::Rename => permission::ElevatableAct::Move,
+        }
+    }
+
+    /// **One elevated act per unit** (`File Browser` P6b rule 1), each as a
+    /// folder and the names inside it (`File Browser` P6b as changed after Sol's look), or
+    /// nothing where the paths do not fit the act or one is refused on the
+    /// desk.
+    pub fn the_acts(&self) -> Option<Vec<smoozy_file_browser::elevated::AnElevatedAct>> {
+        use smoozy_file_browser::elevated::{the_path_is_split, AnElevatedAct};
+        match (self.act, self.paths.as_slice()) {
+            (TheRetriedAct::Listing, [folder]) => Some(vec![AnElevatedAct::AListing { folder: folder.clone() }]),
+            (TheRetriedAct::NewFolder, [path]) => {
+                let (folder, name) = the_path_is_split(path).ok()?;
+                Some(vec![AnElevatedAct::NewFolder { folder, name }])
+            }
+            (TheRetriedAct::Rename, [from, to]) => {
+                let (folder, from) = the_path_is_split(from).ok()?;
+                let (landing, to) = the_path_is_split(to).ok()?;
+                // **A rename stays in its folder**; a move between two is not
+                // an elevated act (`File Browser` P6b as changed).
+                (landing == folder).then(|| vec![AnElevatedAct::Rename { folder, from, to }])
+            }
+            (TheRetriedAct::Delete, victims) if !victims.is_empty() => victims
+                .iter()
+                .map(|path| {
+                    let (folder, name) = the_path_is_split(path).ok()?;
+                    Some(AnElevatedAct::Delete { folder, name })
+                })
+                .collect(),
+            _ => None,
+        }
+    }
+
+    /// **The act as the box's line names it**: *Delete /data/old was refused:
+    /// permission denied.* The act's word and the path are kept apart — the
+    /// word through the typography point, the path by the verbatim route.
+    pub fn as_the_box_names_it(&self) -> crate::surface::servers::Words {
+        use crate::surface::set_up::words::WAS_REFUSED;
+        let first = self.paths.first().map(|path| String::from_utf8_lossy(path).into_owned()).unwrap_or_default();
+        let (lead, value, rest) = match self.act {
+            TheRetriedAct::Listing => (words::OPEN, first, WAS_REFUSED),
+            TheRetriedAct::NewFolder => (words::NEW_FOLDER, first, WAS_REFUSED),
+            TheRetriedAct::Rename => (words::RENAME, first, WAS_REFUSED),
+            TheRetriedAct::Delete if self.paths.len() == 1 => (words::DELETE, first, WAS_REFUSED),
+            TheRetriedAct::Delete => (words::DELETE, self.paths.len().to_string(), words::ITEMS_WERE_REFUSED),
+        };
+        crate::surface::servers::Words {
+            lead: Prose::new(lead),
+            values: vec![Verbatim::new(value)],
+            rest: Some(Prose::new(rest)),
+            the_rest_joins: false,
+        }
+    }
+}
+
+/// **A refusal, with the offer `File Browser` P5 composed and what it would
+/// run again** — the retry rides only where there is an offer.
+pub fn a_refusal_offering(what: TheRefusedAct, offer: Offer, retry: AnAdminRetry) -> ARefusal {
+    let mut refusal = a_refusal(what, offer);
+    if refusal.the_offer.is_some() {
+        // **`File Browser` M3c**: a delete the retry would make inside a
+        // system folder carries the line of `File Browser` M3b beside the offer.
+        if retry.act == TheRetriedAct::Delete {
+            refusal.the_system_folder = a_system_folder_among(&retry.paths);
+        }
+        refusal.retry = Some(retry);
+    }
+    refusal
+}
+
+/// **`File Browser` P5's readings, taken at the refusal, beside each other,
+/// and never before one** — `Server Setup`'s own three (the kind, whether the
+/// login is root, and M3's probe), read into `File Browser`'s offer.
+pub async fn the_offer_at_the_refusal<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    act: permission::ElevatableAct,
+) -> Offer {
+    use smoozy_server_setup::elevation::ReadsTheMachineAtARefusal;
+    use smoozy_servers::readings::CommandChannel;
+    let mut commands = crate::submitting::OnThisServersPoint { sessions };
+    let mut files = crate::submitting::OnThisServersPoint { sessions };
+    // **`Server Setup`'s own kind and login readings, and P5's probe as Files
+    // takes it, under `sudo -k`** (after Sol's second look): M3's `sudo -n
+    // true` would use, and keep fresh, a credential cached by something else.
+    let kind = smoozy_server_setup::readings::read_the_machine_kind(&mut commands, &mut files).await;
+    let login_is_root = smoozy_server_setup::readings::read_whether_the_login_is_root(&mut commands).await;
+    let probe = match commands.run(smoozy_file_browser::elevated::THE_PROBE_IGNORING_A_CACHED_CREDENTIAL).await {
+        Ok(ran) if ran.ended_cleanly() => smoozy_server_setup::kind::Probe::Succeeded,
+        _ => smoozy_server_setup::kind::Probe::Failed,
+    };
+    let mut taken = smoozy_server_setup::readings::TheMachineAtARefusal::as_answered(kind, login_is_root, probe);
+    struct Read {
+        kind: permission::MachineKind,
+        probe: permission::TheProbe,
+    }
+    impl permission::ReadsWhatElevationWouldDo for Read {
+        fn the_machine_kind(&mut self) -> permission::MachineKind {
+            self.kind
+        }
+        fn the_non_interactive_probe(&mut self) -> permission::TheProbe {
+            self.probe
+        }
+    }
+    let mut read = Read {
+        kind: match taken.the_kind() {
+            smoozy_server_setup::kind::MachineKind::AContainer => permission::MachineKind::AContainerUnderANonRootLogin,
+            smoozy_server_setup::kind::MachineKind::ASystemdMachine => permission::MachineKind::ASystemdMachine,
+            smoozy_server_setup::kind::MachineKind::TheTableDoesNotPlaceIt => {
+                permission::MachineKind::TheTableDoesNotPlaceIt
+            }
+        },
+        probe: match taken.the_non_interactive_probe() {
+            smoozy_server_setup::kind::Probe::Succeeded => permission::TheProbe::Succeeded,
+            smoozy_server_setup::kind::Probe::Failed => permission::TheProbe::Failed,
+        },
+    };
+    permission::the_offer(act, taken.the_login_is_root(), &mut read)
+}
+
+/// **What pressing *Retry with admin access* came to**, as the page draws it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "is", rename_all = "kebab-case")]
+pub enum TheAdminRetrysAnswer {
+    /// **Done**: the folder is read again.
+    Done,
+    /// **A folder read with admin access** (`File Browser` P8: marked as read
+    /// elevated).
+    TheFolder { browser: Box<TheBrowser> },
+    /// Said on the line above the list.
+    Said { said: Words },
+    /// **`Server Setup` §9's own box**, titled for Files. The page hands the
+    /// password back with the same retry.
+    AsksForThePassword {
+        asked: Box<crate::surface::set_up::TheAdminAccessBox>,
+    },
+}
+
+/// **The text the page handed over, taken into `Security and licence`'s
+/// erasing origin at once** (Sol's finding 7). The string's own buffer moves
+/// into the origin, so no ordinary copy is left to be dropped unerased.
+pub fn the_typed_password_is_taken(
+    typed: Option<String>,
+) -> Option<smoozy_security_and_licence::plaintext::Origin> {
+    let typed = typed?;
+    let origin = smoozy_security_and_licence::plaintext::Origin::what_the_user_typed(typed.into_bytes());
+    (!origin.is_empty()).then_some(origin)
+}
+
+/// **Whether the press is on the server the refusal was met on** — `File
+/// Browser` P5 as changed after Sol's look (finding 2).
+pub fn the_retry_belongs_to(retry: &AnAdminRetry, server: &str) -> bool {
+    retry.server == server
+}
+
+/// **What one elevated act came to, as the line says it** — `Design/File
+/// Browser`, the paragraph after the offer's. `None` is done.
+pub fn what_the_retry_says(
+    came_to: &crate::managing_files::WhatTheElevatedActCameTo,
+) -> Option<Words> {
+    use crate::managing_files::WhatTheElevatedActCameTo as Came;
+    Some(match came_to {
+        Came::Done | Came::TheRows(_) => return None,
+        Came::APasswordIsNeeded => Words::plain(words::ADMIN_ACCESS_REFUSED),
+        Came::TheWrongPassword => Words::plain(words::WRONG_PASSWORD),
+        Came::AdminAccessWasRefused => Words::plain(words::ADMIN_ACCESS_REFUSED),
+        Came::TheLandingIsTaken => Words::plain(words::ALREADY_EXISTS_NOTHING_CHANGED),
+        Came::ThePathGoesThroughALink => Words::plain(words::THE_PATH_GOES_THROUGH_A_LINK),
+        Came::MadeButOwnedByRoot => Words::plain(words::MADE_BUT_OWNED_BY_ROOT),
+        Came::AnotherActRan => Words::plain(words::ANOTHER_ADMIN_ACTION_RAN),
+        // **`File Browser` P6: the reason is said** (Sol's finding 9) — the
+        // server's last line, or that the reply was not a file list.
+        Came::TheFolderWasNotRead(crate::managing_files::WhyTheFolderWasNotRead::TheReplyWasNotAFileList) => {
+            Words::plain(words::NOT_READ_WITH_ADMIN_NOT_A_LIST)
+        }
+        Came::TheFolderWasNotRead(crate::managing_files::WhyTheFolderWasNotRead::TheServerSaid(said)) => {
+            match the_last_line(said) {
+                Some(line) => Words::with(words::NOT_READ_WITH_ADMIN_LEAD, line),
+                None => Words::plain(words::NOT_READ_WITH_ADMIN),
+            }
+        }
+        Came::TheConnectionWent => Words::plain(words::THE_CONNECTION_WENT),
+        Came::ThePathIsRefused(_) => Words::plain(words::NOT_DONE_ON_THIS_PATH),
+        // **The server's own words, its last line**, which is where a
+        // program says what stopped it.
+        Came::Failed { the_servers_words } => match the_last_line(the_servers_words) {
+            Some(line) => Words::with(words::FAILED_WITH_ADMIN, line),
+            None => Words::plain(words::FAILED_WITH_ADMIN_ALONE),
+        },
+    })
+}
+
+/// **The server's last line with anything on it**, which is where a program
+/// says what stopped it.
+fn the_last_line(said: &str) -> Option<String> {
+    said.lines().rev().map(str::trim).find(|line| !line.is_empty()).map(str::to_string)
+}
+
+/// **Pressing *Retry with admin access*** — `File Browser` P5 to `File Browser` P8 and `File Browser` P6b,
+/// `Design/File Browser`, the paragraph after the offer's.
+///
+/// In this order: `File Browser` P5's readings again, at the press; the password the user
+/// typed, kept as they chose before it is used (as setup keeps it), or one
+/// already held for this server, or the box; the act, one elevated command per
+/// unit; a wrong password forgotten; the act's diary line, marked elevated.
+///
+/// **The password crosses the page once, becomes `Security and licence`'s own
+/// origin at this line, and is never logged or put on a screen** — exactly as
+/// setup's box answer does.
+#[tauri::command]
+pub async fn an_act_is_retried_with_admin_access<R: Runtime>(
+    app: AppHandle<R>,
+    server: String,
+    retry: AnAdminRetry,
+    password: Option<String>,
+    choice: Option<String>,
+) -> TheAdminRetrysAnswer {
+    use crate::managing_files::WhatTheElevatedActCameTo as Came;
+    use smoozy_server_setup::elevated::HowElevationIsObtained;
+    // **The typed text becomes `Security and licence`'s erasing origin before
+    // anything else is done** (Sol's finding 7): no return below drops an
+    // ordinary copy of it.
+    let given = the_typed_password_is_taken(password);
+    // **`File Browser` P5 as changed (Sol's finding 2): the press runs on the
+    // server the refusal was met on, and on no other.**
+    if !the_retry_belongs_to(&retry, &server) {
+        return TheAdminRetrysAnswer::Said {
+            said: Words::plain(words::NOT_DONE_ON_THIS_PATH),
+        };
+    }
+    let (row, point, shown) = match what_an_act_runs_on(&app, &server) {
+        Ok(held) => held,
+        Err(AnActsAnswer::Said { said }) => return TheAdminRetrysAnswer::Said { said },
+        Err(_) => {
+            return TheAdminRetrysAnswer::Said {
+                said: Words::plain(words::NOT_CONNECTED_FOR_AN_ACT),
+            }
+        }
+    };
+    let Some(acts) = retry.the_acts() else {
+        return TheAdminRetrysAnswer::Said {
+            said: Words::plain(words::NOT_DONE_ON_THIS_PATH),
+        };
+    };
+    // **`File Browser` P5's readings again, at the press** (`File Browser` P6b).
+    let offer = the_offer_at_the_refusal(&point, retry.the_elevatable_act()).await;
+    if let Offer::NoOffer(_) = offer {
+        return TheAdminRetrysAnswer::Said {
+            said: Words::plain(words::NO_ADMIN_ACCESS_HERE),
+        };
+    }
+    let choice = choice.as_deref().and_then(crate::surface::set_up::the_choice_named);
+    let held = if given.is_none() && offer == Offer::OfferedAndAPasswordIsAsked {
+        let (app, server) = (app.clone(), server.clone());
+        tauri::async_runtime::spawn_blocking(move || {
+            let started = app.try_state::<Mutex<Started>>()?;
+            let record = crate::keys::TheRunsRecord { started: started.inner() };
+            let store = crate::surface::keys::the_store_for_this_system();
+            crate::setting_up::the_password_held_for(&record, store.as_deref(), &server)
+        })
+        .await
+        .ok()
+        .flatten()
+    } else {
+        None
+    };
+    // **Where the probe passes at the press, no password is sent** — not
+    // even one the user typed into a box opened before the server stopped
+    // asking (after Sol's second look). Then the password just typed, then
+    // one held, then the box.
+    let how = match (offer, given.as_ref(), held.as_ref()) {
+        (Offer::OfferedAndNothingIsAsked, _, _) => HowElevationIsObtained::Passwordless,
+        (_, Some(typed), _) => HowElevationIsObtained::APasswordIsHeld(typed),
+        (_, None, Some(password)) => HowElevationIsObtained::APasswordIsHeld(password),
+        (_, None, None) => return the_box_asks(&app, &retry).await,
+    };
+
+    // **The jobs a delete or a rename touches are told first**, as the
+    // ordinary act does (`File Browser` W8).
+    let holds = what_the_record_holds(&app, &server);
+    let named = match retry.act {
+        TheRetriedAct::Delete => the_delete_box_over_the_record(&retry.paths, holds.as_ref(), &[], false).1,
+        TheRetriedAct::Rename => {
+            the_live_job_box_over_the_record("rename", &retry.paths[..1], None, holds.as_ref()).1
+        }
+        TheRetriedAct::Listing | TheRetriedAct::NewFolder => Vec::new(),
+    };
+    let marked_as = match retry.act {
+        TheRetriedAct::Rename => crate::managing_files::A_RENAME,
+        _ => crate::managing_files::A_DELETE,
+    };
+    let door = TheApplicationsRecord { app: app.clone() };
+    if !crate::managing_files::the_marks_stand_first(&door, &named, marked_as) {
+        return TheAdminRetrysAnswer::Said {
+            said: Words::plain(if retry.act == TheRetriedAct::Rename {
+                words::NOTHING_RENAMED_THE_TELLING
+            } else {
+                words::NOTHING_DELETED_THE_RECORD
+            }),
+        };
+    }
+
+    // **Whether the password just typed is the one sent**: not where the
+    // probe passed at the press.
+    let (ended, the_typed_one_went_after_all) =
+        crate::managing_files::the_elevated_acts_are_made(&point, &acts, how, given.as_ref()).await;
+    let the_typed_one_is_sent =
+        given.is_some() && (offer != Offer::OfferedAndNothingIsAsked || the_typed_one_went_after_all);
+    let rows = ended.iter().find_map(|came| match came {
+        Came::TheRows(entries) => Some(entries.clone()),
+        _ => None,
+    });
+    let units: Vec<(Vec<u8>, Option<UnitOutcome>)> = acts
+        .iter()
+        .zip(ended.iter().map(Some).chain(std::iter::repeat(None)))
+        .map(|(act, came)| {
+            let outcome = match came {
+                // **A folder made and left root's was made**: the diary says
+                // so, and the line says whose it is.
+                Some(Came::Done | Came::MadeButOwnedByRoot) => Some(UnitOutcome::Done),
+                Some(Came::TheConnectionWent) => None,
+                _ => Some(UnitOutcome::Failed),
+            };
+            (act.the_path_it_is_about(), outcome)
+        })
+        .collect();
+    crate::managing_files::the_marks_are_finished(&door, &named, marked_as, &units);
+
+    // **Passwordless elevation that needed a password after all** — P5's
+    // probe passed on a credential cached by something else, which `sudo -k`
+    // ignores (Sol's finding 6): nothing ran, and the box asks.
+    if given.is_none() && ended.first() == Some(&Came::APasswordIsNeeded) {
+        return the_box_asks(&app, &retry).await;
+    }
+    // **A typed password is kept as the user chose only once it worked**
+    // (`File Browser` P5 as changed, Sol's finding 2), off the drawing thread
+    // (a store call may prompt).
+    if let (Some(typed), Some(choice)) = (given, choice) {
+        if the_typed_one_is_sent && ended.first().is_some_and(Came::the_password_worked) {
+            let (app, server) = (app.clone(), server.clone());
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                if let Some(started) = app.try_state::<Mutex<Started>>() {
+                    let record = crate::keys::TheRunsRecord { started: started.inner() };
+                    let store = crate::surface::keys::the_store_for_this_system();
+                    crate::setting_up::the_password_is_kept_as_chosen(&record, store.as_deref(), &server, &typed, choice);
+                }
+            })
+            .await;
+        }
+    }
+
+    // **A password that stops working is forgotten** — whichever lifetime
+    // held it (`Whole app`; `Server Setup` E4).
+    if ended.iter().any(|came| *came == Came::TheWrongPassword) {
+        crate::setting_up::the_connections_password_goes(&server);
+        let app = app.clone();
+        let server = server.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            let Some(started) = app.try_state::<Mutex<Started>>() else { return };
+            let store = crate::surface::keys::the_store_for_this_system();
+            let held = started.lock();
+            if let Ok(held) = held.as_deref() {
+                let _ = crate::surface::servers::the_password_is_forgotten(held, store.as_deref(), &server);
+            }
+        })
+        .await;
+    }
+
+    the_retry_goes_in_the_diary(&app, &row, &retry, &ended, acts.len(), &named);
+
+    if let Some(entries) = rows {
+        let folder = retry.paths[0].clone();
+        let listed = entries.iter().map(ListedEntry::from_a_protocol_entry).collect();
+        let mut browser = the_tab_after_the_reading(
+            the_order_held(),
+            &server,
+            &folder,
+            None,
+            WhatTheReadingFound::TheFolder { entries: listed, free: None },
+            None,
+            shown,
+        );
+        // **`File Browser` P8: what elevation could see**, marked so.
+        if let TheListing::Rows { read_elevated, .. } = &mut browser.listing {
+            *read_elevated = true;
+        }
+        return TheAdminRetrysAnswer::TheFolder { browser: Box::new(browser) };
+    }
+    let done = ended.iter().filter(|came| **came == Came::Done).count();
+    let first_not_done = ended.iter().find_map(what_the_retry_says);
+    match first_not_done {
+        None if done == acts.len() => TheAdminRetrysAnswer::Done,
+        None => TheAdminRetrysAnswer::Said {
+            said: Words::plain(words::THE_CONNECTION_WENT),
+        },
+        Some(said) if acts.len() == 1 || done == 0 => TheAdminRetrysAnswer::Said { said },
+        // **Some went and some did not**: how many, then the first reason.
+        Some(said) => TheAdminRetrysAnswer::Said {
+            said: Words::after(done.to_string(), words::OF)
+                .and(acts.len().to_string())
+                .then(words::DONE_WITH_ADMIN_REST)
+                .followed_by(said),
+        },
+    }
+}
+
+/// **`Server Setup` §9's own box, titled for Files** — the same choices,
+/// composed from the store's standing in the same way, off the drawing thread.
+async fn the_box_asks<R: Runtime>(app: &AppHandle<R>, retry: &AnAdminRetry) -> TheAdminRetrysAnswer {
+    let app = app.clone();
+    let mut asked = tauri::async_runtime::spawn_blocking(move || {
+        crate::surface::set_up::the_admin_access_box_is_composed(&app, "", false)
+    })
+    .await
+    .unwrap_or_else(|_| crate::surface::set_up::the_box("", None, false));
+    asked.title = Prose::new(words::NEEDS_THE_LOGIN_PASSWORD);
+    asked.which_step = retry.as_the_box_names_it();
+    TheAdminRetrysAnswer::AsksForThePassword { asked: Box::new(asked) }
+}
+
+/// **`File Browser` B3's line for the retry, marked elevated** (`File Browser` P6, `File Browser` P8): one
+/// line for the act the user asked for, with its counts.
+fn the_retry_goes_in_the_diary<R: Runtime>(
+    app: &AppHandle<R>,
+    row: &ServerRow,
+    retry: &AnAdminRetry,
+    ended: &[crate::managing_files::WhatTheElevatedActCameTo],
+    units: usize,
+    named: &[AJobNamed],
+) {
+    use crate::managing_files::WhatTheElevatedActCameTo as Came;
+    use smoozy_file_browser::diary::{FileAct, HowItRan, TheThreeCounts, WhatTheActWasAbout};
+    let act = match retry.act {
+        // **A listing is not one of `File Browser` B3's five acts**, so it writes no line.
+        TheRetriedAct::Listing => return,
+        TheRetriedAct::Delete => FileAct::Delete,
+        TheRetriedAct::NewFolder => FileAct::NewFolder,
+        TheRetriedAct::Rename => FileAct::Rename,
+    };
+    // **Nothing was asked of the machine** where the password was owed, so no
+    // line is owed either.
+    if ended.iter().all(|came| matches!(came, Came::APasswordIsNeeded | Came::ThePathIsRefused(_))) {
+        return;
+    }
+    let done = ended.iter().filter(|came| matches!(came, Came::Done | Came::MadeButOwnedByRoot)).count();
+    let refused = ended
+        .iter()
+        .filter(|came| !matches!(came, Came::Done | Came::MadeButOwnedByRoot | Came::TheConnectionWent))
+        .count();
+    let counts = TheThreeCounts {
+        done,
+        refused,
+        not_attempted: units.saturating_sub(ended.len()),
+    };
+    let about = match (retry.act, retry.paths.as_slice()) {
+        (TheRetriedAct::Delete, many) if many.len() > 1 => WhatTheActWasAbout::AFolderAndACount {
+            folder: String::from_utf8_lossy(&crate::managing_files::the_folder_holding(&many[0])).into_owned(),
+            entries: many.len(),
+        },
+        (_, paths) => WhatTheActWasAbout::OneThing(
+            paths.first().map(|path| String::from_utf8_lossy(path).into_owned()).unwrap_or_default(),
+        ),
+    };
+    let Some(started) = app.try_state::<Mutex<Started>>() else {
+        return;
+    };
+    let Ok(started) = started.lock() else {
+        return;
+    };
+    let _ = crate::managing_files::the_act_is_written_down_as(
+        &started,
+        row,
+        act,
+        about,
+        None,
+        counts,
+        named,
+        HowItRan::Elevated,
+    );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -5112,6 +6206,17 @@ pub fn calculate_size_is_offered_on(browser: &mut TheBrowser, stands: Option<Whe
     }
 }
 
+// `File Browser` M15 governs Paste; Copy's setup requirement is separate.
+fn copy_is_offered_on(browser: &mut TheBrowser, ready: bool) {
+    let greyed = (!ready).then(|| AGreying { why: Some(Words::plain(words::SET_UP_TO_COPY)) });
+    browser.toolbar.copy_greyed = greyed.clone();
+    for menu in &mut browser.menus {
+        for item in &mut menu.items {
+            if item.act.as_str() == "copy" { item.greyed = greyed.clone(); }
+        }
+    }
+}
+
 /// **A folder's Size cell, as the page draws it** — `Design/File Browser`,
 /// the Size paragraph.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -5253,6 +6358,7 @@ fn the_upload_goes_with(chosen: &[std::path::PathBuf]) -> TheUploadAsk {
             .iter()
             .map(|path| APath::of(the_bytes_of(path).as_slice()))
             .collect(),
+        counting: Words::plain(words::COUNTING_FILES),
     }
 }
 
@@ -5398,12 +6504,12 @@ impl<R: Runtime> TheNeighboursOfThisMachine<R> {
 }
 
 impl<R: Runtime> WhenAFileIsPublished for TheNeighboursOfThisMachine<R> {
-    fn a_file_begins_going_up(&self) {
-        self.the_check_is_told(|going_up, machine| going_up.one_begins(machine));
+    fn a_file_begins_going_up(&self, landing: &[u8]) {
+        self.the_check_is_told(|going_up, machine| going_up.one_begins(machine, landing));
     }
 
-    fn a_file_stopped_going_up(&self) {
-        self.the_check_is_told(|going_up, machine| going_up.one_ends(machine));
+    fn a_file_stopped_going_up(&self, landing: &[u8]) {
+        self.the_check_is_told(|going_up, machine| going_up.one_ends(machine, landing));
     }
 
     fn a_file_was_published(&self, landing_path: &[u8], outcome: &UnitOutcome) {
@@ -5529,6 +6635,20 @@ fn uploads_waiting_on_their_question() -> &'static Held<AnUploadWaiting> {
     &HELD
 }
 
+/// **The user's Stop in Transfers, on an upload whose `File Browser` U4 question
+/// is open**: the stop is written as its answer at once, so its row ends now
+/// (`File Browser` U6; Sol's fresh look on the twenty-eighth notes, piece 12).
+/// The question, answered after, does nothing.
+pub(crate) fn an_upload_waiting_on_its_question_is_stopped(
+    door: &dyn crate::downloading::TheRecordADownloadWrites,
+    request: &str,
+) {
+    let Some((_, _, mut ready, _)) = uploads_waiting_on_their_question().take(request) else {
+        return;
+    };
+    let _ = uploading::the_stop_is_written_before_it_went(&mut ready.request, &|act| door.with_the_record(act));
+}
+
 fn uploads_that_ended() -> &'static Held<Words> {
     static HELD: Held<Words> = Held::empty();
     &HELD
@@ -5541,9 +6661,14 @@ fn the_files_go<R: Runtime>(
     app: AppHandle<R>,
     server: String,
     row: &ServerRow,
-    ready: AnUploadReadyToRun,
+    mut ready: AnUploadReadyToRun,
     point: ThisServersSessions,
 ) -> TheUploadGoes {
+    // **`Server protocol and transfers` S12b: where Smoozy's own program sits
+    // on this server**, so a file carried on across a repair has its part
+    // checked there — only where the row records an installation this copy
+    // confirmed, as Paste's copy asks (uploads carry on).
+    ready.the_servers_program = the_package_area_to_copy_with(row);
     let request = ready.request.record.as_text();
     let publishing = TheNeighboursOfThisMachine {
         app: app.clone(),
@@ -5556,7 +6681,10 @@ fn the_files_go<R: Runtime>(
     tauri::async_runtime::spawn(async move {
         let the_run = match app.try_state::<Arc<TheRunsTransfers>>() {
             Some(the_run) => Arc::clone(the_run.inner()),
-            None => return,
+            None => {
+                uploading::it_will_not_go_under_way(&ready.request.record);
+                return;
+            }
         };
         let door: Arc<dyn TheRecordAnUploadWrites> = Arc::new(TheApplicationsRecord { app: app.clone() });
         let came_to = uploading::the_upload_runs(ready, &point, &the_run, door, &publishing).await;
@@ -5869,8 +6997,10 @@ fn the_answers(act: TheCollidingAct, put_skip_forward: bool) -> Vec<AnAnswer> {
         }
         // **`File Browser` M8 and `File Browser` M18: a colliding move offers Replace or
         // Cancel; a colliding
-        // copy offers Replace, Keep both or Cancel.** Taken from that clause's
-        // own function rather than written out again.
+        // copy offers Replace, Keep both or Cancel** — and Skip existing since
+        // `File Browser` M8a (the leftovers of the Rough what-if answers, 176),
+        // so a copy cut off part-way can be pasted again and finish. Taken
+        // from that clause's own function rather than written out again.
         TheCollidingAct::APasteAfterACut | TheCollidingAct::APasteAfterACopy => {
             let cut_or_copy = if act == TheCollidingAct::APasteAfterACut {
                 CutOrCopy::Cut
@@ -5878,8 +7008,9 @@ fn the_answers(act: TheCollidingAct, put_skip_forward: bool) -> Vec<AnAnswer> {
                 CutOrCopy::Copy
             };
             let mut answers = vec![one("replace", words::REPLACE, false)];
-            if the_answers_offered(cut_or_copy) == TheAnswersOffered::ReplaceKeepBothOrCancel {
+            if the_answers_offered(cut_or_copy) == TheAnswersOffered::ReplaceKeepBothSkipExistingOrCancel {
                 answers.push(one("keep-both", words::KEEP_BOTH, false));
+                answers.push(one("skip-existing", words::SKIP_EXISTING, false));
             }
             answers.push(one("cancel", words::CANCEL, false));
             answers
@@ -5913,7 +7044,8 @@ pub fn the_live_job_warning(
             .iter()
             .find(|(identity, _)| *identity == job.job.as_text())
             .map(|(_, label)| label.clone())
-            .unwrap_or_else(|| job.job.as_text())
+            // **Never the inner identity** — scout 3.31, 2026-11-11.
+            .unwrap_or_else(|| words::ANOTHER_JOB.to_string())
     };
     let rendering: Vec<&AJobNamed> = jobs
         .iter()
@@ -5927,12 +7059,24 @@ pub fn the_live_job_warning(
     // **Per job the warning may differentiate, and `File Browser` W5 supplies
     // what on.** The names are values and the words between them are prose;
     // nothing is joined into anything.
-    let mut said = Words::empty();
-    for job in &rendering {
-        said = said.and(label_of(job));
-    }
+    // **Several names are joined with commas and *and***, so one can tell
+    // where each ends (the UI at every size, C-27); they ran together with
+    // spaces only.
+    let named = |said: Words, these: &[&AJobNamed]| {
+        let mut said = said;
+        for (at, job) in these.iter().enumerate() {
+            if at > 0 && at + 1 == these.len() {
+                said = said.then(words::AND);
+            } else if at > 0 {
+                said = said.then(",").joined();
+            }
+            said = said.and(label_of(job));
+        }
+        said
+    };
+    let mut said = named(Words::empty(), &rendering);
     if !rendering.is_empty() {
-        said = said.then(words::IS_RENDERING_WITH_THIS_FILE);
+        said = said.then(if rendering.len() == 1 { words::IS_RENDERING_WITH_THIS_FILE } else { words::ARE_RENDERING_WITH_THIS_FILE });
         if waiting.is_empty() {
             said = said.then(".").joined();
         }
@@ -5941,13 +7085,11 @@ pub fn the_live_job_warning(
         if !rendering.is_empty() {
             said = said.then(",").joined().then(words::AND_ALSO);
         }
-        for job in &waiting {
-            said = said.and(label_of(job));
-        }
+        said = named(said, &waiting);
         said = said.then(if waiting.len() == 1 {
             words::IS_WAITING_ON_IT
         } else {
-            words::IS_WAITING_ON_THEM
+            words::ARE_WAITING_ON_IT
         });
     }
 
@@ -6015,6 +7157,9 @@ pub fn the_delete_box_from(
                 ),
                 said: None,
             }),
+        smoozys_own_files: None,
+        the_ssh_keys: None,
+        the_system_folder: a_system_folder_among(victims),
         permanent: Prose::new(words::PERMANENT),
         dont_warn_again: Prose::new(words::DONT_WARN_AGAIN),
         what_it_does_not_cover: Prose::new(words::WHAT_IT_DOES_NOT_COVER),
@@ -6034,6 +7179,17 @@ pub fn the_live_job_box_from(
     into: Option<&[u8]>,
 ) -> Option<TheLiveJobBox> {
     let warning = the_live_job_warning(live_jobs, the_job_labels)?;
+    Some(the_disturbance_box(act, Some(warning), victims, into))
+}
+
+/// **The box itself, for whichever warnings it carries** — its title naming
+/// the act, as [`the_live_job_box_from`] has always composed it.
+fn the_disturbance_box(
+    act: &str,
+    warning: Option<TheLiveJobWarning>,
+    victims: &[Vec<u8>],
+    into: Option<&[u8]>,
+) -> TheLiveJobBox {
     let (question, carry_on) = match act {
         // **`Design/File Browser § The live-job warning`'s own title names the
         // destination** — *Move 2 items into `assets/`?* — so it is a value
@@ -6074,12 +7230,127 @@ pub fn the_live_job_box_from(
             words::RENAME_QUESTION_LEAD,
         ),
     };
-    Some(TheLiveJobBox {
+    TheLiveJobBox {
         question,
         live_jobs: warning,
+        smoozys_own_files: None,
+        the_ssh_keys: None,
         cancel: Prose::new(words::CANCEL),
         carry_on: Prose::new(carry_on),
+    }
+}
+
+/// **What Smoozy and the login rely on, on one server** — Smoozy's own
+/// folders, as the row recorded them at hand-over (`Job files and outputs`
+/// L1 and `Job files and outputs` L4a: the root and the package area,
+/// wherever it sits), and the login's
+/// SSH folder, under the home this connection already read. **Nothing is
+/// read from the machine here**: what is not known names nothing.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WhatThisServerReliesOn {
+    pub smoozys_own_folders: Vec<Vec<u8>>,
+    pub the_ssh_folder: Option<Vec<u8>>,
+}
+
+impl WhatThisServerReliesOn {
+    /// From the row's recorded layout and the login's home, where known.
+    pub fn of(row: &ServerRow, home: Option<&[u8]>) -> WhatThisServerReliesOn {
+        use smoozy_job_files::layout::Area;
+        let smoozys_own_folders = crate::servers::installation::the_layout_recorded_for(row)
+            .map(|layout| {
+                vec![
+                    layout.root().as_path().as_bytes().to_vec(),
+                    layout.area(Area::Package).into_bytes(),
+                ]
+            })
+            .unwrap_or_default();
+        let the_ssh_folder = home.map(|home| {
+            let mut folder = trim_trailing_slashes(home).to_vec();
+            folder.extend_from_slice(b"/.ssh");
+            folder
+        });
+        WhatThisServerReliesOn { smoozys_own_folders, the_ssh_folder }
+    }
+
+    /// **The two lines, for what is disturbed**: a path is reached where it
+    /// is one of these folders, sits inside one, or holds one.
+    pub fn the_lines_for(&self, disturbed: &[Vec<u8>]) -> (Option<AWarningLine>, Option<AWarningLine>) {
+        let reaches = |folder: &[u8]| disturbed.iter().any(|path| one_reaches_the_other(path, folder));
+        let line = |named: &str, said: &str| AWarningLine {
+            named: Words::plain(named),
+            said: Some(Prose::new(said)),
+        };
+        (
+            self.smoozys_own_folders
+                .iter()
+                .any(|folder| reaches(folder))
+                .then(|| line(words::SMOOZYS_OWN_FILES, words::SMOOZYS_OWN_FILES_SAID)),
+            self.the_ssh_folder
+                .as_deref()
+                .filter(|folder| reaches(folder))
+                .map(|_| line(words::THE_SSH_KEYS, words::THE_SSH_KEYS_SAID)),
+        )
+    }
+
+    /// **The rename or move box, with these lines added**, made where only
+    /// they call for it. A copy disturbs nothing it copies, so it adds none.
+    pub fn added_to(
+        &self,
+        the_box: Option<TheLiveJobBox>,
+        act: &str,
+        victims: &[Vec<u8>],
+        into: Option<&[u8]>,
+    ) -> Option<TheLiveJobBox> {
+        if act == "copy" {
+            return the_box;
+        }
+        let (smoozys_own_files, the_ssh_keys) = self.the_lines_for(victims);
+        if smoozys_own_files.is_none() && the_ssh_keys.is_none() {
+            return the_box;
+        }
+        let mut the_box = the_box.unwrap_or_else(|| the_disturbance_box(act, None, victims, into));
+        the_box.smoozys_own_files = smoozys_own_files;
+        the_box.the_ssh_keys = the_ssh_keys;
+        Some(the_box)
+    }
+}
+
+/// Whether one path is the other, or either sits inside the other.
+fn one_reaches_the_other(path: &[u8], folder: &[u8]) -> bool {
+    // **The machine's top holds everything.**
+    if !path.is_empty() && path.iter().all(|byte| *byte == b'/') {
+        return true;
+    }
+    let path = trim_trailing_slashes(path);
+    let folder = trim_trailing_slashes(folder);
+    let inside = |inner: &[u8], outer: &[u8]| {
+        outer.is_empty() || (inner.len() > outer.len() && inner.starts_with(outer) && inner[outer.len()] == b'/')
+    };
+    !path.is_empty() && !folder.is_empty() && (path == folder || inside(path, folder) || inside(folder, path))
+}
+
+/// **`File Browser` M3b: the delete box's red line where a system folder, or
+/// anything inside one, is among what is deleted** — the folders are that
+/// clause's own list, kept in `File Browser`'s `managing`.
+pub fn a_system_folder_among(victims: &[Vec<u8>]) -> Option<AWarningLine> {
+    use smoozy_file_browser::managing::is_in_a_system_folder;
+    victims.iter().any(|path| is_in_a_system_folder(path)).then(|| AWarningLine {
+        named: Words::plain(words::A_SYSTEM_FOLDER),
+        said: Some(Prose::new(words::A_SYSTEM_FOLDER_SAID)),
     })
+}
+
+/// [`WhatThisServerReliesOn`] for one server, through the application: its
+/// row, and the home its live connection already read.
+fn what_this_server_relies_on<R: Runtime>(app: &AppHandle<R>, server: &str) -> WhatThisServerReliesOn {
+    let Some(row) = the_row_of(app, server) else {
+        return WhatThisServerReliesOn::default();
+    };
+    let periods = app
+        .try_state::<Arc<ThePeriodsThisRun>>()
+        .map(|periods| Arc::clone(periods.inner()));
+    let home = the_live_point_of(periods.as_deref(), server).and_then(|point| point.the_logins_home_as_read());
+    WhatThisServerReliesOn::of(&row, home.as_deref())
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -6350,6 +7621,8 @@ pub fn a_new_folder_refused(folder: &[u8], typed: &[u8], offer: Offer) -> ARow {
         // moment, since the machine never listed it.
         sorts_by: WhatTheRowSortsBy { name: typed.to_vec(), folder: true, size: 0, changed: None },
         picture: None,
+        // A folder not yet made is never the login's home.
+        home: None,
     }
 }
 
@@ -6614,6 +7887,15 @@ fn the_queue_is_told(queue: &TheOneQueue, event: Event) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **The headers carry what a folder's Kind reads** — UI consistency,
+    /// finding 28: a new folder's row, typed into before it exists, had an
+    /// empty Kind where the drawing reads *Folder*.
+    #[test]
+    fn ui28_the_headers_carry_a_folders_kind() {
+        assert_eq!(the_headers(TheOrder::default()).a_folder, Prose::new(words::A_FOLDER));
+        assert_eq!(words::A_FOLDER, "Folder");
+    }
     use smoozy_file_browser::listing::{ApparentSize, LastChanged};
     use smoozy_file_browser::permission::{MachineKind, TheProbe, WalkOutcome, WhatSmoozyMet};
     use std::time::SystemTime;
@@ -6730,14 +8012,22 @@ mod tests {
             crate::surface::the_dependency_check::THE_STATES_THIS_PIECE_DRAWS.len(),
             "the `chk-` states are the dependency check's"
         );
-        // Thirty-eight from 2026-10-31, when the plan and drawing pass for the
+        // Forty from 2026-11-09, when the twenty-eighth notes' piece 7 drew
+        // `fb-counting` and `fb-uploading` (note 10, the upload's line above
+        // the list). Thirty-eight from 2026-10-31, when the plan and drawing pass for the
         // seventeenth notes drew `fb-view`, `fb-viewexr` and `fb-viewbig`
         // (note 11, the picture viewer). Thirty-five from 2026-10-30, when the
         // twenty-third notes' design pass
         // drew `fb-sizemenu`, `fb-size` and `fb-sizeold` (note 2). Thirty-two
         // from 2026-10-29, when the twenty-first notes' design pass drew
         // `fb-check` and `fb-hidden` (notes 6 and 3).
-        assert_eq!(drawn.len(), 38, "the A server group has thirty-eight of ours");
+        // Forty-one from 2026-11-10, when the twenty-ninth notes' drawing
+        // pass drew `fb-viewalpha` (note 12, the board under a picture).
+        // Fifty-five from 2026-11-13: `fb-home`, the home folder named at the
+        // server's top (the Creator's notes on the test copy, note 0).
+        // Fifty-seven from 2026-11-14: `delete-own` and `fb-live-ssh`, batch 2
+        // of the Bad what-if answers.
+        assert_eq!(drawn.len(), 57, "the A server group has fifty-seven of ours");
 
         let claimed = the_working_half();
         let named: Vec<String> = drawn
@@ -7011,6 +8301,83 @@ mod tests {
         assert!(!parts[0].here);
         assert_eq!(the_path(b"/").len(), 1);
         assert!(the_path(b"/")[0].here);
+    }
+
+    /// **The login's home folder carries a house on its row and in the path,
+    /// and nothing else does** — `Design/File Browser § The list`, the
+    /// Creator's ask of 2026-11-11. The home is the server's own answer,
+    /// handed in; where none was read, nothing is marked, and a file at that
+    /// path is never marked.
+    #[test]
+    fn the_home_folder_carries_a_house_on_its_row_and_in_the_path() {
+        let listed = |folder: &[u8]| {
+            the_tab_after_the_reading(
+                TheOrder::default(),
+                "row",
+                folder,
+                None,
+                WhatTheReadingFound::TheFolder {
+                    entries: vec![
+                        an_entry("ubuntu", Kind::Folder, 0),
+                        an_entry("other", Kind::Folder, 0),
+                        an_entry("notes.txt", Kind::File, 1),
+                    ],
+                    free: None,
+                },
+                Some(ObservedValue::Connected),
+                false,
+            )
+        };
+        let rows_marked = |browser: &TheBrowser| -> Vec<String> {
+            let TheListing::Rows { rows, .. } = &browser.listing else { panic!("rows") };
+            rows.iter()
+                .filter(|row| row.home.is_some())
+                .map(|row| row.name.shown.as_str().to_string())
+                .collect()
+        };
+        let parts_marked = |browser: &TheBrowser| -> Vec<Vec<u8>> {
+            browser.path.iter().filter(|part| part.home.is_some()).map(|part| part.folder.bytes.clone()).collect()
+        };
+
+        // **Its row, in the folder above it**: the house, the word on hover,
+        // and the kind still *Folder*.
+        let mut above = listed(b"/home");
+        the_home_is_marked(&mut above, Some(b"/home/ubuntu"));
+        assert_eq!(rows_marked(&above), vec!["ubuntu"]);
+        assert!(parts_marked(&above).is_empty());
+        let TheListing::Rows { rows, .. } = &above.listing else { panic!("rows") };
+        let home = rows.iter().find(|row| row.home.is_some()).expect("the home row");
+        assert_eq!(home.home, Some(Prose::new(words::HOME_FOLDER)));
+        assert_eq!(home.kind, Prose::new(words::A_FOLDER));
+        assert!(matches!(home.icon, AnIcon::Folder));
+        let json = serde_json::to_value(home).expect("it serialises");
+        assert_eq!(json["home"], serde_json::to_value(Prose::new(words::HOME_FOLDER)).expect("the word"));
+
+        // **Its part of the path, below it and standing in it**, whatever
+        // trailing slash the answer carried.
+        let mut below = listed(b"/home/ubuntu/kitchen");
+        the_home_is_marked(&mut below, Some(b"/home/ubuntu/"));
+        assert_eq!(parts_marked(&below), vec![b"/home/ubuntu".to_vec()]);
+        assert!(rows_marked(&below).is_empty());
+        let mut in_it = listed(b"/home/ubuntu");
+        the_home_is_marked(&mut in_it, Some(b"/home/ubuntu"));
+        assert_eq!(parts_marked(&in_it), vec![b"/home/ubuntu".to_vec()]);
+        assert!(in_it.path.last().is_some_and(|part| part.here && part.home.is_some()));
+        // `/root` sits under the server's top, which is not marked.
+        let mut root = listed(b"/");
+        the_home_is_marked(&mut root, Some(b"/root"));
+        assert!(parts_marked(&root).is_empty());
+
+        // **No home read: no house.** A file at the home's path: no house.
+        let mut none = listed(b"/home");
+        the_home_is_marked(&mut none, None);
+        assert!(rows_marked(&none).is_empty() && parts_marked(&none).is_empty());
+        let mut a_file = listed(b"/home");
+        the_home_is_marked(&mut a_file, Some(b"/home/notes.txt"));
+        assert!(rows_marked(&a_file).is_empty());
+        // Unmarked rows and parts carry nothing.
+        let json = serde_json::to_value(&none).expect("it serialises");
+        assert!(json["path"][1]["home"].is_null());
     }
 
     /// **An undecodable byte is replaced for display and never for identity** —
@@ -7344,12 +8711,44 @@ mod tests {
         assert_eq!(cut, vec!["replace", "cancel"]);
         let after_a_copy = of(TheCollidingAct::APasteAfterACopy, None);
         let copy: Vec<&str> = after_a_copy.answers.iter().map(|one| one.answer.as_str()).collect();
-        assert_eq!(copy, vec!["replace", "keep-both", "cancel"]);
+        // **`File Browser` M8a (the leftovers of the Rough what-if answers,
+        // 176): a copy also offers Skip existing**, and nothing is put forward.
+        assert_eq!(copy, vec!["replace", "keep-both", "skip-existing", "cancel"]);
+        assert!(after_a_copy.answers.iter().all(|one| !one.put_forward));
+        // **The page's answer reaches the copy as Skip existing**, which
+        // leaves every file already there and copies the rest; before, it was
+        // read as Cancel.
+        assert_eq!(
+            the_answer_from(Some("skip-existing")),
+            Some(smoozy_file_browser::already_exists::CollisionAnswer::SkipExisting)
+        );
+    }
+
+    /// **The four questions, scout 3.50: the already-there box's words say
+    /// what the user acts on** — `Design/File Browser`, changed 2026-11-12.
+    #[test]
+    fn fifth_part_3_50_the_already_there_box_says_what_was_not_compared() {
+        assert_eq!(words::COMPARED_BY, "Matched by name; contents not compared.");
+        assert_eq!(words::PLACED_BY_THE_CHECK_SAID, "Replacing them undoes the check's path fixes.");
     }
 
     /// **`File Browser` W5a: uniform across files, differentiated across jobs,
     /// and the
     /// sentence is a *may* and never a description.**
+    #[test]
+    fn third_part_3_31_several_job_names_have_separators_and_a_plural_verb() {
+        use smoozy_state::identities::{Identity, IdentityKind};
+        let one = Identity::issue(IdentityKind::Job).unwrap();
+        let two = Identity::issue(IdentityKind::Job).unwrap();
+        let jobs = vec![one.clone(), two.clone()].into_iter().map(|job| AJobNamed {
+            job, stands: HowTheJobStands::Waiting, the_members_reached: vec![b"/file.blend".to_vec()],
+            the_set_was_the_widest_case: false,
+        }).collect::<Vec<_>>();
+        let labels = [(one.as_text(), "Kitchen".to_owned()), (two.as_text(), "Hallway".to_owned())];
+        let warning = the_live_job_warning(&jobs, &labels).unwrap();
+        assert_eq!(in_plain(&warning.said), "Kitchen and Hallway are waiting on it.");
+    }
+
     #[test]
     fn the_live_job_warning_differentiates_across_jobs_and_never_across_files() {
         use smoozy_state::identities::{Identity, IdentityKind};
@@ -7500,16 +8899,30 @@ mod tests {
             None,
             false,
         );
-        assert_eq!(
-            tab.bottom.uploads_go_to.values()[0],
-            "/home/artist/kitchen"
-        );
+        // **The folder's own name, the whole path on hover** (the UI at every
+        // size, C-05).
+        assert_eq!(tab.bottom.uploads_go_to.values()[0], "kitchen/");
+        assert_eq!(tab.bottom.uploads_go_to_whole, "/home/artist/kitchen");
         let counts = tab
             .bottom
             .what_is_in_the_folder
             .expect("a listing carries a count");
         assert_eq!(counts.values()[0], "2");
         assert_eq!(counts.values()[1], "1");
+    }
+
+    /// **Uploads go to names the folder, not the path** (the UI at every
+    /// size, C-05): *Uploads go to `kitchen/`*, as `Design/File Browser`
+    /// writes it, and the machine's top reads `/`. The whole path is beside
+    /// it, for the hover.
+    #[test]
+    fn c05_uploads_go_to_names_the_folder_and_keeps_the_path_for_the_hover() {
+        assert_eq!(the_folders_own_name(b"/home/artist/kitchen"), "kitchen/");
+        assert_eq!(the_folders_own_name(b"/home/artist/kitchen/"), "kitchen/");
+        assert_eq!(the_folders_own_name(b"/"), "/");
+        let bar = the_bottom_bar(b"/srv/shots/Q_012", &[], false, HowTheBrowserComposes::FromTheCacheAndStale, false);
+        assert_eq!(bar.uploads_go_to.values()[0], "Q_012/");
+        assert_eq!(bar.uploads_go_to_whole, "/srv/shots/Q_012");
     }
 
     /// **Three menus, and only the folder menu could carry paste** — Design.
@@ -7590,6 +9003,9 @@ mod tests {
             serde_json::json!({
                 "is": "go",
                 "chosen": chosen.iter().map(|one| serde_json::to_value(APath::of(one.as_bytes())).expect("a path")).collect::<Vec<_>>(),
+                // **And the words the line above the list says until the walk
+                // ends** — added 2026-11-09, the twenty-eighth notes, note 10.
+                "counting": Words::plain(words::COUNTING_FILES),
             }),
             "a pick composes something other than the upload going with what was picked"
         );
@@ -7606,9 +9022,9 @@ mod tests {
         };
         assert_eq!(title, Prose::new(words::WHICH_KIND));
         let wanted = if cfg!(target_os = "windows") {
-            "The Windows file picker cannot select files and folders together."
+            "The Windows file picker can't select files and folders together."
         } else {
-            "This computer's file picker cannot select files and folders together."
+            "This computer's file picker can't select files and folders together."
         };
         assert_eq!(said, Prose::new(wanted));
     }
@@ -7754,7 +9170,7 @@ mod tests {
             at.the_browser_is_asked(server, Some(folder));
             let found = if at.no_frame_is_saved_here() { not_there_yet_where_no_frame_is_saved(found) } else { found };
             match the_tab_after_the_reading(TheOrder::default(), server, folder, None, found, None, false).listing {
-                TheListing::TheFolderWasNotRead { said } => said,
+                TheListing::TheFolderWasNotRead { said, .. } => said,
                 other => panic!("the folder was listed: {other:?}"),
             }
         };
@@ -7872,6 +9288,19 @@ mod tests {
         );
     }
 
+    #[test]
+    fn rough_share_1_a_drop_while_a_box_is_open_is_not_taken() {
+        // The Rough what-if answers, share 1 (24): a second drop drew a second
+        // overwrite box over the first. The drop, and the zone shown over it,
+        // are not taken while any box is open.
+        let page = the_page();
+        let drop = page.find("if (what.type === \"drop\")").expect("the drop branch");
+        let next = page[drop..].find("files_were_dropped").expect("the drop is sent");
+        assert!(page[drop..drop + next].contains("if (aBoxIsOpen()) return;"), "a drop is refused while a box is open");
+        let over = page.find("if (what.type === \"over\" || what.type === \"enter\")").expect("the over branch");
+        assert!(page[over..drop].contains("if (aBoxIsOpen()) return;"), "and no drop zone is shown");
+    }
+
     /// **The stale bar's moment is marked as one, and the page renders it**,
     /// rather than drawing the bare epoch figure — which is what a running copy
     /// showed on 2026-09-13.
@@ -7980,7 +9409,9 @@ mod tests {
         );
         // **Step 10c piece 4: the confirmed upload runs from this screen**,
         // through `src/uploading.rs`, and no longer goes to Transfers.
-        assert!(code.contains("theUploadIsConfirmed(ask.chosen);"), "the confirmed upload");
+        // A drop on a folder's row hands its folder too (the four questions,
+        // scout 2.19, 2026-11-12).
+        assert!(code.contains("theUploadIsConfirmed(ask.chosen, into);"), "the confirmed upload");
         assert!(!code.contains("aTransferIsStarted(\"upload\")"), "the upload still goes to Transfers");
         assert!(code.contains("() => aTransferIsStarted(\"download\")"), "the toolbar's Download");
         assert!(code.contains("aTransferIsStarted(item.act);"), "the menus' Download and Download to…");
@@ -8047,12 +9478,14 @@ mod tests {
         // **The one menu is placed the way `web/servers.js`'s is**: two custom
         // properties the stylesheet reads, which are values and not
         // declarations — and **a folder size's hover line the same way**
-        // (the twenty-third notes, note 2). No other use of the element's
-        // style is allowed.
+        // (the twenty-third notes, note 2) — **and the reading cover's top,
+        // so it covers the part of the list in view** (UI consistency,
+        // finding 29). No other use of the element's style is allowed.
         assert_eq!(
             page.matches(".style.").count(),
             page.matches(".style.setProperty(\"--fctx-").count()
-                + page.matches(".style.setProperty(\"--fsz-").count(),
+                + page.matches(".style.setProperty(\"--fsz-").count()
+                + page.matches(".style.setProperty(\"--fwait-").count(),
             "H33: no inline style"
         );
         assert!(!page.contains("setAttribute(\"style\""), "H33: no inline style");
@@ -8271,12 +9704,12 @@ mod tests {
             failed: vec![b"/cube.blend".to_vec()],
             refused: vec![(
                 b"/cube.blend".to_vec(),
-                "the server said permission was denied".to_string(),
+                "permission denied".to_string(),
             )],
             ..WhatTheUploadCameTo::default()
         };
         let told = what_it_came_to(&came_to, b"/");
-        let said = told.said().replace('\u{a0}', " ");
+        let said = told.said().replace('\u{a0}', " ").replace('’', "'");
         assert!(said.contains(words::ONE_COULD_NOT_BE_UPLOADED), "{said}");
         assert!(told.values().contains(&"cube.blend"), "{:?}", told.values());
         assert!(said.contains(crate::surface::transfers::words::CANNOT_WRITE_THERE), "{said}");
@@ -8336,6 +9769,7 @@ mod tests {
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             std::fs::write(folder.join(name), text).expect("a stand-in is written");
@@ -8362,6 +9796,479 @@ mod tests {
         .join("\n");
         assert_eq!(said, expected);
     }
+
+    /// **`Design/File Browser`, 2026-11-12, the live pass's new fault 6: a
+    /// delete refused part-way earns the offer after its report only where
+    /// every refusal was for permission.**
+    #[test]
+    fn live_pass_6_a_part_way_delete_earns_the_offer_only_where_every_refusal_was_for_permission() {
+        use crate::managing_files::WhatTheDeleteCameTo;
+        let ran = |done, refused, refused_for_permission| WhatTheDeleteCameTo::Ran {
+            record: Identity::issue(IdentityKind::Operation).expect("randomness"),
+            done,
+            refused,
+            not_attempted: 1,
+            never_learned: 0,
+            refused_for_permission,
+        };
+        assert!(a_part_way_delete_earns_the_offer(&ran(0, 1, 1)), "the pass's root-owned folder");
+        assert!(a_part_way_delete_earns_the_offer(&ran(3, 2, 2)));
+        assert!(!a_part_way_delete_earns_the_offer(&ran(3, 2, 1)), "one refused for another reason");
+        assert!(!a_part_way_delete_earns_the_offer(&ran(3, 0, 0)), "nothing refused");
+        assert!(!a_part_way_delete_earns_the_offer(&WhatTheDeleteCameTo::NothingWasRemoved(
+            crate::managing_files::WhatTheActCameTo::TheLoginMayNot
+        )));
+    }
+
+    /// **The offer carries what it runs again, and only where there is an
+    /// offer** (`File Browser` P5); each act is one unit per path (`File Browser` P6b rule
+    /// 1); and the box's line names the act.
+    #[test]
+    fn a_refusal_offering_carries_its_retry_only_beside_an_offer() {
+        use smoozy_file_browser::elevated::AnElevatedAct;
+        let retry = AnAdminRetry {
+            server: "row".to_string(),
+            act: TheRetriedAct::Delete,
+            paths: vec![b"/data/old".to_vec(), b"/data/older".to_vec()],
+        };
+        let offered = a_refusal_offering(TheRefusedAct::Deleting, Offer::OfferedAndAPasswordIsAsked, retry.clone());
+        assert_eq!(offered.retry.as_ref(), Some(&retry));
+        assert_eq!(
+            offered.the_offer.as_ref().map(|offer| offer.as_str().replace('\u{a0}', " ")),
+            Some(words::TRY_WITH_ADMIN.to_string())
+        );
+        for none in [
+            Offer::NoOffer(WhyThereIsNoOffer::AContainersLoginDemandsAPasswordSmoozyDoesNotHold),
+            Offer::NoOffer(WhyThereIsNoOffer::TheKindTableDoesNotPlaceTheMachine),
+            Offer::NoOffer(WhyThereIsNoOffer::TheLoginIsAlreadyRoot),
+        ] {
+            let refusal = a_refusal_offering(TheRefusedAct::Deleting, none, retry.clone());
+            assert_eq!(refusal.retry, None);
+            assert_eq!(refusal.the_offer, None);
+        }
+        assert_eq!(
+            retry.the_acts(),
+            Some(vec![
+                AnElevatedAct::Delete { folder: b"/data".to_vec(), name: b"old".to_vec() },
+                AnElevatedAct::Delete { folder: b"/data".to_vec(), name: b"older".to_vec() },
+            ])
+        );
+        let named = retry.as_the_box_names_it();
+        assert_eq!(named.lead.as_str(), words::DELETE);
+        assert_eq!(named.values, vec![Verbatim::new("2")]);
+        assert_eq!(named.rest.as_ref().map(|rest| rest.as_str().replace('\u{a0}', " ")), Some(words::ITEMS_WERE_REFUSED.to_string()));
+        let rename = AnAdminRetry {
+            server: "row".to_string(),
+            act: TheRetriedAct::Rename,
+            paths: vec![b"/data/a".to_vec(), b"/data/b".to_vec()],
+        };
+        assert_eq!(
+            rename.the_acts(),
+            Some(vec![AnElevatedAct::Rename { folder: b"/data".to_vec(), from: b"a".to_vec(), to: b"b".to_vec() }])
+        );
+        assert_eq!(rename.as_the_box_names_it().values, vec![Verbatim::new("/data/a")]);
+        assert_eq!(rename.the_elevatable_act(), permission::ElevatableAct::Move);
+        // Paths that do not fit the act run nothing.
+        let odd = AnAdminRetry { server: "row".to_string(), act: TheRetriedAct::Rename, paths: vec![b"/data/a".to_vec()] };
+        assert_eq!(odd.the_acts(), None);
+        // **A rename that would leave its folder, and a path refused on the
+        // desk, run nothing** (`File Browser` P6b as changed after Sol's look).
+        let away = AnAdminRetry {
+            server: "row".to_string(),
+            act: TheRetriedAct::Rename,
+            paths: vec![b"/data/a".to_vec(), b"/elsewhere/b".to_vec()],
+        };
+        assert_eq!(away.the_acts(), None);
+        let root = AnAdminRetry { server: "row".to_string(), act: TheRetriedAct::Delete, paths: vec![b"/".to_vec()] };
+        assert_eq!(root.the_acts(), None);
+        let listing = AnAdminRetry { server: "row".to_string(), act: TheRetriedAct::Listing, paths: vec![b"/root".to_vec()] };
+        assert_eq!(listing.as_the_box_names_it().lead.as_str(), words::OPEN);
+    }
+
+    /// **What the retry says**, word for word — `Design/File Browser`, the
+    /// paragraph after the offer's.
+    #[test]
+    fn the_retry_says_what_happened_and_stops() {
+        use crate::managing_files::WhatTheElevatedActCameTo as Came;
+        let read = |came: Came| {
+            what_the_retry_says(&came).map(|words| {
+                words
+                    .pieces
+                    .iter()
+                    .map(|piece| match (&piece.said, &piece.value) {
+                        (Some(said), _) => said.as_str().to_string(),
+                        (None, Some(value)) => value.as_str().to_string(),
+                        (None, None) => String::new(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .replace('\u{a0}', " ")
+            })
+        };
+        assert_eq!(read(Came::Done), None);
+        assert_eq!(read(Came::TheWrongPassword).as_deref(), Some("Wrong password. Nothing was changed."));
+        assert_eq!(read(Came::AdminAccessWasRefused).as_deref(), Some("Admin access refused."));
+        assert_eq!(read(Came::TheLandingIsTaken).as_deref(), Some("Already exists. Nothing was changed."));
+        // **Sol's finding 9: the reason is said.**
+        use crate::managing_files::WhyTheFolderWasNotRead as Why;
+        assert_eq!(
+            read(Came::TheFolderWasNotRead(Why::TheServerSaid("find: unknown predicate `-printf'\n".into()))).as_deref(),
+            Some("Could not read this folder with admin access: find: unknown predicate `-printf'")
+        );
+        assert_eq!(
+            read(Came::TheFolderWasNotRead(Why::TheReplyWasNotAFileList)).as_deref(),
+            Some("Could not read this folder with admin access: the reply was not a file list.")
+        );
+        assert_eq!(
+            read(Came::TheFolderWasNotRead(Why::TheServerSaid(String::new()))).as_deref(),
+            Some("Could not read this folder with admin access.")
+        );
+        assert_eq!(read(Came::ThePathGoesThroughALink).as_deref(), Some("Not done. The folder path could not be verified."));
+        assert_eq!(read(Came::MadeButOwnedByRoot).as_deref(), Some("Folder created, but owned by root."));
+        assert_eq!(read(Came::AnotherActRan).as_deref(), Some("Not done. Another admin action was running. Try again."));
+        assert_eq!(
+            read(Came::Failed { the_servers_words: "rm: cannot remove '/x': Read-only file system\n".into() }).as_deref(),
+            Some("Failed with admin access: rm: cannot remove '/x': Read-only file system")
+        );
+        assert_eq!(read(Came::Failed { the_servers_words: String::new() }).as_deref(), Some("Failed with admin access."));
+    }
+
+    /// **Retry with admin access, on the page**: the press sends what the
+    /// refusal carried; where the application asks for the password, Server
+    /// Setup's own box is drawn (its drawing is set-up.js's, stood in here);
+    /// and *Retry* in it sends the same retry again with the password and the
+    /// choice. **This runs the page**; it says so and is skipped where no Node
+    /// is installed. `Design/File Browser`, the paragraph after the offer's,
+    /// 2026-11-12.
+    #[test]
+    fn the_admin_retry_sends_its_act_then_the_password_through_setups_box() {
+        let folder = std::env::temp_dir().join(format!("smoozy-files-admin-retry-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for page in ["files.js", "the-value-drawn.js", "the-focus-moves.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+        }
+        for (name, text) in THE_LISTS_STAND_INS {
+            let text = if name == "harness.js" {
+                let (document, _) = text.split_once("const answers = JSON.parse").expect("the list harness's document");
+                format!("{document}{THE_ADMIN_RETRY_STEPS}")
+            } else {
+                text.to_string()
+            };
+            std::fs::write(folder.join(name), text).expect("a stand-in is written");
+        }
+        std::fs::write(
+            folder.join("set-up.js"),
+            r#"export function theAdminAccessBoxIsDrawnInto(box, asked, { answered, closes }) {
+  console.log("box " + asked.title);
+  // The press comes after the box is up, as a user's does.
+  setTimeout(() => {
+    answered("typed by the test", "while-connected");
+    closes();
+  }, 0);
+}"#,
+        )
+        .expect("set-up.js's stand-in");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the Files page was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let said = String::from_utf8_lossy(&ran.stdout).trim().to_string();
+        assert_eq!(
+            said,
+            "sent {\"server\":\"row\",\"retry\":{\"server\":\"row\",\"act\":\"delete\",\"paths\":[[47,120]]},\"password\":null,\"choice\":null}\n\
+             box This needs the server's login password\n\
+             sent {\"server\":\"row\",\"retry\":{\"server\":\"row\",\"act\":\"delete\",\"paths\":[[47,120]]},\"password\":\"typed by the test\",\"choice\":\"while-connected\"}\n\
+             boxes after 0\n\
+             the report after gone"
+        );
+    }
+
+    /// **Sol's finding 2: the press runs on the server the refusal was met
+    /// on, and a typed password is kept only once it worked.**
+    #[test]
+    fn a_retry_runs_only_on_its_own_server() {
+        let retry = AnAdminRetry { server: "server A".to_string(), act: TheRetriedAct::Delete, paths: vec![b"/data/old".to_vec()] };
+        assert!(the_retry_belongs_to(&retry, "server A"));
+        assert!(!the_retry_belongs_to(&retry, "server B"));
+        use crate::managing_files::WhatTheElevatedActCameTo as Came;
+        for kept in [Came::Done, Came::TheLandingIsTaken, Came::Failed { the_servers_words: "x".into() }, Came::ThePathGoesThroughALink] {
+            assert!(kept.the_password_worked(), "{kept:?}");
+        }
+        for not_kept in [Came::TheWrongPassword, Came::AdminAccessWasRefused, Came::APasswordIsNeeded, Came::TheConnectionWent] {
+            assert!(!not_kept.the_password_worked(), "{not_kept:?}");
+        }
+    }
+
+    /// **Sol's finding 7: the typed text becomes the erasing origin at once**,
+    /// and an empty one is no password.
+    #[test]
+    fn the_typed_password_is_taken_into_the_erasing_origin() {
+        assert!(the_typed_password_is_taken(None).is_none());
+        assert!(the_typed_password_is_taken(Some(String::new())).is_none());
+        let taken = the_typed_password_is_taken(Some("a test value".to_string())).expect("taken");
+        assert_eq!(taken.for_a_destination().expose(|bytes| bytes.to_vec()), b"a test value".to_vec());
+    }
+
+    /// **Sol's finding 8: a folder refused at a folder above it carries the
+    /// offer**, whose retry reads the folder asked for, on its own server;
+    /// with no offer, nothing rides.
+    #[test]
+    fn a_folder_refused_on_the_way_carries_the_offer() {
+        let refused_above = |offer| {
+            let mut browser = the_tab_after_the_reading(
+                TheOrder::default(),
+                "row",
+                b"/root/project",
+                None,
+                WhatTheReadingFound::NotListedForPermission(Words::with(words::NOT_PERMITTED_AT_LEAD, "/root".to_string())),
+                None,
+                false,
+            );
+            the_offer_stands_beside_the_sentence(&mut browser, "row", offer);
+            browser.listing
+        };
+        let TheListing::TheFolderWasNotRead { said, refusal } = refused_above(Offer::OfferedAndAPasswordIsAsked) else {
+            panic!("not a sentence");
+        };
+        assert_eq!(said, Words::with(words::NOT_PERMITTED_AT_LEAD, "/root".to_string()), "the sentence keeps its words");
+        let refusal = refusal.expect("the offer stands beside it");
+        assert_eq!(
+            refusal.retry,
+            Some(AnAdminRetry { server: "row".to_string(), act: TheRetriedAct::Listing, paths: vec![b"/root/project".to_vec()] })
+        );
+        assert!(refusal.the_offer.is_some());
+        let TheListing::TheFolderWasNotRead { refusal, .. } =
+            refused_above(Offer::NoOffer(WhyThereIsNoOffer::AContainersLoginDemandsAPasswordSmoozyDoesNotHold))
+        else {
+            panic!("not a sentence");
+        };
+        assert_eq!(refusal, None);
+    }
+
+    /// **Sol's finding 2, on the page: going to another server closes the
+    /// password box, and its *Retry* sends nothing to any server.** **This
+    /// runs the page**; it says so and is skipped where no Node is installed.
+    #[test]
+    fn the_password_box_never_sends_to_another_server() {
+        let folder = std::env::temp_dir().join(format!("smoozy-files-admin-switch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for page in ["files.js", "the-value-drawn.js", "the-focus-moves.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+        }
+        for (name, text) in THE_LISTS_STAND_INS {
+            let text = if name == "harness.js" {
+                let (document, _) = text.split_once("const answers = JSON.parse").expect("the list harness's document");
+                format!("{document}{THE_ADMIN_RETRY_SWITCH_STEPS}")
+            } else {
+                text.to_string()
+            };
+            std::fs::write(folder.join(name), text).expect("a stand-in is written");
+        }
+        std::fs::write(
+            folder.join("set-up.js"),
+            r#"export function theAdminAccessBoxIsDrawnInto(box, asked, { answered, closes }) {
+  console.log("box " + asked.title);
+  globalThis.theBoxesAnswer = answered;
+}"#,
+        )
+        .expect("set-up.js's stand-in");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the Files page was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let said = String::from_utf8_lossy(&ran.stdout).trim().to_string();
+        assert_eq!(
+            said,
+            "sent row\n\
+             box This needs the server's login password\n\
+             boxes after the move 0\n\
+             sent 1 in all"
+        );
+    }
+
+    const THE_ADMIN_RETRY_SWITCH_STEPS: &str = r#"let sent = 0;
+globalThis.window = {
+  innerWidth: 1000, innerHeight: 800,
+  __TAURI__: {
+    core: {
+      invoke(command, what) {
+        if (command === "an_act_is_retried_with_admin_access") {
+          sent += 1;
+          console.log("sent " + what.server);
+          return Promise.resolve({ is: "asks-for-the-password", asked: { title: "This needs the server's login password" } });
+        }
+        return new Promise(() => {});
+      },
+    },
+  },
+};
+const page = await import("./files.js");
+const host = anElement("div");
+body.appendChild(host);
+globalThis.theTab.itIsDrawn(host);
+globalThis.theTab.itIsShowing("row");
+const settled = () => new Promise((done) => setTimeout(done, 0));
+await settled();
+page.theAdminRetryIsAskedFor({ server: "row", act: "delete", paths: [[47, 120]] }, null, null);
+for (let turn = 0; turn < 10; turn += 1) await settled();
+globalThis.theTab.itIsShowing("another");
+for (let turn = 0; turn < 5; turn += 1) await settled();
+const theBoxes = () => everyUnder(host, (one) => one.classList && one.classList.contains("modal"), []);
+console.log("boxes after the move " + theBoxes().length);
+if (globalThis.theBoxesAnswer) globalThis.theBoxesAnswer("typed by the test", "while-connected");
+for (let turn = 0; turn < 10; turn += 1) await settled();
+console.log("sent " + sent + " in all");
+"#;
+
+    const THE_ADMIN_RETRY_STEPS: &str = r#"const sent = [];
+let asked = 0;
+globalThis.window = {
+  innerWidth: 1000, innerHeight: 800,
+  __TAURI__: {
+    core: {
+      invoke(command, what) {
+        if (command === "an_act_is_retried_with_admin_access") {
+          sent.push(what);
+          console.log("sent " + JSON.stringify(what));
+          asked += 1;
+          if (asked === 1) {
+            return Promise.resolve({ is: "asks-for-the-password", asked: { title: "This needs the server's login password" } });
+          }
+          return Promise.resolve({ is: "done" });
+        }
+        return new Promise(() => {});
+      },
+    },
+  },
+};
+const page = await import("./files.js");
+const host = anElement("div");
+body.appendChild(host);
+globalThis.theTab.itIsDrawn(host);
+globalThis.theTab.itIsShowing("row");
+const settled = () => new Promise((done) => setTimeout(done, 0));
+await settled();
+// **The part-way delete's report on the line, with its offer**, as the page
+// draws it before the press (the second live pass, new fault 4).
+const theReport = anElement("div");
+theReport.className = "fnotyet";
+theReport.dataset.act = "act";
+theReport.textContent = "0 deleted, 3 failed, 2 skipped. Retry with admin access";
+host.appendChild(theReport);
+page.theAdminRetryIsAskedFor({ server: "row", act: "delete", paths: [[47, 120]] }, null, null);
+for (let turn = 0; turn < 10; turn += 1) await settled();
+const theBoxes = () => everyUnder(host, (one) => one.classList && one.classList.contains("modal"), []);
+console.log("boxes after " + theBoxes().length);
+const theLineNow = host.querySelector(".fnotyet");
+console.log("the report after " + (theLineNow && !theLineNow.hidden ? "shown" : "gone"));
+"#;
+
+    /// **Escape on an upload's already-there box is *Stop***, and the upload
+    /// ends as *Stop* ends it — the four questions, batch 2, fix 3 (scout
+    /// 1.12): Escape closed the box with no answer, and the upload waited for
+    /// one nobody could give, reading as under way for good. `Design/Whole app
+    /// § Keyboard shortcuts`, the paragraph of 2026-11-11. **This runs the page**; it
+    /// says so and is skipped where no Node is installed.
+    #[test]
+    fn escape_on_the_upload_question_answers_stop() {
+        let question = TheCollisionQuestion {
+            headline: Words::plain("2 files already there"),
+            compared_by: Prose::new("Compared by name."),
+            names: vec![Verbatim::new("a.png".to_string()), Verbatim::new("b.png".to_string())],
+            and_more: None,
+            placed_by_the_check: None,
+            live_jobs: None,
+            interrupted: None,
+            answers: ["replace", "keep-both", "skip-existing", "stop"]
+                .into_iter()
+                .map(|answer| AnAnswer {
+                    answer: Verbatim::new(answer.to_string()),
+                    label: Prose::new(answer),
+                    put_forward: false,
+                })
+                .collect(),
+        };
+        let answers = serde_json::json!({ "question": question }).to_string();
+        let folder = std::env::temp_dir().join(format!("smoozy-files-escape-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for page in ["files.js", "the-value-drawn.js", "the-focus-moves.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+        }
+        for (name, text) in THE_LISTS_STAND_INS {
+            let text = if name == "harness.js" {
+                let (document, _) = text.split_once("const answers = JSON.parse").expect("the list harness's document");
+                // **A key is pressed on an element**, which the list's
+                // document has no need of.
+                let document = document.replacen(
+                    "focus() {},",
+                    "focus() {},\n    press(kind, event) { for (const handler of listeners.get(kind) || []) handler(event); },",
+                    1,
+                );
+                format!("{document}{THE_ESCAPE_STEPS}")
+            } else {
+                text.to_string()
+            };
+            std::fs::write(folder.join(name), text).expect("a stand-in is written");
+        }
+        std::fs::write(folder.join("answers.json"), answers).expect("the answers are written");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the Files page was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let said = String::from_utf8_lossy(&ran.stdout).trim().to_string();
+        assert_eq!(
+            said,
+            "boxes before 1\nsent the_already_exists_question_was_answered {\"request\":\"operation:1\",\"answer\":\"stop\"}\nboxes after 0"
+        );
+    }
+
+    const THE_ESCAPE_STEPS: &str = r#"const answers = JSON.parse(readFileSync("answers.json", "utf8"));
+const sent = [];
+globalThis.window = {
+  innerWidth: 1000, innerHeight: 800,
+  __TAURI__: {
+    core: {
+      invoke(command, asked) {
+        if (command === "the_already_exists_question_was_answered") {
+          sent.push(command + " " + JSON.stringify(asked));
+          return Promise.resolve({ what: "NothingHappened" });
+        }
+        return new Promise(() => {});
+      },
+    },
+  },
+};
+const page = await import("./files.js");
+const host = anElement("div");
+body.appendChild(host);
+globalThis.theTab.itIsDrawn(host);
+const settled = () => new Promise((done) => setTimeout(done, 0));
+const theBoxes = () => everyUnder(host, (one) => one.classList && one.classList.contains("modal"), []);
+page.theAlreadyExistsBox(answers.question, "operation:1");
+console.log("boxes before " + theBoxes().length);
+theBoxes()[0].press("keydown", { key: "Escape", preventDefault() {}, stopPropagation() {} });
+await settled();
+for (const one of sent) console.log("sent " + one);
+console.log("boxes after " + theBoxes().length);
+"#;
 
     /// **What `web/files.js` imports, standing in**, and the harness. The
     /// document is the least the page needs — the shape `src/surface/the_queue.rs`'s
@@ -8593,6 +10500,7 @@ console.log("another folder: " + list().children.filter((one) => one.classList.c
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             // **The list test's document, and this test's own scenario after
@@ -8710,6 +10618,20 @@ console.log(`handed over while put away: asked ${now.tab}`);
 
         let toolbar = the_toolbar(None);
         let word = |prose: &Prose| serde_json::to_value(prose).ok().and_then(|one| one.as_str().map(String::from)).unwrap_or_default();
+        // **Refresh is the toolbar's last icon** since the twenty-ninth notes,
+        // note 2, at the right end after the space that grows, so this
+        // left-to-right count does not place it; the real-browser test
+        // `twenty_ninth_2_refresh_is_last_on_the_toolbar_and_its_icon_is_centred_in_a_real_browser`
+        // holds its place. The file manager's own seven are the ones here.
+        let refresh = word(&toolbar.refresh);
+        for case in ["nothing", "blend", "picture"] {
+            assert_eq!(places(case, "icons").last().map(|(name, _)| name.clone()), Some(refresh.clone()), "Refresh is last with {case} chosen");
+        }
+        // **Paste's held room is no icon** (UI consistency, finding 25): it
+        // has no name, and it keeps Delete's place; the places below hold it.
+        let places = |case: &str, what: &str| -> Vec<(String, i64)> {
+            places(case, what).into_iter().filter(|(name, _)| *name != refresh && !name.is_empty()).collect()
+        };
         let icons = places("nothing", "icons");
         let names: Vec<String> = icons.iter().map(|(name, _)| name.clone()).collect();
         let expected: Vec<String> = [&toolbar.upload, &toolbar.download, &toolbar.new_folder, &toolbar.rename, &toolbar.cut, &toolbar.copy, &toolbar.delete]
@@ -8829,6 +10751,7 @@ console.log(`handed over while put away: asked ${now.tab}`);
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         // **The list test's stand-ins and its document**, with this test's own
         // steps in place of the list test's.
@@ -9160,6 +11083,8 @@ console.log(JSON.stringify(measured));
             the_sweep_left_behind: Vec::new(),
             record: Some(record),
             record_trouble: None,
+            the_record_is_newer_than_this_copy: false,
+            the_record_is_damaged: false,
             diary: None,
             declarations: smoozy_reporting::lines::Declarations::new(),
             what_modules_declare: crate::presentation::declarations::TheDeclarations::default(),
@@ -9316,6 +11241,7 @@ console.log(JSON.stringify(measured));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -9485,6 +11411,9 @@ globalThis.document = {
   createTextNode: (text) => ({ text, children: [] }),
   addEventListener(kind, handler) { if (kind === "keydown") keys.push(handler); },
   removeEventListener() {},
+  // The page asks whether a box is open before it takes a drop (the Rough
+  // what-if answers, share 1, 24).
+  querySelectorAll: (selector) => body.querySelectorAll(selector),
   body,
 };
 const answers = JSON.parse(readFileSync("answers.json", "utf8"));
@@ -9615,6 +11544,199 @@ console.log(JSON.stringify(out));
         });
         row.last_confirmed_installation_identity = Some(installation.as_text());
         row
+    }
+
+    /// **Batch 2 of the Bad what-if answers, 160, 161, 162, 164 and 182**:
+    /// deleting, renaming or moving Smoozy's own folder — the root, anything
+    /// in it, a folder holding it, or a package area set apart — or the
+    /// login's SSH folder names it in the box, which a rename or a move is
+    /// then asked for with no live job behind it. A copy disturbs nothing it
+    /// copies, and an ordinary folder names neither. Before this, every one of
+    /// these went with the ordinary warning alone, or with none.
+    /// **`File Browser` M6b, the leftovers of the Rough what-if answers
+    /// (449): a move or a copy refused part-way, whose one reading where it
+    /// lands found no space left, says *Server disk is full.* after its
+    /// counts**; one whose reading found space, or took none, says the counts
+    /// alone, as before.
+    #[test]
+    fn rough_leftovers_449_a_move_or_copy_onto_a_full_disk_says_so() {
+        use crate::managing_files::{WhatTheCopyCameTo as Copy, WhatThePasteCameTo as Paste};
+        let entries = [b"/home/ubuntu/project".to_vec()];
+        let full = Identity::issue(IdentityKind::Operation).expect("randomness");
+        let not = Identity::issue(IdentityKind::Operation).expect("randomness");
+        crate::managing_files::the_disk_was_full_at(&full);
+        let moved = |record: &Identity| match what_the_paste_says(
+            &Paste::Ran { record: record.clone(), done: 3, refused: 9, not_done: 0, never_learned: 0, crossings: 0, crossings_want_an_update: false },
+            &entries,
+            b"/mnt/data",
+            &[],
+            &[],
+            TheCollidingAct::APasteAfterACut,
+        ) {
+            AnActsAnswer::Said { said } => in_plain(&said),
+            _ => panic!("a move refused part-way was called done"),
+        };
+        assert_eq!(moved(&full), "3 moved, 9 failed, 0 skipped. Server disk is full.");
+        assert_eq!(moved(&not), "3 moved, 9 failed, 0 skipped.");
+        let copied = |record: &Identity| match what_the_copy_says(
+            &Copy::Ran { record: record.clone(), done: 3, refused: 9, not_done: 0, never_learned: 0 },
+            &entries,
+            b"/mnt/data",
+            &[],
+            &[],
+        ) {
+            AnActsAnswer::Said { said } => in_plain(&said),
+            _ => panic!("a copy refused part-way was called done"),
+        };
+        assert_eq!(copied(&full), "3 copied, 9 failed, 0 skipped. Server disk is full.");
+        assert_eq!(copied(&not), "3 copied, 9 failed, 0 skipped.");
+    }
+
+    /// **`File Browser` M3b, the leftovers of the Rough what-if answers
+    /// (181): a delete inside a system folder is named in red in the delete
+    /// box**, so the user is warned before the refusal that offers *Retry
+    /// with admin access*. Before, `/usr` went with the ordinary warning
+    /// alone, which can be switched off.
+    #[test]
+    fn rough_leftovers_181_a_delete_in_a_system_folder_is_warned_first() {
+        let named = |path: &[u8]| a_system_folder_among(&[path.to_vec()]).is_some();
+        for system in [b"/usr".as_slice(), b"/usr/", b"/usr/lib/x86_64-linux-gnu", b"/etc/ssh/sshd_config", b"/boot", b"/var/lib/dpkg"] {
+            assert!(named(system), "{}", String::from_utf8_lossy(system));
+        }
+        for ordinary in [b"/home/ubuntu/scenes".as_slice(), b"/root/smoozy", b"/mnt/data", b"/opt/textures", b"/usrdata", b"/etcetera"] {
+            assert!(!named(ordinary), "{}", String::from_utf8_lossy(ordinary));
+        }
+        let the_box = the_delete_box_from(&[b"/home/ubuntu/a.png".to_vec(), b"/usr/local".to_vec()], &[], &[], None, None, true);
+        let line = the_box.the_system_folder.expect("the line");
+        assert_eq!(in_plain(&line.named), "Includes a system folder.");
+        assert_eq!(
+            line.said.map(|said| said.as_str().replace('\u{a0}', " ")),
+            Some("Deleting it can stop the server from working.".to_string())
+        );
+        // **The page asks even with the delete warning switched off**, as it
+        // does for Smoozy's own files.
+        let page = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/web/files.js")).expect("the page");
+        assert!(page.contains("&& !reading.the_system_folder"), "the switched-off box skips the system folder line");
+        assert!(page.contains("aWarning(reading.the_system_folder, true)"), "the page does not draw the line in red");
+    }
+
+    /// **`File Browser` M3c, the runner's ruling on 181: the system-folder
+    /// line stands beside *Retry with admin access* too** — on a delete's
+    /// refusal that offers the retry and would reach a system folder, and on
+    /// no other.
+    #[test]
+    fn rough_leftovers_181_the_system_folder_line_stands_beside_the_admin_retry() {
+        let retry = |paths: &[&[u8]], act| AnAdminRetry {
+            server: "row".to_string(),
+            act,
+            paths: paths.iter().map(|path| path.to_vec()).collect(),
+        };
+        let offered = a_refusal_offering(
+            TheRefusedAct::Deleting,
+            Offer::OfferedAndAPasswordIsAsked,
+            retry(&[b"/home/ubuntu/a.png", b"/usr/local/lib"], TheRetriedAct::Delete),
+        );
+        let line = offered.the_system_folder.expect("the line beside the retry");
+        assert_eq!(in_plain(&line.named), "Includes a system folder.");
+        assert_eq!(
+            line.said.map(|said| said.as_str().replace('\u{a0}', " ")),
+            Some("Deleting it can stop the server from working.".to_string())
+        );
+        // Not where nothing reaches a system folder, not with no offer, and
+        // not for an act that deletes nothing.
+        let ordinary = a_refusal_offering(
+            TheRefusedAct::Deleting,
+            Offer::OfferedAndAPasswordIsAsked,
+            retry(&[b"/home/ubuntu/a.png"], TheRetriedAct::Delete),
+        );
+        assert_eq!(ordinary.the_system_folder, None);
+        let no_offer = a_refusal_offering(
+            TheRefusedAct::Deleting,
+            Offer::NoOffer(WhyThereIsNoOffer::TheLoginIsAlreadyRoot),
+            retry(&[b"/usr/local/lib"], TheRetriedAct::Delete),
+        );
+        assert_eq!(no_offer.the_system_folder, None);
+        let a_folder = a_refusal_offering(
+            TheRefusedAct::MakingAFolder,
+            Offer::OfferedAndAPasswordIsAsked,
+            retry(&[b"/usr/local/new"], TheRetriedAct::NewFolder),
+        );
+        assert_eq!(a_folder.the_system_folder, None);
+        // **The page draws it in red under the refusal on the line.**
+        let page = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/web/files.js")).expect("the page");
+        assert!(
+            page.contains("if (refusal.the_system_folder) told.appendChild(aWarning(refusal.the_system_folder, true));"),
+            "the line's refusal does not draw the system folder in red"
+        );
+    }
+
+    #[test]
+    fn bad_batch_2_smoozys_own_files_and_the_ssh_keys_are_named_before_they_go() {
+        let server = Identity::issue(IdentityKind::LocalServer).expect("randomness");
+        let installation = Identity::issue(IdentityKind::Installation).expect("randomness");
+        let mut row = a_placed_row(&server, &installation);
+        let relies = WhatThisServerReliesOn::of(&row, Some(b"/root/"));
+        assert_eq!(relies.the_ssh_folder.as_deref(), Some(b"/root/.ssh".as_slice()));
+        let named = |paths: &[&[u8]]| {
+            let paths: Vec<Vec<u8>> = paths.iter().map(|path| path.to_vec()).collect();
+            let (own, keys) = relies.the_lines_for(&paths);
+            (own.is_some(), keys.is_some())
+        };
+        for own in [
+            b"/ephemeral/smoozy".as_slice(),
+            b"/ephemeral/smoozy/",
+            b"/ephemeral/smoozy/package",
+            b"/ephemeral/smoozy/job-records",
+            b"/ephemeral/smoozy/.smoozy-root",
+            b"/ephemeral",
+        ] {
+            assert_eq!(named(&[own]), (true, false), "{}", String::from_utf8_lossy(own));
+        }
+        for keys in [b"/root/.ssh".as_slice(), b"/root/.ssh/authorized_keys"] {
+            assert_eq!(named(&[keys]), (false, true), "{}", String::from_utf8_lossy(keys));
+        }
+        assert_eq!(named(&[b"/root"]), (false, true));
+        assert_eq!(named(&[b"/"]), (true, true));
+        for neither in [b"/ephemeral/smoozy-old".as_slice(), b"/root/.sshkeep", b"/root/scenes"] {
+            assert_eq!(named(&[neither]), (false, false), "{}", String::from_utf8_lossy(neither));
+        }
+
+        // The words, in the delete box and the rename box alike, read
+        // without the typography point's spaces and apostrophes.
+        let plain = |text: &str| text.replace('\u{a0}', " ").replace('\u{2019}', "'");
+        let (own, _) = relies.the_lines_for(&[b"/ephemeral/smoozy".to_vec()]);
+        let own = own.expect("the line");
+        assert_eq!(plain(&own.named.said()), "Includes Smoozy's own files.");
+        assert_eq!(own.said.as_ref().map(|said| plain(said.as_str())).as_deref(), Some("Setup and jobs on this server need them."));
+        let (_, keys) = relies.the_lines_for(&[b"/root/.ssh".to_vec()]);
+        let keys = keys.expect("the line");
+        assert_eq!(plain(&keys.named.said()), "Includes this server's SSH keys.");
+        assert_eq!(keys.said.as_ref().map(|said| plain(said.as_str())).as_deref(), Some("Smoozy may not be able to connect again."));
+
+        let rename = relies
+            .added_to(None, "rename", &[b"/ephemeral/smoozy".to_vec()], None)
+            .expect("a rename of Smoozy's folder is asked about");
+        assert!(rename.live_jobs.is_none() && rename.smoozys_own_files.is_some());
+        assert_eq!(rename.question.values(), vec!["smoozy"]);
+        let moved = relies
+            .added_to(None, "move", &[b"/root/.ssh".to_vec()], Some(b"/tmp"))
+            .expect("a move of the keys is asked about");
+        assert!(moved.the_ssh_keys.is_some());
+        assert!(relies.added_to(None, "copy", &[b"/ephemeral/smoozy".to_vec()], Some(b"/tmp")).is_none());
+        assert!(relies.added_to(None, "rename", &[b"/root/scenes".to_vec()], None).is_none());
+
+        // A package area set apart is Smoozy's too.
+        row.recorded_machine_root = Some(smoozy_servers::store::RecordedMachineRoot {
+            path: "/mnt/data/smoozy".into(),
+            the_package_areas_own_location: Some("/root/smoozy".into()),
+            read_under: installation.as_text(),
+        });
+        let apart = WhatThisServerReliesOn::of(&row, None);
+        assert!(apart.the_ssh_folder.is_none(), "no home read, no keys named");
+        assert!(apart.the_lines_for(&[b"/root/smoozy/package".to_vec()]).0.is_some());
+        assert!(apart.the_lines_for(&[b"/mnt/data/smoozy/blender".to_vec()]).0.is_some());
+        // A row never set up names nothing of Smoozy's.
+        assert!(WhatThisServerReliesOn::of(&a_server_row("fresh"), None).smoozys_own_folders.is_empty());
     }
 
     /// **A provisional job record, as a submission writes it**, naming its
@@ -9926,7 +12048,7 @@ console.log(JSON.stringify(out));
         use smoozy_file_browser::managing::WhyTheNameIsRefused as Why;
         // **The typography point binds short words**, so the sentences are
         // compared with its no-break spaces read as spaces.
-        let plainly = |words: Words| words.said().replace('\u{a0}', " ");
+        let plainly = |words: Words| words.said().replace('\u{a0}', " ").replace('’', "'");
         let on_the_row = |answer: AnActsAnswer| match answer {
             AnActsAnswer::OnTheRow { editing, refusal } => (editing, refusal),
             other => panic!("the row was let go of: {other:?}"),
@@ -10031,6 +12153,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -10256,6 +12379,7 @@ console.log(JSON.stringify(out));
                     refused: 0,
                     not_attempted: 0,
                     never_learned: 0,
+                    refused_for_permission: 0,
                 },
                 &[victim],
             ),
@@ -10275,6 +12399,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -10345,6 +12470,7 @@ console.log(JSON.stringify(out));
                     refused: 0,
                     not_attempted: 0,
                     never_learned: 0,
+                    refused_for_permission: 0,
                 },
                 &[victim],
             ),
@@ -10364,6 +12490,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -10517,6 +12644,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -10701,6 +12829,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -10960,6 +13089,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "render-settings.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if !["harness.js", "render-settings.js"].contains(&name) {
@@ -10993,7 +13123,8 @@ export async function theFormatBoxIsOpenedForAFile() {}"#,
             (
                 "the-underway-shape.js",
                 r#"export function theMarkOverAPane() { return document.createElement("div"); }
-export function theMarkOnAControl() {} export function theMarkOnARow() { return document.createElement("span"); }"#,
+export function theMarkOnAControl() {} export function theMarkOnARow() { return document.createElement("span"); }
+export function theElapsed() { return document.createElement("span"); }"#,
             ),
             ("servers.js", "export function theMomentReads(seconds) { return `at ${seconds}`; }"),
             ("the-rail.js", "export const THE_QUEUE = 'queueview'; export function theCurrentPlaceIs() {}"),
@@ -11144,6 +13275,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -11386,6 +13518,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -11478,6 +13611,143 @@ out.dropped = { asked: taken(), boxes: boxes() };
 console.log(JSON.stringify(out));
 "#;
 
+    /// **A drop on a folder's row goes into that folder** — `Design/File
+    /// Browser § Uploading` and `File Browser` H3a's build detail of
+    /// 2026-11-12 (the four questions, scout 2.19). Run under Node over the
+    /// application's own answers, at a window scale of 2: the shell's
+    /// physical position is halved and the row there taken; the border's line
+    /// is asked for that folder while the pointer is over it, and the drop
+    /// uploads into it. A drop anywhere else goes into the folder being
+    /// browsed, as before. Skipped, and says so, where no Node is installed.
+    #[test]
+    fn sixth_part_2_19_a_drop_on_a_folder_row_goes_into_that_folder() {
+        let here: &[u8] = b"/home/ubuntu";
+        let mut reading = the_tab("row", here, None, a_folder_being_read(here), None, None, false);
+        reading.a_reading_follows = true;
+        let rows = the_tab_after_the_reading(
+            TheOrder::default(),
+            "row",
+            here,
+            None,
+            WhatTheReadingFound::TheFolder { entries: vec![an_entry("renders", Kind::Folder, 0)], free: None },
+            Some(ObservedValue::Connected),
+            false,
+        );
+        let picked = [std::path::PathBuf::from("/Users/a/one.png")];
+        let answers = serde_json::json!({
+            "reading": reading,
+            "rows": rows,
+            "go": the_upload_goes_with(&picked),
+        });
+        let folder = std::env::temp_dir().join(format!("smoozy-files-drop-on-a-folder-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for page in ["files.js", "the-value-drawn.js", "the-focus-moves.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+        }
+        for (name, text) in THE_LISTS_STAND_INS {
+            if name != "harness.js" {
+                std::fs::write(folder.join(name), text).expect("a stand-in is written");
+            }
+        }
+        let the_document = &THE_HIDDEN_FILES_HARNESS
+            [..THE_HIDDEN_FILES_HARNESS.find("const answers = JSON.parse").expect("the shared document")];
+        std::fs::write(folder.join("harness.js"), format!("{the_document}{THE_DROP_ON_A_FOLDER_HARNESS}"))
+            .expect("the harness is written");
+        std::fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers are written");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the Files page was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value =
+            serde_json::from_str(String::from_utf8_lossy(&ran.stdout).trim()).expect("the harness prints one answer");
+        let wanted = serde_json::json!({
+            "overTheFolder": [{ "command": "what_is_being_dropped", "folder": "/home/ubuntu/renders" }],
+            "stillOverIt": [],
+            "droppedOnIt": [
+                { "command": "files_were_dropped" },
+                { "command": "the_upload_is_confirmed", "folder": "/home/ubuntu/renders" },
+            ],
+            "droppedElsewhere": [
+                { "command": "files_were_dropped" },
+                { "command": "the_upload_is_confirmed", "folder": "/home/ubuntu" },
+            ],
+        });
+        assert_eq!(got, wanted, "a drop on a folder's row did not go into that folder");
+    }
+
+    /// **The scenario for
+    /// [`sixth_part_2_19_a_drop_on_a_folder_row_goes_into_that_folder`]**:
+    /// the point (100, 40) in the page's own pixels is over the *renders*
+    /// row's name; every other point is over the list's empty part.
+    const THE_DROP_ON_A_FOLDER_HARNESS: &str = r#"const answers = JSON.parse(readFileSync("answers.json", "utf8"));
+let asked = [];
+let theDrop = null;
+const named = (bytes) => String.fromCharCode(...bytes);
+globalThis.window = {
+  innerWidth: 1000, innerHeight: 800, devicePixelRatio: 2,
+  __TAURI__: {
+    core: {
+      invoke(command, args) {
+        if (command === "the_files_tab") return Promise.resolve(answers.reading);
+        if (command === "the_folder_is_read") return Promise.resolve(answers.rows);
+        if (command === "the_saved_with_version_is_read") return Promise.resolve(null);
+        if (command === "what_is_being_dropped") {
+          asked.push({ command, folder: named(args.folder) });
+          return new Promise(() => {});
+        }
+        if (command === "files_were_dropped") {
+          asked.push({ command });
+          return Promise.resolve(answers.go);
+        }
+        if (command === "the_upload_is_confirmed") {
+          asked.push({ command, folder: named(args.folder) });
+          return new Promise(() => {});
+        }
+        return new Promise(() => {});
+      },
+    },
+    webviewWindow: {
+      getCurrentWebviewWindow: () => ({
+        onDragDropEvent(handler) { theDrop = handler; return Promise.resolve(() => {}); },
+      }),
+    },
+  },
+};
+await import("./files.js");
+const host = anElement("div");
+body.appendChild(host);
+globalThis.theTab.itIsDrawn(host);
+const settled = async () => { for (let at = 0; at < 6; at += 1) await new Promise((done) => setTimeout(done, 0)); };
+globalThis.theTab.itIsShowing("row");
+await settled();
+const theRow = host.querySelectorAll("button.frow")[0];
+const itsName = theRow.querySelector("span.fname");
+const theCover = host.querySelector("div.dropzone");
+globalThis.document.elementsFromPoint = (x, y) => (x === 100 && y === 40 ? [theCover, itsName, theRow, host] : [theCover, host]);
+const taken = () => { const out = asked.slice(); asked = []; return out; };
+asked = [];
+const out = {};
+theDrop({ payload: { type: "enter", paths: ["/Users/a/one.png"], position: { x: 200, y: 80 } } });
+await settled();
+out.overTheFolder = taken();
+theDrop({ payload: { type: "over", position: { x: 200, y: 80 } } });
+await settled();
+out.stillOverIt = taken();
+theDrop({ payload: { type: "drop", paths: ["/Users/a/one.png"], position: { x: 200, y: 80 } } });
+await settled();
+out.droppedOnIt = taken();
+theDrop({ payload: { type: "drop", paths: ["/Users/a/one.png"], position: { x: 20, y: 700 } } });
+await settled();
+out.droppedElsewhere = taken();
+console.log(JSON.stringify(out));
+"#;
+
     /// **The line above the list belongs to the server it was said on**
     /// (`Design/File Browser § The list`; the Creator's notes 2 and 3 on 0.1.8,
     /// step 10c piece 1), run under Node over the application's own answers:
@@ -11526,6 +13796,7 @@ console.log(JSON.stringify(out));
                     refused: 0,
                     not_attempted: 0,
                     never_learned: 0,
+                    refused_for_permission: 0,
                 },
                 &[victim],
             ),
@@ -11536,6 +13807,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -11629,6 +13901,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -11711,6 +13984,542 @@ out.backAgain = line();
 console.log(JSON.stringify(out));
 "#;
 
+    /// **Files stays in the folder it shows** — `Design/File Browser § The
+    /// list`, added 2026-11-13 (the Creator's notes on the test copy of
+    /// 2026-11-12, note 1: *"Something makes the file browser reset to the /
+    /// folder after an upload"*). `web/files.js` runs under Node, and every
+    /// reading it asks for waits until the scenario answers it, the way the
+    /// record held by an upload holds a reading up. **An older reading of `/`
+    /// that comes back after the user opened `/root`, uploaded into it and saw
+    /// the upload end must not take Files back to `/`**: neither the tab's
+    /// answer nor the rows' reading, the second asked for the folder Files
+    /// opens on. Skipped, and says so, where no Node is installed.
+    #[test]
+    fn files_stays_in_the_folder_it_shows_when_an_older_reading_comes_back() {
+        let top: &[u8] = b"/";
+        let root: &[u8] = b"/root";
+        let reading_of = |here: &[u8]| {
+            let mut reading = the_tab("row", here, None, a_folder_being_read(here), None, None, false);
+            reading.a_reading_follows = true;
+            reading
+        };
+        let rows_of = |here: &[u8]| {
+            the_tab_after_the_reading(
+                TheOrder::default(),
+                "row",
+                here,
+                None,
+                WhatTheReadingFound::TheFolder { entries: a_folder_with_hidden_names(), free: None },
+                Some(ObservedValue::Connected),
+                false,
+            )
+        };
+        let ended = what_it_came_to(
+            &WhatTheUploadCameTo { uploaded: 1, skipped: 0, failed: Vec::new(), did_not_finish: 0, refused: Vec::new() },
+            root,
+        );
+        let answers = serde_json::json!({
+            "top": { "reading": reading_of(top), "rows": rows_of(top) },
+            "root": { "reading": reading_of(root), "rows": rows_of(root) },
+            "rootBytes": root,
+            "ended": ended,
+        });
+        let folder = std::env::temp_dir().join(format!("smoozy-files-stays-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for page in ["files.js", "the-value-drawn.js", "the-focus-moves.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+        }
+        for (name, text) in THE_LISTS_STAND_INS {
+            if name != "harness.js" {
+                std::fs::write(folder.join(name), text).expect("a stand-in is written");
+            }
+        }
+        std::fs::write(
+            folder.join("event-route.js"),
+            "export function whenTold(kind, handler) { (globalThis.told ||= {})[kind] = handler; }",
+        )
+        .expect("the route's stand-in");
+        let the_document = &THE_HIDDEN_FILES_HARNESS
+            [..THE_HIDDEN_FILES_HARNESS.find("const answers = JSON.parse").expect("the shared document")];
+        std::fs::write(folder.join("harness.js"), format!("{the_document}{THE_STAYING_HARNESS}"))
+            .expect("the harness is written");
+        std::fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers are written");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the Files page was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value =
+            serde_json::from_str(String::from_utf8_lossy(&ran.stdout).trim()).expect("the harness prints one answer");
+        let wanted = serde_json::json!({
+            "afterTheUpload": "/root",
+            "afterAnOlderAnswer": "/root",
+            "afterAnOlderReading": "/root",
+            "theLine": "Uploaded 1 file into /root.",
+        });
+        assert_eq!(got, wanted);
+    }
+
+    /// **The scenario for [`files_stays_in_the_folder_it_shows_when_an_older_reading_comes_back`]**.
+    const THE_STAYING_HARNESS: &str = r#"const answers = JSON.parse(readFileSync("answers.json", "utf8"));
+const named = (args) => (args && args.folder ? String.fromCharCode(...args.folder) : null);
+const theOne = (args) => (named(args) === "/root" ? answers.root : answers.top);
+const waiting = [];
+globalThis.window = {
+  innerWidth: 1000, innerHeight: 800,
+  __TAURI__: {
+    core: {
+      invoke(command, args) {
+        if (command === "the_files_tab" || command === "the_folder_is_read") {
+          return new Promise((done) => waiting.push({ command, args, done }));
+        }
+        if (command === "the_saved_with_version_is_read") return Promise.resolve(null);
+        if (command === "what_the_upload_came_to") return Promise.resolve(answers.ended);
+        return new Promise(() => {});
+      },
+    },
+  },
+};
+const page = await import("./files.js");
+const host = anElement("div");
+body.appendChild(host);
+globalThis.theTab.itIsDrawn(host);
+const settled = async () => { for (let at = 0; at < 6; at += 1) await new Promise((done) => setTimeout(done, 0)); };
+const plainly = (text) => (text == null ? text : text.replace(/\u00A0/g, " "));
+const line = () => { const one = host.querySelector(".fnotyet"); return one && !one.hidden && one.textContent ? plainly(one.textContent) : null; };
+const shows = async () => { globalThis.theTab.itIsShowing("server-1"); await settled(); };
+const answered = async (command, where) => {
+  const at = waiting.findIndex((one) => one.command === command && named(one.args) === where);
+  if (at < 0) throw new Error(`nothing waits on ${command} for ${where}`);
+  const [one] = waiting.splice(at, 1);
+  one.done(command === "the_files_tab" ? theOne(one.args).reading : theOne(one.args).rows);
+  await settled();
+};
+const bothAnswered = async (where) => { await answered("the_files_tab", where); await answered("the_folder_is_read", where); };
+// **Where Files stands**: the folder the next showing asks for, which is the
+// folder the page holds. Answered, so it does not wait on the next step.
+const whereFilesStands = async () => {
+  await shows();
+  const asked = waiting.filter((one) => one.command === "the_files_tab").pop();
+  const where = named(asked.args);
+  await bothAnswered(where);
+  return where;
+};
+const out = {};
+// The server opens on `/`, read whole.
+await shows();
+await answered("the_files_tab", null);
+await answered("the_folder_is_read", null);
+// The server's page is drawn again while an upload holds the record, so this
+// reading of `/` waits.
+await shows();
+// The user opens `/root`, and it is read.
+page.theBrowserIsOpenedAt("server-1", answers.rootBytes);
+await settled();
+await bothAnswered("/root");
+// The upload into `/root` ends, and the folder is read again.
+globalThis.told["files:the-answer"]({ said: { what: "the-upload-ended", server: "server-1", request: "r1" } });
+await settled();
+await bothAnswered("/root");
+out.theLine = line();
+out.afterTheUpload = await whereFilesStands();
+// The record lets go, and the older reading of `/` comes back.
+await answered("the_files_tab", "/");
+if (waiting.some((one) => one.command === "the_folder_is_read" && named(one.args) === "/")) await answered("the_folder_is_read", "/");
+out.afterAnOlderAnswer = await whereFilesStands();
+// **The rows of the first showing, asked for no folder**, held up while the
+// user opens `/root`, then let go.
+globalThis.theTab.itIsShowing("server-2");
+await settled();
+await answered("the_files_tab", null);
+page.theBrowserIsOpenedAt("server-2", answers.rootBytes);
+await settled();
+await bothAnswered("/root");
+await answered("the_folder_is_read", null);
+const showsTwo = async () => { globalThis.theTab.itIsShowing("server-2"); await settled(); };
+await showsTwo();
+const asked = waiting.filter((one) => one.command === "the_files_tab").pop();
+out.afterAnOlderReading = named(asked.args);
+console.log(JSON.stringify(out));
+"#;
+
+    /// **Every reading Files asks for is numbered, and an older one never
+    /// undoes a newer one** — `Design/File Browser § The list`, *Files stays in
+    /// the folder it shows*, as widened 2026-11-13 after Sol's look at the
+    /// window notes (points 1 to 3). `web/files.js` runs under Node; every
+    /// reading waits until the scenario lets it go, and each is answered with
+    /// what the server held at the moment it was asked, so an older answer is
+    /// told apart from a newer one by its rows.
+    ///
+    /// The orders Sol reproduced, each on a server of its own:
+    /// - **A refresh while a move is still out** (an upload ending, the
+    ///   connection handed back, Files shown again, Refresh pressed): the
+    ///   refresh reads the folder the user opened, not the one still drawn,
+    ///   and Files lands there.
+    /// - **Two readings of one folder**: the older rows, let go after the
+    ///   newer ones were drawn, are dropped.
+    /// - **An old *nothing listed* after the connection came back**: dropped,
+    ///   so Files is never left empty with nothing more to read.
+    /// - **Leaving for another server and coming back**: a reading from the
+    ///   first visit is dropped.
+    /// - **An admin retry's folder after the user opened another**: dropped.
+    ///
+    /// And two of this file's own: **refreshes asked while one is out are
+    /// joined into one**, and **a refresh asked while an admin retry is out
+    /// does not undo the folder the retry read**. Skipped, and says so, where
+    /// no Node is installed.
+    #[test]
+    fn an_older_reading_never_undoes_a_newer_one_in_files() {
+        let reading_of = |here: &[u8]| {
+            let mut reading = the_tab("row", here, None, a_folder_being_read(here), None, None, false);
+            reading.a_reading_follows = true;
+            reading
+        };
+        // **`/` holds the folder `root`**, so the user opens it as a
+        // double-click does: a move that leaves the folder drawn as it was
+        // until its answer comes.
+        let rows_of = |here: &[u8], name: &str| {
+            let mut entries = vec![an_entry(name, Kind::File, 10)];
+            if here == b"/" {
+                entries.insert(0, an_entry("root", Kind::Folder, 0));
+            }
+            the_tab_after_the_reading(
+                TheOrder::default(),
+                "row",
+                here,
+                None,
+                WhatTheReadingFound::TheFolder { entries, free: None },
+                Some(ObservedValue::Connected),
+                false,
+            )
+        };
+        let mut folders = serde_json::Map::new();
+        for (here, tag) in [(&b"/"[..], "top"), (b"/root", "root"), (b"/private", "private")] {
+            let path = String::from_utf8_lossy(here).to_string();
+            folders.insert(
+                path,
+                serde_json::json!({
+                    "reading": reading_of(here),
+                    "old": rows_of(here, &format!("{tag}-old.txt")),
+                    "new": rows_of(here, &format!("{tag}-new.txt")),
+                }),
+            );
+        }
+        let nothing_lent = the_tab(
+            "row",
+            b"/root",
+            None,
+            TheListing::NothingHasBeenListed {
+                lead: Prose::new(words::NOTHING_LISTED_LEAD),
+                rest: Prose::new(words::NOTHING_LISTED_REST),
+            },
+            Some(ObservedValue::Connected),
+            None,
+            false,
+        );
+        let admin = TheAdminRetrysAnswer::TheFolder { browser: Box::new(rows_of(b"/private", "private-admin.txt")) };
+        let ended = what_it_came_to(
+            &WhatTheUploadCameTo { uploaded: 1, skipped: 0, failed: Vec::new(), did_not_finish: 0, refused: Vec::new() },
+            b"/root",
+        );
+        let answers = serde_json::json!({
+            "folders": folders,
+            "nothingLent": nothing_lent,
+            "admin": admin,
+            "ended": ended,
+            "lent": crate::surface::render_settings::THE_CONNECTION_IS_LENT,
+            "root": b"/root",
+            "private": b"/private",
+        });
+        let folder = std::env::temp_dir().join(format!("smoozy-files-numbered-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for page in ["files.js", "the-value-drawn.js", "the-focus-moves.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+        }
+        for (name, text) in THE_LISTS_STAND_INS {
+            if name != "harness.js" {
+                std::fs::write(folder.join(name), text).expect("a stand-in is written");
+            }
+        }
+        std::fs::write(
+            folder.join("event-route.js"),
+            "export function whenTold(kind, handler) { (globalThis.told ||= {})[kind] = handler; }",
+        )
+        .expect("the route's stand-in");
+        let the_document = &THE_HIDDEN_FILES_HARNESS
+            [..THE_HIDDEN_FILES_HARNESS.find("const answers = JSON.parse").expect("the shared document")];
+        std::fs::write(folder.join("harness.js"), format!("{the_document}{THE_NUMBERED_HARNESS}"))
+            .expect("the harness is written");
+        std::fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers are written");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the Files page was not run");
+            let _ = std::fs::remove_dir_all(&folder);
+            return;
+        };
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value =
+            serde_json::from_str(String::from_utf8_lossy(&ran.stdout).trim()).expect("the harness prints one answer");
+        let wanted = serde_json::json!({
+            "aMoveThenAnUploadEnds": { "refreshRead": "/root", "shows": ["root-new.txt"], "waiting": 0 },
+            "aMoveThenTheConnectionIsBack": { "refreshRead": "/root", "shows": ["root-new.txt"], "waiting": 0 },
+            "aMoveThenFilesIsShownAgain": { "refreshRead": "/root", "shows": ["root-new.txt"], "waiting": 0 },
+            "aMoveThenRefreshIsPressed": { "refreshRead": "/root", "shows": ["root-new.txt"], "waiting": 0 },
+            "olderRowsOfOneFolder": { "shows": ["root-new.txt"], "waiting": 0 },
+            "anOldNothingListed": { "shows": ["root-new.txt"], "waiting": 0 },
+            "anotherServerAndBack": { "shows": ["root-new.txt"], "waiting": 0 },
+            "anAdminRetryAfterAMove": { "shows": ["root-new.txt"], "waiting": 0 },
+            "refreshesJoin": { "asked": 2, "shows": ["root-new.txt"], "waiting": 0 },
+            "aRefreshDuringAnAdminRetry": { "shows": ["private-admin.txt"], "waiting": 0 },
+            "anUnansweredReadingThenTheConnectionIsBack": { "fresh": true, "refreshAsked": true, "shows": ["root-new.txt"] },
+        });
+        assert_eq!(got, wanted);
+    }
+
+    /// **The scenarios for [`an_older_reading_never_undoes_a_newer_one_in_files`]**.
+    /// Each reading is written down with the *moment* it was asked in
+    /// (`old` or `new`, or `lost` while the connection is gone), and answered
+    /// with the rows the server held then.
+    const THE_NUMBERED_HARNESS: &str = r#"const answers = JSON.parse(readFileSync("answers.json", "utf8"));
+const named = (args) => (args && args.folder ? String.fromCharCode(...args.folder) : null);
+const waiting = [];
+let moment = "old";
+let theDefault = "/";
+let asks = 0;
+globalThis.window = {
+  innerWidth: 1000, innerHeight: 800,
+  __TAURI__: {
+    core: {
+      invoke(command, args) {
+        if (command === "the_files_tab" || command === "the_folder_is_read" || command === "an_act_is_retried_with_admin_access") {
+          if (command === "the_files_tab") asks += 1;
+          return new Promise((done) => waiting.push({ command, args, moment, done }));
+        }
+        if (command === "the_saved_with_version_is_read") return Promise.resolve(null);
+        if (command === "what_the_upload_came_to") return Promise.resolve(answers.ended);
+        return new Promise(() => {});
+      },
+    },
+  },
+};
+const page = await import("./files.js");
+const host = anElement("div");
+body.appendChild(host);
+globalThis.theTab.itIsDrawn(host);
+const settled = async () => { for (let at = 0; at < 8; at += 1) await new Promise((done) => setTimeout(done, 0)); };
+const names = () => {
+  const list = host.querySelector("div.flist");
+  if (!list) return [];
+  return list.children
+    .filter((one) => one.classList.contains("frow") && !one.classList.contains("fhead"))
+    .map((one) => one.querySelector(".fname").textContent.replace(/ /g, " ").trim());
+};
+const theAnswerTo = (one) => {
+  if (one.command === "an_act_is_retried_with_admin_access") return answers.admin;
+  const where = named(one.args) || theDefault;
+  if (one.command === "the_files_tab") return one.moment === "lost" ? answers.nothingLent : answers.folders[where].reading;
+  return answers.folders[where][one.moment === "lost" ? "old" : one.moment];
+};
+const letGo = async (at) => { const [one] = waiting.splice(at, 1); one.done(theAnswerTo(one)); await settled(); };
+// **One reading let go**: the oldest asked for that command, folder and
+// moment. It fails where nothing like it waits.
+const answered = async (command, where, when) => {
+  const at = waiting.findIndex((one) => one.command === command && (where === undefined || named(one.args) === where) && (when === undefined || one.moment === when));
+  if (at < 0) throw new Error(`nothing waits on ${command} for ${where} at ${when}: ${JSON.stringify(waiting.map((one) => [one.command, named(one.args), one.moment]))}`);
+  await letGo(at);
+};
+const oldestFirst = async () => { while (waiting.length) await letGo(0); };
+const newestFirst = async () => { while (waiting.length) await letGo(waiting.length - 1); };
+const shows = async (which) => { globalThis.theTab.itIsShowing(which); await settled(); };
+// **A server opened on `/`, read whole**, at the moment `old`.
+const opened = async (which) => { moment = "old"; theDefault = "/"; await shows(which); await oldestFirst(); };
+// **The user opens `/root` from `/`** by a double-click on its row.
+const opensRoot = async () => {
+  const list = host.querySelector("div.flist");
+  const row = list && list.children.find((one) => one.classList.contains("frow") && one.querySelector(".fname") && one.querySelector(".fname").textContent.trim() === "root");
+  if (!row) throw new Error(`no row root: ${JSON.stringify(names())}`);
+  row.press("dblclick");
+  await settled();
+};
+const theLastTabAsked = () => { const asked = waiting.filter((one) => one.command === "the_files_tab").pop(); return asked ? named(asked.args) : null; };
+const uploadEnds = async (which) => { globalThis.told["files:the-answer"]({ said: { what: "the-upload-ended", server: which, request: "r" } }); await settled(); };
+const connectionIsBack = async (which) => { globalThis.told[answers.lent]({ said: { server: which } }); await settled(); };
+const refreshIsPressed = async () => {
+  const control = host.querySelectorAll("button.ib").find((one) => one.querySelector("i.spin"));
+  if (!control) throw new Error("no Refresh control");
+  control.press("click");
+  await settled();
+};
+const out = {};
+
+// **A refresh while a move is still out**, four ways. The user opens `/root`
+// from `/`; before it answers, something reads the folder again.
+const refreshes = {
+  aMoveThenAnUploadEnds: uploadEnds,
+  aMoveThenTheConnectionIsBack: connectionIsBack,
+  aMoveThenFilesIsShownAgain: (which) => shows(which),
+  aMoveThenRefreshIsPressed: () => refreshIsPressed(),
+};
+for (const [name, refresh] of Object.entries(refreshes)) {
+  const which = `server-${name}`;
+  await opened(which);
+  moment = "new";
+  await opensRoot();
+  const before = waiting.length;
+  await refresh(which);
+  const asked = waiting.slice(before).filter((one) => one.command === "the_files_tab").pop();
+  await oldestFirst();
+  out[name] = { refreshRead: asked ? named(asked.args) : theLastTabAsked(), shows: names(), waiting: waiting.length };
+}
+
+// **Two readings of one folder**: an upload's refresh is answered, its rows
+// held; the user opens `/root` again and that is read whole; then the older
+// rows are let go.
+{
+  const which = "server-older-rows";
+  await opened(which);
+  page.theBrowserIsOpenedAt(which, answers.root);
+  await settled();
+  await oldestFirst();
+  await uploadEnds(which);
+  await answered("the_files_tab", "/root", "old");
+  moment = "new";
+  page.theBrowserIsOpenedAt(which, answers.root);
+  await settled();
+  await answered("the_files_tab", "/root", "new");
+  await answered("the_folder_is_read", "/root", "new");
+  await oldestFirst();
+  out.olderRowsOfOneFolder = { shows: names(), waiting: waiting.length };
+}
+
+// **An old *nothing listed***: Files at `/root` is shown again while the
+// connection is gone, and that reading is held; the connection comes back,
+// and the newest readings are let go first.
+{
+  const which = "server-nothing-listed";
+  await opened(which);
+  page.theBrowserIsOpenedAt(which, answers.root);
+  await settled();
+  await oldestFirst();
+  moment = "lost";
+  await shows(which);
+  moment = "new";
+  await connectionIsBack(which);
+  await newestFirst();
+  out.anOldNothingListed = { shows: names(), waiting: waiting.length };
+}
+
+// **Leaving for another server and coming back**: a refresh of `/root` on
+// the first visit has its rows held; back on the server, which opens on
+// `/root`, an upload ends and is read whole; then the first visit's rows are
+// let go.
+{
+  const which = "server-and-back";
+  await opened(which);
+  page.theBrowserIsOpenedAt(which, answers.root);
+  await settled();
+  await oldestFirst();
+  await uploadEnds(which);
+  await answered("the_files_tab", "/root", "old");
+  await shows("server-elsewhere");
+  await answered("the_files_tab", null);
+  await answered("the_folder_is_read", null);
+  moment = "new";
+  theDefault = "/root";
+  await shows(which);
+  await answered("the_files_tab", null, "new");
+  await answered("the_folder_is_read", null, "new");
+  await uploadEnds(which);
+  await answered("the_files_tab", "/root", "new");
+  await answered("the_folder_is_read", "/root", "new");
+  await oldestFirst();
+  out.anotherServerAndBack = { shows: names(), waiting: waiting.length };
+}
+
+// **An admin retry after a move**: the retry of `/private` is out, the user
+// opens `/root`, then the retry's folder comes back first.
+{
+  const which = "server-admin";
+  await opened(which);
+  page.theAdminRetryIsAskedFor({ server: which, act: "listing", paths: [answers.private] }, null, null);
+  await settled();
+  moment = "new";
+  await opensRoot();
+  await answered("an_act_is_retried_with_admin_access");
+  await oldestFirst();
+  out.anAdminRetryAfterAMove = { shows: names(), waiting: waiting.length };
+}
+
+// **Refreshes join**: at `/root`, three uploads end and the connection comes
+// back while the first reading is out. One reading is out at a time, and one
+// more is owed.
+{
+  const which = "server-joined";
+  await opened(which);
+  page.theBrowserIsOpenedAt(which, answers.root);
+  await settled();
+  await oldestFirst();
+  moment = "new";
+  asks = 0;
+  await uploadEnds(which);
+  await uploadEnds(which);
+  await uploadEnds(which);
+  await connectionIsBack(which);
+  await oldestFirst();
+  out.refreshesJoin = { asked: asks, shows: names(), waiting: waiting.length };
+}
+
+// **A refresh during an admin retry**: Files at `/private`, the retry is out,
+// an upload ends, then the retry's folder comes back.
+{
+  const which = "server-admin-refresh";
+  await opened(which);
+  page.theBrowserIsOpenedAt(which, answers.private);
+  await settled();
+  await oldestFirst();
+  page.theAdminRetryIsAskedFor({ server: which, act: "listing", paths: [answers.private] }, null, null);
+  await settled();
+  await uploadEnds(which);
+  await answered("an_act_is_retried_with_admin_access");
+  await oldestFirst();
+  out.aRefreshDuringAnAdminRetry = { shows: names(), waiting: waiting.length };
+}
+
+// **A reading never answered, then the connection back** (Sol's look at the
+// window and read points, 2026-11-13; the scout's list, item 6): at `/root`,
+// Refresh is pressed and its reading is never answered — the line went. The
+// connection comes back: a reading is asked at once, not queued behind the
+// lost one, and drawn; and Refresh can be pressed again. Last, since the lost
+// reading is never let go.
+{
+  const which = "server-unanswered";
+  await opened(which);
+  page.theBrowserIsOpenedAt(which, answers.root);
+  await settled();
+  await oldestFirst();
+  await refreshIsPressed();
+  moment = "new";
+  await connectionIsBack(which);
+  const fresh = waiting.some((one) => one.command === "the_files_tab" && one.moment === "new");
+  if (fresh) {
+    await answered("the_files_tab", "/root", "new");
+    await answered("the_folder_is_read", "/root", "new");
+  }
+  const before = asks;
+  await refreshIsPressed();
+  out.anUnansweredReadingThenTheConnectionIsBack = { fresh, refreshAsked: asks > before, shows: names() };
+}
+console.log(JSON.stringify(out));
+"#;
+
     /// **The file's name in a panel's title opens Files on that file's folder
     /// with the file chosen** — `Design/Whole app § Panels over a server`,
     /// added 2026-10-12 (the Creator's ninth notes, note 5).
@@ -11762,6 +14571,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -11957,6 +14767,39 @@ out.taken = taken;
 console.log(JSON.stringify(out));
 "#;
 
+    /// **A partial act names each item that did not go, with its reason** —
+    /// the four questions, batch 2, fix 7 (scout 3.34): *8 deleted, 2 failed,
+    /// 2 skipped.* named nothing and explained nothing. Three at most, then
+    /// *And 2 more.*; an item the server never answered for says it may have
+    /// happened. `Design/File Browser § What the screen says around an act`,
+    /// 2026-11-11.
+    #[test]
+    fn a_partial_act_names_what_did_not_go_and_why() {
+        use crate::managing_files::SOMETHING_INSIDE_IT_STAYED;
+        use crate::record::file_acts::{AUnit, WhichAct};
+        use smoozy_state::outcomes::UnitOutcome;
+        let unit = |path: &str| AUnit { role: "one entry", source: path.as_bytes().to_vec(), destination: None, staging: None };
+        let units = vec![
+            (unit("/home/ubuntu/tex/a.png"), Some(UnitOutcome::Failed)),
+            (unit("/home/ubuntu/tex/b.png"), Some(UnitOutcome::Done)),
+            (unit("/home/ubuntu/tex"), Some(UnitOutcome::NotAttempted { stopped_by: SOMETHING_INSIDE_IT_STAYED.into() })),
+            (unit("/home/ubuntu/tex/c.png"), None),
+            (unit("/home/ubuntu/d.png"), Some(UnitOutcome::Failed)),
+            (unit("/home/ubuntu/e.png"), Some(UnitOutcome::Failed)),
+        ];
+        let said = what_did_not_go(&units, b"/home/ubuntu", WhichAct::Delete).expect("the names");
+        assert_eq!(said.values(), vec!["tex/a.png", "tex", "tex/c.png", "2"]);
+        assert_eq!(
+            said.said().replace('\u{a0}', " "),
+            ": refused by the server. : skipped, something inside was not deleted. : no reply — it may have been deleted. And more."
+        );
+        let moved = vec![(unit("/home/ubuntu/x.exr"), None)];
+        let said = what_did_not_go(&moved, b"/home/ubuntu", WhichAct::Move).expect("the name");
+        assert_eq!(said.said().replace('\u{a0}', " "), ": no reply — it may have been moved.");
+        let all_done = vec![(unit("/home/ubuntu/x.exr"), Some(UnitOutcome::Done))];
+        assert!(what_did_not_go(&all_done, b"/home/ubuntu", WhichAct::Copy).is_none());
+    }
+
     /// **What a delete says when it ends** — `Design/File Browser § What the
     /// screen says around an act`: what was done, what was refused, what was
     /// not attempted, and where the line went, that some were never answered.
@@ -11967,7 +14810,7 @@ console.log(JSON.stringify(out));
         let victims = [b"/home/ubuntu/cache".to_vec()];
         let ran = |done, refused, not_attempted, never_learned| {
             what_the_delete_says(
-                &WhatTheDeleteCameTo::Ran { record: id(), done, refused, not_attempted, never_learned },
+                &WhatTheDeleteCameTo::Ran { record: id(), done, refused, not_attempted, never_learned, refused_for_permission: 0 },
                 &victims,
             )
         };
@@ -12029,7 +14872,7 @@ console.log(JSON.stringify(out));
     fn a_paste_says_what_moved_and_asks_first_where_something_collides() {
         use crate::managing_files::{WhatThePasteCameTo as Paste, WhyThePasteIsRefused};
         use smoozy_file_browser::already_exists::{AComparison, Comparison};
-        let plainly = |words: &Words| words.said().replace('\u{a0}', " ");
+        let plainly = |words: &Words| words.said().replace('\u{a0}', " ").replace('’', "'");
         let entries = [b"/home/ubuntu/textures".to_vec()];
         let says = |came: Paste| what_the_paste_says(&came, &entries, b"/home/ubuntu/archive", &[], &[], TheCollidingAct::APasteAfterACut);
         let AnActsAnswer::Said { said } = says(Paste::Refused(WhyThePasteIsRefused::AFolderIntoItself)) else {
@@ -12160,6 +15003,7 @@ console.log(JSON.stringify(out));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -12219,6 +15063,20 @@ console.log(JSON.stringify(out));
     /// server cannot count**, saying why in Copy's words, and greyed with
     /// nothing said before the release is known — and Paste's own rebuild of
     /// the menus keeps none of that by accident, since the gate comes after it.
+    #[test]
+    fn third_part_3_33_copy_is_disabled_before_setup_in_the_toolbar_and_every_menu() {
+        let mut browser = the_tab_after_the_reading(TheOrder::default(), "row", b"/home/ubuntu", None,
+            WhatTheReadingFound::TheFolder { entries: a_folder_with_hidden_names(), free: None },
+            Some(ObservedValue::Connected), false);
+        copy_is_offered_on(&mut browser, false);
+        assert!(browser.menus.iter().all(|menu| menu.items.iter().filter(|item| item.act.as_str() == "copy")
+            .all(|item| item.greyed.as_ref().and_then(|g| g.why.as_ref()).map(in_plain).as_deref() == Some("Set up this server to copy files."))));
+        let page = the_page();
+        assert!(page.contains("toolbar.copy_greyed"), "the toolbar still offers Copy");
+        copy_is_offered_on(&mut browser, true);
+        assert!(browser.menus.iter().all(|menu| menu.items.iter().filter(|item| item.act.as_str() == "copy").all(|item| item.greyed.is_none())));
+    }
+
     #[test]
     fn twenty_third_2_the_menu_item_sits_under_the_downloads_and_greys_on_an_older_server() {
         let menus = the_menus_with(Some(2));
@@ -12324,6 +15182,7 @@ console.log(JSON.stringify(out));
             let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
             for page in ["files.js", "the-value-drawn.js"] {
                 std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+                std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
             }
             for (name, text) in THE_LISTS_STAND_INS {
                 if name != "harness.js" {
@@ -12526,23 +15385,27 @@ for (const [kind, make] of Object.entries(THE_FILE_ICONS)) {{
         };
         assert!(ran.status.success(), "the icons did not draw: {}", String::from_utf8_lossy(&ran.stderr));
         let said = String::from_utf8_lossy(&ran.stdout).to_string();
-        assert_eq!(said.lines().count(), 5, "{said}");
+        // **Six from 2026-11-12**: the house on the login's home folder,
+        // solid like the folder it replaces (`Design/File Browser § The list`).
+        assert_eq!(said.lines().count(), 6, "{said}");
         assert!(!said.contains("black"), "a part of an icon is drawn in SVG's default black:\n{said}");
         assert!(said.lines().any(|line| line == "folder: currentColor"), "{said}");
+        assert!(said.lines().any(|line| line == "home: currentColor"), "{said}");
     }
 
-    /// **An upload under way says nothing above the list**, and its ending
-    /// still does — `Design/File Browser § The list`: the bottom bar's count
-    /// says it is running. The answer carries no sentence, and the page takes
-    /// an older line away rather than leaving it to read as this one's. The
-    /// Creator's note 10 on 0.1.7.
+    /// **An upload under way asks for its line above the list**, and its
+    /// ending still says how it ended — `Design/File Browser § The list`.
+    /// *Until 2026-11-09 this test was* `an_upload_under_way_says_nothing_above_the_list`
+    /// *and held the page to taking the line away while an upload ran (the
+    /// Creator's note 10 on 0.1.7); the twenty-eighth notes, note 10, changed
+    /// that rule, and the page now asks [`the_upload_into_this_folder`].*
     #[test]
-    fn an_upload_under_way_says_nothing_above_the_list() {
+    fn an_upload_under_way_asks_for_its_line_above_the_list() {
         let goes = serde_json::to_value(TheUploadGoes::Underway { request: Verbatim::new("r1".to_string()) })
             .expect("serialises");
         assert_eq!(goes, serde_json::json!({ "is": "underway", "request": "r1" }));
         let page = the_page_code();
-        assert!(page.contains(r#"if (goes.is === "underway") theLineIsTakenAway();"#));
+        assert!(page.contains(r#"if (goes.is === "underway") theUploadLineIsAskedFor();"#));
         assert!(page.contains(r#"if (goes.is === "did-not-start") theLineSays(goes.said, "upload");"#));
     }
 
@@ -12640,6 +15503,7 @@ console.log("pressed: " + (globalThis.shown || 0));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             std::fs::write(folder.join(name), text).expect("a stand-in is written");
@@ -12670,6 +15534,390 @@ console.log("pressed: " + (globalThis.shown || 0));
         );
     }
 
+    // ── The twenty-eighth notes, notes 9 and 10 ──────────────────────────────
+
+    /// **The plans' own words for notes 9 and 10**, read where they are
+    /// written: Design's sentences, and the drawing's refresh icon, its two
+    /// new states and their lines. `Design/File Browser § The list` and
+    /// `§ Keyboard shortcuts`.
+    fn the_design_of_files() -> String {
+        std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Preparation/Design/File Browser.md"),
+        )
+        .expect("the design is readable")
+    }
+
+    fn the_mockup_itself() -> String {
+        std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Preparation/Design/Mockup/Smoozy.html"),
+        )
+        .expect("the drawing is readable")
+    }
+
+    /// **Note 9: the refresh icon's word rides the toolbar's answer**, and
+    /// Design and the drawing put the icon last on the toolbar, with the path
+    /// bar holding the path alone. *(Until 2026-11-10 this was
+    /// `twenty_eighth_9_refresh_is_a_word_of_the_answer_and_sits_at_the_paths_end`;
+    /// the Creator's twenty-ninth notes, note 2, moved the icon, and piece F
+    /// moved the test with it.)*
+    #[test]
+    fn twenty_eighth_9_and_twenty_ninth_2_refresh_is_a_word_of_the_answer_and_sits_last_on_the_toolbar() {
+        let toolbar = the_toolbar(None);
+        assert_eq!(toolbar.refresh.as_str(), "Refresh");
+        let design = the_design_of_files();
+        assert!(design.contains("**A refresh icon sits at the toolbar's right end**, after everything else on it"));
+        assert!(design.contains("Its word on hover is *Refresh*, opening leftward, inside the window. The path bar holds the path alone."));
+        assert!(design.contains("**How many files are chosen is said at the far end of the toolbar**, just before the refresh icon"));
+        assert!(design.contains("**⌘R on a Mac, and Ctrl+R or F5 elsewhere, refreshes the folder**"));
+        assert!(design.contains("so it is the third exception"));
+        let mockup = the_mockup_itself();
+        assert!(mockup.contains(r#"<symbol id="i-refresh""#));
+        // **The path bars hold the path alone**: the one Files opens on, and
+        // the first-frame check's folder's.
+        for opens in [r#"<div class="crumbs" id="fbcrumbs">"#, r#"<div class="crumbs" data-t21="fb-check" hidden>"#] {
+            let crumbs = &mockup[mockup.find(opens).expect("the path")..];
+            let crumbs = &crumbs[..crumbs.find("</div>").expect("it closes")];
+            assert!(!crumbs.contains("fbrefresh") && !crumbs.contains(r#"class="ib""#), "{opens} still holds Refresh");
+        }
+        // **Refresh is the toolbar's last control**, after the selection note,
+        // with the underway mark inside it as before.
+        let tools = &mockup[mockup.find(r#"<div class="ftools">"#).expect("the toolbar")..];
+        let refresh = r##"<span class="selnote" id="fbselnote">1 selected</span>"##;
+        let tools = &tools[tools.find(refresh).expect("the selection note") + refresh.len()..];
+        let button = r##"<button type="button" class="ib" id="fbrefresh" aria-label="Refresh"><svg class="uwl" aria-hidden="true"><use href="#i-refresh"></use></svg><span class="ibl">Refresh</span><i class="spin"></i></button>"##;
+        let after = &tools[tools.find(button).expect("Refresh is on the toolbar") + button.len()..];
+        assert!(after.trim_start().starts_with("</div>"), "nothing follows Refresh on the toolbar");
+        // **And the drawing carries what the mockup draws it with**: the word
+        // opening leftward on the toolbar's last icon, and the underway mark
+        // never a grid item.
+        let drawing = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web/the-drawing.css"))
+            .expect("the drawing is readable");
+        for rule in [
+            ".ftools > .ib:last-child .ibl { left: auto; right: 0; transform: none; }",
+            ".ib > .spin { position: absolute; }",
+        ] {
+            assert!(mockup.contains(rule) && drawing.contains(rule), "{rule}");
+        }
+        assert!(!drawing.contains(".crumbs .up"), "the path bar's Refresh rules are gone");
+    }
+
+    /// **Note 10's words: *Counting files…*, then *Uploading 12 of 40 files
+    /// to* the folder, one file said as one, and a bar in bytes** (`File
+    /// Browser` U11). The counting words ride the pick's own answer, so the
+    /// line can appear the moment the pick or the drop lands.
+    #[test]
+    fn twenty_eighth_10_the_line_counts_then_says_n_of_m_files_to_the_folder() {
+        let TheUploadAsk::Go { counting, .. } = the_upload_goes_with(&[std::path::PathBuf::from("/Users/a/one.png")])
+        else {
+            panic!("a pick goes");
+        };
+        assert_eq!(in_plain(&counting), "Counting files…");
+        let into = crate::surface::transfers::TheUploadsInto {
+            files_done: 12,
+            files_in_the_whole: 40,
+            bytes_done: 300 << 20,
+            bytes_in_the_whole: 1 << 30,
+        };
+        let line = the_upload_line(&into, b"/home/ubuntu/kitchen");
+        assert_eq!(in_plain(&line.said), "Uploading 12 of 40 files to /home/ubuntu/kitchen");
+        assert_eq!(line.said.values(), vec!["12", "40", "/home/ubuntu/kitchen"]);
+        assert!(line.said.pieces.last().expect("the folder").is_path, "the folder can be copied");
+        assert_eq!(line.bar, crate::surface::transfers::ABar { value: 300 << 20, max: 1 << 30 });
+        let one = the_upload_line(
+            &crate::surface::transfers::TheUploadsInto {
+                files_done: 0,
+                files_in_the_whole: 1,
+                bytes_done: 0,
+                bytes_in_the_whole: 0,
+            },
+            b"/root",
+        );
+        assert_eq!(in_plain(&one.said), "Uploading 0 of 1 file to /root");
+        // **Empty files only**: the bar still moves, by files.
+        assert_eq!(one.bar, crate::surface::transfers::ABar { value: 0, max: 1 });
+        let design = the_design_of_files();
+        assert!(design.contains("~~An upload started here therefore says nothing above the list while it runs, and says there only how it ended.~~"));
+        assert!(design.contains("**An upload started here is said on the line above the list from the moment the pick or the drop lands"));
+        let mockup = the_mockup_itself();
+        assert!(mockup.contains(r#"<option value="fb-counting">"#));
+        assert!(mockup.contains(r#"<option value="fb-uploading">"#));
+        assert!(mockup.contains(r#"<div class="fnotyet" data-t28="fb-counting" hidden>Counting files&#8230;</div>"#));
+        assert!(mockup.contains(r#"<div class="fnotyet" data-t28="fb-uploading" hidden>Uploading 12 of 40&#160;files to <span class="mono">kitchen/</span><div class="bar">"#));
+    }
+
+    /// **The page half of notes 9 and 10 runs in Node**, over the real
+    /// `web/files.js`, the list's stand-ins beside it and an event route that
+    /// keeps its handlers. **Where `SMOOZY_THE_FILES_HARNESS` names a folder,
+    /// the harness and its answers are left there**, so the same run can be
+    /// made against an earlier page and the pictures can be fed the same
+    /// answers. Skipped, and says so, where no Node is installed.
+    fn the_files_page_runs(named: &str, answers: &serde_json::Value, scenario: &str) -> Option<serde_json::Value> {
+        let folder = std::env::temp_dir().join(format!("smoozy-files-{named}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for page in ["files.js", "the-value-drawn.js"] {
+            std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+        }
+        for (name, text) in THE_LISTS_STAND_INS {
+            if name != "harness.js" {
+                std::fs::write(folder.join(name), text).expect("a stand-in is written");
+            }
+        }
+        std::fs::write(
+            folder.join("event-route.js"),
+            "export function whenTold(kind, handler) { globalThis.told ||= {}; (globalThis.told[kind] ||= []).push(handler); }",
+        )
+        .expect("written");
+        std::fs::write(
+            folder.join("transfers.js"),
+            "export function aTransferIsAskedFor() {}\nexport function theTransfersAreShown() { globalThis.shown = (globalThis.shown || 0) + 1; }",
+        )
+        .expect("written");
+        let the_document = &THE_HIDDEN_FILES_HARNESS
+            [..THE_HIDDEN_FILES_HARNESS.find("const answers = JSON.parse").expect("the shared document")];
+        std::fs::write(folder.join("harness.js"), format!("{the_document}{scenario}")).expect("the harness is written");
+        std::fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers are written");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        if let Some(keep) = std::env::var_os("SMOOZY_THE_FILES_HARNESS") {
+            let keep = std::path::PathBuf::from(keep).join(named);
+            let _ = std::fs::create_dir_all(&keep);
+            for entry in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
+                let _ = std::fs::copy(entry.path(), keep.join(entry.file_name()));
+            }
+        }
+        let _ = std::fs::remove_dir_all(&folder);
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the Files page was not run");
+            return None;
+        };
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        Some(serde_json::from_str(String::from_utf8_lossy(&ran.stdout).trim()).expect("the harness prints one answer"))
+    }
+
+    fn a_kitchen_read() -> (TheBrowser, TheBrowser) {
+        let here: &[u8] = b"/home/ubuntu/kitchen";
+        let mut reading = the_tab("row", here, None, a_folder_being_read(here), None, None, false);
+        reading.a_reading_follows = true;
+        let rows = the_tab_after_the_reading(
+            TheOrder::default(),
+            "row",
+            here,
+            None,
+            WhatTheReadingFound::TheFolder {
+                entries: vec![an_entry("textures", Kind::Folder, 0), an_entry("kitchen.blend", Kind::File, 90 << 20)],
+                free: Some(61 << 30),
+            },
+            Some(ObservedValue::Connected),
+            false,
+        );
+        (reading, rows)
+    }
+
+    /// **Note 9 on the page: Refresh, last on the toolbar since the
+    /// twenty-ninth notes' note 2, reads the folder
+    /// shown again, exactly as opening it does**, turns while the read runs and
+    /// takes no second press then; ⌘R on a Mac, Ctrl+R and F5 elsewhere, do
+    /// the same; and while the listing is stale it does nothing.
+    #[test]
+    fn twenty_eighth_9_refresh_reads_the_folder_again_from_its_icon_and_its_keys() {
+        let (reading, rows) = a_kitchen_read();
+        let mut offline = rows.clone();
+        offline.unavailable = vec!["upload", "download"];
+        let answers = serde_json::json!({ "reading": reading, "rows": rows, "offline": offline });
+        let Some(got) = the_files_page_runs("refresh", &answers, THE_REFRESH_HARNESS) else { return };
+        let again = serde_json::json!([
+            { "command": "the_files_tab", "folder": "/home/ubuntu/kitchen" },
+            { "command": "the_folder_is_read", "folder": "/home/ubuntu/kitchen" },
+        ]);
+        let wanted = serde_json::json!({
+            "drawn": { "label": "Refresh", "word": "Refresh", "turning": false, "onThePath": 0 },
+            "pressed": { "asked": again, "turning": true },
+            "pressedAgainWhileReading": { "asked": [], "turning": true },
+            "read": { "turning": false },
+            "ctrlR": again,
+            "f5": again,
+            "commandRElsewhere": [],
+            "commandROnAMac": again,
+            "ctrlROnAMac": [],
+            "offline": { "pressed": [], "key": [] },
+        });
+        assert_eq!(got, wanted);
+    }
+
+    /// **The scenario for [`twenty_eighth_9_refresh_reads_the_folder_again_from_its_icon_and_its_keys`]**.
+    const THE_REFRESH_HARNESS: &str = r#"const answers = JSON.parse(readFileSync("answers.json", "utf8"));
+let asked = [];
+let held = false;
+let release = null;
+let tab = answers.reading;
+let rows = answers.rows;
+const named = (args) => (args && args.folder ? String.fromCharCode(...args.folder) : null);
+globalThis.window = {
+  innerWidth: 1000, innerHeight: 800,
+  __TAURI__: {
+    core: {
+      invoke(command, args) {
+        if (command === "the_files_tab") { asked.push({ command, folder: named(args) }); return Promise.resolve(tab); }
+        if (command === "the_folder_is_read") {
+          asked.push({ command, folder: named(args) });
+          if (held) return new Promise((done) => { release = () => done(rows); });
+          return Promise.resolve(rows);
+        }
+        if (command === "the_saved_with_version_is_read" || command === "the_transfers_on_this_server" || command === "the_upload_into_this_folder") return Promise.resolve(null);
+        asked.push({ command });
+        return new Promise(() => {});
+      },
+    },
+  },
+};
+await import("./files.js");
+const host = anElement("div");
+host.className = "files";
+body.appendChild(host);
+globalThis.theTab.itIsDrawn(host);
+const settled = async () => { for (let at = 0; at < 6; at += 1) await new Promise((done) => setTimeout(done, 0)); };
+// **Refresh is the toolbar's last control** (the twenty-ninth notes, note 2).
+const refresh = () => { const tools = host.querySelector("div.ftools"); const last = tools && tools.children[tools.children.length - 1]; return last && last.tag === "button" && last.classList.contains("ib") ? last : null; };
+const onThePath = () => host.querySelector("div.crumbs").querySelectorAll("button.ib").length;
+const turning = () => Boolean(refresh() && refresh().classList.contains("uway"));
+const key = async (which, more = {}) => {
+  asked = [];
+  for (const handler of keys) {
+    handler({ key: which, shiftKey: false, metaKey: false, ctrlKey: false, altKey: false, ...more, preventDefault() {}, defaultPrevented: false, target: body });
+  }
+  await settled();
+  return asked.slice();
+};
+const press = async () => { asked = []; const one = refresh(); if (one) one.press("click"); await settled(); return asked.slice(); };
+globalThis.theTab.itIsShowing("row");
+await settled();
+const out = {};
+const drawn = refresh();
+out.drawn = drawn
+  ? { label: drawn.getAttribute("aria-label"), word: drawn.querySelector("span.ibl") ? drawn.querySelector("span.ibl").textContent : null, turning: turning(), onThePath: onThePath() }
+  : null;
+held = true;
+out.pressed = { asked: await press(), turning: turning() };
+out.pressedAgainWhileReading = { asked: await press(), turning: turning() };
+if (release) release();
+await settled();
+out.read = { turning: turning() };
+held = false;
+out.ctrlR = await key("r", { ctrlKey: true });
+out.f5 = await key("F5");
+out.commandRElsewhere = await key("r", { metaKey: true });
+globalThis.document.documentElement = { dataset: { system: "macos" } };
+out.commandROnAMac = await key("r", { metaKey: true });
+out.ctrlROnAMac = await key("r", { ctrlKey: true });
+// **The listing goes stale**: every act that needs the server is unavailable,
+// and Refresh with them.
+tab = answers.offline;
+rows = answers.offline;
+globalThis.theTab.itIsShowing("row");
+await settled();
+out.offline = { pressed: await press(), key: await key("r", { metaKey: true }) };
+console.log(JSON.stringify(out));
+"#;
+
+    /// **Note 10 on the page: the line above the list says the upload while it
+    /// runs, inside Files.** Upload pressed and a pick made: *Counting files…*
+    /// at once, before the walk answers, with no bar. The walk answers *under
+    /// way*: *Uploading 12 of 40 files to* the folder, with a bar in bytes. A
+    /// transfer moves: *13 of 40*. It ends: the ending the line already said,
+    /// and no bar. **Transfers is never shown.**
+    #[test]
+    fn twenty_eighth_10_the_line_says_the_upload_while_it_runs_and_never_leaves_files() {
+        let (reading, rows) = a_kitchen_read();
+        let into = |done, bytes| crate::surface::transfers::TheUploadsInto {
+            files_done: done,
+            files_in_the_whole: 40,
+            bytes_done: bytes,
+            bytes_in_the_whole: 1 << 30,
+        };
+        let here: &[u8] = b"/home/ubuntu/kitchen";
+        let answers = serde_json::json!({
+            "reading": reading,
+            "rows": rows,
+            "go": the_upload_goes_with(&[std::path::PathBuf::from("/Users/a/textures")]),
+            "underway": TheUploadGoes::Underway { request: Verbatim::new("r1".to_string()) },
+            "twelve": the_upload_line(&into(12, 300 << 20), here),
+            "thirteen": the_upload_line(&into(13, 330 << 20), here),
+            "ended": what_it_came_to(
+                &WhatTheUploadCameTo { uploaded: 40, ..WhatTheUploadCameTo::default() },
+                here,
+            ),
+        });
+        let Some(got) = the_files_page_runs("upload-line", &answers, THE_UPLOAD_LINE_HARNESS) else { return };
+        let wanted = serde_json::json!({
+            "counting": { "line": "Counting files…", "bar": null },
+            "underway": { "line": "Uploading 12 of 40 files to /home/ubuntu/kitchen", "bar": [300 << 20, 1 << 30] },
+            "moved": { "line": "Uploading 13 of 40 files to /home/ubuntu/kitchen", "bar": [330 << 20, 1 << 30] },
+            "ended": { "line": "Uploaded 40 files into /home/ubuntu/kitchen.", "bar": null },
+            "transfersShown": 0,
+        });
+        assert_eq!(got, wanted);
+    }
+
+    /// **The scenario for [`twenty_eighth_10_the_line_says_the_upload_while_it_runs_and_never_leaves_files`]**.
+    const THE_UPLOAD_LINE_HARNESS: &str = r#"const answers = JSON.parse(readFileSync("answers.json", "utf8"));
+let walked = null;
+let line = null;
+let ending = null;
+globalThis.window = {
+  innerWidth: 1000, innerHeight: 800,
+  __TAURI__: {
+    core: {
+      invoke(command) {
+        if (command === "the_files_tab") return Promise.resolve(answers.reading);
+        if (command === "the_folder_is_read") return Promise.resolve(answers.rows);
+        if (command === "the_saved_with_version_is_read" || command === "the_transfers_on_this_server") return Promise.resolve(null);
+        if (command === "an_upload_is_asked_for") return Promise.resolve(answers.go);
+        if (command === "the_upload_is_confirmed") return new Promise((done) => { walked = done; });
+        if (command === "the_upload_into_this_folder") return Promise.resolve(line);
+        if (command === "what_the_upload_came_to") return Promise.resolve(ending);
+        return new Promise(() => {});
+      },
+    },
+  },
+};
+await import("./files.js");
+const host = anElement("div");
+host.className = "files";
+body.appendChild(host);
+globalThis.theTab.itIsDrawn(host);
+const settled = async () => { for (let at = 0; at < 6; at += 1) await new Promise((done) => setTimeout(done, 0)); };
+const told = async (kind, said) => { for (const handler of (globalThis.told[kind] || [])) handler({ said }); await settled(); };
+const plainly = (text) => text.replace(/ /g, " ").replace(/\s+/g, " ").trim();
+const theLine = () => {
+  const one = host.querySelector(".fnotyet");
+  if (!one || one.hidden) return { line: null, bar: null };
+  const bar = one.querySelector("progress.underway-bar");
+  return { line: plainly(one.textContent), bar: bar ? [bar.value, bar.max] : null };
+};
+globalThis.theTab.itIsShowing("row");
+await settled();
+const out = {};
+host.querySelector("span.uphold").querySelector("button.ib").press("click");
+await settled();
+out.counting = theLine();
+line = answers.twelve;
+walked(answers.underway);
+await settled();
+out.underway = theLine();
+line = answers.thirteen;
+await told("transfers:moved", {});
+out.moved = theLine();
+line = null;
+ending = answers.ended;
+await told("files:the-answer", { what: "the-upload-ended", server: "row", request: "r1" });
+await told("transfers:moved", {});
+out.ended = theLine();
+out.transfersShown = globalThis.shown || 0;
+console.log(JSON.stringify(out));
+"#;
+
     /// **What a paste after a copy says** — a copy offers Replace, Keep both
     /// or Cancel (`File Browser` M8); where the server cannot copy on itself,
     /// Design's own sentence (`Design/File Browser § What the screen says
@@ -12687,7 +15935,7 @@ console.log("pressed: " + (globalThis.shown || 0));
             panic!("a collision did not ask first");
         };
         let answers: Vec<&str> = question.answers.iter().map(|one| one.answer.as_str()).collect();
-        assert_eq!(answers, vec!["replace", "keep-both", "cancel"]);
+        assert_eq!(answers, vec!["replace", "keep-both", "skip-existing", "cancel"]);
         let AnActsAnswer::Said { said } =
             says(Copy::TheServerCannotCopy(crate::managing_files::WhyTheServerCannotCopy::SmoozyIsNotSetUpThere))
         else {
@@ -12992,6 +16240,7 @@ console.log("pressed: " + (globalThis.shown || 0));
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_LISTS_STAND_INS {
             if name != "harness.js" {
@@ -13094,8 +16343,12 @@ console.log(JSON.stringify(out));
         assert!(!page.contains("hand-over-to-the-check"), "the act that answered not built yet");
         assert!(include_str!("mod.rs").contains("files::the_files_the_check_placed_go_through_it,"));
         let answered = include_str!("../uploading.rs");
+        // **The answer with nothing colliding**, since the twenty-eighth notes,
+        // piece 12, read after a Stop pressed before the request went has
+        // been taken as the answer.
+        assert!(answered.contains("answer.filter(|_| ready.something_collides())"));
         let no_question = answered
-            .split("let Some(answer) = answer.filter(|_| ready.something_collides()) else {")
+            .split("let Some(answer) = answer else {")
             .nth(1)
             .expect("the answer with nothing colliding");
         let no_question = &no_question[..no_question.find("};").expect("its end")];
@@ -13209,7 +16462,7 @@ mod a_picture_looked_at {
         assert_eq!(browser.viewer, the_viewers_words());
         assert_eq!(browser.viewer.loading.said().replace('\u{a0}', " "), "Loading…");
         assert_eq!(browser.viewer.not_connected.said().replace('\u{a0}', " "), "Not connected.");
-        assert_eq!(browser.viewer.picture.as_str(), "Picture");
+        assert_eq!(browser.viewer.picture.as_str(), "Image");
     }
 
     #[test]
@@ -13277,6 +16530,7 @@ mod a_picture_looked_at {
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["files.js", "the-value-drawn.js"] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            std::fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_VIEWERS_STAND_INS {
             std::fs::write(folder.join(name), text).expect("a stand-in is written");
@@ -13297,7 +16551,7 @@ mod a_picture_looked_at {
         let wanted = serde_json::json!({
             "names": ["frame_0001.png", "frame_0002.blend", "frame_0003.png", "studio_backplate.exr", "studio_matte_16bit.png"],
             "opened": {
-                "open": true, "label": "Picture", "title": "frame_0001.png", "meta": "3.9 MB · 1920 × 1080",
+                "open": true, "label": "Image", "title": "frame_0001.png", "meta": "3.9 MB · 1920 × 1080",
                 "picture": true, "say": null, "previous": true, "next": false, "chosen": "frame_0001.png",
                 "asked": [{ "command": "a_picture_is_read", "path": png("frame_0001.png"), "listed": 4_089_446 }],
             },
@@ -13540,6 +16794,298 @@ out.lineDown = { open: Boolean(viewer()), asked: asked.filter((one) => one.comma
 console.log(JSON.stringify(out));
 "#;
 
+    // ── Files in a real browser: Refresh on the toolbar, and the board ───────
+
+    /// **The Files tab as the window draws it**, in headless Chrome over the
+    /// application's own `web/` and stylesheets: a folder with a `.blend`
+    /// chosen and a picture with transparency in it.
+    fn a_folder_with_a_cutout() -> serde_json::Value {
+        let here: &[u8] = b"/home/ubuntu/kitchen";
+        let rows = the_tab_after_the_reading(
+            TheOrder::default(),
+            "row",
+            here,
+            Some(b"kitchen.blend"),
+            WhatTheReadingFound::TheFolder {
+                entries: vec![
+                    an_entry("textures", Kind::Folder, 0),
+                    an_entry("bottle_cutout.png", Kind::File, 2_516_582),
+                    an_entry("kitchen.blend", Kind::File, 94_371_840),
+                    an_entry("kitchen_0001.png", Kind::File, 4_089_446),
+                ],
+                free: Some(61 << 30),
+            },
+            Some(ObservedValue::Connected),
+            false,
+        );
+        serde_json::to_value(rows).expect("it serialises")
+    }
+
+    /// **Files drawn, then measured or pictured.** `scene` is empty to
+    /// measure; otherwise it names the state the picture is taken in.
+    /// `which` keeps each test's scratch folder and Chrome profile its own,
+    /// since the tests run side by side.
+    fn files_in_a_real_browser(which: &str, scene: &str, picture: Option<&std::path::Path>) -> Option<serde_json::Value> {
+        let page = THE_FILES_PAGE
+            .replace("ANSWERS", &a_folder_with_a_cutout().to_string())
+            .replace("SCENE", scene);
+        crate::surface::focus::a_page_with_stand_ins_in_a_real_browser(which, &page, &[], &THE_FILES_STAND_INS, picture)
+    }
+
+    /// **The pictures for the Creator**, taken where
+    /// `SMOOZY_THE_FILES_PICTURES` names a folder — *before* where
+    /// `SMOOZY_THE_FOCUS_RING_WEB` names a copy of `web/` from before piece F.
+    /// Returns whether it took them on the old page, where nothing is
+    /// measured.
+    fn the_pictures_are_taken(which: &str) -> bool {
+        let Some(pictures) = std::env::var_os("SMOOZY_THE_FILES_PICTURES") else { return false };
+        let pictures = std::path::PathBuf::from(pictures);
+        std::fs::create_dir_all(&pictures).expect("the pictures' folder");
+        let when = if std::env::var_os("SMOOZY_THE_FOCUS_RING_WEB").is_some() { "before" } else { "after" };
+        for (scene, name) in [
+            ("toolbar", "1. Files, the path bar and the toolbar"),
+            ("hover", "2. Refresh's word and ground, on hover"),
+            ("turning", "3. Refresh turning while the folder is read"),
+            ("board", "4. A picture with transparency in Files"),
+        ] {
+            files_in_a_real_browser(which, scene, Some(&pictures.join(format!("{name}, {when}.png"))));
+        }
+        when == "before"
+    }
+
+    fn the_faults_in(measured: &serde_json::Value, part: &str) -> Vec<String> {
+        measured[part]
+            .as_array()
+            .expect("the faults are listed")
+            .iter()
+            .map(|one| one.as_str().unwrap_or_default().to_string())
+            .collect()
+    }
+
+    /// **The twenty-ninth notes, note 2, in a real browser: Refresh is the
+    /// toolbar's last control and its icon sits in the middle of its hover
+    /// ground**, which is the same size and height as every other icon's on
+    /// the bar. Its word opens leftward, inside the window; it turns while the
+    /// folder is read and its ground does not move; the path bar holds no
+    /// icon. `Design/File Browser § The list`. Skipped, and says so, where
+    /// Chrome is absent.
+    #[test]
+    fn twenty_ninth_2_refresh_is_last_on_the_toolbar_and_its_icon_is_centred_in_a_real_browser() {
+        if the_pictures_are_taken("files-refresh") {
+            return;
+        }
+        let Some(measured) = files_in_a_real_browser("files-refresh", "", None) else { return };
+        let faults = the_faults_in(&measured, "refresh");
+        assert!(faults.is_empty(), "{} faults:\n{}\n{measured}", faults.len(), faults.join("\n"));
+    }
+
+    /// **The twenty-ninth notes, note 12, in a real browser: a picture is
+    /// shown over the grey-and-white board**, drawn by the page under the
+    /// picture and over its own area only, white and `#cccccc` with grey in
+    /// the top-left, the same in the dark theme; its squares are 8 pixels on
+    /// screen, and still are after the box changes size; and it is hidden
+    /// until the picture itself has loaded. `Design/File Browser § Looking at
+    /// a picture`. Skipped, and says so, where Chrome is absent.
+    #[test]
+    fn twenty_ninth_12_a_picture_is_shown_over_the_board_in_8_pixel_squares_in_a_real_browser() {
+        if std::env::var_os("SMOOZY_THE_FILES_PICTURES").is_some() {
+            return;
+        }
+        let Some(measured) = files_in_a_real_browser("files-board", "", None) else { return };
+        let faults = the_faults_in(&measured, "board");
+        assert!(faults.is_empty(), "{} faults:\n{}\n{measured}", faults.len(), faults.join("\n"));
+    }
+
+    /// The modules Files imports that are other screens, stood in, as piece
+    /// 7's pictures stood them in.
+    const THE_FILES_STAND_INS: [(&str, &str); 5] = [
+        ("event-route.js", "export function whenTold(kind, handler) { globalThis.told ||= {}; (globalThis.told[kind] ||= []).push(handler); }"),
+        (
+            "a-server.js",
+            r#"export const FILES = "files";
+export function aTabIsRegistered(tab) { globalThis.theTab = tab; }
+export function aPanelIsOpenOver() { return false; }"#,
+        ),
+        ("the-dependency-check.js", "export function theCheckIsOpenedOn() {}"),
+        ("transfers.js", "export function aTransferIsAskedFor() {}\nexport function theTransfersAreShown() {}"),
+        ("render-settings.js", "export async function theSettingsAreOpenedOn() {}"),
+    ];
+
+    /// The page for both tests. `SCENE` is empty to measure, or names the
+    /// state a picture is taken in. **The picture is made on the page**: a
+    /// bottle on nothing, its shadow half see-through, 640 × 360, as a PNG.
+    /// The `.hovered` rule is the picture's alone, the drawing's own
+    /// `.ib:hover` and its word, since a picture cannot hold a pointer.
+    const THE_FILES_PAGE: &str = r#"<!doctype html>
+<html lang="en" data-theme="light" data-system="macos"><head><meta charset="utf-8"><link rel="stylesheet" href="smoozy.css">
+<style>html,body{margin:0;height:100%;background:var(--bg);} #host{height:100vh;} #out{display:none;}
+.ib.hovered { background: var(--sel); color: var(--ink); } .ib.hovered .ibl { opacity: 1; }</style></head>
+<body><div class="files" id="host"></div>
+<pre id="out"></pre>
+<script>
+const answers = ANSWERS;
+const theTest = { held: false, picture: null };
+const never = () => new Promise(() => {});
+window.__TAURI__ = { core: { invoke: async (command) => {
+  if (command === 'the_files_tab') return { ...structuredClone(answers), a_reading_follows: theTest.held };
+  if (command === 'the_folder_is_read') return theTest.held ? never() : structuredClone(answers);
+  if (command === 'a_picture_is_read') return theTest.picture();
+  if (['the_picture_is_let_go', 'the_saved_with_version_is_read', 'the_transfers_on_this_server', 'the_upload_into_this_folder'].includes(command)) return null;
+  return never();
+} } };
+theTest.picture = () => new Promise((done) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640; canvas.height = 360;
+  const g = canvas.getContext('2d');
+  g.fillStyle = 'rgba(0, 0, 0, 0.3)'; g.beginPath(); g.ellipse(320, 322, 96, 14, 0, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#3e6b8a'; g.beginPath(); g.roundRect(272, 124, 96, 196, 18); g.fill();
+  g.fillStyle = '#355d78'; g.fillRect(298, 80, 44, 50);
+  g.fillStyle = '#c9a24a'; g.fillRect(294, 54, 52, 30);
+  g.fillStyle = '#e8e2d4'; g.fillRect(284, 180, 72, 76);
+  // Made at once: a picture read back from a file waits on nothing here.
+  const bytes = atob(canvas.toDataURL('image/png').split(',')[1]);
+  done(Uint8Array.from(bytes, (one) => one.charCodeAt(0)).buffer);
+});
+</script>
+<script type="module">
+import './files.js';
+const out = document.getElementById('out');
+const scene = 'SCENE';
+const faults = { refresh: [], board: [] };
+const measured = {};
+const check = (part, ok, why) => { if (!ok) faults[part].push(why); };
+const near = (a, b, by = 0.5) => Math.abs(a - b) < by;
+const settle = async () => { for (let at = 0; at < 16; at += 1) await new Promise((go) => setTimeout(go, 0)); };
+// A short wait. Headless Chrome on its own clock draws frames rarely, so
+// nothing here waits on one.
+const aWhile = () => new Promise((go) => setTimeout(go, 50));
+const host = document.getElementById('host');
+const tools = () => host.querySelector('.ftools');
+// Refresh where it is: last on the toolbar, or on the path before piece F.
+const onTheToolbar = () => { const last = tools().lastElementChild; return last && last.matches('button.ib') ? last : null; };
+const refresh = () => onTheToolbar() || host.querySelector('.crumbs .ib');
+const theCutout = () => Array.from(host.querySelectorAll('.frow')).find((row) => row.querySelector('.fname') && row.querySelector('.fname').textContent === 'bottle_cutout.png');
+const theSvg = () => document.querySelector('.fbview .fbvpic svg');
+const theGround = () => { const svg = theSvg(); return svg && svg.querySelector('rect[fill^="url("]'); };
+let hiddenAtFirst = null;
+const theViewerOpens = async () => {
+  new MutationObserver(() => { const ground = theGround(); if (ground && hiddenAtFirst === null) hiddenAtFirst = getComputedStyle(ground).visibility; })
+    .observe(host, { childList: true, subtree: true });
+  theCutout().dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  await settle();
+  // The picture's own load: a short while at most.
+  for (let at = 0; at < 30; at += 1) {
+    const ground = theGround();
+    if (ground && getComputedStyle(ground).visibility === 'visible') break;
+    if (!ground && theSvg() && theSvg().querySelector('image') && at > 10) break;
+    await aWhile();
+  }
+};
+const box = (one) => one.getBoundingClientRect();
+try {
+  globalThis.theTab.itIsDrawn(host);
+  globalThis.theTab.itIsShowing('row');
+  await settle();
+  // The .blend chosen, as a user would have it: its two words and *1
+  // selected* come and go to Refresh's left.
+  const theBlend = Array.from(host.querySelectorAll('.frow')).find((row) => row.querySelector('.fname') && row.querySelector('.fname').textContent === 'kitchen.blend');
+  theBlend.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await settle();
+  if (scene === 'hover') refresh().classList.add('hovered');
+  else if (scene === 'turning') { theTest.held = true; refresh().click(); await settle(); }
+  else if (scene === 'board') await theViewerOpens();
+  else if (scene === '') {
+    // ── Refresh (note 2) ──
+    const button = refresh();
+    check('refresh', onTheToolbar() && onTheToolbar().getAttribute('aria-label') === 'Refresh', "Refresh is not the toolbar's last control");
+    check('refresh', host.querySelector('.crumbs').querySelectorAll('.ib').length === 0, 'the path bar still holds an icon');
+    check('refresh', tools().querySelector('.selnote'), 'the .blend was not chosen, so nothing came and went before Refresh');
+    if (button) {
+      const ground = box(button);
+      const icon = box(button.querySelector('svg'));
+      const across = (icon.left + icon.right) / 2 - (ground.left + ground.right) / 2;
+      const down = (icon.top + icon.bottom) / 2 - (ground.top + ground.bottom) / 2;
+      measured.iconOffTheMiddle = [across, down];
+      check('refresh', near(across, 0) && near(down, 0), 'the icon sits ' + across + ' px across and ' + down + ' px down from the middle of its ground');
+      const download = tools().querySelectorAll('.ib')[1];
+      const theirs = box(download);
+      measured.grounds = { refresh: [ground.top, ground.width, ground.height], download: [theirs.top, theirs.width, theirs.height] };
+      check('refresh', near(theirs.top, ground.top) && near(theirs.height, ground.height) && near(theirs.width, ground.width), "Refresh's ground is not lined up with the other icons'");
+      const word = box(button.querySelector('.ibl'));
+      check('refresh', word.right <= ground.right + 0.5 && word.left < ground.left, 'its word does not open leftward from the icon');
+      check('refresh', word.right <= innerWidth && word.left >= 0, 'its word leaves the window');
+      check('refresh', near(ground.right, box(tools()).right - parseFloat(getComputedStyle(tools()).paddingRight)), "Refresh is not at the toolbar's right end");
+    }
+    // ── The board (note 12) ──
+    await theViewerOpens();
+    const svg = theSvg();
+    const image = svg && svg.querySelector('image');
+    const pattern = svg && svg.querySelector('pattern');
+    const ground = theGround();
+    check('board', image, 'the picture is not drawn');
+    check('board', pattern && pattern.classList.contains('fbvboard') && ground, 'no board is drawn under the picture');
+    if (image && pattern && ground) {
+      check('board', ground.compareDocumentPosition(image) & Node.DOCUMENT_POSITION_FOLLOWING, 'the board is not under the picture');
+      check('board', ground.getAttribute('fill') === 'url(#' + pattern.id + ')', 'the board is not filled with its pattern');
+      check('board', hiddenAtFirst === 'hidden', 'the board was not hidden before the picture loaded: ' + hiddenAtFirst);
+      check('board', getComputedStyle(ground).visibility === 'visible', 'the board is hidden after the picture loaded');
+      const squares = pattern.querySelectorAll('rect');
+      const fills = () => Array.from(squares).map((one) => getComputedStyle(one).fill);
+      measured.fills = fills();
+      check('board', JSON.stringify(fills()) === JSON.stringify(['rgb(255, 255, 255)', 'rgb(204, 204, 204)', 'rgb(204, 204, 204)']), 'the board is not white and #cccccc: ' + fills());
+      check('board', !squares[1].hasAttribute('x') && !squares[1].hasAttribute('y'), 'the grey square is not the top-left one');
+      const pictured = box(image);
+      const boarded = box(ground);
+      check('board', near(pictured.left, boarded.left) && near(pictured.top, boarded.top) && near(pictured.width, boarded.width) && near(pictured.height, boarded.height), "the board is not the picture's own area");
+      const onScreen = () => (Number(pattern.getAttribute('width')) / 2) * (box(image).width / 640);
+      measured.square = onScreen();
+      check('board', near(onScreen(), 8, 0.01), 'a square is ' + onScreen() + ' px on screen, not 8');
+      const wide = box(image).width;
+      // The window changing size, as near as a page can make it: the box
+      // narrows and the window says it was resized.
+      document.querySelector('.fbview .pvbox').style.width = '45%';
+      window.dispatchEvent(new Event('resize'));
+      await settle();
+      measured.narrowed = { picture: [wide, box(image).width], square: onScreen() };
+      check('board', box(image).width < wide - 50, 'the box did not narrow, so the resize was not tried');
+      check('board', near(onScreen(), 8, 0.01), 'after the box narrowed, a square is ' + onScreen() + ' px on screen, not 8');
+      document.documentElement.dataset.theme = 'dark';
+      measured.darkFills = fills();
+      check('board', JSON.stringify(fills()) === JSON.stringify(measured.fills), 'the board changes colour in the dark theme: ' + fills());
+      document.documentElement.dataset.theme = 'light';
+      // **A picture that fails to draw takes the board with it.**
+      image.setAttribute('href', 'blob:null/nothing-here');
+      for (let at = 0; at < 10 && getComputedStyle(ground).visibility !== 'hidden'; at += 1) await aWhile();
+      check('board', getComputedStyle(ground).visibility === 'hidden', 'the board stays when the picture fails');
+    }
+    // ── Refresh turning (note 2), last: the read it starts never ends ──
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settle();
+    check('board', !document.querySelector('.fbview'), 'Escape did not close the picture');
+    const still = refresh();
+    const before = still && box(still);
+    theTest.held = true;
+    if (still) { still.click(); await settle(); }
+    const turning = refresh();
+    check('refresh', turning && turning.classList.contains('uway'), 'Refresh does not turn while the folder is read');
+    if (turning && before) {
+      const now = box(turning);
+      check('refresh', near(now.top, before.top) && near(now.left, before.left) && near(now.height, before.height), 'its ground moved while it turns');
+      const spin = box(turning.querySelector('.spin'));
+      const off = [(spin.left + spin.right) / 2 - (now.left + now.right) / 2, (spin.top + spin.bottom) / 2 - (now.top + now.bottom) / 2];
+      measured.spinOffTheMiddle = off;
+      check('refresh', near(off[0], 0, 1) && near(off[1], 0, 1), 'the turning mark sits ' + off + ' px from the middle of its ground');
+    }
+  }
+} catch (error) {
+  faults.refresh.push('the page threw: ' + error);
+  faults.board.push('the page threw: ' + error);
+}
+out.textContent = JSON.stringify({ ...faults, measured });
+</script>
+</body></html>
+"#;
+
     #[cfg(unix)]
     mod over_a_real_point {
         use std::os::fd::OwnedFd;
@@ -13715,5 +17261,32 @@ console.log(JSON.stringify(out));
             let read = super::super::the_picture_of(&point.sessions, &run, &path, 1_000, &|| true).await;
             assert!(matches!(read, ThePictureRead::TheBytes { .. }), "{read:?}");
         }
+    }
+}
+
+/// **The four questions, batch 3: words a user can't act on** (2026-11-11).
+/// Each line is in the user's words, by `Preparation/Groundwork/Rules.md`
+/// Rule 1 and Rule 9. Written before the words changed, and failed first.
+#[cfg(test)]
+mod the_four_questions_batch_3 {
+    use super::*;
+
+    /// Scouts 3.31, 3.32 and 3.35, as Sol narrowed them.
+    #[test]
+    fn files_names_jobs_folders_and_references_in_plain_words() {
+        let someone_elses = smoozy_file_browser::warnings::AJobNamed {
+            job: Identity::issue(IdentityKind::Job).expect("randomness"),
+            stands: smoozy_file_browser::warnings::HowTheJobStands::Rendering,
+            the_members_reached: Vec::new(),
+            the_set_was_the_widest_case: false,
+        };
+        // **The name is a value**, drawn by the verbatim route.
+        let warning = the_live_job_warning(&[someone_elses.clone()], &[]).expect("a warning");
+        assert_eq!(warning.said.values(), vec!["Another job"]);
+        assert!(!warning.said.values().contains(&someone_elses.job.as_text().as_str()));
+        assert_eq!(words::THE_TOP_OF_THE_SERVER, "Server");
+        assert_eq!(words::OTHER_REFERENCES_REST, "other files on this server depend on this file.");
+        assert_eq!(words::ONE_OTHER_REFERENCE_REST, "other file on this server depends on this file.");
+        assert_eq!(words::REFERENCES_SAID, "Deleting it breaks them until you check their dependencies again.");
     }
 }

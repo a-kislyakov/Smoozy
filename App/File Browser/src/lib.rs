@@ -151,6 +151,7 @@ pub mod cache;
 pub mod continuation;
 pub mod declarations;
 pub mod diary;
+pub mod elevated;
 pub mod free_space;
 pub mod keep_both;
 pub mod listing;

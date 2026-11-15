@@ -423,3 +423,44 @@ The Creator: *"The question is can Smoozy detect everything there is to simulate
 8. **Whether Blender itself answers for the whole file.** *What breaks:* nothing if no; if yes, the reading could lean on it instead of a list of kinds.
 9. **What a bake covers.** *What breaks:* a bake taken for whole when it is not, played too late.
 
+
+## Reading at a frame
+
+*Added 2026-11-13, Creator-raised: the settings read takes minutes on heavy scenes (the Creator's test-copy notes, 2026-11-12, note 15, and the talk after). The read steps the scene through its frame range to learn what changes over time, and each step works the whole scene out. The Creator: "let's do it properly with research then." From `Audits/Build/The four questions/The test copy's notes, second round — what landed.md` (questions 1–5) and `Reading the settings, its speed — the answer.md` (questions 6–7).*
+
+1. **Whether an animated setting's value at a frame can be learned from an open file without moving the scene to that frame,** by what means, and whether it matches what a render uses at that frame in every case. *What breaks:* nothing if no; if yes, most files skip the walk.
+2. **The same where a setting is driven by a driver.**
+3. **The same where a data-block's animation is several actions stacked in the NLA.**
+4. **When timeline markers switch a scene's camera, which camera is active before the first marker, between two, on one and after the last,** and whether that can be learned without moving the scene.
+5. **When a scene is moved to a frame, which settings, of the scene and of other data-blocks, can change, and through what.**
+6. **Whether opening a file with no window and with the option not to build and evaluate dependency graphs on load can change any setting a script then reads,** after the file's own start-up scripts run (scenes, View Layers, compositor nodes, render settings, file paths). *What breaks:* a wrong reading if yes; if no, every read and render start skips one full working-out of the scene.
+7. **Whether a scene can be brought to a frame so that its own settings, its View Layers' switches and its compositor take that frame's values without its objects being worked out again,** and whether every such value matches a full move. *What breaks:* nothing if no; if yes, a 90-second read becomes a few seconds.
+
+## Working out a driver
+
+*Added 2026-11-13, Creator-raised: a file of eight one-frame scenes, each with a driver copying the Background View Layer's samples from another scene, still takes about 25 seconds a scene to read, because the settings read moves every scene with a driver to its frames (*Reading at a frame* left drivers to the walk: its question 2 found a driver can be worked out by hand in one case, but not how drivers combine their inputs in general). The Creator: "I feel like reading the actual driver's expression could be the key to success. Or something else, go figure it out."*
+
+1. **How each driver type combines its variables into one value** (Averaged Value, Sum Values, Scripted Expression, Minimum Value, Maximum Value). *What breaks:* a wrong value read for a driven setting.
+2. **What value each driver variable type takes, and where it comes from** (Single Property, Transform Channel, Rotational Difference, Distance, Context Property), including when the property it reads is itself animated or driven, or lives on another scene or data-block.
+3. **What a driver's own F-Curve does to the combined value**, with no keyframes, with keyframes, and with modifiers, including what a newly made driver comes with.
+4. **Which expressions count as Simple Expressions**, what they may contain, and how they are worked out.
+5. **What value a driven setting takes when its driver cannot be worked out** — a path that leads nowhere, a missing target, an expression that fails or is not allowed to run.
+6. **In what order drivers and keyframe animation are worked out when one reads what another sets**, and whether a script can learn a driver's value at a frame without moving the scene there.
+
+## What a move works out
+
+*Added 2026-11-13, Creator-raised: in the same file (eight one-frame scenes sharing a heavy model), each move of a scene to its frame takes about 25 seconds, because Blender works out the whole scene, objects included, while the settings read needs only the scene's own settings, its View Layers and its compositor. *Reading at a frame* question 7 found no built-in move that leaves the objects out. The Creator: "taking 5 minutes to read them to begin with is probably even worse… I really want you to get to the bottom of it." The read runs in a copy of the file that is never saved, so it may change anything first.*
+
+1. **When a script moves a scene to a frame, which data Blender works out, and what decides that set.** *What breaks:* nothing; it tells the read what it pays for.
+2. **Whether a script can make that set smaller before a move, by what means, and which values still come out as a full move gives them** (the scene's settings, its View Layers' settings and switches, its compositor, drivers on them). *What breaks:* if yes, a 25-second move may take a fraction of a second.
+3. **In a file with several scenes, which scenes' data Blender works out on opening with no window, and when a script moves a scene that is not the one the file opened on.**
+
+## Colour spaces and image sequences
+
+*Added 2026-11-15, Creator-raised (*"do research and fix it first"*): two what-if answers wait on Blender facts (`Audits/Build/What if — the answers/Bad ones, batch 3 — what landed.md`, 244 and 251). 244: a file made with a custom colour configuration on the Mac may name colour spaces the server's Blender doesn't have, and nothing warns. 251: a picture stored as an image sequence is uploaded as its first frame only, because the dependency check treats its name as one file.*
+
+1. **What Blender does when a file names a colour space its colour configuration does not have** — on opening, in a script reading the setting, and in a render. *What breaks:* frames in wrong colours with no warning.
+2. **Where Blender's colour configuration comes from, and how a script learns which is in use and which colour spaces it holds.**
+3. **For an image stored as an image sequence, which part of the stored name stands for the frame number, and how Blender finds the file for a frame,** including when the number of digits varies. *What breaks:* only the first frame uploaded.
+4. **Which frames of an image sequence a render uses,** given the image's own frame settings and the scene's frame.
+5. **How a script can list the files an image sequence will use for a range of frames.**

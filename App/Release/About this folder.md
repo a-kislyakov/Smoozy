@@ -8,6 +8,10 @@ What it does, what it does not do, how a version is named, and the exact command
 
 The rules it keeps are `Preparation/Architecture/Server protocol and transfers.md` §5 — B8, B8a, B9 and B10 — and the code that keeps them is `App/Server protocol and transfers/src/release/`, which this program calls and never re-implements.
 
+## The scout before a hosted run
+
+`Scout before a hosted run.py` checks on this Mac, for nothing, what a hosted Windows or Linux run would otherwise fail on. When it runs and what it checks are at `Preparation/Build/Method.md`, *Where the app is built*; how to run it is at the top of the script. Its second check is also the test `tests/the_scout_before_a_hosted_run.rs`.
+
 ## Signing and notarizing the Mac download
 
 `smoozy-release sign-the-mac-bundle --bundle <Smoozy.app> --into <Smoozy-macos.zip>` signs the Mac bundle with the Creator's Developer ID, has Apple notarize it, staples Apple's ticket to it, checks it, and only then writes the Mac download. That download is the one `compose --also` takes. Where something is missing, it stops before it touches the bundle and says what is missing. Its code is `src/the_mac_bundle.rs`, and what Apple requires is cited there.

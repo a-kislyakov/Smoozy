@@ -1774,6 +1774,18 @@ mod on_a_desk_with_a_socket_pair {
         screen.requests.iter().find(|row| row.id.as_str() == request)
     }
 
+    /// **Every control the row's header offers, in order** — its own, then
+    /// the second one beside it. An upload left over offers *Continue*, then
+    /// *Remove* (`Design/Transfers § What a past sitting left behind`, as
+    /// changed 2026-11-11, the four questions, batch 2, fix 2).
+    fn the_controls(row: &ARequestDrawn) -> Vec<String> {
+        [row.control.as_ref(), row.also.as_ref()]
+            .into_iter()
+            .flatten()
+            .map(|control| control.act.as_str().to_string())
+            .collect()
+    }
+
     /// **Every word and value of a composed line, in order**, as the page
     /// would lay them out.
     fn as_read(said: &Words) -> String {
@@ -3957,14 +3969,14 @@ mod on_a_desk_with_a_socket_pair {
         );
         let screen = the_screen_now(&record, &the_run);
         let row = the_row(&screen, &request).expect("the request is on the screen");
-        let control = row.control.as_ref().map(|control| control.act.as_str().to_string());
+        let control = the_controls(row);
         println!(
-            "LEFTOVER UP: the row reads «{}» · «{}» · «{}», control {control:?}.",
+            "LEFTOVER UP: the row reads «{}» · «{}» · «{}», controls {control:?}.",
             as_read(&row.name),
             as_read(&row.count),
             as_read(&row.where_it_goes)
         );
-        a_figure!(missed, control.as_deref() == Some("remove"), "LEFTOVER UP: the row offers {control:?}, not Remove");
+        a_figure!(missed, control == ["continue", "remove"], "LEFTOVER UP: the row offers {control:?}, not Continue then Remove");
         a_figure!(
             missed,
             as_read(&row.where_it_goes).contains("partial files still use space on the server"),
@@ -4031,8 +4043,8 @@ mod on_a_desk_with_a_socket_pair {
         let row = the_row(&screen, &request).expect("the first request is still on the screen");
         a_figure!(
             missed,
-            row.control.as_ref().map(|control| control.act.as_str()) != Some("remove"),
-            "LEFTOVER UP, ASKED AGAIN: the part was taken up and the first request still offers Remove"
+            !the_controls(row).iter().any(|act| act == "remove" || act == "continue"),
+            "LEFTOVER UP, ASKED AGAIN: the part was taken up and the first request still offers Continue or Remove"
         );
         the_figures_held("THE LEFTOVER, UP", missed);
     }
@@ -4154,8 +4166,10 @@ mod on_a_desk_with_a_socket_pair {
         );
         a_figure!(
             missed,
-            cause == Some(smoozy_server_protocol::transfers::StartOverCause::TheStagedPrefixDidNotVerify),
-            "CHANGED, ASKED AGAIN: the row never said it was uploading the file from the start ({cause:?})"
+            // **`File Browser` K10a (uploads carry on, 2026-11-14): the row
+            // says the file changed**, not that a resume failed.
+            cause == Some(smoozy_server_protocol::transfers::StartOverCause::TheFileChangedOnThisComputer),
+            "CHANGED, ASKED AGAIN: the row never said the file changed and was uploading from the start ({cause:?})"
         );
         a_figure!(
             missed,
@@ -4163,6 +4177,133 @@ mod on_a_desk_with_a_socket_pair {
             "CHANGED, ASKED AGAIN: the file on the machine is not the file as it is now"
         );
         the_figures_held("THE LEFTOVER, UP, CHANGED", missed);
+    }
+
+    /// **A file saved larger between a cut upload and asking for it again is
+    /// sent whole, as it is now** — `File Browser` U8's paragraph of
+    /// 2026-11-12: the start-over takes the file's size as it now stands. The
+    /// Fable review's seventh sitting, fault 2.
+    ///
+    /// **The fault as it stood**: the part started over, and kept the size it
+    /// was arranged at. The loop sent that many bytes of the larger file,
+    /// `File Browser` K9's gate read past them to the file's real end, and the
+    /// request that asked for the file as it is now ended *the file changed
+    /// during upload*.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn an_upload_asked_for_again_after_the_file_was_saved_larger_lands_whole() {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+
+        let size = 24_000_000u64;
+
+        let scratch = Scratch::new("leftover-up-larger");
+        let here = scratch.folder("here/three");
+        three_parts_one_large(&here, size);
+        let machine_side = scratch.folder("machine");
+        let record = TheTimedRecord::at(&scratch.folder("record").join("smoozy.sqlite3"));
+        let (server_row, installation) = a_server_row_installed(&record);
+        let the_server = server_row.as_text();
+        let machine = Arc::new(AMachine {
+            program,
+            home: scratch.at.clone(),
+            limit: 10,
+            ..AMachine::default()
+        });
+        let point = APointLending::over(&machine).await;
+        let the_run = Arc::new(TheRunsTransfers::for_this_run());
+        let cap = TheCap::Of(BytesPerSecond(4_000_000));
+        the_run.the_caps_saved_are(cap, cap);
+        let as_a_door: Arc<dyn TheRecordAnUploadWrites> = record.clone();
+
+        let asked = WhatIsBeingUploaded {
+            server_row: server_row.clone(),
+            installation: Some(installation.clone()),
+            destination: the_bytes_of(&machine_side),
+            chosen: vec![here.clone()],
+            run: a_run(),
+        };
+        let mut ready = an_upload_is_prepared(&asked, &point.sessions, as_a_door.as_ref())
+            .await
+            .expect("the upload is prepared");
+        assert_eq!(
+            the_answer_is_applied(&mut ready, None, &point.sessions, as_a_door.as_ref()).await,
+            WhatTheAnswerLeft::ItGoes
+        );
+        let request = ready.request.record.as_text();
+        let (came_to, ()) = tokio::join!(
+            the_upload_runs(ready, &point.sessions, &the_run, Arc::clone(&as_a_door), &NobodyIsTold),
+            cut_by_a_disconnect(&record, &machine, &point, &the_run, &the_server, &request)
+        );
+        assert_eq!(came_to.uploaded, 2, "{came_to:?}");
+
+        // ---- the file is saved again while the line is down: its first
+        // megabyte changes and it is three megabytes larger
+        let cut_file = here.join("part_1.blend");
+        {
+            use std::io::{Seek, SeekFrom};
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&cut_file)
+                .expect("the cut file opens for writing");
+            file.seek(SeekFrom::Start(0)).expect("the start of the file");
+            file.write_all(&vec![0xAB; 1_000_000]).expect("the first part is rewritten");
+            file.seek(SeekFrom::End(0)).expect("the end of the file");
+            file.write_all(&vec![0xCD; 3_000_000]).expect("the file grows");
+        }
+        let the_file_now = std::fs::read(&cut_file).expect("the changed file reads");
+
+        // ---- Connect again, and ask for the cut file again
+        let point = APointLending::over(&machine).await;
+        let landing_folder = machine_side.join("three");
+        let asked = WhatIsBeingUploaded {
+            server_row: server_row.clone(),
+            installation: Some(installation.clone()),
+            destination: the_bytes_of(&landing_folder),
+            chosen: vec![cut_file.clone()],
+            run: a_run(),
+        };
+        let mut ready = an_upload_is_prepared(&asked, &point.sessions, as_a_door.as_ref())
+            .await
+            .expect("the second upload is prepared");
+        assert_eq!(
+            the_answer_is_applied(&mut ready, None, &point.sessions, as_a_door.as_ref()).await,
+            WhatTheAnswerLeft::ItGoes
+        );
+        let again = ready.request.record.as_text();
+        let watched = TheFileWatched::over(&the_run, again.clone());
+        let came_to = the_upload_runs(ready, &point.sessions, &the_run, Arc::clone(&as_a_door), &NobodyIsTold).await;
+        let looks = watched.ended();
+        let verified = looks.iter().find_map(|look| look.verifying);
+        let cause = looks.iter().find_map(|look| look.cause);
+        let highest = looks.iter().map(|look| look.staged).max();
+        let landed = std::fs::read(landing_folder.join("part_1.blend")).ok();
+        println!(
+            "SAVED LARGER, ASKED AGAIN: came to {came_to:?}; the part verified {verified:?}; started \
+             over {cause:?}; the highest figure {highest:?}; the file on the machine is the file \
+             now {}; left staged {:?}.",
+            landed.as_deref() == Some(the_file_now.as_slice()),
+            what_is_left_staged(&landing_folder)
+        );
+        let mut missed = Vec::new();
+        a_figure!(missed, came_to.uploaded == 1, "SAVED LARGER, ASKED AGAIN: came to {came_to:?}, not uploaded");
+        a_figure!(
+            missed,
+            verified.is_none(),
+            "SAVED LARGER, ASKED AGAIN: the part sent before the change was taken up and carried on from"
+        );
+        a_figure!(
+            missed,
+            // **`File Browser` K10a (uploads carry on, 2026-11-14): the row
+            // says the file changed**, not that a resume failed.
+            cause == Some(smoozy_server_protocol::transfers::StartOverCause::TheFileChangedOnThisComputer),
+            "SAVED LARGER, ASKED AGAIN: the row never said the file changed and was uploading from the start ({cause:?})"
+        );
+        a_figure!(
+            missed,
+            landed.as_deref() == Some(the_file_now.as_slice()),
+            "SAVED LARGER, ASKED AGAIN: the file on the machine is not the file as it is now"
+        );
+        the_figures_held("THE LEFTOVER, UP, SAVED LARGER", missed);
     }
 
     /// **A manual download a *Disconnect* cut is told as a leftover in the
@@ -4235,7 +4376,14 @@ mod on_a_desk_with_a_socket_pair {
             as_read(&row.count),
             as_read(&row.where_it_goes)
         );
-        a_figure!(missed, control.as_deref() == Some("remove"), "LEFTOVER DOWN: the row offers {control:?}, not Remove");
+        // **Since 2026-11-12 a download from Files left over offers *Continue*
+        // first**, then *Remove* (the live pass of that date, new fault 4).
+        let also = row.also.as_ref().map(|control| control.act.as_str().to_string());
+        a_figure!(
+            missed,
+            control.as_deref() == Some("continue-download") && also.as_deref() == Some("remove"),
+            "LEFTOVER DOWN: the row offers {control:?} and {also:?}, not Continue and Remove"
+        );
         a_figure!(
             missed,
             as_read(&row.where_it_goes).contains("partial files are still in"),
@@ -4274,14 +4422,12 @@ mod on_a_desk_with_a_socket_pair {
             "LEFTOVER DOWN, REMOVED: no record reads stopped, staging removed by user: {cut:?}"
         );
         let screen = the_screen_now(&record, &the_run);
-        let row = the_row(&screen, &request).expect("the request is still on the screen");
+        // **Once nothing is left over, the row goes** (`Download` M13 as
+        // amended 2026-11-12, the second live pass's new fault 3).
         a_figure!(
             missed,
-            row.control.as_ref().map(|control| control.act.as_str()) == Some("files-on-your-computer")
-                && !as_read(&row.where_it_goes).contains("partial files"),
-            "LEFTOVER DOWN, REMOVED: the row still reads as a leftover: «{}», {:?}",
-            as_read(&row.where_it_goes),
-            row.control.as_ref().map(|control| control.act.as_str())
+            the_row(&screen, &request).is_none(),
+            "LEFTOVER DOWN, REMOVED: the row is still on the screen"
         );
         the_figures_held("THE LEFTOVER, DOWN", missed);
     }
@@ -4445,11 +4591,15 @@ mod on_a_desk_with_a_socket_pair {
         // **A person looking at Transfers now reads a leftover** — and the
         // screen has read what the request left, which the take-up then moves.
         let screen = the_screen_now(&record, &the_run);
+        // **A download from Files left over offers *Continue* first**, then
+        // *Remove* — `Design/Transfers § What a past sitting left behind` as
+        // changed 2026-11-12. This read `Some("remove")` until the live pass's
+        // leftovers, item 6, ran it.
         assert_eq!(
             the_row(&screen, &first)
                 .and_then(|row| row.control.as_ref())
                 .map(|control| control.act.as_str()),
-            Some("remove"),
+            Some("continue-download"),
             "the cut request reads as a leftover"
         );
 
@@ -4496,10 +4646,309 @@ mod on_a_desk_with_a_socket_pair {
         let row = the_row(&screen, &first).expect("the first request is on the screen");
         a_figure!(
             missed,
-            row.control.as_ref().map(|control| control.act.as_str()) != Some("remove"),
+            !matches!(row.control.as_ref().map(|control| control.act.as_str()), Some("remove" | "continue-download")),
             "TAKE-UP DOWN: the first request still offers Remove"
         );
         the_figures_held("TAKE-UP, DOWN", missed);
+    }
+
+    /// **A download from Files cut by a quit, carried on by *Continue*, lands
+    /// whole** — `Design/Transfers § What a past sitting left behind`, its
+    /// paragraph of 2026-11-12 (the live pass of that date, new fault 4: a 2 GB
+    /// download cut by a quit offered *Remove* alone). The builder that added
+    /// *Continue* had no test carrying it through; the live pass's leftovers,
+    /// item 6, asked for one.
+    ///
+    /// **The quit, at the desk**: the download's future is dropped mid-file,
+    /// every session ends, the start's own settling of what the last run left
+    /// runs, and a fresh run reads the record, as the next sitting does. ***Continue*'s own steps**: what it asks for is read from
+    /// the request's record, the request is prepared from the same server into
+    /// the same folder, and *Skip existing* is the answer it gives without
+    /// asking. The file must land whole with the same bytes, the cut transfer
+    /// must be the one taken up, nothing may stay staged, and the first request
+    /// must stop offering *Continue* or *Remove*.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_download_cut_by_a_quit_is_continued_and_lands_whole() {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+
+        let size = 24_000_000u64;
+        let scratch = Scratch::new("continue-down");
+        let on_the_machine = scratch.folder("machine/three");
+        three_parts_one_large(&on_the_machine, size);
+        let chosen = scratch.folder("chosen");
+        let record = TheTimedRecord::at(&scratch.folder("record").join("smoozy.sqlite3"));
+        let (server_row, installation) = a_server_row_installed(&record);
+        let machine = Arc::new(AMachine {
+            program,
+            home: scratch.at.clone(),
+            limit: 10,
+            ..AMachine::default()
+        });
+        let point = APointLending::over(&machine).await;
+        let the_first_run = Arc::new(TheRunsTransfers::for_this_run());
+        let cap = TheCap::Of(BytesPerSecond(4_000_000));
+        the_first_run.the_caps_saved_are(cap, cap);
+        let asked = |destination: Vec<u8>, picked: Vec<Vec<u8>>| WhatIsBeingDownloaded {
+            server_row: server_row.clone(),
+            installation: Some(installation.clone()),
+            destination,
+            picked,
+            run: a_run(),
+        };
+        let mut ready = a_download_is_prepared(
+            asked(the_bytes_of(&chosen), vec![the_bytes_of(&on_the_machine)]),
+            &point.sessions,
+            record.as_ref() as &dyn TheRecordADownloadWrites,
+            &NoJobIsKnown,
+        )
+        .await
+        .expect("the download is prepared");
+        the_request_goes_without_a_question(&mut ready, record.as_ref())
+            .expect("the dispositions are written");
+        let first = ready.request.record.as_text();
+
+        // ---- The quit: mid-file, the download stops being run at all.
+        let two_checkpoints = 2 * smoozy_server_protocol::transfers::moving::THE_CHECKPOINT_INTERVAL + 1_000_000;
+        tokio::select! {
+            _ = the_download_runs(&mut ready, &point.sessions, &the_first_run, record.as_ref()) => {
+                panic!("the download ended before the quit");
+            }
+            () = until("the file in flight passes two checkpoints", Duration::from_secs(60), || {
+                the_first_run.what_is_under_way().get(&first).is_some_and(|under_way| {
+                    under_way.moving.iter().any(|file| {
+                        file.report.bytes_staged >= two_checkpoints && file.report.bytes_staged < file.report.bytes_expected
+                    })
+                })
+            }) => {}
+        }
+        machine.every_session_ends();
+        point.lending.abort();
+        drop(the_first_run);
+
+        // ---- The next sitting: the start settles what the last run left, as
+        // the application's own start does, and a fresh run reads the record.
+        let settled = {
+            let held = record.record.lock().expect("the record");
+            smoozy_desktop::start::what_the_last_run_left_is_settled(&held)
+        };
+        println!("CONTINUE DOWN: the start settled {settled:?}.");
+        let the_run = Arc::new(TheRunsTransfers::for_this_run());
+        the_run.the_caps_saved_are(cap, cap);
+        let mut missed = Vec::new();
+        let screen = the_screen_now(&record, &the_run);
+        let row = the_row(&screen, &first).expect("the request is on the screen");
+        let offered = (
+            row.control.as_ref().map(|control| control.act.as_str().to_string()),
+            row.also.as_ref().map(|control| control.act.as_str().to_string()),
+        );
+        println!(
+            "CONTINUE DOWN: after the quit the row reads «{}» · «{}», offering {offered:?}; staged {:?}.",
+            as_read(&row.count),
+            as_read(&row.where_it_goes),
+            what_is_left_staged(&chosen)
+        );
+        a_figure!(
+            missed,
+            offered.0.as_deref() == Some("continue-download") && offered.1.as_deref() == Some("remove"),
+            "CONTINUE DOWN: after the quit the row offers {offered:?}, not Continue and Remove"
+        );
+
+        // ---- Continue: what the request asked for, read from its record.
+        let again = {
+            let held = record.record.lock().expect("the record");
+            smoozy_desktop::surface::transfers::what_continue_downloads_again(held.connection(), &server_row, &first)
+        };
+        let Some((destination, picked)) = again else {
+            panic!("CONTINUE DOWN: the request's record gives nothing to ask for again");
+        };
+        assert_eq!(destination, the_bytes_of(&chosen), "the same folder");
+        assert_eq!(picked, vec![the_bytes_of(&on_the_machine)], "the same pick");
+        let point = APointLending::over(&machine).await;
+        let mut ready = a_download_is_prepared(
+            asked(destination, picked),
+            &point.sessions,
+            record.as_ref() as &dyn TheRecordADownloadWrites,
+            &NoJobIsKnown,
+        )
+        .await
+        .expect("Continue's download is prepared");
+        let answer = smoozy_desktop::surface::transfers::the_answer_for_recovery(&ready.the_pre_flight, true);
+        a_figure!(
+            missed,
+            answer == Some(smoozy_file_browser::already_exists::CollisionAnswer::SkipExisting),
+            "CONTINUE DOWN: Continue would ask a question rather than answer Skip existing: {answer:?}"
+        );
+        smoozy_desktop::downloading::the_answer_is_applied(
+            &mut ready,
+            record.as_ref(),
+            smoozy_file_browser::already_exists::CollisionAnswer::SkipExisting,
+        )
+        .expect("the answer is written");
+        let came_to = the_download_runs(&mut ready, &point.sessions, &the_run, record.as_ref()).await;
+        println!(
+            "CONTINUE DOWN: came to {came_to:?}; staged {:?} and {:?}.",
+            what_is_left_staged(&chosen),
+            what_is_left_staged(&chosen.join("three"))
+        );
+        // The large one, [`three_parts_one_large`]'s second.
+        let landed = chosen.join("three").join("part_1.blend");
+        a_figure!(
+            missed,
+            it_holds_the_pattern(&landed, size),
+            "CONTINUE DOWN: the cut file on this computer is not the file on the server: {:?} bytes",
+            std::fs::metadata(&landed).map(|held| held.len()).ok()
+        );
+        a_figure!(
+            missed,
+            what_is_left_staged(&chosen).is_empty() && what_is_left_staged(&chosen.join("three")).is_empty(),
+            "CONTINUE DOWN: something is left staged"
+        );
+        let screen = the_screen_now(&record, &the_run);
+        let row = the_row(&screen, &first).expect("the first request is on the screen");
+        let still = row.control.as_ref().map(|control| control.act.as_str().to_string());
+        a_figure!(
+            missed,
+            still.as_deref() != Some("remove") && still.as_deref() != Some("continue-download"),
+            "CONTINUE DOWN: the first request still offers {still:?} after Continue"
+        );
+        the_figures_held("CONTINUE, DOWN", missed);
+    }
+
+    /// **A file that grew on the server between a cut download and asking
+    /// for it again comes down whole** — `Download` M13's paragraph of
+    /// 2026-11-12: a part is taken up only where the size the new request's
+    /// listing gives is the size the part was arranged at. The Fable review's
+    /// seventh sitting, fault 1.
+    ///
+    /// **The fault as it stood**: the part was taken up with the size it was
+    /// arranged at. It started over, read that many bytes of the larger file,
+    /// published them, and the row read as downloaded.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_downloads_leftover_asked_again_after_the_file_grew_lands_whole() {
+        a_downloads_leftover_asked_again_after_the_file_grew(false).await;
+    }
+
+    /// **The same, where the part itself has gone from the staging folder** —
+    /// the user tidied it away. Nothing is staged, so the loop has no
+    /// start-over to take the size at; the take-up's own gate is what keeps
+    /// the old size out.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_downloads_leftover_whose_part_is_gone_asked_again_after_the_file_grew_lands_whole() {
+        a_downloads_leftover_asked_again_after_the_file_grew(true).await;
+    }
+
+    async fn a_downloads_leftover_asked_again_after_the_file_grew(the_part_is_gone: bool) {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+
+        let size = 24_000_000u64;
+        let scratch = Scratch::new(if the_part_is_gone { "takeup-down-grew-gone" } else { "takeup-down-grew" });
+        let on_the_machine = scratch.folder("machine/three");
+        three_parts_one_large(&on_the_machine, size);
+        let chosen = scratch.folder("chosen");
+        let record = TheTimedRecord::at(&scratch.folder("record").join("smoozy.sqlite3"));
+        let (server_row, installation) = a_server_row_installed(&record);
+        let the_server = server_row.as_text();
+        let machine = Arc::new(AMachine {
+            program,
+            home: scratch.at.clone(),
+            limit: 10,
+            ..AMachine::default()
+        });
+        let point = APointLending::over(&machine).await;
+        let the_run = Arc::new(TheRunsTransfers::for_this_run());
+        let cap = TheCap::Of(BytesPerSecond(4_000_000));
+        the_run.the_caps_saved_are(cap, cap);
+        let asked = |picked: PathBuf, into: &Path| WhatIsBeingDownloaded {
+            server_row: server_row.clone(),
+            installation: Some(installation.clone()),
+            destination: the_bytes_of(into),
+            picked: vec![the_bytes_of(&picked)],
+            run: a_run(),
+        };
+        let mut ready = a_download_is_prepared(
+            asked(on_the_machine.clone(), &chosen),
+            &point.sessions,
+            record.as_ref() as &dyn TheRecordADownloadWrites,
+            &NoJobIsKnown,
+        )
+        .await
+        .expect("the download is prepared");
+        the_request_goes_without_a_question(&mut ready, record.as_ref())
+            .expect("the dispositions are written");
+        let first = ready.request.record.as_text();
+        let (_, ()) = tokio::join!(
+            the_download_runs(&mut ready, &point.sessions, &the_run, record.as_ref()),
+            cut_by_a_disconnect(&record, &machine, &point, &the_run, &the_server, &first)
+        );
+        let cut = the_interrupted_one(&record);
+        assert_eq!(what_is_left_staged(&chosen).len(), 1, "one part was left");
+        // **A person looking at Transfers now reads a leftover** — and the
+        // screen has read what the request left, which the take-up then moves.
+        let screen = the_screen_now(&record, &the_run);
+        // **A download from Files left over offers *Continue* first**, then
+        // *Remove* — `Design/Transfers § What a past sitting left behind` as
+        // changed 2026-11-12. This read `Some("remove")` until the live pass's
+        // leftovers, item 6, ran it.
+        assert_eq!(
+            the_row(&screen, &first)
+                .and_then(|row| row.control.as_ref())
+                .map(|control| control.act.as_str()),
+            Some("continue-download"),
+            "the cut request reads as a leftover"
+        );
+
+        // ---- the file on the machine is written again, larger: the frame
+        // rendered again
+        let the_file_now = vec![0x6Eu8; 30_000_000];
+        std::fs::write(&cut.source_path, &the_file_now).expect("the machine's file is written again");
+        if the_part_is_gone {
+            std::fs::remove_file(cut.staging_path.as_text()).expect("the part is removed by hand");
+        }
+
+        // ---- Connect again, and ask for the cut file again, landing where it
+        // was going
+        let point = APointLending::over(&machine).await;
+        let mut ready = a_download_is_prepared(
+            asked(PathBuf::from(&cut.source_path), &chosen.join("three")),
+            &point.sessions,
+            record.as_ref() as &dyn TheRecordADownloadWrites,
+            &NoJobIsKnown,
+        )
+        .await
+        .expect("the second download is prepared");
+        the_request_goes_without_a_question(&mut ready, record.as_ref())
+            .expect("the dispositions are written");
+        let came_to = the_download_runs(&mut ready, &point.sessions, &the_run, record.as_ref()).await;
+        let landed = std::fs::read(&cut.final_path).ok();
+        let mut missed = Vec::new();
+        println!(
+            "GREW, ASKED AGAIN, DOWN: came to {came_to:?}; landed {:?} bytes of {}; staged {:?} and {:?}.",
+            landed.as_ref().map(Vec::len),
+            the_file_now.len(),
+            what_is_left_staged(&chosen),
+            what_is_left_staged(&chosen.join("three"))
+        );
+        a_figure!(missed, came_to.fetched == 1, "GREW, ASKED AGAIN, DOWN: came to {came_to:?}");
+        a_figure!(
+            missed,
+            landed.as_deref() == Some(the_file_now.as_slice()),
+            "GREW, ASKED AGAIN, DOWN: the file on this computer is not the file on the machine as it is now"
+        );
+        a_figure!(
+            missed,
+            what_is_left_staged(&chosen).is_empty() && what_is_left_staged(&chosen.join("three")).is_empty(),
+            "GREW, ASKED AGAIN, DOWN: something is left staged"
+        );
+        let screen = the_screen_now(&record, &the_run);
+        let row = the_row(&screen, &first).expect("the first request is on the screen");
+        a_figure!(
+            missed,
+            !matches!(row.control.as_ref().map(|control| control.act.as_str()), Some("remove" | "continue-download")),
+            "GREW, ASKED AGAIN, DOWN: the first request still offers Remove"
+        );
+        the_figures_held("GREW, ASKED AGAIN, DOWN", missed);
     }
 
     // ------------- the download question's answers (thirteenth-pass piece 3)
@@ -5393,18 +5842,20 @@ mod on_a_desk_with_a_socket_pair {
         let screen = the_screen_now(&record, &the_run);
         let row = the_row(&screen, &request).expect("the request is on the screen");
         println!(
-            "REMOVE UP: the row reads «{}», control {:?}.",
+            "REMOVE UP: the row reads «{}», controls {:?}.",
             as_read(&row.where_it_goes),
-            row.control.as_ref().map(|control| control.act.as_str())
+            the_controls(row)
         );
         // **The 38's piece 9, item 33: a part whose cleanup is owed keeps its
         // *Remove***, which now reaches the machine (`File Browser` U8 as
-        // amended 2026-10-03). Until then the row offered nothing.
+        // amended 2026-10-03). Until then the row offered nothing. Since
+        // 2026-11-11 *Continue* stands before it (`Design/Transfers § What a
+        // past sitting left behind`).
         a_figure!(
             missed,
             as_read(&row.where_it_goes).contains("partial files still use space on the server")
-                && row.control.as_ref().map(|control| control.act.as_str()) == Some("remove"),
-            "REMOVE UP: the row does not say the part is still on the server, or offers no Remove"
+                && the_controls(row) == ["continue", "remove"],
+            "REMOVE UP: the row does not say the part is still on the server, or offers no Continue then Remove"
         );
 
         // ---- Connect again: the sweep leaves what it cannot claim
@@ -5540,13 +5991,26 @@ mod on_a_desk_with_a_socket_pair {
             the_part.cleanup_is_owed
         );
         let screen = the_screen_now(&record, &the_run);
-        let row = the_row(&screen, &request).expect("the request is on the screen");
-        println!("REMOVE UP, CONNECTED: the row reads «{}».", as_read(&row.where_it_goes));
+        // **Once nothing is left over, the row goes** (`File Browser` U8 as
+        // amended 2026-11-12, the second live pass's new fault 3: the part
+        // went and the row stayed as *did not finish* with *Show in Files*).
+        // The request record stays, marked.
+        let row = the_row(&screen, &request);
+        println!(
+            "REMOVE UP, CONNECTED: the row {:?}.",
+            row.map(|row| (as_read(&row.name), as_read(&row.where_it_goes), the_controls(row)))
+        );
+        a_figure!(missed, row.is_none(), "REMOVE UP, CONNECTED: the row is still on the screen");
+        let held = record.record.lock().expect("the record");
         a_figure!(
             missed,
-            !as_read(&row.where_it_goes).contains("partial files") && row.control.is_none(),
-            "REMOVE UP, CONNECTED: the row still says partial files are on the server, or offers a control"
+            smoozy_desktop::record::upload_requests::read(held.connection(), &Identity::read_back(IdentityKind::Operation, &request).expect("an identity"))
+                .ok()
+                .flatten()
+                .is_some(),
+            "REMOVE UP, CONNECTED: the request record went with the row"
         );
+        drop(held);
 
         // ---- A record naming a path outside the staging folder is refused
         let elsewhere = machine_side.join("not-staging");
@@ -6380,14 +6844,14 @@ mod on_a_desk_with_a_socket_pair {
         );
         let screen = the_screen_now(&record, &the_run);
         let row = the_row(&screen, &request).expect("the request is on the screen");
-        let control = row.control.as_ref().map(|control| control.act.as_str().to_string());
+        let control = the_controls(row);
         println!(
-            "SILENT LEFTOVER: the row reads «{}» · «{}» · «{}», control {control:?}.",
+            "SILENT LEFTOVER: the row reads «{}» · «{}» · «{}», controls {control:?}.",
             as_read(&row.name),
             as_read(&row.count),
             as_read(&row.where_it_goes)
         );
-        a_figure!(missed, control.as_deref() == Some("remove"), "SILENT LEFTOVER: the row offers {control:?}, not Remove");
+        a_figure!(missed, control == ["continue", "remove"], "SILENT LEFTOVER: the row offers {control:?}, not Continue then Remove");
         a_figure!(
             missed,
             as_read(&row.where_it_goes).contains("partial files still use space on the server"),

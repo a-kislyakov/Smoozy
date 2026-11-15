@@ -138,6 +138,9 @@ const THE_PARTIAL_FILE_COULD_NOT_BE_RESUMED: &str = "Could not resume.";
 /// of `Server protocol and transfers` S13, which starts over only on a
 /// download — the file on the server is the one that changed.
 const THE_FILE_CHANGED_ON_THE_SERVER: &str = "File changed on the server.";
+/// **`File Browser` K10a's cause**: a part a later upload could not carry on
+/// because the file on this computer changed (uploads carry on, 2026-11-14).
+const THE_FILE_CHANGED: &str = "File changed.";
 /// The line drawn while a resume is checking what already went.
 const CHECKING_WHAT_WAS_ALREADY_SENT: &str = "Verifying the partial file.";
 /// **The countdown's two forms.** The seconds are a value the drawing counts
@@ -146,6 +149,10 @@ pub(crate) const TRYING_AGAIN_IN: &str = "retrying in";
 /// P10c's hazard said rather than repaired: a suspended computer wakes the
 /// reading long past due, and the honest line is that the attempt is due.
 pub(crate) const TRYING_AGAIN_NOW: &str = "retrying now";
+/// **The unit after the seconds**, bound to them with no space — the
+/// drawing's *retrying in 12s* (the UI at every size, B-06 and C-28: it read
+/// *retrying in 44*, a number with nothing to say what of).
+pub(crate) const SECONDS: &str = "s";
 /// **M3a's *as of that moment***, with the moment beside it as a value.
 const AS_OF: &str = "as of";
 /// The word before the clock's own name.
@@ -431,6 +438,7 @@ impl WatchesTheTransfer for TheTransfersReporter {
                                 StartOverCause::TheSourceChangedUnderADownload => {
                                     THE_FILE_CHANGED_ON_THE_SERVER
                                 }
+                                StartOverCause::TheFileChangedOnThisComputer => THE_FILE_CHANGED,
                             })),
                         );
                 }
@@ -516,7 +524,8 @@ pub fn a_server_is_repairing(
                     .saying(
                         "theTryingAgainNow",
                         Said::Prose(Prose::new(TRYING_AGAIN_NOW)),
-                    );
+                    )
+                    .saying("theSecondsUnit", Said::Prose(Prose::new(SECONDS)));
             }
             if let Some(work) = &drawn.readings.the_last_known_work_reading {
                 event = event

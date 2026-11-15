@@ -748,8 +748,26 @@ pub(crate) mod tests {
                 .expect("the plan is readable");
         let opening_lines = the_clauses_defined_by(&plan);
         let defined: HashSet<String> = opening_lines.iter().cloned().collect();
-        assert_eq!(opening_lines.len(), 121);
-        assert_eq!(defined.len(), 120, "{:?}", {
+        // **122 and 121 from 2026-11-11, the Fable review's fifth sitting:
+        // §3.6 gained K14c** — a render whose remap left a path unchanged
+        // finishes, and says which. Built by the same sitting, as far as the
+        // note and the phone: the machine program's `after_the_launch` and
+        // `Rendering — machine`'s `the_files_a_remap_left_unchanged`.
+        // **125 and 124 from 2026-11-14, the Rough what-if answers, share 3
+        // (commit `7245539e6`)**, which that share did not count because it
+        // did not run this crate; the leftovers sitting moved it. Three
+        // clauses, all built by that share:
+        // - **K11a**, *Force stop* — the kill sent only as the user's own
+        //   fresh command (the Creator's ruling on 287): the machine program's
+        //   stop handling, and the desk's `the_queues_own_acts` and
+        //   `the_queue`.
+        // - **L17c**, the file's own range saved ending before it starts
+        //   fails before the render (233): `Rendering — machine`'s `endings`
+        //   and `acting::pipeline`.
+        // - **S11a**, the rest of a part submission goes with the first
+        //   settings and the banner says so (462): the desk's `the_queue`.
+        assert_eq!(opening_lines.len(), 125);
+        assert_eq!(defined.len(), 124, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

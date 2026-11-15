@@ -38,8 +38,10 @@
 //!   own fill-in, **whose tombstone refusal is unconditional**.
 //! - **Step 5**: the queue reading, `Queue & History` A1's one request,
 //!   **period-held** and written nowhere durable.
-//! - **Step 6**: the adoption offer, `Queue & History` A5, composed once from
-//!   that reading and **never recomposed by a pass** (`Servers` Q18).
+//! - **Step 6**: the adoption offer, `Queue & History` A5, composed from
+//!   that reading — **and again by every pass's reading** (`Servers` Q18 as
+//!   amended 2026-11-12), so a job the machine makes while connected is
+//!   offered then.
 //!
 //! **Beside it, on a thread of its own, `Server protocol and transfers` S28's
 //! machine-side sweep** — [`the_staging_left_on_this_machine_is_swept`], step
@@ -100,6 +102,7 @@ use smoozy_queue_history::acting::adoption::{
 };
 use smoozy_queue_history::acting::note::TheNote;
 use smoozy_queue_history::catch_up::{compose_the_account, AnAppliedEvent};
+use smoozy_queue_history::diary::WhyNotHeld;
 use smoozy_queue_history::line::QueueState;
 use smoozy_queue_history::readings::{AJobAsTheMachineReadsIt, WhatTheEntryHasLive};
 use smoozy_queue_history::record::{Standing, WhatTheMachineSaidAboutTheJob};
@@ -111,9 +114,11 @@ use smoozy_server_protocol::requests::{
     THE_ABOUT_FIELD, THE_CURSOR_FIELD, THE_CURSOR_MOVES_FORWARD_REQUEST, THE_DISPOSITION_EVENT,
     THE_DOES_THE_MACHINE_HOLD_THIS_JOB_REQUEST, THE_HELD_BEHIND_FIELD,
     THE_HOLD_IT_IS_HELD_UNDER_FIELD, THE_HOLD_PLACED_EVENT, THE_HOLD_REASON_FIELD, THE_JOB_FIELD,
+    the_job_a_resubmission_was_made_from,
     THE_JOB_RECORD_REMOVED_EVENT, THE_JOB_RECORD_WRITTEN_EVENT, THE_JOB_THAT_STARTS_NEXT_FIELD,
-    THE_KIND_FIELD, THE_NEXT_SEQUENCE_FIELD, THE_OLDEST_RETAINED_FIELD,
+    THE_LINE_IS_STOPPED_FIELD, THE_KIND_FIELD, THE_NEXT_SEQUENCE_FIELD, THE_OLDEST_RETAINED_FIELD,
     THE_OUTCOME_IT_ENDED_WITH_FIELD, THE_PER_JOB_NOTE_READING_REQUEST, THE_PREVIEW_PUBLISHED_EVENT,
+    THE_PREVIEW_SET_MADE_EVENT,
     THE_QUEUE_READING_REQUEST, THE_QUEUE_STATE_FIELD, THE_READ_FORWARD_REQUEST,
     THE_RECORDED_OUTCOME_WRITTEN_EVENT, THE_RELEASE_EVENT, THE_RENDER_ATTEMPT_STARTED_EVENT,
     THE_PHONES_CHOICE_MOMENT_FIELD, THE_PHONES_CHOICE_OPERATION_FIELD, THE_PHONES_REPORTING_CHOICE_FIELD,
@@ -448,6 +453,30 @@ pub struct WhatTheReadingSaysOfReporting {
     /// is not carried here.
     pub each_jobs_choice: Vec<(Identity, String)>,
     pub the_phones_choice: Option<ThePhonesChoiceRead>,
+    /// **Why the machine's line is stopped, where the reading says it is**
+    /// (`Queue & History` A1 as changed 2026-11-10) — the machine's own
+    /// words. Not reporting, but read here beside it for the same reason:
+    /// it is said once in the reading and is no job's. `State, identity and
+    /// recovery` F12a's condition is raised and withdrawn on it.
+    pub the_line_is_stopped: Option<String>,
+    pub unreadable_job_records: u64,
+    /// **The job the machine's line could not start for want of room, where
+    /// the reading names one** (`Queue & History` A1 as changed 2026-11-11;
+    /// `Rented-server runtime` M4a). Read here for the reason the line above
+    /// is: it is said once in the reading. The Queue draws it on that job's
+    /// row.
+    pub the_line_waits_for_room_at: Option<Identity>,
+    /// **The setup run a standing *setup in progress* state names, where no
+    /// setup worker is running it** (`Queue & History` A1 as changed
+    /// 2026-11-14; the Rough what-if answers, share 4, 310). Said once in the
+    /// reading. The Queue says the server's jobs wait for it, and the row
+    /// draws *Setup stopped part-way*.
+    pub the_line_waits_for_a_setup: Option<Identity>,
+    /// **`Telegram` F6's word for how Telegram is answering this server's
+    /// bot, where the reading carries one** (`Queue & History` A1 as widened
+    /// 2026-11-14). Said once in the reading. The server's row and Settings'
+    /// Telegram section draw it. When Telegram refuses.
+    pub telegrams_trouble: Option<smoozy_server_protocol::requests::TheTelegramTrouble>,
 }
 
 /// **The machine's phone's choice** (`Telegram` V1d): the value, the operation
@@ -565,6 +594,26 @@ pub fn the_queue_reading_and_its_reporting_in(
             the_hold,
         });
     }
+    // **And once, whether the machine's line is stopped** (`Queue & History`
+    // A1 as changed 2026-11-10), in the machine's own words.
+    reporting.the_line_is_stopped = fields.text(THE_LINE_IS_STOPPED_FIELD).map(str::to_string);
+    reporting.unreadable_job_records = a_number(fields.text(smoozy_server_protocol::requests::HOW_MANY_DID_NOT_READ_BACK_FIELD)).unwrap_or(0);
+    // **And once, the job the line could not start for want of room**
+    // (`Queue & History` A1 as changed 2026-11-11).
+    reporting.the_line_waits_for_room_at = fields
+        .text(smoozy_server_protocol::requests::THE_LINE_WAITS_FOR_ROOM_FIELD)
+        .and_then(|text| Identity::read_back(IdentityKind::Job, text));
+    // **And once, a setup that stopped part-way and holds the line**
+    // (`Queue & History` A1 as changed 2026-11-14).
+    reporting.the_line_waits_for_a_setup = fields
+        .text(smoozy_server_protocol::requests::THE_LINE_WAITS_FOR_A_SETUP_FIELD)
+        .and_then(|text| Identity::read_back(IdentityKind::Operation, text));
+    // **And once, how Telegram is answering this server's bot** (`Telegram`
+    // F6, `Queue & History` A1 as widened 2026-11-14): a word this copy does
+    // not know is no word.
+    reporting.telegrams_trouble = fields
+        .text(smoozy_server_protocol::requests::TELEGRAMS_TROUBLE_HERE_FIELD)
+        .and_then(smoozy_server_protocol::requests::TheTelegramTrouble::read_back);
     // **And once, the machine's phone's choice** — all three or none.
     reporting.the_phones_choice = match (
         fields
@@ -650,6 +699,9 @@ pub struct TheQueueOverThisServersPoint<'a> {
     /// **What the answer said of reporting** (`Telegram` V1d), kept from the
     /// last answer for the caller, which holds the record. Start it empty.
     pub the_reporting_read: std::cell::RefCell<Option<WhatTheReadingSaysOfReporting>>,
+    /// **Why the last ask had no reading**, kept for the diary's gap lines
+    /// (`Queue & History` §17, note 11's piece 5a). Start it empty.
+    pub why_there_was_none: std::cell::RefCell<Option<WhyThereIsNoReading>>,
 }
 
 impl AsksAMachineForItsQueue for TheQueueOverThisServersPoint<'_> {
@@ -662,6 +714,7 @@ impl AsksAMachineForItsQueue for TheQueueOverThisServersPoint<'_> {
             *self.the_reporting_read.borrow_mut() = Some(reporting);
             state
         });
+        *self.why_there_was_none.borrow_mut() = read.as_ref().err().copied();
         match read {
             Ok(state) => WhatTheRequestGave::ItAnswered(Reading::taken(
                 state,
@@ -1025,13 +1078,24 @@ pub fn the_held_jobs_answer_is_sent(
 pub struct WhatAPeriodHolds {
     /// **`Queue & History` C6: the last-known queue reading, period-held.**
     pub reading: Option<Reading<TheMachinesWorkingState>>,
-    /// **`Queue & History` A5's offer, composed once at step 7** and never by a
-    /// pass (`Servers` Q18).
+    /// **`Queue & History` A5's offer, composed by every queue reading of the
+    /// period** (`Servers` Q18 as amended 2026-11-12).
     pub the_offer: Vec<Identity>,
     /// **`Queue & History` C7's trigger: the break is declared**, and the
     /// reading reads as not updating from that moment until a later
     /// connection's step 7 takes a fresh one.
     pub the_break_is_declared: bool,
+    /// **The job the reading says the machine's line could not start for
+    /// want of room** (`Queue & History` A1 as changed 2026-11-11), and
+    /// nothing where it names none. Period-held with the reading it came in
+    /// and replaced by the next one. The Queue reads it for that job's row.
+    pub the_job_waiting_for_room: Option<Identity>,
+    pub unreadable_job_records: u64,
+    /// **The setup run that stopped part-way and holds the machine's line,
+    /// where the reading names one** (`Queue & History` A1 as changed
+    /// 2026-11-14). Period-held with the reading it came in and replaced by
+    /// the next one. The Queue and the server's row read it.
+    pub the_setup_that_holds_the_line: Option<Identity>,
     /// Which live connection of this period the reading is for.
     connection: u64,
     /// The connection that actually took `reading`, rather than one that
@@ -1195,6 +1259,10 @@ pub struct WhatThisRunHolds {
     /// reading of the machine, and every connection's fill-in reads them again.
     /// The 38's piece 10.
     what_each_reading_says: Mutex<HashMap<String, WhatTheReadingSays>>,
+    /// **`Queue & History` §17's gap lines: each server's stalled readings**,
+    /// kept for the run so a stall that spans a new connection is still one
+    /// stall. Written nowhere. Note 11's piece 5a.
+    the_readings_watch: Mutex<TheReadingsWatch>,
 }
 
 /// **`Download` N6's whole for one job: the narrowed inventory's count, and
@@ -1243,6 +1311,11 @@ impl WhatThisRunHolds {
         };
         let period = held.entry(server.to_string()).or_default();
         period.connection = number;
+        period.the_job_waiting_for_room = None;
+        period.the_setup_that_holds_the_line = None;
+        // **`Telegram` F6's word goes with the connection**, under this lock
+        // (Sol's look, point 2).
+        crate::servers::published::telegrams_trouble_was_read(server, None);
         period.connection
     }
 
@@ -1256,7 +1329,31 @@ impl WhatThisRunHolds {
                 period.the_break_is_declared = true;
                 period.connection = number;
             }
+            crate::servers::published::telegrams_trouble_was_read(server, None);
         }
+    }
+
+    /// **`Telegram` F6: the word a reading carried, held for the connection**
+    /// — only where that reading's connection is still the current one and
+    /// its break is not declared, **decided under the same lock the
+    /// connection's beginning and ending take**, so a late reading never puts
+    /// a word back after the connection ended (Sol's look, point 2). Answers
+    /// whether it moved. When Telegram refuses, 2026-11-14.
+    pub fn the_reading_says_of_telegram(
+        &self,
+        server: &str,
+        connection: u64,
+        trouble: Option<smoozy_server_protocol::requests::TheTelegramTrouble>,
+    ) -> bool {
+        let Ok(held) = self.per_server.lock() else {
+            return false;
+        };
+        let current = held.get(server).is_some_and(|period| {
+            !period.the_break_is_declared
+                && period.connection == connection
+                && period.reading_connection == Some(connection)
+        });
+        current && crate::servers::published::telegrams_trouble_was_read(server, trouble)
     }
 
     /// **The next number for this server, never given out before in this
@@ -1338,6 +1435,16 @@ impl WhatThisRunHolds {
         &self.idle_nudges
     }
 
+    /// **The connection count of this server's period as it stands**, whatever
+    /// the break's mark says — what a pass compares to know the connection it
+    /// began on is still the one.
+    fn the_connection_count_of(&self, server: &str) -> Option<u64> {
+        self.per_server
+            .lock()
+            .ok()
+            .and_then(|held| held.get(server).map(|period| period.connection))
+    }
+
     /// **Which connection of this server's period is the live one**, and
     /// nothing where none is — no connection lent yet, or the break declared.
     /// **It moves nothing**: `Servers` Q19a's re-take is taken on the
@@ -1417,21 +1524,111 @@ impl WhatThisRunHolds {
         reading: Reading<TheMachinesWorkingState>,
         the_offer: Option<Vec<Identity>>,
     ) {
+        let _ = self.a_reading_is_kept(server, connection, reading, the_offer);
+    }
+
+    /// **[`WhatThisRunHolds::a_reading_is_kept`], with the job the reading
+    /// names as waiting for room kept in the same act** (`Queue & History` A1
+    /// as changed 2026-11-11) — so no reading is ever held beside another
+    /// reading's word about it (Sol's fourth and fifth points on the full
+    /// disk).
+    pub fn a_reading_is_kept_naming_the_wait(
+        &self,
+        server: &str,
+        connection: u64,
+        reading: Reading<TheMachinesWorkingState>,
+        the_offer: Option<Vec<Identity>>,
+        the_job_waiting_for_room: Option<Identity>,
+    ) -> bool {
+        self.a_reading_is_kept_with_its_count(server, connection, reading, the_offer, the_job_waiting_for_room, None, 0)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn a_reading_is_kept_with_its_count(
+        &self, server: &str, connection: u64, reading: Reading<TheMachinesWorkingState>,
+        the_offer: Option<Vec<Identity>>, the_job_waiting_for_room: Option<Identity>,
+        the_setup_that_holds_the_line: Option<Identity>, unreadable_job_records: u64,
+    ) -> bool {
+        let Ok(mut held) = self.per_server.lock() else {
+            return false;
+        };
+        let Some(period) = held.get_mut(server) else {
+            return false;
+        };
+        if period.connection != connection {
+            return false;
+        }
+        period.the_figures_moved_or_not(&reading);
+        period.reading = Some(reading);
+        period.reading_connection = Some(connection);
+        period.the_break_is_declared = false;
+        period.the_job_waiting_for_room = the_job_waiting_for_room;
+        period.the_setup_that_holds_the_line = the_setup_that_holds_the_line;
+        period.unreadable_job_records = unreadable_job_records;
+        if let Some(offer) = the_offer {
+            period.the_offer = offer;
+        }
+        true
+    }
+
+    /// **[`WhatThisRunHolds::a_reading_was_taken`], saying whether the reading
+    /// landed** — false where it was taken on a connection no longer current,
+    /// or after the period ended. Until note 11's piece 5a that drop was silent and the
+    /// caller counted the reading as held (the dig of note 11, route c).
+    pub fn a_reading_is_kept(
+        &self,
+        server: &str,
+        connection: u64,
+        reading: Reading<TheMachinesWorkingState>,
+        the_offer: Option<Vec<Identity>>,
+    ) -> bool {
+        // **A reading kept with no word of a job waiting for room names
+        // none.**
+        self.a_reading_is_kept_naming_the_wait(server, connection, reading, the_offer, None)
+    }
+
+    /// **A test's way to say what the reading in hand names as waiting for
+    /// room.** The application keeps it with the reading
+    /// ([`WhatThisRunHolds::a_reading_is_kept_naming_the_wait`]).
+    #[cfg(test)]
+    pub fn the_reading_says_the_line_waits_for_room_at(
+        &self,
+        server: &str,
+        connection: u64,
+        job: Option<Identity>,
+    ) {
         if let Ok(mut held) = self.per_server.lock() {
-            let Some(period) = held.get_mut(server) else {
-                return;
-            };
-            if period.connection != connection {
-                return;
-            }
-            period.the_figures_moved_or_not(&reading);
-            period.reading = Some(reading);
-            period.reading_connection = Some(connection);
-            period.the_break_is_declared = false;
-            if let Some(offer) = the_offer {
-                period.the_offer = offer;
+            if let Some(period) = held.get_mut(server).filter(|period| period.connection == connection) {
+                period.the_job_waiting_for_room = job;
             }
         }
+    }
+
+    /// **A test's way to say what the reading in hand names as the setup
+    /// holding the line** (`Queue & History` A1 as changed 2026-11-14). The
+    /// application keeps it with the reading.
+    #[cfg(test)]
+    pub fn the_reading_says_a_setup_holds_the_line(&self, server: &str, connection: u64, run: Option<Identity>) {
+        if let Ok(mut held) = self.per_server.lock() {
+            if let Some(period) = held.get_mut(server).filter(|period| period.connection == connection) {
+                period.the_setup_that_holds_the_line = run;
+            }
+        }
+    }
+
+    /// **Whether a setup that stopped part-way holds that server's line**, as
+    /// the current connection's reading named it — and `false` where the
+    /// reading is not updating, since then nothing is known (`Queue & History`
+    /// C7). The server's row draws *Setup stopped part-way* on it. The Rough
+    /// what-if answers, share 4 (310).
+    pub fn a_setup_holds_the_line_on(&self, server: &str) -> bool {
+        self.per_server.lock().ok().is_some_and(|held| {
+            held.get(server).is_some_and(|period| {
+                !period.the_break_is_declared
+                    && period.reading_connection == Some(period.connection)
+                    && period.the_setup_that_holds_the_line.is_some()
+            })
+        })
     }
 
     /// `Download` J6: only reports actually read on the live connection.
@@ -1439,7 +1636,7 @@ impl WhatThisRunHolds {
     pub fn the_saved_prefixes_reported_on_this_connection(
         &self,
         server: &str,
-    ) -> HashMap<String, (u32, i64)> {
+    ) -> HashMap<String, (u32, i64, Option<i64>)> {
         let Ok(held) = self.per_server.lock() else {
             return HashMap::new();
         };
@@ -1466,17 +1663,20 @@ impl WhatThisRunHolds {
                 else {
                     return None;
                 };
+                // **With the frame the same report has in hand** (`Download`
+                // J6's paragraph of 2026-11-12): the saved frame is taken
+                // only once that is a later one.
                 Some((
                     job.job.as_text(),
-                    (report.attempt, report.newest_frame_saved?),
+                    (report.attempt, report.newest_frame_saved?, report.readings.value().frame_in_hand),
                 ))
             })
             .collect()
     }
 
     /// **`Queue & History` A6: the offer was accepted**, so the jobs it
-    /// adopted leave the held offer. **The offer is still never recomposed by
-    /// a pass** (`Servers` Q18): this takes jobs out of it and puts none in.
+    /// adopted leave the held offer. This takes jobs out of it and puts none
+    /// in; the next reading composes it again (`Servers` Q18 as amended).
     /// Owed piece 10.
     pub fn the_offer_was_accepted(&self, server: &str, adopted: &[Identity]) {
         if let Ok(mut held) = self.per_server.lock() {
@@ -1782,6 +1982,13 @@ pub struct WhatTheReadingSays {
     /// frame the reading does not cover keeps naming it. The Creator's second
     /// notes, piece 6b.
     pub more_than_one_view_layer_at: std::collections::BTreeMap<i64, bool>,
+    /// **Every folder the job writes into, with its files by format**, as
+    /// Render settings lists them (`Design/Render Settings § What it will
+    /// write`): what a press on the folder line's count opens where the job
+    /// writes into more than three (`Design/Queue & History § What the job
+    /// writes`; the Creator's twenty-ninth notes, notes 8 and 10). Nothing
+    /// where the inventory was not composed or the job writes nothing.
+    pub every_folder: Option<crate::surface::render_settings::TheWrites>,
 }
 
 impl WhatTheReadingSays {
@@ -2293,6 +2500,12 @@ pub fn the_readings_are_filled_in(
                     the_frames_cannot_be_counted,
                     job_output_folder: job_output_folder.clone(),
                     more_than_one_view_layer_at,
+                    every_folder: crate::surface::render_settings::every_folder_a_job_writes(
+                        &derived.reading,
+                        &derived.map,
+                        &derived.inventory,
+                        &job_output_folder,
+                    ),
                 },
             );
         }
@@ -2386,16 +2599,34 @@ pub fn every_provisional_record_is_resolved(
     machine: &mut dyn AsksTheSupervisor,
     did: &mut WhatStepSevenDid,
 ) {
-    let provisional: Vec<Identity> = with_the_record(record, |connection| {
+    let records: Vec<_> = with_the_record(record, |connection| {
         JobRecords::over(connection)
             .provisional_for(server)
             .unwrap_or_default()
     })
     .unwrap_or_default()
     .into_iter()
-    .map(|one| one.job)
+    // **`State, identity and recovery` V1 step 2 (as added 2026-11-11): a
+    // record whose submission act is still running in this run is not asked
+    // about.** Its request may not have been sent yet, so the machine's
+    // *absent* would be true now and wrong a moment later. The act resolves
+    // it, or the next connection does. The Fable review's second sitting,
+    // fault 3.
+    .filter(|one| !crate::submitting::an_act_still_running_holds(&one.job))
     .collect();
-    the_provisional_records_named_are_resolved(record, machine, &provisional, did);
+    let provisional: Vec<Identity> = records.iter().map(|one| one.job.clone()).collect();
+    let removed = the_provisional_records_named_are_resolved(record, machine, &provisional, did);
+    // **A job the server never took is said in its server's line** — the
+    // Rough what-if answers, share 1 (42): Smoozy closed while sending it,
+    // and until then it went from the record with no word.
+    for one in records.iter().filter(|one| removed.contains(&one.job)) {
+        let file = one.blend_path_on_the_machine.clone().unwrap_or_default();
+        let name = smoozy_queue_history::naming::what_a_job_is_called(
+            one.label.as_deref(),
+            one.blend_path_on_the_machine.as_deref(),
+        );
+        crate::submitting::a_submission_was_found_never_taken(&server.as_text(), &file, name);
+    }
 }
 
 /// **`State, identity and recovery` V1 step 2's ask and its branch, for the
@@ -2409,7 +2640,8 @@ fn the_provisional_records_named_are_resolved(
     machine: &mut dyn AsksTheSupervisor,
     named: &[Identity],
     did: &mut WhatStepSevenDid,
-) {
+) -> Vec<Identity> {
+    let mut removed = Vec::new();
     for job in named {
         let said = what_the_machine_says_about(machine, job);
         match said {
@@ -2419,10 +2651,19 @@ fn the_provisional_records_named_are_resolved(
             }
             WhatTheMachineSaidAboutTheJob::TheMachineCannotSay => did.still_provisional += 1,
         }
-        let _ = with_the_record(record, |connection| {
+        let resolved = with_the_record(record, |connection| {
             JobRecords::over(connection).the_resolution(job, said)
         });
+        if matches!(
+            resolved,
+            Some(Ok(crate::record::job_records::WhatTheResolutionDid::TheStepsOwnAnswer(
+                smoozy_queue_history::record::WhatAnAbsenceDoes::TheRecordIsRemovedLeavingNoTrace
+            )))
+        ) {
+            removed.push(job.clone());
+        }
     }
+    removed
 }
 
 /// **`State, identity and recovery` V1 step 4**: every record of this server
@@ -2532,6 +2773,16 @@ pub fn the_read_forward_pass(
     arrived: HowItArrived,
 ) -> HowThePassEnded {
     let server_text = server.as_text();
+    // **`State, identity and recovery` E3 (as added 2026-11-11): one pass at
+    // a time per server.** A pass begun while another runs waits here and
+    // then starts from the cursor that one left. The Fable review's second
+    // sitting, fault 2.
+    // **The connection this pass began on**, so a pass that outlives it never
+    // completes the next connection's catch-up below (`Desktop app and
+    // delivery` T20; Sol's second point on the same sitting).
+    let the_connection_it_began_on = holds.the_connection_count_of(&server_text);
+    let turn = the_passes_turn_on(&server_text);
+    let _one_pass_at_a_time = turn.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let now_or_catching_up = holds.how_an_event_read_now_arrived(server, arrived);
     let ended = the_read_forward_applied(server, record, machine, holds, now_or_catching_up);
     the_re_runs_frames_are_read(server, record, machine);
@@ -2540,10 +2791,24 @@ pub fn the_read_forward_pass(
         && now_or_catching_up == NowOrCatchingUp::CatchingUp
         && matches!(ended, HowThePassEnded::ItReadToTheEnd { .. })
         && holds.the_connection_now(&server_text).is_some()
+        && holds.the_connection_count_of(&server_text) == the_connection_it_began_on
     {
         holds.the_reconciliation_read_completed(server);
     }
     ended
+}
+
+/// **The turn a read-forward pass takes on one server**, held for the run.
+/// One per server row, so passes on different servers never wait on each
+/// other.
+fn the_passes_turn_on(server: &str) -> Arc<Mutex<()>> {
+    static TURNS: std::sync::OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> =
+        std::sync::OnceLock::new();
+    let mut turns = TURNS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    Arc::clone(turns.entry(server.to_string()).or_default())
 }
 
 fn the_read_forward_applied(
@@ -2562,18 +2827,32 @@ fn the_read_forward_applied(
     };
     // **A cursor the desktop never held is a reader starting at the beginning
     // of this installation's own journal**, and missing nothing it tracked.
+    // **`State, identity and recovery` E2: the cursor lives against the
+    // installation it was taken under**, so the one this pass began under is
+    // kept and compared at every write of the cursor (Sol's first point on the
+    // Fable review's second sitting).
+    let the_installation_it_began_under = row.last_confirmed_installation_identity.clone();
     let the_desktop_held_a_cursor = row.event_cursor.is_some();
     let mut from = row.event_cursor.unwrap_or(0);
     let mut the_first_read = true;
+    let mut journal_reset = false;
     loop {
         let Some(read) = the_read_forward_from(machine, from) else {
             return HowThePassEnded::TheReadCouldNotComplete {
                 applied: applied_in_all,
             };
         };
-        let gap = the_first_read
+        if read.next < from {
+            // `State, identity and recovery`’s journal-reset exception.
+            // Keep the saved cursor until the replacement account is durable.
+            if journal_reset { return HowThePassEnded::TheReadCouldNotComplete { applied: applied_in_all }; }
+            journal_reset = true;
+            from = 0;
+            continue;
+        }
+        let gap = journal_reset || (the_first_read
             && the_desktop_held_a_cursor
-            && read.oldest_retained.is_some_and(|oldest| oldest > from);
+            && read.oldest_retained.is_some_and(|oldest| oldest > from));
         the_first_read = false;
         if read.events.is_empty() && !gap {
             return HowThePassEnded::ItReadToTheEnd {
@@ -2688,7 +2967,36 @@ fn the_read_forward_applied(
                 &mut WhatStepSevenDid::default(),
             );
         }
-        if read
+        // **`Queue & History` A5's paragraph of 2026-11-12: a job the
+        // machine made from a job this desk tracks joins by itself** — the
+        // build runner's ruling 2 on the second live pass. The event its
+        // record was journalled under carries the machine's mark and the job
+        // it was made from; where the local record holds that one here, the
+        // made job is taken in before the cursor moves past the event
+        // (`State, identity and recovery` E3), so a machine that does not
+        // answer moves no cursor and the next pass takes it in.
+        let made_from_a_job: Vec<(Identity, Identity)> = read
+            .events
+            .iter()
+            .filter(|event| event.kind == THE_JOB_RECORD_WRITTEN_EVENT)
+            .filter_map(|event| {
+                let made = event
+                    .about
+                    .as_deref()
+                    .and_then(|text| Identity::read_back(IdentityKind::Job, text))?;
+                let source = the_job_a_resubmission_was_made_from(event.says.as_deref()?)?;
+                Some((made, source))
+            })
+            .collect();
+        if !made_from_a_job.is_empty()
+            && the_jobs_made_from_tracked_jobs_join(server, record, machine, holds, &made_from_a_job)
+                .is_err()
+        {
+            return HowThePassEnded::TheReadCouldNotComplete {
+                applied: applied_in_all,
+            };
+        }
+        if journal_reset || read
             .events
             .iter()
             .any(|event| THE_KINDS_THAT_MOVE_A_JOB.contains(&event.kind.as_str()))
@@ -2728,14 +3036,32 @@ fn the_read_forward_applied(
         // not take moves no cursor**, so the event is read again. The fetch
         // itself runs beside the pass, never in it (`crate::the_previews`).
         // The 38's piece 3.
-        if read
-            .events
-            .iter()
-            .any(|event| event.kind == THE_PREVIEW_PUBLISHED_EVENT)
-        {
+        //
+        // **Where an event left a copy's names to its production's record**
+        // (`Queue & History` P3 and `Queue & History` P10a as changed 2026-11-10, piece J), the
+        // machine is asked once per production first, outside the lend; an
+        // ask that got nothing back moves no cursor, as a write the record
+        // would not take does. **The set event is applied as its main copy's
+        // event**, which is what owes a main copy whose early event came
+        // before its record named it.
+        if read.events.iter().any(|event| {
+            event.kind == THE_PREVIEW_PUBLISHED_EVENT || event.kind == THE_PREVIEW_SET_MADE_EVENT
+        }) {
+            let Some(named) =
+                crate::the_previews::the_records_the_events_leave_names_to(machine, &read.events)
+            else {
+                return HowThePassEnded::TheReadCouldNotComplete {
+                    applied: applied_in_all,
+                };
+            };
             let owed = with_the_record(record, |connection| {
-                crate::the_previews::the_published_are_owed(connection, server, &read.events)
-                    .is_ok()
+                crate::the_previews::the_published_are_owed_named(
+                    connection,
+                    server,
+                    &read.events,
+                    &named,
+                )
+                .is_ok()
             });
             if owed != Some(true) {
                 return HowThePassEnded::TheReadCouldNotComplete {
@@ -2875,7 +3201,16 @@ fn the_read_forward_applied(
             let Ok(Some(mut row)) = server_rows::one(connection, &server_text) else {
                 return false;
             };
-            row.event_cursor = Some(next);
+            // **A row whose installation is no longer the one this pass
+            // began under takes no cursor from it** (`State, identity and
+            // recovery` E2): a setup recorded a new installation meanwhile,
+            // and its journal starts at nought.
+            if row.last_confirmed_installation_identity != the_installation_it_began_under {
+                return false;
+            }
+            // **Never lower than it stands** (`State, identity and
+            // recovery` E3 as added 2026-11-11).
+            row.event_cursor = Some(if journal_reset { next } else { row.event_cursor.map_or(next, |stands| stands.max(next)) });
             server_rows::write(connection, &row).is_ok()
         });
         if written != Some(true) {
@@ -2911,6 +3246,7 @@ fn the_read_forward_applied(
             };
         }
         from = next;
+        journal_reset = false;
     }
 }
 
@@ -3054,10 +3390,54 @@ pub struct WhatTheQueueReadingCameTo {
     /// **Whether a phone's choice read here became the default** (`Telegram`
     /// V1d), so the caller can draw Settings again.
     pub the_default_was_taken: bool,
+    /// **Whether the reading said the machine's line is stopped over a record
+    /// it cannot read** (`State, identity and recovery` F12a) — and nothing
+    /// where the reading did not answer, which moves no condition.
+    pub the_line_is_stopped: Option<bool>,
+    /// **Whether Smoozy on the server answered the reading** — `Some(true)`
+    /// where it answered, whatever it said; `Some(false)` where nothing
+    /// answered it on a connection still live
+    /// (`Server protocol and transfers` C17a); nothing otherwise.
+    /// `Desktop app and delivery` V1 as added 2026-11-15 raises and withdraws
+    /// its condition on it.
+    pub the_supervisor_answered: Option<bool>,
+}
+
+/// **What one P10d pass's queue reading does to `Desktop app and delivery`
+/// V1's condition** — §3.3's *a pass's outcome moves the observed value*, as
+/// V1 says from 2026-11-15 (the what-if live pass, new fault 3: Smoozy's
+/// program ended while connected and the row read *Idle*).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TheSupervisorsConditionMoves {
+    IsRaised,
+    IsWithdrawn,
+}
+
+/// - **Unanswered on a live connection, and not standing**: raised — once;
+///   a standing one is not raised again, so nothing is posted every pass.
+/// - **Answered, and standing**: withdrawn, whatever brought Smoozy back.
+/// - **Never raised while Smoozy's own act holds the server** — V13's
+///   update, V3c's repair, a setup this copy drives: each restarts the
+///   program on purpose, and V13 says that raises nothing of V1's.
+pub fn what_a_reading_does_to_the_supervisors_condition(
+    answered: Option<bool>,
+    it_stands: bool,
+    smoozys_own_act_holds_the_server: bool,
+) -> Option<TheSupervisorsConditionMoves> {
+    match answered {
+        Some(false) if !it_stands && !smoozys_own_act_holds_the_server => Some(TheSupervisorsConditionMoves::IsRaised),
+        Some(true) if it_stands => Some(TheSupervisorsConditionMoves::IsWithdrawn),
+        _ => None,
+    }
 }
 
 /// **`Queue & History` A1's reading, taken and held** — step 5, and a P10d
-/// pass's queue reading. `the_offer` is step 6's and only step 7 composes it.
+/// pass's queue reading. **Each reading composes `Queue & History` A5's offer
+/// again** (`Servers` Q18 as amended 2026-11-12, the second live pass's fault
+/// 2): a job that appears on the machine while connected — the one a phone's
+/// *Resume* makes — is offered at the next reading, not at the next
+/// connection. Until then step 7 alone composed it, and a pass kept the one
+/// step 7 made.
 /// **An ending the reading names is learned before it is held**
 /// ([`a_reading_is_held_once_its_endings_are_learned`]).
 pub fn the_queue_is_read(
@@ -3067,12 +3447,12 @@ pub fn the_queue_is_read(
     machine: &mut dyn AsksTheSupervisor,
     holds: &WhatThisRunHolds,
     the_connection_is_live: &dyn Fn() -> bool,
-    compose_the_offer: bool,
 ) -> WhatTheQueueReadingCameTo {
     let asking = TheQueueOverThisServersPoint {
         machine: std::cell::RefCell::new(machine),
         the_connection_is_live,
         the_reporting_read: std::cell::RefCell::new(None),
+        why_there_was_none: std::cell::RefCell::new(None),
     };
     let gave = smoozy_queue_history::acting::adoption::take_the_reading(
         &asking,
@@ -3080,26 +3460,59 @@ pub fn the_queue_is_read(
         smoozy_queue_history::acting::adoption::WhetherTheInstallationConfirmed::ItIsTheSameInstallation,
     );
     let the_reporting_read = asking.the_reporting_read.into_inner();
+    let why_there_was_none = asking.why_there_was_none.into_inner();
     let machine = asking.machine.into_inner();
+    // **Whether Smoozy answered at all** (`Desktop app and delivery` V1 as
+    // added 2026-11-15): an answer of any kind is Smoozy answering; nothing
+    // correlated on a connection still live is Smoozy's silence
+    // (`Server protocol and transfers` C17a),
+    // and the same on a line that has gone is the line's and says nothing.
+    let the_supervisor_answered = match (&gave, why_there_was_none) {
+        (Some(WhatTheRequestGave::ItAnswered(_)), _) | (_, Some(WhyThereIsNoReading::TheMachineSaidItCouldNot)) => Some(true),
+        (Some(WhatTheRequestGave::TheSupervisorIsUnavailable), Some(WhyThereIsNoReading::NothingThatAnswersItCameBack)) => {
+            Some(false)
+        }
+        _ => None,
+    };
     let mut came_to = WhatTheQueueReadingCameTo {
         gave,
         applied_first: 0,
         the_default_was_taken: false,
+        the_line_is_stopped: None,
+        the_supervisor_answered,
     };
     // **`Telegram` V1d: what the reading said of reporting is the desk's
     // before the reading is held**, so the Queue drawn from it shows each
     // job's choice as the machine holds it.
     if let (Some(WhatTheRequestGave::ItAnswered(_)), Some(said)) = (&came_to.gave, the_reporting_read.as_ref()) {
+        came_to.the_line_is_stopped = Some(said.the_line_is_stopped.is_some());
         came_to.the_default_was_taken =
             with_the_record(record, |connection| the_reporting_the_reading_carried_is_written(connection, said))
                 .unwrap_or(false);
     }
     if let Some(WhatTheRequestGave::ItAnswered(reading)) = &came_to.gave {
-        let offer = if compose_the_offer {
-            Some(the_offer_in(reading.value(), record))
-        } else {
-            None
-        };
+        let mut offer = the_offer_in(reading.value(), record);
+        // **`Queue & History` A5's paragraph of 2026-11-12: a reading whose
+        // offer holds a job the offer last held did not takes the read
+        // forward first**, so a job the phone made from a job this desk
+        // tracks joins before it could be offered — never offered for one
+        // reading. The machine journals a job's record in the act that writes
+        // it, so a reading that names the job is never ahead of its event.
+        let the_offer_held: Vec<Identity> = holds
+            .every_server()
+            .into_iter()
+            .find(|(held, _)| *held == server.as_text())
+            .map(|(_, period)| period.the_offer)
+            .unwrap_or_default();
+        let mut read_forward_first = 0;
+        if offer.iter().any(|job| !the_offer_held.contains(job)) {
+            read_forward_first = match a_read_forward_pass(server, record, machine, holds) {
+                HowThePassEnded::ItReadToTheEnd { applied }
+                | HowThePassEnded::TheReadCouldNotComplete { applied } => applied,
+            };
+            offer = the_offer_in(reading.value(), record);
+        }
+        let offer = Some(offer);
         let held = a_reading_is_held_once_its_endings_are_learned(
             server,
             connection,
@@ -3108,13 +3521,100 @@ pub fn the_queue_is_read(
             holds,
             reading.clone(),
             offer,
+            // **`Queue & History` A1 as changed 2026-11-11: the job the line
+            // could not start for want of room is held with the reading that
+            // named it**, in the one act.
+            the_reporting_read
+                .as_ref()
+                .and_then(|said| said.the_line_waits_for_room_at.clone()),
+            // **And the setup that holds the line, in the same act**
+            // (`Queue & History` A1 as changed 2026-11-14).
+            the_reporting_read
+                .as_ref()
+                .and_then(|said| said.the_line_waits_for_a_setup.clone()),
+            the_reporting_read.as_ref().map_or(0, |said| said.unreadable_job_records),
         );
-        came_to.applied_first = held.applied_first;
+        came_to.applied_first = read_forward_first + held.applied_first;
+        // **`Telegram` F6: the reading's word for Telegram is held for the
+        // connection**, only where the reading landed on the current one; the
+        // row and Settings are drawn again from the work column's telling.
+        if held.it_was_held && held.it_landed {
+            holds.the_reading_says_of_telegram(
+                &server.as_text(),
+                connection,
+                the_reporting_read.as_ref().and_then(|said| said.telegrams_trouble),
+            );
+        }
         if !held.it_was_held {
             came_to.gave = None;
         }
+        // **Only a reading that was held, on the connection that is still
+        // the current one, says anything of the line** (`State, identity and
+        // recovery` F12a): a late answer from an old connection would
+        // otherwise raise *Queue stopped* on a server that has recovered, or
+        // take it off one that has not.
+        if !held.it_was_held || !held.it_landed {
+            came_to.the_line_is_stopped = None;
+        }
+        // **Nor does a late answer from an old connection say Smoozy answered
+        // on this one** (Sol's look, 2026-11-15, point 2): it would withdraw
+        // the current connection's *Smoozy isn't responding.*
+        if !the_connection_is_live() {
+            came_to.the_supervisor_answered = None;
+        }
+        the_watch_hears_the_reading(
+            server,
+            record,
+            holds,
+            if !held.it_was_held {
+                Err(WhyNotHeld::AnEndingItNamesWasNotLearned)
+            } else if !held.it_landed {
+                Err(WhyNotHeld::ItWasTakenOnAConnectionNoLongerCurrent)
+            } else {
+                Ok(())
+            },
+        );
+    } else {
+        // **No reading came back**, and the ask said why.
+        the_watch_hears_the_reading(
+            server,
+            record,
+            holds,
+            Err(match why_there_was_none {
+                Some(WhyThereIsNoReading::TheMachineSaidItCouldNot) => {
+                    WhyNotHeld::TheServerSaidItCouldNot
+                }
+                Some(WhyThereIsNoReading::NothingThatAnswersItCameBack) => {
+                    WhyNotHeld::NothingThatAnswersItCameBack
+                }
+                Some(WhyThereIsNoReading::ItCouldNotBeAsked) | None => {
+                    WhyNotHeld::ItCouldNotBeAsked
+                }
+            }),
+        );
     }
     came_to
+}
+
+/// **What a queue reading came to, heard by `Queue & History` §17's gap
+/// lines** — held, or not held and why. Note 11's piece 5a.
+fn the_watch_hears_the_reading(
+    server: &Identity,
+    record: &dyn LendsTheRecord,
+    holds: &WhatThisRunHolds,
+    held: Result<(), WhyNotHeld>,
+) {
+    let now = std::time::Instant::now();
+    let server_text = server.as_text();
+    a_gap_line_is_written(
+        record,
+        server,
+        &|watch, label| match held {
+            Ok(()) => watch.a_reading_was_held(&server_text, now, label),
+            Err(why) => watch.a_reading_was_not_held(&server_text, why, now, label),
+        },
+        holds,
+    );
 }
 
 /// **Whether a reading was held, and what was read forward before it** —
@@ -3123,6 +3623,11 @@ pub fn the_queue_is_read(
 pub struct WhatHoldingTheReadingCameTo {
     pub it_was_held: bool,
     pub applied_first: usize,
+    /// **Whether it landed in the period** — false where it was taken on a
+    /// connection no longer current. `it_was_held` stays true there, as it
+    /// always did, so no caller's conduct moves; this is for the diary's
+    /// gap lines alone (note 11's piece 5a).
+    pub it_landed: bool,
 }
 
 /// **`Queue & History` C11: when the job ends it leaves the queue and the
@@ -3168,6 +3673,9 @@ pub(crate) fn a_reading_is_held_once_its_endings_are_learned(
     holds: &WhatThisRunHolds,
     reading: Reading<TheMachinesWorkingState>,
     offer: Option<Vec<Identity>>,
+    the_job_waiting_for_room: Option<Identity>,
+    the_setup_that_holds_the_line: Option<Identity>,
+    unreadable_job_records: u64,
 ) -> WhatHoldingTheReadingCameTo {
     let mut applied_first = 0;
     if an_ending_it_names_is_not_learned(server, reading.value(), record) {
@@ -3179,15 +3687,25 @@ pub(crate) fn a_reading_is_held_once_its_endings_are_learned(
                     return WhatHoldingTheReadingCameTo {
                         it_was_held: false,
                         applied_first,
+                        it_landed: false,
                     };
                 }
             }
         }
     }
-    holds.a_reading_was_taken(&server.as_text(), connection, reading, offer);
+    let it_landed = holds.a_reading_is_kept_with_its_count(
+        &server.as_text(),
+        connection,
+        reading,
+        offer,
+        the_job_waiting_for_room,
+        the_setup_that_holds_the_line,
+        unreadable_job_records,
+    );
     WhatHoldingTheReadingCameTo {
         it_was_held: true,
         applied_first,
+        it_landed,
     }
 }
 
@@ -3302,7 +3820,6 @@ pub fn the_step_seven(
         machine,
         holds,
         the_connection_is_live,
-        true,
     )
     .gave
     {
@@ -3369,7 +3886,6 @@ pub fn the_offer_is_accepted(
     machine: &mut dyn AsksTheSupervisor,
     holds: &WhatThisRunHolds,
 ) -> Result<Vec<Identity>, WhyNothingWasTracked> {
-    use smoozy_job_files::manifest::{SubmissionManifest, MANIFEST_FILE_NAME};
     let server_text = server.as_text();
     let Some((_, period)) = holds
         .every_server()
@@ -3381,9 +3897,9 @@ pub fn the_offer_is_accepted(
     let Some(reading) = period.reading.as_ref() else {
         return Err(WhyNothingWasTracked::TheServerCouldNotBeReached);
     };
-    let mut state = reading.value().clone();
+    let state = reading.value().clone();
     let still_offerable = the_offer_in(&state, record);
-    let mut offer: Vec<Identity> = period
+    let offer: Vec<Identity> = period
         .the_offer
         .iter()
         .filter(|job| still_offerable.contains(job))
@@ -3397,7 +3913,52 @@ pub fn the_offer_is_accepted(
     }) else {
         return Err(WhyNothingWasTracked::TheServerCouldNotBeReached);
     };
-    let layout = crate::servers::installation::the_layout_recorded_for(&row);
+    let jobs = the_jobs_are_written_down(server, record, machine, holds, &row, offer, state)?;
+    // **`Queue & History` §17: *untracked work taken over*, one line for the
+    // act** — the server's label as `Queue & History` N12's copy carries it and the count, and
+    // never a job's identity or label. Owed piece 11. **What the diary
+    // answers changes nothing** (`Desktop app and delivery` L16).
+    if !jobs.is_empty() {
+        let act = smoozy_queue_history::diary::AnAct::UntrackedWorkTakenOver {
+            // **Empty where the row has no label**, as the copy holds none.
+            the_servers_label: row.label.clone().unwrap_or_default(),
+            jobs_covered: jobs.len(),
+        };
+        let at = SystemTime::now();
+        let wrote = record.write_a_modules_line(THE_QUEUES_MODULE, &|run| {
+            act.line(
+                &smoozy_queue_history::diary::Concerning {
+                    run,
+                    server_row: Some(server.clone()),
+                    operations: Vec::new(),
+                    group: None,
+                },
+                at,
+            )
+        });
+        let _ = wrote.nothing_is_owed();
+    }
+    Ok(jobs)
+}
+
+/// **`Queue & History` A6 to A8's write, for the jobs named**: each one's note
+/// and manifest read now (A7), the jobs the machine no longer holds left out,
+/// then one write, every record confirmed under the machine's identity, the
+/// jobs taken out of the held offer, and their readings filled in. Shared by
+/// *Add to Queue* ([`the_offer_is_accepted`]) and the job a phone made from a
+/// job this desk tracks ([`the_jobs_made_from_tracked_jobs_join`]). **Writes
+/// no diary line**: that is the user's act's own.
+fn the_jobs_are_written_down(
+    server: &Identity,
+    record: &dyn LendsTheRecord,
+    machine: &mut dyn AsksTheSupervisor,
+    holds: &WhatThisRunHolds,
+    row: &smoozy_servers::store::ServerRow,
+    mut offer: Vec<Identity>,
+    mut state: TheMachinesWorkingState,
+) -> Result<Vec<Identity>, WhyNothingWasTracked> {
+    use smoozy_job_files::manifest::{SubmissionManifest, MANIFEST_FILE_NAME};
+    let layout = crate::servers::installation::the_layout_recorded_for(row);
     let mut manifests: HashMap<Identity, Option<SubmissionManifest>> = HashMap::new();
     let mut no_longer_held: Vec<Identity> = Vec::new();
     for job in &offer {
@@ -3439,40 +4000,72 @@ pub fn the_offer_is_accepted(
     }
     let mut writer = TheAdoptedAreWrittenDown {
         record,
-        stood: the_server_as_it_stands(&row, server),
+        stood: the_server_as_it_stands(row, server),
         manifests,
     };
     let adopted =
         smoozy_queue_history::acting::adoption::accept(&mut writer, server, &offer, &state)
             .map_err(|_| WhyNothingWasTracked::TheRecordRefusedIt)?;
     let jobs: Vec<Identity> = adopted.into_iter().map(|one| one.job).collect();
-    holds.the_offer_was_accepted(&server_text, &jobs);
+    holds.the_offer_was_accepted(&server.as_text(), &jobs);
     the_readings_are_filled_in(server, record, machine, holds, &jobs);
-    // **`Queue & History` §17: *untracked work taken over*, one line for the
-    // act** — the server's label as `Queue & History` N12's copy carries it and the count, and
-    // never a job's identity or label. Owed piece 11. **What the diary
-    // answers changes nothing** (`Desktop app and delivery` L16).
-    if !jobs.is_empty() {
-        let act = smoozy_queue_history::diary::AnAct::UntrackedWorkTakenOver {
-            // **Empty where the row has no label**, as the copy holds none.
-            the_servers_label: row.label.clone().unwrap_or_default(),
-            jobs_covered: jobs.len(),
-        };
-        let at = SystemTime::now();
-        let wrote = record.write_a_modules_line(THE_QUEUES_MODULE, &|run| {
-            act.line(
-                &smoozy_queue_history::diary::Concerning {
-                    run,
-                    server_row: Some(server.clone()),
-                    operations: Vec::new(),
-                    group: None,
-                },
-                at,
-            )
-        });
-        let _ = wrote.nothing_is_owed();
-    }
     Ok(jobs)
+}
+
+/// **`Queue & History` A5's paragraph of 2026-11-12: a job the machine made
+/// from a job the local record names joins by itself** — the build runner's
+/// ruling 2 on the second live pass. `made` pairs each job a *job record was
+/// written* event names with the job its mark says it was made from
+/// (`smoozy_framing::requests::the_job_a_resubmission_was_made_from`). **Only
+/// a pair whose source the local record holds on this server is taken in**,
+/// and never a job the record already names or a tombstone names (`Queue &
+/// History` A9). Nothing is offered and no diary line is written: the user
+/// made no act at the desk. **A machine that does not answer the note reading
+/// is an error**, so the caller moves no cursor and the next pass tries again
+/// (`State, identity and recovery` E3).
+pub fn the_jobs_made_from_tracked_jobs_join(
+    server: &Identity,
+    record: &dyn LendsTheRecord,
+    machine: &mut dyn AsksTheSupervisor,
+    holds: &WhatThisRunHolds,
+    made: &[(Identity, Identity)],
+) -> Result<Vec<Identity>, WhyNothingWasTracked> {
+    let server_text = server.as_text();
+    let Some(Some((row, joining))) = with_the_record(record, |connection| {
+        let row = server_rows::one(connection, &server_text).ok().flatten()?;
+        let store = JobRecords::over(connection);
+        let tombstones = store.tombstones().ok()?;
+        let mut joining: Vec<Identity> = Vec::new();
+        for (job, source) in made {
+            let the_source_is_tracked_here = matches!(
+                store.read(source),
+                Ok(Some(held)) if &held.server.local_server == server
+            );
+            if the_source_is_tracked_here
+                && matches!(store.read(job), Ok(None))
+                && smoozy_queue_history::deletion::may_become_an_entry_again(&tombstones, job)
+                && !joining.contains(job)
+            {
+                joining.push(job.clone());
+            }
+        }
+        Some((row, joining))
+    }) else {
+        return Err(WhyNothingWasTracked::TheRecordRefusedIt);
+    };
+    if joining.is_empty() {
+        return Ok(Vec::new());
+    }
+    // **Only the notes are read off the state** (`Queue & History` A6's
+    // `accept`), and those are read now, so no reading need be held.
+    let state = TheMachinesWorkingState {
+        jobs: Vec::new(),
+        the_admission_point_stands_at: None,
+        notes: Vec::new(),
+        the_history_copys_count: 0,
+        the_history_copys_entries: Vec::new(),
+    };
+    the_jobs_are_written_down(server, record, machine, holds, &row, joining, state)
 }
 
 /// **The name `Queue & History` declares its diary lines under**, registered
@@ -3668,7 +4261,16 @@ pub fn an_adopted_record(
         },
         the_files_values_beside_the_overrides: None,
         dependency_check: None,
-        carries_on_from: None,
+        // **`Queue & History` N15's build detail of 2026-11-12: a job the
+        // machine made on a phone's *Resume* carries on from the job its note
+        // names**, with the note's label, which the copy took from that job
+        // (the four questions, batch 4's leftover). None on every other.
+        carries_on_from: adopted.the_note.as_ref().and_then(|note| {
+            Some(smoozy_queue_history::record::CarriesOnFrom {
+                earlier_job: note.carries_on_from.clone()?,
+                the_label_as_it_stood: note.label.clone(),
+            })
+        }),
         disturbances: Vec::new(),
         attempts_where_the_file_changed: Vec::new(),
         the_frames: TheFramesTheReadFound::default(),
@@ -3787,8 +4389,10 @@ pub enum TheUpdatesEnding {
     /// gate*), or another transaction stands. The update waits.
     ItWaits,
     /// **Rolled back, failed before commit, or not carried out**, with the
-    /// transaction's own words. The machine is on the release it had.
-    ItFailed { said: String },
+    /// transaction's own words. The machine is on the release it had. **`at`
+    /// says whose words**: the server's, or Smoozy's own download of the
+    /// release (`Server protocol and transfers` B10b).
+    ItFailed { said: String, at: crate::servers::published::WhereTheUpdateFailed },
 }
 
 /// **Everything step 9 reaches that is not a judgement**, as a seam — its one
@@ -3830,6 +4434,10 @@ pub enum WhatStepNineDid {
     /// **V4: a request is already in hand for this server**, so none was
     /// composed.
     ARequestIsAlreadyInHand,
+    /// **V11 with `Server Setup` Y9: a setup run began on this server since
+    /// step 9's gate**, so the update did not take its turn: nothing fetched,
+    /// nothing sent, and step 9 follows that run. Added 2026-11-11.
+    ASetupRunGoesFirst,
 }
 
 /// **`Servers` Q1 step 9, on one reading: V11, V12 and V14, with V13's
@@ -3879,8 +4487,16 @@ pub fn the_step_nine(
             the_server_carries(server, None);
             None
         }
+        // **V14: the program answered step 7's reading, so the protocol
+        // intervals overlap**, and the desktop goes on using the machine and
+        // says nothing. *Too new* is raised only where they do not, or where
+        // the supervisor does not answer (`crate::servers::installation`'s
+        // inspection). *(Until 2026-11-14 this raised *too new* here too, which
+        // hid a working server's work behind the dash and said it could not
+        // be used; the Rough what-if answers, share 5, 431.)* Nothing is sent
+        // either way: no release below the machine's own is placed.
         WhatStepNineDecides::TheMachineIsTooNew => {
-            the_server_carries(server, Some(Carries::TooNew));
+            the_server_carries(server, None);
             None
         }
         WhatStepNineDecides::TheUpdateWaits => {
@@ -3888,6 +4504,21 @@ pub fn the_step_nine(
             None
         }
         WhatStepNineDecides::TheUpdateIsSent => {
+            // **V11 with `Server Setup` Y9: one act of Smoozy's own on a
+            // machine at a time.** The update looks again here, before it
+            // fetches, and takes its turn in the same act: a setup run begun
+            // since step 9's gate goes first, and a press from now on waits in
+            // the line (`Server Setup` Y9a item 11). Added 2026-11-11, the
+            // Fable review's second sitting, fault 4.
+            use crate::setting_up::{an_update_takes_its_turn, TheUpdatesTurn};
+            match an_update_takes_its_turn(server) {
+                TheUpdatesTurn::ItIsTaken => {}
+                TheUpdatesTurn::ASetupRunGoesFirst => return WhatStepNineDid::ASetupRunGoesFirst,
+                TheUpdatesTurn::AnUpdateHoldsIt => return WhatStepNineDid::ARequestIsAlreadyInHand,
+            }
+            // **The turn is let go however this ends**, and the line behind
+            // it begins.
+            let _the_turn = TheUpdatesTurnIsLetGo(server);
             // **V4: one request outstanding per server.**
             if !an_update_is_taken_in_hand(server) {
                 return WhatStepNineDid::ARequestIsAlreadyInHand;
@@ -3909,8 +4540,8 @@ pub fn the_step_nine(
                         None
                     }
                     TheUpdatesEnding::ItWaits => Some(Carries::TheUpdateWaits),
-                    TheUpdatesEnding::ItFailed { said } => {
-                        Some(Carries::TheUpdateFailed { said: said.clone() })
+                    TheUpdatesEnding::ItFailed { said, at } => {
+                        Some(Carries::TheUpdateFailed { said: said.clone(), at: *at })
                     }
                 },
             );
@@ -3918,6 +4549,17 @@ pub fn the_step_nine(
         }
     };
     WhatStepNineDid::Decided { decided, ending }
+}
+
+/// **The update's turn on one server, let go when step 9 is done with it** —
+/// on every way out, a failure part-way included, so a press that waited
+/// behind it is never left waiting for ever.
+struct TheUpdatesTurnIsLetGo<'a>(&'a str);
+
+impl Drop for TheUpdatesTurnIsLetGo<'_> {
+    fn drop(&mut self) {
+        crate::setting_up::the_update_lets_the_server_go(self.0);
+    }
 }
 
 /// **Whether the local record has learned this job's ending** — `Some` where it
@@ -3986,15 +4628,42 @@ impl TheUpdatesOwnEnds for TheUpdateOverThisPoint<'_> {
         let got = the_own_release_and_its_program(self.record, &tuple);
         let (verified, artifact) = match got {
             Ok(got) => got,
-            Err(said) => return TheUpdatesEnding::ItFailed { said },
+            Err(failed) => {
+                return TheUpdatesEnding::ItFailed {
+                    said: failed.said,
+                    at: crate::servers::published::WhereTheUpdateFailed::InTheDownload {
+                        nothing_answered: failed.nothing_answered,
+                    },
+                }
+            }
         };
         let sessions = &self.sessions;
         let area = self.package_area.as_str();
+        // **V11's gate, read again now** — after this copy's own release is
+        // had, which can take a while, and just before the placement takes
+        // the connection whole. A job sent since step 7's reading holds the
+        // update, as `Rented-server runtime` G21 means it to. *(Added
+        // 2026-11-14, the Rough what-if answers, share 5, 432: the commit read
+        // the work as it stood when the connection opened.)*
+        let learned = the_ending_is_learned_in(self.record);
+        let fresh = waited_for(|| async move {
+            match the_queue_reading_request() {
+                Some(request) => the_queue_reading_in(sessions.ask_the_supervisor(area, &request).await),
+                None => Err(WhyThereIsNoReading::ItCouldNotBeAsked),
+            }
+        });
+        // Step 7's reading held nothing that blocks, or the update would not
+        // have been sent; the fresh one is what the commit is handed.
+        let _ = accepted_work;
+        let accepted_work = match the_work_at_the_placement(fresh.as_ref(), &learned) {
+            Ok(work) => work,
+            Err(waits) => return waits,
+        };
         let installation = self.installation.clone();
         let placed = waited_for(|| async move {
             crate::setting_up::the_update_is_placed(
                 sessions,
-                crate::setting_up::OverTheLentConnection,
+                crate::setting_up::OverTheLentConnection { gives_up: None },
                 area,
                 installation,
                 held,
@@ -4013,19 +4682,46 @@ impl TheUpdatesOwnEnds for TheUpdateOverThisPoint<'_> {
             | Ok(Reached::AClaimStandsWhoseOwnerCouldNotBeRead) => TheUpdatesEnding::ItWaits,
             Ok(Reached::RolledBack) => TheUpdatesEnding::ItFailed {
                 said: "New version failed to start. Rolled back.".to_string(),
+                at: crate::servers::published::WhereTheUpdateFailed::OnTheServer,
             },
             Ok(Reached::FailedBeforeCommit { because }) | Ok(Reached::RollingBack { because }) => {
-                TheUpdatesEnding::ItFailed { said: because }
+                TheUpdatesEnding::ItFailed {
+                    said: because,
+                    at: crate::servers::published::WhereTheUpdateFailed::OnTheServer,
+                }
             }
-            Err(said) => TheUpdatesEnding::ItFailed { said },
+            Err(said) => TheUpdatesEnding::ItFailed {
+                said,
+                at: crate::servers::published::WhereTheUpdateFailed::OnTheServer,
+            },
         }
     }
+}
+
+/// **V11's gate at the placement**: the work read again just before the
+/// update is placed. **Anything live, held or uncollected holds the update**
+/// (it waits, and V12 tries it again), and so does a reading that could not
+/// be had, which is never an empty line. Otherwise the fresh reading is what
+/// `Rented-server runtime` G21 is handed. Added 2026-11-14, the Rough what-if
+/// answers, share 5 (432).
+pub fn the_work_at_the_placement(
+    fresh: Result<&TheMachinesWorkingState, &WhyThereIsNoReading>,
+    the_ending_is_learned: &dyn Fn(&Identity) -> Option<bool>,
+) -> Result<Vec<(String, smoozy_runtime::package::retry::AcceptedWorkStanding)>, TheUpdatesEnding> {
+    let Ok(fresh) = fresh else {
+        return Err(TheUpdatesEnding::ItWaits);
+    };
+    let now = what_g21_reads(fresh, the_ending_is_learned);
+    if now.iter().any(|(_, standing)| standing.blocks()) {
+        return Err(TheUpdatesEnding::ItWaits);
+    }
+    Ok(now)
 }
 
 /// **This application's own release, and the program in it** — read the way
 /// the ready action reads it (`crate::setting_up::the_ready_action_on`), so the
 /// update and a setup place the same thing.
-fn the_own_release_and_its_program(
+pub(crate) fn the_own_release_and_its_program(
     record: &dyn LendsTheRecord,
     tuple: &smoozy_server_protocol::release::manifest::TargetTuple,
 ) -> Result<
@@ -4033,7 +4729,7 @@ fn the_own_release_and_its_program(
         smoozy_server_protocol::release::verifying::AVerifiedRelease,
         Vec<u8>,
     ),
-    String,
+    crate::setting_up::ADownloadThatFailed,
 > {
     use crate::setting_up::ReadsTheCurrentRelease;
     #[cfg(debug_assertions)]
@@ -4067,21 +4763,33 @@ fn the_step_nine_here<R: Runtime>(
     .flatten()
     .and_then(|row| row.last_confirmed_installation_identity)
     .and_then(|text| Identity::read_back(IdentityKind::Installation, &text));
-    let Some(installation) = step_nine_may_run_now(server, connection, confirmed) else {
+    let Some(mut installation) = step_nine_may_run_now(server, connection, confirmed) else {
         return;
     };
     let before = crate::servers::published::what_the_server_carries(server);
     let the_control_before = crate::servers::published::a_live_jobs_reporting_can_be_changed_on(server);
     let told = || crate::surface::servers::the_work_column_is_told_again(app);
-    let mut ends = TheUpdateOverThisPoint {
-        sessions: sessions.clone(),
-        package_area: package_area.to_string(),
-        record,
-        installation,
-        the_page_is_told: &told,
-    };
     let learned = the_ending_is_learned_in(record);
-    the_step_nine(server, reading, &learned, &mut ends);
+    loop {
+        let mut ends = TheUpdateOverThisPoint {
+            sessions: sessions.clone(),
+            package_area: package_area.to_string(),
+            record,
+            installation: installation.clone(),
+            the_page_is_told: &told,
+        };
+        if the_step_nine(server, reading, &learned, &mut ends) != WhatStepNineDid::ASetupRunGoesFirst {
+            break;
+        }
+        // **V11: a setup run began since the gate, so step 9 waits behind
+        // it** — held back on this connection and taken when the run ends,
+        // the way the gate holds it back. **Where the run has already ended
+        // by now, step 9 is taken again at once.** Added 2026-11-11.
+        match step_nine_may_run_now(server, connection, Some(installation.clone())) {
+            Some(again) => installation = again,
+            None => break,
+        }
+    }
     if crate::servers::published::what_the_server_carries(server) != before {
         crate::surface::servers::the_work_column_is_told_again(app);
     }
@@ -4291,13 +4999,30 @@ fn the_work_on_one_connection<R: Runtime>(
         package_area: package_area.clone(),
     };
 
+    // **Note 11's piece 5a: the first reconciliation is timed, and each of its asks**,
+    // so one over a minute names its slowest read (`Queue & History` §17).
+    let began = std::time::Instant::now();
+    let mut timed = TheAsksTimed {
+        machine: &mut machine,
+        clock: &std::time::Instant::now,
+        slowest: None,
+    };
     let did = the_step_seven(
         &server_identity,
         connection,
         &record,
-        &mut machine,
+        &mut timed,
         holds,
         &is_live,
+    );
+    let slowest = timed.slowest;
+    a_stretch_of_reading_is_heard(
+        &record,
+        &server_identity,
+        holds,
+        smoozy_queue_history::diary::WhichStretch::ANewConnectionsFirstReconciliation,
+        began.elapsed(),
+        slowest,
     );
     // **`Queue & History` E9: the words of every ending step 7 learned**, on a
     // thread of their own beside the rest. The Creator's notes on 0.1.8, piece
@@ -4382,6 +5107,8 @@ fn the_work_on_one_connection<R: Runtime>(
         is_live: &is_live,
         sessions: &sessions,
         package_area: &package_area,
+        this_pass_began: None,
+        this_pass_slowest: None,
     };
     let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -4731,23 +5458,9 @@ impl ReadsASinksBytes for TheSinksOverThisServersPoint {
     fn the_bytes(&mut self, path: &str, from: u64, to: u64) -> Result<Vec<u8>, String> {
         let sessions = &self.sessions;
         let path = path.as_bytes().to_vec();
-        waited_for(|| async move {
-            let read = sessions
-                .a_reading(true, move |subsystem| {
-                    Box::pin(async move {
-                        Ok(smoozy_dependencies::acting::checking::read_a_streams_bytes_over_the_file_session(
-                            subsystem, &path, from, to,
-                        )
-                        .await)
-                    })
-                })
-                .await;
-            match read {
-                Ok(Ok(read)) => read,
-                Ok(Err(failure)) => Err(format!("{failure:?}")),
-                Err(not_lent) => Err(format!("{not_lent:?}")),
-            }
-        })
+        // **In pieces** (`Server protocol and transfers` §1.1 item 2 as added
+        // 2026-11-12): the first read of a long stream is the whole of it.
+        waited_for(|| async move { sessions.a_streams_bytes(true, &path, from, to).await })
     }
 }
 
@@ -5079,6 +5792,10 @@ pub struct ThePassesOverThisConnection<'a, R: Runtime> {
     /// queue reading.
     sessions: &'a ThisServersSessions,
     package_area: &'a str,
+    /// **When this pass began, and its slowest single read so far** —
+    /// `Queue & History` §17's *reading took over a minute*. Note 11's piece 5a.
+    this_pass_began: Option<std::time::Instant>,
+    this_pass_slowest: Option<(smoozy_queue_history::diary::WhichRead, std::time::Duration)>,
 }
 
 impl<R: Runtime> WhatAPassTakes for ThePassesOverThisConnection<'_, R> {
@@ -5104,17 +5821,26 @@ impl<R: Runtime> WhatAPassTakes for ThePassesOverThisConnection<'_, R> {
 
     fn take(&mut self, _server: &str, read: WhatAPassReads) {
         let holds = self.periods.the_machines_work();
+        // **Note 11's piece 5a: the pass is timed, and each of its asks**, so a pass
+        // over a minute can name its slowest read (`Queue & History` §17).
+        self.this_pass_began.get_or_insert_with(std::time::Instant::now);
+        let mut timed = TheAsksTimed {
+            machine: &mut *self.machine,
+            clock: &std::time::Instant::now,
+            slowest: self.this_pass_slowest.take(),
+        };
         match read {
             WhatAPassReads::TheReadForwardFromTheEventCursor => {
                 let applied = match a_read_forward_pass(
                     self.server,
                     self.record,
-                    &mut *self.machine,
+                    &mut timed,
                     holds,
                 ) {
                     HowThePassEnded::ItReadToTheEnd { applied }
                     | HowThePassEnded::TheReadCouldNotComplete { applied } => applied,
                 };
+                self.this_pass_slowest = timed.slowest;
                 self.a_read_forward_is_followed_up(applied);
             }
             WhatAPassReads::TheQueueReading => {
@@ -5126,13 +5852,39 @@ impl<R: Runtime> WhatAPassTakes for ThePassesOverThisConnection<'_, R> {
                     self.server,
                     self.connection,
                     self.record,
-                    &mut *self.machine,
+                    &mut timed,
                     holds,
                     self.is_live,
-                    false,
                 );
+                self.this_pass_slowest = timed.slowest;
                 if read.applied_first > 0 {
                     self.a_read_forward_is_followed_up(read.applied_first);
+                }
+                // **`Desktop app and delivery` V2, `State, identity and
+                // recovery` F12a: the reading said whether the machine's line
+                // is stopped over a record it cannot read**, and the condition
+                // on the server's row is raised or withdrawn by it. A reading
+                // that did not answer moves nothing.
+                if let Some(stopped) = read.the_line_is_stopped {
+                    self.periods
+                        .the_publisher()
+                        .the_machines_line_is(&self.server.as_text(), stopped);
+                }
+                // **`Desktop app and delivery` V1 as added 2026-11-15: the
+                // reading moves the not-responding condition**, as §3.3 says
+                // a pass does — raised where Smoozy left it unanswered on a
+                // live connection, withdrawn where Smoozy answers again. The
+                // what-if live pass, new fault 3.
+                let server = self.server.as_text();
+                let publisher = self.periods.the_publisher();
+                match what_a_reading_does_to_the_supervisors_condition(
+                    read.the_supervisor_answered,
+                    publisher.the_supervisors_condition_stands(&server),
+                    smoozys_own_act_holds(&server),
+                ) {
+                    Some(TheSupervisorsConditionMoves::IsRaised) => publisher.the_supervisor_is_unavailable(&server),
+                    Some(TheSupervisorsConditionMoves::IsWithdrawn) => publisher.the_supervisor_answered(&server),
+                    None => {}
                 }
                 // **`Telegram` V1d: a phone's choice taken as the default** is
                 // drawn in Settings' Telegram section at once.
@@ -5182,6 +5934,9 @@ impl<R: Runtime> WhatAPassTakes for ThePassesOverThisConnection<'_, R> {
                 }
             }
             WhatAPassReads::TheRunningEntrysCommentaryRead => {
+                // **The commentary read is timed whole** — its bytes come over
+                // the reading session, not as an ask of the supervisor.
+                let began = std::time::Instant::now();
                 let mut reader = TheSinksOverThisServersPoint {
                     sessions: self.sessions.clone(),
                 };
@@ -5195,9 +5950,41 @@ impl<R: Runtime> WhatAPassTakes for ThePassesOverThisConnection<'_, R> {
                 if the_entrys_lines_are_read(holds, &self.server.as_text(), &mut reader) {
                     crate::surface::the_queue::the_queue_is_told_again(self.app);
                 }
+                timed.a_read_took(
+                    smoozy_queue_history::diary::WhichRead::TheCommentaryRead,
+                    began.elapsed(),
+                );
+                self.this_pass_slowest = timed.slowest;
             }
         }
     }
+
+    /// **Note 11's piece 5a: the pass is heard by `Queue & History` §17's gap lines** —
+    /// how long it took and its slowest read.
+    fn the_pass_is_over(&mut self, _server: &str) {
+        let Some(began) = self.this_pass_began.take() else {
+            return;
+        };
+        a_stretch_of_reading_is_heard(
+            self.record,
+            self.server,
+            self.periods.the_machines_work(),
+            smoozy_queue_history::diary::WhichStretch::APass,
+            began.elapsed(),
+            self.this_pass_slowest.take(),
+        );
+    }
+}
+
+/// **Whether Smoozy's own act holds the server and restarts its program on
+/// purpose**: V13's update or V3c's repair under way, or a setup this copy
+/// drives there (`Desktop app and delivery` V1 as added 2026-11-15).
+fn smoozys_own_act_holds(server: &str) -> bool {
+    use crate::servers::published::WhatSmoozyOnTheServerIs as Carries;
+    matches!(
+        crate::servers::published::what_the_server_carries(server),
+        Some(Carries::TheUpdateIsUnderWay) | Some(Carries::TheRepairIsUnderWay)
+    ) || crate::setting_up::the_kind_being_driven_on(server).is_some()
 }
 
 impl<R: Runtime> ThePassesOverThisConnection<'_, R> {
@@ -5242,6 +6029,243 @@ impl<R: Runtime> ThePassesOverThisConnection<'_, R> {
             );
         }
     }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Note 11's piece 5a: the diary's lines for a reading that stalls
+// ════════════════════════════════════════════════════════════════════════════
+
+/// **The bound past which a stall is written down: one minute**, on the desk's
+/// own clock. `Queue & History` §17's gap lines name it in their own words.
+/// Nothing waits on it and nothing fires at it; it is only compared with what
+/// a read already measured.
+pub const A_STALL_IS_WRITTEN_PAST: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// **`Queue & History` §17's gap lines, kept for the run, one server at a
+/// time** — note 11's piece 5a, from the Creator's twenty-ninth notes, note 11 (the
+/// Queue showed *Submitting…* while the server rendered, and nothing said
+/// why).
+///
+/// **One line when a stall passes the minute, one when it ends, never one per
+/// reading.** Each answer below is the line to write, or nothing. It holds no
+/// reading, writes nothing durable and changes nothing a user reads; losing it
+/// costs the lines alone (`Reporting a problem` R7).
+#[derive(Debug, Default)]
+pub struct TheReadingsWatch {
+    per_server: HashMap<String, OneServersWatch>,
+}
+
+#[derive(Debug, Default)]
+struct OneServersWatch {
+    /// Since the first queue reading not held, and how many tries since.
+    not_held: Option<TheReadingsNotHeld>,
+    /// **How many stretches in a row took over a minute**, once the first of
+    /// them was written down.
+    slow_in_a_row: u32,
+}
+
+#[derive(Debug)]
+struct TheReadingsNotHeld {
+    since: std::time::Instant,
+    tries: u32,
+    written: bool,
+}
+
+impl TheReadingsWatch {
+    /// **A queue reading was not held, and why.** The line is written at the
+    /// first such try once a minute has passed since the first, and not again
+    /// until one is held.
+    pub fn a_reading_was_not_held(
+        &mut self,
+        server: &str,
+        why: smoozy_queue_history::diary::WhyNotHeld,
+        now: std::time::Instant,
+        the_servers_label: &dyn Fn() -> String,
+    ) -> Option<smoozy_queue_history::diary::AGap> {
+        let watch = self.per_server.entry(server.to_string()).or_default();
+        let not_held = watch.not_held.get_or_insert(TheReadingsNotHeld {
+            since: now,
+            tries: 0,
+            written: false,
+        });
+        not_held.tries += 1;
+        let for_how_long = now.saturating_duration_since(not_held.since);
+        if not_held.written || for_how_long < A_STALL_IS_WRITTEN_PAST {
+            return None;
+        }
+        not_held.written = true;
+        Some(smoozy_queue_history::diary::AGap::NoQueueReadingHeld {
+            the_servers_label: the_servers_label(),
+            for_seconds: for_how_long.as_secs(),
+            tries: not_held.tries,
+            why,
+        })
+    }
+
+    /// **A queue reading was held.** It ends a stall, and where the stall was
+    /// written down, says so once.
+    pub fn a_reading_was_held(
+        &mut self,
+        server: &str,
+        now: std::time::Instant,
+        the_servers_label: &dyn Fn() -> String,
+    ) -> Option<smoozy_queue_history::diary::AGap> {
+        let not_held = self.per_server.get_mut(server)?.not_held.take()?;
+        if !not_held.written {
+            return None;
+        }
+        Some(smoozy_queue_history::diary::AGap::AQueueReadingHeldAgain {
+            the_servers_label: the_servers_label(),
+            after_seconds: now.saturating_duration_since(not_held.since).as_secs(),
+            tries: not_held.tries,
+        })
+    }
+
+    /// **A pass, or a new connection's first reconciliation, ended**, having
+    /// taken `took`, its slowest single read beside it. **Only the first of a
+    /// run of slow ones writes**, and the first that is not writes once.
+    pub fn a_stretch_of_reading_ended(
+        &mut self,
+        server: &str,
+        stretch: smoozy_queue_history::diary::WhichStretch,
+        took: std::time::Duration,
+        slowest: Option<(smoozy_queue_history::diary::WhichRead, std::time::Duration)>,
+        the_servers_label: &dyn Fn() -> String,
+    ) -> Option<smoozy_queue_history::diary::AGap> {
+        let watch = self.per_server.entry(server.to_string()).or_default();
+        if took >= A_STALL_IS_WRITTEN_PAST {
+            watch.slow_in_a_row += 1;
+            if watch.slow_in_a_row > 1 {
+                return None;
+            }
+            return Some(smoozy_queue_history::diary::AGap::ReadingTookOverAMinute {
+                the_servers_label: the_servers_label(),
+                stretch,
+                seconds: took.as_secs(),
+                slowest: slowest.map(|(read, took)| (read, took.as_secs())),
+            });
+        }
+        let slow_in_a_row = std::mem::take(&mut watch.slow_in_a_row);
+        (slow_in_a_row > 0).then(|| smoozy_queue_history::diary::AGap::ReadingBackUnderAMinute {
+            the_servers_label: the_servers_label(),
+            slow_in_a_row,
+        })
+    }
+}
+
+/// **A gap line, written** under `Queue & History`'s own declared name, with
+/// the server's label as `Queue & History` N12's copy carries it — read only
+/// when a line is due. **What the diary answers changes nothing** (L16).
+fn a_gap_line_is_written(
+    record: &dyn LendsTheRecord,
+    server: &Identity,
+    what: &dyn Fn(&mut TheReadingsWatch, &dyn Fn() -> String) -> Option<smoozy_queue_history::diary::AGap>,
+    holds: &WhatThisRunHolds,
+) {
+    let the_servers_label = || {
+        with_the_record(record, |connection| {
+            server_rows::one(connection, &server.as_text()).ok().flatten()
+        })
+        .flatten()
+        .and_then(|row| row.label)
+        .unwrap_or_default()
+    };
+    let gap = match holds.the_readings_watch.lock() {
+        Ok(mut watch) => what(&mut watch, &the_servers_label),
+        Err(_) => None,
+    };
+    let Some(gap) = gap else {
+        return;
+    };
+    let at = SystemTime::now();
+    let wrote = record.write_a_modules_line(THE_QUEUES_MODULE, &|run| {
+        gap.line(run, server.clone(), at)
+    });
+    let _ = wrote.nothing_is_owed();
+}
+
+/// **The asks of one stretch of reading, timed**, so a slow one can name its
+/// slowest single read (`Queue & History` §17's *reading took over a minute*).
+/// It answers exactly as the machine it wraps does.
+pub struct TheAsksTimed<'a> {
+    pub machine: &'a mut dyn AsksTheSupervisor,
+    pub clock: &'a dyn Fn() -> std::time::Instant,
+    pub slowest: Option<(smoozy_queue_history::diary::WhichRead, std::time::Duration)>,
+}
+
+impl TheAsksTimed<'_> {
+    /// **One read, timed, and kept where it is the slowest so far.**
+    pub fn a_read_took(
+        &mut self,
+        read: smoozy_queue_history::diary::WhichRead,
+        took: std::time::Duration,
+    ) {
+        if self.slowest.map_or(true, |(_, slowest)| took > slowest) {
+            self.slowest = Some((read, took));
+        }
+    }
+
+    fn timed<T>(
+        &mut self,
+        read: smoozy_queue_history::diary::WhichRead,
+        ask: impl FnOnce(&mut dyn AsksTheSupervisor) -> T,
+    ) -> T {
+        let began = (self.clock)();
+        let answered = ask(&mut *self.machine);
+        let took = (self.clock)().saturating_duration_since(began);
+        self.a_read_took(read, took);
+        answered
+    }
+}
+
+/// **A request named in plain words** — never by its own name (`Reporting a
+/// problem` J3).
+fn which_read_is(request: &Request) -> smoozy_queue_history::diary::WhichRead {
+    use smoozy_queue_history::diary::WhichRead;
+    match request.name.as_str() {
+        THE_READ_FORWARD_REQUEST => WhichRead::TheReadForward,
+        THE_CURSOR_MOVES_FORWARD_REQUEST => WhichRead::TheCursorsMove,
+        THE_QUEUE_READING_REQUEST => WhichRead::TheQueueReading,
+        THE_PER_JOB_NOTE_READING_REQUEST => WhichRead::ANoteRead,
+        THE_DOES_THE_MACHINE_HOLD_THIS_JOB_REQUEST => WhichRead::AJobCheck,
+        _ => WhichRead::AnotherRequest,
+    }
+}
+
+impl AsksTheSupervisor for TheAsksTimed<'_> {
+    fn ask(&mut self, request: &Request) -> WhatCameBack {
+        self.timed(which_read_is(request), |machine| machine.ask(request))
+    }
+
+    fn ask_within(&mut self, request: &Request, within: std::time::Duration) -> WhatCameBack {
+        self.timed(which_read_is(request), |machine| machine.ask_within(request, within))
+    }
+
+    fn a_file_of_the_job_record_directory(&mut self, path: &str) -> Option<Vec<u8>> {
+        self.timed(smoozy_queue_history::diary::WhichRead::ARecordFileRead, |machine| {
+            machine.a_file_of_the_job_record_directory(path)
+        })
+    }
+}
+
+/// **A stretch of reading has ended** — a P10d pass, or a new connection's
+/// first reconciliation — and the watch hears how long it took.
+pub fn a_stretch_of_reading_is_heard(
+    record: &dyn LendsTheRecord,
+    server: &Identity,
+    holds: &WhatThisRunHolds,
+    stretch: smoozy_queue_history::diary::WhichStretch,
+    took: std::time::Duration,
+    slowest: Option<(smoozy_queue_history::diary::WhichRead, std::time::Duration)>,
+) {
+    a_gap_line_is_written(
+        record,
+        server,
+        &|watch, label| {
+            watch.a_stretch_of_reading_ended(&server.as_text(), stretch, took, slowest, label)
+        },
+        holds,
+    );
 }
 
 #[cfg(test)]
@@ -5364,10 +6388,13 @@ pub(crate) mod tests {
                         operation: Identity::issue(IdentityKind::Operation).unwrap(),
                     },
                     live: WhatTheEntryHasLive::Readings {
+                        running_again: false,
                         figures: Some(AWorkersReport {
                             attempt,
                             readings: Reading::taken(
-                                LiveReadings::default(),
+                                // The frame after the saved one is in hand,
+                                // as it is in a render that has gone on.
+                                LiveReadings { frame_in_hand: Some(saved + 1), ..LiveReadings::default() },
                                 SystemTime::now(),
                                 Clock::AMachine(MachineClock("test".into())),
                             ),
@@ -5376,6 +6403,7 @@ pub(crate) mod tests {
                             the_units_finished: None,
                         }),
                         sinks: None,
+                        rendered_for: None,
                     },
                     the_hold: None,
                 }],
@@ -5387,6 +6415,35 @@ pub(crate) mod tests {
             SystemTime::now(),
             Clock::ThisComputer,
         )
+    }
+
+    #[test]
+    fn bad_batch_2_unreadable_job_records_are_not_an_empty_queue() {
+        let read = |count| {
+            let request = the_queue_reading_request().unwrap();
+            the_queue_reading_and_its_reporting_in(WhatCameBack::ItAnswered(
+                Answered::to(&request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test").carrying(
+                    a_queue(&[]).and(smoozy_server_protocol::requests::HOW_MANY_DID_NOT_READ_BACK_FIELD, count)
+                )
+            )).unwrap().1
+        };
+        assert_eq!(read("2").unreadable_job_records, 2);
+        assert_eq!(read("0").unreadable_job_records, 0);
+    }
+
+    #[test]
+    fn bad_batch_2_a_restarted_journal_recovers_endings_below_the_saved_cursor() {
+        let (record, server) = a_record_with_a_server();
+        let kitchen = a_confirmed_record(&record, &server, "Kitchen");
+        let mut row = server_rows::one(&record.0, &server.as_text()).unwrap().unwrap();
+        row.event_cursor = Some(90);
+        server_rows::write(&record.0, &row).unwrap();
+        let mut machine = AMachineThatAnswersAfter { ended: kitchen.job.clone(), first: None };
+        let ended = a_read_forward_pass(&server, &record, &mut machine, &WhatThisRunHolds::default());
+        assert!(matches!(ended, HowThePassEnded::ItReadToTheEnd { .. }));
+        assert_eq!(the_cursor_of(&record, &server), Some(1));
+        assert!(JobRecords::over(&record.0).read(&kitchen.job).unwrap().unwrap().the_ending_learned().is_some());
+        assert!(the_account_of(&record, &server).is_some(), "the missing account is said");
     }
 
     #[test]
@@ -5404,7 +6461,7 @@ pub(crate) mod tests {
             holds
                 .the_saved_prefixes_reported_on_this_connection("server")
                 .get(&job.as_text()),
-            Some(&(2, 10))
+            Some(&(2, 10, Some(11)))
         );
         holds.the_connection_ended("server");
         assert!(holds
@@ -5433,7 +6490,7 @@ pub(crate) mod tests {
             holds
                 .the_saved_prefixes_reported_on_this_connection("server")
                 .get(&job.as_text()),
-            Some(&(3, -4))
+            Some(&(3, -4, Some(-3)))
         );
     }
 
@@ -5508,6 +6565,40 @@ pub(crate) mod tests {
              provisional record** — `Preparation/Specs/Whole app.md` forbids the \
              determination a timeout would need"
         );
+    }
+
+    /// **A job the server never took is said in its server's line** — the
+    /// Rough what-if answers, share 1 (42). Smoozy closed while sending it;
+    /// the next connection removed its provisional record, and until then
+    /// nothing said so. Now a row reads *Not submitted.* with *Smoozy closed
+    /// while sending it.*, as a failed act's row does.
+    #[test]
+    fn rough_share_1_a_job_found_never_taken_is_said_as_not_submitted() {
+        let (record, server) = a_record_with_a_server();
+        let never = a_provisional_record(&server, "Never taken");
+        write(&record, &never);
+        let mut machine = AMachineInHand::default().answers(
+            THE_DOES_THE_MACHINE_HOLD_THIS_JOB_REQUEST,
+            on_the_machine(IT_IS_ABSENT),
+        );
+        let mut did = WhatStepSevenDid::default();
+        every_provisional_record_is_resolved(&server, &record, &mut machine, &mut did);
+        assert_eq!(did.removed, 1);
+        let rows: Vec<_> = crate::submitting::the_acts_in_flight_to_draw(&|_| None)
+            .into_iter()
+            .filter(|act| act.server == server.as_text())
+            .collect();
+        assert_eq!(rows.len(), 1, "one row, in that server's line");
+        assert_eq!(
+            rows[0].not_submitted,
+            Some(crate::submitting::WhatTheActCameTo::TheseJobs(vec![
+                crate::submitting::WhatBecameOfOneJob::SmoozyClosedWhileSendingIt
+            ]))
+        );
+        let (said, _) = crate::surface::render_settings::the_acts_answer(rows[0].not_submitted.as_ref().unwrap());
+        let words = serde_json::to_string(&said).unwrap().replace('\u{a0}', " ");
+        assert!(words.contains("Not submitted.") && words.contains("Smoozy closed during submission."), "{words}");
+        assert!(crate::submitting::a_not_submitted_row_is_cleared(rows[0].which));
     }
 
     /// **The other two branches**: *present* confirms, and only an answer that
@@ -5649,6 +6740,7 @@ pub(crate) mod tests {
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: the_reason.map(str::to_string),
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: Some(line.to_string()),
             });
             // **The machine's own composition**, which `smoozy-server` sends.
@@ -5694,7 +6786,7 @@ pub(crate) mod tests {
                     assert!(entry.failure.is_none());
                 }
                 _ => {
-                    assert_eq!(ran_on, vec!["not known".to_string()]);
+                    assert_eq!(ran_on, vec!["unknown".to_string()]);
                     assert_eq!(
                         entry
                             .failure
@@ -6768,7 +7860,7 @@ pub(crate) mod tests {
         };
         let read_once = |fields: Fields| {
             let mut machine = AMachineInHand::default().answers(THE_QUEUE_READING_REQUEST, Some(fields));
-            the_queue_is_read(&server, connection, &record, &mut machine, &holds, &nothing_is_live, false)
+            the_queue_is_read(&server, connection, &record, &mut machine, &holds, &nothing_is_live)
         };
 
         // The first reading: the job's choice is the record's, and the phone's
@@ -6804,11 +7896,79 @@ pub(crate) mod tests {
         // **A reading from a program before these fields** changes nothing.
         let mut machine = AMachineInHand::default()
             .answers(THE_QUEUE_READING_REQUEST, Some(a_queue(&[(&waiting.job, IT_IS_WAITING)])));
-        let read = the_queue_is_read(&server, connection, &record, &mut machine, &holds, &nothing_is_live, false);
+        let read = the_queue_is_read(&server, connection, &record, &mut machine, &holds, &nothing_is_live);
         assert!(!read.the_default_was_taken);
         assert_eq!(
             JobRecords::over(&record.0).the_reporting_choice_of(&waiting.job).unwrap().as_deref(),
             Some("\"OnlyWhatNeedsAnAnswer\"")
+        );
+    }
+
+    /// **The what-if live pass of 2026-11-15, new fault 3: Smoozy's program
+    /// ended while the server stayed connected, and the row read *Idle* and
+    /// the card *No setup found*.** A pass's queue reading Smoozy leaves
+    /// unanswered on a live connection now says so, and moves `Desktop app and
+    /// delivery` V1's condition (§3.3 always said a pass does): raised where it
+    /// does not stand, withdrawn at the next answered reading, and never while
+    /// Smoozy's own act holds the server and restarts the program on purpose.
+    /// A silence on a line that has gone is the connection's
+    /// (`Server protocol and transfers` C17a).
+    #[test]
+    fn a_reading_smoozy_leaves_unanswered_moves_the_not_responding_condition() {
+        use TheSupervisorsConditionMoves::{IsRaised, IsWithdrawn};
+        let (record, server) = a_record_with_a_server();
+        let holds = WhatThisRunHolds::default();
+        let connection = holds.a_connection_begins(&server.as_text());
+        let mut silent = AMachineInHand::default().answers(THE_QUEUE_READING_REQUEST, None);
+        let read = the_queue_is_read(&server, connection, &record, &mut silent, &holds, &nothing_is_live);
+        assert_eq!(read.the_supervisor_answered, Some(false));
+        let gone = || false;
+        let read = the_queue_is_read(&server, connection, &record, &mut silent, &holds, &gone);
+        assert_eq!(read.the_supervisor_answered, None, "the line's silence, not Smoozy's");
+        let mut answering = AMachineInHand::default().answers(THE_QUEUE_READING_REQUEST, Some(a_queue(&[])));
+        let read = the_queue_is_read(&server, connection, &record, &mut answering, &holds, &nothing_is_live);
+        assert_eq!(read.the_supervisor_answered, Some(true));
+        // **Sol's look, point 2: an answer on a connection no longer current
+        // says nothing**, so it cannot withdraw the current one's condition.
+        let read = the_queue_is_read(&server, connection, &record, &mut answering, &holds, &gone);
+        assert_eq!(read.the_supervisor_answered, None, "a late answer from an old connection");
+
+        assert_eq!(what_a_reading_does_to_the_supervisors_condition(Some(false), false, false), Some(IsRaised));
+        assert_eq!(what_a_reading_does_to_the_supervisors_condition(Some(false), true, false), None, "raised once");
+        assert_eq!(what_a_reading_does_to_the_supervisors_condition(Some(false), false, true), None, "an update or repair restarts it");
+        assert_eq!(what_a_reading_does_to_the_supervisors_condition(Some(true), true, false), Some(IsWithdrawn));
+        assert_eq!(what_a_reading_does_to_the_supervisors_condition(Some(true), true, true), Some(IsWithdrawn));
+        assert_eq!(what_a_reading_does_to_the_supervisors_condition(Some(true), false, false), None);
+        assert_eq!(what_a_reading_does_to_the_supervisors_condition(None, true, false), None);
+        assert_eq!(what_a_reading_does_to_the_supervisors_condition(None, false, false), None);
+
+        // **The pass does it**, through the run's one publisher.
+        let this = include_str!("the_machines_work.rs");
+        assert!(this.contains("what_a_reading_does_to_the_supervisors_condition(\n                    read.the_supervisor_answered,"));
+    }
+
+    /// **`Queue & History` A1 as changed 2026-11-10: a reading that says the
+    /// line is stopped is read back with the machine's words**, and one that
+    /// does not — or comes from a program older than the field — says nothing.
+    #[test]
+    fn a_reading_that_says_the_line_is_stopped_is_read_back_saying_so() {
+        let request = the_queue_reading_request().unwrap();
+        let read = |fields: Fields| {
+            the_queue_reading_and_its_reporting_in(WhatCameBack::ItAnswered(
+                Answered::to(&request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test").carrying(fields),
+            ))
+            .expect("the answer reads")
+            .1
+        };
+        let moving = Fields::none().and(HOW_MANY_JOBS_FIELD, "0");
+        assert_eq!(read(moving.clone()).the_line_is_stopped, None);
+        let stopped = moving.and(
+            smoozy_server_protocol::requests::THE_LINE_IS_STOPPED_FIELD,
+            "a record did not read back",
+        );
+        assert_eq!(
+            read(stopped).the_line_is_stopped.as_deref(),
+            Some("a record did not read back")
         );
     }
 
@@ -6851,6 +8011,32 @@ pub(crate) mod tests {
         assert_eq!(read(not_one_of_the_five).the_phones_choice, None);
     }
 
+    /// **When Telegram refuses — `Telegram` F6's word is read off the
+    /// reading**, and a word this copy does not know, or none, is no word.
+    #[test]
+    fn when_telegram_refuses_the_readings_word_is_read() {
+        use smoozy_server_protocol::requests::{TheTelegramTrouble, TELEGRAMS_TROUBLE_HERE_FIELD};
+        let request = the_queue_reading_request().unwrap();
+        let read = |fields: Fields| {
+            the_queue_reading_and_its_reporting_in(WhatCameBack::ItAnswered(
+                Answered::to(&request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test").carrying(fields),
+            ))
+            .expect("the answer reads")
+            .1
+            .telegrams_trouble
+        };
+        let empty = Fields::none().and(HOW_MANY_JOBS_FIELD, "0");
+        assert_eq!(read(empty.clone()), None, "an older program says nothing");
+        for trouble in [
+            TheTelegramTrouble::TheTokenIsRejected,
+            TheTelegramTrouble::TheChatRefuses,
+            TheTelegramTrouble::TelegramIsNotReached,
+        ] {
+            assert_eq!(read(empty.clone().and(TELEGRAMS_TROUBLE_HERE_FIELD, trouble.the_word())), Some(trouble));
+        }
+        assert_eq!(read(empty.and(TELEGRAMS_TROUBLE_HERE_FIELD, "something new")), None);
+    }
+
     /// **Step 10c's worldwide setup pass on Vast, new fault 5: a finished job
     /// was in neither Queue nor History for at least 12 seconds.** A P10d pass
     /// reads forward and then takes the queue reading; a job that ended
@@ -6886,7 +8072,6 @@ pub(crate) mod tests {
             &mut machine,
             &holds,
             &nothing_is_live,
-            false,
         );
         assert!(matches!(read.gave, Some(WhatTheRequestGave::ItAnswered(_))));
         assert_eq!(
@@ -6927,7 +8112,6 @@ pub(crate) mod tests {
             &mut machine,
             &holds,
             &nothing_is_live,
-            false,
         );
         assert!(
             matches!(read.gave, Some(WhatTheRequestGave::ItAnswered(_))),
@@ -6967,7 +8151,6 @@ pub(crate) mod tests {
             &mut machine,
             &holds,
             &nothing_is_live,
-            false,
         );
         assert_eq!(machine.how_many_times(THE_READ_FORWARD_REQUEST), 0);
         assert_eq!(
@@ -6991,7 +8174,6 @@ pub(crate) mod tests {
             &mut machine,
             &holds,
             &nothing_is_live,
-            false,
         );
         let mut machine = AMachineInHand::default()
             .answers(
@@ -7006,7 +8188,6 @@ pub(crate) mod tests {
             &mut machine,
             &holds,
             &nothing_is_live,
-            false,
         );
         assert!(read.gave.is_none(), "the reading is not held");
         assert_eq!(machine.how_many_times(THE_READ_FORWARD_REQUEST), 1);
@@ -7742,6 +8923,121 @@ pub(crate) mod tests {
         assert_eq!(what_the_server_carries(&server), None);
     }
 
+    /// **An update whose fetch of this application's own release is slow**:
+    /// it says when the fetch has begun, waits for the test's word to finish
+    /// it, and notes whether a setup run stood on the server at the moment it
+    /// sent. Added 2026-11-11, the Fable review's second sitting, fault 4.
+    struct AnUpdateSlowToFetch {
+        server: String,
+        holds: WhatThePackageAreaHolds,
+        the_fetch_began: std::sync::mpsc::Sender<()>,
+        the_fetch_may_end: std::sync::mpsc::Receiver<()>,
+        a_setup_run_stood_at_the_send: Option<bool>,
+    }
+
+    impl TheUpdatesOwnEnds for AnUpdateSlowToFetch {
+        fn what_the_package_area_holds(&mut self) -> WhatThePackageAreaHolds {
+            self.holds.clone()
+        }
+        fn this_applications_own_release(&mut self) -> Result<u64, String> {
+            Ok(7)
+        }
+        fn the_update_is_sent(
+            &mut self,
+            _under: Option<Identity>,
+            _held: &WhatThePackageAreaHolds,
+            _accepted_work: Vec<(String, AcceptedWorkStanding)>,
+        ) -> TheUpdatesEnding {
+            let _ = self.the_fetch_began.send(());
+            // **A deadline for a broken test, never the thing waited on.**
+            let _ = self.the_fetch_may_end.recv_timeout(std::time::Duration::from_secs(60));
+            self.a_setup_run_stood_at_the_send =
+                Some(crate::setting_up::the_kind_being_driven_on(&self.server).is_some());
+            TheUpdatesEnding::ItLanded
+        }
+    }
+
+    /// **`Server Setup` Y9, `Server Setup` Y9a item 11 and `Desktop app and delivery` V11: a
+    /// setup step pressed while Smoozy updates its own program on that server
+    /// waits its turn in the line, exactly as behind a setup run, and begins
+    /// when the update ends** — so only one of the two runs at a time, and the
+    /// second runs after. The Fable review's second sitting, fault 4: the
+    /// press began at once, under a program being swapped and restarted.
+    #[test]
+    fn a_setup_step_pressed_during_an_update_waits_its_turn_and_begins_after() {
+        use crate::setting_up::{the_acts_are_taken_from_the_card, the_kind_being_driven_on, ASetUpAct, HowThePressWasTaken};
+        let server = a_server();
+        let (began, the_fetch_began) = std::sync::mpsc::channel();
+        let (it_may_end, the_fetch_may_end) = std::sync::mpsc::channel();
+        let update = std::thread::spawn({
+            let server = server.clone();
+            move || {
+                let mut update = AnUpdateSlowToFetch {
+                    server: server.clone(),
+                    holds: AMachineThatRecordsUpdates::running(Some(6), 7).holds,
+                    the_fetch_began: began,
+                    the_fetch_may_end,
+                    a_setup_run_stood_at_the_send: None,
+                };
+                let did = the_step_nine(&server, Some(&a_line(&[])), &nothing_tracked, &mut update);
+                (did, update.a_setup_run_stood_at_the_send)
+            }
+        });
+        the_fetch_began
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("the update began to fetch");
+
+        // **The press, while the update fetches.**
+        let install = ASetUpAct::AnInstallFromTheList("5.2.3".to_string());
+        let taken = the_acts_are_taken_from_the_card(&server, vec![install.clone()], &mut |_| {});
+        assert_eq!(taken, HowThePressWasTaken::ItWaitsItsTurn, "a press during the update began at once");
+        assert_eq!(the_kind_being_driven_on(&server), None, "a setup run began while the update ran");
+        assert_eq!(crate::setting_up::the_acts_still_waiting_on(&server), vec![install], "the press is not in the line");
+
+        it_may_end.send(()).expect("the update is let finish");
+        let (did, stood) = update.join().expect("the update ran");
+        assert_eq!(stood, Some(false), "a setup run stood on the server when the update sent");
+        assert_eq!(
+            did,
+            WhatStepNineDid::Decided {
+                decided: WhatStepNineDecides::TheUpdateIsSent,
+                ending: Some(TheUpdatesEnding::ItLanded),
+            }
+        );
+        // **The second runs after**: the press's install is begun as the
+        // update lets the server go, and nothing is left waiting.
+        assert_eq!(
+            the_kind_being_driven_on(&server),
+            Some(smoozy_server_setup::run::SetupKind::ABlenderInstall),
+            "the press did not begin when the update ended"
+        );
+        assert!(crate::setting_up::the_acts_still_waiting_on(&server).is_empty());
+        let _ = crate::setting_up::a_run_in_the_line_ends(&server, true);
+    }
+
+    /// **`Desktop app and delivery` V11: the update looks again when it is
+    /// about to begin, and waits behind a setup run that began since step 9's
+    /// gate** — nothing fetched, nothing sent, the row as it was, and step 9
+    /// owed when that run ends. The Fable review's second sitting, fault 4.
+    #[test]
+    fn the_update_waits_behind_a_setup_run_begun_since_its_first_look() {
+        let server = a_server();
+        let installation = Identity::issue(IdentityKind::Installation).expect("randomness");
+        // **The first look**, with nothing driven.
+        assert_eq!(step_nine_may_run_now(&server, 7, Some(installation.clone())), Some(installation.clone()));
+        // **A setup run begins between the gate and the update.**
+        assert!(crate::setting_up::a_run_begins(&server, smoozy_server_setup::run::SetupKind::ABlenderInstall));
+        let mut machine = AMachineThatRecordsUpdates::running(Some(6), 7);
+        let did = the_step_nine(&server, Some(&a_line(&[])), &nothing_tracked, &mut machine);
+        assert!(machine.sent.is_empty(), "the update was sent over a setup run begun since its gate");
+        assert_eq!(did, WhatStepNineDid::ASetupRunGoesFirst);
+        assert_eq!(what_the_server_carries(&server), None, "the row moved for an update that never began");
+        // **Step 9 is owed once the run ends.**
+        assert_eq!(step_nine_may_run_now(&server, 7, Some(installation)), None);
+        crate::setting_up::a_run_ends(&server);
+        assert_eq!(a_held_back_step_nine_is_owed_on(&server), Some(7), "step 9 was not owed after the run");
+    }
+
     /// **V11: an older machine with a waiting job gets nothing, and the update
     /// waits — then V12: the reading that shows the job ended sends it.** The
     /// gap proved first is that until 2026-09-28 a machine with work on it was
@@ -7884,6 +9180,7 @@ pub(crate) mod tests {
             &server,
             Some(WhatSmoozyOnTheServerIs::TheUpdateFailed {
                 said: "earlier".into(),
+                at: crate::servers::published::WhereTheUpdateFailed::OnTheServer,
             }),
         );
         let mut machine = AMachineThatRecordsUpdates::running(Some(7), 7);
@@ -7914,16 +9211,71 @@ pub(crate) mod tests {
             machine.sent.is_empty(),
             "a newer machine was sent an older release"
         );
+        // **V14, kept from 2026-11-14 (the Rough what-if answers, share 5,
+        // 431): a newer program that answered step 7 shares a protocol with
+        // this copy**, so nothing is raised and its work is shown. *Too new*
+        // is the inspection's, where no protocol is shared.
+        assert_eq!(what_the_server_carries(&server), None);
+    }
+
+    /// **The Rough what-if answers, share 5 (432): a job sent after step 7's
+    /// reading holds the update.** The work is read again just before the
+    /// placement: a job waiting or rendering there now, or a reading that
+    /// could not be had, makes the update wait; an empty line is handed on.
+    /// Before, the commit was handed the work as it stood when the connection
+    /// opened.
+    #[test]
+    fn rough_share_5_a_job_sent_since_the_reading_holds_the_update() {
+        let job = a_job();
+        for state in [QueueState::Waiting, QueueState::Rendering { operation: Identity::issue(IdentityKind::Operation).expect("randomness") }] {
+            let now = a_line(&[(job.clone(), state.clone())]);
+            assert_eq!(
+                the_work_at_the_placement(Ok(&now), &nothing_tracked),
+                Err(TheUpdatesEnding::ItWaits),
+                "a job {state:?} since the reading did not hold the update"
+            );
+        }
         assert_eq!(
-            what_the_server_carries(&server),
-            Some(WhatSmoozyOnTheServerIs::TooNew)
+            the_work_at_the_placement(Err(&WhyThereIsNoReading::NothingThatAnswersItCameBack), &nothing_tracked),
+            Err(TheUpdatesEnding::ItWaits),
+            "a reading that could not be had was read as an empty line"
         );
+        assert_eq!(the_work_at_the_placement(Ok(&a_line(&[])), &nothing_tracked), Ok(Vec::new()));
+        // **The running update reads it after its own release is had**, and
+        // before the placement takes the connection.
+        let (working, _) = include_str!("the_machines_work.rs").split_once("#[cfg(test)]\npub(crate) mod tests").expect("tests are last");
+        let sent = working.split_once("fn the_update_is_sent(\n        &mut self,\n        under: Option<Identity>,\n        held: &crate::servers::installation::WhatThePackageAreaHolds,\n        accepted_work").map(|(_, after)| after).unwrap_or_default();
+        let had = sent.find("the_own_release_and_its_program(").expect("the release is had");
+        let read = sent.find("the_work_at_the_placement(").expect("the work is read again");
+        let placed = sent.find("the_update_is_placed(").expect("the update is placed");
+        assert!(had < read && read < placed, "the work is not read again between the release and the placement");
+    }
+
+    /// **The Rough what-if answers, share 5 (431): a newer program that
+    /// answers is used and nothing is said** — V14's *where the protocol
+    /// intervals still overlap, the desktop goes on using the machine and says
+    /// nothing*. A *too new* left from an earlier reading is withdrawn. Before,
+    /// step 9 raised *too new* on every newer machine, and the row then hid its
+    /// work behind the dash and said it could not be used.
+    #[test]
+    fn rough_share_5_a_newer_program_that_answers_is_used_and_nothing_is_said() {
+        let server = a_server();
+        crate::servers::published::the_server_carries(&server, Some(WhatSmoozyOnTheServerIs::TooNew));
+        let mut machine = AMachineThatRecordsUpdates::running(Some(8), 7);
+        let did = the_step_nine(&server, Some(&a_line(&[])), &nothing_tracked, &mut machine);
+        assert_eq!(
+            did,
+            WhatStepNineDid::Decided { decided: WhatStepNineDecides::TheMachineIsTooNew, ending: None }
+        );
+        assert!(machine.sent.is_empty(), "a newer machine was sent an older release");
+        assert_eq!(what_the_server_carries(&server), None, "a newer program that answers was said to be unusable");
     }
 
     /// **W0-2, in `Server protocol and transfers` B10a: a copy given a desk
     /// program takes it as its own release, at nought.** A machine the shortcut
     /// placed reads the same and gets nothing; one a published release placed
-    /// reads too new and gets nothing either.
+    /// reads newer and gets nothing either (and, from 2026-11-14, is not said
+    /// to be too new, since it answered: V14).
     #[cfg(debug_assertions)]
     #[test]
     fn a_shortcut_copy_neither_updates_nor_refuses_its_own_desk_program() {
@@ -7953,10 +9305,8 @@ pub(crate) mod tests {
             &mut release_placed,
         );
         assert!(release_placed.sent.is_empty());
-        assert_eq!(
-            what_the_server_carries(&server),
-            Some(WhatSmoozyOnTheServerIs::TooNew)
-        );
+        // V14 from 2026-11-14: it answered, so nothing is said (431).
+        assert_eq!(what_the_server_carries(&server), None);
     }
 
     /// **V4: one request outstanding per server**, and a failed update is said
@@ -7975,12 +9325,14 @@ pub(crate) mod tests {
         crate::servers::published::the_server_carries(&server, None);
         machine.ending = TheUpdatesEnding::ItFailed {
             said: "the health exchange did not answer".into(),
+            at: crate::servers::published::WhereTheUpdateFailed::OnTheServer,
         };
         the_step_nine(&server, Some(&a_line(&[])), &nothing_tracked, &mut machine);
         assert_eq!(
             what_the_server_carries(&server),
             Some(WhatSmoozyOnTheServerIs::TheUpdateFailed {
-                said: "the health exchange did not answer".into()
+                said: "the health exchange did not answer".into(),
+                at: crate::servers::published::WhereTheUpdateFailed::OnTheServer,
             })
         );
         // **A package area that could not be read moves nothing.**
@@ -8173,6 +9525,7 @@ pub(crate) mod tests {
             the_attempt_whose_capture_record_holds_the_words: 1,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         JobRecords::over(&record.0).the_fill_in(job, &note).unwrap();
@@ -9987,6 +11340,7 @@ pub(crate) mod tests {
             simplify: Default::default(),
             the_check_is_written_as_a_picture: false,
             the_check_writes_into: None,
+            the_range_jobs_frames: None,
         };
         JobRecords::over(&record.0)
             .write_the_provisional_record_and_its_kept_setup(&held, &kept)
@@ -10155,6 +11509,7 @@ pub(crate) mod tests {
                     main: place == 0,
                     place,
                     source: None,
+                    the_names_are_in_the_record: false,
                 };
                 let at = ((frame - 1) * 2) as usize + place as usize;
                 carried = carried.and(
@@ -10184,6 +11539,181 @@ pub(crate) mod tests {
         }
     }
 
+    /// **The stand-in's frame of twelve View Layers, with names as long as the
+    /// Creator's, as the machine journals it after piece J**: twelve copies'
+    /// events and the set event, every one leaving its names to the
+    /// production's record.
+    struct TheStandInsFrame {
+        job: Identity,
+        names: Vec<String>,
+        production: String,
+    }
+
+    impl TheStandInsFrame {
+        fn on(record: &ARecordInHand, server: &Identity) -> Self {
+            TheStandInsFrame {
+                job: a_confirmed_record(record, server, "Kitchen").job,
+                names: (0..12).map(|place| format!("SH010_Forest_Clearing_Wide_Background_{place:02}")).collect(),
+                production: Identity::issue(IdentityKind::Operation).unwrap().as_text(),
+            }
+        }
+
+        fn says(&self, place: u32) -> String {
+            let said = smoozy_queue_history::previews::ThePublishedPreview {
+                frame: 1,
+                operation: self.production.clone(),
+                view_layer: Some(self.names[place as usize].as_bytes().to_vec()),
+                main: place == 0,
+                place,
+                ..Default::default()
+            }
+            .as_says();
+            assert!(said.contains("in_record"), "a name this long is left to the record: {said}");
+            said
+        }
+
+        /// The machine's answer naming the first `how_many` copies.
+        fn the_copies(&self, how_many: usize) -> Fields {
+            use smoozy_server_protocol::requests::{
+                A_PREVIEW_COPY, HOW_MANY_PREVIEW_COPIES_FIELD, IT_IS_YES, THE_COPYS_PLACE_FIELD,
+                THE_COPYS_VIEW_LAYER_FIELD, THE_COPY_IS_THE_MAIN_ONE_FIELD,
+            };
+            let mut fields = Fields::none()
+                .and(ON_THIS_MACHINE_FIELD, IT_IS_PRESENT)
+                .and(HOW_MANY_PREVIEW_COPIES_FIELD, how_many.to_string());
+            for at in 0..how_many {
+                let item = |field: &str| the_field_of_item(A_PREVIEW_COPY, at, field);
+                if at == 0 {
+                    fields = fields.and(&item(THE_COPY_IS_THE_MAIN_ONE_FIELD), IT_IS_YES);
+                }
+                fields = fields
+                    .and(&item(THE_COPYS_PLACE_FIELD), at.to_string())
+                    .and(&item(THE_COPYS_VIEW_LAYER_FIELD), self.names[at].as_bytes().to_vec());
+            }
+            fields
+        }
+
+        /// The main copy's early event alone, at sequence 0.
+        fn the_early_event(&self) -> Fields {
+            events(0, &[(THE_PREVIEW_PUBLISHED_EVENT, Some(&self.job))], Some(0))
+                .and(&the_field_of_item(AN_EVENT, 0, THE_SAYS_FIELD), self.says(0))
+        }
+
+        /// The other eleven copies' events and the set event, from sequence 1.
+        fn the_rest(&self) -> Fields {
+            use smoozy_server_protocol::requests::THE_PREVIEW_SET_MADE_EVENT;
+            let mut kinds = vec![(THE_PREVIEW_PUBLISHED_EVENT, Some(&self.job)); 11];
+            kinds.push((THE_PREVIEW_SET_MADE_EVENT, Some(&self.job)));
+            let mut rest = events(1, &kinds, Some(0));
+            for place in 1..12u32 {
+                rest = rest.and(&the_field_of_item(AN_EVENT, place as usize - 1, THE_SAYS_FIELD), self.says(place));
+            }
+            rest.and(&the_field_of_item(AN_EVENT, 11, THE_SAYS_FIELD), self.says(0))
+        }
+
+        fn every_copy_is_owed_by_name(&self, record: &ARecordInHand, server: &Identity) {
+            let mut owed = crate::record::previews::the_owed_on(&record.0, server).unwrap();
+            owed.sort_by_key(|one| one.place);
+            assert_eq!(owed.len(), 12, "every copy is owed: {owed:#?}");
+            for (place, one) in owed.iter().enumerate() {
+                assert_eq!(one.view_layer.as_deref(), Some(self.names[place].as_bytes()), "place {place}");
+                assert_eq!(one.the_main_copy, place == 0);
+            }
+        }
+    }
+
+    /// **Piece J, the twenty-ninth notes, note 11 — `Queue & History` P3 and
+    /// `Queue & History` P10a as changed 2026-11-10**: the stand-in's frame of
+    /// twelve View Layers, whose events leave the names to the production's
+    /// record. The main copy's early event comes first, while the production
+    /// still stands: the record already names the main copy, so it is owed at
+    /// once under its View Layer. Then the other eleven and the set event: one
+    /// ask for the production, and every copy is owed by name. **An ask that
+    /// gets nothing back, or that the machine answers *cannot say*, moves no
+    /// cursor** (Sol's fresh look, point 1). **It failed before the fix**: none
+    /// of the eleven was owed, the desk owing nothing for a copy with no name;
+    /// and before Sol's point 1, *cannot say* moved the cursor past them.
+    #[test]
+    fn piece_j_names_left_to_the_record_are_read_off_it_once_per_production() {
+        use smoozy_server_protocol::requests::{
+            THE_MACHINES_OWN_WORDS_FIELD, THE_MACHINE_CANNOT_SAY, THE_PREVIEW_COPIES_REQUEST,
+        };
+        let (record, server) = a_record_with_a_server();
+        let frame = TheStandInsFrame::on(&record, &server);
+
+        let mut machine = AMachineInHand::default()
+            .answers(THE_READ_FORWARD_REQUEST, Some(frame.the_early_event()))
+            .answers(THE_READ_FORWARD_REQUEST, Some(events(1, &[], Some(0))))
+            .answers(THE_PREVIEW_COPIES_REQUEST, Some(frame.the_copies(1)))
+            .answers(THE_CURSOR_MOVES_FORWARD_REQUEST, Some(Fields::none()));
+        a_read_forward_pass(&server, &record, &mut machine, &WhatThisRunHolds::default());
+        assert_eq!(the_cursor_of(&record, &server), Some(1));
+        let owed = crate::record::previews::the_owed_on(&record.0, &server).unwrap();
+        assert_eq!(owed.len(), 1, "the main copy, at once");
+        assert_eq!(owed[0].view_layer.as_deref(), Some(frame.names[0].as_bytes()));
+
+        for nothing_that_names_it in [
+            None,
+            Some(
+                Fields::none()
+                    .and(ON_THIS_MACHINE_FIELD, THE_MACHINE_CANNOT_SAY)
+                    .and(THE_MACHINES_OWN_WORDS_FIELD, "Input/output error"),
+            ),
+        ] {
+            let mut silent = AMachineInHand::default()
+                .answers(THE_READ_FORWARD_REQUEST, Some(frame.the_rest()))
+                .answers(THE_PREVIEW_COPIES_REQUEST, nothing_that_names_it.clone())
+                .answers(THE_CURSOR_MOVES_FORWARD_REQUEST, Some(Fields::none()));
+            assert_eq!(
+                a_read_forward_pass(&server, &record, &mut silent, &WhatThisRunHolds::default()),
+                HowThePassEnded::TheReadCouldNotComplete { applied: 0 },
+                "{nothing_that_names_it:?}: the pass ends there"
+            );
+            assert_eq!(the_cursor_of(&record, &server), Some(1), "and the cursor stays");
+        }
+
+        let mut machine = AMachineInHand::default()
+            .answers(THE_READ_FORWARD_REQUEST, Some(frame.the_rest()))
+            .answers(THE_READ_FORWARD_REQUEST, Some(events(13, &[], Some(0))))
+            .answers(THE_PREVIEW_COPIES_REQUEST, Some(frame.the_copies(12)))
+            .answers(THE_CURSOR_MOVES_FORWARD_REQUEST, Some(Fields::none()));
+        a_read_forward_pass(&server, &record, &mut machine, &WhatThisRunHolds::default());
+        assert_eq!(the_cursor_of(&record, &server), Some(13));
+        assert_eq!(
+            machine.how_many_times(THE_PREVIEW_COPIES_REQUEST),
+            1,
+            "one ask for the production, however many copies it names"
+        );
+        frame.every_copy_is_owed_by_name(&record, &server);
+    }
+
+    /// **Piece J: where the record named no copy at the main copy's early
+    /// event** — a production recorded before the early copy was written
+    /// there — **the set event owes it**, applied as the main copy's event.
+    /// **It failed before the fix**: the set event was applied as nothing, and
+    /// the main copy was never owed.
+    #[test]
+    fn piece_j_the_set_event_owes_a_main_copy_its_early_event_could_not_name() {
+        use smoozy_server_protocol::requests::THE_PREVIEW_COPIES_REQUEST;
+        let (record, server) = a_record_with_a_server();
+        let frame = TheStandInsFrame::on(&record, &server);
+        let mut machine = AMachineInHand::default()
+            .answers(THE_READ_FORWARD_REQUEST, Some(frame.the_early_event()))
+            .answers(THE_READ_FORWARD_REQUEST, Some(events(1, &[], Some(0))))
+            .answers(THE_PREVIEW_COPIES_REQUEST, Some(frame.the_copies(0)))
+            .answers(THE_CURSOR_MOVES_FORWARD_REQUEST, Some(Fields::none()));
+        a_read_forward_pass(&server, &record, &mut machine, &WhatThisRunHolds::default());
+        assert_eq!(the_cursor_of(&record, &server), Some(1));
+        assert!(crate::record::previews::the_owed_on(&record.0, &server).unwrap().is_empty());
+        let mut machine = AMachineInHand::default()
+            .answers(THE_READ_FORWARD_REQUEST, Some(frame.the_rest()))
+            .answers(THE_READ_FORWARD_REQUEST, Some(events(13, &[], Some(0))))
+            .answers(THE_PREVIEW_COPIES_REQUEST, Some(frame.the_copies(12)))
+            .answers(THE_CURSOR_MOVES_FORWARD_REQUEST, Some(Fields::none()));
+        a_read_forward_pass(&server, &record, &mut machine, &WhatThisRunHolds::default());
+        frame.every_copy_is_owed_by_name(&record, &server);
+    }
+
     #[test]
     fn piece_3_a_published_preview_puts_a_fetch_on_its_job_before_the_cursor_moves() {
         let (record, server) = a_record_with_a_server();
@@ -10195,6 +11725,7 @@ pub(crate) mod tests {
             main: true,
             place: 0,
             source: None,
+            the_names_are_in_the_record: false,
         }
         .as_says();
         let one = |from: u64| {
@@ -10282,5 +11813,771 @@ pub(crate) mod tests {
             "every system takes the held picture: Linux by its file address in a hint"
         );
         std::fs::remove_dir_all(&folder).unwrap();
+    }
+
+    // ── Note 11's piece 5a: the diary's lines for a reading that stalls ───────────────
+
+    /// **A record that keeps every line written under a module's name**, so a
+    /// test can read the gap lines `Queue & History` §17 declares.
+    struct ARecordThatKeepsItsLines {
+        record: ARecordInHand,
+        lines: std::cell::RefCell<Vec<(&'static str, smoozy_reporting::lines::Line)>>,
+    }
+
+    impl LendsTheRecord for ARecordThatKeepsItsLines {
+        fn lend(&self, act: &mut dyn FnMut(&rusqlite::Connection)) {
+            act(&self.record.0)
+        }
+        fn write_a_diary_line(&self, _act: &smoozy_keys::diary::Act) {}
+        fn write_a_modules_line(
+            &self,
+            module: &'static str,
+            compose: &dyn Fn(Identity) -> smoozy_reporting::lines::Line,
+        ) -> crate::diary_service::Wrote {
+            let run = Identity::issue(IdentityKind::Run).unwrap();
+            self.lines.borrow_mut().push((module, compose(run)));
+            crate::diary_service::Wrote::Yes
+        }
+    }
+
+    impl ARecordThatKeepsItsLines {
+        fn with_a_server() -> (Self, Identity) {
+            let (record, server) = a_record_with_a_server();
+            (
+                ARecordThatKeepsItsLines {
+                    record,
+                    lines: std::cell::RefCell::new(Vec::new()),
+                },
+                server,
+            )
+        }
+
+        fn texts(&self) -> Vec<String> {
+            self.lines
+                .borrow()
+                .iter()
+                .map(|(module, line)| {
+                    assert_eq!(*module, THE_QUEUES_MODULE);
+                    assert_eq!(line.kind, smoozy_reporting::lines::LineKind::Gap);
+                    line.text.clone()
+                })
+                .collect()
+        }
+    }
+
+    /// **A stall that began a minute and a second ago**, as the watch would
+    /// hold it after a first queue reading not held.
+    fn a_stall_a_minute_old(holds: &WhatThisRunHolds, server: &Identity) {
+        holds.the_readings_watch.lock().unwrap().per_server.insert(
+            server.as_text(),
+            OneServersWatch {
+                not_held: Some(TheReadingsNotHeld {
+                    since: std::time::Instant::now()
+                        .checked_sub(std::time::Duration::from_secs(61))
+                        .unwrap(),
+                    tries: 1,
+                    written: false,
+                }),
+                slow_in_a_row: 0,
+            },
+        );
+    }
+
+    /// **A machine that was never asked** — the request never reached it.
+    struct AMachineNeverAsked;
+
+    impl AsksTheSupervisor for AMachineNeverAsked {
+        fn ask(&mut self, _request: &Request) -> WhatCameBack {
+            WhatCameBack::ItWasNeverAsked
+        }
+    }
+
+    /// **Note 11's piece 5a: a queue reading not held writes nothing for a minute, one
+    /// line once the minute has passed, nothing more while it stays not held,
+    /// and one line when a reading is held again.** Never one per reading.
+    #[test]
+    fn n5a_a_reading_not_held_is_written_once_past_a_minute_and_its_return_once() {
+        use smoozy_queue_history::diary::{AGap, WhyNotHeld};
+        let mut watch = TheReadingsWatch::default();
+        let label = || "the big box".to_string();
+        let first = std::time::Instant::now();
+        let at = |seconds: u64| first + std::time::Duration::from_secs(seconds);
+        let why = WhyNotHeld::NothingThatAnswersItCameBack;
+        for seconds in [0, 5, 10, 55] {
+            assert_eq!(watch.a_reading_was_not_held("A", why, at(seconds), &label), None);
+        }
+        assert_eq!(
+            watch.a_reading_was_not_held("A", why, at(60), &label),
+            Some(AGap::NoQueueReadingHeld {
+                the_servers_label: label(),
+                for_seconds: 60,
+                tries: 5,
+                why,
+            })
+        );
+        for seconds in [65, 70, 300] {
+            assert_eq!(watch.a_reading_was_not_held("A", why, at(seconds), &label), None);
+        }
+        // Another server's readings are its own.
+        assert_eq!(watch.a_reading_was_not_held("B", why, at(300), &label), None);
+        assert_eq!(
+            watch.a_reading_was_held("A", at(310), &label),
+            Some(AGap::AQueueReadingHeldAgain {
+                the_servers_label: label(),
+                after_seconds: 310,
+                tries: 8,
+            })
+        );
+        assert_eq!(watch.a_reading_was_held("A", at(315), &label), None);
+        // **A stall shorter than the minute writes nothing either way.**
+        assert_eq!(watch.a_reading_was_not_held("A", why, at(320), &label), None);
+        assert_eq!(watch.a_reading_was_held("A", at(370), &label), None);
+    }
+
+    /// **Note 11's piece 5a: a stretch of reading over a minute writes one line naming
+    /// its slowest read, a run of them writes no more, and the first under a
+    /// minute after them writes one.**
+    #[test]
+    fn n5a_a_slow_stretch_is_written_once_and_its_end_once() {
+        use smoozy_queue_history::diary::{AGap, WhichRead, WhichStretch};
+        let mut watch = TheReadingsWatch::default();
+        let label = || "the big box".to_string();
+        let secs = std::time::Duration::from_secs;
+        assert_eq!(
+            watch.a_stretch_of_reading_ended("A", WhichStretch::APass, secs(59), None, &label),
+            None
+        );
+        assert_eq!(
+            watch.a_stretch_of_reading_ended(
+                "A",
+                WhichStretch::ANewConnectionsFirstReconciliation,
+                secs(140),
+                Some((WhichRead::ARecordFileRead, secs(128))),
+                &label,
+            ),
+            Some(AGap::ReadingTookOverAMinute {
+                the_servers_label: label(),
+                stretch: WhichStretch::ANewConnectionsFirstReconciliation,
+                seconds: 140,
+                slowest: Some((WhichRead::ARecordFileRead, 128)),
+            })
+        );
+        assert_eq!(
+            watch.a_stretch_of_reading_ended(
+                "A",
+                WhichStretch::APass,
+                secs(90),
+                Some((WhichRead::TheQueueReading, secs(88))),
+                &label,
+            ),
+            None,
+            "only the first of a run of slow stretches writes"
+        );
+        assert_eq!(
+            watch.a_stretch_of_reading_ended("A", WhichStretch::APass, secs(2), None, &label),
+            Some(AGap::ReadingBackUnderAMinute {
+                the_servers_label: label(),
+                slow_in_a_row: 2,
+            })
+        );
+        assert_eq!(
+            watch.a_stretch_of_reading_ended("A", WhichStretch::APass, secs(2), None, &label),
+            None
+        );
+    }
+
+    /// **Note 11's piece 5a: each of the five routes a queue reading is not held by is
+    /// named in the line**, through [`the_queue_is_read`] itself, and a reading
+    /// held after it writes *held again*. Route c of the dig — a reading taken
+    /// on a connection no longer current — was dropped without a word and
+    /// counted as held.
+    #[test]
+    fn n5a_a_queue_reading_not_held_names_its_route() {
+        #[derive(Clone, Copy, PartialEq)]
+        enum Route {
+            TheServerCouldNot,
+            NothingCameBack,
+            NeverAsked,
+            AnEndingNotLearned,
+            AStaleConnection,
+        }
+        let routes = [
+            (Route::TheServerCouldNot, "the server answered that it could not"),
+            (Route::NothingCameBack, "nothing that answers it came back"),
+            (Route::NeverAsked, "it could not be asked"),
+            (Route::AnEndingNotLearned, "an ending it names was not learned"),
+            (Route::AStaleConnection, "it was taken on a connection no longer current"),
+        ];
+        for (route, words) in routes {
+            let stale = route == Route::AStaleConnection;
+            let (record, server) = ARecordThatKeepsItsLines::with_a_server();
+            let holds = WhatThisRunHolds::default();
+            let mut connection = holds.a_connection_begins(&server.as_text());
+            if stale {
+                let _newer = holds.a_connection_begins(&server.as_text());
+            }
+            a_stall_a_minute_old(&holds, &server);
+            let mut machine: Box<dyn AsksTheSupervisor> = match route {
+                Route::TheServerCouldNot => Box::new(AMachineInHand::default()),
+                Route::NothingCameBack => {
+                    Box::new(AMachineInHand::default().answers(THE_QUEUE_READING_REQUEST, None))
+                }
+                Route::NeverAsked => Box::new(AMachineNeverAsked),
+                Route::AnEndingNotLearned => {
+                    let ended = a_record_in_history(&server, "Hall");
+                    write(&record.record, &ended);
+                    Box::new(
+                        AMachineInHand::default()
+                            .answers(THE_QUEUE_READING_REQUEST, Some(a_queue(&[(&ended.job, IT_HAS_ENDED)])))
+                            .answers(THE_READ_FORWARD_REQUEST, None),
+                    )
+                }
+                Route::AStaleConnection => {
+                    Box::new(AMachineInHand::default().answers(THE_QUEUE_READING_REQUEST, Some(a_queue(&[]))))
+                }
+            };
+            the_queue_is_read(&server, connection, &record, machine.as_mut(), &holds, &nothing_is_live);
+            let texts = record.texts();
+            assert_eq!(texts.len(), 1, "{words}: {texts:?}");
+            assert!(texts[0].starts_with("no queue reading held\t\t6"), "{texts:?}");
+            assert!(texts[0].contains("\u{a0}s\t2\u{a0}tries\t"), "{texts:?}");
+            assert!(texts[0].ends_with(words), "{texts:?}");
+            assert_eq!(record.lines.borrow()[0].1.concerning[1], server);
+
+            // **A reading held again writes the one line of its return.**
+            if stale {
+                connection = holds.a_connection_begins(&server.as_text());
+            }
+            let mut fine = AMachineInHand::default().answers(THE_QUEUE_READING_REQUEST, Some(a_queue(&[])));
+            the_queue_is_read(&server, connection, &record, &mut fine, &holds, &nothing_is_live);
+            let texts = record.texts();
+            assert_eq!(texts.len(), 2, "{words}: {texts:?}");
+            assert!(texts[1].starts_with("queue reading held again\t\t6"), "{texts:?}");
+            assert!(texts[1].ends_with("\u{a0}s\t2\u{a0}tries"), "{texts:?}");
+        }
+    }
+
+    /// **Sol's point on the follow-up: a reading taken on a connection that is
+    /// no longer the current one says nothing of the line**, so a late answer
+    /// from an old connection can neither raise *Queue stopped* on a server
+    /// that has recovered nor take it off one that has not (`State, identity
+    /// and recovery` F12a).
+    #[test]
+    fn a_reading_from_a_connection_no_longer_current_says_nothing_of_the_line() {
+        let (record, server) = ARecordThatKeepsItsLines::with_a_server();
+        let holds = WhatThisRunHolds::default();
+        let stale = holds.a_connection_begins(&server.as_text());
+        let connection = holds.a_connection_begins(&server.as_text());
+        let stopped = || {
+            AMachineInHand::default().answers(
+                THE_QUEUE_READING_REQUEST,
+                Some(a_queue(&[]).and(THE_LINE_IS_STOPPED_FIELD, "a record did not read back")),
+            )
+        };
+        let mut machine = stopped();
+        let read = the_queue_is_read(&server, connection, &record, &mut machine, &holds, &nothing_is_live);
+        assert_eq!(read.the_line_is_stopped, Some(true), "the current connection's word stands");
+        let mut machine = stopped();
+        let read = the_queue_is_read(&server, stale, &record, &mut machine, &holds, &nothing_is_live);
+        assert_eq!(read.the_line_is_stopped, None, "an old connection's word moves nothing");
+    }
+
+    /// **The runner's ruling 3 of 2026-11-11, `Queue & History` A1 as changed
+    /// that day: a reading that names the job the machine's line could not
+    /// start for want of room is held saying so, and the next reading that
+    /// names none takes it away.** A reading from a connection no longer
+    /// current moves nothing. *Until then nothing on the desk knew a job
+    /// waited for room.*
+    #[test]
+    fn a_reading_that_names_a_job_waiting_for_room_is_held_saying_so() {
+        let (record, server) = ARecordThatKeepsItsLines::with_a_server();
+        let holds = WhatThisRunHolds::default();
+        let stale = holds.a_connection_begins(&server.as_text());
+        let connection = holds.a_connection_begins(&server.as_text());
+        let job = Identity::issue(IdentityKind::Job).unwrap();
+        let waits = |for_room: bool| {
+            let queue = a_queue(&[(&job, smoozy_server_protocol::requests::IT_IS_WAITING)]);
+            AMachineInHand::default().answers(
+                THE_QUEUE_READING_REQUEST,
+                Some(if for_room {
+                    queue.and(
+                        smoozy_server_protocol::requests::THE_LINE_WAITS_FOR_ROOM_FIELD,
+                        job.as_text(),
+                    )
+                } else {
+                    queue
+                }),
+            )
+        };
+        let held = || {
+            holds
+                .every_server()
+                .into_iter()
+                .find(|(one, _)| *one == server.as_text())
+                .and_then(|(_, period)| period.the_job_waiting_for_room)
+        };
+        the_queue_is_read(&server, connection, &record, &mut waits(true), &holds, &nothing_is_live);
+        assert_eq!(held(), Some(job.clone()), "the reading named the job waiting for room");
+        the_queue_is_read(&server, stale, &record, &mut waits(false), &holds, &nothing_is_live);
+        assert_eq!(held(), Some(job.clone()), "an old connection's reading moves nothing");
+        the_queue_is_read(&server, connection, &record, &mut waits(false), &holds, &nothing_is_live);
+        assert_eq!(held(), None, "a reading that names none takes it away");
+    }
+
+    /// **Sol's fourth and fifth points on the full disk: a reading is held
+    /// with the job it names as waiting for room in one act**, whichever route
+    /// took it — a pass's reading or the one taken again after a move — so a
+    /// move's re-read does not take the word off a job that still waits, and
+    /// an older reading's word cannot land beside a newer reading.
+    #[test]
+    fn a_reading_is_held_with_the_job_it_names_as_waiting_for_room() {
+        let (record, server) = ARecordThatKeepsItsLines::with_a_server();
+        let holds = WhatThisRunHolds::default();
+        let connection = holds.a_connection_begins(&server.as_text());
+        let job = Identity::issue(IdentityKind::Job).unwrap();
+        let held_as = |the_wait: Option<Identity>| {
+            let mut machine = AMachineInHand::default();
+            a_reading_is_held_once_its_endings_are_learned(
+                &server,
+                connection,
+                &record,
+                &mut machine,
+                &holds,
+                Reading::taken(
+                    a_line(&[(job.clone(), QueueState::Waiting)]),
+                    SystemTime::now(),
+                    Clock::ThisComputer,
+                ),
+                None,
+                the_wait,
+                None,
+                0,
+            );
+            holds
+                .every_server()
+                .into_iter()
+                .find(|(one, _)| *one == server.as_text())
+                .and_then(|(_, period)| period.the_job_waiting_for_room)
+        };
+        assert_eq!(held_as(Some(job.clone())), Some(job.clone()));
+        assert_eq!(held_as(None), None, "a reading that names none takes the word away");
+    }
+
+    /// **The Rough what-if answers, share 4 (310): a reading that names a
+    /// setup holding the machine's line is held saying so**, and the next
+    /// reading that names none takes it away; a connection no longer current
+    /// moves nothing, and a declared break says nothing (`Queue & History`
+    /// A1 as changed 2026-11-14). *Before, nothing on the desk knew the queue
+    /// waited for an unfinished setup.*
+    #[test]
+    fn rough_share_4_a_reading_that_names_a_setup_holding_the_line_is_held_saying_so() {
+        let (record, server) = ARecordThatKeepsItsLines::with_a_server();
+        let holds = WhatThisRunHolds::default();
+        let stale = holds.a_connection_begins(&server.as_text());
+        let connection = holds.a_connection_begins(&server.as_text());
+        let job = Identity::issue(IdentityKind::Job).unwrap();
+        let run = Identity::issue(IdentityKind::Operation).unwrap();
+        let reads = |setup: bool| {
+            let queue = a_queue(&[(&job, smoozy_server_protocol::requests::IT_IS_WAITING)]);
+            AMachineInHand::default().answers(
+                THE_QUEUE_READING_REQUEST,
+                Some(if setup {
+                    queue.and(smoozy_server_protocol::requests::THE_LINE_WAITS_FOR_A_SETUP_FIELD, run.as_text())
+                } else {
+                    queue
+                }),
+            )
+        };
+        let held = || {
+            holds
+                .every_server()
+                .into_iter()
+                .find(|(one, _)| *one == server.as_text())
+                .and_then(|(_, period)| period.the_setup_that_holds_the_line)
+        };
+        assert!(!holds.a_setup_holds_the_line_on(&server.as_text()));
+        the_queue_is_read(&server, connection, &record, &mut reads(true), &holds, &nothing_is_live);
+        assert_eq!(held(), Some(run.clone()), "the reading named the setup");
+        assert!(holds.a_setup_holds_the_line_on(&server.as_text()));
+        the_queue_is_read(&server, stale, &record, &mut reads(false), &holds, &nothing_is_live);
+        assert_eq!(held(), Some(run.clone()), "an old connection's reading moves nothing");
+        holds.the_connection_ended(&server.as_text());
+        assert!(!holds.a_setup_holds_the_line_on(&server.as_text()), "a declared break says nothing");
+        let connection = holds.a_connection_begins(&server.as_text());
+        assert_eq!(held(), None, "a new connection starts with nothing named");
+        the_queue_is_read(&server, connection, &record, &mut reads(true), &holds, &nothing_is_live);
+        assert!(holds.a_setup_holds_the_line_on(&server.as_text()));
+        the_queue_is_read(&server, connection, &record, &mut reads(false), &holds, &nothing_is_live);
+        assert_eq!(held(), None, "a reading that names none takes it away");
+        assert!(!holds.a_setup_holds_the_line_on(&server.as_text()));
+    }
+
+    /// **Note 11's piece 5a: a reading held with no stall standing writes nothing**, and
+    /// the stale-connection reading is still reported as held to its caller,
+    /// so no conduct moves.
+    #[test]
+    fn n5a_an_ordinary_reading_writes_nothing_and_a_stale_one_moves_no_conduct() {
+        let (record, server) = ARecordThatKeepsItsLines::with_a_server();
+        let holds = WhatThisRunHolds::default();
+        let stale = holds.a_connection_begins(&server.as_text());
+        let connection = holds.a_connection_begins(&server.as_text());
+        let mut machine = AMachineInHand::default().answers(THE_QUEUE_READING_REQUEST, Some(a_queue(&[])));
+        let read = the_queue_is_read(&server, connection, &record, &mut machine, &holds, &nothing_is_live);
+        assert!(matches!(read.gave, Some(WhatTheRequestGave::ItAnswered(_))));
+        let read = the_queue_is_read(&server, stale, &record, &mut machine, &holds, &nothing_is_live);
+        assert!(
+            matches!(read.gave, Some(WhatTheRequestGave::ItAnswered(_))),
+            "the caller still reads the stale one as answered, as before"
+        );
+        assert!(record.texts().is_empty(), "{:?}", record.texts());
+    }
+
+    /// **Note 11's piece 5a: the asks of a stretch are timed one by one, and the
+    /// slowest is named in plain words** — here a record-file read, as Sol
+    /// asked the record-file and commentary reads to be among them. The
+    /// answers are the machine's own, unchanged.
+    #[test]
+    fn n5a_the_asks_timed_name_the_slowest_read() {
+        use smoozy_queue_history::diary::WhichRead;
+        let base = std::time::Instant::now();
+        let ticks = std::cell::Cell::new(0u64);
+        // 0, 1, 4, 9, 16, 25: each ask takes longer than the one before.
+        let clock = || {
+            let tick = ticks.get();
+            ticks.set(tick + 1);
+            base + std::time::Duration::from_secs(tick * tick)
+        };
+        let mut machine = AMachineInHand::default().answers(THE_QUEUE_READING_REQUEST, Some(a_queue(&[])));
+        let mut timed = TheAsksTimed {
+            machine: &mut machine,
+            clock: &clock,
+            slowest: None,
+        };
+        let queue = the_queue_reading_in(timed.ask(&the_queue_reading_request().unwrap()));
+        assert!(queue.is_ok(), "the machine's own answer comes through");
+        let _ = the_note_of(&mut timed, &Identity::issue(IdentityKind::Job).unwrap());
+        assert_eq!(timed.slowest, Some((WhichRead::ANoteRead, std::time::Duration::from_secs(5))));
+        let _ = timed.a_file_of_the_job_record_directory("record/attempt-1.json");
+        assert_eq!(
+            timed.slowest,
+            Some((WhichRead::ARecordFileRead, std::time::Duration::from_secs(9)))
+        );
+        timed.a_read_took(WhichRead::TheCommentaryRead, std::time::Duration::from_secs(3));
+        assert_eq!(timed.slowest.map(|(read, _)| read), Some(WhichRead::ARecordFileRead));
+        assert_eq!(machine.how_many_times(THE_QUEUE_READING_REQUEST), 1);
+    }
+
+    /// **Note 11's piece 5a: a stretch heard over a minute writes its line under
+    /// `Queue & History`'s name**, with the slowest read, and the next under a
+    /// minute writes its end.
+    #[test]
+    fn n5a_a_stretch_heard_over_a_minute_is_written_and_so_is_its_end() {
+        use smoozy_queue_history::diary::{WhichRead, WhichStretch};
+        let (record, server) = ARecordThatKeepsItsLines::with_a_server();
+        let holds = WhatThisRunHolds::default();
+        let secs = std::time::Duration::from_secs;
+        a_stretch_of_reading_is_heard(&record, &server, &holds, WhichStretch::APass, secs(75), Some((WhichRead::TheReadForward, secs(70))));
+        a_stretch_of_reading_is_heard(&record, &server, &holds, WhichStretch::APass, secs(4), None);
+        assert_eq!(
+            record.texts(),
+            vec![
+                "reading took over a minute\t\ta pass\t75\u{a0}s\tslowest: the read forward\t70\u{a0}s".to_string(),
+                "reading back under a minute\t\t1\u{a0}slow in a row".to_string(),
+            ]
+        );
+    }
+
+    // ── The Fable review's second sitting ────────────────────────────────────
+
+    /// **A record two threads can lend**, for the tests that run two passes at
+    /// once.
+    struct ARecordTwoThreadsLend(Mutex<rusqlite::Connection>);
+
+    impl LendsTheRecord for ARecordTwoThreadsLend {
+        fn lend(&self, act: &mut dyn FnMut(&rusqlite::Connection)) {
+            let held = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            act(&held)
+        }
+        fn write_a_diary_line(&self, _act: &smoozy_keys::diary::Act) {}
+    }
+
+    /// **A machine that answers the read forward from the cursor it is asked
+    /// with**, over the journal as this reader saw it — and, where it is
+    /// given a gate, says when its first read was asked and holds the answer
+    /// back until it is let go.
+    struct AJournalAsOneReaderSawIt {
+        events: Vec<(&'static str, Identity)>,
+        gate: Option<(std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>,
+    }
+
+    impl AsksTheSupervisor for AJournalAsOneReaderSawIt {
+        fn ask(&mut self, request: &Request) -> WhatCameBack {
+            let answered = Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test");
+            let fields = if request.name == THE_READ_FORWARD_REQUEST {
+                let from: usize = request
+                    .fields
+                    .text(THE_CURSOR_FIELD)
+                    .and_then(|text| text.parse().ok())
+                    .unwrap_or(0);
+                if let Some((asked, let_go)) = self.gate.take() {
+                    let _ = asked.send(());
+                    let _ = let_go.recv_timeout(std::time::Duration::from_secs(20));
+                }
+                let carried: Vec<(&str, Option<&Identity>)> = self
+                    .events
+                    .iter()
+                    .skip(from)
+                    .map(|(kind, about)| (*kind, Some(about)))
+                    .collect();
+                events(from.min(self.events.len()) as u64, &carried, Some(0))
+            } else if request.name == THE_PER_JOB_NOTE_READING_REQUEST {
+                a_note_that_started_and_finished("Kitchen")
+            } else if request.name == THE_CURSOR_MOVES_FORWARD_REQUEST {
+                Fields::none()
+            } else {
+                return WhatCameBack::ItAnswered(
+                    answered.saying_it_does_not_answer_that_request(&request.name),
+                );
+            };
+            WhatCameBack::ItAnswered(answered.carrying(fields))
+        }
+    }
+
+    /// **Two read-forward passes on one server take turns, and the cursor
+    /// never goes back** (`State, identity and recovery` E3, as added
+    /// 2026-11-11). The pass after
+    /// a cancel reads the journal while it holds one ending and is slow to
+    /// come back; the live pass reads both endings meanwhile and saves the
+    /// cursor past them. *Until the Fable review's second sitting the slow
+    /// pass then saved its own, lower cursor over it, so the second ending was
+    /// read and told again by the next pass.*
+    #[test]
+    fn two_passes_on_one_server_take_turns_and_the_cursor_never_goes_back() {
+        let (record, server) = a_record_with_a_server();
+        let holds = WhatThisRunHolds::default();
+        let kitchen = a_confirmed_record(&record, &server, "Kitchen");
+        let hall = a_confirmed_record(&record, &server, "Hall");
+        step_seven_on_a_new_connection(&record, &server, &holds, events(0, &[], Some(0)), 0);
+        let record = ARecordTwoThreadsLend(Mutex::new(record.0));
+        let the_journal = vec![
+            (THE_RECORDED_OUTCOME_WRITTEN_EVENT, kitchen.job.clone()),
+            (THE_RECORDED_OUTCOME_WRITTEN_EVENT, hall.job.clone()),
+        ];
+
+        let (asked, was_asked) = std::sync::mpsc::channel();
+        let (let_go, is_let_go) = std::sync::mpsc::channel();
+        let (ended, has_ended) = std::sync::mpsc::channel();
+        let mut the_slow_one = AJournalAsOneReaderSawIt {
+            events: the_journal[..1].to_vec(),
+            gate: Some((asked, is_let_go)),
+        };
+        let mut the_live_one = AJournalAsOneReaderSawIt {
+            events: the_journal.clone(),
+            gate: None,
+        };
+        std::thread::scope(|scope| {
+            scope.spawn(|| {
+                a_read_forward_pass(&server, &record, &mut the_slow_one, &holds);
+            });
+            was_asked
+                .recv_timeout(std::time::Duration::from_secs(20))
+                .expect("the slow pass asked for its read");
+            scope.spawn(|| {
+                a_read_forward_pass(&server, &record, &mut the_live_one, &holds);
+                let _ = ended.send(());
+            });
+            // The live pass is given its chance to run beside the slow one.
+            let _ = has_ended.recv_timeout(std::time::Duration::from_millis(400));
+            let _ = let_go.send(());
+        });
+
+        let the_cursor = record
+            .0
+            .lock()
+            .map(|held| server_rows::one(&held, &server.as_text()).unwrap().unwrap().event_cursor)
+            .unwrap();
+        assert_eq!(
+            the_cursor,
+            Some(2),
+            "the cursor stands past both endings, whichever pass saved last"
+        );
+        let told = holds.the_endings_to_tell_are_taken(&server.as_text());
+        assert!(told.contains(&kitchen.job) && told.contains(&hall.job), "{told:?}");
+        assert_eq!(told.len(), 2, "each ending is put out once: {told:?}");
+
+        // **The next pass finds nothing new**, so no ending is told again.
+        let mut the_next = AJournalAsOneReaderSawIt {
+            events: the_journal,
+            gate: None,
+        };
+        assert_eq!(
+            a_read_forward_pass(&server, &record, &mut the_next, &holds),
+            HowThePassEnded::ItReadToTheEnd { applied: 0 },
+            "an ending already applied is read again"
+        );
+        assert!(
+            holds.the_endings_to_tell_are_taken(&server.as_text()).is_empty(),
+            "an ending already told is told again"
+        );
+    }
+
+    /// **A machine whose first read forward is answered only after something
+    /// else has happened at the desk** — a new installation recorded on the
+    /// row, a connection replaced — and whose journal holds one ending.
+    struct AMachineThatAnswersAfter<'a> {
+        ended: Identity,
+        first: Option<Box<dyn FnOnce() + 'a>>,
+    }
+
+    impl AsksTheSupervisor for AMachineThatAnswersAfter<'_> {
+        fn ask(&mut self, request: &Request) -> WhatCameBack {
+            let answered = Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test");
+            let fields = if request.name == THE_READ_FORWARD_REQUEST {
+                if let Some(first) = self.first.take() {
+                    first();
+                }
+                let from: u64 = request
+                    .fields
+                    .text(THE_CURSOR_FIELD)
+                    .and_then(|text| text.parse().ok())
+                    .unwrap_or(0);
+                if from == 0 {
+                    events(0, &[(THE_RECORDED_OUTCOME_WRITTEN_EVENT, Some(&self.ended))], Some(0))
+                } else {
+                    events(1, &[], Some(0))
+                }
+            } else if request.name == THE_PER_JOB_NOTE_READING_REQUEST {
+                a_note_that_started_and_finished("Kitchen")
+            } else if request.name == THE_CURSOR_MOVES_FORWARD_REQUEST {
+                Fields::none()
+            } else {
+                return WhatCameBack::ItAnswered(
+                    answered.saying_it_does_not_answer_that_request(&request.name),
+                );
+            };
+            WhatCameBack::ItAnswered(answered.carrying(fields))
+        }
+    }
+
+    /// **A pass that began under one installation never writes its cursor onto
+    /// the row of the next** (`State, identity and recovery` E2: the cursor
+    /// lives against the server row *and the installation identity it was
+    /// taken under*). A setup records a new installation and clears the cursor
+    /// while a pass of the old one is still reading. *Until the Fable review's
+    /// second sitting (Sol's first point) the old pass then wrote its own
+    /// cursor onto the new installation's row, and the new journal, which
+    /// starts at nought, was read from there: its news was skipped until it
+    /// had grown past that number.*
+    #[test]
+    fn a_pass_of_one_installation_writes_no_cursor_onto_the_next() {
+        let (record, server) = a_record_with_a_server();
+        let kitchen = a_confirmed_record(&record, &server, "Kitchen");
+        let the_new_installation = Identity::issue(IdentityKind::Installation).unwrap();
+        let mut machine = AMachineThatAnswersAfter {
+            ended: kitchen.job.clone(),
+            first: Some(Box::new(|| {
+                let mut row = server_rows::one(&record.0, &server.as_text()).unwrap().unwrap();
+                row.last_confirmed_installation_identity = Some(the_new_installation.as_text());
+                row.event_cursor = None;
+                server_rows::write(&record.0, &row).unwrap();
+            })),
+        };
+        let ended = a_read_forward_pass(&server, &record, &mut machine, &WhatThisRunHolds::default());
+        assert_eq!(
+            the_cursor_of(&record, &server),
+            None,
+            "the old installation's cursor was written onto the new installation's row"
+        );
+        assert!(
+            matches!(ended, HowThePassEnded::TheReadCouldNotComplete { .. }),
+            "a pass whose installation went is not a whole read: {ended:?}"
+        );
+    }
+
+    /// **A pass that began on one connection never completes the catch-up of
+    /// the next** (`Desktop app and delivery` T18 and T20). The connection is
+    /// replaced while a live pass reads the last of its catch-up. *Until the
+    /// Fable review's second sitting (Sol's second point) the old pass, ending
+    /// after the new connection's reading had landed, marked the new
+    /// connection's catch-up complete; whatever that connection then read of
+    /// the time it was away was shown as new notifications.*
+    #[test]
+    fn a_pass_of_one_connection_does_not_complete_the_catch_up_of_the_next() {
+        let (record, server) = a_record_with_a_server();
+        let holds = WhatThisRunHolds::default();
+        let kitchen = a_confirmed_record(&record, &server, "Kitchen");
+        let the_server = server.as_text();
+        holds.a_connection_begins(&the_server);
+        let mut machine = AMachineThatAnswersAfter {
+            ended: kitchen.job.clone(),
+            first: Some(Box::new(|| {
+                holds.the_connection_ended(&the_server);
+                let next = holds.a_connection_begins(&the_server);
+                // The new connection's queue reading lands, its own catch-up
+                // not yet read.
+                assert!(holds.a_reading_is_kept(
+                    &the_server,
+                    next,
+                    Reading::taken(a_line(&[]), SystemTime::now(), Clock::ThisComputer),
+                    None,
+                ));
+            })),
+        };
+        assert!(matches!(
+            a_read_forward_pass(&server, &record, &mut machine, &holds),
+            HowThePassEnded::ItReadToTheEnd { .. }
+        ));
+        assert_eq!(
+            holds.how_an_event_read_now_arrived(&server, HowItArrived::OnTheLiveReading),
+            NowOrCatchingUp::CatchingUp,
+            "the old connection's pass completed the new connection's catch-up"
+        );
+    }
+
+    /// **`State, identity and recovery` V1 step 2 does not ask about a job
+    /// whose submission is still being sent in this run.** The record is
+    /// written before the job's files go up, so a connection made meanwhile —
+    /// the line dropped and came back under the upload — would ask the machine
+    /// about a job whose request is still on its way. The machine would truly
+    /// answer *absent*, and the record, its download plan and, at the next
+    /// clean-up, its files on the server would go; a moment later the machine
+    /// would take the job. **Once the act has ended, the record is asked about
+    /// as any other.** *Until the Fable review's second sitting step 2 asked
+    /// about every provisional record.*
+    #[test]
+    fn step_two_does_not_ask_about_a_job_whose_act_is_still_sending_it() {
+        let (record, server) = a_record_with_a_server();
+        let sending = a_provisional_record(&server, "Kitchen");
+        write(&record, &sending);
+        let the_act = crate::submitting::an_act_is_begun_on(&server.as_text(), "Kitchen".to_string());
+        the_act.its_jobs_are(std::slice::from_ref(&sending.job));
+
+        let mut machine = AMachineInHand::default().answers(
+            THE_DOES_THE_MACHINE_HOLD_THIS_JOB_REQUEST,
+            on_the_machine(IT_IS_ABSENT),
+        );
+        let mut did = WhatStepSevenDid::default();
+        every_provisional_record_is_resolved(&server, &record, &mut machine, &mut did);
+        assert_eq!(
+            JobRecords::over(&record.0)
+                .read(&sending.job)
+                .unwrap()
+                .map(|held| held.standing),
+            Some(Standing::Provisional),
+            "the record of a job still being sent was removed on the machine's *absent*"
+        );
+        assert_eq!(
+            machine.how_many_times(THE_DOES_THE_MACHINE_HOLD_THIS_JOB_REQUEST),
+            0,
+            "the machine is not asked about a job whose request has not gone yet"
+        );
+        assert_eq!(did.removed, 0);
+
+        // **The act ends**, and the next connection asks as ever.
+        drop(the_act);
+        let mut did = WhatStepSevenDid::default();
+        every_provisional_record_is_resolved(&server, &record, &mut machine, &mut did);
+        assert_eq!(did.removed, 1);
+        assert!(JobRecords::over(&record.0).read(&sending.job).unwrap().is_none());
     }
 }

@@ -543,6 +543,11 @@ pub fn the_mark_for(entry: &PublishedChannel, answered_on_the_machine: &[Version
 /// publishes over an existing folder, and the removal warning is composed from
 /// recorded **paths** rather than from versions. **The mark is a reading for the
 /// user's eye and no decision anywhere reads it.**
+///
+/// **Narrowed 2026-11-14 (B6a): the desktop's install box does not offer a
+/// finished release whose mark is *this version is present*.** Nothing on the
+/// machine reads the mark, which is what this answers; an install that arrives
+/// still proceeds. The Rough what-if answers, share 4 (20, 366).
 pub fn anything_decides_on_the_mark(_mark: TheMark) -> bool {
     false
 }

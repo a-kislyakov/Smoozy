@@ -373,9 +373,20 @@ impl WhatClearsTheState {
 /// *"An install interrupted mid-transaction can leave the machine's package
 /// system needing its own repair first, and that step's re-run begins with the
 /// repair operation"* **where the package system reports itself interrupted.**
+///
+/// **The second command carries `-y` from 2026-11-12** (S7, *the second
+/// sentence the repair answers*). It runs with no terminal, so without it the
+/// command stopped at its own question wherever it had something to change.
+/// `apt-get(8)`, apt 2.8.3,
+/// `https://manpages.ubuntu.com/manpages/noble/en/man8/apt-get.8.html`, read
+/// 2026-11-12: *"Automatic yes to prompts; assume "yes" as answer to all
+/// prompts and run non-interactively. If an undesirable situation, such as
+/// changing a held package, trying to install an unauthenticated package or
+/// removing an essential package occurs then apt-get will abort."* **Nothing
+/// is forced by it**: no `--force-…` of dpkg's is added.
 pub const THE_REPAIR_OPERATION: [CommandString; 2] = [
     CommandString::constant("dpkg --configure -a"),
-    CommandString::constant("apt-get -o DPkg::Lock::Timeout=120 --fix-broken install"),
+    CommandString::constant("apt-get -o DPkg::Lock::Timeout=120 --fix-broken install -y"),
 ];
 
 /// **S7: `dpkg --remove --force-all` is forbidden as the first act of any

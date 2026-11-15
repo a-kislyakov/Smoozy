@@ -249,6 +249,10 @@ pub enum AKindOfReport {
     WaitingOnYou,
     /// D2's stop outcome and every answer to a tap the user made.
     AnAnswerToATap,
+    /// **C1d — the job's own message**, sent at its start and edited as the
+    /// job moves, under every choice but `Nothing` (V1b). Added 2026-11-09,
+    /// the twenty-eighth notes, note 18.
+    TheJobsMessage,
 }
 
 /// **`Telegram` V1 — whether a job's reporting choice lets this be sent.**
@@ -276,7 +280,101 @@ pub fn the_job_reports(choice: TheReportingChoice, kind: AKindOfReport) -> bool 
             choice != TheReportingChoice::OnlyWhatNeedsAnAnswer
         }
         TheStatusMessage => choice == TheReportingChoice::Everything,
+        TheJobsMessage => true,
     }
+}
+
+/// **`Telegram` V1e's rows — the sends about a job whose sound the job's
+/// choice decides.** Everything else composed for the user is B24's and keeps
+/// its sound; an edit takes no setting at all (Sources entry 90). Added
+/// 2026-11-09, the twenty-eighth notes, note 18.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AJobsSend {
+    /// The job's message at its start (C1a, C1d).
+    TheStart,
+    /// A frame's picture or album (I2, I2a).
+    AFramesPicture,
+    /// An ending (E1), a group's message (G1), A3a's pictures and question.
+    AnEndingOrAQuestion,
+    /// A contact sheet (M2), a finished video and its too-large message (M10),
+    /// a moving picture (M4), and I3's and M2's refusals after the ending.
+    AfterTheEnding,
+    /// The job's message sent again after the user deleted it (C7a), or after
+    /// V1c's change away from `Nothing`.
+    TheJobsMessageSentAgain,
+}
+
+/// **`Telegram` V1e — whether a send about a job makes a sound**, by the
+/// job's choice. **One home, beside [`the_job_reports`]**, which decides
+/// whether it is sent at all; no send decides its own sound. *"A sound for
+/// what the choice is named for, and for endings and questions"*: the start
+/// sounds under `Everything` alone, a picture wherever pictures go, an ending
+/// or a question always, and what follows an ending or repeats the job's
+/// message never. Creator-stated, the twenty-eighth notes, note 18.
+pub fn it_makes_a_sound(choice: TheReportingChoice, send: AJobsSend) -> bool {
+    match send {
+        AJobsSend::TheStart => choice == TheReportingChoice::Everything,
+        AJobsSend::AFramesPicture | AJobsSend::AnEndingOrAQuestion => true,
+        AJobsSend::AfterTheEnding | AJobsSend::TheJobsMessageSentAgain => false,
+    }
+}
+
+/// **`Telegram` C1d — the job's message**: R7a's head, then the job's line in
+/// C1's words (`crate::status::the_state_line`), *Started.* until the first
+/// progress, and any last line a refusal left (I3), each on its own line. None
+/// of C1's machine readings and no uptime. ~~No moment.~~ **While the job
+/// renders, its message's keeper adds C1d's *Updated* line after these**
+/// ([`AMarkedText::with_when_it_was_updated`], the twenty-ninth notes, note 9).
+pub fn the_jobs_message(
+    server: &(impl TheServersName + ?Sized),
+    label: &str,
+    state_line: Option<&str>,
+    last_lines: &[&str],
+) -> AMarkedText {
+    let mut body = state_line.unwrap_or("Started.").to_string();
+    for line in last_lines {
+        body.push('\n');
+        body.push_str(line);
+    }
+    a_user_message(server, label, "", &body)
+}
+
+/// **`Telegram` C1d's *Updated* line**: its word, and the `date_time`
+/// entity's format, `r`, *"Displays the time relative to the current time"*
+/// (Sources entry 91).
+pub const THE_UPDATED_LINES_WORD: &str = "Updated";
+pub const THE_UPDATED_LINES_FORMAT: &str = "r";
+
+/// **`Telegram` C1e's state words, the job's message cut to one line ending in
+/// one of them** — as R7a words each ending, a failure keeping its 🔴.
+pub const A_FINISHED_ENDING: &str = "Finished.";
+pub const A_FAILED_ENDING: &str = "🔴 Failed.";
+pub const A_STOPPED_ENDING: &str = "Stopped.";
+/// *Interrupted.* since 2026-11-11 (the four questions, scout 3.24): it read
+/// *Abandoned.*, as if the user gave up.
+pub const AN_ABANDONED_ENDING: &str = "Interrupted.";
+/// **V1c's change to `Nothing`** (C1e).
+pub const REPORTING_OFF: &str = "Reporting off.";
+/// **A job removed from the queue with no ending of its own** — a cancel, a
+/// clear, or a drop for a removed Blender. The build's word: C1e names none
+/// for it, and a message left saying *Queued.* would go stale (Specs
+/// `Telegram`, *One message per job*: the cut is so it no longer says anything
+/// that has stopped being true).
+pub const A_REMOVED_JOB: &str = "Removed.";
+
+/// **`Telegram` C1e — the job's message cut to one line**: R7a's mark, the
+/// server label in bold, ` · `, the job label in italic, ` · `, then the state
+/// word — R7a's one exception to its two-line head.
+pub fn the_jobs_message_cut(server: &(impl TheServersName + ?Sized), label: &str, ended: &str) -> AMarkedText {
+    let mut out = AMarkedText::default();
+    if let Some(mark) = the_colour_square(server.colour()) {
+        out.append(&format!("{mark} "), None);
+    }
+    out.append(server.label(), Some("bold"));
+    out.append(" \u{b7} ", None);
+    out.append(label, Some("italic"));
+    out.append(&format!(" \u{b7} {ended}"), None);
+    out
 }
 
 /// `Telegram` R7a: marked runs travel beside their text, never as markup.
@@ -305,6 +403,25 @@ impl AMarkedText {
         }));
     }
     pub fn push_str(&mut self, text: &str) { self.append(text, None); }
+    /// **`Telegram` C1d's *Updated* line, as of 2026-11-10 (the twenty-ninth
+    /// notes, note 9)**: a new last line, *Updated* and then Telegram's
+    /// `date_time` entity, format `r`, holding `at` (Sources entry 91). The
+    /// entity's own text is `at` in C2a's form, so an app that cannot draw
+    /// the age still reads one named UTC instant. Smoozy computes no age.
+    pub fn with_when_it_was_updated(&mut self, at: SystemTime) {
+        self.append(&format!("\n{THE_UPDATED_LINES_WORD} "), None);
+        let moment = the_moment_in_utc(at);
+        let offset = self.text.encode_utf16().count();
+        self.text.push_str(&moment);
+        let unix_time = at.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        self.entities.push(json!({
+            "type": "date_time",
+            "offset": offset,
+            "length": moment.encode_utf16().count(),
+            "unix_time": unix_time,
+            "date_time_format": THE_UPDATED_LINES_FORMAT,
+        }));
+    }
     pub fn as_str(&self) -> &str { &self.text }
     pub fn entities(&self) -> Value { json!(self.entities) }
 }
@@ -406,24 +523,95 @@ pub fn the_start_message(server: &(impl TheServersName + ?Sized), label: &str) -
     a_user_message(server, label, "", "Started.")
 }
 
+/// **`Telegram` D0's question.** A waiting job's is the window's own cancel
+/// question, *Cancel this job?* with *Keep the job* and *Cancel the job* (was
+/// *Cancel this waiting job?*, *Keep waiting* and *Stop this job* — the
+/// Creator's twenty-eighth notes, note 16); a rendering job's is *Stop this
+/// job? The current frame may not be saved.* with *Keep rendering* and *Stop
+/// this job*. The confirmation is the same act either way: a waiting job is
+/// cancelled, a rendering one stopped.
 pub fn the_stop_question(server: &(impl TheServersName + ?Sized), label: &str, waiting: bool) -> AComposedMessage {
+    the_stop_question_for(server, label, if waiting { &AStopQuestion::AWaitingJob } else { &AStopQuestion::ARender })
+}
+
+/// **Which of `Telegram` D0's questions a Stop asks.**
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AStopQuestion {
+    /// A rendering job.
+    ARender,
+    /// A first-frame check with its range held on it (`Queue & History`
+    /// L19a), its one frame and the range in words.
+    ACheck { first_frame: String, the_frames: String },
+    /// A job waiting its turn.
+    AWaitingJob,
+    /// **A range waiting its turn after *Render all*** — C1d's *Cancel this
+    /// job* on its job's message, asking with the pair's sentence. The
+    /// twenty-eighth notes, note 16, its design item 9.
+    AWaitingRange { the_frames: String },
+}
+
+impl AStopQuestion {
+    fn is_a_cancel(&self) -> bool {
+        matches!(self, AStopQuestion::AWaitingJob | AStopQuestion::AWaitingRange { .. })
+    }
+}
+
+/// **`Telegram` D0 — the question's own words, below the head**: what a
+/// question sent as a new message says, and what the job's message gains when
+/// the question is asked in place (C1d).
+pub fn the_stop_questions_words(question: &AStopQuestion) -> String {
+    match question {
+        AStopQuestion::ARender => "Stop this job?\nThe current frame may not be saved.".into(),
+        AStopQuestion::ACheck { first_frame, the_frames } => {
+            format!("Stop this job?\nFrame {first_frame} may not be saved. Frames {the_frames} will not render.")
+        }
+        AStopQuestion::AWaitingJob => "Cancel this job?".into(),
+        AStopQuestion::AWaitingRange { the_frames } => format!(
+            "Cancel this job?\nFrames {the_frames} have not started. Their settings are deleted too. The first-frame check stays in History."
+        ),
+    }
+}
+
+/// **`Telegram` D0's question, whole** — its words and its two buttons: *Keep
+/// rendering* and *Stop this job*, or for a waiting job *Keep the job* and
+/// *Cancel the job*.
+pub fn the_stop_question_for(server: &(impl TheServersName + ?Sized), label: &str, question: &AStopQuestion) -> AComposedMessage {
+    let waiting = question.is_a_cancel();
     let mut keep = a_stop_to_offer(server, label, false);
     keep.action = KEEP_RENDERING;
     keep.label = if waiting {
-        "Keep waiting"
+        "Keep the job"
     } else {
         "Keep rendering"
     }
     .into();
     keep.payload["labels"]["button"] = json!(keep.label);
-    AComposedMessage {
-        text: if waiting {
-            a_user_message(server, label, "", "Cancel this waiting job?")
-        } else {
-            a_user_message(server, label, "", "Stop this job?\nThe current frame may not be saved.")
-        },
-        buttons: vec![keep, a_stop_to_offer(server, label, true)],
+    let mut go = a_stop_to_offer(server, label, true);
+    if waiting {
+        go.label = "Cancel the job".into();
+        go.payload["labels"]["button"] = json!(go.label);
     }
+    AComposedMessage {
+        text: a_user_message(server, label, "", &the_stop_questions_words(question)),
+        buttons: vec![keep, go],
+    }
+}
+
+/// **`Telegram` D0 for a first-frame check whose range waits on it**: *Stop
+/// this job? Frame 1 may not be saved. Frames 1–240 will not render.* with
+/// *Keep rendering* and *Stop this job* — the confirmation ends the whole job
+/// (`Queue & History` L19a). The Creator's twenty-eighth notes, note 16.
+pub fn the_checks_stop_question(
+    server: &(impl TheServersName + ?Sized),
+    label: &str,
+    first_frame: &str,
+    the_frames: &str,
+) -> AComposedMessage {
+    the_stop_question_for(
+        server,
+        label,
+        &AStopQuestion::ACheck { first_frame: first_frame.into(), the_frames: the_frames.into() },
+    )
 }
 
 pub fn the_job_already_ended(server: &(impl TheServersName + ?Sized), label: &str) -> AMarkedText {
@@ -438,7 +626,15 @@ pub const ASK_TO_STOP_THIS_JOB: &str = "ask to stop this job";
 pub const KEEP_RENDERING: &str = "keep rendering";
 pub const STOP_THIS_JOB: &str = "stop this job";
 pub const ANSWER_A_WAITING_JOB: &str = "answer a waiting job";
+/// **`Telegram` A2 as changed 2026-11-09: the first-frame question's *Cancel
+/// job* asks in place** before the *no* is sent; *Keep the job* puts the two
+/// answers back. The Creator's twenty-eighth notes, note 16.
+pub const ASK_TO_CANCEL_THE_JOB: &str = "ask to cancel the job";
+pub const KEEP_THE_JOB: &str = "keep the job";
 pub const TRY_IT_AGAIN: &str = "try it again";
+/// **`Telegram` Y4a as changed 2026-11-11 (the four questions, scout 1.5)**:
+/// *Resume*, Y1's submission from the frame the payload carries.
+pub const RESUME_IT: &str = "resume it";
 pub const SEND_THE_WORDS: &str = "send the words";
 
 // ------------------------------------------------------------ E1 to E3, and Y4a
@@ -460,7 +656,9 @@ pub struct AFailedJob {
     pub generation: String,
     pub attempt: u32,
     /// The frame the render was on, and the job's frame count, where known.
-    pub at_frame: Option<(u64, u64)>,
+    /// **The frame is signed** — `Specs/Render Settings`: a range may start
+    /// below zero (the four questions, batch 4's S2 leftover).
+    pub at_frame: Option<(i64, u64)>,
     /// The exit status verbatim; nothing where none was reaped (`Rented-server
     /// runtime` M21).
     pub exit_status: Option<i32>,
@@ -483,6 +681,33 @@ pub struct AFailedJob {
     /// render began and where Blender exited at 0 and the job still failed: it
     /// is Smoozy's own sentence and nothing is read from a stream (`Telegram` E1).
     pub the_reason_the_machine_recorded: Option<String>,
+    /// **How many frames the job asked for**, for *Submit again — 240 frames*;
+    /// none read, and the button names no count (`Telegram` Y4a as changed
+    /// 2026-11-11, the four questions, scout 1.5).
+    pub frames_asked: u64,
+    /// **Where *Resume* would start, and how many frames it holds** — the
+    /// note's `Queue & History` N6 figure and the asked frames from it on, as
+    /// the app's History reckons them (`Rendering` A4, A5). None where the app
+    /// would not offer it.
+    pub resume: Option<AResume>,
+}
+
+/// **The phone's *Resume*** (`Telegram` Y4a as changed 2026-11-11): the frame
+/// the new job starts at, and how many frames it renders.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AResume {
+    pub from: i64,
+    pub frames: u64,
+}
+
+/// **The app's own label for one of the two ways** (`Design/Queue & History`,
+/// *Submit again — 240 frames*, *Resume — 181 frames*): the count where one is
+/// known.
+fn one_of_the_two_ways(name: &str, frames: u64) -> String {
+    if frames == 0 {
+        return name.to_string();
+    }
+    format!("{name} \u{2014} {}", frames_in_words(frames))
 }
 
 /// **`Whole app`'s sentence for the one failure whose cause Smoozy can read**:
@@ -503,13 +728,14 @@ pub struct AFailedJob {
 /// free space on the server and render it again.*; and again 2026-11-01,
 /// the second words sweep, with the desktop's: *…; free space on the server
 /// and render again.*)*
-pub const THE_DISK_IS_FULL: &str = "The output folder was full when the render ended; free space and resubmit.";
+pub const THE_DISK_IS_FULL: &str =
+    "The output folder on the server was full; free space, then Submit again.";
 
 /// **Y4a's sentence where the cause is *the file's own*, and only there.** The
 /// drawing has no words for it; the spec's are *"the message says the job
 /// needs a change before it can go again"* (`Preparation/Specs/Telegram.md`),
 /// said only where the file itself failed.
-pub const IT_NEEDS_A_CHANGE: &str = "Change the job in Smoozy, then resubmit it.";
+pub const IT_NEEDS_A_CHANGE: &str = "Change the job in Smoozy, then submit again.";
 
 /// **Y4a's sentence where the cause is *undetermined*** (corrected
 /// 2026-09-16). Smoozy cannot name the cause, so the sentence says so, says
@@ -519,8 +745,10 @@ pub const IT_NEEDS_A_CHANGE: &str = "Change the job in Smoozy, then resubmit it.
 /// own button (`Preparation/Design/Mockup/Smoozy.html`).
 ///
 /// *(Shortened 2026-11-01, the second words sweep: it read *Cause unknown. To
-/// resubmit, use Submit again in Smoozy on your computer.*)*
-pub const SMOOZY_CANNOT_TELL_WHY: &str = "Cause unknown. Use Submit again in Smoozy.";
+/// resubmit, use Submit again in Smoozy on your computer.*)* *(And 2026-11-12,
+/// `Telegram` Y4a as changed that day: it read *Cause unknown. Use Submit again
+/// in Smoozy.*, and the message now carries *Submit again* itself.)*
+pub const SMOOZY_CANNOT_TELL_WHY: &str = "Cause unknown.";
 
 /// **E2 — the sentence for one stream's outcome**, or nothing where *collected*
 /// says it with its button alone. **Collected-and-empty and never-established
@@ -535,14 +763,14 @@ pub fn what_the_outcome_says(stream: AStream, outcome: ACollectionOutcome) -> Op
         // reported no errors or printed nothing *and there is nothing further
         // to read*, which spoke for the other stream; Blender 5 writes its
         // errors to its ordinary output. Each now claims only its own stream.
-        (TheComplaints, CollectedAndTheStreamWasEmpty) => "Blender wrote nothing under Errors.".to_string(),
-        (TheOrdinaryOutput, CollectedAndTheStreamWasEmpty) => "Blender wrote nothing under Output.".to_string(),
+        (TheComplaints, CollectedAndTheStreamWasEmpty) => "Errors log is empty.".to_string(),
+        (TheOrdinaryOutput, CollectedAndTheStreamWasEmpty) => "Output log is empty.".to_string(),
         // **Step 13's words sweep (Rule 9)**: the desk's tab names with the
         // standard word *log*. *No output was recorded.* is the desk panel's
         // own words for *never established*.
         (TheOrdinaryOutput, CollectionIncomplete) => "Output log incomplete.".to_string(),
         (TheComplaints, CollectionIncomplete) => "Errors log incomplete.".to_string(),
-        (TheOrdinaryOutput, NeverEstablished) => "No output was recorded.".to_string(),
+        (TheOrdinaryOutput, NeverEstablished) => "Output log not recorded.".to_string(),
         (TheComplaints, NeverEstablished) => "Errors log not recorded.".to_string(),
     })
 }
@@ -570,11 +798,31 @@ pub fn the_words_are_offered(outcome: ACollectionOutcome) -> bool {
 }
 
 /// **Y4a — the *try it again* button is attached at composition, from the
-/// recorded cause, and never at the tap**: only on the machine's own. The
-/// file's own and *undetermined* both take no button; each has its own
-/// sentence ([`what_is_said_instead_of_try_it_again`]).
+/// recorded cause, and never at the tap**: ~~only on the machine's own~~ on
+/// every cause but the file's own, which keeps its *needs a change* sentence
+/// ([`what_is_said_instead_of_try_it_again`]). *Changed 2026-11-12, `Telegram`
+/// Y4a as changed that day, Creator-stated: the phone matches the app, whose
+/// History offers both ways on an undetermined cause.*
 pub fn try_it_again_is_offered(cause: TheCause) -> bool {
-    cause == TheCause::TheMachinesOwn
+    cause != TheCause::TheFilesOwn
+}
+
+/// **The app's two ways as buttons** (`Telegram` Y4a): *Submit again* with the
+/// frames asked, and *Resume* beside it where there is a frame to start from.
+fn the_two_ways(labels: &Value, frames_asked: u64, resume: Option<AResume>) -> Vec<AButtonToOffer> {
+    let mut buttons = vec![AButtonToOffer {
+        label: one_of_the_two_ways("Submit again", frames_asked),
+        action: TRY_IT_AGAIN,
+        payload: json!({ "labels": labels }),
+    }];
+    if let Some(resume) = resume {
+        buttons.push(AButtonToOffer {
+            label: one_of_the_two_ways("Resume", resume.frames),
+            action: RESUME_IT,
+            payload: json!({ "labels": labels, "from": resume.from }),
+        });
+    }
+    buttons
 }
 
 /// **Y4a, corrected 2026-09-16 — the sentence a failure carries where no *try
@@ -627,8 +875,11 @@ pub fn the_failure_message(failed: &AFailedJob) -> AComposedMessage {
                     format!("{first}{}.", letters.as_str())
                 })
                 .unwrap_or_else(|| "Blender exited normally but wrote none of the job's files.".to_string()),
-            Some(status) => format!("Blender exited with code {status}."),
-            None => "Blender exited without an exit code.".to_string(),
+            // **`Telegram` E1 as changed 2026-11-11** (the four questions, scout
+            // 3.25): the code stays in the log, since a bare number is not
+            // something an artist acts on.
+            Some(_) => "Blender exited with an error.".to_string(),
+            None => "Blender quit unexpectedly.".to_string(),
         };
         lines.push(format!("🔴 Failed{at}. {status}"));
     }
@@ -671,8 +922,10 @@ pub fn the_failure_message(failed: &AFailedJob) -> AComposedMessage {
             }),
         })
         .collect();
+    // **`Telegram` Y4a as changed 2026-11-11, Creator-stated (the four
+    // questions, scout 1.5): the app's two ways, never *Retry*.**
     if try_it_again_is_offered(failed.cause) {
-        buttons.push(AButtonToOffer { label: "Retry".into(), action: TRY_IT_AGAIN, payload: json!({ "labels": labels }) });
+        buttons.extend(the_two_ways(&labels, failed.frames_asked, failed.resume));
     }
     AComposedMessage { text: a_user_message(&failed.server, &failed.label, "", &lines.join("\n")), buttons }
 }
@@ -721,6 +974,39 @@ pub fn the_finishing_message(finished: &AFinishedJob) -> Option<AMarkedText> {
     )))
 }
 
+/// **E1a's sentence of 2026-11-11: one line under a finishing message for
+/// each path the remap left unchanged — *Missing: <file name>*** (`Rendering`
+/// K14c). The names are the user's own file names, carried as written.
+/// Nothing is added where there is none.
+///
+/// **The lines stop where the message would pass Telegram's bound**, and a
+/// last line says how many more: *and 84 more.* (the UI at every size, T-03;
+/// `Telegram` E1a as changed that day). Telegram refuses a message past
+/// B2's 4,096 whole (`Preparation/Architecture/Sources/Telegram.sources.md`,
+/// entries 39 and 90: `sendMessage` text is *"1-4096 characters after entity
+/// parsing"*, read 2026-08-20 and 2026-11-09), and a refused finish is the
+/// phone never told the job finished.
+pub fn with_the_files_missing(mut message: AMarkedText, missing: &[String]) -> AMarkedText {
+    let units = |text: &str| text.encode_utf16().count();
+    for (at, name) in missing.iter().enumerate() {
+        let line = format!("\nMissing: {name}");
+        let left = missing.len() - at - 1;
+        // Room for this line, and for the closing count should any follow it.
+        let after = if left > 0 { units(&the_files_not_named(left)) } else { 0 };
+        if units(&message.text) + units(&line) + after > THE_BOUND_ON_A_MESSAGE {
+            message.append(&the_files_not_named(missing.len() - at), None);
+            return message;
+        }
+        message.append(&line, None);
+    }
+    message
+}
+
+/// The closing line of a long *Missing:* list: how many names it left out.
+fn the_files_not_named(how_many: usize) -> String {
+    format!("\nand {how_many} more.")
+}
+
 /// **One job given up after a second interruption** (`Queue & History` N1;
 /// the spec: *"said the same way"* as a failure).
 #[derive(Debug, Clone, PartialEq)]
@@ -733,18 +1019,24 @@ pub struct AGivenUpJob {
     pub frames_on_the_server: u64,
     pub ordinary_output: ACollectionOutcome,
     pub complaints: ACollectionOutcome,
+    /// **How many frames the job asked for, and where *Resume* would start**,
+    /// as on [`AFailedJob`]: `Telegram` Y4a as changed 2026-11-12, the phone
+    /// matching the app's History on a job given up.
+    pub frames_asked: u64,
+    pub resume: Option<AResume>,
 }
 
 /// **`Telegram` E1 and E3 — the given-up message.** The server, the label,
 /// *was interrupted twice and abandoned* (step 13's final words sweep; until
 /// then *was given up after being interrupted twice*), the frames on the server, and
-/// the words button per stream where there are words (E3). **No *try it
+/// the words button per stream where there are words (E3), ~~**No *try it
 /// again***: no failure cause was classified, and Y4a attaches that button
-/// only on a recorded cause of the machine's own. Standard words that Design
+/// only on a recorded cause of the machine's own.~~ and since 2026-11-12 the
+/// app's two ways after them (`Telegram` Y4a as changed that day). Standard words that Design
 /// may replace; added by the round-1 code audit of the bot and the chat,
 /// fix-here item 11, since *failed* with an exit status is not true here.
 pub fn the_given_up_message(given_up: &AGivenUpJob) -> AComposedMessage {
-    let mut lines = vec!["Abandoned. Interrupted twice.".to_string()];
+    let mut lines = vec!["Interrupted twice. No more retries.".to_string()];
     lines.push(match given_up.frames_on_the_server {
         0 => "No frames on the server.".to_string(),
         1 => "1 frame on the server.".to_string(),
@@ -752,7 +1044,7 @@ pub fn the_given_up_message(given_up: &AGivenUpJob) -> AComposedMessage {
     });
     let labels = json!({ "server": given_up.server, "label": given_up.label });
     let streams = [(AStream::TheOrdinaryOutput, given_up.ordinary_output), (AStream::TheComplaints, given_up.complaints)];
-    let buttons = streams
+    let mut buttons: Vec<AButtonToOffer> = streams
         .iter()
         .filter(|(_, outcome)| the_words_are_offered(*outcome))
         .map(|(stream, outcome)| AButtonToOffer {
@@ -766,6 +1058,9 @@ pub fn the_given_up_message(given_up: &AGivenUpJob) -> AComposedMessage {
             }),
         })
         .collect();
+    // **`Telegram` Y4a as changed 2026-11-12, Creator-stated: the app's History
+    // offers both ways on a job given up, and so does the phone.**
+    buttons.extend(the_two_ways(&labels, given_up.frames_asked, given_up.resume));
     AComposedMessage { text: a_user_message(&given_up.server, &given_up.label, "", &lines.join("\n")), buttons }
 }
 
@@ -932,8 +1227,10 @@ pub struct AWaitingJob {
     /// **What the hold waits for** — where it is the driver update, nothing is
     /// sent ([`WhatTheHoldWaitsFor::the_phone_is_told`]).
     pub waits_for: WhatTheHoldWaitsFor,
-    /// The frame that came back first.
-    pub the_frame_shown: u64,
+    /// The frame that came back first, **by its own number, below zero too**
+    /// (Sol's S2, the four questions, batch 4: a frame below zero was said as
+    /// frame 1).
+    pub the_frame_shown: i64,
     /// **The held job's own frame count** — the whole range, its first frame
     /// included (`Rendering` S13 as amended 2026-10-02, decision C), so *Render
     /// all — 240 frames* for a range of 240.
@@ -972,7 +1269,7 @@ impl TheAnswer {
     fn in_words(self, frames_held: u64) -> String {
         match self {
             TheAnswer::GoOn => format!("Render all \u{2014} {} {}", with_thousands(frames_held), frames_word(frames_held)),
-            TheAnswer::Dont => "Cancel".to_string(),
+            TheAnswer::Dont => "Cancel job".to_string(),
         }
     }
 }
@@ -1011,19 +1308,76 @@ pub fn the_waiting_message(waiting: &AWaitingJob) -> Option<AComposedMessage> {
         format!("{} {}", if held == 1 { "frame" } else { "frames" }, waiting.the_frames)
     };
     let text = a_user_message(&waiting.server, &waiting.label, &format!(" · {the_header}"), &format!("Needs your answer. Render {the_range}?"));
-    let buttons = [TheAnswer::GoOn, TheAnswer::Dont]
+    let buttons = the_questions_two_answers(&waiting.server, &waiting.label, held, &waiting.the_frames);
+    Some(AComposedMessage { text, buttons })
+}
+
+/// **`Telegram` A2: the question's two answers** — *Render all — 240 frames*,
+/// the *yes*, sent at once; and *Cancel job*, which asks in place first (the
+/// Creator's twenty-eighth notes, note 16, and their answer that it asks).
+/// Each carries what the question in place needs to say and to put back.
+pub fn the_questions_two_answers(
+    server: &(impl TheServersName + ?Sized),
+    label: &str,
+    frames_held: u64,
+    the_frames: &str,
+) -> Vec<AButtonToOffer> {
+    [TheAnswer::GoOn, TheAnswer::Dont]
         .into_iter()
         .map(|answer| AButtonToOffer {
-            label: answer.in_words(held),
-            action: ANSWER_A_WAITING_JOB,
+            label: answer.in_words(frames_held),
+            action: match answer {
+                TheAnswer::GoOn => ANSWER_A_WAITING_JOB,
+                TheAnswer::Dont => ASK_TO_CANCEL_THE_JOB,
+            },
             payload: json!({
-                "labels": { "server": waiting.server, "label": waiting.label },
+                "labels": { "server": server, "label": label },
                 "answer": answer,
-                "frames_held": held,
+                "frames_held": frames_held,
+                "the_frames": the_frames,
             }),
         })
-        .collect();
-    Some(AComposedMessage { text, buttons })
+        .collect()
+}
+
+/// **`Telegram` A2: *Cancel job* asked in place, on the question itself** —
+/// its words gain *Cancel this job? Frames 1–240 will not render. Their
+/// settings are deleted too. The first-frame check stays in History.*, and its
+/// buttons become *Keep the job* and *Cancel the job*; only the second sends
+/// the *no*. The Creator's twenty-eighth notes, note 16.
+pub fn the_question_asks_to_cancel(
+    question: &AMarkedText,
+    server: &(impl TheServersName + ?Sized),
+    label: &str,
+    frames_held: u64,
+    the_frames: &str,
+) -> AComposedMessage {
+    let what_goes = if the_frames.is_empty() {
+        format!("{} will not render.", frames_in_words(frames_held))
+    } else {
+        format!("Frames {the_frames} will not render.")
+    };
+    let mut text = question.clone();
+    text.push_str(&format!(
+        "\n\nCancel this job? {what_goes} Their settings are deleted too. The first-frame check stays in History."
+    ));
+    let carried = json!({
+        "labels": { "server": server, "label": label },
+        "frames_held": frames_held,
+        "the_frames": the_frames,
+    });
+    let mut keep = carried.clone();
+    keep["labels"]["button"] = json!("Keep the job");
+    let mut go = carried;
+    go["answer"] = json!(TheAnswer::Dont);
+    go["labels"]["button"] = json!("Cancel the job");
+    AComposedMessage {
+        text,
+        buttons: vec![
+            AButtonToOffer { label: "Keep the job".into(), action: KEEP_THE_JOB, payload: keep },
+            AButtonToOffer { label: "Cancel the job".into(), action: ANSWER_A_WAITING_JOB, payload: go },
+        ],
+    }
 }
 
 /// **`Telegram` A3 and `Rented-server runtime` U14 — the answer that lost is
@@ -1056,15 +1410,18 @@ pub enum TheDependencyEnded {
 
 /// **`Telegram` A4 — the drop, told**: the machine dropped the hold with
 /// nobody connected (`Rented-server runtime` U17 to U20), and the phone carries the news and the why.
-pub fn the_drop_message(server: &(impl TheServersName + ?Sized), label: &str, frames_held: u64, the_frame_shown: u64, why: TheDependencyEnded) -> AMarkedText {
+pub fn the_drop_message(server: &(impl TheServersName + ?Sized), label: &str, frames_held: u64, the_frame_shown: i64, why: TheDependencyEnded) -> AMarkedText {
     let how = match why {
         TheDependencyEnded::Failed => "failed",
         TheDependencyEnded::Stopped => "was stopped",
-        TheDependencyEnded::GivenUp => "was abandoned",
+        TheDependencyEnded::GivenUp => "was interrupted twice",
         TheDependencyEnded::Cancelled => "was cancelled",
     };
+    // **The count first and the reason after, without *held*** —
+    // `Architecture/Telegram` A4's build detail of 2026-11-12 (the four
+    // questions, scout 3.46).
     a_user_message(server, label, "", &format!(
-        "Not rendered: frame {the_frame_shown} {how} ({} {} held).",
+        "{} {} not rendered: frame {the_frame_shown} {how}.",
         with_thousands(frames_held),
         frames_word(frames_held)
     ))
@@ -1134,6 +1491,9 @@ pub fn the_stops_outcome(server: &(impl TheServersName + ?Sized), label: &str, o
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ASubmissionsOutcome {
     Submitted,
+    /// *Resume*'s job stands, starting at `from` (`Telegram` Y4a as changed
+    /// 2026-11-11).
+    Resumed { from: i64 },
     /// R4: a second press lands on the machine's own idempotency.
     AlreadySubmitted { at: SystemTime },
 }
@@ -1142,9 +1502,13 @@ pub enum ASubmissionsOutcome {
 /// standard words, recorded at the decisions record.
 pub fn the_submissions_outcome(server: &(impl TheServersName + ?Sized), label: &str, outcome: &ASubmissionsOutcome) -> AMarkedText {
     let body = match outcome {
-        ASubmissionsOutcome::Submitted => format!("Resubmitted."),
+        ASubmissionsOutcome::Submitted => format!("Submitted again."),
+        // The desk's own line under *Resume* (`Design/Queue & History`).
+        ASubmissionsOutcome::Resumed { from } => {
+            format!("Resumed from frame {from}. The frames will be in two folders.")
+        }
         ASubmissionsOutcome::AlreadySubmitted { at } => {
-            format!("Already resubmitted at {}.", the_moment_in_utc(*at))
+            format!("Already submitted again at {}.", the_moment_in_utc(*at))
         }
     };
     a_user_message(server, label, "", &body)
@@ -1156,13 +1520,20 @@ pub fn the_submissions_outcome(server: &(impl TheServersName + ?Sized), label: &
 /// in plain words**: what was not done, naming the server and the job. Standard
 /// words that Design may replace.
 pub fn the_act_was_not_done(server: &(impl TheServersName + ?Sized), label: &str, asked: &str) -> AMarkedText {
-    a_user_message(server, label, "", &format!("\u{201c}{asked}\u{201d} was rejected by this server."))
+    // **The word sweep of 2026-11-13**: a button's own name is quoted; a
+    // stand-in where the record carried none (*the answer*, *the action*) is
+    // not, so it never reads as the name of a button the user tapped.
+    let what = match asked.chars().next() {
+        Some(first) if first.is_lowercase() => format!("{}{}", first.to_uppercase(), &asked[first.len_utf8()..]),
+        _ => format!("\u{201c}{asked}\u{201d}"),
+    };
+    a_user_message(server, label, "", &format!("{what} was refused by this server."))
 }
 
 /// **`Telegram` R14, until step 8b composes the actor that answers a routed
 /// frame request**: the truth, that the frame cannot be sent yet. Standard
 /// words.
-pub fn a_frame_cannot_be_sent_yet(server: &(impl TheServersName + ?Sized), label: &str, frame: u64) -> AMarkedText {
+pub fn a_frame_cannot_be_sent_yet(server: &(impl TheServersName + ?Sized), label: &str, frame: i64) -> AMarkedText {
     a_user_message(server, label, &format!(" · Frame {frame}"), "Not available on this server yet.")
 }
 
@@ -1220,6 +1591,10 @@ pub struct TheWordsInTheChat {
     pub text: AMarkedText,
     /// The file's name, where the whole stream follows as a file.
     pub file: Option<String>,
+    /// **E3e — what the button under the message copies**: the block's last
+    /// line with anything but white space, inside Telegram's 256. Nothing
+    /// where the block holds white space alone.
+    pub copies: Option<String>,
 }
 
 /// **E3d — the label**, the drawing's three lines word for word for the
@@ -1287,9 +1662,12 @@ pub fn the_words_in_the_chat(server: &(impl TheServersName + ?Sized), label: &st
     let over_the_cap = words.len() as u64 > THE_CAP_ON_A_FILE;
     let text = String::from_utf8_lossy(words);
     let head = |shown| { let mut head = a_user_message(server, label, "", &the_words_label(label, stream, shown, over_the_cap, incomplete)); head.append("\n", None); head };
+    // **E3e (2026-11-12, Creator-stated): the stream's text is one folded
+    // quotation**, the label outside it, and the button under the message
+    // copies the block's last line.
     let composed = |mut head: AMarkedText, shown: &str, file: Option<String>| {
-        head.append(shown, None);
-        TheWordsInTheChat { text: head, file }
+        head.append(shown, Some(THE_FOLDED_QUOTATION));
+        TheWordsInTheChat { text: head, file, copies: the_line_the_button_copies(shown) }
     };
 
     if !over_the_cap {
@@ -1326,6 +1704,43 @@ pub fn the_words_in_the_chat(server: &(impl TheServersName + ?Sized), label: &st
         starts = at;
     }
     composed(the_head, &last[starts..], file)
+}
+
+/// **E3e — the entity the log's text is sent as.** Telegram's page: *"“expandable_blockquote”
+/// (collapsed-by-default block quotation)"* (Sources entry 95).
+pub const THE_FOLDED_QUOTATION: &str = "expandable_blockquote";
+
+/// **E3e — the copy button's words** (Rule 9).
+pub const COPY_LAST_LINE: &str = "Copy last line";
+
+/// **E3e — Telegram's bound on what a copy button holds**: *"The text to be
+/// copied to the clipboard; 1-256 characters"*. The page names no unit, so
+/// these are UTF-16 code units, the larger reading, as E3d counts its bound.
+pub const THE_BOUND_ON_A_COPIED_TEXT: usize = 256;
+
+/// **E3e — what the button copies: the block's last line with anything but
+/// white space**, without the white space around it, and its first 256 units
+/// where it is longer, cut between whole characters. **Chosen by where the
+/// line is, never by what it says** (E3d: nothing is mined for a cause).
+pub fn the_line_the_button_copies(block: &str) -> Option<String> {
+    let line = block.lines().rev().map(str::trim).find(|line| !line.is_empty())?;
+    let (mut ends, mut used) = (0, 0);
+    for (at, c) in line.char_indices() {
+        if used + c.len_utf16() > THE_BOUND_ON_A_COPIED_TEXT {
+            break;
+        }
+        used += c.len_utf16();
+        ends = at + c.len_utf8();
+    }
+    Some(line[..ends].to_string())
+}
+
+/// **E3e — the keyboard under a log**: one inline button with `copy_text`
+/// (Telegram's `CopyTextButton`). Pressed on the phone; nothing comes back
+/// to a machine, so it has no token and no record.
+pub fn the_copy_button_under(told: &TheWordsInTheChat) -> Option<Value> {
+    let line = told.copies.as_deref()?;
+    Some(json!({ "inline_keyboard": [[{ "text": COPY_LAST_LINE, "copy_text": { "text": line } }]] }))
 }
 
 /// **E3 — the words could not be read back whole** (`Rented-server runtime`
@@ -1388,6 +1803,80 @@ mod tests {
         }).collect()
     }
 
+    /// **`Telegram` V1e — which sends make a sound, by the job's choice**, in
+    /// the one home beside [`the_job_reports`]: the start under `Everything`
+    /// alone, pictures where they are sent, endings and questions always, the
+    /// contact sheet, the video and a message sent again never. The
+    /// twenty-eighth notes, note 18.
+    #[test]
+    fn twenty_eighth_18_the_sound_follows_the_choice() {
+        use AJobsSend::*;
+        use TheReportingChoice::*;
+        let paced = APictureEveryFewMinutes { minutes: 5 };
+        for (send, everything, pictures, a_picture_every, alerts) in [
+            (TheStart, true, false, false, false),
+            (AFramesPicture, true, true, true, true),
+            (AnEndingOrAQuestion, true, true, true, true),
+            (AfterTheEnding, false, false, false, false),
+            (TheJobsMessageSentAgain, false, false, false, false),
+        ] {
+            assert_eq!(it_makes_a_sound(Everything, send), everything, "{send:?}");
+            assert_eq!(it_makes_a_sound(ThePicturesWithoutTheRunningCommentary, send), pictures, "{send:?}");
+            assert_eq!(it_makes_a_sound(paced, send), a_picture_every, "{send:?}");
+            assert_eq!(it_makes_a_sound(OnlyWhatNeedsAnAnswer, send), alerts, "{send:?}");
+        }
+        assert!(the_job_reports(OnlyWhatNeedsAnAnswer, AKindOfReport::TheJobsMessage));
+        assert!(the_job_reports(ThePicturesWithoutTheRunningCommentary, AKindOfReport::TheJobsMessage));
+        assert!(!the_job_reports(Nothing, AKindOfReport::TheJobsMessage));
+    }
+
+    /// **`Telegram` C1d and C1e — the job's message and its one-line cut.**
+    /// The head, then C1's own line for the job; *Started.* until the first
+    /// progress; a refusal's line last. The cut: the mark, the server in bold,
+    /// the job in italic and the state word, on one line.
+    #[test]
+    fn twenty_eighth_18_the_jobs_message_and_its_cut() {
+        let server = AServerLabel::with_colour("RunPod 4090", Some("red"));
+        let started = the_jobs_message(&server, "Kitchen \u{2014} final", None, &[]);
+        assert_eq!(started.text, "🟥 RunPod 4090\nKitchen \u{2014} final\nStarted.");
+        let rendering = the_jobs_message(
+            &server,
+            "Kitchen \u{2014} final",
+            Some("Rendering: frame 31 of 240 \u{b7} 13%"),
+            &["Preview not sent: over Telegram's limits."],
+        );
+        assert_eq!(
+            rendering.text,
+            "🟥 RunPod 4090\nKitchen \u{2014} final\nRendering: frame 31 of 240 \u{b7} 13%\nPreview not sent: over Telegram's limits."
+        );
+        let cut = the_jobs_message_cut(&server, "Kitchen \u{2014} final", A_FAILED_ENDING);
+        assert_eq!(cut.text, "🟥 RunPod 4090 \u{b7} Kitchen \u{2014} final \u{b7} 🔴 Failed.");
+        assert_eq!(names_in(&cut), [("bold".into(), "RunPod 4090".into()), ("italic".into(), "Kitchen \u{2014} final".into())]);
+        assert!(!the_jobs_message_cut("Vast 5060", "Spins", A_FINISHED_ENDING).text.contains('\n'));
+    }
+
+    /// **`Telegram` D0 asked in place, and the waiting range's question with
+    /// the pair's sentence** — the words the job's message gains. The
+    /// twenty-eighth notes, notes 16 and 18.
+    #[test]
+    fn twenty_eighth_18_the_stop_questions_words_in_place() {
+        assert_eq!(the_stop_questions_words(&AStopQuestion::ARender), "Stop this job?\nThe current frame may not be saved.");
+        assert_eq!(
+            the_stop_questions_words(&AStopQuestion::ACheck { first_frame: "1".into(), the_frames: "1\u{2013}240".into() }),
+            "Stop this job?\nFrame 1 may not be saved. Frames 1\u{2013}240 will not render."
+        );
+        assert_eq!(the_stop_questions_words(&AStopQuestion::AWaitingJob), "Cancel this job?");
+        let range = AStopQuestion::AWaitingRange { the_frames: "1\u{2013}240".into() };
+        assert_eq!(
+            the_stop_questions_words(&range),
+            "Cancel this job?\nFrames 1\u{2013}240 have not started. Their settings are deleted too. The first-frame check stays in History."
+        );
+        let asked = the_stop_question_for("RunPod 4090", "Kitchen", &range);
+        let labels: Vec<_> = asked.buttons.iter().map(|b| b.label.as_str()).collect();
+        assert_eq!(labels, ["Keep the job", "Cancel the job"]);
+        assert!(asked.text.text.ends_with("The first-frame check stays in History."));
+    }
+
     #[test]
     fn twenty_first_names_are_explicit_utf16_runs_even_with_squares_and_markup_in_the_name() {
         let server = AServerLabel::with_colour("🟥 サーバー <&> 🎬", Some("blue"));
@@ -1411,7 +1900,7 @@ mod tests {
         let job = "台所 <&>";
         let mut failed = kitchen(TheCause::TheMachinesOwn, ACollectionOutcome::Collected, ACollectionOutcome::Collected);
         failed.server = server.clone(); failed.label = job.into();
-        let given = AGivenUpJob { server: server.clone(), job: "id".into(), label: job.into(), generation: "1".into(), attempt: 2, frames_on_the_server: 3, ordinary_output: ACollectionOutcome::Collected, complaints: ACollectionOutcome::Collected };
+        let given = AGivenUpJob { server: server.clone(), job: "id".into(), label: job.into(), generation: "1".into(), attempt: 2, frames_on_the_server: 3, ordinary_output: ACollectionOutcome::Collected, complaints: ACollectionOutcome::Collected, frames_asked: 0, resume: None };
         let waiting = AWaitingJob { server: server.clone(), label: job.into(), hold: "h".into(), generation: "1".into(), waits_for: WhatTheHoldWaitsFor::TheUsersAnswer, the_frame_shown: 1, frames_held: 3, the_frames: "1–3".into() };
         let mut texts = vec![
             the_start_message(&server, job), the_stop_question(&server, job, false).text,
@@ -1435,7 +1924,11 @@ mod tests {
         ];
         for text in &texts {
             assert!(text.starts_with("🟩 Сервер 🎬\n台所 <&>"), "{text}");
-            assert_eq!(names_in(text), [("bold".into(), server.to_string()), ("italic".into(), job.into())]);
+            // **The names, and nothing else marked** — but E3e's fold over
+            // a log's own text (2026-11-12), which is no name.
+            let names: Vec<(String, String)> =
+                names_in(text).into_iter().filter(|(kind, _)| kind != THE_FOLDED_QUOTATION).collect();
+            assert_eq!(names, [("bold".into(), server.to_string()), ("italic".into(), job.into())]);
             assert_eq!(text.matches(job).count(), 1, "{text}");
         }
         assert!(texts.remove(4).contains("\n🔴 Failed at frame 148 of 240."));
@@ -1458,7 +1951,64 @@ mod tests {
             disk_free_at_the_ending: Some(61_000_000_000),
             no_render_began: false,
             the_reason_the_machine_recorded: None,
+            frames_asked: 240,
+            resume: None,
         }
+    }
+
+    /// **A job interrupted twice is said as that, never *abandoned***, which
+    /// read as if the user gave up — the four questions, scout 3.24 as Sol
+    /// narrowed it, 2026-11-11: no cause is named that the ending cannot know.
+    #[test]
+    fn a_job_interrupted_twice_is_said_as_that() {
+        assert_eq!(AN_ABANDONED_ENDING, "Interrupted.");
+        let given_up = AGivenUpJob {
+            server: "RunPod 4090".into(),
+            job: "job-1".into(),
+            label: "Kitchen \u{2014} final".into(),
+            generation: "1".into(),
+            attempt: 2,
+            frames_on_the_server: 0,
+            ordinary_output: ACollectionOutcome::NeverEstablished,
+            complaints: ACollectionOutcome::NeverEstablished,
+            frames_asked: 0,
+            resume: None,
+        };
+        assert!(the_given_up_message(&given_up).text.contains("\nInterrupted twice. No more retries.\n"));
+        assert!(the_drop_message("A", "K", 2, 1, TheDependencyEnded::GivenUp)
+            .text
+            .ends_with("2 frames not rendered: frame 1 was interrupted twice."));
+    }
+
+    /// **`Specs/Render Settings`: nothing assumes the first frame is frame 1**
+    /// — a failure at a frame below zero says *at frame* with that frame, as
+    /// any other does. The four questions, batch 4's S2 leftover.
+    #[test]
+    fn four_questions_s2_a_failure_below_zero_says_its_frame() {
+        use ACollectionOutcome::*;
+        let mut failed = kitchen(TheCause::TheMachinesOwn, Collected, CollectedAndTheStreamWasEmpty);
+        failed.at_frame = Some((-3, 10));
+        let lines: Vec<String> = the_failure_message(&failed).text.lines().map(str::to_string).collect();
+        assert_eq!(lines[2], "🔴 Failed at frame -3 of 10. Blender exited with an error.");
+    }
+
+    /// **The phone says how Blender ended in words, never a bare exit code**,
+    /// and a full disk names the server and the app's own button — the four
+    /// questions, scout 3.25 and 3.23, 2026-11-11. The code stays in the log.
+    #[test]
+    fn the_phone_says_how_blender_ended_in_words() {
+        use ACollectionOutcome::*;
+        let mut failed = kitchen(TheCause::TheMachinesOwn, Collected, CollectedAndTheStreamWasEmpty);
+        let lines: Vec<String> = the_failure_message(&failed).text.lines().map(str::to_string).collect();
+        assert_eq!(lines[2], "🔴 Failed at frame 148 of 240. Blender exited with an error.");
+        failed.exit_status = None;
+        let lines: Vec<String> = the_failure_message(&failed).text.lines().map(str::to_string).collect();
+        assert_eq!(lines[2], "🔴 Failed at frame 148 of 240. Blender quit unexpectedly.");
+        assert!(!the_failure_message(&failed).text.contains("code"));
+        assert_eq!(
+            THE_DISK_IS_FULL,
+            "The output folder on the server was full; free space, then Submit again."
+        );
     }
 
     /// **E1, `Design/Queue & History`: a job that failed before any render says so,
@@ -1493,7 +2043,7 @@ mod tests {
         let mut failed = kitchen(TheCause::TheMachinesOwn, Collected, CollectedAndTheStreamWasEmpty);
         failed.disk_free_at_the_ending = Some(0);
         let lines: Vec<String> = the_failure_message(&failed).text.lines().map(str::to_string).collect();
-        assert_eq!(lines[2], "🔴 Failed at frame 148 of 240. Blender exited with code 1.");
+        assert_eq!(lines[2], "🔴 Failed at frame 148 of 240. Blender exited with an error.");
         assert_eq!(lines[3], THE_DISK_IS_FULL);
         for reading in [None, Some(1)] {
             failed.disk_free_at_the_ending = reading;
@@ -1501,10 +2051,11 @@ mod tests {
         }
     }
 
-    /// **E1 and E3 — a job given up says so, offers the words, and never *try it
-    /// again***.
+    /// **E1 and E3 — a job given up says so and offers the words**, ~~and never
+    /// *try it again*~~ and since 2026-11-12 *Submit again* after them (Y4a as
+    /// changed that day).
     #[test]
-    fn a_given_up_job_says_it_was_given_up_and_offers_no_try_it_again() {
+    fn a_given_up_job_says_it_was_given_up_and_offers_the_words_then_submit_again() {
         let given_up = AGivenUpJob {
             server: "RunPod 4090".into(),
             job: "job-1".into(),
@@ -1514,15 +2065,16 @@ mod tests {
             frames_on_the_server: 147,
             ordinary_output: ACollectionOutcome::Collected,
             complaints: ACollectionOutcome::CollectedAndTheStreamWasEmpty,
+            frames_asked: 0,
+            resume: None,
         };
         let message = the_given_up_message(&given_up);
         assert_eq!(
             message.text,
-            "RunPod 4090\nKitchen — final\nAbandoned. Interrupted twice.\n147 frames on the server."
+            "RunPod 4090\nKitchen — final\nInterrupted twice. No more retries.\n147 frames on the server."
         );
         assert!(!message.text.contains("failed"));
-        assert_eq!(labels(&message), ["Send Output log"]);
-        assert!(message.buttons.iter().all(|b| b.action != TRY_IT_AGAIN));
+        assert_eq!(labels(&message), ["Send Output log", "Submit again"]);
     }
 
     /// **A3 — the winning answer is told**, in the shape of the losing one's.
@@ -1532,7 +2084,44 @@ mod tests {
             the_answer_was_applied("RunPod 4090", "Kitchen \u{2014} final", TheAnswer::GoOn, 240),
             "RunPod 4090\nKitchen — final\nAnswered “Render all — 240 frames”."
         );
-        assert_eq!(the_answer_was_applied("RunPod 4090", "Kitchen", TheAnswer::Dont, 3), "RunPod 4090\nKitchen\nAnswered “Cancel”.");
+        assert_eq!(the_answer_was_applied("RunPod 4090", "Kitchen", TheAnswer::Dont, 3), "RunPod 4090\nKitchen\nAnswered “Cancel job”.");
+    }
+
+    /// **The twenty-eighth notes, note 16 — the phone's words.** `/stop` on a
+    /// waiting job asks the window's own question; a first-frame check's stop
+    /// says the whole job ends; the question's *Cancel job* asked in place
+    /// keeps the question and adds the window's cancel sentence, with *Keep
+    /// the job* and *Cancel the job*, only the second the *no*. **It failed
+    /// before the change**: *Cancel this waiting job?* with *Keep waiting* and
+    /// *Stop this job*, and no composer for the other two.
+    #[test]
+    fn twenty_eighth_16_the_questions_speak_of_the_job() {
+        let waiting = the_stop_question("RunPod 4090", "Kitchen", true);
+        assert_eq!(waiting.text, "RunPod 4090\nKitchen\nCancel this job?");
+        assert_eq!(labels(&waiting), ["Keep the job", "Cancel the job"]);
+        assert_eq!(waiting.buttons[1].action, STOP_THIS_JOB);
+        let rendering = the_stop_question("RunPod 4090", "Kitchen", false);
+        assert_eq!(labels(&rendering), ["Keep rendering", "Stop this job"]);
+        let check = the_checks_stop_question("RunPod 4090", "Kitchen", "1", "1\u{2013}240");
+        assert_eq!(
+            check.text,
+            "RunPod 4090\nKitchen\nStop this job?\nFrame 1 may not be saved. Frames 1\u{2013}240 will not render."
+        );
+        assert_eq!(labels(&check), ["Keep rendering", "Stop this job"]);
+        assert_eq!(check.buttons[1].action, STOP_THIS_JOB);
+
+        let question = AMarkedText::plain("RunPod 4090\nKitchen\nNeeds your answer. Render frames 1\u{2013}240?");
+        let asked = the_question_asks_to_cancel(&question, "RunPod 4090", "Kitchen", 240, "1\u{2013}240");
+        assert_eq!(
+            asked.text,
+            "RunPod 4090\nKitchen\nNeeds your answer. Render frames 1\u{2013}240?\n\nCancel this job? Frames 1\u{2013}240 will not render. Their settings are deleted too. The first-frame check stays in History."
+        );
+        assert_eq!(labels(&asked), ["Keep the job", "Cancel the job"]);
+        assert_eq!(asked.buttons[0].action, KEEP_THE_JOB);
+        assert_eq!(asked.buttons[1].action, ANSWER_A_WAITING_JOB);
+        assert_eq!(asked.buttons[1].payload["answer"], json!(TheAnswer::Dont));
+        let unread = the_question_asks_to_cancel(&question, "RunPod 4090", "Kitchen", 240, "");
+        assert!(unread.text.contains("Cancel this job? 240 frames will not render."));
     }
 
     fn labels(message: &AComposedMessage) -> Vec<String> {
@@ -1550,9 +2139,9 @@ mod tests {
         let message = the_failure_message(&kitchen(TheCause::TheMachinesOwn, Collected, CollectedAndTheStreamWasEmpty));
         assert_eq!(
             message.text,
-            "RunPod 4090\nKitchen — final\n🔴 Failed at frame 148 of 240. Blender exited with code 1.\n147 frames on the server."
+            "RunPod 4090\nKitchen — final\n🔴 Failed at frame 148 of 240. Blender exited with an error.\n147 frames on the server."
         );
-        assert_eq!(labels(&message), ["Send Output log", "Retry"]);
+        assert_eq!(labels(&message), ["Send Output log", "Submit again \u{2014} 240 frames"]);
     }
 
     /// **The live Telegram pass, fault 7 (E2 as narrowed 2026-10-31): a
@@ -1569,19 +2158,19 @@ mod tests {
         let message = the_failure_message(&no_camera);
         assert_eq!(
             message.text,
-            "RunPod 4090\nKitchen — final\n🔴 Failed. Blender exited with code 1.\nNo frames on the server.\nCause unknown. Use Submit again in Smoozy."
+            "RunPod 4090\nKitchen — final\n🔴 Failed. Blender exited with an error.\nNo frames on the server.\nCause unknown."
         );
-        assert_eq!(labels(&message), ["Send Output log"]);
+        assert_eq!(labels(&message), ["Send Output log", "Submit again \u{2014} 240 frames"]);
         let partly = the_failure_message(&kitchen(TheCause::Undetermined, CollectionIncomplete, CollectedAndTheStreamWasEmpty));
         assert!(partly.text.contains("Output log incomplete.") && !partly.text.contains("Errors"));
         for ordinary in [CollectedAndTheStreamWasEmpty, NeverEstablished] {
             let said = the_failure_message(&kitchen(TheCause::Undetermined, ordinary, CollectedAndTheStreamWasEmpty));
-            assert!(said.text.contains("Blender wrote nothing under Errors."), "{ordinary:?}");
+            assert!(said.text.contains("Errors log is empty."), "{ordinary:?}");
             assert!(said.text.contains(&what_the_outcome_says(AStream::TheOrdinaryOutput, ordinary).unwrap()), "{ordinary:?}");
         }
         let output_empty = the_failure_message(&kitchen(TheCause::Undetermined, CollectedAndTheStreamWasEmpty, Collected));
-        assert!(output_empty.text.contains("Blender wrote nothing under Output."));
-        assert_eq!(labels(&output_empty), ["Send Errors log"]);
+        assert!(output_empty.text.contains("Output log is empty."));
+        assert_eq!(labels(&output_empty), ["Send Errors log", "Submit again \u{2014} 240 frames"]);
     }
 
     /// **The Creator's eighth notes, note 6 (2026-10-11): an empty stream's
@@ -1594,8 +2183,8 @@ mod tests {
         use AStream::*;
         let errors = what_the_outcome_says(TheComplaints, CollectedAndTheStreamWasEmpty).unwrap();
         let output = what_the_outcome_says(TheOrdinaryOutput, CollectedAndTheStreamWasEmpty).unwrap();
-        assert_eq!(errors, "Blender wrote nothing under Errors.");
-        assert_eq!(output, "Blender wrote nothing under Output.");
+        assert_eq!(errors, "Errors log is empty.");
+        assert_eq!(output, "Output log is empty.");
         for said in [&errors, &output] {
             let said = said.to_lowercase();
             assert!(!said.contains("no errors"), "{said}");
@@ -1604,30 +2193,69 @@ mod tests {
         assert!(!errors.contains("Output") && !output.contains("Errors"));
     }
 
-    /// **Y4a: *try it again* on the machine's own cause and on no other**; the
-    /// file's own says the job needs a change, and undetermined says Smoozy
-    /// cannot tell why. **E3's words button is independent of it.**
+    /// **`Telegram` Y4a as changed 2026-11-12, Creator-stated: the phone
+    /// matches the app.** The live pass of that date, new fault 8: on a killed
+    /// Blender (an undetermined cause) and on a job interrupted twice, the
+    /// app's History offered *Submit again — 40 frames* and *Resume — 34/38
+    /// frames*, and the phone offered neither. The file's own keeps none.
     #[test]
-    fn try_it_again_is_attached_only_on_the_machines_own_cause() {
+    fn live_pass_8_the_phone_offers_the_apps_two_ways_where_the_app_does() {
         use ACollectionOutcome::*;
-        for (cause, sentence) in [(TheCause::TheFilesOwn, IT_NEEDS_A_CHANGE), (TheCause::Undetermined, SMOOZY_CANNOT_TELL_WHY)] {
-            let message = the_failure_message(&kitchen(cause, Collected, Collected));
-            assert!(!message.buttons.iter().any(|b| b.action == TRY_IT_AGAIN), "{cause:?}");
-            assert!(message.text.ends_with(sentence), "{cause:?}");
-            assert_eq!(labels(&message), ["Send Output log", "Send Errors log"]);
-        }
+        let mut unknown = kitchen(TheCause::Undetermined, NeverEstablished, NeverEstablished);
+        unknown.resume = Some(AResume { from: 35, frames: 6 });
+        let message = the_failure_message(&unknown);
+        assert_eq!(labels(&message), ["Submit again \u{2014} 240 frames", "Resume \u{2014} 6 frames"]);
+        assert!(message.text.ends_with("\nCause unknown."), "{}", message.text);
+        assert_eq!(message.buttons[1].payload["from"], json!(35));
+
+        let the_files = the_failure_message(&kitchen(TheCause::TheFilesOwn, NeverEstablished, NeverEstablished));
+        assert!(the_files.buttons.is_empty());
+        assert!(the_files.text.ends_with(IT_NEEDS_A_CHANGE));
+
+        let given_up = AGivenUpJob {
+            server: "RunPod 4090".into(),
+            job: "job-1".into(),
+            label: "Kitchen \u{2014} final".into(),
+            generation: "1".into(),
+            attempt: 2,
+            frames_on_the_server: 7,
+            ordinary_output: Collected,
+            complaints: NeverEstablished,
+            frames_asked: 40,
+            resume: Some(AResume { from: 8, frames: 33 }),
+        };
+        let message = the_given_up_message(&given_up);
+        assert_eq!(labels(&message), ["Send Output log", "Submit again \u{2014} 40 frames", "Resume \u{2014} 33 frames"]);
+        assert!(message.text.contains("\nInterrupted twice. No more retries.\n"));
+    }
+
+    /// **Y4a: *try it again* on every cause but the file's own** (as changed
+    /// 2026-11-12; it was the machine's own alone); the file's own says the
+    /// job needs a change, and undetermined says the cause is unknown. **E3's
+    /// words button is independent of it.**
+    #[test]
+    fn try_it_again_is_attached_on_every_cause_but_the_files_own() {
+        use ACollectionOutcome::*;
+        let the_files = the_failure_message(&kitchen(TheCause::TheFilesOwn, Collected, Collected));
+        assert!(!the_files.buttons.iter().any(|b| b.action == TRY_IT_AGAIN));
+        assert!(the_files.text.ends_with(IT_NEEDS_A_CHANGE));
+        assert_eq!(labels(&the_files), ["Send Output log", "Send Errors log"]);
+        let unknown = the_failure_message(&kitchen(TheCause::Undetermined, Collected, Collected));
+        assert!(unknown.text.ends_with(SMOOZY_CANNOT_TELL_WHY));
+        assert_eq!(labels(&unknown), ["Send Output log", "Send Errors log", "Submit again \u{2014} 240 frames"]);
         let machines = the_failure_message(&kitchen(TheCause::TheMachinesOwn, NeverEstablished, NeverEstablished));
-        assert_eq!(labels(&machines), ["Retry"]);
+        assert_eq!(labels(&machines), ["Submit again \u{2014} 240 frames"]);
         assert!(!machines.text.contains(IT_NEEDS_A_CHANGE));
         let neither = the_failure_message(&kitchen(TheCause::Undetermined, NeverEstablished, CollectedAndTheStreamWasEmpty));
-        assert!(neither.buttons.is_empty());
+        assert_eq!(labels(&neither), ["Submit again \u{2014} 240 frames"]);
     }
 
     /// **Y4a, corrected 2026-09-16: a failure nobody can explain is not told
     /// as the file's fault.** *Undetermined* carries [`SMOOZY_CANNOT_TELL_WHY`]
     /// and never [`IT_NEEDS_A_CHANGE`]; *the file's own* still carries
-    /// [`IT_NEEDS_A_CHANGE`] and never the other; neither offers *try it
-    /// again*, whatever the two streams recorded.
+    /// [`IT_NEEDS_A_CHANGE`] and never the other; the file's own never offers
+    /// *try it again*, and since 2026-11-12 undetermined always does (Y4a as
+    /// changed that day), whatever the two streams recorded.
     #[test]
     fn an_undetermined_failure_says_smoozy_cannot_tell_and_never_blames_the_file() {
         use ACollectionOutcome::*;
@@ -1638,7 +2266,7 @@ mod tests {
                 assert!(neither.text.ends_with(SMOOZY_CANNOT_TELL_WHY), "{ordinary:?} {complaints:?}");
                 assert!(!neither.text.contains(IT_NEEDS_A_CHANGE), "{ordinary:?} {complaints:?}");
                 assert!(!neither.text.contains("needs a change"), "{ordinary:?} {complaints:?}");
-                assert!(neither.buttons.iter().all(|b| b.action != TRY_IT_AGAIN), "{ordinary:?} {complaints:?}");
+                assert!(neither.buttons.iter().any(|b| b.action == TRY_IT_AGAIN), "{ordinary:?} {complaints:?}");
 
                 let the_files = the_failure_message(&kitchen(TheCause::TheFilesOwn, ordinary, complaints));
                 assert!(the_files.text.ends_with(IT_NEEDS_A_CHANGE), "{ordinary:?} {complaints:?}");
@@ -1681,7 +2309,7 @@ mod tests {
         failed.at_frame = None;
         failed.frames_on_the_server = 0;
         let message = the_failure_message(&failed);
-        assert!(message.text.contains("🔴 Failed. Blender exited without an exit code."));
+        assert!(message.text.contains("🔴 Failed. Blender quit unexpectedly."));
         assert!(message.text.contains("No frames on the server."));
         for button in &message.buttons {
             assert!(!button.payload.to_string().contains("printed:"));
@@ -1765,6 +2393,36 @@ mod tests {
         );
         job.group = Some("group-1".into());
         assert_eq!(the_finishing_message(&job), None);
+    }
+
+    /// **E1a's sentence of 2026-11-11: one *Missing:* line for each file, under
+    /// the finishing sentence, and nothing where there is none.**
+    #[test]
+    fn e1a_a_finish_says_missing_for_each_file_the_remap_left_unchanged() {
+        let server: AServerLabel = "RunPod 4090".into();
+        let said = a_user_message(&server, "Kitchen", "", "Finished. 240 frames.");
+        assert_eq!(with_the_files_missing(said.clone(), &[]), said);
+        assert_eq!(
+            with_the_files_missing(said, &["wood.png".to_string(), "props.blend".to_string()]),
+            "RunPod 4090\nKitchen\nFinished. 240 frames.\nMissing: wood.png\nMissing: props.blend"
+        );
+    }
+
+    /// **T-03 of the UI at every size: a list of missing files too long for
+    /// one message stops inside Telegram's bound and says how many more**, so
+    /// the finish is still sent. Two hundred 28-letter names were about 7,800
+    /// characters, which Telegram refuses whole.
+    #[test]
+    fn e1a_a_long_missing_list_stays_inside_the_bound_and_counts_the_rest() {
+        let server: AServerLabel = "RunPod 4090".into();
+        let said = a_user_message(&server, "Kitchen", "", "Finished. 240 frames.");
+        let names: Vec<String> = (0..200).map(|at| format!("texture_wood_planks_{at:04}.png")).collect();
+        let told = with_the_files_missing(said, &names);
+        assert!(told.text.encode_utf16().count() <= THE_BOUND_ON_A_MESSAGE);
+        let named = told.text.lines().filter(|line| line.starts_with("Missing: ")).count();
+        assert!(named > 50 && named < 200, "{named} named");
+        assert_eq!(told.text.lines().last(), Some(format!("and {} more.", 200 - named).as_str()));
+        assert!(told.text.contains("Missing: texture_wood_planks_0000.png"), "the first names are the ones kept");
     }
 
     /// **E1a: a count that came up short takes the frames' place, and the state
@@ -1961,8 +2619,13 @@ mod tests {
         assert_eq!(the_frames_in_words([1, 3, 5, 6, 7]), "1,3,5\u{2013}7");
         let unread = AWaitingJob { the_frames: String::new(), ..waiting.clone() };
         assert!(the_waiting_message(&unread).unwrap().text.ends_with("Render 240 frames?"));
-        assert_eq!(labels(&message), ["Render all \u{2014} 240 frames", "Cancel"]);
-        assert!(message.buttons.iter().all(|b| b.action == ANSWER_A_WAITING_JOB));
+        // **The twenty-eighth notes, note 16**: *Cancel job*, which asks in
+        // place first; *Render all* answers at once.
+        assert_eq!(labels(&message), ["Render all \u{2014} 240 frames", "Cancel job"]);
+        assert_eq!(
+            message.buttons.iter().map(|b| b.action).collect::<Vec<_>>(),
+            [ANSWER_A_WAITING_JOB, ASK_TO_CANCEL_THE_JOB]
+        );
         assert_eq!(
             the_answer_already_applied("RunPod 4090", "Kitchen \u{2014} final", TheAnswer::GoOn, 240, at(0)),
             "RunPod 4090\nKitchen — final\nAlready answered “Render all — 240 frames” at 1 Jan 1970, 00:00:00 UTC."
@@ -1971,12 +2634,24 @@ mod tests {
         // holds frame 1 too since decision C (2026-10-02).
         assert_eq!(
             the_drop_message("RunPod 4090", "Kitchen \u{2014} final", 240, 1, TheDependencyEnded::Failed),
-            "RunPod 4090\nKitchen \u{2014} final\nNot rendered: frame 1 failed (240 frames held)."
+            "RunPod 4090\nKitchen \u{2014} final\n240 frames not rendered: frame 1 failed."
         );
         // **The two endings added for the Telegram worker's piece 3** are told
         // as what they were, never as a failure or a stop.
-        assert!(the_drop_message("A", "K", 2, 1, TheDependencyEnded::GivenUp).ends_with("frame 1 was abandoned (2 frames held)."));
-        assert!(the_drop_message("A", "K", 2, 1, TheDependencyEnded::Cancelled).ends_with("frame 1 was cancelled (2 frames held)."));
+        assert!(the_drop_message("A", "K", 2, 1, TheDependencyEnded::GivenUp).ends_with("2 frames not rendered: frame 1 was interrupted twice."));
+        assert!(the_drop_message("A", "K", 2, 1, TheDependencyEnded::Cancelled).ends_with("2 frames not rendered: frame 1 was cancelled."));
+    }
+
+    /// **The four questions, scout 3.46 (Sol's narrowed form): the drop says
+    /// the count first and the reason after, without *held*** —
+    /// `Architecture/Telegram` A4's build detail of 2026-11-12.
+    #[test]
+    fn fifth_part_3_46_the_drop_names_its_count_without_held() {
+        assert_eq!(
+            the_drop_message("RunPod 4090", "Kitchen \u{2014} final", 240, 1, TheDependencyEnded::Failed),
+            "RunPod 4090\nKitchen \u{2014} final\n240 frames not rendered: frame 1 failed."
+        );
+        assert!(the_drop_message("A", "K", 1, -3, TheDependencyEnded::Stopped).text.ends_with("1 frame not rendered: frame -3 was stopped."));
     }
 
     /// **`Queue & History` L22's drop and `State, identity and recovery` E5's
@@ -2070,5 +2745,55 @@ mod tests {
             );
         }
         assert!(!the_job_reports(TheReportingChoice::OnlyWhatNeedsAnAnswer, AKindOfReport::AFinishedVideo));
+    }
+
+    /// **Sol's S2 (the four questions, batch 4, 2026-11-11): the first-frame
+    /// question and its drop name the checked frame by its own number**, below
+    /// zero too. Before, a frame below zero was said as frame 1.
+    #[test]
+    fn four_questions_s2_the_checked_frame_below_zero_is_named_as_it_is() {
+        let dropped = the_drop_message("S", "J", 3, -2, TheDependencyEnded::Failed);
+        assert!(dropped.text.contains("not rendered: frame -2 failed"), "{}", dropped.text);
+        let waiting = AWaitingJob {
+            server: "S".into(),
+            label: "J".into(),
+            hold: "h".into(),
+            generation: "1".into(),
+            waits_for: WhatTheHoldWaitsFor::TheUsersAnswer,
+            the_frame_shown: -2,
+            frames_held: 3,
+            the_frames: String::new(),
+        };
+        let asked = the_waiting_message(&waiting).unwrap().text;
+        assert!(asked.text.contains(" · frame -2\n"), "{}", asked.text);
+    }
+
+    /// **The four questions, batch 4 (scout 1.5), Creator-stated 2026-11-11:
+    /// the phone offers the app's two ways, in the app's words, and never
+    /// *Retry*** (`Specs/Rendering`, `Telegram` Y4a as changed that day):
+    /// *Submit again — 240 frames* for the whole job, and *Resume — 181
+    /// frames* where the job's entry kept the frame it ended at, carrying that
+    /// frame. The answer to *Resume* says where it started and the two folders.
+    /// Before, the one button read *Retry* and sent the whole range again.
+    #[test]
+    fn four_questions_1_5_submit_again_and_resume_never_retry() {
+        use ACollectionOutcome::*;
+        let mut job = kitchen(TheCause::TheMachinesOwn, NeverEstablished, NeverEstablished);
+        job.frames_asked = 240;
+        job.resume = Some(AResume { from: 60, frames: 181 });
+        let message = the_failure_message(&job);
+        assert_eq!(labels(&message), ["Submit again \u{2014} 240 frames", "Resume \u{2014} 181 frames"]);
+        let resume = message.buttons.iter().find(|b| b.action == RESUME_IT).expect("Resume");
+        assert_eq!(resume.payload["from"], serde_json::json!(60));
+        job.resume = None;
+        job.frames_asked = 1;
+        assert_eq!(labels(&the_failure_message(&job)), ["Submit again \u{2014} 1 frame"]);
+        job.cause = TheCause::TheFilesOwn;
+        job.resume = Some(AResume { from: 60, frames: 181 });
+        assert!(the_failure_message(&job).buttons.is_empty(), "the file's own: neither");
+        assert_eq!(
+            the_submissions_outcome("S", "J", &ASubmissionsOutcome::Resumed { from: -4 }),
+            a_user_message("S", "J", "", "Resumed from frame -4. The frames will be in two folders.")
+        );
     }
 }

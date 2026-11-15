@@ -28,6 +28,7 @@
 //! bytes written, and no more.** It does not prove the file on the sending disk
 //! was whole before Smoozy read it.
 
+use sha2::digest::common::hazmat::{SerializableState, SerializedState};
 use sha2::{Digest as _, Sha256};
 
 /// **S23: one digest function per protocol version, the same at both ends, and
@@ -134,6 +135,61 @@ impl Running {
     }
 }
 
+impl Running {
+    /// **`S12b`: the running digest's own state**, kept at an upload's
+    /// checkpoint beside the digest, so a carry-on goes on from the checkpoint
+    /// without the prefix's bytes.
+    pub fn the_state(&self) -> RunningState {
+        RunningState(self.state.serialize().to_vec())
+    }
+
+    /// **`S12b`: a running digest carried on from a recorded state**, standing
+    /// at `bytes_taken`. `None` where the state does not read as one; the
+    /// caller then reads the prefix back as S12 step 3 always has.
+    pub fn carried_on_from(state: &RunningState, bytes_taken: u64) -> Option<Running> {
+        let serialized = SerializedState::<Sha256>::try_from(state.0.as_slice()).ok()?;
+        Some(Running {
+            state: Sha256::deserialize(&serialized).ok()?,
+            bytes_taken,
+        })
+    }
+}
+
+/// **`S12b`: the running digest's own state at one offset** — SHA-256's
+/// working values, its count and whatever part of a block it holds, in the
+/// function's own serialised form. **It is a value and never a claim**: the
+/// caller checks that it reproduces the checkpoint's digest before carrying
+/// on from it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct RunningState(Vec<u8>);
+
+impl RunningState {
+    /// The written form, in hexadecimal digits.
+    pub fn as_text(&self) -> String {
+        self.0.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    /// The written form read back. **Nothing where it is not a whole state.**
+    pub fn read_back(text: &str) -> Option<RunningState> {
+        if text.len() % 2 != 0 || text.is_empty() {
+            return None;
+        }
+        let bytes = text
+            .as_bytes()
+            .chunks(2)
+            .map(|pair| u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok())
+            .collect::<Option<Vec<u8>>>()?;
+        SerializedState::<Sha256>::try_from(bytes.as_slice()).ok()?;
+        Some(RunningState(bytes))
+    }
+}
+
+impl std::fmt::Debug for RunningState {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(out, "RunningState({} bytes)", self.0.len())
+    }
+}
+
 impl Default for Running {
     fn default() -> Running {
         Running::new()
@@ -203,6 +259,37 @@ mod tests {
             compare(&Digest::of(&sent), &Digest::of(&original)),
             WhatTheComparisonSaid::TheyDisagree
         );
+    }
+
+    /// **`S12b`: a running digest carried on from its recorded state comes to
+    /// what the whole would**, so a carry-on that takes the state from the
+    /// record and none of the prefix's bytes still hands `File Browser` K9's
+    /// gate the digest of the whole file.
+    #[test]
+    fn a_running_digest_carried_on_from_its_state_matches_a_whole_one() {
+        let whole: Vec<u8> = (0..300_000u32).map(|at| (at % 251) as u8).collect();
+        for split in [0usize, 64, 4_096, 100_003, 300_000] {
+            let mut first = Running::new();
+            first.take(&whole[..split]);
+            let written = first.the_state().as_text();
+            let state = RunningState::read_back(&written).expect("the written form reads back");
+            let mut carried = Running::carried_on_from(&state, split as u64).expect("a state carries on");
+            assert_eq!(carried.so_far(), Digest::of(&whole[..split]), "the state is the prefix's own");
+            carried.take(&whole[split..]);
+            assert_eq!(carried.so_far(), Digest::of(&whole), "split at {split}");
+            assert_eq!(carried.bytes_taken(), whole.len() as u64);
+        }
+    }
+
+    /// **`S12b`: a written state that is not one reads back as nothing**, so a
+    /// damaged record falls to S12 step 3's read-back rather than to a wrong
+    /// digest.
+    #[test]
+    fn a_written_state_that_is_not_one_reads_back_as_nothing() {
+        assert_eq!(RunningState::read_back(""), None);
+        assert_eq!(RunningState::read_back("zz"), None);
+        let written = Running::new().the_state().as_text();
+        assert_eq!(RunningState::read_back(&written[..written.len() - 2]), None);
     }
 
     #[test]

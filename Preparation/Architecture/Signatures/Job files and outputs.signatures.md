@@ -116,3 +116,16 @@
 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the downloaded folder's short name.md`, outside any round — N3, the 8-character identity in the output folder written into the plan. No auditor has seen it. (Line added by the build runner, which the builder left out.)
 
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent) — R4 item 8: where the simulations begin, and Sources entry 87. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 13, an output that writes nothing does not shape the job's folder.md`, outside any round — P6a, and P18's dated note: an output that writes nothing for the job's frames takes no part in the shared run. Changed 2026-11-10, the Creator's twenty-eighth notes (their answer of the morning), runner's pick. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 13, an output that writes nothing does not shape the job's folder.md`, outside any round — P6a: a first-frame check and its range job decide by the range's frames. Changed 2026-11-10, the runner's ruling on the Creator's twenty-eighth notes (piece 13, Rule 10). No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 5, how a render ends and what it counts.md`, outside any round — §6.6 gains **P21a**: the record of where the folder sits is given its name only when whole, and one that does not read back names no choice. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, second round.md`, outside any round — R4 item 5: animation that reaches nothing the reading reads moves no scene, and the walk writes its step. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — reading at a frame, built from the research.md`, outside any round — R4 item 5: a scene read off its curves instead of walked; the depsgraph option left out, and why. No auditor has seen it.
+
+2026-11-14 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — drivers and cheap moves, built from the research.md`, outside any round — R4 item 5: drivers followed without a move, drivers on never-read paths, and cheap moves. No auditor has seen it.
+2026-11-14 — Claude Opus 5.5 — added P19a, a run of / alone is case 2 (Rough share 3, 230 and 231).

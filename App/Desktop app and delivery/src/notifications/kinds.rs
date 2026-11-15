@@ -415,7 +415,7 @@ fn what_an_ending_says(ending: Ending) -> Prose {
     match ending {
         Ending::Finished => Prose::new("finished"),
         Ending::Failed => Prose::new("failed"),
-        Ending::GivenUp => Prose::new("abandoned"),
+        Ending::GivenUp => Prose::new("interrupted"),
         Ending::Stopped => {
             debug_assert!(false, "T10: a job the user stopped posts nothing");
             Prose::new("stopped")
@@ -757,7 +757,7 @@ mod tests {
         for (ending, said) in [
             (Ending::Finished, "finished"),
             (Ending::Failed, "failed"),
-            (Ending::GivenUp, "abandoned"),
+            (Ending::GivenUp, "interrupted"),
         ] {
             let posts = what_this_ending_posts(&ended(&job, None, ending), &[]);
             assert_eq!(posts[0].said.as_str(), said, "{ending:?}");

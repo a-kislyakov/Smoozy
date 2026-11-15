@@ -247,6 +247,71 @@ mod tests {
         }
     }
 
+    /// **A Windows checkout can write every path in the repository.**
+    ///
+    /// The hosted Windows runner checks out the whole repository — plans and
+    /// audit trails as well as `App/` — and **one name it cannot write stops
+    /// the checkout before anything is built or tested**. Observed on hosted
+    /// run 43727887590 (2026-11-15): a brief named with a colon. The Mac
+    /// writes such a name happily, so nothing at this desk saw it.
+    ///
+    /// The names Windows refuses are documented in Microsoft's *Naming Files,
+    /// Paths, and Namespaces* (learn.microsoft.com, read 2026-11-15): the
+    /// characters `<>:"/\|?*` and those below 32; a name ending in a space or
+    /// a period; and `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9`
+    /// (with `¹²³` as digits too), alone or followed by an extension. **Every
+    /// folder and file name in every tracked path is read**, since a folder's
+    /// name stops the checkout as surely as a file's.
+    ///
+    /// The account is `Audits/Build/Step 11/The release of 0.4.0 — what
+    /// happened.md`.
+    #[test]
+    fn a_windows_checkout_can_write_every_path() {
+        let listing = git(&["ls-files", "-z"]);
+        let reserved = |name: &str| {
+            let stem = name.split('.').next().unwrap_or(name).to_ascii_uppercase();
+            matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+                || ["COM", "LPT"].iter().any(|device| {
+                    stem.strip_prefix(device).is_some_and(|digit| {
+                        matches!(digit, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³")
+                    })
+                })
+        };
+        let why_windows_refuses = |name: &str| {
+            if name.chars().any(|one| "<>:\"\\|?*".contains(one) || (one as u32) < 32) {
+                Some("a character Windows refuses")
+            } else if name.ends_with(' ') || name.ends_with('.') {
+                Some("a name ending in a space or a period")
+            } else if reserved(name) {
+                Some("a name Windows keeps for a device")
+            } else {
+                None
+            }
+        };
+        // The reading itself, on names it must refuse and names it must not.
+        for refused in ["a: b.md", "what?.md", "a|b", "ends.", "ends ", "CON", "nul.txt", "com1.tar.gz", "LPT¹"] {
+            assert!(why_windows_refuses(refused).is_some(), "{refused:?} was not caught");
+        }
+        for allowed in [".gitattributes", "CONTRIBUTING.md", "console.js", "COM10", "Brief — piece 7, Files' refresh.md"] {
+            assert!(why_windows_refuses(allowed).is_none(), "{allowed:?} was refused");
+        }
+
+        let mut faults = Vec::new();
+        let mut looked_at = 0;
+        for path in listing.split('\0').filter(|path| !path.is_empty()) {
+            looked_at += 1;
+            if let Some((name, why)) = path.split('/').find_map(|name| why_windows_refuses(name).map(|why| (name, why))) {
+                faults.push(format!("{path} — {why}, in {name:?}"));
+            }
+        }
+        assert!(looked_at > 1000, "git listed only {looked_at} paths");
+        assert!(
+            faults.is_empty(),
+            "a Windows checkout cannot write these paths, and the hosted \
+             Windows run would stop at its checkout: {faults:#?}"
+        );
+    }
+
     #[test]
     fn the_workflow_keeps_the_applications_without_building_the_retired_worker() {
         let workflow = fs::read_to_string(the_repository().join(".github/workflows/desktop-build.yml"))

@@ -28,8 +28,6 @@ Pre-built downloads are published at <https://github.com/a-kislyakov/Smoozy-rele
 
 Smoozy checks this releases page for a newer version when it starts and every three hours while it is open.
 
-If macOS blocks an unsigned download, move `Smoozy.app` to `/Applications`, run `xattr -dr com.apple.quarantine "/Applications/Smoozy.app"` once in Terminal, and open it.
-
 ## Build from source
 
 Keep `App/`, `Preparation/`, and the root `COPYING` file together: the desktop build runs `App/Release/notices.py` to embed `COPYING` and generate third-party licence notices from Cargo's locked dependency tree, and the test suite reads `Preparation/`.

@@ -78,7 +78,11 @@ pub fn the_offer_is_made_before_a_refusal(_it_would_be_smoother: bool) -> bool {
 /// §1.3 fixed this route before this document was written.
 pub const THE_ELEVATING_COMMANDS_STDIN_FORM: &str = "sudo -S";
 
-/// **E4: the validate form, which runs no command at all.**
+/// **E4: the validate form, which runs no command at all.** **Not sent from
+/// 2026-11-12** (E3 and E4 as changed that day): the password goes once, to
+/// the step itself, under `sudo -k`, and [`crate::elevated::issue`] tells a
+/// refusal from the step's failure by `crate::elevated::THE_COMMAND_FAILED_LINE`.
+/// Kept as the record of what E4 used to send.
 ///
 /// **Documented**, same manual: `-v, --validate` *"Update the user's cached
 /// credentials, authenticating the user if necessary. For the sudoers plugin,

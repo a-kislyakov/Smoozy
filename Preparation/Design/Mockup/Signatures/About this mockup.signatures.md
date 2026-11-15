@@ -81,3 +81,29 @@ This note had no companion signatures file before this one. It is a document und
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — a Linux rollback with an unreadable record says so.md`, outside any round — the count moved to 341 and `upd-rollback-unread` written into the history. No auditor has seen it.
 2026-11-02 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 11/Brief — the OptiX check and two Render Settings faults.md`, outside any round — the count to 342 and the entry for `su-nooptix`.
 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — the count to 343 and the entry for `res-drvold`. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 2, Server output keeps everything.md`, outside any round — the count to 353, counted from the state list (it was 351, not the 343 the line said), and the entry for `su-dl` and `su-dllog`. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 3, updates by the user's choice and the Dock.md`, outside any round — the count to 354 and the entry for updates being the user's choice. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 5, the report's address.md`, outside any round — the entry for the report's address as a mail link; the count unchanged at 354. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 6, the dependency check.md`, outside any round — the entry for the dependency check's notes 8, 14 and 15; the count unchanged at 354. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 11, linked files go first.md`, outside any round — the entry for linked files going first; the count from 354 to 357. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 7, Files: refresh and the upload's progress.md`, outside any round — the entry for Files' refresh and upload line and the check's alternating rows; the count from 357 to 359. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 8, the Queue's dot and the first-frame buttons.md`, outside any round — the entry for the first-frame check's buttons and the waiting dot; the count from 359 to 363. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 9, Render settings with many view layers.md`, outside any round — the entry for many long View Layers; the count from 363 to 367. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 10, Telegram's one message per job, the code.md`, outside any round — the entry for Telegram's one message per job; the count stays at 367. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — the drawing pass.md`, outside any round — the entry for the twenty-ninth notes; the count from 367 to 372. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Thirtieth notes/Brief — the folded blur.md`, outside any round — the entry for the folded blur; no state added, and the list's 374 options noted against the 372 counted. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+- 2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — the count to 393 and the entry for `h-missing`. No auditor has seen it.

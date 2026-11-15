@@ -10,7 +10,7 @@
 //! type rather than habits.
 //!
 //! **Markers used below that belong to another document, each with the
-//! document it belongs to.** `Server Setup` R7b.
+//! document it belongs to.** `Server Setup` R6a, R7b.
 
 use crate::names;
 
@@ -384,6 +384,72 @@ impl TheLayout {
 /// recorded and the supervisor refuses a job rather than guessing one.
 pub const THE_RECORD_OF_THE_ROOT: &str = "root";
 
+/// **`Server Setup` R6a's mark, beside the record of the root**: the identity
+/// the hand-over wrote into the root, kept where the program and the desktop
+/// read it before using the root (`Server Setup` R6a's change of later on
+/// 2026-11-13, item 4; Sol's look at the scout's list, point 1).
+pub const THE_RECORD_OF_THE_ROOTS_MARK: &str = "root-mark";
+
+/// **`Server Setup` R6a's mark, in the root itself.** A root whose mark is not
+/// the recorded one is not the folder Smoozy made — the disk it was on is not
+/// mounted, or was replaced — and nothing is made under it.
+pub const THE_ROOTS_MARK: &str = ".smoozy-root";
+
+/// **One read of a mark**, on whichever side reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AMarkRead {
+    /// The file is not there.
+    NotThere,
+    Read(Vec<u8>),
+    /// Anything else, in the reader's own words.
+    CouldNotBeRead(String),
+}
+
+/// **`Server Setup` R6a: the mark recorded beside the record of the root**, or
+/// none where the root was placed before marks were written. A record that
+/// cannot be read is said with its reason and never taken as none. **As
+/// changed 2026-11-13 (Sol's look at the scout's list, second check): an
+/// empty record is none** — one an earlier release left empty when its
+/// connection dropped mid-write — so setup writes the marks again rather
+/// than stopping at every retry.
+pub fn the_recorded_mark(at: &str, read: AMarkRead) -> Result<Option<Vec<u8>>, String> {
+    match read {
+        AMarkRead::NotThere => Ok(None),
+        AMarkRead::Read(bytes) if the_mark_as_written(&bytes).is_empty() => Ok(None),
+        AMarkRead::Read(bytes) => Ok(Some(the_mark_as_written(&bytes))),
+        AMarkRead::CouldNotBeRead(why) => Err(format!("Could not read {at}: {why}.")),
+    }
+}
+
+/// **`Server Setup` R6a: the root holds the recorded mark**, said plainly where
+/// it does not. Never repaired here: the root that does not hold it is not the
+/// one Smoozy made.
+pub fn the_root_holds_its_mark(root: &str, recorded: &[u8], found: AMarkRead) -> Result<(), String> {
+    match found {
+        AMarkRead::Read(bytes) if the_mark_as_written(&bytes) == the_mark_as_written(recorded) => Ok(()),
+        AMarkRead::Read(_) => Err(format!(
+            "Smoozy's folder, {root}, is not the one set up here. Its disk may have been replaced."
+        )),
+        // **The mark alone is read**, so the words say what was not found
+        // and never that the folder is gone (batch 2 of the Bad what-if
+        // answers, 164): the folder may stand without its mark.
+        AMarkRead::NotThere => Err(format!(
+            "Could not find {root}/{THE_ROOTS_MARK}. Smoozy's folder or its disk may be missing."
+        )),
+        AMarkRead::CouldNotBeRead(why) => Err(format!("Could not read {root}/{THE_ROOTS_MARK}: {why}.")),
+    }
+}
+
+/// **`Server Setup` R6a: the login's real write in the root did not land**, in
+/// words.
+pub fn a_root_that_takes_no_write(root: &str, why: &str) -> String {
+    format!("Smoozy's folder, {root}, can't be written to: {why}.")
+}
+
+fn the_mark_as_written(bytes: &[u8]) -> Vec<u8> {
+    String::from_utf8_lossy(bytes).trim().as_bytes().to_vec()
+}
+
 /// **L7a, named rather than left as a general relaxation.**
 ///
 /// *"One exception, and it is the only one: a bake or cache the user uploaded,
@@ -449,6 +515,12 @@ mod tests {
             MachineRoot::chosen("/ephemeral/smoozy").unwrap(),
             WhereThePackageAreaSits::UnderTheRoot,
         )
+    }
+
+    #[test]
+    fn bad_batch_2_a_missing_mark_does_not_claim_the_folder_is_missing() {
+        let said = the_root_holds_its_mark("/work/smoozy", b"owned", AMarkRead::NotThere).unwrap_err();
+        assert_eq!(said, "Could not find /work/smoozy/.smoozy-root. Smoozy's folder or its disk may be missing.");
     }
 
     #[test]

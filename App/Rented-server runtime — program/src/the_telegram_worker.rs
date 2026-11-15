@@ -174,6 +174,13 @@ pub const THE_INSTRUCTIONS_OUTCOME_IS_RECORDED_REQUEST: &str = "an instruction's
 /// Y7a), and comes back in [`THE_NEW_JOB_FIELD`].
 pub const THE_JOB_IS_SUBMITTED_AGAIN_REQUEST: &str = "a job is submitted again by this machine";
 
+/// **The phone's *Resume*** (`Telegram` Y4a as changed 2026-11-11, the four
+/// questions, scout 1.5): on [`THE_JOB_IS_SUBMITTED_AGAIN_REQUEST`], the frame
+/// the new job starts at. Absent for *Submit again*, the whole job; an older
+/// supervisor that does not read it makes the whole job, which is what this
+/// build's never sends it.
+pub const THE_FRAME_IT_RESUMES_FROM_FIELD: &str = "the frame it resumes from";
+
 /// **What became of the submission**: [`IT_WAS_SUBMITTED_NOW`],
 /// [`IT_WAS_SUBMITTED_BEFORE`], [`IT_WAS_NOT_SUBMITTED`] with the machine's own
 /// words beside it, or [`IT_IS_STILL_BEING_MADE`].
@@ -394,14 +401,80 @@ pub enum AFact {
     /// **`Telegram` V1d — the phone's choice**, the worker's own written
     /// form. The worker has already decided it is later than the one held.
     ThePhonesChoice(String),
+    /// **`Telegram` C7a — one job's message**, the worker's own written form,
+    /// under its job. Added 2026-11-09, the twenty-eighth notes, notes 18 and
+    /// 19.
+    AJobsMessage { job: String, record: String },
+    /// **`Telegram` C7a — that job's message record ends.**
+    AJobsMessageEnds(String),
+    /// **`Telegram` F3b — the next update identity to ask from, with the
+    /// moment it was written**, in seconds since 1970 on this machine's
+    /// clock: one fact, so one write. Added 2026-11-12, the Fable review,
+    /// sitting 6.
+    TheUpdatePositionAt { next: i64, at: u64 },
+    /// **`Telegram` F3b — the bot `getMe` answered at this worker's start.**
+    /// Where it is not the bot the store holds, everything in the store that
+    /// belongs to the old bot's conversation is dropped in this same write.
+    TheBot(i64),
+    /// **`Telegram` B3 as changed 2026-11-12 — the entries the last confirmed
+    /// board held**, the worker's own written form, or nothing to empty it.
+    /// Added by the Fable review's sitting 6 follow-up.
+    TheEntriesLastHeld(Option<String>),
+    /// **`Telegram` F6 — how Telegram is answering this machine's bot**, one
+    /// of `TheTelegramTrouble`'s words, or nothing where all is well. Added
+    /// 2026-11-14, when Telegram refuses.
+    TelegramsTrouble(Option<String>),
 }
 
 impl AFact {
     /// The store, with this fact written into it.
     pub fn written_into(self, held: &mut TheTelegramWorkersStateAsHeld) {
         match self {
-            AFact::TheUpdatePosition(next) => held.update_position = Some(next),
+            AFact::TheUpdatePosition(next) => {
+                held.update_position = Some(next);
+                held.update_position_written_at = None;
+            }
+            AFact::TheUpdatePositionAt { next, at } => {
+                held.update_position = Some(next);
+                held.update_position_written_at = Some(at);
+            }
+            AFact::TheBot(bot) => {
+                // **`Telegram` F3b: a different bot is a different
+                // conversation** (P4), so nothing that names an update or a
+                // message of the old one is kept — the instruction outcomes
+                // among them, since an instruction is named after its
+                // update's number (*stop-4242*) and the new bot's may repeat
+                // it (Sol's look at sitting 6). The journal cursor, the
+                // routing key and the phone's choice name neither, and stay.
+                // **A store that names no bot was written before the bot was
+                // kept, and which bot that was cannot be read from it**
+                // (`Telegram` F3b's sentence of 2026-11-12, Sol's look at the double-check
+                // ideas, finding 2). It takes this one and drops its
+                // instruction outcomes: under a different bot one of them
+                // would make a new instruction, a stop among them, read as
+                // already done. Its messages are kept, since the ordinary
+                // upgrade is under the same bot and they are still right.
+                if held.bot.is_none() {
+                    held.instruction_outcomes.clear();
+                }
+                if held.bot.is_some_and(|was| was != bot) {
+                    held.instruction_outcomes.clear();
+                    held.update_position = None;
+                    held.update_position_written_at = None;
+                    held.board = None;
+                    held.machinery_message = None;
+                    held.status_message = None;
+                    held.sent_messages.clear();
+                    held.jobs_messages.clear();
+                    held.action_contexts.clear();
+                    held.entries_last_held = None;
+                    held.telegrams_trouble = None;
+                }
+                held.bot = Some(bot);
+            }
             AFact::TheBoard(message) => held.board = Some(message),
+            AFact::TheEntriesLastHeld(written) => held.entries_last_held = written,
+            AFact::TelegramsTrouble(word) => held.telegrams_trouble = word,
             AFact::TheMachineryMessage(message) => held.machinery_message = Some(message),
             AFact::TheStatusMessage(message) => held.status_message = Some(message),
             AFact::AnActionContext { identity, record } => {
@@ -422,6 +495,12 @@ impl AFact {
                 }
             }
             AFact::ThePhonesChoice(written) => held.phones_choice = Some(written),
+            AFact::AJobsMessage { job, record } => {
+                held.jobs_messages.insert(job, record);
+            }
+            AFact::AJobsMessageEnds(job) => {
+                held.jobs_messages.remove(&job);
+            }
         }
     }
 }
@@ -653,6 +732,12 @@ pub struct TheStoreOverTheSupervisor {
     supervisor: Arc<dyn AsksTheSupervisor>,
     held: TheTelegramWorkersStateAsHeld,
     refused: Arc<AtomicBool>,
+    /// **`Telegram` F3c as changed 2026-11-12 — jobs' message records
+    /// Telegram's send was accepted for and the store could not write**, by
+    /// job. Read beside the written ones, written again after each later write
+    /// that succeeds, and taken out at their end. Memory only. Added by the
+    /// Fable review's sitting 6 follow-up, its left item 1.
+    jobs_messages_not_yet_written: std::collections::BTreeMap<String, smoozy_telegram::worker_state::AJobsMessage>,
 }
 
 impl TheStoreOverTheSupervisor {
@@ -663,7 +748,7 @@ impl TheStoreOverTheSupervisor {
     ) -> TheStoreOverTheSupervisor {
         let mut held = start.state.clone();
         held.routing_key = Some(start.routing_key.clone());
-        TheStoreOverTheSupervisor { supervisor, held, refused }
+        TheStoreOverTheSupervisor { supervisor, held, refused, jobs_messages_not_yet_written: Default::default() }
     }
 
     fn asked(&self, name: &str, fields: Fields) -> Result<Answered, WhyTheStoreFailed> {
@@ -675,7 +760,30 @@ impl TheStoreOverTheSupervisor {
         })
     }
 
+    /// One fact written, and then, the store having taken a write, every job's
+    /// message record still in memory written again (`Telegram` F3c).
     fn the_fact_written(&mut self, fact: AFact) -> Result<(), WhyTheStoreFailed> {
+        self.one_fact_written(fact)?;
+        self.the_waiting_jobs_messages_written();
+        Ok(())
+    }
+
+    /// **`Telegram` F3c as changed 2026-11-12** — after a write the store
+    /// took, each job's message record held in memory is written, until one
+    /// is not.
+    fn the_waiting_jobs_messages_written(&mut self) {
+        let waiting: Vec<smoozy_telegram::worker_state::AJobsMessage> =
+            self.jobs_messages_not_yet_written.values().cloned().collect();
+        for record in waiting {
+            let Ok(written) = serde_json::to_string(&record) else { continue };
+            if self.one_fact_written(AFact::AJobsMessage { job: record.job.clone(), record: written }).is_err() {
+                break;
+            }
+            self.jobs_messages_not_yet_written.remove(&record.job);
+        }
+    }
+
+    fn one_fact_written(&mut self, fact: AFact) -> Result<(), WhyTheStoreFailed> {
         let fields = the_fact_as_fields(&fact).map_err(WhyTheStoreFailed)?;
         let answered = self.asked(THE_TELEGRAM_WORKERS_FACT_REQUEST, fields)?;
         match answered.fields.text(WHAT_BECAME_OF_THE_WRITE_FIELD) {
@@ -715,6 +823,12 @@ impl TheTelegramWorkersState for TheStoreOverTheSupervisor {
     }
     fn record_the_update_position(&mut self, next: i64) -> Result<(), WhyTheStoreFailed> {
         self.the_fact_written(AFact::TheUpdatePosition(next))
+    }
+    fn the_update_positions_moment(&self) -> Result<Option<u64>, WhyTheStoreFailed> {
+        Ok(self.held.update_position_written_at)
+    }
+    fn record_the_update_position_at(&mut self, next: i64, at: u64) -> Result<(), WhyTheStoreFailed> {
+        self.the_fact_written(AFact::TheUpdatePositionAt { next, at })
     }
     fn the_board(&self) -> Result<Option<i64>, WhyTheStoreFailed> {
         Ok(self.held.board)
@@ -797,6 +911,7 @@ impl TheTelegramWorkersState for TheStoreOverTheSupervisor {
                     .text(smoozy_framing::requests::THE_CURSOR_FIELD)
                     .and_then(|at| at.parse().ok())
                     .or(Some(next));
+                self.the_waiting_jobs_messages_written();
                 Ok(())
             }
             _ => Err(WhyTheStoreFailed(the_words_in(&answered, "the cursor did not move"))),
@@ -850,6 +965,47 @@ impl TheTelegramWorkersState for TheStoreOverTheSupervisor {
         self.the_fact_written(AFact::ThePhonesChoice(written))?;
         Ok(true)
     }
+    /// **`Telegram` C7a, and `Telegram` F3c as changed 2026-11-12**: the written
+    /// records, with any held in memory in place of the written one for its
+    /// job.
+    fn the_entries_last_held(&self) -> Result<Option<String>, WhyTheStoreFailed> {
+        Ok(self.held.entries_last_held.clone())
+    }
+    fn record_the_entries_last_held(&mut self, written: Option<String>) -> Result<(), WhyTheStoreFailed> {
+        self.the_fact_written(AFact::TheEntriesLastHeld(written))
+    }
+    fn the_jobs_messages(&self) -> Result<Vec<smoozy_telegram::worker_state::AJobsMessage>, WhyTheStoreFailed> {
+        let mut records: Vec<smoozy_telegram::worker_state::AJobsMessage> = self
+            .held
+            .jobs_messages
+            .iter()
+            .filter(|(job, _)| !self.jobs_messages_not_yet_written.contains_key(*job))
+            .map(|(_, written)| serde_json::from_str(written).map_err(|why| WhyTheStoreFailed(format!("a job's message record does not read back: {why}"))))
+            .collect::<Result<_, _>>()?;
+        records.extend(self.jobs_messages_not_yet_written.values().cloned());
+        Ok(records)
+    }
+    /// **`Telegram` F3c as changed 2026-11-12: a record the store could not write is
+    /// kept in memory**, and the failure still given back so the caller logs it.
+    fn record_a_jobs_message(&mut self, record: smoozy_telegram::worker_state::AJobsMessage) -> Result<(), WhyTheStoreFailed> {
+        let written = serde_json::to_string(&record).map_err(|why| WhyTheStoreFailed(why.to_string()))?;
+        self.jobs_messages_not_yet_written.remove(&record.job);
+        let job = record.job.clone();
+        match self.the_fact_written(AFact::AJobsMessage { job: job.clone(), record: written }) {
+            Ok(()) => Ok(()),
+            Err(why) => {
+                self.jobs_messages_not_yet_written.insert(job, record);
+                Err(why)
+            }
+        }
+    }
+    fn the_jobs_message_ends(&mut self, job: &str) -> Result<(), WhyTheStoreFailed> {
+        self.jobs_messages_not_yet_written.remove(job);
+        if !self.held.jobs_messages.contains_key(job) {
+            return Ok(());
+        }
+        self.the_fact_written(AFact::AJobsMessageEnds(job.to_string()))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -893,6 +1049,10 @@ pub struct TheCommandPathOverTheSupervisor {
     teller: Option<TheTeller>,
     context_store: Option<OneStore>,
     frame_answers: std::collections::HashMap<String, smoozy_telegram::pictures::ThePictures>,
+    /// **`Telegram` C1d — this machine's keeper of each job's own message**,
+    /// for `Telegram` D0's question asked in place on it. Added 2026-11-09, the
+    /// twenty-eighth notes, note 18.
+    jobs_messages: Option<smoozy_telegram::status::TheJobsOwnMessages>,
 }
 
 /// **What the owner's command path tells the phone with** —
@@ -936,6 +1096,7 @@ impl TheCommandPathOverTheSupervisor {
             teller: None,
             context_store: None,
             frame_answers: std::collections::HashMap::new(),
+            jobs_messages: None,
         }
     }
 
@@ -1060,17 +1221,29 @@ impl TheCommandPathOverTheSupervisor {
             }
             None => return self.not_done(operation, "this server no longer holds the job"),
         };
-        let answered = self.a_command(
-            asked_of_the_machine::THE_STOP_REQUEST,
-            self.confirmation_fields(
-                Fields::none().and(
-                    asked_of_the_machine::THE_OPERATION_TO_STOP_FIELD,
-                    target.as_text(),
+        // **`Queue & History` L19a and `Telegram` D0 as changed 2026-11-09: a
+        // first-frame check with its range held on it is stopped as a pair** —
+        // the range removed first, then the check's render — so the phone's
+        // stop ends the whole job, as the window's does. The Creator's
+        // twenty-eighth notes, note 16.
+        let answered = if self.a_range_is_held_on(&job) {
+            match self.the_pairs_stop_is_asked(operation, &job)? {
+                Ok(answered) => answered,
+                Err(said) => return Ok(said),
+            }
+        } else {
+            self.a_command(
+                asked_of_the_machine::THE_STOP_REQUEST,
+                self.confirmation_fields(
+                    Fields::none().and(
+                        asked_of_the_machine::THE_OPERATION_TO_STOP_FIELD,
+                        target.as_text(),
+                    ),
+                    &job,
+                    generation,
                 ),
-                &job,
-                generation,
-            ),
-        )?;
+            )?
+        };
         let words = the_words_in(&answered, "the machine said nothing more");
         match answered
             .fields
@@ -1090,7 +1263,11 @@ impl TheCommandPathOverTheSupervisor {
                             .map_or_else(SystemTime::now, |ended| ended.taken_at());
                         AStopsOutcome::AlreadyStopped { at }
                     }
-                    Some(asked_of_the_machine::ITS_OWN_ENDING) => {
+                    // **A pair's stop resolves to nothing where the check ended
+                    // before the clear's write** (`Queue & History` L19a): the
+                    // job had already ended, as told for its own ending.
+                    Some(asked_of_the_machine::ITS_OWN_ENDING)
+                    | Some(asked_of_the_machine::NOTHING_WAS_RENDERING) => {
                         AStopsOutcome::TheJobHadAlreadyEnded
                     }
                     Some(other) => {
@@ -1122,6 +1299,78 @@ impl TheCommandPathOverTheSupervisor {
                 "the stop's answer said nothing of what became of it: {words}"
             )),
         }
+    }
+
+    /// **Whether a job is held behind this one, unanswered** — a first-frame
+    /// check's range (`Queue & History` L19a's pair), read through the line:
+    /// a held record names its hold, and the hold its dependency.
+    fn a_range_is_held_on(&self, check: &Identity) -> bool {
+        self.records.every_job_record().unwrap_or_default().iter().any(|record| {
+            let QueueState::Held { hold } = &record.state else {
+                return false;
+            };
+            self.records
+                .the_hold(hold)
+                .filter(|standing| standing.release.is_none())
+                .and_then(|standing| standing.dependency)
+                .is_some_and(|named| &named.work == check)
+        })
+    }
+
+    /// **`Queue & History` L19a: the pair's clear, then its stop**, each under
+    /// an identity issued here and naming the other, so whichever the machine
+    /// meets first has both recorded before anything acts. **`Ok(Ok)` is the
+    /// stop's answer**, read as any stop's; **`Ok(Err)` is the act recorded as
+    /// not done**, the clear having been refused (`Queue & History` L16: the
+    /// stop is not attempted). `Err` where nothing answered, so the press is
+    /// tried again — a second pair then finds nothing left to clear.
+    fn the_pairs_stop_is_asked(
+        &mut self,
+        operation: &str,
+        check: &Identity,
+    ) -> Result<Result<Answered, ARecordedOutcome>, String> {
+        let (Ok(clear), Ok(stop)) = (
+            Identity::issue(IdentityKind::Operation),
+            Identity::issue(IdentityKind::Operation),
+        ) else {
+            return Err("the system would not supply random bytes".to_string());
+        };
+        let half = |partner_field: &str, partner: &Identity| {
+            Fields::none()
+                .and(partner_field, partner.as_text())
+                .and(asked_of_the_machine::THE_FIRST_FRAME_CHECK_FIELD, check.as_text())
+        };
+        let cleared = asked_under(
+            self.supervisor.as_ref(),
+            clear.clone(),
+            asked_of_the_machine::THE_PAIRS_CLEAR_REQUEST,
+            half(asked_of_the_machine::THE_PAIRED_STOP_FIELD, &stop),
+        )
+        .map_err(|why| why.in_words())?;
+        let words = the_words_in(&cleared, "the machine said nothing more");
+        match cleared.fields.text(asked_of_the_machine::WHAT_BECAME_OF_IT_FIELD) {
+            Some(asked_of_the_machine::IT_HAS_A_RECORDED_OUTCOME)
+                if cleared.fields.text(asked_of_the_machine::THE_CLEARS_OUTCOME_FIELD)
+                    == Some(asked_of_the_machine::IT_WAS_CLEARED) => {}
+            // **A clear refused part-way is the machine's to finish**, and its
+            // stop waits for it there: the act is in the machine's hands.
+            Some(asked_of_the_machine::IT_IS_STILL_IN_HAND) => return self.done(operation).map(Err),
+            Some(asked_of_the_machine::IT_HAS_A_RECORDED_OUTCOME)
+            | Some(asked_of_the_machine::THERE_IS_NO_RECORD_OF_IT) => {
+                return self
+                    .not_done(operation, &format!("the job was not stopped: {words}"))
+                    .map(Err)
+            }
+            _ => return Err(format!("the pair's clear said nothing of what became of it: {words}")),
+        }
+        asked_under(
+            self.supervisor.as_ref(),
+            stop,
+            asked_of_the_machine::THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST,
+            half(asked_of_the_machine::THE_PAIRED_CLEAR_FIELD, &clear),
+        )
+        .map(Ok)
+        .map_err(|why| why.in_words())
     }
 
     fn job_of_hold(&self, hold: &str) -> Option<String> {
@@ -1164,6 +1413,9 @@ impl TheCommandPathOverTheSupervisor {
 }
 
 impl TheSupervisorsCommandPath for TheCommandPathOverTheSupervisor {
+    fn the_jobs_own_messages(&self) -> Option<smoozy_telegram::status::TheJobsOwnMessages> {
+        self.jobs_messages.clone()
+    }
     fn the_action_context_store(&self) -> Option<Box<dyn TheTelegramWorkersState>> {
         self.context_store
             .as_ref()
@@ -1359,7 +1611,7 @@ impl TheSupervisorsCommandPath for TheCommandPathOverTheSupervisor {
     /// machine made it (`crate::the_telegram_journal::the_job_a_resubmission_was_made_from`).
     /// A refusal is recorded *not done* with the machine's words, and the
     /// owner's acts tell it (`Telegram` B9).
-    fn submit_again(&mut self, operation: &str, submission: &str, failed_job: &str) -> Result<ARecordedOutcome, String> {
+    fn submit_again(&mut self, operation: &str, submission: &str, failed_job: &str, from: Option<i64>) -> Result<ARecordedOutcome, String> {
         let Some(failed) = Identity::read_back(IdentityKind::Job, failed_job) else {
             return self.not_done(operation, "the button names no job");
         };
@@ -1370,7 +1622,12 @@ impl TheSupervisorsCommandPath for TheCommandPathOverTheSupervisor {
             self.supervisor.as_ref(),
             submission,
             THE_JOB_IS_SUBMITTED_AGAIN_REQUEST,
-            Fields::none().and(asked_of_the_machine::THE_JOB_FIELD, failed.as_text()),
+            match from {
+                Some(from) => Fields::none()
+                    .and(asked_of_the_machine::THE_JOB_FIELD, failed.as_text())
+                    .and(THE_FRAME_IT_RESUMES_FROM_FIELD, from.to_string()),
+                None => Fields::none().and(asked_of_the_machine::THE_JOB_FIELD, failed.as_text()),
+            },
         )
         .map_err(|why| {
             if let WhyItWasNotAnswered::ItIsToEndItself(_) = why {
@@ -1437,12 +1694,13 @@ impl TheSupervisorsCommandPath for TheCommandPathOverTheSupervisor {
     /// for a frame already being made changes nothing.
     /// **`Telegram` R13a and `Telegram` C1c** — the newest frame the job's derivative set
     /// holds, where this path answers frame requests at all.
-    fn the_newest_frame_held(&mut self, job: &str) -> Option<Option<u64>> {
+    fn the_newest_frame_held(&mut self, job: &str) -> Option<Option<i64>> {
         self.teller.as_ref()?;
         Some(
             Identity::read_back(IdentityKind::Job, job)
-                .and_then(|job| self.records.the_newest_frame_held(&job))
-                .and_then(|frame| u64::try_from(frame).ok()),
+                // `Telegram` R14 as added 2026-11-13: from the job's records, so a
+                // cleared picture is made again rather than missed.
+                .and_then(|job| self.records.the_newest_frame_finished(&job)),
         )
     }
 
@@ -1521,7 +1779,7 @@ impl TheSupervisorsCommandPath for TheCommandPathOverTheSupervisor {
         &mut self,
         operation: &str,
         job: &str,
-        frame: u64,
+        frame: i64,
     ) -> Option<Result<ARecordedOutcome, String>> {
         use smoozy_telegram::pictures::{APictureSent, ThePictures};
         let teller = self.teller.as_ref()?;
@@ -1559,22 +1817,21 @@ impl TheSupervisorsCommandPath for TheCommandPathOverTheSupervisor {
                 notes: Box::new(|_| {}),
             })
         };
-        let say = |text: smoozy_telegram::job_messages::AMarkedText| match messages() {
-            Some(mut messages) => the_answers_outcome(smoozy_telegram::actions::message_result(
-                messages.send_about_while(
-                    live,
-                    &smoozy_telegram::job_messages::AComposedMessage {
-                        text,
-                        buttons: vec![],
-                    },
-                    &subject,
-                    &server,
-                    &label,
-                    AClassOfSend::RoutedAnswersAndAcknowledgements,
-                ),
+        let say_it = |text: smoozy_telegram::job_messages::AMarkedText| match messages() {
+            Some(mut messages) => smoozy_telegram::actions::message_result(messages.send_about_while(
+                live,
+                &smoozy_telegram::job_messages::AComposedMessage {
+                    text,
+                    buttons: vec![],
+                },
+                &subject,
+                &server,
+                &label,
+                AClassOfSend::RoutedAnswersAndAcknowledgements,
             )),
-            None => the_answers_outcome(an_answer_said(&queue, conversation, text)),
+            None => an_answer_said(&queue, conversation, text),
         };
+        let say = |text: smoozy_telegram::job_messages::AMarkedText| the_answers_outcome(say_it(text));
         let mut pictures = self
             .frame_answers
             .remove(operation)
@@ -1589,11 +1846,14 @@ impl TheSupervisorsCommandPath for TheCommandPathOverTheSupervisor {
             let Some(mut messages) = messages() else {
                 return Err("a frame answer has no action-context store".into());
             };
-            match pictures.send_a_frame_with_its_stop(
+            // **`Telegram` I2: an answer too is a reply to the job's message**,
+            // with no Stop on the picture (`Telegram` C1b; Sol's fresh look, round 1).
+            let reply_to = subject.job.as_deref().and_then(|job| messages.store.the_jobs_message_of(job)).map(|record| record.message);
+            match pictures.send_a_frame_as(
                 &mut messages,
                 copies,
                 AClassOfSend::RoutedAnswersAndAcknowledgements,
-                live.then_some(&subject),
+                smoozy_telegram::pictures::AFramesWay { stop: live.then_some(&subject), reply_to, the_jobs_messages: None, after_the_ending: false },
             ) {
                 APictureSent::NotAccepted(HowASendEnded::HandedBack(
                     WhyTheCallFailed::NotReached(why),
@@ -1619,8 +1879,14 @@ impl TheSupervisorsCommandPath for TheCommandPathOverTheSupervisor {
                         }
                     },
                     Some(ITS_PICTURE_IS_BEING_MADE) => {
-                        frames.ask(job, i64::try_from(frame).unwrap_or(i64::MAX));
-                        say(a_frame_is_being_made_again(&server, &label, frame))
+                        frames.ask(job, frame);
+                        // `Telegram` I4 as changed 2026-11-13: kept, to go
+                        // once the picture's answer is sent.
+                        let ended = say_it(a_frame_is_being_made_again(&server, &label, frame));
+                        if let Some(message) = smoozy_telegram::actions::accepted_id_for_a_job_message(&ended) {
+                            frames.its_words_are(job, frame, message);
+                        }
+                        the_answers_outcome(ended)
                     }
                     Some(IT_HAS_NOT_FINISHED) => say(
                         match answer_send_a_frame(
@@ -1768,7 +2034,7 @@ impl TheLineOnThisMachine {
             .the_manifest(record)
             .map_or(0, |manifest| self.records.the_frames_of(record, &manifest).len() as u64);
         let Some(report) = report else {
-            return TheProgress { frame: 0, of, percent: 0 };
+            return TheProgress { frame: 0, of, percent: 0, finishing: false };
         };
         let counted = report.readings.value().frames_completed;
         let percent = match (report.the_units_finished, report.the_plan_total) {
@@ -1776,7 +2042,10 @@ impl TheLineOnThisMachine {
             _ if of > 0 => counted.saturating_mul(100) / of,
             _ => 0,
         };
-        TheProgress { frame: (counted + 1).min(of), of, percent: percent.min(100) as u8 }
+        // **`Telegram` C1's *Finishing* as changed later on 2026-11-13**: the
+        // frame in hand, by the rule the Queue entry reads.
+        let finishing = report.readings.value().the_frame_in_hand_has_finished_sampling();
+        TheProgress { frame: (counted + 1).min(of), of, percent: percent.min(100) as u8, finishing }
     }
 }
 
@@ -1793,12 +2062,10 @@ struct WhatTheQueueReadingSays {
     ended: std::collections::HashSet<String>,
 }
 
-impl ReadsWhatThisMachineHolds for TheLineOnThisMachine {
-    fn the_jobs(&self) -> Vec<AJobAsHeld> {
-        self.the_jobs_and_those_being_stopped().0
-    }
-
-    fn the_jobs_and_those_being_stopped(&self) -> (Vec<AJobAsHeld>, Vec<String>) {
+impl TheLineOnThisMachine {
+    /// The work and the ended jobs, newest ending first, **at most
+    /// `ended_at_most` of those where a bound is given**.
+    fn the_jobs_ending_with(&self, ended_at_most: Option<usize>) -> (Vec<AJobAsHeld>, Vec<String>) {
         let Some(every) = self.records.every_job_record() else {
             return (Vec::new(), Vec::new());
         };
@@ -1870,7 +2137,7 @@ impl ReadsWhatThisMachineHolds for TheLineOnThisMachine {
             owed.into_iter()
                 .map(|record| (None, record))
                 .chain(ended)
-                .take(THE_MOST_ENDED_JOBS_A_REPLY_CARRIES)
+                .take(ended_at_most.unwrap_or(usize::MAX))
                 .map(|(_, record)| {
                     let mut label = self.records.what_the_job_is_called(&record.job);
                     let mut end = label
@@ -1891,6 +2158,64 @@ impl ReadsWhatThisMachineHolds for TheLineOnThisMachine {
                 }),
         );
         (work, stopping)
+    }
+}
+
+impl ReadsWhatThisMachineHolds for TheLineOnThisMachine {
+    fn the_jobs(&self) -> Vec<AJobAsHeld> {
+        self.the_jobs_and_those_being_stopped().0
+    }
+
+    /// **`Telegram` A2's question in place acts only while the hold's release
+    /// is unwritten** (the twenty-eighth notes, note 16).
+    fn the_hold_is_unanswered(&self, hold: &str) -> bool {
+        Identity::read_back(IdentityKind::Operation, hold)
+            .and_then(|hold| self.records.the_hold(&hold))
+            .is_some_and(|standing| standing.release.is_none())
+    }
+
+    /// **`Queue & History` L19a's pair, read through the line**: the check
+    /// rendering, and a held record whose hold names it — the check's one
+    /// frame and the held range, in the question's own words.
+    fn the_pair_of_a_check(&self, job: &str) -> Option<(String, String)> {
+        let check = Identity::read_back(IdentityKind::Job, job)?;
+        let first = self.records.the_job_record(&check)?;
+        if !matches!(first.state, QueueState::Rendering { .. }) {
+            return None;
+        }
+        let range = self.records.every_job_record()?.into_iter().find(|record| {
+            let QueueState::Held { hold } = &record.state else {
+                return false;
+            };
+            self.records
+                .the_hold(hold)
+                .filter(|standing| standing.release.is_none())
+                .and_then(|standing| standing.dependency)
+                .is_some_and(|named| named.work == check)
+        })?;
+        let the_frame = self
+            .records
+            .the_manifest(&first)
+            .and_then(|manifest| self.records.the_frames_of(&first, &manifest).first().copied())?;
+        let the_frames = self
+            .records
+            .the_manifest(&range)
+            .map(|manifest| self.records.the_frames_of(&range, &manifest))
+            .filter(|frames| !frames.is_empty())?;
+        Some((the_frame.to_string(), smoozy_telegram::job_messages::the_frames_in_words(the_frames)))
+    }
+
+    fn the_jobs_and_those_being_stopped(&self) -> (Vec<AJobAsHeld>, Vec<String>) {
+        self.the_jobs_ending_with(Some(THE_MOST_ENDED_JOBS_A_REPLY_CARRIES))
+    }
+
+    /// **`Telegram` R13 as added 2026-11-13 — every ended job whose record
+    /// folder stands**, newest ending first, after the work; the routing
+    /// keeps what fits a reply (`smoozy_telegram::routing::gather::the_jobs_a_reply_carries`).
+    /// Until then a frame's gather saw the newest five alone (the Creator's
+    /// notes on the test copy, note 9).
+    fn the_jobs_for_a_frame(&self) -> Vec<AJobAsHeld> {
+        self.the_jobs_ending_with(None).0
     }
 
     fn the_stop_state(&self, job: &str) -> smoozy_telegram::routing::gather::AStopState {
@@ -1933,8 +2258,17 @@ impl ReadsWhatThisMachineHolds for OneReaderOfWhatIsHeld {
     fn the_stop_state(&self, job: &str) -> smoozy_telegram::routing::gather::AStopState {
         lock(&self.0).the_stop_state(job)
     }
+    fn the_hold_is_unanswered(&self, hold: &str) -> bool {
+        lock(&self.0).the_hold_is_unanswered(hold)
+    }
+    fn the_pair_of_a_check(&self, job: &str) -> Option<(String, String)> {
+        lock(&self.0).the_pair_of_a_check(job)
+    }
     fn the_jobs_and_those_being_stopped(&self) -> (Vec<AJobAsHeld>, Vec<String>) {
         lock(&self.0).the_jobs_and_those_being_stopped()
+    }
+    fn the_jobs_for_a_frame(&self) -> Vec<AJobAsHeld> {
+        lock(&self.0).the_jobs_for_a_frame()
     }
 }
 
@@ -1993,6 +2327,23 @@ impl TheReadingsOnThisMachine {
             package_area: package_area.to_path_buf(),
         }
     }
+
+    /// **`Telegram` C1's free disk: the disk Smoozy's folder is on** — the
+    /// root recorded at hand-over, the path the server row's free disk is
+    /// read against (`Servers` H10), so the phone and the window give one
+    /// figure. The state area where no root is recorded; **none** where the
+    /// recorded root is refused (its mark does not stand), since another
+    /// disk's figure would be read in its place. The night's live pass,
+    /// fault 2.
+    fn where_the_free_disk_is_read(&self) -> Option<PathBuf> {
+        let record = self.package_area.join(smoozy_job_files_machine::layout::THE_RECORD_OF_THE_ROOT);
+        let Ok(written) = std::fs::read_to_string(&record) else {
+            return Some(self.package_area.clone());
+        };
+        crate::a_recorded_root_on_this_machine(written.trim(), &record)
+            .ok()
+            .map(|root| PathBuf::from(root.as_path()))
+    }
 }
 
 /// **A mebibyte's bytes, over a gigabyte's**: the driver prints mebibytes,
@@ -2018,7 +2369,8 @@ impl TakesTheStatusReadings for TheReadingsOnThisMachine {
     }
 
     fn the_free_disk_in_gb(&self) -> AReading<f64> {
-        match the_free_space_at(&self.package_area) {
+        let Some(at) = self.where_the_free_disk_is_read() else { return AReading::Unavailable };
+        match the_free_space_at(&at) {
             Ok(bytes) => AReading::Taken { value: bytes as f64 / 1_000_000_000.0, at: SystemTime::now() },
             Err(_) => AReading::Unavailable,
         }
@@ -2085,6 +2437,9 @@ pub(crate) struct TheStatusOnItsClock {
     refused: Arc<AtomicBool>,
     /// The listener's clock at the last tick, if one was made in this run.
     last_tick: Option<Duration>,
+    /// **`Telegram` C1d — each job's own message**, edited on this tick.
+    jobs: smoozy_telegram::status::TheJobsOwnMessages,
+    conversation: i64,
     notes: SaysOnItsComplaintsStream,
 }
 
@@ -2112,11 +2467,100 @@ impl TheStatusOnItsClock {
             .as_ref()
             .and_then(|subject| subject.job.as_deref())
             .and_then(|job| Identity::read_back(IdentityKind::Job, job))
-            .is_some_and(|job| self.records.the_newest_frame_held(&job).is_some());
+            .is_some_and(|job| self.records.the_newest_frame_finished(&job).is_some());
         self.clock.a_frame_can_be_sent(finished);
         if let Err(why) = self.clock.a_tick(&mut store, &self.queue, &status, stop.as_ref(), (self.the_machines_now)()) {
             (self.notes)(&format!("the status message: the tick was not made: {}", why.0));
         }
+        // **`Telegram` C1d — each job's own message, on the same turn.**
+        let notes = self.notes.clone();
+        let mut messages = TheJobMessages {
+            conversation: self.conversation,
+            store: Box::new(self.store.clone()),
+            queue: self.queue.clone(),
+            notes: Box::new(move |what: &str| notes(&format!("a job's own message: {what}"))),
+        };
+        let says = self.what_each_jobs_message_says();
+        self.jobs.a_tick(&mut messages, &says);
+    }
+
+    /// **What each live job's message says now** (`Telegram` C1d) — from the
+    /// same reading `Telegram` C1's message is composed from, its progress under every
+    /// choice but `Nothing` (`Telegram` V1b, `Telegram` V1e: *"its progress is shown under all
+    /// four"*). Only a job a message is recorded for (`Telegram` C7a) is read. **A job
+    /// held on its question is left out**: the question's words stand while it
+    /// waits (`Telegram` A3a), and so is one whose record reads ended, which only its cut
+    /// changes (`Telegram` C1e).
+    fn what_each_jobs_message_says(&self) -> Vec<smoozy_telegram::status::WhatAJobsMessageSays> {
+        use smoozy_telegram::status::{AJobsState, WhatAJobsMessageSays};
+        let Ok(recorded) = lock(&self.store).the_jobs_messages() else { return Vec::new() };
+        if recorded.is_empty() {
+            return Vec::new();
+        }
+        let (jobs, stopping) = self.holds.the_jobs_and_those_being_stopped();
+        recorded
+            .into_iter()
+            .filter_map(|record| {
+                let identity = Identity::read_back(IdentityKind::Job, &record.job)?;
+                let job_record = self.records.the_job_record(&identity)?;
+                if self.records.the_job_reports_nothing(&job_record) {
+                    return None;
+                }
+                let held = jobs.iter().find(|one| one.job == record.job);
+                // **A render the reading has seen end, whose ending is owed to
+                // the record** (`Rented-server runtime` S14), is left as it
+                // stands: its cut comes with its ending.
+                if matches!(job_record.state, QueueState::Rendering { .. })
+                    && held.is_some_and(|one| one.rendering.is_none() && one.waiting.is_none())
+                {
+                    return None;
+                }
+                let state = match (&job_record.state, held.and_then(|one| one.rendering)) {
+                    (QueueState::Rendering { .. }, _) if stopping.contains(&record.job) => AJobsState::Stopping,
+                    (QueueState::Rendering { .. }, _) if self.records.the_job_is_running_again(&job_record) => AJobsState::RunningAgain,
+                    (QueueState::Rendering { .. }, progress) => {
+                        let progress = progress.unwrap_or(TheProgress { frame: 0, of: 0, percent: 0, finishing: false });
+                        AJobsState::Rendering {
+                            frame: progress.frame,
+                            of: progress.of,
+                            percent: progress.percent,
+                            a_frame_is_finished: self.records.the_newest_frame_finished(&identity).is_some(),
+                            finishing: progress.finishing,
+                        }
+                    }
+                    (QueueState::Waiting, _) => AJobsState::Queued { the_frames: self.the_range_its_question_named(record.message) },
+                    _ => return None,
+                };
+                Some(WhatAJobsMessageSays {
+                    subject: TheSubject {
+                        owning_machine: self.machine.clone(),
+                        job: Some(record.job.clone()),
+                        hold: None,
+                        generation: held.map(|one| one.generation.clone()).unwrap_or_else(|| self.records.action_generation(&job_record)),
+                    },
+                    server: self.server.clone(),
+                    label: self.records.what_the_job_is_called(&identity),
+                    state,
+                    // **`Telegram` C1d's *Updated* line** (the twenty-ninth
+                    // notes, note 9): the moment of this tick, on the
+                    // machine's own clock.
+                    at: Some((self.the_machines_now)()),
+                })
+            })
+            .collect()
+    }
+
+    /// **The range a first-frame question named**, read off its answers'
+    /// records on the message — which is how a released range's job's
+    /// message knows to offer *Cancel this job* with the pair's sentence (`Telegram` C1d's
+    /// buttons). Nothing for a job's message that was never a question.
+    fn the_range_its_question_named(&self, message: i64) -> Option<String> {
+        lock(&self.store)
+            .the_action_contexts_bound_to(message)
+            .ok()?
+            .into_iter()
+            .find(|record| record.action == smoozy_telegram::job_messages::ANSWER_A_WAITING_JOB)
+            .and_then(|record| record.payload["the_frames"].as_str().map(str::to_string))
     }
 
     /// **Whether a job's reporting choice lets its progress be said** —
@@ -2144,7 +2588,7 @@ impl TheStatusOnItsClock {
             let progress = if self.its_progress_is_said(&job.job) {
                 progress
             } else {
-                TheProgress { frame: 0, of: 0, percent: 0 }
+                TheProgress { frame: 0, of: 0, percent: 0, finishing: false }
             };
             (
                 // **`Telegram` C1: once a stop has been sent, *Stopping.* in
@@ -2156,6 +2600,10 @@ impl TheStatusOnItsClock {
                 // commentary. The live pass's faults, piece E.
                 if stopping.contains(&job.job) {
                     WhatTheMachineIsDoing::Stopping { job_label: job.label.clone() }
+                } else if Identity::read_back(IdentityKind::Job, &job.job).and_then(|job| self.records.the_job_record(&job))
+                    .is_some_and(|record| self.records.the_job_is_running_again(&record))
+                {
+                    WhatTheMachineIsDoing::RunningAgain { job_label: job.label.clone() }
                 } else {
                     WhatTheMachineIsDoing::Rendering {
                         job_label: job.label.clone(),
@@ -2164,6 +2612,7 @@ impl TheStatusOnItsClock {
                         of: progress.of,
                         percent: progress.percent,
                         this_frame: None,
+                        finishing: progress.finishing,
                     }
                 },
                 Some(TheSubject {
@@ -2282,6 +2731,11 @@ fn the_kind_the_status_names(kind: MachineKind) -> TheMachineKind {
 pub(crate) struct TheFramesAsked {
     asked: Arc<Mutex<std::collections::BTreeMap<(String, i64), Duration>>>,
     clock: Arc<dyn ReadsItsOwnClock>,
+    /// **`Telegram` I4 as changed 2026-11-13 (the Creator's addition) — the
+    /// *being made again* message of each frame asked for**, and those owed
+    /// a deletion once the frame's answer was sent. Memory only, as the rest.
+    words: Arc<Mutex<std::collections::BTreeMap<(String, i64), i64>>>,
+    to_delete: Arc<Mutex<Vec<i64>>>,
 }
 
 /// **How long a picture being made again is waited for** before the user is
@@ -2292,7 +2746,7 @@ pub(crate) const A_PICTURE_IS_WAITED_FOR: Duration = Duration::from_secs(10 * 60
 impl TheFramesAsked {
     /// Nothing asked yet, the moments read off `clock`.
     pub(crate) fn on(clock: Arc<dyn ReadsItsOwnClock>) -> TheFramesAsked {
-        TheFramesAsked { asked: Arc::default(), clock }
+        TheFramesAsked { asked: Arc::default(), clock, words: Arc::default(), to_delete: Arc::default() }
     }
 
     /// **Asked now** — or, for a frame already asked for, left at the moment
@@ -2303,8 +2757,28 @@ impl TheFramesAsked {
     }
 
     /// True once for a frame asked for, which is then no longer asked.
+    /// **Its *being made again* is then owed a deletion** (`Telegram` I4 as
+    /// changed 2026-11-13): the answer has settled it.
     pub(crate) fn answered(&self, job: &str, frame: i64) -> bool {
+        if let Some(message) = lock(&self.words).remove(&(job.to_string(), frame)) {
+            lock(&self.to_delete).push(message);
+        }
         lock(&self.asked).remove(&(job.to_string(), frame)).is_some()
+    }
+
+    /// **The *being made again* message sent for a frame asked for.**
+    fn its_words_are(&self, job: &str, frame: i64, message: i64) {
+        lock(&self.words).insert((job.to_string(), frame), message);
+    }
+
+    /// **The in-between messages owed a deletion**, taken; one not reached
+    /// is handed back with [`Self::still_to_delete`].
+    pub(crate) fn the_words_to_delete(&self) -> Vec<i64> {
+        std::mem::take(&mut *lock(&self.to_delete))
+    }
+
+    pub(crate) fn still_to_delete(&self, message: i64) {
+        lock(&self.to_delete).push(message);
     }
 
     /// Whether a frame is asked for, leaving it asked.
@@ -2344,7 +2818,7 @@ pub struct TheDerivativeSetOnThisMachine {
 }
 
 impl TheDerivativeSet for TheDerivativeSetOnThisMachine {
-    fn what_it_holds(&self, job: &str, frame: u64) -> WhatTheSetHolds {
+    fn what_it_holds(&self, job: &str, frame: i64) -> WhatTheSetHolds {
         let Some(identity) = Identity::read_back(IdentityKind::Job, job) else {
             return WhatTheSetHolds::TheRecordIsGone;
         };
@@ -2355,7 +2829,6 @@ impl TheDerivativeSet for TheDerivativeSetOnThisMachine {
             return WhatTheSetHolds::TheRecordIsGone;
         }
         let label = self.records.what_the_job_is_called(&identity);
-        let frame = i64::try_from(frame).unwrap_or(i64::MAX);
         let named = self.records.which_picture_the_preview_record_names(&identity, frame);
         match self.records.the_frames_copies(&record, &identity, &label, frame, named, None)
             .and_then(|copies| copies.into_iter().next())
@@ -2395,7 +2868,7 @@ impl TheDerivativeSetOnThisMachine {
 struct ASetThatSays(WhatTheSetHolds);
 
 impl TheDerivativeSet for ASetThatSays {
-    fn what_it_holds(&self, _: &str, _: u64) -> WhatTheSetHolds {
+    fn what_it_holds(&self, _: &str, _: i64) -> WhatTheSetHolds {
         self.0.clone()
     }
 }
@@ -2484,10 +2957,16 @@ impl WhyItCannotWork {
 /// crate's walkthrough reads it the same way), and only that refusal stops the
 /// worker. A call that reached nothing is not a refused token: the worker runs,
 /// and its listener meets the line as it is.
+///
+/// **The third thing given back is the bot's identity, where `getMe`
+/// answered one** (`Telegram` S3a: the answered `getMe` is the authority for
+/// which bot the token names) — what [`the_start_tied_to_its_bot`] compares
+/// (`Telegram` F3b). Nothing where the call reached nothing or its answer
+/// carries no identity.
 pub fn what_it_can_work_with(
     package_area: &Path,
     reach: &dyn Fn(&str) -> TheClient,
-) -> Result<(TheClient, TheRoleConfiguration), WhyItCannotWork> {
+) -> Result<(TheClient, TheRoleConfiguration, Option<i64>), WhyItCannotWork> {
     let token = match std::fs::read(package_area.join(THE_TOKEN_FILES_NAME)) {
         Ok(bytes) => bytes,
         Err(why) if why.kind() == std::io::ErrorKind::NotFound => return Err(WhyItCannotWork::NoTokenFile),
@@ -2514,7 +2993,125 @@ pub fn what_it_can_work_with(
         Err(WhyTheCallFailed::Refused(refusal)) if refusal.error_code == Some(401) => {
             Err(WhyItCannotWork::TelegramRefusesTheToken)
         }
-        _ => Ok((client, configuration)),
+        Ok(me) => {
+            let bot = me.get("id").and_then(serde_json::Value::as_i64);
+            Ok((client, configuration, bot))
+        }
+        Err(_) => Ok((client, configuration, None)),
+    }
+}
+
+/// **`Telegram` F3b — the worker's start, tied to the bot its token names.**
+/// Where `getMe` answered a bot that is not the one the store holds, the
+/// facts of the old bot's conversation are dropped — from the start this
+/// worker runs on, and from the supervisor's store, in the one write that
+/// records the new bot ([`AFact::TheBot`]). A store that names no bot takes
+/// this one. **With no bot answered, nothing is compared or written at this
+/// start, and the position's moment is dropped from this worker's own copy**,
+/// so its asks carry no offset until an update's work is done: a different
+/// bot's updates are then not confirmed unread (Sol's look at sitting 6).
+///
+/// **The start is changed whether or not the write was answered**: this
+/// worker must not ask from the old bot's position or edit its messages. A
+/// write that was not made is said, and the next start compares again.
+/// Gives back whether the bot differed from the one held.
+pub fn the_start_tied_to_its_bot(
+    start: &mut TheWorkersStart,
+    bot: Option<i64>,
+    supervisor: &dyn AsksTheSupervisor,
+    says: &dyn Fn(&str),
+) -> bool {
+    let Some(bot) = bot else {
+        start.state.update_position_written_at = None;
+        return false;
+    };
+    if start.state.bot == Some(bot) {
+        return false;
+    }
+    let differed = start.state.bot.is_some();
+    let fact = AFact::TheBot(bot);
+    let written = the_fact_as_fields(&fact)
+        .and_then(|fields| asked(supervisor, THE_TELEGRAM_WORKERS_FACT_REQUEST, fields).map_err(|why| why.in_words()))
+        .and_then(|answered| match answered.fields.text(WHAT_BECAME_OF_THE_WRITE_FIELD) {
+            Some(IT_WAS_WRITTEN) => Ok(()),
+            _ => Err(the_words_in(&answered, "the fact was not written")),
+        });
+    if let Err(why) = written {
+        says(&format!("the bot this worker runs under was not written to its store: {why}"));
+    }
+    fact.written_into(&mut start.state);
+    if differed {
+        says("the token names a different bot: what was kept of the old bot's conversation was dropped (`Telegram` F3b)");
+    }
+    differed
+}
+
+// ---------------------------------------------------------------------------
+// When Telegram refuses — `Telegram` F6, added 2026-11-14
+// ---------------------------------------------------------------------------
+
+/// **`Telegram` F6's three minutes**: how long nothing may reach Telegram
+/// before this server says it cannot reach it. A Build figure: one dropped
+/// call or a short outage says nothing, and a server where Telegram is blocked
+/// says so within one look at it.
+pub const HOW_LONG_NOTHING_REACHES_TELEGRAM_BEFORE_IT_IS_SAID: Duration = Duration::from_secs(180);
+
+/// **`Telegram` F6 — the one word for how Telegram is answering**, out of
+/// what the client heard, at `now`: the token first, then the chat, then the
+/// line.
+pub fn telegrams_trouble_in(
+    how: smoozy_telegram::transport::HowTelegramAnswers,
+    now: std::time::Instant,
+) -> Option<smoozy_framing::requests::TheTelegramTrouble> {
+    use smoozy_framing::requests::TheTelegramTrouble;
+    if how.the_token_is_rejected {
+        Some(TheTelegramTrouble::TheTokenIsRejected)
+    } else if how.the_chat_refuses {
+        Some(TheTelegramTrouble::TheChatRefuses)
+    } else if how.nothing_reached_it_since.is_some_and(|since| {
+        now.saturating_duration_since(since) >= HOW_LONG_NOTHING_REACHES_TELEGRAM_BEFORE_IT_IS_SAID
+    }) {
+        Some(TheTelegramTrouble::TelegramIsNotReached)
+    } else {
+        None
+    }
+}
+
+/// **`Telegram` F6 — the word kept in the store, written only when it
+/// changed**, through the supervisor (`Telegram` F2). Starts from what the store held at
+/// this worker's start.
+pub struct TelegramsTroubleKept {
+    supervisor: Arc<dyn AsksTheSupervisor>,
+    written: Option<String>,
+}
+
+impl TelegramsTroubleKept {
+    pub fn from(supervisor: Arc<dyn AsksTheSupervisor>, start: &TheWorkersStart) -> TelegramsTroubleKept {
+        TelegramsTroubleKept { supervisor, written: start.state.telegrams_trouble.clone() }
+    }
+
+    /// **One look**: the word the client's answers give now, written where it
+    /// is not the one held. A write that was not answered is tried at the next
+    /// look.
+    pub fn a_look(&mut self, client: &TheClient) {
+        let now = telegrams_trouble_in(client.how_telegram_answers(), std::time::Instant::now())
+            .map(|trouble| trouble.the_word().to_string());
+        if now == self.written {
+            return;
+        }
+        if the_trouble_written(self.supervisor.as_ref(), now.clone()).is_ok() {
+            self.written = now;
+        }
+    }
+}
+
+/// The word, or its absence, written to the store.
+fn the_trouble_written(supervisor: &dyn AsksTheSupervisor, word: Option<String>) -> Result<(), String> {
+    let fields = the_fact_as_fields(&AFact::TelegramsTrouble(word))?;
+    let answered = asked(supervisor, THE_TELEGRAM_WORKERS_FACT_REQUEST, fields).map_err(|why| why.in_words())?;
+    match answered.fields.text(WHAT_BECAME_OF_THE_WRITE_FIELD) {
+        Some(IT_WAS_WRITTEN) => Ok(()),
+        _ => Err(the_words_in(&answered, "the fact was not written")),
     }
 }
 
@@ -2576,6 +3173,11 @@ pub struct TheAssembledWorker {
     me: WhoThisMachineIs,
     refused: Arc<AtomicBool>,
     notes: SaysOnItsComplaintsStream,
+    /// **The package area**, where the role's desired state is read at the
+    /// polite stop (`Telegram` B14 as added 2026-11-13).
+    package_area: PathBuf,
+    /// **`Telegram` F6**: how Telegram is answering, looked at on every turn.
+    trouble: TelegramsTroubleKept,
 }
 
 /// The display name a machine with no label is announced by.
@@ -2598,6 +3200,7 @@ const A_MACHINE_WITH_NO_LABEL: &str = "A server";
 /// 9. **The status message on its clock** — the map's piece 6
 ///    ([`TheStatusOnItsClock`]).
 pub fn the_worker_assembled(handed: WhatTheWorkerIsHanded) -> TheAssembledWorker {
+    let trouble = TelegramsTroubleKept::from(handed.supervisor.clone(), &handed.start);
     let refused = Arc::new(AtomicBool::new(false));
     let conversation = handed.configuration.conversation.0;
     let me = WhoThisMachineIs {
@@ -2622,6 +3225,10 @@ pub fn the_worker_assembled(handed: WhatTheWorkerIsHanded) -> TheAssembledWorker
     let holds = OneReaderOfWhatIsHeld(Arc::new(Mutex::new(handed.holds)));
     let records = TheRecordsOnThisMachine::in_the_package_area(&handed.package_area);
     let frames = TheFramesAsked::on(handed.clock.clone());
+    // **`Telegram` C1d — one keeper of each job's own message**, shared by the
+    // journal's thread, the clock and the owner's acts (the twenty-eighth
+    // notes, note 18).
+    let jobs = smoozy_telegram::status::TheJobsOwnMessages::default();
     let router = TheRouter::new(WhatTheRouterIsHanded {
         conversation,
         me: me.clone(),
@@ -2642,6 +3249,7 @@ pub fn the_worker_assembled(handed: WhatTheWorkerIsHanded) -> TheAssembledWorker
             records: records.clone(),
             context_store: Some(store.clone()),
             frame_answers: std::collections::HashMap::new(),
+            jobs_messages: Some(jobs.clone()),
             teller: telling.then(|| TheTeller {
                 conversation,
                 server: me.display.clone(),
@@ -2680,6 +3288,7 @@ pub fn the_worker_assembled(handed: WhatTheWorkerIsHanded) -> TheAssembledWorker
         // **`Telegram` I2a counts its minutes on the listener's own clock**,
         // monotonic, never the wall clock (`State, identity and recovery` D5).
         clock: handed.clock.clone(),
+        jobs: jobs.clone(),
         notes: notes.clone(),
     });
     let status = TheStatusOnItsClock {
@@ -2696,6 +3305,8 @@ pub fn the_worker_assembled(handed: WhatTheWorkerIsHanded) -> TheAssembledWorker
         the_machines_now: handed.the_machines_now.clone(),
         refused: refused.clone(),
         last_tick: None,
+        jobs,
+        conversation,
         notes: notes.clone(),
     };
     let listener = TheListener::new(WhatTheListenerIsHanded {
@@ -2733,6 +3344,8 @@ pub fn the_worker_assembled(handed: WhatTheWorkerIsHanded) -> TheAssembledWorker
         me,
         refused,
         notes,
+        package_area: handed.package_area.clone(),
+        trouble,
     }
 }
 
@@ -2756,6 +3369,10 @@ pub enum WhatTheLastEditCameTo {
     NothingToMark,
     /// The edit was accepted.
     Edited,
+    /// **Not holding, and its role switched off**: its last machinery
+    /// message asks the holder to take it off the roster (`Telegram` B14 as
+    /// added 2026-11-13).
+    AskedToBeTakenOff,
     /// The edit was not made, and why.
     NotMade(String),
 }
@@ -2814,6 +3431,7 @@ impl TheAssembledWorker {
             acknowledgement,
             journal,
             status,
+            trouble,
             ..
         } = self;
         {
@@ -2824,6 +3442,7 @@ impl TheAssembledWorker {
         journal.a_turn();
         let mut held = lock(listener);
         status.a_turn(&held);
+        trouble.a_look(&held.client());
         held.a_turn();
         if let Some(ask) = held.the_ask_to_make() {
             let got = held.client().get_updates(ask.offset, ask.wait_seconds);
@@ -2854,6 +3473,8 @@ impl TheAssembledWorker {
             me,
             refused,
             notes,
+            package_area,
+            mut trouble,
         } = self;
         // `Telegram` F3a / `Telegram` C6a: report sends never hold the listener's turn lock.
         let journal_thread = {
@@ -2883,6 +3504,8 @@ impl TheAssembledWorker {
                 acknowledgement.before_each_turn(held);
                 // **The map's piece 6**: the status message, on its clock.
                 status.a_turn(held);
+                // **`Telegram` F6**: how Telegram is answering, kept.
+                trouble.a_look(&held.client());
             });
         }
         if journal_thread.join().is_err() {
@@ -2892,7 +3515,7 @@ impl TheAssembledWorker {
         if refused.load(Ordering::SeqCst) {
             return WhyTheRunEnded::TheSupervisorToldItToEndItself;
         }
-        WhyTheRunEnded::ThePoliteStop(the_last_board_edit(&listener, &store, conversation, &me))
+        WhyTheRunEnded::ThePoliteStop(the_last_board_edit(&listener, &store, conversation, &me, the_role_is_switched_off(&package_area)))
     }
 
     /// **`Telegram` section 19's one final board edit, marking this machine
@@ -2912,8 +3535,25 @@ impl TheAssembledWorker {
     /// run makes it through the same function at its end; a test calls it here.
     #[cfg(test)]
     pub fn a_last_board_edit_marking_this_machine_silent(&self) -> WhatTheLastEditCameTo {
-        the_last_board_edit(&self.listener, &self.store, self.conversation, &self.me)
+        the_last_board_edit(&self.listener, &self.store, self.conversation, &self.me, the_role_is_switched_off(&self.package_area))
     }
+}
+
+/// **`Telegram` B14 as added 2026-11-13 — whether this polite stop switches
+/// the role off**: the role's desired state reads *disabled*, written before
+/// the worker is stopped (`Rented-server runtime` W8), so a removal or
+/// *Telegram off* reached this machine. A restart leaves it *enabled*. A
+/// state that cannot be read is not taken for a removal.
+fn the_role_is_switched_off(package_area: &Path) -> bool {
+    use smoozy_runtime::workers::{KeepsTheRolesDesiredState, RoleDesiredState};
+    let state = smoozy_runtime::acting::stores::TheRoleStateOnTheMachine {
+        at: smoozy_runtime::the_program::the_record_at(
+            &package_area.display().to_string(),
+            smoozy_runtime::the_program::records::THE_TELEGRAM_ROLE_STATE,
+        )
+        .into(),
+    };
+    state.read() == Ok(RoleDesiredState::Disabled)
 }
 
 /// The edit itself, for the run's end and for a test alike.
@@ -2922,9 +3562,17 @@ fn the_last_board_edit(
     store: &OneStore,
     conversation: i64,
     me: &WhoThisMachineIs,
+    switched_off: bool,
 ) -> WhatTheLastEditCameTo {
-    let held = lock(listener);
+    let mut held = lock(listener);
     if !held.is_holding() {
+        // **`Telegram` B14 as added 2026-11-13 (the Creator's notes on the
+        // test copy, note 8): a machine whose role is switched off asks the
+        // holder to take it off**, so a server removed in the app leaves the
+        // pinned message. Until then only the holder took itself off.
+        if switched_off && held.say_it_is_leaving() {
+            return WhatTheLastEditCameTo::AskedToBeTakenOff;
+        }
         return WhatTheLastEditCameTo::NotHolding;
     }
     let (Some(board), Ok(Some(id))) = (held.the_board_as_last_read(), store.the_board()) else {
@@ -3033,6 +3681,13 @@ fn it_stays_until_it_is_stopped(
          the supervisor only for its start once a minute, until it is stopped.",
         why.in_words()
     );
+    // **`Telegram` F6: a token Telegram rejected at the start is said once.**
+    if matches!(why, WhyItCannotWork::TelegramRefusesTheToken) {
+        let word = smoozy_framing::requests::TheTelegramTrouble::TheTokenIsRejected.the_word();
+        if let Err(not) = the_trouble_written(supervisor, Some(word.to_string())) {
+            eprintln!("smoozy-server: the Telegram worker could not write that Telegram rejects the token: {not}");
+        }
+    }
     let mut asked_at = std::time::Instant::now();
     while !THE_POLITE_STOP_ARRIVED.load(Ordering::SeqCst) {
         std::thread::sleep(HOW_OFTEN_A_WORKER_THAT_STAYS_LOOKS);
@@ -3098,11 +3753,16 @@ pub fn the_telegram_worker(package_area: &str, recorded_endpoint_path: &str) -> 
             )
         }
     };
-    let (client, configuration) =
+    let (client, configuration, bot) =
         match what_it_can_work_with(Path::new(package_area), &|token| TheClient::reaching_telegram_with(token)) {
             Ok(found) => found,
             Err(why) => return it_stays_until_it_is_stopped(&why, supervisor.as_ref()),
         };
+    // `Telegram` F3b: nothing of another bot's conversation is carried on.
+    let mut start = start;
+    the_start_tied_to_its_bot(&mut start, bot, supervisor.as_ref(), &|what: &str| {
+        eprintln!("smoozy-server: the Telegram worker, {what}")
+    });
     let holds = Box::new(TheLineOnThisMachine::over(supervisor.clone(), Path::new(package_area)));
     let readings = Box::new(TheReadingsOnThisMachine::on(start.machine_kind.clone(), Path::new(package_area)));
     let worker = the_worker_assembled(WhatTheWorkerIsHanded {
@@ -3130,6 +3790,9 @@ pub fn the_telegram_worker(package_area: &str, recorded_endpoint_path: &str) -> 
                 WhatTheLastEditCameTo::NotHolding => "none, as it was not holding the slot".to_string(),
                 WhatTheLastEditCameTo::NothingToMark => "none, as the board did not list it".to_string(),
                 WhatTheLastEditCameTo::Edited => "made".to_string(),
+                WhatTheLastEditCameTo::AskedToBeTakenOff => {
+                    "none, as it was not holding the slot; it asked the holder to take it off the roster".to_string()
+                }
                 WhatTheLastEditCameTo::NotMade(why) => format!("not made: {why}"),
             }
         ),
@@ -3185,6 +3848,15 @@ pub mod a_simulated_conversation {
         pub heard: Vec<(String, String, Value)>,
         /// Callers whose token Telegram does not accept.
         pub refused_tokens: HashSet<String>,
+        /// **When Telegram refuses (`Telegram` F6): the user blocked the
+        /// bot**, so every send, edit, pin or unpin in the chat is
+        /// refused with 403, while an ask for updates is still answered.
+        pub the_bot_is_blocked: bool,
+        /// **What the what-if live pass of 2026-11-15 met**: with the bot
+        /// blocked, a new message is refused with 403 while an edit, a pin or
+        /// an unpin of a message already sent is not (`Telegram` F6 as changed
+        /// that day, Sources entry 96a, an assumption for the edits).
+        pub its_edits_go_through_while_blocked: bool,
         /// **The messages sent as pictures**, by identity — their captions are
         /// in [`Self::texts`] (the map's piece 3).
         pub photos: Vec<i64>,
@@ -3216,6 +3888,21 @@ pub mod a_simulated_conversation {
         /// **Lines a test has made 48 hours old or older**, which Telegram
         /// refuses to delete (`Sources` entry 87).
         pub past_two_days: HashSet<i64>,
+        /// **How many of the next edits Telegram refuses** with a bad
+        /// request that is not *not found* — a buttons edit lost, say (Sol's
+        /// fresh look at the twenty-eighth notes' piece 10).
+        pub the_next_edits_are_refused: usize,
+        /// **Sitting 6: every edit of this message is refused, and not as a
+        /// bad request** — a refusal that is neither *not modified* nor
+        /// `Telegram` C7's *cannot be edited*. The code and the words are a
+        /// stand-in's own: Telegram's pages fix neither (`Sources` entry 93).
+        pub every_edit_of_this_is_refused: Option<i64>,
+        /// **How many of the next edits that add buttons Telegram refuses for
+        /// flooding** (429, wait one second) — the night's live pass, fault 1:
+        /// *Which job?* came with no buttons right after a job's pictures.
+        pub the_next_button_edits_are_flooded: usize,
+        /// **Sitting 6: the bot's identity `getMe` answers**, 1 where unset.
+        pub the_bots_identity: Option<i64>,
     }
 
     impl TheConversation {
@@ -3378,6 +4065,13 @@ pub mod a_simulated_conversation {
             if s.refused_tokens.contains(&self.name) {
                 return refused(401, "Unauthorized");
             }
+            if s.the_bot_is_blocked
+                && (method.starts_with("send")
+                    || (!s.its_edits_go_through_while_blocked
+                        && (method.starts_with("edit") || matches!(method, "pinChatMessage" | "unpinChatMessage"))))
+            {
+                return refused(403, "Forbidden: bot was blocked by the user");
+            }
             if (method == "sendPhoto" || method == "sendMediaGroup") && s.broken_pictures_from.contains(&self.name) {
                 return Err("this picture keeps reaching nothing".into());
             }
@@ -3388,7 +4082,7 @@ pub mod a_simulated_conversation {
             let id = fields.get("message_id").and_then(Value::as_i64).unwrap_or(0);
             match method {
                 "getMe" => {
-                    accepted(json!({ "id": 1, "is_bot": true, "username": "a_simulated_bot" }))
+                    accepted(json!({ "id": s.the_bots_identity.unwrap_or(1), "is_bot": true, "username": "a_simulated_bot" }))
                 }
                 "sendMessage" => {
                     if s.fail_message_once_with_prefix
@@ -3442,6 +4136,19 @@ pub mod a_simulated_conversation {
                     accepted(Value::Array(sent))
                 }
                 "editMessageText" => {
+                    if s.every_edit_of_this_is_refused == Some(id) {
+                        return refused(403, "Forbidden: a stand-in's refusal");
+                    }
+                    if s.the_next_edits_are_refused > 0 {
+                        s.the_next_edits_are_refused -= 1;
+                        return refused(400, "Bad Request: the edit was refused");
+                    }
+                    let adds_buttons = fields["reply_markup"]["inline_keyboard"].as_array().is_some_and(|rows| !rows.is_empty());
+                    if adds_buttons && s.the_next_button_edits_are_flooded > 0 {
+                        s.the_next_button_edits_are_flooded -= 1;
+                        return Ok(json!({ "ok": false, "error_code": 429, "description": "Too Many Requests: retry after 1",
+                            "parameters": { "retry_after": 1 } }).to_string());
+                    }
                     if !s.texts.contains_key(&id) {
                         return refused(400, "Bad Request: message to edit not found");
                     }
@@ -3467,6 +4174,17 @@ pub mod a_simulated_conversation {
                 }
                 // **`Telegram` B18**: only a pin's line is deleted, and one 48
                 // hours old or older is refused and stays (`Sources` entry 87).
+                // **And, from 2026-11-13 (`Telegram` D2, the Creator's
+                // addition), a message said in between once it is settled**:
+                // *Stop sent.* and *Regenerating the preview*, never pinned.
+                "deleteMessage"
+                    if !s.pins.contains(&id)
+                        && s.texts.get(&id).is_some_and(|t| t.ends_with("\nStop sent.") || t.contains("\nRegenerating the preview")) =>
+                {
+                    s.texts.remove(&id);
+                    s.deleted.push(id);
+                    accepted(json!(true))
+                }
                 "deleteMessage" => {
                     if s.pins.contains(&id) || s.texts.contains_key(&id) {
                         s.asked_to_delete_what_is_not_a_line.push(id);
@@ -3588,6 +4306,40 @@ pub mod a_simulated_conversation {
 mod tests {
     use super::*;
 
+    /// **The night's live pass, fault 2: Telegram's *Disk free* is the disk
+    /// Smoozy's folder is on**, as the window's is. On a pod whose folder was
+    /// on a volume, the message read the container disk where the program
+    /// sits. **Failed before the fix**: the package area was read whatever
+    /// root was recorded.
+    #[test]
+    fn night_pass_2_the_free_disk_is_read_where_smoozys_folder_is() {
+        struct GoesWithTheTest(PathBuf);
+        impl Drop for GoesWithTheTest {
+            fn drop(&mut self) {
+                std::fs::remove_dir_all(&self.0).ok();
+            }
+        }
+        let at = std::env::current_exe()
+            .expect("this test's own program")
+            .parent()
+            .expect("its folder")
+            .join(format!("smoozy-the-status-disk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&at);
+        let _goes = GoesWithTheTest(at.clone());
+        let package = at.join("root-home/smoozy/package");
+        let root = at.join("workspace/smoozy");
+        std::fs::create_dir_all(&package).expect("the package area");
+        std::fs::create_dir_all(&root).expect("the folder on the volume");
+        let readings = TheReadingsOnThisMachine::on(MachineKind::Container, &package);
+        assert_eq!(readings.where_the_free_disk_is_read(), Some(package.clone()), "no root recorded: the state area");
+        let record = package.join(smoozy_job_files_machine::layout::THE_RECORD_OF_THE_ROOT);
+        std::fs::write(&record, root.display().to_string()).expect("the root is recorded");
+        assert_eq!(readings.where_the_free_disk_is_read(), Some(root.clone()), "the folder's own disk");
+        std::fs::write(package.join(smoozy_job_files_machine::layout::THE_RECORD_OF_THE_ROOTS_MARK), "a-mark\n")
+            .expect("a mark is recorded");
+        assert_eq!(readings.where_the_free_disk_is_read(), None, "a folder whose mark does not stand gives no figure");
+    }
+
     /// **The start the supervisor composes is the start the worker reads.**
     #[test]
     fn the_start_reads_back_as_it_was_composed() {
@@ -3625,6 +4377,16 @@ mod tests {
         AFact::TheseActionContextsAreGone(vec!["x".into()]).written_into(&mut held);
         assert_eq!(held.action_contexts.keys().collect::<Vec<_>>(), vec!["y"]);
         assert_eq!(held.update_position, None);
+        // **`Telegram` C7a**: a job's message record, written and ended, and
+        // nothing else touched (the twenty-eighth notes, notes 18 and 19).
+        for fact in [AFact::AJobsMessage { job: "j".into(), record: "{}".into() }, AFact::AJobsMessageEnds("j".into())] {
+            assert_eq!(the_fact_in(&the_fact_as_fields(&fact).unwrap()), Some(fact));
+        }
+        AFact::AJobsMessage { job: "j".into(), record: "r".into() }.written_into(&mut held);
+        AFact::AJobsMessage { job: "k".into(), record: "s".into() }.written_into(&mut held);
+        AFact::AJobsMessageEnds("j".into()).written_into(&mut held);
+        assert_eq!(held.jobs_messages.keys().collect::<Vec<_>>(), vec!["k"]);
+        assert_eq!(held.action_contexts.keys().collect::<Vec<_>>(), vec!["y"]);
     }
 
     #[test]
@@ -3675,7 +4437,7 @@ mod tests {
                 assert!(!why.in_words().contains("secret-part"), "the token is never said: {why:?}");
                 assert!(!why.in_words().contains("9001"), "the file is never quoted: {why:?}");
             }
-            found.map(|(_, configuration)| configuration)
+            found.map(|(_, configuration, _)| configuration)
         };
         assert_eq!(found(&a_working_client), Err(WhyItCannotWork::NoTokenFile));
         std::fs::write(folder.join(THE_TOKEN_FILES_NAME), b"  \n").expect("written");

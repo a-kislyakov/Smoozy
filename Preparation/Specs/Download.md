@@ -199,3 +199,10 @@ Each of these was handed to Design. **Read against the Design documents on 2026-
 - **How a download is started from history, and from the file browser.** Answered: *Download all* in the header of a queue or history entry, settled in [Queue & History](../Design/Queue%20&%20History.md), and *Download* on the toolbar and in all three right-click menus, settled in [File Browser](../Design/File%20Browser.md).
 - **How a single download is sent somewhere other than the standing folder, without disturbing the setting.** **Found undrawn on 2026-08-25 and drawn the same day.** [Transfers](../Design/Transfers.md), under *Sending one download somewhere other than the standing folder*: a second control beside the first, never a question asked of every download — *Download to…* in each of the file browser's three right-click menus, and *Download all to…* in a queue or history entry's header. The picker offers nothing that makes the choice stick, because the standing setting is untouched.
 - **How the narrowing choice is offered when auto-download is switched on, and how a narrowed arrangement reads afterwards.** Answered: the panel that narrows a download, drawn over the render settings page, and [Transfers](../Design/Transfers.md), where a narrowed arrangement says what it is narrowed to and reads against what the user asked for rather than against everything the job writes.
+
+
+## A file in place of a folder
+
+Before fetching a file, Smoozy makes its landing folder. If a file blocks that folder, the download names the cause and moves no bytes. Auto-download keeps its arrangement and tries again after the folder is usable; it does not fetch the same frame while the obstruction remains.
+
+*2026-11-14 — batch 2 of the Bad what-if answers. No auditor has seen this change.*

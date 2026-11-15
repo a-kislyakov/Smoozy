@@ -735,6 +735,7 @@ mod tests {
             simplify: SimplifyEntries::default(),
             the_check_is_written_as_a_picture: false,
             the_check_writes_into: None,
+            the_range_jobs_frames: None,
         };
         payload.simplify.use_simplify = Some(true);
         payload

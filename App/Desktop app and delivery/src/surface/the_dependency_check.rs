@@ -120,7 +120,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use tauri::{Manager, State};
 
 use smoozy_dependencies::bytes::{MachineLocation, RecordedLocation, StoredLocation};
-use smoozy_dependencies::check::{compare_recorded, Attribution, Kind, LinkedItemStatement, Row};
+use smoozy_dependencies::check::{compare_recorded, Attribution, Kind, LinkedItemStatement, Row, WhichColourName};
 use smoozy_dependencies::record::{HoldingFile, HowResolved, LocatedAnswer, ResolvedTo, ShiftKey};
 use smoozy_dependencies::search::{Outstanding, WantedShape};
 use smoozy_dependencies::rows::{the_qualifiers_of, Action, Qualifier, RowState};
@@ -145,6 +145,12 @@ use crate::typography::{Prose, Verbatim};
 /// that piece's contract asks for.
 pub const THE_DEPENDENCY_CHECK: &str = crate::surface::a_server::THE_DEPENDENCY_CHECK;
 
+/// **The one sentence, the same in the check and in Transfers** —
+/// `Design/Dependency Upload & Remap § Above the rows` and `Design/Transfers §
+/// The dependency check's own transfers`, 2026-11-09 (the twenty-eighth notes,
+/// note 11). Transfers reads it from here, so the two cannot differ.
+pub const LINKED_FILES_GO_FIRST: &str = words::LINKED_FILES_GO_FIRST;
+
 /// **The kind, declared beside the service that posts it.**
 /// `web/the-dependency-check.js` names the same string.
 pub const AN_ACT_ON_THIS_PANEL: &str = "the-dependency-check:an-act";
@@ -165,9 +171,20 @@ pub const AN_ACT_ON_THIS_PANEL: &str = "the-dependency-check:an-act";
 /// *Uploading* and the foot counts only the rest. **Built 2026-10-25 by that
 /// work's piece 3**, which reads this run's sends per file into the rows and
 /// the foot, `Dependency Upload & Remap` A9a.)*
-pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 21] = [
+///
+/// *Twenty-two from 2026-11-09, when the twenty-eighth notes' piece 11 drew
+/// `chk-linked`, the check before the press with linked files to upload first,
+/// and redrew `chk-sending` as the upload reading them (note 11).*
+///
+/// *Twenty-five from 2026-11-13, when the test copy's notes, second round,
+/// drew `chk-addedrun` (note 14) and `chk-fileup` (note 17).*
+pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 25] = [
+    "chk-macos", // Design: the slow local read asks the user to look for the macOS prompt.
     "chk-walk",
+    "chk-addedrun",
+    "chk-fileup",
     "chk-unchecked",
+    "chk-linked",
     "chk-unsetup",
     "chk-clean",
     "chk-sel",
@@ -213,6 +230,14 @@ mod words {
     /// **While the walk over a reading's files runs**, in place of either line
     /// above, with *Stop* beside it — that section, 2026-11-04.
     pub const CHECKING_FILES_ON_THE_SERVER: &str = "Checking files on the server:";
+    /// **The header's line while a check runs and no other line says what it
+    /// is doing** — the remap of the linked files on the server, say. Render
+    /// Settings' own words for the same moment. The twenty-eighth notes, piece
+    /// 12.
+    pub const CHECKING_DEPENDENCIES: &str = "Checking dependencies…";
+    pub const A_CHECK_IS_ALREADY_RUNNING: &str = "A dependency check is already running.";
+    pub const MACOS_MAY_BE_ASKING: &str = "macOS may be asking for access to";
+    pub const LOOK_FOR_ITS_QUESTION: &str = ". Look for its prompt.";
 
     // The statements above the rows. `§ What this document left open, and how
     // it was answered`, first bullet, whose words Design settled.
@@ -222,6 +247,16 @@ mod words {
     // `Dependency Upload & Remap` G9a.
     pub const CANNOT_WORK_OUT_THE_BAKE_FOLDER: &str = "Can't resolve the bake folder";
     pub const BLENDER_MAY_HAVE_PACKED_IT: &str = "It may be packed in the .blend.";
+    // `Dependency Upload & Remap`, *Colour spaces and image sequences*: a colour
+    // name the server's Blender lacks, and the files a sequence needs that its
+    // folder does not hold.
+    pub const NO_COLOUR_SPACE_ON_THIS_SERVER: &str = "This server's Blender has no colour space";
+    pub const NO_VIEW_TRANSFORM_ON_THIS_SERVER: &str = "This server's Blender has no view transform";
+    pub const NO_DISPLAY_ON_THIS_SERVER: &str = "This server's Blender has no display";
+    pub const IT_WILL_USE_ITS_DEFAULT: &str = "It will use its default.";
+    pub const FILE_MISSING: &str = "file missing:";
+    pub const FILES_MISSING: &str = "files missing:";
+    pub const MORE_AT_THE_END: &str = "more.";
     pub const UPLOADED_AS_A_DEPENDENCY_BEFORE: &str =
         "Uploaded before as a dependency.";
     pub const ITS_LOCATIONS_STILL_POINT_HOME: &str =
@@ -276,11 +311,16 @@ mod words {
     pub const IGNORE: &str = "Ignore";
     pub const UNDO_SMOOZYS_GUESS: &str = "Reject match";
 
-    // `§ Above the rows` — a shift, stated once at the top.
-    pub const EVERYTHING_RECORDED_UNDER: &str = "Files recorded under";
-    pub const WAS_FOUND_UNDER: &str = "were found under";
-    pub const ROWS_RESOLVED: &str = "rows resolved.";
-    pub const ROW_RESOLVED: &str = "row resolved.";
+    // `§ Above the rows` — a shift, stated once at the top, in one sentence
+    // counting files: *12 more files under /work were found under /Archive.*,
+    // or *No other missing files under /work were found under /Archive.* with
+    // no undo. The Creator's twenty-eighth notes, note 15. *(Until then:*
+    // Files recorded under … were found under … . N rows resolved.*)*
+    pub const MORE_FILES_UNDER: &str = "more files under";
+    pub const MORE_FILE_UNDER: &str = "more file under";
+    pub const WERE_FOUND_UNDER: &str = "were found under";
+    pub const WAS_FOUND_UNDER: &str = "was found under";
+    pub const NO_OTHER_MISSING_FILES_UNDER: &str = "No other missing files under";
     pub const UNDO_THIS_CHANGE: &str = "Undo this change";
 
     // `§ When the file could not be read at all` — the four endings, worded for
@@ -350,12 +390,13 @@ mod words {
     pub const READY_TO_UPLOAD: &str = "Ready to upload";
     // 2. A failure's own reason, in red.
     pub const UPLOAD_FAILED_NO_PERMISSION: &str = "Upload failed: permission denied";
-    pub const COULD_NOT_UPDATE_ITS_FILE_PATHS: &str = "Uploaded; remap failed: a path did not update";
+    // **Scout 3.14, 2026-11-11**: *remap* is Smoozy's own word.
+    pub const COULD_NOT_UPDATE_ITS_FILE_PATHS: &str = "Uploaded, but its file paths on the server could not be updated";
     /// **Not a failure, in the waiting colour** — `Dependency Upload & Remap`
     /// M14a of 2026-11-07, the build runner's ruling 2 on the demo's faults 6
     /// and 8.
-    pub const THE_REMAP_WAITS_FOR_ITS_LINKED_FILES: &str = "Uploaded; remap waits for its linked files.";
-    pub const COULD_NOT_OPEN_IT_TO_REMAP: &str = "Uploaded; remap failed: Blender could not open it";
+    pub const THE_REMAP_WAITS_FOR_ITS_LINKED_FILES: &str = "Uploaded; its file paths update once its linked files are uploaded.";
+    pub const COULD_NOT_OPEN_IT_TO_REMAP: &str = "Uploaded, but Blender could not open it to update its file paths";
     pub const UPLOAD_FAILED_THE_PATH_IS_TOO_LONG: &str = "Upload failed: path too long for the server";
     pub const UPLOAD_FAILED: &str = "Upload failed";
     /// Transfers' own sentence for the same file, not a second one.
@@ -380,6 +421,18 @@ mod words {
     // `Specs/Dependency Upload & Remap`, *Checking a file*, Creator-stated
     // 2026-10-18.
     pub const NO_SCENE_USES_IT: &str = "Not used by any scene.";
+    // **The rows no scene uses, folded and left out of the upload until
+    // included** — `§ How the rows are grouped and sorted`, the Creator's
+    // twenty-eighth notes, note 14.
+    pub const NOT_USED_BY_ANY_SCENE: &str = "Not used by any scene";
+    pub const INCLUDE: &str = "Include";
+    pub const INCLUDE_ALL: &str = "Include all";
+    pub const YOU_INCLUDED_THIS: &str = "You included this.";
+    pub const NOT_USED_FIGURE: &str = "not used by any scene, not uploaded.";
+    // **The system picker's title for *Locate…***: the word, no ellipsis,
+    // then the row's own name as a value (`Desktop app and delivery` X5's
+    // sentence of 2026-11-09; the twenty-eighth notes, note 13).
+    pub const LOCATE_TITLE: &str = "Locate";
 
     // `§ The seven states` — the screen's names, the spec keeping its own
     // (Rule 9), and the visible actions.
@@ -403,6 +456,37 @@ mod words {
     /// **A row to upload is a linked file nobody has read**, so what lies below
     /// it is not known — `§ Above the rows`, 2026-11-04.
     pub const LINKED_FILES_NOT_CHECKED_YET: &str = "Linked files not checked yet.";
+    /// **And it counts them** — *50 files to upload, 2.1 GB. 10 linked files
+    /// not checked yet.* — `§ Above the rows`, 2026-11-09 (the twenty-eighth
+    /// notes, note 11).
+    pub const LINKED_FILES_NOT_CHECKED_YET_COUNTED: &str = "linked files not checked yet.";
+    pub const LINKED_FILE_NOT_CHECKED_YET_COUNTED: &str = "linked file not checked yet.";
+    /// **While the check's upload runs, the summary's upload figure is the
+    /// upload's own** — *Uploading 0 of 50 files, found so far.*, or after
+    /// another figure *2 missing · uploading 120 of 280 files* — `§ Above the
+    /// rows`, 2026-11-09.
+    pub const UPLOADING_AT_THE_START: &str = "Uploading";
+    pub const UPLOADING_AFTER_A_FIGURE: &str = "uploading";
+    pub const FILES_AFTER_A_COUNT: &str = "files";
+    pub const FILE_AFTER_A_COUNT: &str = "file";
+    /// **The one sentence, the same in the check and in Transfers** — `§ Above
+    /// the rows` and `Design/Transfers § The dependency check's own transfers`,
+    /// 2026-11-09.
+    pub const LINKED_FILES_GO_FIRST: &str =
+        "Linked files upload first, to be read on the server. Their dependencies are added, so the total may grow.";
+    /// **The header's line during the check's upload** — `§ While it is still
+    /// reading below a linked file`, 2026-11-09: *Reading shelf.blend · 4 of 11
+    /// linked files read*, or *Waiting for linked files to upload · 4 of 11
+    /// read*, the second only where that is the reason.
+    pub const READING: &str = "Reading";
+    pub const BETWEEN_ON_THE_LINE: &str = "·";
+    pub const LINKED_FILES_READ: &str = "linked files read";
+    pub const LINKED_FILE_READ: &str = "linked file read";
+    pub const WAITING_FOR_LINKED_FILES_TO_UPLOAD: &str = "Waiting for linked files to upload";
+    pub const READ: &str = "read";
+    /// **`§ A row`'s two notes of 2026-11-09.**
+    pub const UPLOADED_COULD_NOT_BE_READ: &str = "Uploaded; could not be read.";
+    pub const A_DIFFERENT_FILE_IS_ALREADY_THERE: &str = "A different file is already there.";
     pub const FAILED_FIGURE: &str = "failed";
     pub const MISSING_FIGURE: &str = "missing";
     pub const NOT_VERIFIED_FIGURE: &str = "not verified";
@@ -414,7 +498,7 @@ mod words {
     // `§ Along the bottom`: a press that sent nothing says why, once.
     // `§ A row`, `Dependency Upload & Remap` G6f.
     pub const LINKED_BY_FULL_PATH: &str =
-        "Absolute path. Scripts may not reach it, so the render may differ. Make the path relative.";
+        "Linked by full path, so scripts may not find it on the server. Make it relative in Blender and save.";
     pub const NOTHING_TO_UPLOAD: &str = "Nothing to upload.";
     pub const FILE_IS_ALREADY_THERE: &str = "file is already on the server.";
     pub const FILES_ARE_ALREADY_THERE: &str = "files are already on the server.";
@@ -440,6 +524,11 @@ mod words {
 
     // `§ The search folders on this panel`.
     pub const ADD_A_SEARCH_FOLDER: &str = "Add a search folder";
+    /// `§ The search folders on this panel`, as changed 2026-11-13.
+    pub const SEARCHED_IN_THIS_CHECK: &str = "Searched in this check.";
+    /// `Design/Whole app § While other work runs`, 2026-11-13.
+    pub const A_CHECK_IS_RUNNING: &str = "A check is running.";
+    pub const THIS_FILE_IS_UPLOADING: &str = "This file is uploading.";
     /// The box's one sentence, as Design writes it since the Creator's note 5
     /// on 0.1.8 (three sentences before).
     pub const IT_IS_ADDED_AND_SEARCHED: &str =
@@ -467,6 +556,10 @@ mod words {
     /// with** — the render settings panel's own sentence for `Render Settings`
     /// B5.
     pub const NO_BLENDER_ON_THIS_SERVER: &str = crate::surface::render_settings::words::NO_BLENDER_ON_THIS_SERVER;
+    /// **The render settings panel's own sentence where no build answered and
+    /// the server's disk reads full** (`Render Settings` B5 as added
+    /// 2026-11-11), in place of the one above.
+    pub const THE_SERVERS_DISK_IS_FULL: &str = crate::surface::render_settings::words::THE_SERVERS_DISK_IS_FULL;
     /// **The way to a Blender beside it** — `§ When the file could not be read
     /// at all`, the demo's fault 4 (2026-11-07): the Set up tab's own control
     /// name, which the press opens that tab at.
@@ -491,8 +584,7 @@ mod words {
     /// so it is found, where it is, by the search of the user's search folders
     /// (`Dependency Upload & Remap` F3).
     pub const NO_RECORD_OF_WHERE_IT_CAME_FROM: &str =
-        "Original location unknown. Searched in your search folders; matches apply to this server \
-         only.";
+        "Original folder unknown, so your search folders were searched. Matches apply to this server only.";
     pub const OPENED_WITHOUT_A_FILE: &str = "No file chosen.";
     pub const THE_RECORD_WOULD_NOT_READ: &str = "Could not read Smoozy’s database.";
 }
@@ -528,6 +620,12 @@ pub struct WhatTheRunHolds {
     /// issue readings, and `Dependency Upload & Remap` F6 stops the search.
     /// Written and read by `crate::checking_a_file`.
     pub checks_running: BTreeMap<String, bool>,
+    /// **The search folders added while each running check runs**, in the
+    /// order they were added — shown at once with *Searched in this check.*
+    /// (`Design/Dependency Upload & Remap § The search folders on this panel`,
+    /// the Creator's notes on the test copy, second round, note 14). Let go
+    /// when the check ends.
+    pub folders_added_while_it_runs: BTreeMap<String, Vec<Vec<u8>>>,
     /// **The checks reading the file itself**, by the panel's key, until that
     /// reading lands — `Design/Dependency Upload & Remap § While it is still
     /// reading below a linked file`, its closing paragraph: *Reading the
@@ -539,10 +637,16 @@ pub struct WhatTheRunHolds {
     /// never carries (`Dependency Upload & Remap` G17). The Creator's note 8
     /// on the test copy.
     pub files_being_read: BTreeSet<String>,
+    #[cfg(target_os = "macos")]
+    pub macos_reads: BTreeMap<String, Vec<Arc<crate::platform::macos_file_access::ReadStatus>>>,
     /// **`Dependency Upload & Remap` G17a: how many search folders have been
     /// added to each check's sitting**, which a reading compares when its rows
     /// are about to land.
     pub the_adds_taken: BTreeMap<String, u32>,
+    /// **The frames each check's job renders**, as `Render Settings` held them
+    /// when the check was asked for (`Dependency Upload & Remap`, *Colour spaces
+    /// and image sequences*). None kept where they are not known yet.
+    pub the_jobs_frames: BTreeMap<String, Vec<i64>>,
     /// **`Dependency Upload & Remap` G17b: the readings this run keeps**, in
     /// memory alone.
     pub the_kept_readings: crate::kept_readings::TheKeptReadings,
@@ -561,6 +665,12 @@ pub struct WhatTheRunHolds {
     /// **`Dependency Upload & Remap` A9e's (b): the linked `.blend`s landed on each
     /// check, and how many of them a sitting has answered.**
     pub the_libraries_landed: BTreeMap<String, TheLibrariesLanded>,
+    /// **`Dependency Upload & Remap` G14b: the checks whose upload ended with
+    /// what a linked file needs not known** — one failed, was stopped or could
+    /// not be read, or the upload was stopped — so the summary keeps *, found so
+    /// far.* until a check of the file is run again. The twenty-eighth notes,
+    /// note 11.
+    pub the_uploads_left_something_unknown: BTreeSet<String>,
 }
 
 /// **`Dependency Upload & Remap` A9e's (b).**
@@ -579,6 +689,10 @@ pub enum WhyRenderIsHeld {
     ItsCheckIsRunning,
     /// A linked `.blend` landed, and no check is running or coming.
     CheckFirst,
+    /// **This very file is going up through Files** (`Design/Whole app §
+    /// While other work runs`, the Creator's notes on the test copy, second
+    /// round, note 17): a job sent now could take the old file or the new.
+    ThisFileIsUploading,
 }
 
 /// **`Dependency Upload & Remap` A9e: whether this file's check holds *Render* on
@@ -592,7 +706,17 @@ pub fn what_holds_render(
 ) -> Option<WhyRenderIsHeld> {
     let key = keyed(server, file);
     let a_send_goes = crate::the_found_files_sent::a_send_is_going(server, file);
+    // **`Dependency Upload & Remap` G14b: every file landed and a linked file
+    // still read** — the upload, and Render's hold on it, end only when its
+    // last reading ends; meanwhile the control says the check is running.
+    let a_reading_is_owed = !a_send_goes && crate::the_found_files_sent::a_send_owes_a_reading(server, file);
     let held = held.lock().ok()?;
+    if held.the_files_going_up.this_file_is_going_up(server, file.as_bytes()) {
+        return Some(WhyRenderIsHeld::ThisFileIsUploading);
+    }
+    if a_reading_is_owed {
+        return Some(WhyRenderIsHeld::ItsCheckIsRunning);
+    }
     if a_send_goes || held.the_sends_in_hand.contains_key(&key) {
         return Some(WhyRenderIsHeld::ASendIsGoing);
     }
@@ -693,6 +817,10 @@ pub struct ASitting {
     pub linked_items: Vec<LinkedItemStatement>,
     /// `Dependency Upload & Remap` G9a.
     pub the_bake_folders_not_worked_out: Vec<smoozy_dependencies::check::TheBakeFolderNotWorkedOut>,
+    /// **A colour name the server's Blender said it does not have**, one
+    /// statement each (`Dependency Upload & Remap`, *Colour spaces and image
+    /// sequences*).
+    pub the_colour_names_not_found: Vec<smoozy_dependencies::check::AColourNameNotFound>,
     /// `Dependency Upload & Remap` V9a.
     pub sent_up_as_a_dependency_before: bool,
     pub the_search: Option<TheSearchInHand>,
@@ -813,6 +941,12 @@ pub struct ACheckedRow {
     /// folder-shaped row sends.
     pub members: Option<usize>,
     pub size: Option<u64>,
+    /// **A picture stored as a sequence: the files the job's frames need**, or
+    /// nothing where the frames are not known or the row is no such picture —
+    /// and **those its folder does not hold**, said on the row and counted as
+    /// missing (`Dependency Upload & Remap`, *Colour spaces and image sequences*).
+    pub the_files_the_jobs_frames_need: Option<Vec<Vec<u8>>>,
+    pub the_files_not_in_its_folder: Vec<Vec<u8>>,
     pub why_it_did_not_go_up: Option<WhyItDidNotGoUp>,
     pub its_failure_was_cleared: bool,
     /// **`Dependency Upload & Remap` M14a of 2026-11-07: a library on the
@@ -823,6 +957,112 @@ pub struct ACheckedRow {
     /// **`Dependency Upload & Remap` Q5a: the files and bytes of a set or folder row
     /// Q5 found already up**, which the send will not take.
     pub the_part_already_up: Option<(usize, u64)>,
+    /// **What the check's upload left on the row while it ran** —
+    /// `Dependency Upload & Remap` G14b, the twenty-eighth notes, note 11.
+    pub during_the_upload: WhatTheUploadLeftOnTheRow,
+}
+
+/// **`Dependency Upload & Remap` G14b: what a reading during the check's upload
+/// left on a row.** The twenty-eighth notes, note 11.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WhatTheUploadLeftOnTheRow {
+    /// **When it arrived**, a reading during the upload having found it — so it
+    /// sits at the foot of its group, in the order rows arrived, and nothing
+    /// above the user's row moves (`Design/Dependency Upload & Remap § While it
+    /// is still reading below a linked file`).
+    pub arrived: Option<u64>,
+    /// **Its landing place holds a different file** (`Dependency Upload & Remap` Q8): not sent, nothing
+    /// asked mid-upload; it stays to upload for the next press, which asks.
+    pub a_different_file_is_there: bool,
+    /// **A linked file that landed and could not be read**, and why: *Uploaded;
+    /// could not be read.* The check after the upload tries it again.
+    pub could_not_be_read: Option<WhyItCouldNotBeRead>,
+}
+
+/// **Why a linked file that landed during the upload could not be read** — said
+/// behind the row's note, on hover.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhyItCouldNotBeRead {
+    /// The Blender the check reads with could not open it (`Render Settings` Q8).
+    ThisBlenderCouldNotOpenIt,
+    /// The server took no reading of it.
+    TheServerTookNoReading,
+    /// Smoozy's own record would not read.
+    TheRecordWouldNotRead,
+}
+
+/// **`Dependency Upload & Remap` G14b: the rows one reading during the upload
+/// found join the sitting standing, at the foot of their groups**, in the order
+/// they arrived. **Not where a check is walking the tree**, which reads the file
+/// itself, nor where the sitting already holds that file's rows: a file found
+/// twice is not drawn twice. Answers every row with its place, or `usize::MAX`
+/// where it did not land.
+pub fn the_rows_of_a_reading_land(
+    held: &Mutex<WhatTheRunHolds>,
+    key: &str,
+    rows: Vec<ACheckedRow>,
+    linked_items: Vec<LinkedItemStatement>,
+    the_bake_folders_not_worked_out: Vec<smoozy_dependencies::check::TheBakeFolderNotWorkedOut>,
+    stopped: &mut dyn FnMut() -> bool,
+) -> Vec<(usize, ACheckedRow)> {
+    static ARRIVALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let not_landed = |rows: Vec<ACheckedRow>| rows.into_iter().map(|row| (usize::MAX, row)).collect();
+    let Ok(mut held) = held.lock() else {
+        return not_landed(rows);
+    };
+    // **Nor once Stop is pressed**, read with the run's memory held (Sol's
+    // fresh look, 2026-11-09, finding 5).
+    if held.checks_running.contains_key(key) || held.files_being_read.contains(key) || stopped() {
+        return not_landed(rows);
+    }
+    let Some(sitting) = held.sittings.get_mut(key) else {
+        return not_landed(rows);
+    };
+    if rows.first().is_some_and(|first| sitting.rows.iter().any(|one| one.holding == first.holding)) {
+        return not_landed(rows);
+    }
+    let mut placed = Vec::with_capacity(rows.len());
+    for mut row in rows {
+        row.during_the_upload.arrived = Some(ARRIVALS.fetch_add(1, std::sync::atomic::Ordering::SeqCst));
+        placed.push((sitting.rows.len(), row.clone()));
+        sitting.rows.push(row);
+    }
+    for one in linked_items {
+        if !sitting.linked_items.contains(&one) {
+            sitting.linked_items.push(one);
+        }
+    }
+    for one in the_bake_folders_not_worked_out {
+        if !sitting.the_bake_folders_not_worked_out.iter().any(|said| said.recorded == one.recorded) {
+            sitting.the_bake_folders_not_worked_out.push(one);
+        }
+    }
+    placed
+}
+
+/// **`Dependency Upload & Remap` G14b: a linked file landed during the upload and
+/// could not be read** — every row of that real file says so.
+pub fn a_library_could_not_be_read(held: &Mutex<WhatTheRunHolds>, key: &str, the_real_file: &[u8], why: WhyItCouldNotBeRead) {
+    if let Ok(mut held) = held.lock() {
+        if let Some(sitting) = held.sittings.get_mut(key) {
+            for one in sitting.rows.iter_mut().filter(|one| one.the_real_file() == the_real_file) {
+                one.during_the_upload.could_not_be_read = Some(why);
+            }
+        }
+    }
+}
+
+/// **`Dependency Upload & Remap` G14b and `Dependency Upload & Remap` Q8: a row found during the upload whose
+/// landing place holds a different file** — every row of that real file says so,
+/// and stays to upload for the next press.
+pub fn a_different_file_is_there(held: &Mutex<WhatTheRunHolds>, key: &str, the_real_file: &[u8]) {
+    if let Ok(mut held) = held.lock() {
+        if let Some(sitting) = held.sittings.get_mut(key) {
+            for one in sitting.rows.iter_mut().filter(|one| one.the_real_file() == the_real_file) {
+                one.during_the_upload.a_different_file_is_there = true;
+            }
+        }
+    }
 }
 
 /// **`Dependency Upload & Remap` G11b: the rows standing for one real file, in
@@ -873,19 +1113,92 @@ pub fn one_row_per_real_file(rows: &[ACheckedRow], wanted: impl Fn(&ACheckedRow)
         .collect()
 }
 
+/// **Every figure counts a real file once, over the rows `wanted` takes by
+/// their place** — [`one_row_per_real_file`] where the place matters, as it
+/// does for a row left out (the twenty-eighth notes, note 14).
+pub fn one_row_per_real_file_where(rows: &[ACheckedRow], wanted: impl Fn(usize, &ACheckedRow) -> bool) -> Vec<usize> {
+    let mut seen = std::collections::HashSet::new();
+    rows.iter()
+        .enumerate()
+        .filter(|(at, one)| wanted(*at, one) && seen.insert(one.the_real_file()))
+        .map(|(at, _)| at)
+        .collect()
+}
+
+/// **The rows left out of the upload because no scene uses them** —
+/// `Dependency Upload & Remap` A9 as narrowed 2026-11-09, `Specs/Dependency
+/// Upload & Remap` *Checking a file*, Creator-stated (the twenty-eighth notes,
+/// note 14).
+///
+/// **A real file is left out where every row standing for it was under *To
+/// upload* or *Missing* when the check ran, no scene uses it
+/// ([`no_scene_uses`]), and none of its answers carries K4's *included*
+/// mark.** Every row of that real file is left out with it.
+pub fn the_rows_left_out(sitting: &ASitting) -> BTreeSet<usize> {
+    let mut out = BTreeSet::new();
+    for file in the_real_files(&sitting.rows) {
+        let rows: Vec<&ACheckedRow> = file.iter().map(|at| &sitting.rows[*at]).collect();
+        // **Under *To upload* or *Missing* when the check ran, and neither
+        // sent nor failed since** — a row the user ignores there stays there.
+        let to_upload_or_missing = rows.iter().all(|one| {
+            matches!(one.state_when_the_check_ran, RowState::FoundOnYourComputer | RowState::NotFound)
+                && matches!(one.state, RowState::FoundOnYourComputer | RowState::NotFound | RowState::SetAside)
+        });
+        if to_upload_or_missing && no_scene_uses(sitting, &rows) && !it_was_included(&rows) {
+            out.extend(file);
+        }
+    }
+    out
+}
+
+/// **The spec's one exception to saying nothing about scenes** — `Specs/
+/// Dependency Upload & Remap` *Checking a file*: the reading finished for
+/// every reference the rows stand for (`Dependency Upload & Remap` G20a's
+/// *established*) and reached no scene, and the walk starts from something it
+/// could reach a scene from. **Only on rows of the file being checked**
+/// (2026-11-09, the builder's ruling under note 14): a row found inside a
+/// linked `.blend` was read in that file, whose scenes are not the job's.
+pub fn no_scene_uses(sitting: &ASitting, of_this_file: &[&ACheckedRow]) -> bool {
+    !of_this_file.is_empty()
+        && of_this_file.iter().all(|row| {
+            sitting.of.as_ref().is_none_or(|of| of.holding == row.holding)
+                && matches!(&row.scenes, Attribution::Established(scenes) if scenes.is_empty())
+                && the_walk_starts_where_a_scene_can_be_reached(row.kind)
+        })
+}
+
+/// **`Dependency Upload & Remap` K4's included mark on any answer of the
+/// real file** — the user put it back among the files that upload.
+fn it_was_included(of_this_file: &[&ACheckedRow]) -> bool {
+    of_this_file.iter().any(|row| row.answers.iter().any(|answer| answer.included))
+}
+
+/// **The state a row stands at in the check standing** — `Dependency Upload
+/// & Remap` V11 and V12: a row left out counts as set aside (2026-11-09).
+pub fn the_state_the_standing_counts(sitting: &ASitting, at: usize) -> RowState {
+    if the_rows_left_out(sitting).contains(&at) {
+        RowState::SetAside
+    } else {
+        sitting.rows[at].state
+    }
+}
+
 /// `Dependency Upload & Remap` G11b and `Dependency Upload & Remap` V12:
 /// the warning uses the panel's file count in each state.
 /// Confirmation still checks every reference and its holding file.
 pub(crate) fn the_warning_counts(
-    rows: &[ACheckedRow],
+    sitting: &ASitting,
     mut counts: smoozy_dependencies::standing::Counts,
 ) -> smoozy_dependencies::standing::Counts {
-    let count = |state| one_row_per_real_file(rows, |one| one.state == state).len();
+    let rows = &sitting.rows;
+    // **A row left out counts nowhere here** — V11 and V12 of 2026-11-09.
+    let left_out = the_rows_left_out(sitting);
+    let count = |state| one_row_per_real_file_where(rows, |at, one| one.state == state && !left_out.contains(&at)).len();
     counts.not_found = count(RowState::NotFound);
     counts.could_not_be_sent = 0;
     counts.could_not_be_fixed = 0;
     // The panel has one failed group for both kinds of failure.
-    for at in one_row_per_real_file(rows, |one| is_a_failure(one.state)) {
+    for at in one_row_per_real_file_where(rows, |at, one| is_a_failure(one.state) && !left_out.contains(&at)) {
         match rows[at].state {
             RowState::CouldNotBeSent => counts.could_not_be_sent += 1,
             RowState::CouldNotBeFixed => counts.could_not_be_fixed += 1,
@@ -912,7 +1225,13 @@ impl ACheckedRow {
     /// whole location the render reads, and where that cannot be worked out, the
     /// holding file's own text of it.
     pub fn the_real_file(&self) -> Vec<u8> {
-        let resolved = self.the_answer().and_then(|answer| answer.resolution.as_ref());
+        // **A search's arbitrary pick names no real file** (batch 3 of the Bad
+        // what-if answers, 455): two references handed the same first-met
+        // file of a shared name stay two, so locating one leaves the other.
+        let resolved = self
+            .the_answer()
+            .and_then(|answer| answer.resolution.as_ref())
+            .filter(|resolution| !resolution.is_an_arbitrary_pick());
         if let Some(resolution) = resolved {
             let mut file = b"found ".to_vec();
             file.extend_from_slice(resolution.to.location().as_bytes());
@@ -1006,8 +1325,22 @@ pub struct TheCheck {
     pub the_statements: Vec<AStatement>,
     pub the_once: Option<TheFailure>,
     pub the_ending: Option<TheFailure>,
-    /// ***Stop* beside the walk's count**, the one line it is drawn on.
+    /// ***Stop* beside the header's line** — the walk's count, and since
+    /// 2026-11-13 every line of a running check (`§ While it is still reading
+    /// below a linked file`, after Sol's look at reading the file past a
+    /// minute, point 1).
     pub the_walks_stop: Option<Prose>,
+    /// **The search folders added while this check runs**, at once: *Added
+    /// Archive.* and, in grey, *Searched in this check.* Nothing where none was.
+    pub the_added_while_it_runs: Option<TheAddedWhileItRuns>,
+    /// **Why *Check again* and *Check dependencies* cannot be pressed now,
+    /// shown on hover, and the two drawn unavailable** — `Design/Whole app §
+    /// While other work runs` (the Creator's notes on the test copy, second
+    /// round, note 17): this check is running, or the file itself is going up.
+    pub why_a_check_waits: Option<Prose>,
+    /// **Whether the header's line is the walk's count**, whose figures are
+    /// the sentence's own; any other line's value is a file's name.
+    pub the_line_counts: bool,
     pub nothing_was_read: Option<Prose>,
     /// **The one button under *File not read* where no check of the file
     /// is held** — *Check dependencies*, the drawing's `.btn` in `.cnone`
@@ -1056,6 +1389,16 @@ pub struct AStatement {
     pub its_folders_open_with: Option<Verbatim>,
     /// **The one control on the line** — *Check again* on the folders line.
     pub control: Option<AControl>,
+}
+
+/// **A search folder added while the check runs** — `§ The search folders on
+/// this panel`, as changed 2026-11-13: the names, each with its full path on
+/// hover, and the grey words after them.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TheAddedWhileItRuns {
+    pub said: Words,
+    pub the_full_paths: Vec<Verbatim>,
+    pub quiet: Prose,
 }
 
 /// A statement with no hover, no control and nothing bold but what is asked.
@@ -1119,13 +1462,19 @@ pub struct TheSelectionBar {
     pub choose_a_folder: Option<Prose>,
     pub ignore: Option<Prose>,
     pub undo_the_guess: Option<Prose>,
+    /// ***Retry* and *Verify* over the chosen rows** — `§ Acting on many
+    /// rows`, added 2026-11-12 (the four questions, scout 4.9): each takes
+    /// every chosen row its own row's control would.
+    pub retry: Option<Prose>,
+    pub verify: Option<Prose>,
 }
 
+/// **A shift, stated once, in one sentence counting files** — and *Undo this
+/// change* only where it found any (the twenty-eighth notes, note 15).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct TheShift {
     pub said: Words,
-    pub resolved: Words,
-    pub undo: Prose,
+    pub undo: Option<Prose>,
 }
 
 /// **The summary sentence — the answer to the whole check** — `§ Above the
@@ -1172,8 +1521,15 @@ pub struct AGroup {
     /// **How many rows the group holds**, and on *Already on the server* its
     /// size beside: *1 · 128 MB*.
     pub how_many: Words,
-    /// **Folded away** — *Already on the server* and *Ignored*.
+    /// **Folded away** — *Already on the server*, *Not used by any scene*
+    /// and *Ignored*.
     pub folded: bool,
+    /// ***To upload* carries an up arrow in the heading's ink in place of a
+    /// dot** — `§ The seven states`, the Creator's twenty-eighth notes, note 8.
+    pub marked_with_an_up_arrow: bool,
+    /// ***Include all*, on the heading of *Not used by any scene*** — the
+    /// twenty-eighth notes, note 14.
+    pub include_all: Option<Prose>,
     pub rows: Vec<ARow>,
 }
 
@@ -1221,6 +1577,21 @@ pub struct ANote {
     /// row carries a cross last among its buttons, after its action and ⋯ —
     /// the drawing's *Failed* rows. `said` is empty.
     pub failure: Option<TheRowsFailure>,
+    /// **An arbitrary pick's matches, after its note** (`§ A row`, the four
+    /// questions, scout 2.17, 2026-11-12): the one in use first, then the
+    /// others, each pressable. Empty on every other note.
+    pub matches: Vec<AMatch>,
+}
+
+/// **One of an arbitrary pick's matches** — its place under the searched
+/// folder, the whole location on hover, and its place in the answer's
+/// candidates, which the press hands back.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AMatch {
+    pub place: Verbatim,
+    pub whole: Verbatim,
+    pub in_use: bool,
+    pub at: u32,
 }
 
 /// **A failure standing on a row**: the reason, drawn as a red note, and the
@@ -1313,7 +1684,9 @@ pub fn the_dependency_check_panel<R: tauri::Runtime>(
     // Creator's eighteenth notes, note 6).
     let on_its_way = crate::the_found_files_sent::the_files_on_their_way_to(&server);
     let a_send_is_being_counted = crate::the_found_files_sent::a_send_is_being_counted(&server, &file);
-    let known = WhatElseIsKnown { the_list_in_settings, uploading, on_its_way, a_send_is_being_counted };
+    // **`Dependency Upload & Remap` G14b: the readings the check's upload owes.**
+    let the_send = crate::the_found_files_sent::the_readings_of_the_send(&server, &file);
+    let known = WhatElseIsKnown { the_list_in_settings, uploading, on_its_way, a_send_is_being_counted, the_send };
     match the_run_holds().lock() {
         Ok(held) => the_panel_knowing(&held, &server, &file, the_servers_name.as_deref(), &known),
         // **L8a rather than an emptied panel.**
@@ -1373,6 +1746,62 @@ impl<R: tauri::Runtime> crate::uploading::TheRecordAnUploadWrites for TheApplica
     }
 }
 
+/// `Design/Dependency Upload & Remap § A slow local read on macOS`:
+/// every system answers a second press, including before the sitting starts.
+fn the_running_check_says(held: &WhatTheRunHolds, key: &str) -> Option<Prose> {
+    (held.checks_running.contains_key(key) || held.files_being_read.contains(key))
+        .then(|| Prose::new(words::A_CHECK_IS_ALREADY_RUNNING))
+}
+
+#[cfg(target_os = "macos")]
+fn the_macos_read_watch_is_forgotten(
+    held: &mut WhatTheRunHolds,
+    key: &str,
+    status: &Arc<crate::platform::macos_file_access::ReadStatus>,
+) {
+    // A check and its upload can read at once, or the next check can start
+    // while this one's worker ends. Remove only this worker's status.
+    if let Some(reads) = held.macos_reads.get_mut(key) {
+        reads.retain(|current| !Arc::ptr_eq(current, status));
+        if reads.is_empty() { held.macos_reads.remove(key); }
+    }
+}
+
+/// `Design/Dependency Upload & Remap § A slow local read on macOS`.
+/// Shared by the check, linked readings during its upload, and folder decisions.
+#[cfg(target_os = "macos")]
+struct TheMacosReads {
+    key: String,
+    watching: crate::platform::macos_file_access::Watching,
+}
+#[cfg(target_os = "macos")]
+impl Drop for TheMacosReads {
+    fn drop(&mut self) {
+        if let Ok(mut held) = the_run_holds().lock() {
+            the_macos_read_watch_is_forgotten(&mut held, &self.key, &self.watching.status);
+        }
+    }
+}
+#[cfg(target_os = "macos")]
+fn watch_local_reads<R: tauri::Runtime>(app: &tauri::AppHandle<R>, server: &str, file: &str) -> TheMacosReads {
+    let queue = app.try_state::<Arc<TheOneQueue>>().map(|queue| Arc::clone(queue.inner()));
+    let (server, file) = (server.to_string(), file.to_string());
+    let key = keyed(&server, &file);
+    let focus_app = app.clone();
+    let watching = crate::platform::macos_file_access::Watching::start(
+        std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default(),
+        std::time::Duration::from_secs(2),
+        Arc::new(move || {
+            if let Some(queue) = &queue { the_queue_is_told(queue, an_act_said(&server, &file, None)); }
+        }),
+        Arc::new(move || crate::platform::macos_file_access::request_activation(&focus_app)),
+    );
+    if let Ok(mut held) = the_run_holds().lock() {
+        held.macos_reads.entry(key.clone()).or_default().push(watching.status.clone());
+    }
+    TheMacosReads { key, watching }
+}
+
 /// **Everything a sitting starts from**, gathered with the application's lock
 /// held for the gathering alone, and the sitting started.
 fn the_check_is_begun<R: tauri::Runtime>(
@@ -1382,6 +1811,19 @@ fn the_check_is_begun<R: tauri::Runtime>(
     bytes: &[u8],
 ) -> Option<Prose> {
     use crate::checking_a_file::{TheSittingIsOf, TheUsersOwnComputer};
+    // Answer before gathering anything that could ask the server again.
+    if let Ok(held) = the_run_holds().lock() {
+        if let Some(said) = the_running_check_says(&held, &keyed(server, file)) {
+            return Some(said);
+        }
+        // **This very file going up: no check now** (`Design/Whole app § While
+        // other work runs`, 2026-11-13) — it would describe a file about to be
+        // replaced.
+        if held.the_files_going_up.this_file_is_going_up(server, file.as_bytes()) {
+            return Some(Prose::new(words::THIS_FILE_IS_UPLOADING));
+        }
+    }
+
     use smoozy_dependencies::bytes::{MachineLocation, StoredLocation};
     use smoozy_dependencies::record::MachineKey;
     use smoozy_file_browser::request::KeepsTheRequest as _;
@@ -1445,13 +1887,20 @@ fn the_check_is_begun<R: tauri::Runtime>(
     // once where none resolves. **Where no list is held, or no saved-with
     // version, it is resolved on the sitting's thread**, because that asks the
     // machine ([`the_blender_the_check_reads_with`]).
+    // **The frames the job renders, as the page holds them now**
+    // (`Dependency Upload & Remap`, *Colour spaces and image sequences*): what a
+    // picture stored as a sequence needs is worked out over them.
+    let the_jobs_frames = crate::surface::render_settings::the_run_holds()
+        .lock()
+        .ok()
+        .and_then(|page| crate::surface::render_settings::the_frames_this_files_jobs_render(&page, server, file));
     let with_now = match crate::surface::render_settings::the_run_holds().lock() {
         Ok(page) => match crate::surface::render_settings::the_version_resolved(&page, server, file) {
             smoozy_render_settings::version::Resolution::NoVersionResolves(
                 smoozy_render_settings::version::WhyNone::NoMachineInHand
                 | smoozy_render_settings::version::WhyNone::NoSavedWithVersionToMatchOn,
             ) => None,
-            resolution => Some(the_blender_resolved(&resolution)),
+            resolution => Some(the_blender_resolved_on(&page, server, &resolution)),
         },
         Err(_) => return Some(Prose::new(words::THE_RECORD_WOULD_NOT_READ)),
     };
@@ -1488,8 +1937,18 @@ fn the_check_is_begun<R: tauri::Runtime>(
     let key = keyed(server, file);
     let this_press_marked_it = the_run_holds()
         .lock()
-        .map(|mut held| the_file_is_about_to_be_read(&mut held, &key))
+        .map(|mut held| {
+            match &the_jobs_frames {
+                Some(frames) => held.the_jobs_frames.insert(key.clone(), frames.clone()),
+                None => held.the_jobs_frames.remove(&key),
+            };
+            the_file_is_about_to_be_read(&mut held, &key)
+        })
         .unwrap_or(false);
+    // Another press may have claimed the check during the gathering above.
+    if !this_press_marked_it {
+        return Some(Prose::new(words::A_CHECK_IS_ALREADY_RUNNING));
+    }
     // **A check that ends before its sitting starts takes the mark off**;
     // once it starts, `crate::checking_a_file` owns the mark.
     let no_longer_read = move || {
@@ -1517,20 +1976,25 @@ fn the_check_is_begun<R: tauri::Runtime>(
                 &server,
                 &file,
                 || {
-                    let asked = match &runtime {
-                        Some(runtime) => runtime.block_on(crate::submitting::the_blenders_on_the_machine(
-                            &point,
-                            &server,
-                            own_area.as_deref(),
-                        )),
-                        None => smoozy_render_settings::acting::versions::TheVersionListAsk::TheMachineCouldNotBeAsked,
+                    let (asked, the_disk_reads_full) = match &runtime {
+                        Some(runtime) => {
+                            runtime.block_on(crate::submitting::the_blenders_on_the_machine_and_its_disk(
+                                &point,
+                                &server,
+                                own_area.as_deref(),
+                            ))
+                        }
+                        None => (
+                            smoozy_render_settings::acting::versions::TheVersionListAsk::TheMachineCouldNotBeAsked,
+                            false,
+                        ),
                     };
                     // **`Server Setup` R1b's comparison, at `Server Setup`
                     // B12's moment of `Render Settings` asking for the version
                     // list**, which this check asks on that page's behalf.
                     // Added 2026-10-12.
                     crate::servers::the_driver_swap::the_search_is_compared(&app, &server, &asked);
-                    asked
+                    (asked, the_disk_reads_full)
                 },
                 || {
                     runtime.as_ref().and_then(|runtime| {
@@ -1573,18 +2037,22 @@ fn the_check_is_begun<R: tauri::Runtime>(
         };
         let door = TheApplicationsRecord { app: app.clone() };
         let came_to = match &runtime {
-            Some(runtime) => runtime.block_on(crate::checking_a_file::the_check_runs(
-                &mut crate::reading_the_file::ThisServersMachine {
+            Some(runtime) => {
+                let mut machine = crate::reading_the_file::ThisServersMachine {
                     sessions: &point,
                     package_area: &package_area,
                     server: &server,
-                },
-                &door,
-                &TheUsersOwnComputer,
-                the_run_holds(),
-                &sitting,
-                &told,
-            )),
+                };
+                let checking = crate::checking_a_file::the_check_runs(
+                    &mut machine, &door, &TheUsersOwnComputer, the_run_holds(), &sitting, &told,
+                );
+                // Windows and Linux keep their existing reads and focus.
+                #[cfg(target_os = "macos")]
+                let access = watch_local_reads(&app, &server, &file);
+                #[cfg(target_os = "macos")]
+                let checking = access.watching.status.clone().while_polled(checking);
+                runtime.block_on(checking)
+            }
             // **No sitting ran, so its mark is taken off here**; a sitting
             // that ran takes its own off, and one that joined a running check
             // leaves that check's mark alone.
@@ -1640,11 +2108,11 @@ pub enum NoBlenderToReadWith {
 /// **Where none resolves, the reason is named in the render settings panel's
 /// own words** (`Render Settings` B5; `Render Settings` B5a; met at the check): *This server
 /// has no Blender.* only where the list is empty.
-pub fn the_blender_the_check_reads_with(
+pub fn the_blender_the_check_reads_with<A: Into<TheListAndItsDisk>>(
     page: &Mutex<crate::surface::render_settings::WhatTheRunHolds>,
     server: &str,
     file: &str,
-    ask_for_the_list: impl FnOnce() -> smoozy_render_settings::acting::versions::TheVersionListAsk,
+    ask_for_the_list: impl FnOnce() -> A,
     read_the_saved_with_version: impl FnOnce() -> Option<String>,
 ) -> Result<BlenderIdentity, NoBlenderToReadWith> {
     use smoozy_render_settings::version::{Resolution, WhyNone};
@@ -1655,9 +2123,14 @@ pub fn the_blender_the_check_reads_with(
     let mut resolution = resolved()?;
     if resolution == Resolution::NoVersionResolves(WhyNone::NoMachineInHand) {
         // **The ask runs with no lock held**: it reads the machine.
-        let asked = ask_for_the_list();
+        let TheListAndItsDisk(asked, the_disk_reads_full) = ask_for_the_list().into();
         match page.lock() {
-            Ok(mut page) => crate::surface::render_settings::the_version_list_came_back(&mut page, server, asked),
+            Ok(mut page) => crate::surface::render_settings::the_version_list_came_back_with_the_disk(
+                &mut page,
+                server,
+                asked,
+                the_disk_reads_full,
+            ),
             Err(_) => return Err(NoBlenderToReadWith::Said(words::THE_RECORD_WOULD_NOT_READ)),
         }
         resolution = resolved()?;
@@ -1676,7 +2149,49 @@ pub fn the_blender_the_check_reads_with(
             resolution = resolved()?;
         }
     }
-    the_blender_resolved(&resolution)
+    // **`Render Settings` B5 as added 2026-11-11: where no build answered
+    // and the server's disk reads full, the check says so**, and never that
+    // the server has no Blender.
+    match page.lock() {
+        Ok(page) => the_blender_resolved_on(&page, server, &resolution),
+        Err(_) => Err(NoBlenderToReadWith::Said(words::THE_RECORD_WOULD_NOT_READ)),
+    }
+}
+
+/// **[`the_blender_resolved`], on the page's own word about the server's
+/// disk** (`Render Settings` B5 as added 2026-11-11): where no build answered
+/// and the disk reads full, the reason is that, and never that the server has
+/// no Blender. Both of the check's routes to a Blender end here (Sol's third
+/// point on the full disk).
+fn the_blender_resolved_on(
+    page: &crate::surface::render_settings::WhatTheRunHolds,
+    server: &str,
+    resolution: &smoozy_render_settings::version::Resolution,
+) -> Result<BlenderIdentity, NoBlenderToReadWith> {
+    match the_blender_resolved(resolution) {
+        Err(NoBlenderToReadWith::Said(said))
+            if said == words::NO_BLENDER_ON_THIS_SERVER && page.the_disk_reads_full_on.contains(server) =>
+        {
+            Err(NoBlenderToReadWith::Said(words::THE_SERVERS_DISK_IS_FULL))
+        }
+        resolved => resolved,
+    }
+}
+
+/// **A list the check asked for, and what the same search read of the
+/// server's disk** — a list alone says nothing of the disk.
+pub struct TheListAndItsDisk(pub smoozy_render_settings::acting::versions::TheVersionListAsk, pub bool);
+
+impl From<smoozy_render_settings::acting::versions::TheVersionListAsk> for TheListAndItsDisk {
+    fn from(asked: smoozy_render_settings::acting::versions::TheVersionListAsk) -> Self {
+        TheListAndItsDisk(asked, false)
+    }
+}
+
+impl From<(smoozy_render_settings::acting::versions::TheVersionListAsk, bool)> for TheListAndItsDisk {
+    fn from((asked, the_disk_reads_full): (smoozy_render_settings::acting::versions::TheVersionListAsk, bool)) -> Self {
+        TheListAndItsDisk(asked, the_disk_reads_full)
+    }
 }
 
 /// **The resolution, read as the Blender to read with or the reason there is
@@ -1711,7 +2226,8 @@ fn the_sitting_came_to<R: tauri::Runtime>(
 ) -> Option<Prose> {
     use crate::checking_a_file::TheCheckCameTo;
     match came_to {
-        TheCheckCameTo::TheSittingStands(_) | TheCheckCameTo::ItJoinedTheOneRunning => None,
+        TheCheckCameTo::TheSittingStands(_) => None,
+        TheCheckCameTo::ItJoinedTheOneRunning => Some(Prose::new(words::A_CHECK_IS_ALREADY_RUNNING)),
         TheCheckCameTo::ItGaveNothing(ending) => {
             the_ending_lands(app, server, file, ending, Some(with.clone()), the_setup_stands_stopped, name);
             None
@@ -1776,8 +2292,16 @@ pub enum TheAct {
     StopTheOverwrite,
     // A decision about the user's own computer — `Dependency Upload & Remap` K4.
     Locate,
+    // **One of an arbitrary pick's matches, pressed** — *Locate…*'s own
+    // decision with that file (`§ A row`, scout 2.17). `pick` names it.
+    PickAMatch,
     SetAside,
     Restore,
+    // **A row no scene uses put back among the files that upload, or all of
+    // them** — `Dependency Upload & Remap` K4's included mark, the
+    // twenty-eighth notes, note 14.
+    Include,
+    IncludeAll,
     UndoTheGuess,
     Accept,
     UseIt,
@@ -1809,14 +2333,39 @@ pub async fn an_act_on_the_check<R: tauri::Runtime>(
     file: Vec<u8>,
     act: TheAct,
     row: Option<u32>,
+    pick: Option<u32>,
 ) {
     use tauri::Manager;
     let bytes = file;
     let file = crate::surface::render_settings::the_path_as_it_is_keyed(&bytes);
     let row = row.map(|at| at as usize);
-    let said = the_act_is_answered(&app, &server, &file, &bytes, act, row).await;
+    let said = match act {
+        TheAct::PickAMatch => match the_match_picked(server.as_str(), &file, row, pick) {
+            Some(path) => a_decision_looks_at_the_disk(&app, &server, &file, crate::checking_a_file::ADecision::Locate(path), row).await,
+            None => None,
+        },
+        _ => the_act_is_answered(&app, &server, &file, &bytes, act, row).await,
+    };
     if let Some(queue) = app.try_state::<Arc<TheOneQueue>>() {
         the_queue_is_told(&queue, an_act_said(&server, &file, said));
+    }
+}
+
+/// **The match a press names** — the whole location of the `pick`th of the
+/// row's arbitrary pick, as the answer holds it. Nothing where the row no
+/// longer carries one (its answer changed since it was drawn).
+fn the_match_picked(server: &str, file: &str, row: Option<usize>, pick: Option<u32>) -> Option<Vec<u8>> {
+    let held = the_run_holds().lock().ok()?;
+    let one = held.sittings.get(&keyed(server, file)).and_then(|sitting| sitting.rows.get(row?))?;
+    the_match_on(one, pick? as usize)
+}
+
+fn the_match_on(one: &ACheckedRow, pick: usize) -> Option<Vec<u8>> {
+    match &one.the_answer()?.resolution.as_ref()?.how {
+        HowResolved::TheSearch { arbitrary: Some(arbitrary), .. } => {
+            arbitrary.among.get(pick).map(|one| one.as_bytes().to_vec())
+        }
+        _ => None,
     }
 }
 
@@ -1917,12 +2466,18 @@ fn a_send_is_asked_for<R: tauri::Runtime>(
             TheAct::Replace => held.overwrites.remove(&key).map(|asked| asked.row),
             _ => None,
         };
+        // **With no row named, *Retry* and *Verify* take the chosen rows** —
+        // the bar's (`§ Acting on many rows`, the four questions, scout 4.9).
+        let chosen = held.selections.get(&key).cloned().unwrap_or_default();
         let sitting = held.sittings.get(&key)?;
         let of = sitting.of.clone()?;
         let rows: Vec<usize> = match act {
-            TheAct::Upload => the_rows_the_upload_sends(&sitting.rows),
+            TheAct::Upload => the_rows_the_upload_sends(sitting),
             TheAct::Replace => replacing.into_iter().collect(),
-            _ => row.into_iter().filter(|at| *at < sitting.rows.len()).collect(),
+            _ => match row {
+                Some(at) => std::iter::once(at).filter(|at| *at < sitting.rows.len()).collect(),
+                None => the_chosen_rows_the_act_takes(sitting, &chosen, act),
+            },
         };
         (of, rows)
     };
@@ -1959,9 +2514,14 @@ fn a_send_is_asked_for<R: tauri::Runtime>(
     let app = app.clone();
     // **`Dependency Upload & Remap` A9e: from the press, *Render* is held.**
     let in_hand = (act != TheAct::Confirm).then(|| TheSendInHand::of(&key));
-    tauri::async_runtime::spawn(async move {
+    // Windows and Linux retain their existing upload and read route.
+    #[cfg(target_os = "macos")]
+    let access = watch_local_reads(&app, server, file);
+    let task = async move {
         if act == TheAct::Confirm {
-            if let Some(at) = asked.rows.first() {
+            // **Every row asked, not the first** — the bar's *Verify* asks
+            // several (the four questions, scout 4.9).
+            for at in &asked.rows {
                 a_row_is_confirmed(&point, door.as_ref(), the_run_holds(), &asked.of, *at).await;
             }
         } else {
@@ -1984,7 +2544,13 @@ fn a_send_is_asked_for<R: tauri::Runtime>(
         }
         drop(in_hand);
         door.a_transfer_moved();
-    });
+    };
+    #[cfg(target_os = "macos")]
+    let task = async move {
+        access.watching.status.clone().while_polled(task).await;
+        drop(access);
+    };
+    tauri::async_runtime::spawn(task);
     None
 }
 
@@ -2027,7 +2593,8 @@ pub fn the_check_runs_again_after(
 async fn one_picked<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     what: crate::picker::WhatMayBeChosen,
-    title: &str,
+    title: Prose,
+    the_value_after_the_title: Option<Verbatim>,
 ) -> Option<Vec<u8>> {
     use crate::picker::{asked, Asking, HowMany, Picked};
     let Picked::TheUserChose(chosen) = asked(
@@ -2036,7 +2603,8 @@ async fn one_picked<R: tauri::Runtime>(
             what,
             how_many: HowMany::One,
             starting_at: None,
-            title: Prose::new(title),
+            title,
+            the_value_after_the_title,
         },
     )
     .await
@@ -2046,6 +2614,27 @@ async fn one_picked<R: tauri::Runtime>(
     chosen
         .first()
         .map(|one| one.as_the_user_gave_it().as_os_str().as_encoded_bytes().to_vec())
+}
+
+/// **The picker's title for *Locate…* on one row** — `Desktop app and
+/// delivery` X5's sentence of 2026-11-09: *Locate* and the row's own name as
+/// the row shows it, a value on the verbatim route (the twenty-eighth notes,
+/// note 13).
+fn what_locate_asks(one: &ACheckedRow) -> (Prose, Option<Verbatim>) {
+    (Prose::new(words::LOCATE_TITLE), Some(Verbatim::new(the_rows_name(one))))
+}
+
+/// **The row's name as the row shows it** — the last part of the location
+/// the render reads (`Dependency Upload & Remap` G9a), while *The file says*
+/// keeps the recorded bytes.
+fn the_rows_name(one: &ACheckedRow) -> String {
+    let recorded = one.row.ordering_key().as_bytes();
+    lossy(the_name_in(
+        one.wanted
+            .iter()
+            .find(|wanted| wanted.reference.as_bytes() == recorded)
+            .map_or(recorded, |wanted| wanted.the_location_read.as_bytes()),
+    ))
 }
 
 /// **`Dependency Upload & Remap` F1c: *Locate…* and *Choose a folder…*, off the
@@ -2059,7 +2648,12 @@ async fn a_decision_looks_at_the_disk<R: tauri::Runtime>(
 ) -> Option<Prose> {
     use crate::checking_a_file::{a_decision_that_looks_is_taken, TheUsersOwnComputer, WhatADecisionCameTo};
     let (app, key) = (app.clone(), keyed(server, file));
+    #[cfg(target_os = "macos")]
+    let access = watch_local_reads(&app, &server, &file);
     tauri::async_runtime::spawn_blocking(move || {
+        // Windows and Linux keep their existing folder reads.
+        #[cfg(target_os = "macos")]
+        let _scope = access.watching.status.enter();
         match a_decision_that_looks_is_taken(the_run_holds(), &key, &decision, row, &TheApplicationsRecord { app }, &TheUsersOwnComputer) {
             WhatADecisionCameTo::Taken | WhatADecisionCameTo::NothingToTake => None,
             WhatADecisionCameTo::NotSaved => Some(Prose::new(words::THE_CHANGE_WAS_NOT_SAVED)),
@@ -2103,6 +2697,8 @@ async fn the_act_is_answered<R: tauri::Runtime>(
         }
         TheAct::SetAside => ADecision::SetAside,
         TheAct::Restore => ADecision::Restore,
+        TheAct::Include => ADecision::Include,
+        TheAct::IncludeAll => ADecision::IncludeAll,
         TheAct::UndoTheGuess => ADecision::UndoTheGuess,
         TheAct::Accept => ADecision::Accept,
         TheAct::UseIt => ADecision::UseIt,
@@ -2139,30 +2735,34 @@ async fn the_act_is_answered<R: tauri::Runtime>(
         // folder-shaped one, is pointed at a folder**; everything else at a
         // file.
         TheAct::Locate => {
-            let what = match the_run_holds().lock() {
-                Ok(held) => match held
-                    .sittings
-                    .get(&keyed(server, file))
-                    .and_then(|sitting| row.and_then(|at| sitting.rows.get(at)))
-                    .and_then(|one| one.wanted.first())
-                    .map(|wanted| wanted.shape)
-                {
-                    Some(smoozy_dependencies::search::WantedShape::AFile) => WhatMayBeChosen::Files,
-                    Some(_) => WhatMayBeChosen::Folders,
-                    None => return None,
-                },
+            let (what, (title, the_name)) = match the_run_holds().lock() {
+                Ok(held) => {
+                    let Some(one) = held
+                        .sittings
+                        .get(&keyed(server, file))
+                        .and_then(|sitting| row.and_then(|at| sitting.rows.get(at)))
+                    else {
+                        return None;
+                    };
+                    let what = match one.wanted.first().map(|wanted| wanted.shape) {
+                        Some(smoozy_dependencies::search::WantedShape::AFile) => WhatMayBeChosen::Files,
+                        Some(_) => WhatMayBeChosen::Folders,
+                        None => return None,
+                    };
+                    (what, what_locate_asks(one))
+                }
                 Err(_) => return Some(Prose::new(words::THE_RECORD_WOULD_NOT_READ)),
             };
-            let path = one_picked(app, what, words::LOCATE).await?;
+            let path = one_picked(app, what, title, the_name).await?;
             return a_decision_looks_at_the_disk(app, server, file, ADecision::Locate(path), row).await;
         }
         TheAct::ChooseAFolder => {
-            let folder = one_picked(app, WhatMayBeChosen::Folders, words::CHOOSE_A_FOLDER).await?;
+            let folder = one_picked(app, WhatMayBeChosen::Folders, Prose::new(words::CHOOSE_A_FOLDER), None).await?;
             return a_decision_looks_at_the_disk(app, server, file, ADecision::ChooseAFolder(folder), row).await;
         }
         // **The folder is held until Add**, and the box shows it.
         TheAct::ChooseASearchFolder => {
-            let chosen = one_picked(app, WhatMayBeChosen::Folders, words::ADD_A_SEARCH_FOLDER).await?;
+            let chosen = one_picked(app, WhatMayBeChosen::Folders, Prose::new(words::ADD_A_SEARCH_FOLDER), None).await?;
             if let Ok(mut held) = the_run_holds().lock() {
                 if let Some(sitting) = held.sittings.get_mut(&keyed(server, file)) {
                     sitting.the_chosen_search_folder = Some(chosen);
@@ -2342,8 +2942,11 @@ pub fn the_act_is_taken(
         TheAct::CheckAgain
         | TheAct::CheckDependencies
         | TheAct::Locate
+        | TheAct::PickAMatch
         | TheAct::SetAside
         | TheAct::Restore
+        | TheAct::Include
+        | TheAct::IncludeAll
         | TheAct::UndoTheGuess
         | TheAct::Accept
         | TheAct::UseIt
@@ -2461,11 +3064,12 @@ struct AGroupsPlace {
 
 /// **`§ How the rows are grouped and sorted`, since the dependency check's
 /// fresh look (2026-10-18): Failed, Missing, Uploaded before not verified, To
-/// upload, Already on the server (folded, its size on the heading), Ignored
-/// (folded).** Each with its colour: red to act, amber to look, green when
+/// upload, Already on the server (folded, its size on the heading), Not used
+/// by any scene (folded, its size on the heading; the twenty-eighth notes,
+/// note 14), Ignored (folded).** Each with its colour: red to act, amber to look, green when
 /// done, grey where the user has answered, and none where Smoozy uploads the
 /// file itself. The keys are the ones the page and the tests have always used.
-const THE_GROUPS: [AGroupsPlace; 6] = [
+const THE_GROUPS: [AGroupsPlace; 7] = [
     AGroupsPlace { which: "failed", heading: words::FAILED, colour: "bad", folded: false },
     AGroupsPlace { which: "not-found", heading: words::MISSING, colour: "bad", folded: false },
     AGroupsPlace {
@@ -2476,12 +3080,23 @@ const THE_GROUPS: [AGroupsPlace; 6] = [
     },
     AGroupsPlace { which: "found", heading: words::TO_UPLOAD_HEADING, colour: "", folded: false },
     AGroupsPlace { which: "already-there", heading: words::ALREADY_ON_THE_SERVER, colour: "ok", folded: true },
+    // **The rows no scene uses, folded above *Ignored*, in its grey** — the
+    // Creator's twenty-eighth notes, note 14.
+    AGroupsPlace { which: "not-used", heading: words::NOT_USED_BY_ANY_SCENE, colour: "idle", folded: true },
     AGroupsPlace { which: "ignored", heading: words::IGNORED, colour: "idle", folded: true },
 ];
 
+/// The place in [`THE_GROUPS`] of *To upload*, whose heading carries the up
+/// arrow (the twenty-eighth notes, note 8).
+const THE_TO_UPLOAD_GROUP: usize = 3;
+
+/// The place in [`THE_GROUPS`] of *Not used by any scene*, whose rows are not
+/// in the list a selection is made from either (note 14).
+const THE_NOT_USED_GROUP: usize = 5;
+
 /// The place in [`THE_GROUPS`] of the Ignored group, whose rows are not in
 /// the list a selection is made from.
-const THE_IGNORED_GROUP: usize = 5;
+const THE_IGNORED_GROUP: usize = 6;
 
 /// Which of [`THE_GROUPS`] a state sits in.
 fn the_group_of(state: RowState) -> usize {
@@ -2554,6 +3169,7 @@ fn a_control(label: &str, act: &str, unavailable: bool) -> AControl {
         label: Prose::new(label),
         act: Verbatim::new(act),
         unavailable,
+        on_hover: None,
     }
 }
 
@@ -2580,6 +3196,10 @@ pub struct WhatElseIsKnown {
     /// **`Dependency Upload & Remap` A9c: a press of this check's upload control
     /// is still counting what goes.**
     pub a_send_is_being_counted: bool,
+    /// **`Dependency Upload & Remap` G14b: the readings this check's upload
+    /// owes**, where one is running or owes a reading
+    /// (`crate::the_found_files_sent::the_readings_of_the_send`).
+    pub the_send: Option<crate::the_found_files_sent::TheSendsReadings>,
 }
 
 /// **The whole panel, composed from what the run holds and from nothing else.**
@@ -2595,6 +3215,27 @@ pub fn the_panel(
 /// **The whole panel, composed from what the run holds and what the command
 /// read beside it.**
 pub fn the_panel_knowing(
+    held: &WhatTheRunHolds,
+    server: &str,
+    file: &str,
+    the_servers_name: Option<&str>,
+    known: &WhatElseIsKnown,
+) -> TheCheck {
+    let check = the_panel_without_access_hint(held, server, file, the_servers_name, known);
+    #[cfg(target_os = "macos")]
+    let check = {
+        let mut check = check;
+        let key = keyed(server, file);
+        if let Some(folder) = held.macos_reads.get(&key).and_then(|reads| reads.iter().find_map(|read| read.hint())) {
+            check.still_reading = Some(Words::plain(words::MACOS_MAY_BE_ASKING)
+                .and_a_path(folder).then(words::LOOK_FOR_ITS_QUESTION).joined());
+        }
+        check
+    };
+    check
+}
+
+fn the_panel_without_access_hint(
     held: &WhatTheRunHolds,
     server: &str,
     file: &str,
@@ -2617,6 +3258,9 @@ pub fn the_panel_knowing(
         the_once: None,
         the_ending: None,
         the_walks_stop: None,
+        the_added_while_it_runs: None,
+        why_a_check_waits: None,
+        the_line_counts: false,
         nothing_was_read: None,
         the_check_to_start: None,
         the_tools: None,
@@ -2653,6 +3297,20 @@ pub fn the_panel_knowing(
         .flatten()
         .map(|folder| Verbatim::new(lossy(folder)))
         .collect();
+    // **A search folder added while this check runs is shown at once**, even
+    // while the file itself is read (the Creator's notes on the test copy,
+    // second round, note 14).
+    check.the_added_while_it_runs = the_added_while_it_runs(held, &key);
+    // **Why a check cannot start now** (`Design/Whole app § While other work
+    // runs`, 2026-11-13): one is running, or this very file is going up, so a
+    // check would describe a file about to be replaced.
+    check.why_a_check_waits = if held.checks_running.contains_key(&key) || held.files_being_read.contains(&key) {
+        Some(Prose::new(words::A_CHECK_IS_RUNNING))
+    } else if held.the_files_going_up.this_file_is_going_up(server, file.as_bytes()) {
+        Some(Prose::new(words::THIS_FILE_IS_UPLOADING))
+    } else {
+        None
+    };
 
     // **While the file itself is being read: *Reading the file…* on the
     // header's own line, with the underway mark the page puts on that line,
@@ -2663,12 +3321,20 @@ pub fn the_panel_knowing(
     // the run held before** — an earlier sitting's rows or an earlier ending —
     // because the fresh sitting rebuilds and carries none of it (`Dependency
     // Upload & Remap` G17). The Creator's note 8 on the test copy.
+    // ***Stop* beside the line for the whole check**, until it is pressed
+    // (`§ While it is still reading below a linked file`, 2026-11-13, after
+    // Sol's look at reading the file past a minute, point 1): the file's own
+    // reading and a linked file's can be stopped as the walk can.
+    let it_can_be_stopped = held.checks_running.get(&key) == Some(&false);
     if held.files_being_read.contains(&key) {
         check.still_reading = Some(Words::plain(words::READING_THE_FILE));
         // **`Dependency Upload & Remap` Q5a's walk over the file's own rows counts in its place**, with
         // *Stop* beside it (`§ While it is still reading below a linked file`).
         if let Some(walk) = held.sittings.get(&key).and_then(|sitting| sitting.the_walk) {
             check.still_reading = Some(the_walks_line(walk));
+            check.the_walks_stop = Some(Prose::new(words::STOP));
+            check.the_line_counts = true;
+        } else if it_can_be_stopped {
             check.the_walks_stop = Some(Prose::new(words::STOP));
         }
         return check;
@@ -2736,10 +3402,57 @@ pub fn the_panel_knowing(
         if let Some(walk) = sitting.the_walk {
             check.still_reading = Some(the_walks_line(walk));
             check.the_walks_stop = Some(Prose::new(words::STOP));
+            check.the_line_counts = true;
         }
     }
 
+    // **`Dependency Upload & Remap` G14b: while the check's upload owes
+    // readings, the header's line says which linked file is read, and how many
+    // are** — where no walk of a check says its own.
+    let the_send = known.the_send.as_ref().filter(|send| send.linked > 0);
+    if check.still_reading.is_none() && !dropped {
+        check.still_reading = the_send.and_then(the_sends_line);
+    }
+    // **A check running with no other line to say says *Checking
+    // dependencies…***, the words Render Settings shows meanwhile — `§ While it
+    // is still reading below a linked file`, 2026-11-10. On a real line the
+    // check after an upload remapped ten linked files for 76 s with nothing
+    // running shown, its summary reading as an answer (the twenty-eighth notes,
+    // piece 12).
+    if check.still_reading.is_none() && !dropped && held.checks_running.contains_key(&key) {
+        check.still_reading = Some(Words::plain(words::CHECKING_DEPENDENCIES));
+    }
+    if check.still_reading.is_some() && check.the_walks_stop.is_none() && it_can_be_stopped {
+        check.the_walks_stop = Some(Prose::new(words::STOP));
+    }
+    // **And the summary keeps *, found so far.* while what a linked file of the
+    // upload needs is not known** — for good after one failed, was stopped or
+    // could not be read.
+    let unknown = known.the_send.as_ref().is_some_and(|send| send.it_can_grow() || send.unknown_for_good)
+        || held.the_uploads_left_something_unknown.contains(&key);
+
     check.the_statements = the_statements(sitting, dropped, known.the_list_in_settings.as_deref());
+    // **The one sentence, first under the summary, from the moment a linked
+    // file is to upload until every linked file of that upload is read** —
+    // `§ Above the rows`, 2026-11-09.
+    let layout = sitting.of.as_ref().and_then(|of| of.layout.as_ref());
+    let a_linked_file_is_to_upload = crate::the_found_files_sent::the_rows_left_to_upload(sitting, layout, &known.on_its_way)
+        .iter()
+        .any(|at| sitting.rows[*at].kind == Kind::Library);
+    if known.the_send.as_ref().is_some_and(|send| send.it_can_grow()) || a_linked_file_is_to_upload {
+        check.the_statements.insert(
+            0,
+            AStatement {
+                which: Verbatim::new("linked-files-go-first"),
+                said: Words::plain(words::LINKED_FILES_GO_FIRST),
+                its_first_sentence_is_bold: false,
+                its_last_sentence_is_bold: false,
+                the_full_paths: Vec::new(),
+                its_folders_open_with: None,
+                control: None,
+            },
+        );
+    }
     check.the_once = sitting
         .the_once
         .as_ref()
@@ -2766,7 +3479,11 @@ pub fn the_panel_knowing(
     // **The summary sentence, under the title and on the strip** — `§ Above
     // the rows` and `§ Where it sits`, since the dependency check's fresh
     // look: collapsed, the strip shows the same sentence.
-    let stretches = the_summary_of(sitting, so_far);
+    let stretches = the_summary_of(
+        sitting,
+        so_far || unknown,
+        known.uploading.map(|uploading| (uploading, known.on_its_way.as_slice())),
+    );
     check.the_summary = (!stretches.is_empty()).then(|| TheSummary {
         parts: stretches.iter().map(AStretch::on_the_panel).collect(),
     });
@@ -2810,6 +3527,31 @@ fn the_endings_sentence(ending: &Ending) -> Option<&'static str> {
         }
         Ending::SmoozyStoppedIt => Some(words::THE_CHECK_WAS_STOPPED),
     }
+}
+
+/// **`Dependency Upload & Remap` G14b: the header's line while the check's
+/// upload owes readings** — *Reading shelf.blend · 4 of 11 linked files read*,
+/// or, where nothing is read because the next has not landed, *Waiting for
+/// linked files to upload · 4 of 11 read*. Nothing once every linked file of
+/// the upload is read.
+fn the_sends_line(send: &crate::the_found_files_sent::TheSendsReadings) -> Option<Words> {
+    if !send.it_can_grow() {
+        return None;
+    }
+    let counted = |said: Words, rest: &'static str| {
+        said.then(words::BETWEEN_ON_THE_LINE)
+            .and(send.read.to_string())
+            .then(words::OF)
+            .and(send.linked.to_string())
+            .then(rest)
+    };
+    Some(match &send.reading_now {
+        Some(at) => counted(
+            Words::with(words::READING, the_last_part(at)),
+            if send.linked == 1 { words::LINKED_FILE_READ } else { words::LINKED_FILES_READ },
+        ),
+        None => counted(Words::plain(words::WAITING_FOR_LINKED_FILES_TO_UPLOAD), words::READ),
+    })
 }
 
 /// ***Checking files on the server: 120 of 480***, the walk's own count.
@@ -2962,6 +3704,25 @@ fn the_statements(sitting: &ASitting, dropped: bool, the_list_in_settings: Optio
                 .then(words::FULL_STOP)
                 .joined()
                 .then(words::BLENDER_MAY_HAVE_PACKED_IT),
+            false,
+        ));
+    }
+    // `Dependency Upload & Remap`, *Colour spaces and image sequences*: a colour
+    // name the server's Blender lacks, one line each, in `Dependency Upload & Remap` V3a's class — nothing
+    // to press and nothing to dismiss.
+    for one in &sitting.the_colour_names_not_found {
+        let (which, said) = match one.which {
+            WhichColourName::ColourSpace => ("a-colour-space-not-on-the-server", words::NO_COLOUR_SPACE_ON_THIS_SERVER),
+            WhichColourName::ViewTransform => ("a-view-transform-not-on-the-server", words::NO_VIEW_TRANSFORM_ON_THIS_SERVER),
+            WhichColourName::Display => ("a-display-not-on-the-server", words::NO_DISPLAY_ON_THIS_SERVER),
+        };
+        out.push(a_statement(
+            which,
+            Words::plain(said)
+                .and(one.name.clone())
+                .then(words::FULL_STOP)
+                .joined()
+                .then(words::IT_WILL_USE_ITS_DEFAULT),
             false,
         ));
     }
@@ -3123,6 +3884,26 @@ fn what_the_send_said(said: WhatASendSaid) -> AStatement {
     }
 }
 
+/// **The search folders added while this check runs** (`§ The search folders
+/// on this panel`, as changed 2026-11-13): *Added Archive, Textures.* by their
+/// last folder names, the full paths on hover, then *Searched in this check.*
+fn the_added_while_it_runs(held: &WhatTheRunHolds, key: &str) -> Option<TheAddedWhileItRuns> {
+    let running = held.checks_running.contains_key(key) || held.files_being_read.contains(key);
+    let added = held.folders_added_while_it_runs.get(key).filter(|added| running && !added.is_empty())?;
+    let mut said = Words::plain(words::ADDED);
+    for (at, folder) in added.iter().enumerate() {
+        if at > 0 {
+            said = said.then(words::COMMA).joined();
+        }
+        said = said.and(the_last_part(folder));
+    }
+    Some(TheAddedWhileItRuns {
+        said: said.then(words::FULL_STOP).joined(),
+        the_full_paths: added.iter().map(|folder| Verbatim::new(lossy(folder))).collect(),
+        quiet: Prose::new(words::SEARCHED_IN_THIS_CHECK),
+    })
+}
+
 /// **What *Add* said is let go of at the user's next act on this panel**, so
 /// it is said once — every act but the add itself, which says it anew.
 pub fn the_added_statement_is_let_go(held: &mut WhatTheRunHolds, server: &str, file: &str, act: TheAct) {
@@ -3233,27 +4014,52 @@ fn the_selection_bar(sitting: &ASitting, chosen: &BTreeSet<usize>) -> Option<The
         choose_a_folder: missing.then(|| Prose::new(words::CHOOSE_A_FOLDER)),
         ignore: ignorable.then(|| Prose::new(words::IGNORE)),
         undo_the_guess: guessed.then(|| Prose::new(words::UNDO_SMOOZYS_GUESS)),
+        retry: (!the_chosen_rows_the_act_takes(sitting, chosen, TheAct::TryAgain).is_empty())
+            .then(|| Prose::new(words::TRY_AGAIN)),
+        verify: (!the_chosen_rows_the_act_takes(sitting, chosen, TheAct::Confirm).is_empty())
+            .then(|| Prose::new(words::VERIFY)),
     })
 }
 
+/// **The chosen rows a bar's *Retry* or *Verify* takes**: those whose own
+/// row shows that control (`RowState::the_action_that_fits`), in the list's
+/// order. The four questions, scout 4.9.
+fn the_chosen_rows_the_act_takes(sitting: &ASitting, chosen: &BTreeSet<usize>, act: TheAct) -> Vec<usize> {
+    chosen
+        .iter()
+        .copied()
+        .filter(|at| {
+            sitting.rows.get(*at).is_some_and(|one| match (act, one.state.the_action_that_fits()) {
+                (TheAct::TryAgain, Action::TryAgainTheSend | Action::TryAgainTheFixing) => true,
+                (TheAct::Confirm, Action::Confirm) => true,
+                _ => false,
+            })
+        })
+        .collect()
+}
+
+/// **`Dependency Upload & Remap` F19's move, said once, in one sentence that
+/// counts files as the summary does** — a set or folder row by its files —
+/// and ***Undo this change* only where it found any** (F20's undo has
+/// nothing to undo otherwise). The Creator's twenty-eighth notes, note 15.
 fn the_shift(sitting: &ASitting, shift: &TheShiftInHand) -> TheShift {
-    let resolved = one_row_per_real_file(&sitting.rows, |one| the_qualifiers(one).contains(&Qualifier::FromAShift)).len();
+    let files: usize = one_row_per_real_file(&sitting.rows, |one| the_qualifiers(one).contains(&Qualifier::FromAShift))
+        .into_iter()
+        .map(|at| sitting.rows[at].members.unwrap_or(1))
+        .sum();
+    let said = match files {
+        0 => Words::plain(words::NO_OTHER_MISSING_FILES_UNDER),
+        1 => Words::after(files.to_string(), words::MORE_FILE_UNDER),
+        _ => Words::after(files.to_string(), words::MORE_FILES_UNDER),
+    };
     TheShift {
-        said: Words::plain(words::EVERYTHING_RECORDED_UNDER)
+        said: said
             .and(lossy(&shift.old_root))
-            .then(words::WAS_FOUND_UNDER)
+            .then(if files == 1 { words::WAS_FOUND_UNDER } else { words::WERE_FOUND_UNDER })
             .and(lossy(&shift.new_root))
             .then(words::FULL_STOP)
             .joined(),
-        resolved: Words::after(
-            resolved.to_string(),
-            if resolved == 1 {
-                words::ROW_RESOLVED
-            } else {
-                words::ROWS_RESOLVED
-            },
-        ),
-        undo: Prose::new(words::UNDO_THIS_CHANGE),
+        undo: (files > 0).then(|| Prose::new(words::UNDO_THIS_CHANGE)),
     }
 }
 
@@ -3276,15 +4082,30 @@ fn the_qualifiers(one: &ACheckedRow) -> Vec<Qualifier> {
 fn the_rows_in_their_groups(sitting: &ASitting) -> Vec<Vec<usize>> {
     // **`Dependency Upload & Remap` G11b: one real file, one row.**
     let mut order: Vec<usize> = the_real_files(&sitting.rows).into_iter().map(|file| file[0]).collect();
+    // **Rows a reading during the check's upload found sit at the foot of their
+    // group, in the order they arrived** (`Dependency Upload & Remap` G14b), so
+    // nothing above the user's row moves.
     order.sort_by(|one, other| {
         let (a, b) = (&sitting.rows[*one], &sitting.rows[*other]);
-        (b.kind == Kind::Library)
-            .cmp(&(a.kind == Kind::Library))
+        a.during_the_upload
+            .arrived
+            .is_some()
+            .cmp(&b.during_the_upload.arrived.is_some())
+            .then_with(|| a.during_the_upload.arrived.cmp(&b.during_the_upload.arrived))
+            .then_with(|| (b.kind == Kind::Library).cmp(&(a.kind == Kind::Library)))
             .then_with(|| compare_recorded(a.row.ordering_key(), b.row.ordering_key()))
     });
+    // **A row left out sits in *Not used by any scene*** (note 14), and an
+    // *Include* moves it back to its own group at once.
+    let left_out = the_rows_left_out(sitting);
     let mut groups = vec![Vec::new(); THE_GROUPS.len()];
     for at in order {
-        groups[the_group_of(sitting.rows[at].state_when_the_check_ran)].push(at);
+        let place = if left_out.contains(&at) {
+            THE_NOT_USED_GROUP
+        } else {
+            the_group_of(sitting.rows[at].state_when_the_check_ran)
+        };
+        groups[place].push(at);
     }
     groups
 }
@@ -3296,7 +4117,7 @@ fn the_order_a_selection_runs_in(sitting: &ASitting) -> Vec<usize> {
     the_rows_in_their_groups(sitting)
         .into_iter()
         .enumerate()
-        .filter(|(place, _)| *place != THE_IGNORED_GROUP)
+        .filter(|(place, _)| *place != THE_IGNORED_GROUP && *place != THE_NOT_USED_GROUP)
         .flat_map(|(_, rows)| rows)
         .collect()
 }
@@ -3318,11 +4139,12 @@ fn the_table(
         .filter(|(_, rows)| !rows.is_empty())
         .map(|(place, rows)| {
             let group = &THE_GROUPS[place];
-            let choosable = place != THE_IGNORED_GROUP;
+            let choosable = place != THE_IGNORED_GROUP && place != THE_NOT_USED_GROUP;
             // **A heading's count is of rows** — and *Already on the server*
-            // carries its size beside it: *1 · 128 MB*.
+            // and *Not used by any scene* carry their size beside it: *1 ·
+            // 128 MB*.
             let mut how_many = Words::plain("").and(rows.len().to_string());
-            if group.which == "already-there" {
+            if group.which == "already-there" || place == THE_NOT_USED_GROUP {
                 let size: u64 = rows.iter().filter_map(|at| sitting.rows[*at].size).sum();
                 if size > 0 {
                     how_many = how_many.then(words::BETWEEN).and(the_size(size));
@@ -3334,18 +4156,26 @@ fn the_table(
                 colour: Verbatim::new(group.colour),
                 how_many,
                 folded: group.folded,
+                marked_with_an_up_arrow: place == THE_TO_UPLOAD_GROUP,
+                include_all: (place == THE_NOT_USED_GROUP).then(|| Prose::new(words::INCLUDE_ALL)),
                 rows: rows
                     .iter()
                     .map(|at| {
+                        let of_this_file = real_files
+                            .get(at)
+                            .into_iter()
+                            .flatten()
+                            .map(|one| &sitting.rows[*one])
+                            .collect::<Vec<_>>();
+                        let scenes = TheScenesNote {
+                            no_scene_uses: no_scene_uses(sitting, &of_this_file),
+                            left_out: place == THE_NOT_USED_GROUP,
+                            included: it_was_included(&of_this_file),
+                        };
                         a_row(
                             *at,
                             &sitting.rows[*at],
-                            &real_files
-                                .get(at)
-                                .into_iter()
-                                .flatten()
-                                .map(|one| &sitting.rows[*one])
-                                .collect::<Vec<_>>(),
+                            &of_this_file,
                             choosable && chosen.contains(at),
                             choosable,
                             dropped,
@@ -3355,6 +4185,7 @@ fn the_table(
                                 layout,
                                 on_its_way,
                             ),
+                            scenes,
                         )
                     })
                     .collect(),
@@ -3500,6 +4331,30 @@ fn the_walk_starts_where_a_scene_can_be_reached(kind: Kind) -> bool {
     )
 }
 
+/// **How many files a sequence needs and its folder does not hold, and the
+/// first three by name** — *3 files missing: b_0004.png, b_0010.png,
+/// b_0011.png.*, *37 files missing: … and 34 more.* (`Design/Dependency Upload &
+/// Remap § Colour spaces and image sequences, 2026-11-15`).
+fn the_files_missing(files: &[&Vec<u8>]) -> Words {
+    const NAMED: usize = 3;
+    let mut said = Words::after(
+        files.len().to_string(),
+        if files.len() == 1 { words::FILE_MISSING } else { words::FILES_MISSING },
+    );
+    let named = files.len().min(NAMED);
+    for (at, file) in files.iter().take(named).enumerate() {
+        said = said.and(lossy(file));
+        if at + 1 < named {
+            said = said.then(words::COMMA).joined();
+        }
+    }
+    if files.len() > NAMED {
+        said.then(words::AND).and((files.len() - NAMED).to_string()).then(words::MORE_AT_THE_END)
+    } else {
+        said.then(words::FULL_STOP).joined()
+    }
+}
+
 /// A note in its colour, with what it names in full on hover.
 fn a_note(said: Words, colour: &str, hover: Option<&[u8]>) -> ANote {
     ANote {
@@ -3507,10 +4362,47 @@ fn a_note(said: Words, colour: &str, hover: Option<&[u8]>) -> ANote {
         colour: Verbatim::new(colour),
         hover: hover.map(|bytes| Verbatim::new(lossy(bytes))),
         failure: None,
+        matches: Vec::new(),
     }
 }
 
+/// **An arbitrary pick's matches, as the row lists them** — the one in use
+/// first, then the rest in the answer's order, each by its place under the
+/// searched folder (scout 2.17).
+fn the_matches(from_folder: &[u8], pick: &smoozy_dependencies::record::ArbitraryPick) -> Vec<AMatch> {
+    let under = |whole: &[u8]| -> String {
+        let folder = without_the_last_separator(from_folder);
+        match whole.strip_prefix(folder) {
+            Some(rest) if !folder.is_empty() && rest.first().is_some_and(a_separator) => lossy(&rest[1..]),
+            _ => lossy(the_name_in(whole)),
+        }
+    };
+    let mut every: Vec<AMatch> = pick
+        .among
+        .iter()
+        .enumerate()
+        .map(|(at, one)| AMatch {
+            place: Verbatim::new(under(one.as_bytes())),
+            whole: Verbatim::new(lossy(one.as_bytes())),
+            in_use: *one == pick.taken,
+            at: at as u32,
+        })
+        .collect();
+    every.sort_by_key(|one| !one.in_use);
+    every
+}
+
 /// **A failure's own reason** — `§ A row`'s second note, in red.
+/// **Why a linked file that landed during the upload could not be read**, in
+/// words the panel already says for the file itself.
+fn the_reason_it_could_not_be_read(why: WhyItCouldNotBeRead) -> &'static str {
+    match why {
+        WhyItCouldNotBeRead::ThisBlenderCouldNotOpenIt => words::THIS_BLENDER_COULD_NOT_OPEN,
+        WhyItCouldNotBeRead::TheServerTookNoReading => words::THE_READ_DID_NOT_FINISH,
+        WhyItCouldNotBeRead::TheRecordWouldNotRead => words::THE_RECORD_WOULD_NOT_READ,
+    }
+}
+
 fn the_reason(why: Option<WhyItDidNotGoUp>) -> &'static str {
     match why {
         // **`Dependency Upload & Remap` M14a: a failed row says which.**
@@ -3528,6 +4420,15 @@ fn the_reason(why: Option<WhyItDidNotGoUp>) -> &'static str {
 /// **`on_its_way`: a file of it is already uploading** — `§ The seven
 /// states`' paragraph of 2026-10-24 and `Dependency Upload & Remap` A9a: the
 /// row says *Uploading* among its notes, in `busy`, and stays in its group.
+/// **What a row says about scenes, worked out over the sitting** — the
+/// note, whether the row is left out, and whether the user included it (the
+/// twenty-eighth notes, note 14).
+struct TheScenesNote {
+    no_scene_uses: bool,
+    left_out: bool,
+    included: bool,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn a_row(
     at: usize,
@@ -3538,6 +4439,7 @@ fn a_row(
     dropped: bool,
     shift: Option<&TheShiftInHand>,
     on_its_way: bool,
+    scenes: TheScenesNote,
 ) -> ARow {
     let recorded = one.row.ordering_key().as_bytes();
     let resolution = one.the_answer().and_then(|answer| answer.resolution.as_ref());
@@ -3605,6 +4507,19 @@ fn a_row(
     if the_remap_waits {
         notes.push(a_note(Words::plain(words::THE_REMAP_WAITS_FOR_ITS_LINKED_FILES), "busy", None));
     }
+    // **`Dependency Upload & Remap` G14b: a linked file that landed during the
+    // upload and could not be read**, in red, the reason on hover, with no new
+    // control: the check after the upload tries it again.
+    if let Some(why) = one.during_the_upload.could_not_be_read.filter(|_| one.state == RowState::AlreadyOnTheMachine) {
+        let mut note = a_note(Words::plain(words::UPLOADED_COULD_NOT_BE_READ), "bad", None);
+        note.hover = Some(Verbatim::new(the_reason_it_could_not_be_read(why)));
+        notes.push(note);
+    }
+    // **And a row found during the upload whose place on the server holds a
+    // different file** (`Dependency Upload & Remap` Q8): it stays to upload, and the next press asks.
+    if one.during_the_upload.a_different_file_is_there && one.state == RowState::FoundOnYourComputer && !on_its_way {
+        notes.push(a_note(Words::plain(words::A_DIFFERENT_FILE_IS_ALREADY_THERE), "", None));
+    }
     // 2. **A failure's own reason, in red** — with a cross among the row's
     // buttons while it stands, without one once its cross was pressed.
     if is_a_failure(one.state) {
@@ -3620,8 +4535,24 @@ fn a_row(
                     sentence: Prose::new(reason),
                     clear_this: Prose::new(crate::presentation::the_failure_shape::CLEAR_THIS),
                 }),
+                matches: Vec::new(),
             });
         }
+    }
+    // **A picture stored as a sequence: the files the job's frames need that its
+    // folder does not hold**, in red, after a failure's reason
+    // (`Dependency Upload & Remap`, *Colour spaces and image sequences*), over
+    // every row of this real file.
+    let mut not_there: Vec<&Vec<u8>> = Vec::new();
+    for row in of_this_file.iter() {
+        for file in &row.the_files_not_in_its_folder {
+            if !not_there.contains(&file) {
+                not_there.push(file);
+            }
+        }
+    }
+    if !not_there.is_empty() {
+        notes.push(a_note(the_files_missing(&not_there), "bad", None));
     }
     // 3. **How it was found, where that is not where the file says.** *Also
     // in Textures, later in your search folders* is not drawn: the search's
@@ -3639,7 +4570,7 @@ fn a_row(
                 Some(from_folder),
             ));
             if let Some(pick) = arbitrary {
-                notes.push(a_note(
+                let mut note = a_note(
                     Words::after(pick.among.len().to_string(), words::MATCHES_IN)
                         .and(lossy(the_name_in(from_folder)))
                         .then(words::SEMICOLON)
@@ -3647,7 +4578,9 @@ fn a_row(
                         .then(words::SMOOZY_CHOSE_ONE),
                     "",
                     Some(from_folder),
-                ));
+                );
+                note.matches = the_matches(from_folder, pick);
+                notes.push(note);
             }
         }
         Some(HowResolved::AShift(key)) => {
@@ -3712,20 +4645,26 @@ fn a_row(
     // 5. **The spec's one exception to saying nothing about scenes**: only
     // where the reading finished for every reference the row stands for
     // (`Dependency Upload & Remap` G20a's *established*, which the sitting
-    // carries per row) and reached no scene — and only where the walk starts
-    // from something it could reach a scene from. It acts on nothing.
-    if !of_this_file.is_empty()
-        && of_this_file
-            .iter()
-            .all(|row| matches!(&row.scenes, Attribution::Established(scenes) if scenes.is_empty()))
-        && the_walk_starts_where_a_scene_can_be_reached(one.kind)
-    {
+    // carries per row) and reached no scene — only where the walk starts
+    // from something it could reach a scene from, and only on a row of the
+    // file being checked ([`no_scene_uses`]). **Since the twenty-eighth
+    // notes, note 14, it acts**: such a row is left out until included, and
+    // an included one says so after the note.
+    if scenes.no_scene_uses {
         notes.push(a_note(Words::plain(words::NO_SCENE_USES_IT), "", None));
+        if scenes.included {
+            notes.push(a_note(Words::plain(words::YOU_INCLUDED_THIS), "", None));
+        }
     }
 
     // **At most one visible action**, and **⋯ holding the rest**: *Locate…*,
-    // *Ignore*, *Restore*, and *Reject match* where Smoozy guessed.
-    let action = the_visible_action(one, dropped);
+    // *Ignore*, *Restore*, and *Reject match* where Smoozy guessed. **A row
+    // left out shows *Include*** (note 14).
+    let action = if scenes.left_out {
+        Some(a_control(words::INCLUDE, "include", false))
+    } else {
+        the_visible_action(one, dropped)
+    };
     let visible = action.as_ref().map(|action| action.act.as_str().to_string());
     let mut more_items = Vec::new();
     if visible.as_deref() != Some("locate") {
@@ -3749,12 +4688,7 @@ fn a_row(
         at: Verbatim::new(at.to_string()),
         // `Dependency Upload & Remap` G9a: the folder the render reads, while
         // *The file says* keeps the recorded bytes.
-        name: Verbatim::new(lossy(the_name_in(
-            one.wanted
-                .iter()
-                .find(|wanted| wanted.reference.as_bytes() == recorded)
-                .map_or(recorded, |wanted| wanted.the_location_read.as_bytes()),
-        ))),
+        name: Verbatim::new(the_rows_name(one)),
         a_linked_blend: one.kind == Kind::Library,
         kind: the_kind(one.kind, one.members),
         location,
@@ -3777,8 +4711,8 @@ fn a_row(
 /// uploading too, since nothing of it has landed — the drawing's
 /// `chk-sending` keeps *2 files to upload, 90 MB*; the foot counts only the
 /// rest ([`the_foot`]).
-fn the_upload(sitting: &ASitting) -> (usize, u64) {
-    let sent = crate::the_found_files_sent::the_rows_the_upload_sends(&sitting.rows);
+fn what_the_upload_sends(sitting: &ASitting) -> (usize, u64) {
+    let sent = crate::the_found_files_sent::the_rows_the_upload_sends(sitting);
     let files = sent.iter().map(|at| sitting.rows[*at].what_a_send_would_take().0).sum();
     let size = sent.iter().map(|at| sitting.rows[*at].what_a_send_would_take().1).sum();
     (files, size)
@@ -3810,7 +4744,7 @@ fn the_foot(
     }
     let layout = sitting.of.as_ref().and_then(|of| of.layout.as_ref());
     // **`Dependency Upload & Remap` Q5a: never a file the send will not take.**
-    let left: Vec<usize> = crate::the_found_files_sent::the_rows_left_to_upload(&sitting.rows, layout, on_its_way)
+    let left: Vec<usize> = crate::the_found_files_sent::the_rows_left_to_upload(sitting, layout, on_its_way)
         .into_iter()
         .filter(|at| sitting.rows[*at].what_a_send_would_take().0 > 0)
         .collect();
@@ -3819,7 +4753,19 @@ fn the_foot(
     }
     let files: usize = left.iter().map(|at| sitting.rows[*at].what_a_send_would_take().0).sum();
     let size: u64 = left.iter().map(|at| sitting.rows[*at].what_a_send_would_take().1).sum();
-    let upload = if so_far {
+    // **Where a linked file is to upload, the button names what is known and
+    // says it is not all**: *Upload the 50 found so far (2.1 GB)* — `§ Along the
+    // bottom`, 2026-11-09 (the twenty-eighth notes, note 11).
+    let a_linked_file_is_to_upload = left.iter().any(|at| sitting.rows[*at].kind == Kind::Library);
+    let upload = if a_linked_file_is_to_upload && files > 0 {
+        Words::with(words::UPLOAD_THE, files.to_string())
+            .then(words::FOUND_SO_FAR)
+            .then(words::OPENS)
+            .and(the_size(size))
+            .joined()
+            .then(words::CLOSES)
+            .joined()
+    } else if so_far {
         Words::with(words::UPLOAD_THE, files.to_string()).then(words::FOUND_SO_FAR)
     } else {
         let said = Words::with(words::UPLOAD, files.to_string()).then(if files == 1 {
@@ -3893,17 +4839,70 @@ impl AStretch {
 /// **Ignored rows are not in it**, since ignoring a row is the user's answer.
 /// Nothing is said where nothing would be: a check still reading that has
 /// found nothing yet.
-fn the_summary_of(sitting: &ASitting, so_far: bool) -> Vec<AStretch> {
-    // **`Dependency Upload & Remap` G11b: each real file once, in every figure.**
-    let count = |wanted: &dyn Fn(RowState) -> bool| one_row_per_real_file(&sitting.rows, |one| wanted(one.state)).len();
+/// **`the_upload`: while the check's upload runs, its own figure** — files
+/// uploaded of its whole — and what is on its way, so the files waiting for
+/// another press are said apart (`§ Above the rows`, 2026-11-09).
+fn the_summary_of(
+    sitting: &ASitting,
+    so_far: bool,
+    the_upload: Option<((usize, usize), &[MachineLocation])>,
+) -> Vec<AStretch> {
+    // **`Dependency Upload & Remap` G11b: each real file once, in every figure**,
+    // and **a row left out in none of them but its own** — the twenty-eighth
+    // notes, note 14: a missing one there is not counted red.
+    let left_out = the_rows_left_out(sitting);
+    let count = |wanted: &dyn Fn(RowState) -> bool| {
+        one_row_per_real_file_where(&sitting.rows, |at, one| wanted(one.state) && !left_out.contains(&at)).len()
+    };
     let failed = count(&is_a_failure);
-    let missing = count(&|state| state == RowState::NotFound);
-    let not_verified = count(&|state| state == RowState::SentBeforeNotConfirmed);
-    let (files, size) = the_upload(sitting);
-    let on_the_server: u64 = one_row_per_real_file(&sitting.rows, |one| one.state == RowState::AlreadyOnTheMachine)
+    // **And each file a sequence needs that its folder does not hold**
+    // (`Dependency Upload & Remap`, *Colour spaces and image sequences*), once
+    // for each real file.
+    // **Over every row of each real file, as its note says them** (Sol's look,
+    // point 3): a linked file's row of the same sequence can lack others.
+    let not_in_their_folders: usize = the_real_files(&sitting.rows)
         .into_iter()
-        .filter_map(|at| sitting.rows[at].size)
+        .map(|rows| {
+            let mut not_there: Vec<&Vec<u8>> = Vec::new();
+            for at in rows {
+                let one = &sitting.rows[at];
+                if left_out.contains(&at) || one.state == RowState::SetAside {
+                    continue;
+                }
+                for file in &one.the_files_not_in_its_folder {
+                    if !not_there.contains(&file) {
+                        not_there.push(file);
+                    }
+                }
+            }
+            not_there.len()
+        })
         .sum();
+    let missing = count(&|state| state == RowState::NotFound) + not_in_their_folders;
+    let not_verified = count(&|state| state == RowState::SentBeforeNotConfirmed);
+    let layout = sitting.of.as_ref().and_then(|of| of.layout.as_ref());
+    let (files, size) = match the_upload {
+        // **Files waiting for another press, said apart**: the button's figure.
+        Some((_, on_its_way)) => {
+            let left = crate::the_found_files_sent::the_rows_left_to_upload(sitting, layout, on_its_way);
+            (
+                left.iter().map(|at| sitting.rows[*at].what_a_send_would_take().0).sum(),
+                left.iter().map(|at| sitting.rows[*at].what_a_send_would_take().1).sum(),
+            )
+        }
+        None => what_the_upload_sends(sitting),
+    };
+    // **While the upload runs, what it landed is in its own figure**, and only
+    // what was on the server when the check ran is *already on the server*.
+    let on_the_server: u64 = one_row_per_real_file_where(&sitting.rows, |at, one| {
+        one.state == RowState::AlreadyOnTheMachine
+            && !left_out.contains(&at)
+            && (the_upload.is_none() || one.state_when_the_check_ran == RowState::AlreadyOnTheMachine)
+    })
+    .into_iter()
+    .filter_map(|at| sitting.rows[at].size)
+    .sum();
+    let not_used = one_row_per_real_file_where(&sitting.rows, |at, _| left_out.contains(&at)).len();
 
     let mut figures: Vec<Vec<AStretch>> = Vec::new();
     if failed > 0 {
@@ -3914,6 +4913,17 @@ fn the_summary_of(sitting: &ASitting, so_far: bool) -> Vec<AStretch> {
     }
     if not_verified > 0 {
         figures.push(vec![AStretch::a_figure(not_verified.to_string(), words::NOT_VERIFIED_FIGURE, "busy")]);
+    }
+    if let Some(((done, whole), _)) = the_upload {
+        let lead = if figures.is_empty() { words::UPLOADING_AT_THE_START } else { words::UPLOADING_AFTER_A_FIGURE };
+        figures.push(vec![
+            AStretch { lead, value: Some(done.to_string()), rest: words::OF, colour: "", joins: false },
+            AStretch::a_figure(
+                whole.to_string(),
+                if whole == 1 { words::FILE_AFTER_A_COUNT } else { words::FILES_AFTER_A_COUNT },
+                "",
+            ),
+        ]);
     }
     if files > 0 {
         figures.push(vec![
@@ -3937,13 +4947,23 @@ fn the_summary_of(sitting: &ASitting, so_far: bool) -> Vec<AStretch> {
     // because one not yet on the server cannot be, so what lies below it is not
     // known and *Nothing is missing* would be false about the file. *, found so
     // far* already says it while the check is reading.
-    let linked_files_not_checked = !so_far
-        && sitting.rows.iter().any(|one| one.kind == Kind::Library && one.state == RowState::FoundOnYourComputer);
+    // **Counted, each real file once** — 2026-11-09, the twenty-eighth notes,
+    // note 11.
+    let linked_files_not_checked = if so_far || the_upload.is_some() {
+        0
+    } else {
+        one_row_per_real_file_where(&sitting.rows, |at, one| {
+            one.kind == Kind::Library && one.state == RowState::FoundOnYourComputer && !left_out.contains(&at)
+        })
+        .len()
+    };
+    let linked_files_not_checked_yet = linked_files_not_checked;
+    let linked_files_not_checked = linked_files_not_checked > 0;
     let nothing_is_open = failed == 0 && missing == 0 && not_verified == 0 && !so_far && !linked_files_not_checked;
     let mut out = Vec::new();
     if nothing_is_open {
         out.push(AStretch::words(words::NOTHING_IS_MISSING));
-    } else if figures.is_empty() {
+    } else if figures.is_empty() && not_used == 0 {
         return out;
     }
     let any = !figures.is_empty();
@@ -3953,13 +4973,27 @@ fn the_summary_of(sitting: &ASitting, so_far: bool) -> Vec<AStretch> {
         }
         out.extend(figure);
     }
-    if so_far {
+    if any && so_far {
         out.push(AStretch::joined_words(words::COMMA, words::FOUND_SO_FAR_AT_THE_END));
     } else if any {
         out.push(AStretch::joined_words(words::FULL_STOP, ""));
     }
     if linked_files_not_checked {
-        out.push(AStretch::words(words::LINKED_FILES_NOT_CHECKED_YET));
+        out.push(AStretch::a_figure(
+            linked_files_not_checked_yet.to_string(),
+            if linked_files_not_checked_yet == 1 {
+                words::LINKED_FILE_NOT_CHECKED_YET_COUNTED
+            } else {
+                words::LINKED_FILES_NOT_CHECKED_YET_COUNTED
+            },
+            "",
+        ));
+    }
+    // **How many were left out, so leaving them out is never silent** —
+    // `§ Above the rows`, the twenty-eighth notes, note 14: *14 not used by
+    // any scene, not uploaded.*
+    if not_used > 0 {
+        out.push(AStretch::a_figure(not_used.to_string(), words::NOT_USED_FIGURE, ""));
     }
     out
 }
@@ -4046,6 +5080,64 @@ fn the_folder_box() -> TheFolderBox {
 
 #[cfg(test)]
 mod tests {
+    /// **The Creator's notes on the test copy, second round, note 17
+    /// (`Design/Whole app § While other work runs`): *Check again* and *Check
+    /// dependencies* wait while a check runs or while the file itself goes up,
+    /// and say why on hover.** Nothing waits while the check's own upload runs:
+    /// the check counts those files as uploading.
+    #[test]
+    fn a_check_waits_while_one_runs_or_the_file_goes_up_and_says_why() {
+        use super::*;
+        let server = Identity::issue(IdentityKind::LocalServer).unwrap().as_text();
+        let file = "/root/kitchen_v14.blend";
+        let key = keyed(&server, file);
+        let mut held = WhatTheRunHolds::default();
+        let why = |held: &WhatTheRunHolds| the_panel(held, &server, file, None).why_a_check_waits.map(|said| said.as_str().replace('\u{a0}', " "));
+        assert_eq!(why(&held), None);
+        held.checks_running.insert(key.clone(), false);
+        assert_eq!(why(&held).as_deref(), Some("A check is running."));
+        held.checks_running.clear();
+        let machine = smoozy_dependencies::record::MachineKey {
+            server_row: Identity::read_back(IdentityKind::LocalServer, &server).unwrap(),
+            installation: Identity::issue(IdentityKind::Installation).unwrap(),
+        };
+        held.the_files_going_up.one_begins(&machine, file.as_bytes());
+        assert_eq!(why(&held).as_deref(), Some("This file is uploading."));
+        let page = include_str!("../../web/the-dependency-check.js");
+        assert!(page.contains("theCheckWaits(button, said);"), "the page does not draw why");
+        held.the_files_going_up.one_ends(&machine, file.as_bytes());
+        assert_eq!(why(&held), None);
+    }
+
+    #[test]
+    fn macos_question_a_second_press_answers_even_before_the_sitting_starts() {
+        use super::*;
+        let key = keyed("server", "/shot.blend");
+        let mut held = WhatTheRunHolds::default();
+        assert!(the_running_check_says(&held, &key).is_none());
+        held.files_being_read.insert(key.clone());
+        let said = the_running_check_says(&held, &key).expect("a press during Blender selection answers");
+        assert!(serde_json::to_string(&said).unwrap().replace('\u{a0}', " ").contains("A dependency check is already running."));
+        held.files_being_read.clear();
+        held.checks_running.insert(key.clone(), false);
+        assert!(the_running_check_says(&held, &key).is_some(), "a press during a local read answers");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_question_an_ending_check_cannot_remove_the_next_checks_watch() {
+        use crate::platform::macos_file_access::Watching;
+        let old = Watching::start("/Users/artist".into(), std::time::Duration::from_secs(2), Arc::new(|| {}), Arc::new(|| {}));
+        let next = Watching::start("/Users/artist".into(), std::time::Duration::from_secs(2), Arc::new(|| {}), Arc::new(|| {}));
+        let key = keyed("server", "/shot.blend");
+        let mut held = WhatTheRunHolds::default();
+        held.macos_reads.insert(key.clone(), vec![next.status.clone()]);
+        the_macos_read_watch_is_forgotten(&mut held, &key, &old.status);
+        assert!(held.macos_reads.contains_key(&key), "the old check erased the next check's watch");
+        the_macos_read_watch_is_forgotten(&mut held, &key, &next.status);
+        assert!(!held.macos_reads.contains_key(&key));
+    }
+
     use super::*;
     use smoozy_dependencies::check::GroupedBy;
     use smoozy_dependencies::record::{HoldingFile, LocatedAnswerKey, Resolution, ResolvedTo, ShiftKey};
@@ -4105,16 +5197,41 @@ mod tests {
                 resolution: None,
                 set_aside: state == RowState::SetAside,
                 rejected_guess: None,
+                included: false,
                 read_as: Vec::new(),
             }],
             wanted: vec![Outstanding::a_file(RecordedLocation::as_the_reading_carried_it(reference))],
             proposal: None,
             members: None,
             size: Some(1024 * 1024),
+            the_files_the_jobs_frames_need: None,
+            the_files_not_in_its_folder: Vec::new(),
             why_it_did_not_go_up: None,
             the_part_already_up: None,
+            during_the_upload: Default::default(),
             its_failure_was_cleared: false,
             its_remap_waits_for_its_linked_files: false,
+        }
+    }
+
+    /// **Verify's answer leaves a row set aside meanwhile as it is** — the
+    /// Rough what-if answers, share 1 (40). The other rows of the same file
+    /// take the answer.
+    #[test]
+    fn rough_share_1_verify_answering_after_ignore_keeps_the_row_ignored() {
+        let mut rows = vec![
+            a_row(b"//tex/wood.png", Kind::Image, RowState::SetAside),
+            a_row(b"//tex/wood.png", Kind::Image, RowState::SentBeforeNotConfirmed),
+        ];
+        let file = rows[0].the_real_file();
+        for (outcome, became) in [
+            (smoozy_dependencies::record::ConfirmationOutcome::Confirmed, RowState::AlreadyOnTheMachine),
+            (smoozy_dependencies::record::ConfirmationOutcome::Gone, RowState::NotFound),
+        ] {
+            rows[1].state = RowState::SentBeforeNotConfirmed;
+            crate::the_found_files_sent::verify_answers_the_rows_of(&mut rows, &file, outcome);
+            assert_eq!(rows[0].state, RowState::SetAside, "{outcome:?}: the user's Ignore stands");
+            assert_eq!(rows[1].state, became);
         }
     }
 
@@ -4131,6 +5248,7 @@ mod tests {
             }),
             set_aside: false,
             rejected_guess: None,
+            included: false,
             read_as: Vec::new(),
         }];
         one
@@ -4145,6 +5263,7 @@ mod tests {
             completion: Some(Completion::Completed),
             linked_items: Vec::new(),
             the_bake_folders_not_worked_out: Vec::new(),
+            the_colour_names_not_found: Vec::new(),
             sent_up_as_a_dependency_before: false,
             the_search: None,
             the_shift: None,
@@ -4217,19 +5336,69 @@ mod tests {
         }
     }
 
-    /// **The upload control is this panel's act and goes to Transfers** —
-    /// `Design/Dependency Upload & Remap`: *"its uploads run in Transfers"*,
-    /// and the drawing's `data-go="t"` on this control. The act is taken here,
-    /// where the rows and the file's bytes are, since step 10c's dependency
-    /// wave piece 6.
+    /// **The four questions, scout 4.9: *Retry* and *Verify* over a
+    /// selection**, each taking every chosen row its own control would take —
+    /// `Design/Dependency Upload & Remap § Acting on many rows`, added
+    /// 2026-11-12. Before, the bar had neither and *Verify* took the first
+    /// row only.
     #[test]
-    fn the_upload_goes_to_transfers() {
+    fn fifth_part_4_9_retry_and_verify_act_on_every_chosen_row() {
+        let sitting = a_sitting(vec![
+            a_row(b"//tex/a.png", Kind::Image, RowState::CouldNotBeSent),
+            a_row(b"//tex/b.png", Kind::Image, RowState::SentBeforeNotConfirmed),
+            a_row(b"//tex/c.png", Kind::Image, RowState::CouldNotBeSent),
+            a_row(b"//tex/d.png", Kind::Image, RowState::SentBeforeNotConfirmed),
+            a_row(b"//tex/e.png", Kind::Image, RowState::AlreadyOnTheMachine),
+        ]);
+        let every: BTreeSet<usize> = (0..5).collect();
+        let bar = the_selection_bar(&sitting, &every).expect("the bar");
+        assert_eq!(bar.retry, Some(Prose::new(words::TRY_AGAIN)));
+        assert_eq!(bar.verify, Some(Prose::new(words::VERIFY)));
+        assert_eq!(the_chosen_rows_the_act_takes(&sitting, &every, TheAct::TryAgain), vec![0, 2]);
+        assert_eq!(the_chosen_rows_the_act_takes(&sitting, &every, TheAct::Confirm), vec![1, 3]);
+
+        // Neither where no chosen row needs it.
+        let settled: BTreeSet<usize> = [1, 4].into_iter().collect();
+        let bar = the_selection_bar(&sitting, &settled).expect("the bar");
+        assert!(bar.retry.is_none());
+        assert_eq!(bar.verify, Some(Prose::new(words::VERIFY)));
+
+        // The send takes the chosen rows where no row is named, and Verify
+        // checks each of them, not the first.
+        let this = include_str!("the_dependency_check.rs");
+        assert!(this.contains("None => the_chosen_rows_the_act_takes(sitting, &chosen, act),"));
+        assert!(this.contains("for at in &asked.rows {"));
+        let page = include_str!("../../web/the-dependency-check.js");
+        assert!(page.contains("\"retry-over-the-selection\""));
+        assert!(page.contains("\"verify-over-the-selection\""));
+    }
+
+    /// **The upload control is this panel's act, and the press leaves the user
+    /// on the panel** — `Design/Dependency Upload & Remap`, 2026-11-11, the
+    /// four questions, scout 1.9: the press took the window to Transfers, away
+    /// from Render, the next step. The strip, summary and rows say it runs.
+    #[test]
+    fn four_questions_1_9_the_upload_leaves_the_user_on_the_panel() {
         let page = the_page();
-        assert!(page.contains("import { aTransferIsAskedFor } from \"./transfers.js\";"));
-        assert!(page.contains("const UPLOAD_THE_FOUND = \"upload-the-found\";"));
-        assert!(page.contains(
-            "theActIsTaken(server, \"upload\").finally(() => aTransferIsAskedFor(UPLOAD_THE_FOUND, server))"
-        ));
+        assert!(page.contains("upload.addEventListener(\"click\", () => theActIsTaken(server, \"upload\"));"));
+        assert!(!page.contains("aTransferIsAskedFor"), "the press still takes the window to Transfers");
+        let transfers = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web/transfers.js"),
+        )
+        .expect("web/transfers.js");
+        let asked = transfers
+            .split("export function aTransferIsAskedFor(act, whose, picked) {")
+            .nth(1)
+            .expect("the way in")
+            .split("\n}\n")
+            .next()
+            .unwrap();
+        assert!(asked.contains("const theUserStays = act === DOWNLOAD;"), "Files' Download still moves the user");
+        assert!(asked.contains("else if (!theUserStays) theCurrentPlaceIs(TRANSFERS);"));
+        assert!(
+            transfers.contains("answer.what === \"DidNotStart\") {\n        theCurrentPlaceIs(TRANSFERS);"),
+            "a download that could not start is said where the user is not"
+        );
     }
 
     /// **Every word is in `mod words`**, and no composition writes one.
@@ -4300,7 +5469,7 @@ mod tests {
             SERVER,
             FILE,
             None,
-            &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Users/alex/Work".to_vec()]), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false },
+            &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Users/alex/Work".to_vec()]), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false, the_send: None },
         );
         assert_eq!(panel.nothing_was_read, Some(Prose::new(words::NOTHING_WAS_READ)));
         assert!(panel.the_statements.is_empty(), "a folders line where nothing was searched");
@@ -4368,7 +5537,7 @@ mod tests {
                 SERVER,
                 FILE,
                 None,
-                &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Users/alex/Work".to_vec()]), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false },
+                &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Users/alex/Work".to_vec()]), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false, the_send: None },
             );
             assert_eq!(panel.still_reading, Some(Words::plain(words::READING_THE_FILE)));
             assert!(panel.the_reading_line.is_empty(), "a reading line before anything was read");
@@ -4443,7 +5612,7 @@ mod tests {
             SERVER,
             FILE,
             None,
-            &WhatElseIsKnown { the_list_in_settings: Some(list), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false },
+            &WhatElseIsKnown { the_list_in_settings: Some(list), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false, the_send: None },
         );
         let shown: Vec<&str> = panel.the_folder_box.the_folders.iter().map(Verbatim::as_str).collect();
         assert_eq!(shown, vec!["/Volumes/Archive/2023", "/Users/alex/Work", "/Users/alex/Old"]);
@@ -4480,6 +5649,7 @@ mod tests {
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in ["transfers.js", "the-dependency-check.js"] {
             fs::copy(web.join(page), folder.join(page)).expect("the page");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_WAY_BACKS_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
@@ -4532,7 +5702,8 @@ mod tests {
              export function aPanelIsRegistered(panel) { panels.push(panel); } \
              export function thePanelIsOpenedOver(server, panel) { (globalThis.opened ||= []).push([server, panel]); } \
              export function theStripReads() {} export function theCurrentTabIs() {} \
-             export function thePanelCollapsesAsItsChevronDoes() {}",
+             export function thePanelCollapsesAsItsChevronDoes() {} \
+             export function thePanelOverItIsCollapsed() {} export function theServerWillOpenOn() {}",
         ),
         (
             "the-failure-shape.js",
@@ -4541,7 +5712,7 @@ mod tests {
         ),
         (
             "the-underway-shape.js",
-            "export function theMarkOnARow() { return document.createElement('span'); } \
+            "export function theMarkOnARow() { return document.createElement('span'); } export function theMarkOnALine() { return document.createElement('i'); } \
              export function theCountdown() { return document.createElement('span'); }",
         ),
         ("the-machines-own-words.js", "export function theMachinesOwnWordsFor() {}"),
@@ -4572,7 +5743,7 @@ function anElement(tag) {
   return e;
 }
 const every = (e, into = []) => { into.push(e); for (const c of e.children || []) every(c, into); return into; };
-globalThis.document = { createElement: anElement, createTextNode: (text) => ({ text, children: [] }), addEventListener() {}, body: anElement("body"), activeElement: null };
+globalThis.document = { createElement: anElement, createElementNS: (_, tag) => anElement(tag), createTextNode: (text) => ({ text, children: [] }), addEventListener() {}, body: anElement("body"), activeElement: null };
 const answers = JSON.parse(readFileSync("answers.json", "utf8"));
 const words = (s) => ({ pieces: [{ said: s, value: null }] });
 const screen = { heading: "Transfers", speeds: null, caps: words(""), settings: "Settings", show: "Show", every_server: "All", servers: [], showing: null, could_not_read: null, nothing_here: null, foot: words(""), the_rails_figure: "",
@@ -4783,6 +5954,509 @@ console.log(JSON.stringify({
         parts.join(" ").replace('\u{a0}', " ")
     }
 
+    // ───────── the twenty-eighth notes, note 11: linked files go first
+
+    /// **The words note 11 put on this panel, as Design and the drawing write
+    /// them.**
+    const THE_SENTENCE: &str =
+        "Linked files upload first, to be read on the server. Their dependencies are added, so the total may grow.";
+
+    /// **Before the press: the summary counts the linked files not read, the
+    /// sentence says why they go first and why the total may grow, and the
+    /// button names what is known and says it is not all** — `§ Above the rows`
+    /// and `§ Along the bottom`, 2026-11-09 (the twenty-eighth notes, note 11).
+    /// A check with no linked file to upload says none of it.
+    #[test]
+    fn twenty_eighth_11_before_the_press_the_check_counts_linked_files_and_says_why_they_go_first() {
+        let rows = vec![
+            a_row(b"//lib/chair.blend", Kind::Library, RowState::FoundOnYourComputer),
+            a_row(b"//lib/lamp.blend", Kind::Library, RowState::FoundOnYourComputer),
+            a_row(b"//tex/wood.png", Kind::Image, RowState::FoundOnYourComputer),
+        ];
+        let panel = the_panel(&a_run(a_sitting(rows)), SERVER, FILE, None);
+        assert_eq!(the_summary_reads(&panel), "3 files to upload, 3.0 MB. 2 linked files not checked yet.");
+        assert_eq!(panel.the_statements[0].which.as_str(), "linked-files-go-first");
+        assert_eq!(reads(&panel.the_statements[0].said), THE_SENTENCE);
+        assert_eq!(reads(&panel.the_foot.expect("a foot").upload), "Upload the 3 found so far (3.0 MB)");
+
+        let pictures = the_panel(&a_run(a_sitting(vec![a_row(b"//tex/wood.png", Kind::Image, RowState::FoundOnYourComputer)])), SERVER, FILE, None);
+        assert!(pictures.the_statements.iter().all(|one| one.which.as_str() != "linked-files-go-first"));
+        assert_eq!(reads(&pictures.the_foot.expect("a foot").upload), "Upload 1 file (1.0 MB)");
+
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains(&format!("*{THE_SENTENCE}*")));
+        assert!(design.contains("*Upload the 50 found so far (2.1 GB)*"));
+        assert!(design.contains("*50 files to upload, 2.1 GB. 10 linked files not checked yet.*"));
+        let drawing = the_mockup();
+        assert!(drawing.contains("Upload the 50 found so far (2.1&#160;GB)"));
+        assert!(drawing.contains("10 linked files not checked yet."));
+        assert!(drawing.contains("Their dependencies are added, so the total may&#160;grow."));
+    }
+
+    /// **While the check's upload reads its linked files: the summary's upload
+    /// figure is the upload's own, files waiting for another press are said
+    /// apart, and *, found so far.* stays while a linked file is unread and, after
+    /// one failed, for good; the header's line names the file being read and how
+    /// many are, or says it waits for one to land; and a row whose place holds a
+    /// different file says so** — `§ Above the rows`, `§ While it is still
+    /// reading below a linked file` and `§ A row`, 2026-11-09.
+    #[test]
+    fn twenty_eighth_11_while_the_upload_reads_the_summary_is_its_own_and_the_header_names_the_reading() {
+        use crate::checking_a_file::TheSittingIsOf;
+        use crate::the_found_files_sent::TheSendsReadings;
+        use smoozy_dependencies::landing::mirror_of;
+        use smoozy_dependencies::record::MachineKey;
+        use smoozy_job_files::layout::{MachineRoot, TheLayout, WhereThePackageAreaSits};
+        let layout = TheLayout::of(MachineRoot::chosen("/ephemeral/smoozy").expect("a root"), WhereThePackageAreaSits::UnderTheRoot);
+        let chair = a_row_found_at(b"//lib/chair.blend", Kind::Library, b"/Users/a/kitchen/lib/chair.blend", HowResolved::TheRecordedLocationItself);
+        let wood = a_row_found_at(b"//tex/wood.png", Kind::Image, b"/Users/a/kitchen/tex/wood.png", HowResolved::TheRecordedLocationItself);
+        let mut bark = a_row_found_at(b"//tex/bark.png", Kind::Image, b"/Users/a/kitchen/tex/bark.png", HowResolved::TheRecordedLocationItself);
+        bark.during_the_upload.a_different_file_is_there = true;
+        let mut sitting = a_sitting(vec![chair, wood, bark, a_row(b"//tex/gone.png", Kind::Image, RowState::NotFound)]);
+        sitting.of = Some(TheSittingIsOf {
+            server: SERVER.to_string(),
+            file: FILE.to_string(),
+            root: MachineLocation::composed(b"/ephemeral/smoozy/jobs/kitchen.blend".to_vec()),
+            holding: HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(FILE.as_bytes())),
+            with: a_blender(),
+            machine: MachineKey::of(an_identity(SERVER), Identity::issue(IdentityKind::Installation).expect("an installation")),
+            layout: Some(layout.clone()),
+        });
+        let held = a_run(sitting);
+        let on_its_way: Vec<MachineLocation> = [&b"/Users/a/kitchen/lib/chair.blend"[..], b"/Users/a/kitchen/tex/wood.png"]
+            .iter()
+            .map(|source| mirror_of(&layout, &StoredLocation::as_the_system_returned_it(source)).expect("fits"))
+            .collect();
+        let shelf = b"/ephemeral/smoozy/assets/Users/a/kitchen/lib/shelf.blend".to_vec();
+        let reading = |send: TheSendsReadings| {
+            the_panel_knowing(
+                &held,
+                SERVER,
+                FILE,
+                None,
+                &WhatElseIsKnown {
+                    the_list_in_settings: None,
+                    uploading: Some((1, 62)),
+                    on_its_way: on_its_way.clone(),
+                    a_send_is_being_counted: false,
+                    the_send: Some(send),
+                },
+            )
+        };
+
+        let panel = reading(TheSendsReadings { owed: 7, linked: 11, read: 4, reading_now: Some(shelf.clone()), unknown_for_good: false, stopped: false, joining: Vec::new() });
+        assert_eq!(the_summary_reads(&panel), "1 missing · uploading 1 of 62 files · 1 file to upload, 1.0 MB, found so far.");
+        assert_eq!(reads(panel.still_reading.as_ref().expect("the header's line")), "Reading shelf.blend · 4 of 11 linked files read");
+        assert_eq!(panel.the_statements[0].which.as_str(), "linked-files-go-first");
+        assert_eq!(reads(&panel.the_foot.as_ref().expect("a foot").upload), "Upload 1 file (1.0 MB)");
+        let notes: Vec<String> = every_row(panel.the_table.as_ref().expect("a table"))
+            .iter()
+            .flat_map(|row| row.notes.iter().map(|note| reads(&note.said)))
+            .collect();
+        assert!(notes.contains(&"A different file is already there.".to_string()), "{notes:?}");
+        assert_eq!(notes.iter().filter(|note| *note == "Uploading").count(), 2, "{notes:?}");
+
+        let waiting = reading(TheSendsReadings { owed: 7, linked: 11, read: 4, reading_now: None, unknown_for_good: false, stopped: false, joining: Vec::new() });
+        assert_eq!(reads(waiting.still_reading.as_ref().expect("the header's line")), "Waiting for linked files to upload · 4 of 11 read");
+
+        let every_one_read = reading(TheSendsReadings { owed: 0, linked: 14, read: 14, reading_now: None, unknown_for_good: false, stopped: false, joining: Vec::new() });
+        assert!(every_one_read.still_reading.is_none(), "the line outlived the readings");
+        assert!(every_one_read.the_statements.iter().all(|one| one.which.as_str() != "linked-files-go-first"));
+        assert_eq!(the_summary_reads(&every_one_read), "1 missing · uploading 1 of 62 files · 1 file to upload, 1.0 MB.");
+
+        let one_failed = reading(TheSendsReadings { owed: 0, linked: 14, read: 13, reading_now: None, unknown_for_good: true, stopped: false, joining: Vec::new() });
+        assert!(the_summary_reads(&one_failed).ends_with(", found so far."));
+
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        for said in ["*Reading shelf.blend · 4 of 11 linked files read*", "*Waiting for linked files to upload · 4 of 11 read*", "*A different file is already there.*", "*Uploaded; could not be read.*"] {
+            assert!(design.contains(said), "{said}");
+        }
+        let drawing = the_mockup();
+        assert!(drawing.contains("Reading <span class=\"mono\">shelf.blend</span> &#183; 4 of 11 linked files read"));
+        assert!(drawing.contains("Uploading <b>72</b> of <b>214</b> files, found so&#160;far."));
+    }
+
+    /// **The twenty-eighth notes, piece 12: a check that runs says so on its
+    /// header's line, whatever it is doing** — `§ While it is still reading
+    /// below a linked file`, 2026-11-10. On a real line the check after the
+    /// upload remapped ten linked files for 76 s with no line at all, its
+    /// summary *279 MB already on the server, found so far.* reading as an
+    /// answer, while Render Settings read *Checking dependencies…*. Here a
+    /// sitting stands with no reading, no walk and no send: running, it reads
+    /// *Checking dependencies…*; once it ends, nothing.
+    #[test]
+    fn twenty_eighth_12_a_running_check_says_so_whatever_it_is_doing() {
+        let mut held = a_run(a_sitting(vec![a_row(b"//lib/lib_00.blend", Kind::Library, RowState::AlreadyOnTheMachine)]));
+        let key = keyed(SERVER, FILE);
+        held.checks_running.insert(key.clone(), false);
+        let running = the_panel(&held, SERVER, FILE, None);
+        assert_eq!(running.still_reading.as_ref().map(reads), Some("Checking dependencies…".to_string()));
+        held.checks_running.remove(&key);
+        assert!(the_panel(&held, SERVER, FILE, None).still_reading.is_none());
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains("the header's line reads *Checking dependencies…*"));
+    }
+
+    /// **The twenty-eighth notes, piece 12: a file a reading finds during the
+    /// upload reads *Uploading* from the moment its row lands, and is never
+    /// offered as an upload of its own** — `Design/Dependency Upload & Remap`'s
+    /// walkthrough: *They join To upload at the foot of the group, reading
+    /// Uploading*. On a real line `lib_07.png` stood outside the upload for about
+    /// 10 s, its summary *1 file to upload, 9.3 MB* and its foot *Upload 1 file
+    /// (9.3 MB)*, while the send's pre-flight decided it. **The panel reads the
+    /// send's register**, which holds the file as joining until the send has
+    /// decided it; left out — a different file there, say — it is to upload
+    /// again, for the next press.
+    #[test]
+    fn twenty_eighth_12_a_row_found_during_the_upload_reads_as_joining_it() {
+        use crate::checking_a_file::TheSittingIsOf;
+        use crate::the_found_files_sent::{the_files_on_their_way_to, the_sends_this_run, ASend, TheSendsReadings};
+        use smoozy_dependencies::landing::mirror_of;
+        use smoozy_dependencies::record::MachineKey;
+        use smoozy_job_files::layout::{MachineRoot, TheLayout, WhereThePackageAreaSits};
+        let layout = TheLayout::of(MachineRoot::chosen("/ephemeral/smoozy").expect("a root"), WhereThePackageAreaSits::UnderTheRoot);
+        let lib = a_row_found_at(b"//lib/lib_07.blend", Kind::Library, b"/Users/a/kitchen/lib/lib_07.blend", HowResolved::TheRecordedLocationItself);
+        let mut sitting = a_sitting(vec![lib]);
+        sitting.of = Some(TheSittingIsOf {
+            server: SERVER.to_string(),
+            file: FILE.to_string(),
+            root: MachineLocation::composed(b"/ephemeral/smoozy/jobs/kitchen.blend".to_vec()),
+            holding: HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(FILE.as_bytes())),
+            with: a_blender(),
+            machine: MachineKey::of(an_identity(SERVER), Identity::issue(IdentityKind::Installation).expect("an installation")),
+            layout: Some(layout.clone()),
+        });
+        let held = Mutex::new(a_run(sitting));
+        let mirror = |at: &[u8]| mirror_of(&layout, &StoredLocation::as_the_system_returned_it(at)).expect("fits").as_bytes().to_vec();
+        let mut found = a_row_found_at(b"//lib_07.png", Kind::Image, b"/Users/a/kitchen/tex/lib_07.png", HowResolved::TheRecordedLocationItself);
+        found.holding = HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(b"/Users/a/kitchen/lib/lib_07.blend"));
+        let key = keyed(SERVER, FILE);
+        let _ = the_rows_of_a_reading_land(&held, &key, vec![found], Vec::new(), Vec::new(), &mut || false);
+        // **The register, under a server of this test's own**: the linked file
+        // going, and the texture joining.
+        let server = format!("piece-12-{}", Identity::issue(IdentityKind::Operation).expect("randomness").as_text());
+        let request = Identity::issue(IdentityKind::Operation).expect("randomness");
+        let readings = |joining: Vec<Vec<u8>>| TheSendsReadings { owed: 1, linked: 1, read: 0, reading_now: Some(mirror(b"/Users/a/kitchen/lib/lib_07.blend")), unknown_for_good: false, stopped: false, joining };
+        the_sends_this_run().lock().expect("the register").push(ASend {
+            request: request.clone(),
+            server: server.clone(),
+            file: FILE.to_string(),
+            files: vec![crate::the_found_files_sent::AFileSent { landing: mirror(b"/Users/a/kitchen/lib/lib_07.blend"), size: MB, transfer: None, ended: None }],
+            readings: readings(vec![mirror(b"/Users/a/kitchen/tex/lib_07.png")]),
+        });
+        let drawn = |held: &Mutex<WhatTheRunHolds>| {
+            let send = the_sends_this_run().lock().expect("the register").iter().find(|one| one.request == request).map(|one| one.readings.clone());
+            the_panel_knowing(
+                &held.lock().expect("the run"),
+                SERVER,
+                FILE,
+                None,
+                &WhatElseIsKnown {
+                    the_list_in_settings: None,
+                    uploading: Some((0, 1)),
+                    on_its_way: the_files_on_their_way_to(&server),
+                    a_send_is_being_counted: false,
+                    the_send: send,
+                },
+            )
+        };
+        let uploading_notes = |panel: &TheCheck| {
+            every_row(panel.the_table.as_ref().expect("a table"))
+                .iter()
+                .flat_map(|row| row.notes.iter().map(|note| reads(&note.said)))
+                .filter(|note| note == "Uploading")
+                .count()
+        };
+
+        let joining = drawn(&held);
+        assert!(!the_summary_reads(&joining).contains("to upload"), "{}", the_summary_reads(&joining));
+        assert!(joining.the_foot.is_none(), "a file joining the upload was offered on its own");
+        assert_eq!(uploading_notes(&joining), 2, "the found file does not read Uploading");
+
+        // **Left out by the send**: to upload again.
+        for one in the_sends_this_run().lock().expect("the register").iter_mut().filter(|one| one.request == request) {
+            one.readings = readings(Vec::new());
+        }
+        let left = drawn(&held);
+        the_sends_this_run().lock().expect("the register").retain(|one| one.request != request);
+        assert!(the_summary_reads(&left).contains("1 file to upload"), "{}", the_summary_reads(&left));
+        assert_eq!(reads(&left.the_foot.as_ref().expect("a foot").upload), "Upload 1 file (1.0 MB)");
+        assert_eq!(uploading_notes(&left), 1);
+    }
+
+    /// **The pictures of piece 12 for the Creator** — the check after the
+    /// upload, its last check running, before and after; and a file found during
+    /// the upload, before and after it reads as joining. Composed by this panel,
+    /// kept where `SMOOZY_THE_PIECE_12_CHECK` names a file. The *before* scenes
+    /// are this panel fed what the old code held: no running line, and the found
+    /// file not on its way.
+    #[test]
+    fn twenty_eighth_12_the_picture_scenes_compose() {
+        use crate::checking_a_file::TheSittingIsOf;
+        use crate::the_found_files_sent::TheSendsReadings;
+        use smoozy_dependencies::landing::mirror_of;
+        use smoozy_dependencies::record::MachineKey;
+        use smoozy_job_files::layout::{MachineRoot, TheLayout, WhereThePackageAreaSits};
+        let layout = TheLayout::of(MachineRoot::chosen("/root/smoozy").expect("a root"), WhereThePackageAreaSits::UnderTheRoot);
+        let found = |recorded: String, at: String, kind: Kind, size: u64, state: RowState| {
+            let mut one = a_row_found_at(recorded.as_bytes(), kind, at.as_bytes(), HowResolved::TheRecordedLocationItself);
+            one.size = Some(size);
+            one.state = state;
+            one.state_when_the_check_ran = state;
+            one
+        };
+        let sitting_of = |rows: Vec<ACheckedRow>, completion: Option<Completion>| {
+            let mut sitting = a_sitting(rows);
+            sitting.linked_files_read = 10;
+            sitting.completion = completion;
+            sitting.of = Some(TheSittingIsOf {
+                server: SERVER.to_string(),
+                file: FILE.to_string(),
+                root: MachineLocation::composed(b"/root/smoozy/jobs/main.blend".to_vec()),
+                holding: HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(FILE.as_bytes())),
+                with: a_blender(),
+                machine: MachineKey::of(an_identity(SERVER), Identity::issue(IdentityKind::Installation).expect("an installation")),
+                layout: Some(layout.clone()),
+            });
+            sitting
+        };
+        let mut every_one: Vec<ACheckedRow> = (0..10)
+            .map(|at| found(format!("//lib/lib_{at:02}.blend"), format!("/Users/alex/work/linked/lib/lib_{at:02}.blend"), Kind::Library, 87 * 1024, RowState::AlreadyOnTheMachine))
+            .collect();
+        every_one.extend((0..30).map(|at| {
+            found(format!("//tex/noise_{at:02}.png"), format!("/Users/alex/work/linked/tex/noise_{at:02}.png"), Kind::Image, 9_300_000, RowState::AlreadyOnTheMachine)
+        }));
+        let panel = |held: &WhatTheRunHolds, known: &WhatElseIsKnown| serde_json::to_value(the_panel_knowing(held, SERVER, FILE, None, known)).expect("it serialises");
+        let mut out = serde_json::Map::new();
+
+        // **The last check, running after the upload.**
+        let mut held = a_run(sitting_of(every_one.clone(), None));
+        out.insert("rerun-before".into(), panel(&held, &WhatElseIsKnown::default()));
+        held.checks_running.insert(keyed(SERVER, FILE), false);
+        out.insert("rerun-after".into(), panel(&held, &WhatElseIsKnown::default()));
+
+        // **A file found during the upload**: lib_07.blend read, lib_07.png found.
+        let mut rows: Vec<ACheckedRow> = (0..10)
+            .map(|at| found(format!("//lib/lib_{at:02}.blend"), format!("/Users/alex/work/linked/lib/lib_{at:02}.blend"), Kind::Library, 87 * 1024, if at < 7 { RowState::AlreadyOnTheMachine } else { RowState::FoundOnYourComputer }))
+            .collect();
+        rows.extend((0..20).map(|at| {
+            found(format!("//tex/noise_{at:02}.png"), format!("/Users/alex/work/linked/tex/noise_{at:02}.png"), Kind::Image, 9_300_000, RowState::FoundOnYourComputer)
+        }));
+        let mut lib_07 = found("//lib_07.png".into(), "/Users/alex/work/linked/lib/lib_07.png".into(), Kind::Image, 9_300_000, RowState::FoundOnYourComputer);
+        lib_07.during_the_upload.arrived = Some(1);
+        rows.push(lib_07);
+        let mirror = |one: &ACheckedRow| {
+            let location = one.the_answer().and_then(|answer| answer.resolution.as_ref()).map(|resolution| resolution.to.location().clone()).expect("an answer");
+            mirror_of(&layout, &location).expect("fits")
+        };
+        let going: Vec<MachineLocation> = rows.iter().filter(|one| one.state == RowState::FoundOnYourComputer && one.row.ordering_key().as_bytes() != b"//lib_07.png").map(mirror).collect();
+        let joining = mirror(rows.last().expect("lib_07.png"));
+        let held = a_run(sitting_of(rows, None));
+        let send = TheSendsReadings { owed: 3, linked: 10, read: 7, reading_now: None, unknown_for_good: false, stopped: false, joining: Vec::new() };
+        let known = |on_its_way: Vec<MachineLocation>| WhatElseIsKnown { the_list_in_settings: None, uploading: Some((30, 36)), on_its_way, a_send_is_being_counted: false, the_send: Some(send.clone()) };
+        out.insert("joining-before".into(), panel(&held, &known(going.clone())));
+        let mut with_it = going;
+        with_it.push(joining);
+        out.insert("joining-after".into(), panel(&held, &known(with_it)));
+        assert!(out["rerun-after"]["still_reading"].is_object());
+        if let Some(keep) = std::env::var_os("SMOOZY_THE_PIECE_12_CHECK") {
+            fs::write(keep, serde_json::Value::Object(out).to_string()).expect("the scenes are kept");
+        }
+    }
+
+    /// **Rows a reading during the upload found arrive at the foot of their
+    /// group, in the order they arrived, so nothing above the user's row moves;
+    /// a file found twice, or while a check walks the tree, is not drawn twice**
+    /// — `§ While it is still reading below a linked file`, 2026-11-09.
+    #[test]
+    fn twenty_eighth_11_rows_a_reading_finds_arrive_at_the_foot_of_their_group() {
+        let held = Mutex::new(a_run(a_sitting(vec![
+            a_row(b"//tex/a.png", Kind::Image, RowState::FoundOnYourComputer),
+            a_row(b"//lib/b.blend", Kind::Library, RowState::FoundOnYourComputer),
+        ])));
+        let below = |recorded: &[u8], kind: Kind| {
+            let mut one = a_row(recorded, kind, RowState::FoundOnYourComputer);
+            one.holding = HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(b"/Users/a/lib/b.blend"));
+            one
+        };
+        let key = keyed(SERVER, FILE);
+        let placed = the_rows_of_a_reading_land(&held, &key, vec![below(b"//tex/z_late.png", Kind::Image), below(b"//c.blend", Kind::Library)], Vec::new(), Vec::new(), &mut || false);
+        assert_eq!(placed.iter().map(|(at, _)| *at).collect::<Vec<_>>(), [2, 3]);
+        let order: Vec<String> = {
+            let held = held.lock().expect("the run");
+            let groups = the_rows_in_their_groups(&held.sittings[&key]);
+            groups.iter().flatten().map(|at| String::from_utf8_lossy(held.sittings[&key].rows[*at].row.ordering_key().as_bytes()).into_owned()).collect()
+        };
+        assert_eq!(order, ["//lib/b.blend", "//tex/a.png", "//tex/z_late.png", "//c.blend"]);
+
+        // **The same file's rows again, or a check walking**: nothing lands.
+        let again = the_rows_of_a_reading_land(&held, &key, vec![below(b"//tex/z_late.png", Kind::Image)], Vec::new(), Vec::new(), &mut || false);
+        assert_eq!(again[0].0, usize::MAX);
+        held.lock().expect("the run").checks_running.insert(key.clone(), false);
+        let walking = the_rows_of_a_reading_land(&held, &key, vec![a_row(b"//tex/q.png", Kind::Image, RowState::FoundOnYourComputer)], Vec::new(), Vec::new(), &mut || false);
+        assert_eq!(walking[0].0, usize::MAX);
+        assert_eq!(held.lock().expect("the run").sittings[&key].rows.len(), 4);
+    }
+
+    /// **Sol's fresh look, 2026-11-09, finding 5: rows a reading found do not land
+    /// once Stop is pressed**, however late in the reading it comes.
+    #[test]
+    fn twenty_eighth_11_rows_found_after_stop_do_not_land() {
+        let held = Mutex::new(a_run(a_sitting(vec![a_row(b"//tex/a.png", Kind::Image, RowState::FoundOnYourComputer)])));
+        let key = keyed(SERVER, FILE);
+        let mut found = a_row(b"//tex/late.png", Kind::Image, RowState::FoundOnYourComputer);
+        found.holding = HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(b"/Users/a/lib/b.blend"));
+        let placed = the_rows_of_a_reading_land(&held, &key, vec![found], Vec::new(), Vec::new(), &mut || true);
+        assert_eq!(placed[0].0, usize::MAX, "a row landed after Stop");
+        assert_eq!(held.lock().expect("the run").sittings[&key].rows.len(), 1);
+    }
+
+    /// **A linked file that landed during the upload and could not be read says
+    /// *Uploaded; could not be read.*, in red, its reason on hover, with no new
+    /// control** — `§ A row`, 2026-11-09.
+    #[test]
+    fn twenty_eighth_11_a_linked_file_that_could_not_be_read_says_so_on_its_row() {
+        let mut props = a_row(b"//lib/props.blend", Kind::Library, RowState::AlreadyOnTheMachine);
+        props.during_the_upload.could_not_be_read = Some(WhyItCouldNotBeRead::ThisBlenderCouldNotOpenIt);
+        let panel = the_panel(&a_run(a_sitting(vec![props])), SERVER, FILE, None);
+        let row = every_row(panel.the_table.as_ref().expect("a table"))[0].clone();
+        let note = row.notes.iter().find(|note| reads(&note.said) == "Uploaded; could not be read.").expect("the note");
+        assert_eq!(note.colour.as_str(), "bad");
+        assert_eq!(note.hover.as_ref().map(|hover| hover.as_str()), Some(words::THIS_BLENDER_COULD_NOT_OPEN));
+        assert!(row.action.is_none(), "a new control");
+    }
+
+    /// **`Dependency Upload & Remap` G14b and `Dependency Upload & Remap` A9e: every file of the upload landed
+    /// and a linked file is still read — *Render* waits for the check**, and the
+    /// hold goes when the reading does.
+    #[test]
+    fn twenty_eighth_11_render_waits_for_the_check_while_the_upload_owes_a_reading() {
+        use crate::the_found_files_sent::{the_sends_this_run, AFileSent, ASend, HowItEnded, TheSendsReadings};
+        let server = "c0ffee00c0ffee00c0ffee00c0ff1111";
+        let request = Identity::issue(IdentityKind::Operation).expect("randomness");
+        the_sends_this_run().lock().expect("the register").push(ASend {
+            request: request.clone(),
+            server: server.to_string(),
+            file: FILE.to_string(),
+            files: vec![AFileSent { landing: b"/m/props.blend".to_vec(), size: 1, transfer: None, ended: Some(HowItEnded::Published) }],
+            readings: TheSendsReadings { owed: 1, linked: 1, read: 0, reading_now: Some(b"/m/props.blend".to_vec()), unknown_for_good: false, stopped: false, joining: Vec::new() },
+        });
+        let held = Mutex::new(WhatTheRunHolds::default());
+        assert_eq!(what_holds_render(&held, server, FILE), Some(WhyRenderIsHeld::ItsCheckIsRunning));
+        for send in the_sends_this_run().lock().expect("the register").iter_mut().filter(|one| one.request == request) {
+            send.readings.owed = 0;
+            send.readings.reading_now = None;
+        }
+        assert_eq!(what_holds_render(&held, server, FILE), None);
+    }
+
+    /// **The pictures of note 11 for the Creator** — kitchen.blend's check at the
+    /// design's moments 1, 3, 6 and 8, composed by this panel, kept where
+    /// `SMOOZY_THE_LINKED_PICTURES` names a file. Moment 1 before the press; 3,
+    /// every file on its way and no linked file landed; 6, four read and shelf.blend
+    /// being read, two rows arrived; 8, every linked file read.
+    #[test]
+    fn twenty_eighth_11_the_picture_scenes_compose() {
+        use crate::checking_a_file::TheSittingIsOf;
+        use crate::the_found_files_sent::TheSendsReadings;
+        use smoozy_dependencies::landing::mirror_of;
+        use smoozy_dependencies::record::MachineKey;
+        use smoozy_job_files::layout::{MachineRoot, TheLayout, WhereThePackageAreaSits};
+        let layout = TheLayout::of(MachineRoot::chosen("/root/smoozy").expect("a root"), WhereThePackageAreaSits::UnderTheRoot);
+        let linked = ["chair", "dishes", "fridge", "lamp", "oven", "people", "plants", "shelf", "table", "window"];
+        let sizes = [64, 48, 120, 22, 140, 210, 96, 80, 110, 134];
+        let textures = [("floor_tile.png", 64), ("metal_grid.png", 18), ("wall_plaster.png", 31), ("wood_oak.png", 42)];
+        let found = |recorded: String, at: String, kind: Kind, size: u64| {
+            let mut one = a_row_found_at(recorded.as_bytes(), kind, at.as_bytes(), HowResolved::TheRecordedLocationItself);
+            one.size = Some(size * MB);
+            one
+        };
+        let mut rows: Vec<ACheckedRow> = linked
+            .iter()
+            .zip(sizes)
+            .map(|(name, size)| found(format!("//lib/{name}.blend"), format!("/Users/alex/work/kitchen/lib/{name}.blend"), Kind::Library, size))
+            .collect();
+        rows.extend(textures.iter().map(|(name, size)| {
+            found(format!("//textures/{name}"), format!("/Users/alex/work/kitchen/textures/{name}"), Kind::Image, *size)
+        }));
+        let sitting_of = |rows: Vec<ACheckedRow>| {
+            let mut sitting = a_sitting(rows);
+            sitting.linked_files_read = 0;
+            sitting.of = Some(TheSittingIsOf {
+                server: SERVER.to_string(),
+                file: FILE.to_string(),
+                root: MachineLocation::composed(b"/root/smoozy/jobs/kitchen.blend".to_vec()),
+                holding: HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(FILE.as_bytes())),
+                with: a_blender(),
+                machine: MachineKey::of(an_identity(SERVER), Identity::issue(IdentityKind::Installation).expect("an installation")),
+                layout: Some(layout.clone()),
+            });
+            sitting
+        };
+        let mirrors = |rows: &[ACheckedRow]| -> Vec<MachineLocation> {
+            rows.iter()
+                .filter(|row| matches!(row.state, RowState::FoundOnYourComputer))
+                .filter_map(|row| row.the_answer().and_then(|answer| answer.resolution.as_ref()).map(|resolution| resolution.to.location().clone()))
+                .map(|source| mirror_of(&layout, &source).expect("fits"))
+                .collect()
+        };
+        let panel = |rows: Vec<ACheckedRow>, uploading: Option<(usize, usize)>, the_send: Option<TheSendsReadings>| {
+            let on_its_way = if uploading.is_some() { mirrors(&rows) } else { Vec::new() };
+            let held = a_run(sitting_of(rows));
+            serde_json::to_value(the_panel_knowing(
+                &held,
+                SERVER,
+                FILE,
+                None,
+                &WhatElseIsKnown { the_list_in_settings: None, uploading, on_its_way, a_send_is_being_counted: false, the_send },
+            ))
+            .expect("it serialises")
+        };
+        let shelf = mirror_of(&layout, &StoredLocation::as_the_system_returned_it(b"/Users/alex/work/kitchen/lib/shelf.blend")).expect("fits");
+        let mut out = serde_json::Map::new();
+        out.insert("moment-1".into(), panel(rows.clone(), None, None));
+        out.insert(
+            "moment-3".into(),
+            panel(rows.clone(), Some((0, 14)), Some(TheSendsReadings { owed: 10, linked: 10, read: 0, reading_now: None, unknown_for_good: false, stopped: false, joining: Vec::new() })),
+        );
+        // **Moment 6**: chair, dishes, fridge and lamp landed and read; shelf
+        // read now; books.blend and its picture arrived at the foot.
+        let mut six = rows.clone();
+        for row in six.iter_mut().take(4) {
+            row.state = RowState::AlreadyOnTheMachine;
+        }
+        let mut books = found("//books.blend".into(), "/Users/alex/work/kitchen/lib/books.blend".into(), Kind::Library, 38);
+        books.during_the_upload.arrived = Some(1);
+        let mut cover = found("//tex/book_cover.png".into(), "/Users/alex/work/kitchen/lib/tex/book_cover.png".into(), Kind::Image, 6);
+        cover.during_the_upload.arrived = Some(2);
+        six.push(books);
+        six.push(cover);
+        out.insert(
+            "moment-6".into(),
+            panel(six.clone(), Some((4, 16)), Some(TheSendsReadings { owed: 7, linked: 11, read: 4, reading_now: Some(shelf.as_bytes().to_vec()), unknown_for_good: false, stopped: false, joining: Vec::new() })),
+        );
+        // **Moment 8**: every linked file read; three missing arrived.
+        let mut eight = six.clone();
+        for row in eight.iter_mut().filter(|row| row.kind == Kind::Library) {
+            row.state = RowState::AlreadyOnTheMachine;
+        }
+        for (at, name) in ["hair_mask.png", "soil_dry.png", "leaf_normal.png"].iter().enumerate() {
+            let mut gone = a_row(format!("//tex/{name}").as_bytes(), Kind::Image, RowState::NotFound);
+            gone.during_the_upload.arrived = Some(3 + at as u64);
+            eight.push(gone);
+        }
+        out.insert(
+            "moment-8".into(),
+            panel(eight, Some((12, 16)), Some(TheSendsReadings { owed: 0, linked: 14, read: 14, reading_now: None, unknown_for_good: false, stopped: false, joining: Vec::new() })),
+        );
+        for (name, said) in &out {
+            assert!(said["the_table"].is_object(), "{name} drew no table");
+        }
+        if let Some(keep) = std::env::var_os("SMOOZY_THE_LINKED_PICTURES") {
+            fs::write(keep, serde_json::Value::Object(out).to_string()).expect("the scenes are kept");
+        }
+    }
+
     fn a_row_found_at(reference: &[u8], kind: Kind, found: &[u8], how: HowResolved) -> ACheckedRow {
         let mut one = a_row(reference, kind, RowState::FoundOnYourComputer);
         one.answers[0].resolution = Some(Resolution {
@@ -4859,7 +6533,7 @@ console.log(JSON.stringify({
         }
         // The names are Design's own.
         let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
-        assert!(design.contains("*Failed*, *Missing*, *Uploaded before, not verified*, *To upload*, *Already on the server*, *Ignored*"));
+        assert!(design.contains("*Failed*, *Missing*, *Uploaded before, not verified*, *To upload*, *Already on the server*, *Not used by any scene* (2026-11-09), *Ignored*"));
         assert!(design.contains("*● Already on the server 1 · 128 MB*"));
     }
 
@@ -4948,6 +6622,52 @@ console.log(JSON.stringify({
         }
     }
 
+    /// **An arbitrary pick lists its matches, and a press names one** —
+    /// `Design/Dependency Upload & Remap § A row`, added 2026-11-12 (the four
+    /// questions, scout 2.17): the one in use first and plain, the others by
+    /// their place under the searched folder, the whole location on hover; a
+    /// press hands back its place in the answer's candidates, and that is the
+    /// file *Locate…* is given. The page draws them after the note and sends
+    /// `pick-a-match` with the row and the match.
+    #[test]
+    fn sixth_part_2_17_an_arbitrary_pick_lists_its_matches_and_one_can_be_chosen() {
+        let search = HowResolved::TheSearch {
+            from_folder: b"/Volumes/Lib/Textures/".to_vec(),
+            arbitrary: Some(smoozy_dependencies::record::ArbitraryPick {
+                taken: StoredLocation::as_the_system_returned_it(b"/Volumes/Lib/Textures/b/x.png"),
+                among: vec![
+                    StoredLocation::as_the_system_returned_it(b"/Volumes/Lib/Textures/a/x.png"),
+                    StoredLocation::as_the_system_returned_it(b"/Volumes/Lib/Textures/b/x.png"),
+                    StoredLocation::as_the_system_returned_it(b"/Volumes/Lib/Textures/x.png"),
+                ],
+            }),
+        };
+        let found = a_row_found_at(b"//tex/x.png", Kind::Image, b"/Volumes/Lib/Textures/b/x.png", search);
+        let held = a_run(a_sitting(vec![found.clone()]));
+        let table = the_panel(&held, SERVER, FILE, None).the_table.expect("a table");
+        let x = every_row(&table).into_iter().find(|row| row.name.as_str() == "x.png").expect("the row");
+        let note = x.notes.iter().find(|note| reads(&note.said).contains("arbitrary pick")).expect("the note");
+        let listed: Vec<(&str, &str, bool, u32)> = note
+            .matches
+            .iter()
+            .map(|one| (one.place.as_str(), one.whole.as_str(), one.in_use, one.at))
+            .collect();
+        assert_eq!(
+            listed,
+            vec![
+                ("b/x.png", "/Volumes/Lib/Textures/b/x.png", true, 1),
+                ("a/x.png", "/Volumes/Lib/Textures/a/x.png", false, 0),
+                ("x.png", "/Volumes/Lib/Textures/x.png", false, 2),
+            ],
+            "the matches are not listed"
+        );
+        assert!(x.notes.iter().filter(|other| !reads(&other.said).contains("arbitrary pick")).all(|other| other.matches.is_empty()));
+        assert_eq!(the_match_on(&found, 2).as_deref(), Some(&b"/Volumes/Lib/Textures/x.png"[..]));
+        assert_eq!(the_match_on(&found, 3), None);
+        let page = the_page();
+        assert!(page.contains("act: \"pick-a-match\"") && page.contains("note.matches"), "the page does not draw or press them");
+    }
+
     /// **The notes: every one that applies, in `§ A row`'s fixed order** —
     /// a change since the check ran; a failure's own reason; how it was found;
     /// what the row stands for; the scene note — each in its colour.
@@ -5021,9 +6741,9 @@ console.log(JSON.stringify({
         assert_eq!(notes_of("gone.png"), vec![note("File no longer found", "bad", false)]);
         assert_eq!(notes_of("later.png"), vec![note("Ignored", "idle", false)]);
         assert_eq!(notes_of("back.png"), vec![note("Missing", "bad", false)]);
-        assert_eq!(notes_of("cleared.png"), vec![note("Uploaded; remap failed: a path did not update", "bad", false)]);
+        assert_eq!(notes_of("cleared.png"), vec![note("Uploaded, but its file paths on the server could not be updated", "bad", false)]);
         // **`Dependency Upload & Remap` M14a: a failed row says which of two.**
-        assert_eq!(the_reason(Some(WhyItDidNotGoUp::SmoozyCouldNotOpenItToRemapItsPaths)), "Uploaded; remap failed: Blender could not open it");
+        assert_eq!(the_reason(Some(WhyItDidNotGoUp::SmoozyCouldNotOpenItToRemapItsPaths)), "Uploaded, but Blender could not open it to update its file paths");
         // **The search folder named by its last part carries its path on
         // hover.**
         let x = every_row(&table).into_iter().find(|row| row.name.as_str() == "x.png").expect("the row");
@@ -5266,6 +6986,7 @@ console.log(JSON.stringify({
                         })
                         .collect(),
                     a_send_is_being_counted: false,
+                    the_send: None,
                 },
             )
         };
@@ -5313,7 +7034,11 @@ console.log(JSON.stringify({
         // **The drawing's `chk-sending` says the same.**
         let drawing = the_mockup();
         assert!(drawing.contains("<span class=\"note busy\" data-e18=\"chk-sending\" hidden>Uploading</span>"));
-        assert!(drawing.contains("data-e18=\"chk-sending\" hidden>Upload 1 file (918&#160;KB)</button>"));
+        // **Redrawn 2026-11-09 (the twenty-eighth notes, note 11)** as the
+        // upload reading its linked files: every row on its way, so no button.
+        // Until then it drew one file on its way and *Upload 1 file (918 KB)*
+        // for the other, which this test's panels above still compose.
+        assert!(!drawing.contains("data-e18=\"chk-sending\" hidden>Upload "));
         // **The panel's command reads the sends file by file, each time it is
         // asked**, so coming back from Transfers shows which are going.
         let command = the_working_half()
@@ -5339,12 +7064,13 @@ console.log(JSON.stringify({
             a_row(b"/textures/ignored.png", Kind::Image, RowState::SetAside),
         ];
         rows[1].holding = HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(b"/project/library.blend"));
-        let counts = the_warning_counts(&rows, Default::default());
+        let sitting = a_sitting(rows);
+        let counts = the_warning_counts(&sitting, Default::default());
         assert_eq!(counts.not_found, 1);
         assert_eq!(counts.found_but_not_sent, 1);
         assert_eq!(counts.could_not_be_sent, 1);
         assert_eq!(counts.could_not_be_fixed, 0);
-        let panel = the_panel(&a_run(a_sitting(rows)), SERVER, FILE, None);
+        let panel = the_panel(&a_run(sitting), SERVER, FILE, None);
         assert!(the_summary_reads(&panel).contains("1 failed · 1 missing"));
     }
 
@@ -5415,7 +7141,17 @@ console.log(JSON.stringify({
             the_summary_reads(&reading),
             "2 failed · 3 missing · 1 not verified · 344 files to upload, 2.2 GB · 128 MB already on the server, found so far."
         );
-        assert!(the_mockup().contains("344 files to upload, 2.2\\u00a0GB \\u00b7 128\\u00a0MB already on the server, found so\\u00a0far."));
+        // **The drawing's kitchen draws `old_reference.jpg` as used by no
+        // scene**, so it sits in its own fold and the strip says so (the
+        // twenty-eighth notes, note 14).
+        let mut drawn = the_kitchen(None);
+        drawn.rows[10].scenes = Attribution::Established(Vec::new());
+        let drawn = the_summary_reads(&the_panel(&a_run(drawn), SERVER, FILE, None));
+        assert_eq!(
+            drawn,
+            "2 failed · 3 missing · 1 not verified · 343 files to upload, 2.2 GB · 128 MB already on the server, found so far. 1 not used by any scene, not uploaded."
+        );
+        assert!(the_mockup().contains("343 files to upload, 2.2\\u00a0GB \\u00b7 128\\u00a0MB already on the server, found so\\u00a0far. 1 not used by any scene, not\\u00a0uploaded."));
 
         let said = |rows: Vec<ACheckedRow>, completion: Option<Completion>| {
             let mut sitting = a_sitting(rows);
@@ -5462,7 +7198,7 @@ console.log(JSON.stringify({
             assert_eq!(the_strip_reads(&panel), the_summary_reads(&panel));
         }
         let held = a_run(the_kitchen(None));
-        let sending = the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: None, uploading: Some((4, 12)), on_its_way: Vec::new(), a_send_is_being_counted: false });
+        let sending = the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: None, uploading: Some((4, 12)), on_its_way: Vec::new(), a_send_is_being_counted: false, the_send: None });
         assert_eq!(the_strip_reads(&sending), "Uploading 4 of 12");
     }
 
@@ -5604,6 +7340,53 @@ console.log(JSON.stringify({
         assert!(page.contains("said.the_walks_stop, \"stop-the-search\""));
     }
 
+    /// ***Stop* stands beside the header's line for the whole check** — `§ While
+    /// it is still reading below a linked file`, 2026-11-13, after Sol's look at
+    /// reading the file past a minute, point 1. While the file itself is read,
+    /// while a linked file is read, and while the check runs with no other line,
+    /// the check can be stopped; until then *Stop* came only with the walk's
+    /// count, so a Blender stuck reading the file held the check with no way to
+    /// end it. **Once pressed, it is not offered again**, and a check that is
+    /// not running offers none.
+    #[test]
+    fn stop_stands_beside_the_line_for_the_whole_check() {
+        let key = keyed(SERVER, FILE);
+        let mut sitting = a_sitting(vec![a_row(b"//a/found.png", Kind::Image, RowState::FoundOnYourComputer)]);
+        sitting.completion = None;
+        let mut held = a_run(sitting);
+        held.checks_running.insert(key.clone(), false);
+
+        // The file itself, being read.
+        held.files_being_read.insert(key.clone());
+        let the_file = the_panel(&held, SERVER, FILE, None);
+        assert_eq!(reads(the_file.still_reading.as_ref().expect("a line")), "Reading the file…");
+        assert_eq!(the_file.the_walks_stop, Some(Prose::new(words::STOP)), "the file's own reading");
+        held.files_being_read.clear();
+
+        // A linked file, being read.
+        held.sittings.get_mut(&key).expect("it").still_reading_below =
+            Some(RecordedLocation::as_the_reading_carried_it(b"//lib/props.blend"));
+        let below = the_panel(&held, SERVER, FILE, None);
+        assert!(reads(below.still_reading.as_ref().expect("a line")).contains(words::STILL_READING_BELOW));
+        assert_eq!(below.the_walks_stop, Some(Prose::new(words::STOP)), "a linked file's reading");
+        held.sittings.get_mut(&key).expect("it").still_reading_below = None;
+
+        // Running, with no other line.
+        let checking = the_panel(&held, SERVER, FILE, None);
+        assert_eq!(reads(checking.still_reading.as_ref().expect("a line")), words::CHECKING_DEPENDENCIES);
+        assert_eq!(checking.the_walks_stop, Some(Prose::new(words::STOP)), "a running check");
+
+        // Pressed: the check is ending, and Stop is not offered again.
+        held.checks_running.insert(key.clone(), true);
+        held.files_being_read.insert(key.clone());
+        assert!(the_panel(&held, SERVER, FILE, None).the_walks_stop.is_none(), "Stop offered after it was pressed");
+        held.files_being_read.clear();
+
+        // Not running: no Stop.
+        held.checks_running.clear();
+        assert!(the_panel(&held, SERVER, FILE, None).the_walks_stop.is_none());
+    }
+
     /// **`§ Above the rows`, 2026-11-04: a row to upload that is a linked file nobody
     /// has read: the summary says so and never *Nothing is missing*** — the film's
     /// *Nothing is missing. 5 files to upload*, with 500 more in the next round.
@@ -5612,8 +7395,9 @@ console.log(JSON.stringify({
         let mut library = a_row(b"//lib/fx.blend", Kind::Library, RowState::FoundOnYourComputer);
         library.size = Some(1024 * 1024);
         let panel = the_panel(&a_run(a_sitting(vec![library.clone()])), SERVER, FILE, None);
-        assert_eq!(the_summary_reads(&panel), "1 file to upload, 1.0 MB. Linked files not checked yet.");
-        assert_eq!(the_strip_reads(&panel), "1 file to upload, 1.0 MB. Linked files not checked yet.");
+        // **Counted since the twenty-eighth notes, note 11** (`§ Above the rows`).
+        assert_eq!(the_summary_reads(&panel), "1 file to upload, 1.0 MB. 1 linked file not checked yet.");
+        assert_eq!(the_strip_reads(&panel), "1 file to upload, 1.0 MB. 1 linked file not checked yet.");
 
         // A picture going up has nothing below it.
         let picture = a_row(b"//a/wood.png", Kind::Image, RowState::FoundOnYourComputer);
@@ -5766,7 +7550,10 @@ console.log(JSON.stringify({
 
     /// What the page imports, standing in, and a harness that answers the
     /// panel, tells it an act's answer, and presses *Install Blender…*.
-    const THE_NO_BLENDER_STAND_INS: [(&str, &str); 11] = [
+    const THE_NO_BLENDER_STAND_INS: [(&str, &str); 12] = [
+        // The real one way the focus moves, which the page imports (the
+        // twenty-ninth notes, piece A1).
+        ("the-focus-moves.js", include_str!("../../web/the-focus-moves.js")),
         ("package.json", r#"{ "type": "module" }"#),
         ("files.js", "export function theBrowserIsOpenedAt() {}"),
         ("event-route.js", "export function whenTold(kind, handler) { (globalThis.told ||= new Map()).set(kind, handler); }"),
@@ -5784,7 +7571,7 @@ console.log(JSON.stringify({
         ),
         (
             "the-underway-shape.js",
-            "export function theMarkOnARow() { return document.createElement('span'); }",
+            "export function theMarkOnARow() { return document.createElement('span'); } export function theMarkOnALine() { return document.createElement('i'); }",
         ),
         ("the-machines-own-words.js", "export function theMachinesOwnWordsFor() {}"),
         ("transfers.js", "export function aTransferIsAskedFor() {}"),
@@ -5820,7 +7607,7 @@ const card = anElement("section"); card.appendChild(anElement("h2"));
 const blender = anElement("section"); blender.appendChild(anElement("h2"));
 card.scrollIntoView = () => scrolled.push("card"); blender.scrollIntoView = () => scrolled.push("blender");
 const setUp = anElement("div"); setUp.querySelectorAll = (which) => (which.includes("sus") ? [card, blender] : []);
-globalThis.document = { createElement: anElement, createTextNode: (text) => ({ text, children: [] }), addEventListener() {}, body: anElement("body"), activeElement: null,
+globalThis.document = { createElement: anElement, createElementNS: (_, tag) => anElement(tag), createTextNode: (text) => ({ text, children: [] }), addEventListener() {}, body: anElement("body"), activeElement: null,
   querySelector: (which) => (which.includes("setupview") ? setUp : null), querySelectorAll: () => [] };
 globalThis.CSS = { escape: (s) => s };
 globalThis.MutationObserver = class { observe() {} disconnect() {} };
@@ -5895,9 +7682,12 @@ console.log(JSON.stringify({
             a_row(b"//lib/props.blend", Kind::Library, RowState::FoundOnYourComputer),
             a_row(b"//tex/gone.png", Kind::Image, RowState::NotFound),
         ]);
-        assert_eq!(crate::the_found_files_sent::the_rows_the_upload_sends(&sitting.rows), vec![0, 1]);
+        assert_eq!(crate::the_found_files_sent::the_rows_the_upload_sends(&sitting), vec![0, 1]);
         let foot = the_panel(&a_run(sitting), SERVER, FILE, None).the_foot.expect("a foot");
-        assert_eq!(reads(&foot.upload), "Upload 2 files (2.0 MB)");
+        // **Since the twenty-eighth notes, note 11: a linked file to upload makes
+        // the button name what is known and say it is not all** (`§ Along the
+        // bottom`). It read *Upload 2 files (2.0 MB)* until then.
+        assert_eq!(reads(&foot.upload), "Upload the 2 found so far (2.0 MB)");
     }
 
     /// **Choosing rows the way a file manager does** — `§ Acting on many
@@ -6026,7 +7816,7 @@ console.log(JSON.stringify({
             key: ShiftKey(1),
         });
         let shift = the_panel(&a_run(sitting), SERVER, FILE, None).the_shift.expect("the shift");
-        assert!(the_texts(&shift.resolved).contains("\"1\""));
+        assert!(the_texts(&shift.said).contains("\"1\""));
     }
 
     /// **The strip is told what to say, and its title is words beside a
@@ -6062,6 +7852,7 @@ console.log(JSON.stringify({
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("the-dependency-check.js"), folder.join("the-dependency-check.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_CHECKS_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -6191,6 +7982,7 @@ console.log(JSON.stringify(out));
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("the-dependency-check.js"), folder.join("the-dependency-check.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_CHECKS_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -6207,7 +7999,7 @@ console.log(JSON.stringify(out));
         assert_eq!(
             got["standing"],
             serde_json::json!({
-                "note": ["note bad", "Uploaded; remap failed: a path did not update", 0],
+                "note": ["note bad", "Uploaded, but its file paths on the server could not be updated", 0],
                 "acts": [
                     ["BUTTON", "a", "", "Retry"],
                     ["BUTTON", "more", "", "\u{22ef}"],
@@ -6222,7 +8014,10 @@ console.log(JSON.stringify(out));
                 "note": ["note bad", "Upload failed: permission denied", 0],
                 "acts": [
                     ["BUTTON", "a", "", "Retry"],
-                    ["BUTTON", "more", "", "\u{22ef}"]
+                    ["BUTTON", "more", "", "\u{22ef}"],
+                    // The cross's room, unseen and pressing nothing (UI
+                    // consistency, finding 12).
+                    ["SPAN", "fx held", "", "\u{d7}"]
                 ]
             }),
             "a cleared failure still carries a cross"
@@ -6418,15 +8213,15 @@ console.log(JSON.stringify(out));
     /// of it, and the words are gone from this file.
     #[test]
     fn each_searched_folder_is_a_link_with_its_path_and_the_matches_are_not_said() {
-        let three: [&[u8]; 3] = [b"/Volumes/SAMSUNG T7/MijnCommerce", b"/Users/alex/Blender", b"/Volumes/Archive/2023"];
+        let three: [&[u8]; 3] = [b"/Volumes/SAMSUNG T7/ClientWork25", b"/Users/alex/Blender", b"/Volumes/Archive/2023"];
         let mut sitting = a_sitting(vec![a_row(b"//a/missing.png", Kind::Image, RowState::NotFound)]);
         sitting.the_search = Some(a_search_over(&three));
         sitting.the_list_it_searched = three.iter().map(|one| one.to_vec()).collect();
         let panel = the_panel(&a_run(sitting), SERVER, FILE, None);
         let line = the_folders_line_of(&panel);
-        assert_eq!(line.said.values(), vec!["MijnCommerce", "Blender", "2023"]);
+        assert_eq!(line.said.values(), vec!["ClientWork25", "Blender", "2023"]);
         let paths: Vec<&str> = line.the_full_paths.iter().map(Verbatim::as_str).collect();
-        assert_eq!(paths, vec!["/Volumes/SAMSUNG T7/MijnCommerce", "/Users/alex/Blender", "/Volumes/Archive/2023"]);
+        assert_eq!(paths, vec!["/Volumes/SAMSUNG T7/ClientWork25", "/Users/alex/Blender", "/Volumes/Archive/2023"]);
         // **The act each name hands back is a closed one**, and it is the
         // opening.
         let act = line.its_folders_open_with.as_ref().expect("the names are links");
@@ -6449,7 +8244,7 @@ console.log(JSON.stringify(out));
     /// opens nothing and says so. Opening one leaves *Added …* where it is.
     #[test]
     fn a_searched_folders_link_opens_that_folder_and_a_refusal_is_said() {
-        let two: [&[u8]; 2] = [b"/Volumes/SAMSUNG T7/MijnCommerce", b"/Users/alex/Blender"];
+        let two: [&[u8]; 2] = [b"/Volumes/SAMSUNG T7/ClientWork25", b"/Users/alex/Blender"];
         let mut sitting = a_sitting(Vec::new());
         sitting.the_search = Some(a_search_over(&two));
         sitting.the_folder_added = Some(TheFolderAdded { folder: two[1].to_vec(), found: 1, still_not_found: 0 });
@@ -6465,7 +8260,7 @@ console.log(JSON.stringify(out));
             crate::reveal::Revealed::ItOpened
         });
         assert_eq!(opened, None, "an opened folder says nothing");
-        assert_eq!(asked, vec![std::path::PathBuf::from("/Volumes/SAMSUNG T7/MijnCommerce")]);
+        assert_eq!(asked, vec![std::path::PathBuf::from("/Volumes/SAMSUNG T7/ClientWork25")]);
         let refused = a_searched_folder_is_opened(Some(two[0]), |_| crate::reveal::Revealed::ItCouldNotBeOpened);
         assert_eq!(refused, Some(Prose::new(words::COULD_NOT_OPEN_THE_FOLDER)));
         let nothing = a_searched_folder_is_opened(None, |_| panic!("nothing is asked for"));
@@ -6517,7 +8312,7 @@ console.log(JSON.stringify(out));
         sitting.the_list_it_searched = vec![b"/Users/alex/Work".to_vec()];
         let held = a_run(sitting);
         let said = |list: Option<Vec<Vec<u8>>>| {
-            let panel = the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: list, uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false });
+            let panel = the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: list, uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false, the_send: None });
             the_folders_line_of(&panel).clone()
         };
         let unchanged = said(Some(vec![b"/Users/alex/Work".to_vec()]));
@@ -6540,7 +8335,7 @@ console.log(JSON.stringify(out));
             SERVER,
             FILE,
             None,
-            &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Volumes/Assets".to_vec()]), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false },
+            &WhatElseIsKnown { the_list_in_settings: Some(vec![b"/Volumes/Assets".to_vec()]), uploading: None, on_its_way: Vec::new(), a_send_is_being_counted: false, the_send: None },
         );
         assert_eq!(the_folders_line_of(&panel).said.said().replace('\u{a0}', " "), words::YOUR_SEARCH_FOLDERS_CHANGED);
         // The words are Design's own.
@@ -6629,6 +8424,7 @@ console.log(JSON.stringify(out));
                 uploading: None,
                 on_its_way: Vec::new(),
                 a_send_is_being_counted: false,
+                the_send: None,
             },
         );
         let mut nothing_chosen = before_panel.clone();
@@ -6651,6 +8447,7 @@ console.log(JSON.stringify(out));
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("the-dependency-check.js"), folder.join("the-dependency-check.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_CHECKS_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -6743,6 +8540,7 @@ console.log(JSON.stringify(out));
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("the-dependency-check.js"), folder.join("the-dependency-check.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_CHECKS_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -6812,7 +8610,7 @@ console.log(JSON.stringify(out));
     fn the_strip_reads_uploading_while_the_checks_files_go() {
         let held = a_run(a_sitting(vec![a_row(b"//a/missing.png", Kind::Image, RowState::NotFound)]));
         let reading = |uploading| {
-            the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: None, uploading, on_its_way: Vec::new(), a_send_is_being_counted: false })
+            the_panel_knowing(&held, SERVER, FILE, None, &WhatElseIsKnown { the_list_in_settings: None, uploading, on_its_way: Vec::new(), a_send_is_being_counted: false, the_send: None })
                 .the_strip_reading
         };
         let sending = reading(Some((4, 12)));
@@ -6864,6 +8662,7 @@ console.log(JSON.stringify(out));
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("the-dependency-check.js"), folder.join("the-dependency-check.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_CHECKS_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -6916,6 +8715,7 @@ console.log(JSON.stringify(out));
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("the-dependency-check.js"), folder.join("the-dependency-check.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_CHECKS_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -7024,7 +8824,7 @@ console.log(JSON.stringify({ asked, after: panels[0].theFileItIsOn("S") }));
              export function theFailureShape() { return document.createElement('div'); }",
         ),
         ("the-machines-own-words.js", "export function theMachinesOwnWordsFor() {}"),
-        ("the-underway-shape.js", "export function theMarkOnARow() { return document.createElement('span'); }"),
+        ("the-underway-shape.js", "export function theMarkOnARow() { return document.createElement('span'); } export function theMarkOnALine() { return document.createElement('i'); }"),
         ("transfers.js", "export function aTransferIsAskedFor() {}"),
         (
             "settings.js",
@@ -7058,6 +8858,7 @@ class Piece {
   get textContent() { return this.own + this.children.map((one) => one.textContent).join(""); }
   appendChild(child) { if (child.parentNode) child.parentNode.removeChild(child); child.parentNode = this; this.children.push(child); return child; }
   removeChild(child) { const at = this.children.indexOf(child); if (at >= 0) this.children.splice(at, 1); child.parentNode = null; return child; }
+  insertBefore(child, before) { if (child.parentNode) child.parentNode.removeChild(child); const at = this.children.indexOf(before); child.parentNode = this; this.children.splice(at < 0 ? this.children.length : at, 0, child); return child; }
   replaceChildren(...more) { this.textContent = ""; more.forEach((one) => this.appendChild(one)); }
   remove() { if (this.parentNode) this.parentNode.removeChild(this); }
   contains(node) { for (let at = node; at; at = at.parentNode) if (at === this) return true; return false; }
@@ -7078,7 +8879,7 @@ export function everyPiece(root, found = []) {
   root.children.forEach((one) => everyPiece(one, found));
   return found;
 }
-globalThis.document = { createElement: (tag) => new Piece(tag), createTextNode: (text) => new TextPiece(text), activeElement: null };
+globalThis.document = { createElement: (tag) => new Piece(tag), createElementNS: (_, tag) => new Piece(tag), createTextNode: (text) => new TextPiece(text), activeElement: null };
 "#,
         ),
     ];
@@ -7171,7 +8972,7 @@ console.log(JSON.stringify(out));
         for prefix in ["qfail", "svfail", "tffail", "rdfail", "cbad", "ckdot"] {
             assert!(!page.contains(&format!("\"{prefix}")), "the page writes {prefix}");
         }
-        for exported in ["theFailureShape", "theMarkOnARow", "theMachinesOwnWordsFor", "theStripReads"] {
+        for exported in ["theFailureShape", "theMarkOnALine", "theMachinesOwnWordsFor", "theStripReads"] {
             assert!(page.contains(exported), "the page does not call {exported}");
         }
         // A box over the panel is a dialog, which is what piece 5's Escape
@@ -7321,6 +9122,44 @@ console.log(JSON.stringify(out));
         assert_eq!(words::NOTHING_TO_MATCH_ON, crate::surface::render_settings::words::NOTHING_TO_MATCH_ON);
     }
 
+    /// **`Render Settings` B5 as added 2026-11-11: a check on a server whose
+    /// disk reads full, with no build answering, says the disk is full** —
+    /// the render settings panel's sentence — **and never *This server has no
+    /// Blender.***, which would offer *Install Blender…* on a server that has
+    /// one. The build runner's ruling 3 of that date.
+    /// **Sol's second and third points on the full disk.** A check that asks
+    /// for the list itself lands what its own search read of the disk with
+    /// it; and a check started over a list the page already holds says the
+    /// disk is full too — *as first built that second route said* This
+    /// server has no Blender*, with* Install Blender… *beside it.*
+    #[test]
+    fn both_of_the_checks_routes_say_a_full_disk() {
+        let page = a_page_holding(None);
+        assert_eq!(
+            the_blender_the_check_reads_with(&page, SERVER, FILE, || (a_blender_list(&[]), true), || None),
+            Err(NoBlenderToReadWith::Said("The server’s disk is full.")),
+            "the check's own search read the disk full"
+        );
+        let held = page.lock().unwrap();
+        assert!(held.the_disk_reads_full_on.contains(SERVER));
+        let resolution = crate::surface::render_settings::the_version_resolved(&held, SERVER, FILE);
+        assert_eq!(
+            the_blender_resolved_on(&held, SERVER, &resolution),
+            Err(NoBlenderToReadWith::Said("The server’s disk is full.")),
+            "the route over a list the page already holds"
+        );
+    }
+
+    #[test]
+    fn a_check_on_a_full_disk_says_the_disk_is_full() {
+        let page = a_page_holding(Some(a_blender_list(&[])));
+        page.lock().unwrap().the_disk_reads_full_on.insert(SERVER.to_string());
+        assert_eq!(
+            the_blender_the_check_reads_with(&page, SERVER, FILE, never_asked, || None),
+            Err(NoBlenderToReadWith::Said("The server’s disk is full."))
+        );
+    }
+
     /// **`Render Settings` B2a: *a fresh … list* — the check asks for the
     /// server's Blenders where no page has**, rather than saying the server has
     /// none. A check started from Files, with the render settings never opened
@@ -7461,7 +9300,7 @@ console.log(JSON.stringify(out));
     #[test]
     fn k5s_line_says_where_relative_paths_are_looked_for_and_the_design_says_the_same() {
         assert!(
-            words::NO_RECORD_OF_WHERE_IT_CAME_FROM.contains("Searched in your search folders"),
+            words::NO_RECORD_OF_WHERE_IT_CAME_FROM.contains("your search folders were searched"),
             "{}",
             words::NO_RECORD_OF_WHERE_IT_CAME_FROM
         );
@@ -7470,6 +9309,871 @@ console.log(JSON.stringify(out));
         assert!(
             design.contains(&format!("*{}*", words::NO_RECORD_OF_WHERE_IT_CAME_FROM)),
             "the Design document's line and the code's differ"
+        );
+    }
+
+    // ── The twenty-eighth notes' piece 6: notes 8, 13, 14 and 15 ───────────
+
+    /// **The kitchen the pictures are drawn from, as a sitting**, with what
+    /// it is of where the scene note is asked about.
+    fn the_picture_kitchen() -> ASitting {
+        the_picture_scenes()
+            .into_iter()
+            .find(|(name, _)| *name == "kitchen")
+            .map(|(_, sitting)| sitting)
+            .expect("the kitchen scene")
+    }
+
+    fn a_group<'a>(panel: &'a TheCheck, which: &str) -> Option<&'a AGroup> {
+        panel.the_table.as_ref().expect("a table").groups.iter().find(|group| group.which.as_str() == which)
+    }
+
+    /// **Note 8: *To upload* carries an up arrow in the heading's own ink, and
+    /// no other group does** — `Design/Dependency Upload & Remap § The seven
+    /// states`. Not green: the group keeps no colour. The drawing's two *To
+    /// upload* headings carry the same arrow.
+    #[test]
+    fn twenty_eighth_8_to_upload_carries_an_up_arrow_in_its_own_ink() {
+        let panel = the_panel(&a_run(the_kitchen(Some(Completion::Completed))), SERVER, FILE, None);
+        let groups = &panel.the_table.as_ref().expect("a table").groups;
+        assert!(groups.len() > 3);
+        for group in groups {
+            let to_upload = group.which.as_str() == "found";
+            assert_eq!(group.marked_with_an_up_arrow, to_upload, "{}", group.which.as_str());
+            if to_upload {
+                assert_eq!(group.colour.as_str(), "", "To upload took a colour");
+            }
+        }
+        let drawing = the_mockup();
+        assert_eq!(
+            drawing.matches("<div class=\"cgrp\"><svg class=\"cup\" aria-hidden=\"true\"><use href=\"#i-up\"></use></svg>To upload").count(),
+            // Three from 2026-11-09: the twenty-eighth notes' piece 11 drew a
+            // third, kitchen.blend's, in `chk-linked` and `chk-sending`.
+            3,
+            "the drawing's To upload headings do not carry the arrow"
+        );
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains("***To upload* carries an up arrow instead of a dot**"));
+    }
+
+    /// **Note 14: rows no scene uses are folded, left out of the upload and
+    /// counted apart** — `Specs/Dependency Upload & Remap` *Checking a file*,
+    /// `Dependency Upload & Remap` A9, `Design/Dependency Upload & Remap §
+    /// How the rows are grouped and sorted`. A missing one is not counted
+    /// red; the summary says how many were left out; the button and a press
+    /// send only the rest; a row there is not chosen with a click; and each
+    /// row's one action is *Include*, the heading's *Include all*.
+    #[test]
+    fn twenty_eighth_14_rows_no_scene_uses_are_folded_left_out_and_counted_apart() {
+        let mut held = a_run(the_picture_kitchen());
+        let panel = the_panel(&held, SERVER, FILE, None);
+        let order: Vec<&str> =
+            panel.the_table.as_ref().expect("a table").groups.iter().map(|group| group.which.as_str()).collect();
+        assert_eq!(order, vec!["not-found", "found", "already-there", "not-used"]);
+        let fold = a_group(&panel, "not-used").expect("the fold");
+        assert_eq!(fold.heading.as_str().replace('\u{a0}', " "), "Not used by any scene");
+        assert!(fold.folded, "the fold is open");
+        assert_eq!(fold.colour.as_str(), "idle", "the fold is not Ignored's grey");
+        assert_eq!(reads(&fold.how_many), "3 · 15 MB");
+        assert_eq!(fold.include_all.as_ref().map(|said| said.as_str().replace('\u{a0}', " ")), Some("Include all".to_string()));
+        let names: Vec<&str> = fold.rows.iter().map(|row| row.name.as_str()).collect();
+        assert_eq!(names, vec!["backup_plate.exr", "old_reference.jpg", "test_grid.png"]);
+        for row in &fold.rows {
+            assert_eq!(row.action.as_ref().map(|action| action.act.as_str()), Some("include"), "{}", row.name.as_str());
+            assert_eq!(row.action.as_ref().map(|action| action.label.as_str()), Some("Include"));
+            assert!(!row.choosable, "a folded row is in the list a selection is made from");
+            assert!(row.notes.iter().any(|note| reads(&note.said) == words::NO_SCENE_USES_IT));
+        }
+        // **A missing one there keeps *Locate…* behind ⋯.**
+        assert!(fold.rows[0].more_items.iter().any(|item| item.act.as_str() == "locate"));
+        assert_eq!(
+            the_summary_reads(&panel),
+            "1 missing · 2 files to upload, 106 MB · 128 MB already on the server. 3 not used by any scene, not uploaded."
+        );
+        assert_eq!(the_strip_reads(&panel), the_summary_reads(&panel));
+        assert_eq!(reads(&panel.the_foot.as_ref().expect("a foot").upload), "Upload 2 files (106 MB)");
+        let sitting = &held.sittings[&keyed(SERVER, FILE)];
+        let sent: Vec<&str> = crate::the_found_files_sent::the_rows_the_upload_sends(sitting)
+            .into_iter()
+            .map(|at| std::str::from_utf8(sitting.rows[at].row.ordering_key().as_bytes()).unwrap())
+            .collect();
+        assert_eq!(sent, vec!["//textures/floor_tile.png", "//textures/wood_oak.png"]);
+        // **Not chosen with a click.**
+        let left_out: Vec<usize> = the_rows_left_out(sitting).into_iter().collect();
+        assert_eq!(left_out.len(), 3);
+        the_act_is_taken(&mut held, SERVER, FILE, TheAct::ChooseARow, Some(left_out[0]));
+        assert!(held.selections.get(&keyed(SERVER, FILE)).is_none_or(BTreeSet::is_empty), "a folded row was chosen");
+
+        // **With nothing else open, a missing file no scene uses does not stop
+        // *Nothing is missing*.**
+        let mut gone = a_row(b"//plates/gone.exr", Kind::Image, RowState::NotFound);
+        gone.scenes = Attribution::Established(Vec::new());
+        let panel = the_panel(&a_run(a_sitting(vec![a_row(b"//a/found.png", Kind::Image, RowState::FoundOnYourComputer), gone])), SERVER, FILE, None);
+        assert_eq!(the_summary_reads(&panel), "Nothing is missing. 1 file to upload, 1.0 MB. 1 not used by any scene, not uploaded.");
+
+        // **The plan's own words.**
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains("*Nothing is missing. 2 files to upload, 90 MB. 14 not used by any scene, not uploaded.*"));
+        assert!(design.contains("*● Not used by any scene 14 · 340 MB*"));
+        let spec = include_str!("../../../../Preparation/Specs/Dependency Upload & Remap.md");
+        assert!(spec.contains("left out of the upload until the user includes them"));
+        assert!(spec.contains("**The cost, accepted:**"));
+        let drawing = the_mockup();
+        assert!(drawing.contains("<span>Not used by any scene</span><span class=\"k\">1 &#183; 3&#160;MB</span><span class=\"grow\"></span><button type=\"button\" class=\"lnk\">Include all</button>"));
+    }
+
+    /// **Note 14: an included row goes back to its own group, says so, and
+    /// uploads** — `Dependency Upload & Remap` K4's included mark.
+    #[test]
+    fn twenty_eighth_14_an_included_row_returns_to_its_group_and_says_so() {
+        let mut sitting = the_picture_kitchen();
+        let at = sitting
+            .rows
+            .iter()
+            .position(|one| one.row.ordering_key().as_bytes() == b"//textures/test_grid.png")
+            .expect("the grid");
+        for answer in &mut sitting.rows[at].answers {
+            answer.included = true;
+        }
+        let held = a_run(sitting);
+        let panel = the_panel(&held, SERVER, FILE, None);
+        let to_upload = a_group(&panel, "found").expect("To upload");
+        let grid = to_upload.rows.iter().find(|row| row.name.as_str() == "test_grid.png").expect("the grid is under To upload");
+        let notes: Vec<String> = grid.notes.iter().map(|note| reads(&note.said)).collect();
+        assert_eq!(notes, vec!["Not used by any scene.".to_string(), "You included this.".to_string()]);
+        assert!(grid.action.is_none(), "an included row shows an action");
+        assert_eq!(reads(&a_group(&panel, "not-used").expect("the fold").how_many), "2 · 3.0 MB");
+        assert_eq!(reads(&panel.the_foot.as_ref().expect("a foot").upload), "Upload 3 files (118 MB)");
+        assert!(the_summary_reads(&panel).ends_with("2 not used by any scene, not uploaded."));
+    }
+
+    /// **Note 14, the builder's ruling: only rows of the file being checked
+    /// carry the note or are left out.** A row inside a linked `.blend` was
+    /// read in that file, whose scenes are not the job's.
+    #[test]
+    fn twenty_eighth_14_a_row_inside_a_linked_file_is_never_left_out() {
+        use crate::checking_a_file::TheSittingIsOf;
+        use smoozy_dependencies::record::MachineKey;
+        let mut inside = a_row_found_at(b"//tex/wall.png", Kind::Image, b"/Users/alex/lib/tex/wall.png", HowResolved::TheRecordedLocationItself);
+        inside.holding = HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(b"/Users/alex/lib/props.blend"));
+        inside.scenes = Attribution::Established(Vec::new());
+        let mut ours = a_row_found_at(b"//tex/old.png", Kind::Image, b"/Users/alex/work/kitchen/tex/old.png", HowResolved::TheRecordedLocationItself);
+        ours.scenes = Attribution::Established(Vec::new());
+        let mut sitting = a_sitting(vec![inside, ours]);
+        sitting.of = Some(TheSittingIsOf {
+            server: SERVER.to_string(),
+            file: FILE.to_string(),
+            root: MachineLocation::composed(b"/ephemeral/smoozy/jobs/kitchen_v14.blend".to_vec()),
+            holding: HoldingFile::OnTheUsersComputer(StoredLocation::as_the_system_returned_it(FILE.as_bytes())),
+            with: a_blender(),
+            machine: MachineKey::of(an_identity(SERVER), Identity::issue(IdentityKind::Installation).expect("an installation")),
+            layout: None,
+        });
+        assert_eq!(the_rows_left_out(&sitting).into_iter().collect::<Vec<_>>(), vec![1]);
+        let panel = the_panel(&a_run(sitting), SERVER, FILE, None);
+        let wall = every_row(panel.the_table.as_ref().expect("a table"))
+            .into_iter()
+            .find(|row| row.name.as_str() == "wall.png")
+            .expect("the wall")
+            .clone();
+        assert!(wall.notes.iter().all(|note| reads(&note.said) != words::NO_SCENE_USES_IT), "a linked file's row says no scene uses it");
+        assert_eq!(a_group(&panel, "found").expect("To upload").rows.len(), 1);
+    }
+
+    /// **Note 14: the standing counts a row left out as set aside**, so the
+    /// Render band's figure is the panel's — `Dependency Upload & Remap` V11
+    /// and V12 of 2026-11-09.
+    #[test]
+    fn twenty_eighth_14_the_render_bands_figure_leaves_out_what_the_panel_leaves_out() {
+        let sitting = the_picture_kitchen();
+        let counts = the_warning_counts(&sitting, Default::default());
+        assert_eq!((counts.not_found, counts.found_but_not_sent), (1, 2));
+        let left_out = the_rows_left_out(&sitting);
+        for at in 0..sitting.rows.len() {
+            let expected = if left_out.contains(&at) { RowState::SetAside } else { sitting.rows[at].state };
+            assert_eq!(the_state_the_standing_counts(&sitting, at), expected);
+        }
+    }
+
+    /// **Note 15: the shift is one sentence counting files, and offers no
+    /// undo where it found none** — `Design/Dependency Upload & Remap §
+    /// Above the rows`. *(It read* Files recorded under … were found under …
+    /// . 0 rows resolved. *with* Undo this change.*)*
+    #[test]
+    fn twenty_eighth_15_the_shift_counts_files_and_has_no_undo_where_it_found_none() {
+        let shift_of = |name: &str| {
+            let sitting = the_picture_scenes().into_iter().find(|(one, _)| *one == name).expect("the scene").1;
+            the_panel(&a_run(sitting), SERVER, FILE, None).the_shift.expect("the shift")
+        };
+        let some = shift_of("shift-some");
+        assert_eq!(reads(&some.said), "3 more files under /work/kitchen/ were found under /Users/alex/Archive/kitchen/.");
+        assert_eq!(some.undo.as_ref().map(|undo| undo.as_str().replace('\u{a0}', " ")), Some("Undo this change".to_string()));
+        let none = shift_of("shift-none");
+        assert_eq!(reads(&none.said), "No other missing files under /work/kitchen/ were found under /Users/alex/Archive/kitchen/.");
+        assert!(none.undo.is_none(), "a shift that found nothing offers an undo");
+        // **One file, and a set counted by its files, as the summary counts.**
+        let mut one = the_picture_scenes().into_iter().find(|(name, _)| *name == "shift-none").expect("the scene").1;
+        let mut smoke = a_shift_row(b"/work/kitchen/caches/smoke/", b"/Users/alex/Archive/kitchen/caches/smoke/");
+        smoke.members = Some(340);
+        one.rows.push(smoke.clone());
+        let panel = the_panel(&a_run(one), SERVER, FILE, None);
+        assert_eq!(reads(&panel.the_shift.expect("the shift").said), "340 more files under /work/kitchen/ were found under /Users/alex/Archive/kitchen/.");
+        smoke.members = None;
+        let mut single = the_picture_scenes().into_iter().find(|(name, _)| *name == "shift-none").expect("the scene").1;
+        single.rows.push(smoke);
+        let panel = the_panel(&a_run(single), SERVER, FILE, None);
+        assert_eq!(reads(&panel.the_shift.expect("the shift").said), "1 more file under /work/kitchen/ was found under /Users/alex/Archive/kitchen/.");
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains("*12 more files under /work were found under /Archive.*"));
+        assert!(design.contains("*No other missing files under /work were found under /Archive.*"));
+        assert!(the_mockup().contains("<span><b>343</b> more files under <b class=\"mono\">/work/kitchen/</b> were found under <b class=\"mono\">Archive/kitchen/</b>.</span>"));
+    }
+
+    /// **Note 13: *Locate…*'s window says *Locate* and the row's own name** —
+    /// `Desktop app and delivery` X5's sentence of 2026-11-09. The name is a
+    /// value on the verbatim route, as the row shows it; a set or folder row
+    /// gives its own name.
+    #[test]
+    fn twenty_eighth_13_locates_window_says_locate_and_the_files_name() {
+        let ask = |one: &ACheckedRow| {
+            let (title, value) = what_locate_asks(one);
+            crate::picker::Asking {
+                what: crate::picker::WhatMayBeChosen::Files,
+                how_many: crate::picker::HowMany::One,
+                starting_at: None,
+                title,
+                the_value_after_the_title: value,
+            }
+            .the_title()
+        };
+        let hdri = a_row(b"//../Documents/Blender/HDRi/studio_white_soft_light_02.exr", Kind::Image, RowState::NotFound);
+        assert_eq!(ask(&hdri), "Locate studio_white_soft_light_02.exr");
+        let smoke = a_row(b"//caches/smoke/", Kind::FluidCacheFolder, RowState::NotFound);
+        assert_eq!(ask(&smoke), "Locate smoke");
+        assert_eq!(what_locate_asks(&hdri).1.map(|value| value.as_str().to_string()), Some(every_row(&the_panel(&a_run(a_sitting(vec![hdri.clone()])), SERVER, FILE, None).the_table.expect("a table"))[0].name.as_str().to_string()));
+        let plan = include_str!("../../../../Preparation/Architecture/Desktop app and delivery.md");
+        assert!(plan.contains("**A picker's title may be prose followed by one value on the verbatim route**"));
+    }
+
+    /// **The page draws notes 8, 14 and 15 as the drawing does** — under
+    /// Node with the page's stand-ins: *To upload*'s heading carries the arrow
+    /// (`svg.cup`) and no dot; the fold is a `details.cside` whose heading
+    /// carries *Include all*, and pressing it asks for `include-all` without
+    /// opening the fold; a row's *Include* asks for `include` with its place;
+    /// and a shift that found nothing draws its one sentence and no undo.
+    #[test]
+    fn twenty_eighth_the_page_draws_the_arrow_the_fold_and_the_shift() {
+        let mut kitchen = the_picture_kitchen();
+        kitchen.the_shift = Some(TheShiftInHand {
+            old_root: b"/work/kitchen/".to_vec(),
+            new_root: b"/Users/alex/Archive/kitchen/".to_vec(),
+            key: ShiftKey(1),
+        });
+        let panel = the_panel(&a_run(kitchen), SERVER, FILE, None);
+        let fold_row = a_group(&panel, "not-used").expect("the fold").rows[0].at.as_str().to_string();
+        let answers = serde_json::json!({ "panel": panel, "server": SERVER, "file": FILE });
+        let folder = std::env::temp_dir().join(format!("smoozy-check-twenty-eighth-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir_all(&folder).expect("a scratch folder");
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("web/the-dependency-check.js"),
+            folder.join("the-dependency-check.js"),
+        )
+        .expect("the page");
+        for (name, text) in THE_NO_BLENDER_STAND_INS.iter().filter(|(name, _)| *name != "harness.js") {
+            fs::write(folder.join(name), text).expect("a stand-in");
+        }
+        fs::write(folder.join("harness.js"), THE_TWENTY_EIGHTH_HARNESS).expect("the harness");
+        fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        // **Where `SMOOZY_THE_TWENTY_EIGHTH_HARNESS` names a folder, the
+        // harness and its answers are left there**, so the same run can be made
+        // against an earlier page.
+        if let Some(keep) = std::env::var_os("SMOOZY_THE_TWENTY_EIGHTH_HARNESS") {
+            let keep = std::path::PathBuf::from(keep);
+            let _ = fs::create_dir_all(&keep);
+            for entry in fs::read_dir(&folder).into_iter().flatten().flatten() {
+                let _ = fs::copy(entry.path(), keep.join(entry.file_name()));
+            }
+        }
+        let _ = fs::remove_dir_all(&folder);
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the page was not run");
+            return;
+        };
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness prints one answer");
+        assert_eq!(got["toUpload"], serde_json::json!({ "arrow": true, "dot": false }), "{got}");
+        assert_eq!(got["missingHasArrow"], false, "{got}");
+        assert_eq!(got["fold"]["tag"], "DETAILS", "{got}");
+        assert_eq!(got["fold"]["includeAll"].as_str().map(|said| said.replace('\u{a0}', " ")), Some("Include all".to_string()), "{got}");
+        assert_eq!(got["fold"]["openedByThePress"], false, "{got}");
+        assert_eq!(
+            got["pressed"],
+            serde_json::json!([
+                ["an_act_on_the_check", "include-all", null],
+                ["an_act_on_the_check", "include", fold_row.parse::<u32>().expect("a place")]
+            ]),
+            "{got}"
+        );
+        assert_eq!(got["shift"]["undo"], false, "{got}");
+        assert_eq!(
+            got["shift"]["said"].as_str().map(|said| said.replace('\u{a0}', " ")),
+            Some("No other missing files under /work/kitchen/ were found under /Users/alex/Archive/kitchen/.".to_string()),
+            "{got}"
+        );
+    }
+
+    /// The harness for [`twenty_eighth_the_page_draws_the_arrow_the_fold_and_the_shift`].
+    const THE_TWENTY_EIGHTH_HARNESS: &str = r#"import { readFileSync } from "node:fs";
+function anElement(tag) {
+  const names = new Set(); const listeners = new Map();
+  const e = { tagName: tag.toUpperCase(), children: [], parentNode: null, dataset: {}, hidden: false, text: "", type: "", id: "", title: "", style: {}, open: false,
+    classList: { add: (...m) => m.forEach((o) => names.add(o)), remove: (...m) => m.forEach((o) => names.delete(o)), contains: (o) => names.has(o), toggle() {} },
+    set className(v) { names.clear(); String(v).split(" ").filter(Boolean).forEach((o) => names.add(o)); }, get className() { return [...names].join(" "); },
+    set textContent(v) { e.children = []; e.text = v == null ? "" : String(v); }, get textContent() { return e.text + e.children.map((o) => o.textContent || o.text || "").join(""); },
+    appendChild(c) { c.parentNode = e; e.children.push(c); return c; }, removeChild(c) { e.children = e.children.filter((o) => o !== c); return c; },
+    replaceChildren(...f) { e.children = []; f.forEach((o) => e.appendChild(o)); }, remove() {}, setAttribute() {}, removeAttribute() {},
+    addEventListener(k, h) { (listeners.get(k) || listeners.set(k, []).get(k)).push(h); },
+    click() {
+      let stopped = false; let prevented = false;
+      const event = { target: e, preventDefault() { prevented = true; }, stopPropagation() { stopped = true; } };
+      for (let at = e; at && !stopped; at = at.parentNode) {
+        for (const h of (at === e ? listeners.get("click") : at.listenersFor("click")) || []) h(event);
+        if (!prevented && at.tagName === "SUMMARY" && at.parentNode) at.parentNode.open = !at.parentNode.open;
+      }
+    },
+    listenersFor(k) { return listeners.get(k); },
+    focus() {},
+    contains(o) { for (let at = o; at; at = at.parentNode) if (at === e) return true; return false; },
+    get firstChild() { return e.children[0] || null; },
+    get parentElement() { return e.parentNode; }, get childElementCount() { return e.children.filter((o) => o.tagName).length; },
+    closest() { return null; }, querySelector() { return null; }, querySelectorAll() { return []; } };
+  return e;
+}
+const every = (e, into = []) => { into.push(e); for (const c of e.children || []) every(c, into); return into; };
+globalThis.went = [];
+globalThis.document = { createElement: anElement, createElementNS: (_, tag) => anElement(tag), createTextNode: (text) => ({ text, children: [] }), addEventListener() {}, body: anElement("body"), activeElement: null,
+  querySelector: () => null, querySelectorAll: () => [] };
+globalThis.CSS = { escape: (s) => s };
+globalThis.MutationObserver = class { observe() {} disconnect() {} };
+const answers = JSON.parse(readFileSync("answers.json", "utf8"));
+const bytes = [...answers.file].map((c) => c.charCodeAt(0));
+const pressed = [];
+globalThis.window = { __TAURI__: { core: { invoke(command, args) {
+  if (command === "the_dependency_check_panel") return Promise.resolve(answers.panel);
+  pressed.push([command, args.act, args.row]);
+  return Promise.resolve(null);
+} } } };
+await import("./the-dependency-check.js");
+const { panels } = await import("./a-server.js");
+const settle = async () => { for (let at = 0; at < 8; at += 1) await new Promise((go) => setImmediate(go)); };
+const sheet = anElement("div"); const head = sheet.appendChild(anElement("div")); const body = sheet.appendChild(anElement("div"));
+const panel = panels[0];
+if (panel.itIsShownOn) { await panel.itIsShownOn(answers.server, bytes); }
+panel.itIsDrawn({ head, body }, answers.server);
+await settle();
+const heading = (which) => every(body).find((one) => one.dataset && one.dataset.group === which);
+const toUpload = heading("found");
+const has = (node, name) => every(node).some((one) => one !== node && one.classList && one.classList.contains(name));
+const fold = heading("not-used");
+const includeAll = fold ? every(fold).find((one) => one.dataset && one.dataset.box === "include-all") : null;
+if (includeAll) includeAll.click();
+await settle();
+const openedByThePress = fold ? fold.open : null;
+const include = fold ? every(fold).find((one) => one.dataset && typeof one.dataset.box === "string" && one.dataset.box.startsWith("include-") && one !== includeAll) : null;
+if (include) include.click();
+await settle();
+const shift = every(body).find((one) => one.classList && one.classList.contains("shift"));
+console.log(JSON.stringify({
+  toUpload: toUpload ? { arrow: has(toUpload, "cup"), dot: has(toUpload, "cdot") } : null,
+  missingHasArrow: heading("not-found") ? has(heading("not-found"), "cup") : null,
+  fold: fold ? { tag: fold.tagName, includeAll: includeAll ? includeAll.textContent : null, openedByThePress } : null,
+  pressed,
+  shift: shift ? { undo: every(shift).some((one) => one.classList && one.classList.contains("undo")), said: shift.textContent } : null,
+}));
+"#;
+
+    /// **Note 21: the rows alternate ground, afresh under each group's
+    /// heading**, as the Queue's and Transfers' do — every second row of a
+    /// group, open or folded, carries `.alt`, and no heading is touched. The
+    /// page runs in Node over the kitchen's own panel; Design, the drawing and
+    /// the app's copy of it carry the one rule in the neutral shade. The
+    /// Creator's twenty-eighth notes, note 21.
+    #[test]
+    fn twenty_eighth_21_the_rows_alternate_ground_afresh_under_each_heading() {
+        let design = include_str!("../../../../Preparation/Design/Dependency Upload & Remap.md");
+        assert!(design.contains("**The rows alternate ground, as the Queue's and Transfers' do, in the same neutral shades, starting afresh under each group's heading**"));
+        let rule = ".rows .row.alt { background: var(--sunk); box-shadow: -8px 0 0 var(--sunk), 8px 0 0 var(--sunk); }";
+        let mockup = include_str!("../../../../Preparation/Design/Mockup/Smoozy.html");
+        assert!(mockup.contains(rule), "the drawing carries the rule");
+        let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        let sheet = fs::read_to_string(web.join("the-drawing.css")).expect("the drawing's sheet");
+        assert!(sheet.contains(rule), "the app's copy of the drawing carries it");
+
+        let mut kitchen = the_picture_kitchen();
+        kitchen.the_shift = None;
+        let panel = the_panel(&a_run(kitchen), SERVER, FILE, None);
+        let wanted: Vec<serde_json::Value> = panel
+            .the_table
+            .as_ref()
+            .expect("a table")
+            .groups
+            .iter()
+            .map(|group| {
+                serde_json::json!({
+                    "group": group.which.as_str(),
+                    "alt": (0..group.rows.len()).map(|at| at % 2 == 1).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
+        assert!(
+            wanted.iter().any(|group| group["alt"].as_array().map_or(0, Vec::len) >= 3),
+            "the kitchen has a group long enough to show the alternation"
+        );
+        let answers = serde_json::json!({ "panel": panel, "server": SERVER, "file": FILE });
+        let folder = std::env::temp_dir().join(format!("smoozy-check-ground-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&folder);
+        fs::create_dir_all(&folder).expect("a scratch folder");
+        fs::copy(web.join("the-dependency-check.js"), folder.join("the-dependency-check.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+        for (name, text) in THE_NO_BLENDER_STAND_INS.iter().filter(|(name, _)| *name != "harness.js") {
+            fs::write(folder.join(name), text).expect("a stand-in");
+        }
+        let the_document = &THE_TWENTY_EIGHTH_HARNESS
+            [..THE_TWENTY_EIGHTH_HARNESS.find("const heading = (which)").expect("the shared document")];
+        fs::write(folder.join("harness.js"), format!("{the_document}{THE_GROUND_SCENARIO}")).expect("the harness");
+        fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers");
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let _ = fs::remove_dir_all(&folder);
+        let Ok(ran) = ran else {
+            eprintln!("SKIPPED: no Node on this computer, so the page was not run");
+            return;
+        };
+        assert!(ran.status.success(), "the page did not run: {}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness prints one answer");
+        assert_eq!(got, serde_json::Value::Array(wanted));
+    }
+
+    /// The scenario for [`twenty_eighth_21_the_rows_alternate_ground_afresh_under_each_heading`]:
+    /// every row in the order drawn, under the heading it follows.
+    const THE_GROUND_SCENARIO: &str = r#"const groups = [];
+for (const one of every(body)) {
+  if (!one.classList) continue;
+  if (one.classList.contains("cgrp") || one.tagName === "DETAILS") {
+    groups.push({ group: one.dataset.group, alt: [] });
+    if (one.classList.contains("alt")) groups[groups.length - 1].headingAlt = true;
+    continue;
+  }
+  if (one.classList.contains("row") && groups.length) groups[groups.length - 1].alt.push(one.classList.contains("alt"));
+}
+console.log(JSON.stringify(groups));
+"#;
+
+    // ── The twenty-eighth notes' piece 6: the scenes the pictures are drawn
+    // from ─────────────────────────────────────────────────────────────────
+
+    /// **One row found where the file says, with its size and the scenes its
+    /// walk reached.**
+    fn a_picture_row(reference: &[u8], found: Option<&[u8]>, size: Option<u64>, scenes: &[&str]) -> ACheckedRow {
+        let mut one = match found {
+            Some(found) => a_row_found_at(reference, Kind::Image, found, HowResolved::TheRecordedLocationItself),
+            None => a_row(reference, Kind::Image, RowState::NotFound),
+        };
+        one.size = size;
+        one.scenes = Attribution::Established(scenes.iter().map(|scene| scene.to_string()).collect());
+        one
+    }
+
+    /// **A row a shift found**, at its own place, so each is its own real file.
+    fn a_shift_row(reference: &[u8], found: &[u8]) -> ACheckedRow {
+        let mut one = found_by_a_shift(reference);
+        if let Some(resolution) = one.answers[0].resolution.as_mut() {
+            resolution.to = ResolvedTo::AWholeLocation(StoredLocation::as_the_system_returned_it(found));
+        }
+        one
+    }
+
+    /// **The scenes the pictures for the Creator are drawn from**: the
+    /// Creator's own pipe file; a kitchen with two files no scene uses and one
+    /// such file missing; and a path change that found three more, and one
+    /// that found none.
+    fn the_picture_scenes() -> Vec<(&'static str, ASitting)> {
+        let pipe = {
+            let hdri = a_picture_row(
+                b"//../Documents/Blender/HDRi/studio_white_soft_light_02.exr",
+                Some(b"/Users/artist/Documents/Blender/HDRi/studio_white_soft_light_02.exr"),
+                Some(89 * MB),
+                &["Scene"],
+            );
+            let frame = a_picture_row(
+                b"//../Downloads/pipe_assets/PNG/pipe_00001.png",
+                Some(b"/Users/artist/Downloads/pipe_assets/PNG/pipe_00001.png"),
+                Some(918 * 1024),
+                &["Scene.001"],
+            );
+            let mut sitting = a_sitting(vec![hdri, frame]);
+            sitting.linked_files_read = 0;
+            sitting
+        };
+        let kitchen = || {
+            let mut on = a_picture_row(b"//../hdri/studio_4k.exr", Some(b"/Users/alex/Libraries/HDRI/studio_4k.exr"), Some(128 * MB), &["Interior"]);
+            on.state = RowState::AlreadyOnTheMachine;
+            on.state_when_the_check_ran = RowState::AlreadyOnTheMachine;
+            let mut sitting = a_sitting(vec![
+                a_picture_row(b"//textures/METallic.png", None, None, &["Interior"]),
+                a_picture_row(b"//textures/floor_tile.png", Some(b"/Users/alex/work/kitchen/textures/floor_tile.png"), Some(64 * MB), &["Interior"]),
+                a_picture_row(b"//textures/wood_oak.png", Some(b"/Users/alex/work/kitchen/textures/wood_oak.png"), Some(42 * MB), &["Interior"]),
+                a_picture_row(b"//ref/old_reference.jpg", Some(b"/Users/alex/work/kitchen/ref/old_reference.jpg"), Some(3 * MB), &[]),
+                a_picture_row(b"//textures/test_grid.png", Some(b"/Users/alex/work/kitchen/textures/test_grid.png"), Some(12 * MB), &[]),
+                a_picture_row(b"//plates/backup_plate.exr", None, None, &[]),
+                on,
+            ]);
+            sitting.linked_files_read = 0;
+            sitting
+        };
+        let a_shift = |rows: Vec<ACheckedRow>| {
+            let mut sitting = a_sitting(rows);
+            sitting.linked_files_read = 0;
+            sitting.the_shift = Some(TheShiftInHand {
+                old_root: b"/work/kitchen/".to_vec(),
+                new_root: b"/Users/alex/Archive/kitchen/".to_vec(),
+                key: ShiftKey(1),
+            });
+            sitting
+        };
+        let by_hand = || {
+            let mut one = a_row_found_at(
+                b"/work/kitchen/textures/bark_rough.png",
+                Kind::Image,
+                b"/Users/alex/Archive/kitchen/textures/bark_rough.png",
+                HowResolved::TheUsersOwnHand,
+            );
+            one.size = Some(31 * MB);
+            one
+        };
+        let some = a_shift(vec![
+            by_hand(),
+            a_shift_row(b"/work/kitchen/textures/dirt_mask.png", b"/Users/alex/Archive/kitchen/textures/dirt_mask.png"),
+            a_shift_row(b"/work/kitchen/textures/leaf_alpha.png", b"/Users/alex/Archive/kitchen/textures/leaf_alpha.png"),
+            a_shift_row(b"/work/kitchen/textures/metal_grid.png", b"/Users/alex/Archive/kitchen/textures/metal_grid.png"),
+        ]);
+        let none = a_shift(vec![by_hand(), a_picture_row(b"/work/kitchen/hdri/sky.exr", None, None, &["Interior"])]);
+        // **The same kitchen with *Include* pressed on `test_grid.png`.**
+        let mut included = kitchen();
+        if let Some(grid) = included
+            .rows
+            .iter_mut()
+            .find(|one| one.row.ordering_key().as_bytes() == b"//textures/test_grid.png")
+        {
+            for answer in &mut grid.answers {
+                answer.included = true;
+            }
+        }
+        vec![
+            ("pipe", pipe),
+            ("kitchen", kitchen()),
+            ("kitchen-included", included),
+            ("shift-some", some),
+            ("shift-none", none),
+        ]
+    }
+
+    /// **The pictures' deliveries, kept where `SMOOZY_THE_CHECK_PICTURES`
+    /// names a file** — each scene's panel as the page is handed it. Nothing
+    /// is asserted beyond each scene composing a table; the pictures are the
+    /// look.
+    #[test]
+    fn the_picture_scenes_compose_and_are_kept_where_asked() {
+        let mut out = serde_json::Map::new();
+        for (name, sitting) in the_picture_scenes() {
+            let mut held = WhatTheRunHolds::default();
+            held.sittings.insert(keyed(SERVER, FILE), sitting);
+            let panel = the_panel(&held, SERVER, FILE, None);
+            assert!(panel.the_table.is_some(), "{name} drew no table");
+            out.insert(name.to_string(), serde_json::to_value(&panel).expect("it serialises"));
+        }
+        if let Some(keep) = std::env::var_os("SMOOZY_THE_CHECK_PICTURES") {
+            fs::write(keep, serde_json::Value::Object(out).to_string()).expect("the deliveries are kept");
+        }
+    }
+
+    // ── The Creator's twenty-ninth notes, notes 3 and 4 ─────────────────────
+
+    /// **What the rows test presses, in order, and which rows each leaves
+    /// chosen.** A click on row 102 with row 100 at the list's top; ↓ three
+    /// times; Shift+↓; Shift+↓ again with the row below out of view; ↑; and a
+    /// click on row 120 while half of it is under the list's bottom edge.
+    const THE_ROWS_PRESSES: [(TheAct, &str, usize, &[usize]); 8] = [
+        (TheAct::ChooseARow, "choose-a-row", 102, &[102]),
+        (TheAct::ChooseARow, "choose-a-row", 103, &[103]),
+        (TheAct::ChooseARow, "choose-a-row", 104, &[104]),
+        (TheAct::ChooseARow, "choose-a-row", 105, &[105]),
+        (TheAct::ChooseARange, "choose-a-range", 106, &[105, 106]),
+        (TheAct::ChooseARange, "choose-a-range", 107, &[105, 106, 107]),
+        (TheAct::ChooseARow, "choose-a-row", 106, &[106]),
+        (TheAct::ChooseARow, "choose-a-row", 120, &[120]),
+    ];
+
+    /// **The Creator's twenty-ninth notes, notes 3 and 4: a click on a row
+    /// leaves the list where it was, and ↑ and ↓ choose rows** —
+    /// `Preparation/Design/Whole app.md:21` (*a list drawn again with the same
+    /// things in it keeps its place*) and `Dependency Upload & Remap §
+    /// Keyboard shortcuts` (2026-11-10). The account is `Audits/Build/
+    /// Twenty-ninth notes/Part A — what each one is.md`, notes 3 and 4.
+    ///
+    /// A check of 200 missing files is drawn in headless Chrome with the
+    /// application's whole stylesheet list, and every answer the page is
+    /// handed is the application's own, composed here after each act. Then:
+    /// - a click on a row far down the list, and on one half under its bottom
+    ///   edge, leaves the list where it stood to the pixel, and the clicked
+    ///   row has the focus; the press itself is kept from the browser, so the
+    ///   browser cannot scroll the row first; the list is the same element
+    ///   after every redraw, so it never starts again at its top;
+    /// - ↓ three times chooses the next row alone each time, Shift+↓ widens
+    ///   the choice by one row, ↑ chooses the row above alone; the focus moves
+    ///   with the choice; the browser's own use of the key is refused;
+    /// - the list does not move while the row reached is in view, and moves
+    ///   only as far as brings it into view when it is not;
+    /// - a chosen row with the keyboard focus draws no ring, while a row not
+    ///   chosen still does.
+    ///
+    /// **Chrome, not the Mac's own engine**: a page cannot make the engine's
+    /// own click, so the press is the page's and the engine's focus on a press
+    /// is made by hand where the page did not refuse it. Skipped, and says
+    /// so, where Chrome is absent.
+    #[test]
+    fn twenty_ninth_3_and_4_a_click_keeps_the_lists_place_and_the_arrows_choose_rows_in_a_real_browser() {
+        let rows = (0..200)
+            .map(|at| a_row(format!("//textures/wall_{at:03}.png").as_bytes(), Kind::Image, RowState::NotFound))
+            .collect();
+        let mut held = a_run(a_sitting(rows));
+        let mut answers = vec![serde_json::to_value(the_panel(&held, SERVER, FILE, None)).expect("it serialises")];
+        for (act, _, row, _) in THE_ROWS_PRESSES {
+            assert!(the_act_is_taken(&mut held, SERVER, FILE, act, Some(row)).is_none());
+            answers.push(serde_json::to_value(the_panel(&held, SERVER, FILE, None)).expect("it serialises"));
+        }
+        let chosen: Vec<&[usize]> = THE_ROWS_PRESSES.iter().map(|(_, _, _, chosen)| *chosen).collect();
+        let page = THE_ROWS_PAGE
+            .replace("ANSWERS", &serde_json::Value::Array(answers).to_string())
+            .replace("CHOSEN", &serde_json::to_string(&chosen).unwrap());
+        let stand_ins: Vec<(&str, &str)> =
+            THE_CHECKS_STAND_INS.iter().copied().filter(|(name, _)| *name != "document.mjs").collect();
+        if let Some(pictures) = std::env::var_os("SMOOZY_THE_CHECKS_ROWS_PICTURES") {
+            let pictures = std::path::PathBuf::from(pictures);
+            fs::create_dir_all(&pictures).expect("the pictures' folder");
+            let when = if std::env::var_os("SMOOZY_THE_FOCUS_RING_WEB").is_some() { "before" } else { "after" };
+            for (which, name) in [
+                ("click", "A click on a row far down the list"),
+                ("arrow", "A click on a row, then the down arrow"),
+            ] {
+                let file = pictures.join(format!("{name}, {when}.png"));
+                crate::surface::focus::a_page_with_stand_ins_in_a_real_browser(
+                    "check-rows",
+                    &page.replace("PICTURE", which),
+                    &[],
+                    &stand_ins,
+                    Some(&file),
+                );
+            }
+            if when == "before" {
+                return;
+            }
+        }
+        let Some(measured) = crate::surface::focus::a_page_with_stand_ins_in_a_real_browser(
+            "check-rows",
+            &page.replace("PICTURE", ""),
+            &[],
+            &stand_ins,
+            None,
+        ) else {
+            return;
+        };
+        let expected: Vec<serde_json::Value> = THE_ROWS_PRESSES
+            .iter()
+            .map(|(_, act, row, _)| serde_json::json!([act, row]))
+            .collect();
+        let faults: Vec<String> = measured["faults"]
+            .as_array()
+            .expect("the faults are listed")
+            .iter()
+            .map(|one| one.as_str().unwrap_or_default().to_string())
+            .collect();
+        assert!(faults.is_empty(), "{} faults:\n{}\n{measured}", faults.len(), faults.join("\n"));
+        assert_eq!(measured["acts"], serde_json::Value::Array(expected), "the presses sent other acts: {measured}");
+    }
+
+    /// The page for the rows test: the panel as piece 5 frames it, the check
+    /// drawn into it with its stand-ins, and the presses. `PICTURE` stops it
+    /// after the first click (`click`) or the first ↓ (`arrow`).
+    const THE_ROWS_PAGE: &str = r#"<!doctype html>
+<html lang="en" data-theme="light"><head><meta charset="utf-8"><link rel="stylesheet" href="smoozy.css">
+<style>html,body{margin:0;height:100%;} #machineview{position:relative;height:100vh;} #out{display:none;}</style></head>
+<body><div id="machineview">
+<div class="sheetwrap" data-panel="chk"><div class="sheet"><div class="shead"><div class="htitle" id="head"></div><span class="grow"></span></div><div class="suscroll" id="body"></div></div></div>
+</div>
+<pre id="out"></pre>
+<script>
+// The application's answers, one after each act, and the acts the page sent.
+const answers = ANSWERS;
+const theTest = { stage: 0, acts: [] };
+const now = () => answers[Math.min(theTest.stage, answers.length - 1)];
+window.__TAURI__ = { core: { invoke: async (command, args) => {
+  if (command === 'the_dependency_check_panel') return structuredClone(now());
+  if (command === 'an_act_on_the_check') {
+    theTest.acts.push([args.act, args.row]);
+    theTest.stage += 1;
+    setTimeout(() => globalThis.told['the-dependency-check:an-act']({ said: { server: args.server, file: now().file } }), 0);
+  }
+  return null;
+} } };
+</script>
+<script type="module">
+import { panels } from './a-server.js';
+import './the-dependency-check.js';
+const out = document.getElementById('out');
+const chosenAfter = CHOSEN;
+const picture = 'PICTURE';
+const acts = theTest.acts;
+const faults = [];
+const check = (ok, why) => { if (!ok) faults.push(why); };
+try {
+  const settle = async () => { for (let at = 0; at < 16; at += 1) await new Promise((go) => setTimeout(go, 0)); };
+  panels[0].itIsDrawn({ head: document.getElementById('head'), body: document.getElementById('body') }, 'server');
+  await settle();
+  const list = () => document.querySelector('#body .rows');
+  const theRow = (at) => document.querySelector('#body .row[data-row="' + at + '"]');
+  // Where a row stands inside the list's visible part, and how tall that is.
+  const seen = (row) => {
+    const l = list(); const lr = l.getBoundingClientRect(); const r = row.getBoundingClientRect();
+    return { top: r.top - lr.top - l.clientTop, bottom: r.bottom - lr.top - l.clientTop, height: l.clientHeight };
+  };
+  const theList = list();
+  check(theList && theList.scrollHeight > theList.clientHeight * 4, 'the list is not long enough to scroll');
+  // A press as the window makes it: the engine focuses the row on the press
+  // and scrolls it into view unless the page refused the press.
+  const click = async (at) => {
+    const row = theRow(at);
+    const on = row.querySelector('.nm') || row;
+    const down = new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 });
+    on.dispatchEvent(down);
+    if (!down.defaultPrevented) row.focus();
+    check(down.defaultPrevented, 'a press on row ' + at + ' was left to the browser, which may scroll it first');
+    on.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0 }));
+    on.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+    await settle();
+  };
+  const key = async (name, shift) => {
+    const press = new KeyboardEvent('keydown', { key: name, code: name, shiftKey: shift, bubbles: true, cancelable: true });
+    (document.activeElement || document.body).dispatchEvent(press);
+    check(press.defaultPrevented, (shift ? 'Shift+' : '') + name + ' was left to the browser, which scrolls the list');
+    await settle();
+  };
+  const ring = (row) => ({ shown: row.matches(':focus-visible'), outline: getComputedStyle(row).outlineStyle });
+  let press = 0;
+  const afterThePress = (what, focus, place) => {
+    const l = list();
+    const want = chosenAfter[press];
+    press += 1;
+    check(l === theList, what + ': the list was drawn anew, so it started again at its top');
+    if (place !== null) check(Math.abs(l.scrollTop - place) < 1, what + ': the list moved from ' + place + ' to ' + l.scrollTop);
+    const on = document.activeElement;
+    const box = on && on.dataset ? on.dataset.box : null;
+    check(box === 'row-' + focus, what + ': the focus is on ' + (box || (on ? on.tagName : 'nothing')) + ', not on row ' + focus);
+    const sel = [...document.querySelectorAll('#body .row.sel')].map((one) => Number(one.dataset.row));
+    check(JSON.stringify(sel) === JSON.stringify(want), what + ': chosen ' + JSON.stringify(sel) + ', not ' + JSON.stringify(want));
+  };
+  // ── A click on a row far down, row 100 at the list's top ──
+  theList.scrollTop += seen(theRow(100)).top;
+  let place = theList.scrollTop;
+  check(place > 0, 'the list did not scroll to row 100');
+  await click(102);
+  afterThePress('a click on row 102', 102, place);
+  if (picture === 'click') throw 'picture';
+  // ── ↓ three times, each row in view ──
+  await key('ArrowDown', false);
+  afterThePress('↓ from row 102', 103, place);
+  if (picture === 'arrow') throw 'picture';
+  await key('ArrowDown', false);
+  afterThePress('↓ from row 103', 104, place);
+  await key('ArrowDown', false);
+  afterThePress('↓ from row 104', 105, place);
+  {
+    const shown = ring(theRow(105));
+    check(shown.shown, 'the chosen row 105 was not focused as the keyboard focuses, so its ring could not be read');
+    check(shown.outline === 'none', 'the chosen row 105 has the focus and draws a ring (' + shown.outline + ')');
+  }
+  // ── Shift+↓ widens the choice by one row ──
+  await key('ArrowDown', true);
+  afterThePress('Shift+↓ from row 105', 106, place);
+  // ── Shift+↓ to a row under the list's bottom edge: the shortest scroll ──
+  theList.scrollTop += seen(theRow(106)).bottom - seen(theRow(106)).height;
+  place = theList.scrollTop;
+  check(seen(theRow(107)).bottom > seen(theRow(107)).height + 1, 'row 107 was in view before the press');
+  await key('ArrowDown', true);
+  afterThePress('Shift+↓ from row 106', 107, null);
+  {
+    const at = seen(theRow(107));
+    check(at.top >= -1 && Math.abs(at.bottom - at.height) <= 1, 'row 107 is not brought just into view: its top at ' + at.top + ', its foot at ' + at.bottom + ' of ' + at.height);
+    place = theList.scrollTop;
+  }
+  // ── ↑ chooses the row above alone ──
+  await key('ArrowUp', false);
+  afterThePress('↑ from row 107', 106, place);
+  // ── A click on a row half under the list's bottom edge ──
+  {
+    const at = seen(theRow(120));
+    theList.scrollTop += at.top + (at.bottom - at.top) / 2 - at.height;
+    place = theList.scrollTop;
+    const half = seen(theRow(120));
+    check(half.top < half.height && half.bottom > half.height + 2, 'row 120 is not half under the edge');
+  }
+  await click(120);
+  afterThePress('a click on row 120, half under the edge', 120, place);
+  // ── A row not chosen still draws its ring ──
+  {
+    const row = theRow(119);
+    row.focus({ preventScroll: true });
+    const shown = ring(row);
+    check(shown.shown && shown.outline === 'solid', 'row 119, not chosen, with the focus, draws no ring (' + JSON.stringify(shown) + ')');
+  }
+  out.textContent = JSON.stringify({ faults, acts });
+} catch (error) {
+  out.textContent = error === 'picture' ? JSON.stringify({ faults, acts }) : JSON.stringify({ error: String(error && error.stack || error), faults, acts });
+}
+</script></body></html>
+"#;
+}
+
+/// **The four questions, batch 3: words a user can't act on** (2026-11-11).
+/// Each line is in the user's words, by `Preparation/Groundwork/Rules.md`
+/// Rule 1 and Rule 9. Written before the words changed, and failed first.
+#[cfg(test)]
+mod the_four_questions_batch_3 {
+    use super::*;
+
+    /// Scouts 3.14, 3.15 and 3.16, as Sol narrowed them.
+    #[test]
+    fn the_check_says_what_happened_on_the_server_in_plain_words() {
+        assert_eq!(
+            words::COULD_NOT_UPDATE_ITS_FILE_PATHS,
+            "Uploaded, but its file paths on the server could not be updated"
+        );
+        assert_eq!(
+            words::COULD_NOT_OPEN_IT_TO_REMAP,
+            "Uploaded, but Blender could not open it to update its file paths"
+        );
+        assert_eq!(
+            words::THE_REMAP_WAITS_FOR_ITS_LINKED_FILES,
+            "Uploaded; its file paths update once its linked files are uploaded."
+        );
+        assert_eq!(
+            words::LINKED_BY_FULL_PATH,
+            "Linked by full path, so scripts may not find it on the server. Make it relative in Blender and save."
+        );
+        assert_eq!(
+            words::NO_RECORD_OF_WHERE_IT_CAME_FROM,
+            "Original folder unknown, so your search folders were searched. Matches apply to this server only."
         );
     }
 }

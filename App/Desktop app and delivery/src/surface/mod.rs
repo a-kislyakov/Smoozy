@@ -101,6 +101,7 @@ pub fn the_registration_list<R: tauri::Runtime>(
         files::the_files_the_check_placed_go_through_it,
         files::what_the_upload_came_to,
         files::the_transfers_on_this_server,
+        files::the_upload_into_this_folder,
         files::an_upload_is_asked_for,
         files::files_were_dropped,
         files::what_is_being_dropped,
@@ -108,6 +109,7 @@ pub fn the_registration_list<R: tauri::Runtime>(
         files::what_disturbing_costs,
         files::a_file_act_that_needs_a_connection,
         files::a_new_folder_is_made,
+        files::an_act_is_retried_with_admin_access,
         files::a_rename_is_made,
         files::a_delete_is_made,
         files::a_cut_or_copy_is_taken,
@@ -132,10 +134,13 @@ pub fn the_registration_list<R: tauri::Runtime>(
         keys::the_passphrase_box_was_cancelled,
         menus::the_menu_bar,
         menus::a_menu_item_was_chosen,
-        menus::the_held_update_is_installed_anyway,
+        menus::the_update_box_is_answered,
+        menus::the_help_links,
+        menus::the_help_is_opened,
         panes::the_pane_layout,
         panes::a_pane_drag_ended,
         panes::a_pane_width_was_reset,
+        panes::the_copy_before_the_last_update_is_restored,
         servers::the_all_servers_screen,
         servers::the_work_column_is_on_screen,
         servers::the_add_dialog,
@@ -161,6 +166,7 @@ pub fn the_registration_list<R: tauri::Runtime>(
         render_settings::a_pin_is_handed_back,
         render_settings::the_file_was_pointed_at,
         render_settings::the_file_is_read,
+        render_settings::the_file_read_is_stopped,
         render_settings::the_read_failure_is_cleared,
         render_settings::the_missing_assets_warning_is_switched_off,
         render_settings::a_job_is_submitted,
@@ -173,6 +179,7 @@ pub fn the_registration_list<R: tauri::Runtime>(
         reporting::a_folder_is_chosen_for_the_report,
         reporting::the_report_is_saved,
         reporting::the_report_box_is_shut,
+        reporting::the_report_address_is_opened,
         set_up::the_set_up_tab,
         set_up::the_install_list,
         set_up::the_setup_under_way,
@@ -208,6 +215,7 @@ pub fn the_registration_list<R: tauri::Runtime>(
         the_failure_shape::the_failures_standing_against,
         the_failure_shape::a_failure_was_cleared,
         the_history::the_history,
+        the_history::the_resume_count,
         the_machines_own_words::the_machines_own_words_for,
         the_queue::the_queue,
         the_queue::an_act_on_a_job,
@@ -220,6 +228,8 @@ pub fn the_registration_list<R: tauri::Runtime>(
         transfers::a_file_download_is_asked_for,
         transfers::the_download_question_was_answered,
         transfers::a_file_is_sent_again,
+        transfers::an_upload_left_over_is_continued,
+        transfers::a_download_left_over_is_continued,
         transfers::the_files_a_line_names,
         transfers::the_formats_are_chosen_for_a_job,
     ]
@@ -674,6 +684,92 @@ mod tests {
         text.split(' ').filter(|part| holds_a_word(part)).count() > 1
     }
 
+    /// **Every time of day a user reads is on the 24-hour clock** —
+    /// `Design/Whole app § Words`, added 2026-11-13 (the Creator's notes on the
+    /// test copy of 2026-11-12, note 5: *"file read at 11:04 PM — should say
+    /// 23:04"*). The page writes a moment with the system's own date words,
+    /// and the system's own clock style is 12-hour on many computers, so every
+    /// function in the page that asks for an hour must also ask for
+    /// `hourCycle: "h23"`. **And nowhere in the application's sources** — the
+    /// page, the Rust of every crate, the scripts sent to a server — may a
+    /// 12-hour clock be asked for by name: the page's twelve-hour switch, the
+    /// twelve-hour hour and the morning-or-evening mark in a time format, or
+    /// either mark written out in a string.
+    ///
+    /// **What it cannot see, said rather than glossed.** A clock built by hand
+    /// from `getHours()` with its own *AM* spelled some other way; and a time
+    /// the server's own program prints that Smoozy shows untouched, which is
+    /// the server's words and not Smoozy's. It is a text check.
+    #[test]
+    fn every_time_of_day_is_on_the_24_hour_clock() {
+        let mut faults = Vec::new();
+        for (name, text) in the_page_files() {
+            if !name.ends_with(".js") {
+                continue;
+            }
+            let code: Vec<&str> = text
+                .lines()
+                .filter(|line| {
+                    let line = line.trim_start();
+                    !(line.starts_with("//") || line.starts_with('*') || line.starts_with("/*"))
+                })
+                .collect();
+            let code = code.join("\n");
+            // **One function at a time**, from one `function ` to the next: an
+            // hour asked for in one and the 24-hour clock in another is a fault.
+            let mut starts: Vec<usize> = code.match_indices("function ").map(|(at, _)| at).collect();
+            starts.insert(0, 0);
+            starts.push(code.len());
+            for pair in starts.windows(2) {
+                let piece = &code[pair[0]..pair[1]];
+                let asks_an_hour = piece.contains("hour:") || piece.contains(".hour =");
+                let on_the_24_hour_clock =
+                    piece.contains("hourCycle: \"h23\"") || piece.contains(".hourCycle = \"h23\"");
+                if asks_an_hour && !on_the_24_hour_clock {
+                    let first = piece.lines().find(|line| line.contains("hour")).unwrap_or("").trim();
+                    faults.push(format!("{name}: an hour without hourCycle \"h23\": {first}"));
+                }
+            }
+        }
+        // **The 12-hour clock asked for by name, anywhere in the sources.** The
+        // needles are built, so this test's own text is not one of them.
+        let needles = [
+            ["hour", "12"].concat(),
+            ["%", "I"].concat(),
+            ["%", "p"].concat(),
+            ["repr", ":12"].concat(),
+            ["\"", "AM\""].concat(),
+            ["\"", "PM\""].concat(),
+            [" ", "AM<"].concat(),
+            [" ", "PM<"].concat(),
+        ];
+        let app = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut folders = vec![app];
+        while let Some(folder) = folders.pop() {
+            for entry in fs::read_dir(&folder).expect("a source folder is readable") {
+                let path = entry.expect("the entry is readable").path();
+                let named = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                if path.is_dir() {
+                    if !named.starts_with("target") && !named.starts_with('.') && named != "node_modules" && named != "gen" {
+                        folders.push(path);
+                    }
+                    continue;
+                }
+                let kind = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+                if !matches!(kind, "rs" | "js" | "py" | "sh" | "html") {
+                    continue;
+                }
+                let Ok(text) = fs::read_to_string(&path) else { continue };
+                for needle in &needles {
+                    if text.contains(needle.as_str()) {
+                        faults.push(format!("{}: a 12-hour clock ({needle})", path.display()));
+                    }
+                }
+            }
+        }
+        assert!(faults.is_empty(), "times of day not on the 24-hour clock:\n{}", faults.join("\n"));
+    }
+
     /// **A6 and X1: the interface accepts prose from nowhere else, and the page
     /// half is held here rather than by whoever writes a screen.**
     ///
@@ -1097,6 +1193,7 @@ mod the_order_a_value_runs {
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         for page in pages {
             fs::copy(web.join(page), folder.join(page)).expect("the page is copied");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in stand_ins {
             fs::write(folder.join(name), text).expect("a stand-in is written");
@@ -1407,7 +1504,8 @@ const withBox = (root, box) => everyPiece(root).find((one) => one.dataset.box ==
                      export const SET_UP = 'setupview'; export const FILES = 'files'; export const panels = []; \
                      export function aPanelIsRegistered(panel) { panels.push(panel); } \
                      export function thePanelIsOpenedOver() {} export function theStripReads() {} \
-                     export function theCurrentTabIs() {} export function thePanelCollapsesAsItsChevronDoes() {}"
+                     export function theCurrentTabIs() {} export function thePanelCollapsesAsItsChevronDoes() {} \
+                     export function thePanelOverItIsCollapsed() {} export function theServerWillOpenOn() {}"
                         .into(),
                 ),
                 (
@@ -1427,7 +1525,9 @@ const withBox = (root, box) => everyPiece(root).find((one) => one.dataset.box ==
                     "the-underway-shape.js",
                     "export function theMarkOnARow() { return document.createElement('span'); } \
                      export function theCountdown() { return document.createElement('span'); } \
-                     export function theMarkOnAControl() {}"
+                     export function theElapsed() { return document.createElement('span'); } \
+                     export function theMarkOnAControl() {} \
+                     export function theMarkOnALine() { return document.createElement('i'); }"
                         .into(),
                 ),
                 ("the-machines-own-words.js", "export function theMachinesOwnWordsFor() {}".into()),
@@ -1511,8 +1611,11 @@ const withBox = (root, box) => everyPiece(root).find((one) => one.dataset.box ==
                         rows: vec![AWriteRow {
                             place: Verbatim::new(value.to_string()),
                             the_top: None,
-                            how_many: Verbatim::new("250".to_string()),
-                            format: Some(Verbatim::new("PNG".to_string())),
+                            counts: vec![crate::surface::render_settings::AWriteTotal {
+                                how_many: Verbatim::new("250".to_string()),
+                                format: Verbatim::new("PNG".to_string()),
+                            }],
+                            group: None,
                         }],
                         total: words_of("250"),
                         by_format: Vec::new(),
@@ -1605,6 +1708,8 @@ console.log(JSON.stringify(got));
                             colour: Verbatim::new(String::new()),
                             how_many: APiecewiseSentence::plain("").and("1"),
                             folded: false,
+                            marked_with_an_up_arrow: false,
+                            include_all: None,
                             rows: vec![row],
                         }],
                         adds_a_row_with: Verbatim::new("meta".to_string()),
@@ -1668,6 +1773,7 @@ console.log(JSON.stringify(got));
                 .into_iter()
                 .map(|value| {
                     let request = ARequestKnown {
+                        picked: None,
                         start: None,
                         id: "one".into(),
                         kind: TheKind::Upload,
@@ -1692,6 +1798,7 @@ console.log(JSON.stringify(got));
                         the_arrangement_is_done: false,
                         the_whole_was_read: false,
                         nothing_is_moving: false,
+                        the_files_its_count_holds: Vec::new(),
                         stands: WhereTheRequestStands::Running,
                         files: vec![AFileKnown {
                             path: value.to_string(),
@@ -1712,7 +1819,7 @@ console.log(JSON.stringify(got));
                     };
                     let a_format = |name: &str| AFormatKnown {
                         name: name.into(),
-                        where_in_the_job: value.to_string(),
+                        where_in_the_job: vec![value.to_string()],
                         at_the_top: false,
                         files: 3,
                         chosen: true,
@@ -1840,6 +1947,7 @@ mod where_the_user_had_scrolled {
         let _ = fs::remove_dir_all(&scratch);
         fs::create_dir_all(&scratch).expect("a scratch folder");
         fs::copy(web.join("files.js"), scratch.join("files.js")).expect("the page module is copied");
+        fs::copy(web.join("the-focus-moves.js"), scratch.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_STAND_INS {
             fs::write(scratch.join(name), text).expect("a stand-in is written");
         }
@@ -1909,6 +2017,8 @@ class Piece {
   constructor(tag) {
     this.tagName = tag.toUpperCase(); this.children = []; this.own = ""; this.parentNode = null;
     this.dataset = {}; this.attributes = {}; this.hidden = false; this.type = ""; this.title = ""; this.top = 0;
+    // A value the stylesheet reads (the reading cover's top, UI consistency, finding 29).
+    this.style = { setProperty() {} };
     const names = new Set(); this.names = names;
     this.classList = {
       add: (...more) => more.forEach((one) => names.add(one)),
@@ -2066,6 +2176,7 @@ mod a_redraw_keeps_its_place {
         fs::create_dir_all(&scratch).expect("a scratch folder");
         for page in THE_PAGES {
             fs::copy(web.join(page), scratch.join(page)).expect("the page is copied");
+            fs::copy(web.join("the-focus-moves.js"), scratch.join("the-focus-moves.js")).expect("the one way the focus moves");
         }
         for (name, text) in THE_STAND_INS {
             fs::write(scratch.join(name), text).expect("a stand-in is written");
@@ -2176,7 +2287,7 @@ mod a_redraw_keeps_its_place {
         ("the-machines-own-words.js", r#"export function theMachinesOwnWordsFor() {} export function theNewestWordsStayInView() {} export function theWordsPanel() { const panel = document.createElement("div"); panel.hidden = true; return panel; }"#),
         ("the-rail.js", r#"export const THE_QUEUE = "queueview"; export const THE_HISTORY = "historyview"; export function aScreenIsRegistered(screen) { globalThis.screens[screen.place] = screen; } export function theRowsFigureIs() {} export function theCurrentPlace() { return THE_HISTORY; } export function theCurrentPlaceIs() {}"#),
         ("the-typed-text.js", r#"export function theTypingIsTakenFrom() { return null; } export function theTypingIsPutBackInto() {}"#),
-        ("the-underway-shape.js", r#"export function theMarkOnAControl(control, label) { control.textContent = label; return control; } export function theMarkOnARow() { return document.createElement("span"); }"#),
+        ("the-underway-shape.js", r#"export function theMarkOnAControl(control, label) { control.textContent = label; return control; } export function theMarkOnARow() { return document.createElement("span"); } export function theMarkOnALine() { return document.createElement("i"); } export function theElapsed() { return document.createElement("span"); }"#),
         ("the-value-drawn.js", r#"export function theValueIsDrawnInto(node, value) { node.textContent = value; } export function theValueDrawn(value) { const node = document.createElement("span"); node.textContent = value; return node; }"#),
         ("transfers.js", r#"export function aTransferIsAskedFor() {} export async function theFormatBoxIsOpenedFor() {} export async function theFormatBoxIsOpenedForAFile() {}"#),
     ];
@@ -2249,7 +2360,7 @@ class Piece {
     this.parentNode = null;
     this.dataset = {};
     this.attributes = {};
-    this.style = {};
+    this.style = { setProperty() {} };
     this.listeners = {};
     this.hidden = false;
     this.value = "";

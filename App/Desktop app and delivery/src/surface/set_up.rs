@@ -26,7 +26,7 @@
 //!   `su-unpack`, `su-point`,
 //!   `su-low`, `su-notbegun`, `su-run`, `su-cpu`, `su-quiet`, `su-none`, `su-nothing`,
 //!   `su-optixoff`, `su-drvold`,
-//!   `su-tg`, `su-tgnew`, `su-going`, `su-busy`, `su-fail`, `su-step`, `su-rm`,
+//!   `su-tg`, `su-tgnew`, `su-going`, `su-busy`, `su-other`, `su-discard`, `su-fail`, `su-step`, `su-rm`,
 //!   `su-elev`, `pw-nokeep`, `pw-nostore`, `pw-again`, `su-out`, `su-outlog`,
 //!   `su-fetch`, `su-logempty`.
 //!   **Thirty-one in the *Setting a server up* group.** `su-logempty` draws
@@ -188,7 +188,7 @@ pub(crate) mod words {
     /// *Ready to render* stays where a Blender was found.
     pub const SET_UP_STATE: &str = "Set up";
     pub const NOT_SET_UP: &str = "Not set up";
-    pub const NOTHING_TO_PREPARE: &str = "Nothing to prepare";
+    pub const NOTHING_TO_PREPARE: &str = "Nothing to install";
     pub const SETTING_UP: &str = crate::surface::servers::words::SETTING_UP;
     pub const SETUP_STOPPED_PART_WAY: &str = "Setup stopped part-way";
     pub const THE_SERVER_IS_FINISHING_THE_CUT_RUN: &str =
@@ -249,11 +249,15 @@ pub(crate) mod words {
     /// server's NVIDIA driver, 575.64.03 (CUDA 12.9), is too old for Cycles GPU
     /// rendering in Blender 5.3 and later.*
     pub const IS_TOO_OLD_FOR_CYCLES_GPU_IN: &str = "is too old for Cycles GPU rendering in Blender";
-    pub const AND_LATER: &str = "and later.";
+    pub const AND_LATER: &str = "and later,";
     /// **Its second sentence**: on a container, and where a setup tried and
     /// did not get the driver there.
-    pub const SMOOZY_CANT_UPDATE_IT_HERE: &str = "It can't be updated here.";
-    pub const SMOOZY_COULDNT_UPDATE_IT: &str = "It could not be updated.";
+    /// **With what to do instead** — the four questions, scout 3.5, 2026-11-11.
+    pub const SMOOZY_CANT_UPDATE_IT_HERE: &str = "It can't be updated here: pick an older Blender or render on the CPU.";
+    pub const SMOOZY_COULDNT_UPDATE_IT: &str = "It could not be updated: pick an older Blender or render on the CPU.";
+    /// *…and later, which needs 570 or newer.* — the bar's own minimum.
+    pub const WHICH_NEEDS: &str = "which needs";
+    pub const OR_NEWER: &str = "or newer.";
     /// **The Blender table's tag**, drawn like *below 4.5*.
     pub const DRIVER_TOO_OLD_FOR_OPTIX: &str = "driver too old for OptiX";
     /// **The same tag on a build of 5.3 or later** (`Rendering` L23a's bullet of
@@ -269,6 +273,7 @@ pub(crate) mod words {
     // ── `Server Setup` W4's setup fault
     pub const THE_LAST_JOB_ASKED_FOR_THE_GPU: &str =
         "The last job asked for the GPU and rendered on the CPU.";
+    pub const THE_HOSTS_DRIVER: &str = "The GPU driver can’t be updated here. Use another server or render on the CPU.";
     pub const SET_UP_AGAIN_TO_REINSTALL: &str = "Set up again to reinstall the GPU drivers.";
 
     // ── The action — `Design/Server Setup § This server`
@@ -281,7 +286,7 @@ pub(crate) mod words {
 
     // ── `Design/Server Setup § A second setup while one is running`
     pub const ONE_SETUP_AT_A_TIME: &str =
-        "Other actions on this server are queued.";
+        "Other setup operations on this server wait until this one finishes.";
 
     // ── `Design/Server Setup § When a step had nothing to do`
     pub const NOTHING_WAS_INSTALLED: &str = "Nothing installed or changed.";
@@ -292,17 +297,20 @@ pub(crate) mod words {
     // part-way` settles that such a server shows nothing about a setup and does
     // not say what stands in its place, and Rule 8 makes an empty card Smoozy
     // going quiet.
-    pub const NEVER_READ: &str = "Never connected.";
+    // **Scout 3.9, 2026-11-11**: *Never connected.* was untrue of a server
+    // set up yesterday and not read since Smoozy opened.
+    pub const NEVER_READ: &str = "Not connected.";
     // ── Connected, and no setup run found to read — 2026-09-21, **not drawn**.
     pub const NO_SETUP_WAS_READ: &str = "No setup found";
     pub const NO_SETUP_WAS_READ_WHY: &str =
-        "No setup since Smoozy opened.";
+        "This server has not been set up.";
     pub const NEVER_READ_WHY: &str = "Connect to see its setup.";
 
     // ── `Server Setup` Y4's boundary names. **Six are the drawing's own
     // words**, read off the mockup's two step lists at 6469–6476 and 6733–6740.
     pub const READINGS: &str = "Check what is installed";
-    pub const LIBRARIES: &str = "Check system libraries";
+    // **Scout 3.12, 2026-11-11**: the step installs them.
+    pub const LIBRARIES: &str = "Install system libraries";
     pub const DRIVER_PLACED: &str = "Install the GPU driver";
     pub const RESTART_ISSUED: &str = "Restart the server";
     pub const RESTARTING: &str = "Restarting the server";
@@ -347,6 +355,15 @@ pub(crate) mod words {
     pub const NOT_STARTED: &str = "not started";
     pub const DID_NOT_FINISH: &str = "failed";
     pub const WHAT_THE_SERVER_SAID: &str = "What the server said";
+    /// **The same control where the words are Smoozy's own download's**, not
+    /// the server's — `Server protocol and transfers` B10b. **The server row's
+    /// alone from 2026-11-09**: the Set up card has no control of its own.
+    pub const DOWNLOAD_DETAILS: &str = "Download details";
+    /// **The line over Smoozy's own words in *Server output*** — the words of
+    /// a setup failure that are this computer's, not the server's
+    /// (`Design/Server Setup § The step that failed`, the Creator's
+    /// twenty-eighth notes, note 1).
+    pub const FROM_SMOOZY_ON_THIS_COMPUTER: &str = "From Smoozy on this computer";
 
     // ── One plain sentence per step that did not finish. **One is the
     // drawing's own**; the other eight are ruled — see
@@ -357,6 +374,11 @@ pub(crate) mod words {
     /// Installing`: *Could not download Blender 5.3.0 Alpha.* The
     /// build's name follows as a value. The Creator's note 7 on 0.1.7.
     pub const COULD_NOT_FETCH_BLENDER: &str = "Could not download Blender";
+    /// **`Design/Server Setup § The step that failed`'s one exception**: the
+    /// cause and what to do, where blender.org answered the download with
+    /// HTTP 403. Added 2026-11-13, the night's live pass, fault 4.
+    pub const BLENDER_ORG_REFUSED_THIS_SERVER: &str =
+        "blender.org refused this server (HTTP 403). Download Blender on your computer, then choose it in Install Blender…";
     pub const FAILED_TOOLING: &str = "Could not install the unpack tool.";
     pub const BUILD_COULD_NOT_BE_SENT: &str = "Your build was not uploaded.";
     pub const UPLOAD_YOUR_BUILD: &str = "Upload your build";
@@ -373,7 +395,7 @@ pub(crate) mod words {
     pub const FAILED_CARD_CHECK: &str = "The GPU driver did not respond after the restart.";
     /// **A recovery Smoozy opened and did not carry on**, said as what Smoozy
     /// did rather than as a step's failure. Added 2026-09-27, fix piece 6.
-    pub const FAILED_NOT_CARRIED_ON: &str = "Cannot resume mid-step.";
+    pub const FAILED_NOT_CARRIED_ON: &str = "Can't resume mid-step.";
     pub const FAILED_BLENDER: &str = "Could not install Blender.";
     /// The removal's own, ruled in the same shape. The 38's piece 14c.
     pub const FAILED_REMOVAL: &str = "Could not remove Blender.";
@@ -391,6 +413,9 @@ pub(crate) mod words {
     pub const BELOW_THE_FLOOR: &str = "below 4.5";
     pub const INSTALL_BLENDER: &str = "Install Blender…";
     pub const NO_BLENDER_READING: &str = "Not read yet.";
+    /// **A table read and empty** — scout 3.9, 2026-11-11: it said *Not read
+    /// yet.* of a server that was read and holds no Blender.
+    pub const NO_BLENDER_ON_THIS_SERVER: &str = "No Blender on this server.";
 
     // ── The install box — `Design/Server Setup § Installing`
     pub const INSTALL_BLENDER_TITLE: &str = "Install Blender";
@@ -431,6 +456,8 @@ pub(crate) mod words {
     // ── The unpack-tool warning — `Server Setup` W3's own row
     pub const UNPACK_TOOL_FIRST: &str = "This build needs the unpack tool first";
     pub const THERE_IS_WORK: &str = "This server is busy.";
+    // `Server Setup` W3: state the jobs alone, without claiming an outcome.
+    pub const JOBS_ARE_RUNNING: &str = "Jobs are running on this server.";
     pub const NOT_NOW: &str = "Not now";
     pub const INSTALL_ANYWAY: &str = "Install anyway";
 
@@ -438,6 +465,16 @@ pub(crate) mod words {
     pub const THIS_SERVER_HAS_WORK: &str = "This server is busy";
     pub const SETTING_UP_RESTARTS: &str = "Setup installs the GPU driver and restarts the server.";
     pub const SET_UP_ANYWAY: &str = "Set up anyway";
+
+    // ── Before replacing what another copy, or an older program, set up — the
+    // Creator's rulings of 2026-11-14 on batch 1 (58, 128, 353, 354; 437).
+    pub const ANOTHER_SMOOZY_SET_IT_UP: &str = "Another Smoozy set up this server";
+    pub const REPLACING_IT: &str =
+        "Setting it up from this computer replaces that setup. The other copy can no longer follow its jobs.";
+    pub const REPLACE: &str = "Replace";
+    pub const AN_OLDER_SMOOZY_HOLDS_A_JOB: &str = "An older Smoozy on this server has a job";
+    pub const THAT_JOB_IS_LOST: &str = "This Smoozy can't read or stop it. Setting up replaces the older Smoozy, and that job is lost. Frames it already saved stay on the server.";
+    pub const DISCARD_AND_SET_UP: &str = "Discard that job and set up";
 
     // ── What each live job is told about itself — `Design/Server Setup § A long
     // step`, three outcomes and never one sentence covering all three.
@@ -472,10 +509,14 @@ pub(crate) mod words {
     // 0.1.7): *Setting up* is the card's own state line, as on `sugoing` and
     // `burun`, and *Cancel setup* its one control.
     pub const INSTALLING_BLENDER: &str = "Installing Blender";
-    pub const ABANDONING_SETUP: &str = "Abandoning setup";
+    pub const ABANDONING_SETUP: &str = "Ending setup";
     pub const CANCEL_SETUP: &str = "Cancel setup";
     pub const CANCEL_SETUP_LEAVES: &str = "Cancel setup keeps what is installed.";
-    pub const THE_RESTART_HAS_BEGUN: &str = "The restart has begun; Cancel only stops the wait.";
+    /// ***Cancel setup*, once pressed** — `Design/Server Setup § A long step`
+    /// as changed 2026-11-12: the control keeps words. The Creator, on a
+    /// pressed control with no text: *"Cancel without text on it?"*
+    pub const CANCELLING: &str = "Cancelling…";
+    pub const THE_RESTART_HAS_BEGUN: &str = "The server is restarting. Cancel stops waiting, not the restart.";
     // **`Server Setup` T6a, carried into the wording under Rule 10.** The
     // drawing writes *"The render that was running stopped, and restarts by
     // itself."* T6a bounds that exactly: **the stopping half is unconditional
@@ -498,12 +539,16 @@ pub(crate) mod words {
     /// **The closing paragraph, word for word from `Design/Server Setup § The
     /// two ways out`**, which writes it out in full and says it is the same
     /// paragraph on both panels.
-    pub const THE_CLOSING_PARAGRAPH_ONE: &str = "Server checked just now. Set up again resumes where it stopped.";
-    pub const THE_CLOSING_PARAGRAPH_TWO: &str = "ends it and keeps what is installed.";
+    /// **Scout 3.10, 2026-11-11**: *Server checked just now.* did not say what
+    /// was checked; the paragraph says whether jobs can run.
+    pub const THE_CLOSING_PARAGRAPH_ONE: &str = "Set up again resumes where it stopped.";
+    pub const THE_CLOSING_PARAGRAPH_TWO: &str = "keeps what is installed and lets jobs run.";
     /// **The retry form names no control**: *Set up again tries again.* said
     /// what the button says (the last words read before the release, 2026-11-06).
-    pub const THE_RETRY_PARAGRAPH_ONE: &str = "Server checked just now.";
-    pub const ABANDON_SETUP: &str = "Abandon setup";
+    pub const THE_RETRY_PARAGRAPH_ONE: &str = "Jobs can still run on this server.";
+    /// **One word for ending a stopped setup** — scout 3.10, 2026-11-11: it
+    /// was *Abandon setup*, which read as the user giving up.
+    pub const ABANDON_SETUP: &str = "End setup";
     pub const CLOSE: &str = "Close";
 
     // ── What the server printed, beside the steps — `Design/Server Setup § A
@@ -536,10 +581,15 @@ pub(crate) mod words {
     pub const SETTINGS_FOLDER_STAYS: &str = "Its settings and add-ons are kept.";
     pub const REMOVE_ANYWAY: &str = "Remove anyway";
     pub const THE_MANAGER_IS_THE_ROUTE: &str =
-        "Installed by the package manager. Remove it there.";
+        "Installed with the system's package manager (apt), so it can't be removed here.";
+    /// **A build in a folder Smoozy did not install it in** —
+    /// `Design/Server Setup § Removing a Blender`, added 2026-11-12 (scout
+    /// 1.17's first half).
+    pub const NOT_INSTALLED_BY_SMOOZY_HERE: &str = "Not installed by Smoozy, so it can't be removed here.";
 
     // ── Admin access — `Design/Server Setup § Admin access`
-    pub const NEEDS_ADMIN_ACCESS: &str = "This step needs admin access";
+    // **Scout 3.8, 2026-11-11**: which password, said.
+    pub const NEEDS_ADMIN_ACCESS: &str = "This step needs the server's login password";
     pub const WAS_REFUSED: &str = "was refused: permission denied.";
     pub const THE_SYSTEM_WOULD_NOT_HAND_IT_BACK: &str = "Access to the saved password was denied.";
     pub const PASSWORD: &str = "Password";
@@ -572,6 +622,10 @@ pub(crate) mod words {
     /// says what is on the server.
     pub const THE_SERVER_IS_SET_UP: &str = "Setup complete.";
     pub const SETUP_STOPPED: &str = "Setup stopped.";
+    /// **A password given to the admin-access box after its setup ended** —
+    /// `Server Setup` E2, *an answer that comes after its run ended*
+    /// (2026-11-12).
+    pub const SETUP_ENDED_THE_PASSWORD_WAS_NOT_USED: &str = "Setup ended. The password was not used or saved.";
     // ── `Server Setup` T6's second ending: the restart went out and the user
     // stopped waiting for the machine. **That clears nothing** — the mark
     // stands, the machine-level state stands, the reconnect policy goes on
@@ -585,11 +639,23 @@ pub(crate) mod words {
     // starting cannot be told from one that will never answer.** The setup is
     // read back off the machine's own record on the next connection
     // (`Server Setup` S1, S2).
+    // **And what to do** — `Design/Server Setup`, 2026-11-11, the four
+    // questions, scout 2.11. Still no cause.
     pub const THE_SERVER_DID_NOT_COME_BACK: &str =
-        "Could not reconnect after the restart.";
-    pub const NOT_A_MACHINE_SMOOZY_CAN_SET_UP: &str = "Unsupported operating system.";
+        "Could not reconnect after the restart. Check the server is running, then connect.";
+    pub const ONLY_UBUNTU_AND_DEBIAN: &str = "Only Ubuntu and Debian servers are supported.";
+    pub const THIS_KIND_IS_NOT_SUPPORTED: &str = "This kind of server is not supported.";
+    // **`Design/Server Setup § This server`, 2026-11-11 (the four questions,
+    // scout 3.3)**: a processor no release is built for, said plainly, with
+    // the processor the server named behind the details.
+    pub const THE_PROCESSOR_IS_NOT_SUPPORTED: &str = "This server's CPU is not supported.";
+    pub const THE_SERVER_NAMED_ITS_PROCESSOR: &str = "The server reports its CPU as";
     pub const NOTHING_WAS_CHANGED_ON_IT: &str = "Nothing was changed.";
     pub const NO_SERVER_IS_CONNECTED: &str = "Connect to this server first.";
+    // **Set up pressed on a connected server whose Smoozy does not answer**,
+    // with nothing lent — `Design/Server Setup § This server` as added
+    // 2026-11-15 (Sol's look, point 1). The next connection repairs it.
+    pub const RECONNECT_TO_REPAIR: &str = "Smoozy isn't responding. Reconnect to repair it.";
     pub const SETUP_IS_ALREADY_RUNNING: &str =
         "A setup is already running on this server.";
 
@@ -600,15 +666,23 @@ pub(crate) mod words {
     // rental showed in this box.
     pub const COULD_NOT_MAKE_ITS_FOLDER: &str = "Could not create Smoozy's folder on the server.";
     pub const COULD_NOT_RECORD_ITS_FOLDER: &str = "Could not save Smoozy's folder location.";
+    /// **`Server Setup` R6a's change of later on 2026-11-13, items 1 and 4**:
+    /// the folder's record could not be read, or the folder is not the one
+    /// Smoozy made; the reason, in Smoozy's own words, goes beside it.
+    pub const COULD_NOT_FIND_ITS_FOLDER: &str = "Could not find Smoozy's folder on the server.";
     pub const COULD_NOT_GET_ITS_PROGRAM: &str =
-        "Could not download or verify Smoozy's server software. Nothing was installed.";
-    pub const COULD_NOT_INSTALL_ITS_PROGRAM: &str = "Could not install Smoozy's server software.";
+        "Could not download or verify Smoozy for this server. Nothing was installed.";
+    /// **Every try at the download came to no answer** — `Server protocol and
+    /// transfers` B10b, the Creator's twenty-eighth notes, note 3.
+    pub const ITS_PROGRAMS_DOWNLOAD_GOT_NO_RESPONSE: &str =
+        "Could not download Smoozy for this server: no response. Try again in a few minutes. Nothing was installed.";
+    pub const COULD_NOT_INSTALL_ITS_PROGRAM: &str = "Could not install Smoozy on this server.";
     pub const ITS_PROGRAM_WAS_PUT_BACK: &str =
-        "Could not install Smoozy's server software. Rolled back.";
+        "Could not install Smoozy on this server. Rolled back.";
     pub const PUTTING_IT_BACK_DID_NOT_FINISH: &str =
-        "Could not install Smoozy's server software. Rollback incomplete.";
+        "Could not install Smoozy on this server. Rollback incomplete.";
     pub const WORK_STILL_NEEDS_ITS_PROGRAM: &str =
-        "Smoozy's server software not replaced: jobs on the server still use it.";
+        "Smoozy on this server not updated: jobs on the server still use it.";
     /// **Held jobs of an earlier setup, which no new setup can answer** —
     /// `Design/Server Setup § When work on the server holds the setup back`,
     /// word for word, with its singular form. Added 2026-10-01, step 10c's
@@ -618,20 +692,18 @@ pub(crate) mod words {
         use crate::typography::a_figure_with_its_unit;
         if how_many == 1 {
             format!(
-                "Smoozy's server software cannot be replaced: {} from an earlier setup needs an \
-                 answer this computer cannot give. A new server will not have it.",
+                "Smoozy on this server can't be updated: {} from an earlier setup is waiting for an answer that can't be given here. Use a new server.",
                 a_figure_with_its_unit(1, "job")
             )
         } else {
             format!(
-                "Smoozy's server software cannot be replaced: {} from an earlier setup need an \
-                 answer this computer cannot give. A new server will not have them.",
+                "Smoozy on this server can't be updated: {} from an earlier setup are waiting for an answer that can't be given here. Use a new server.",
                 a_figure_with_its_unit(how_many, "jobs")
             )
         }
     }
     pub const ITS_PROGRAM_IS_BEING_INSTALLED: &str =
-        "Smoozy's server software is already being installed.";
+        "Smoozy on this server is already being installed.";
     pub const THE_CONNECTION_ENDED: &str = "Connection lost.";
     pub const THE_RUN_WOULD_NOT_START: &str = "Setup did not start on the server.";
     /// **Why a run was refused, and what to do, where the machine said why.**
@@ -652,13 +724,14 @@ pub(crate) mod words {
     /// step the record named, and it fired on a setup whose driver install had
     /// finished — step 10c's seventh pass on Hyperstack, fault 3.)*
     pub const STOPPED_INSIDE_THE_STEP: &str =
-        "stopped mid-step and cannot resume. Abandon setup, then set up again.";
+        "stopped mid-step and can't resume. End setup, then set up again.";
     /// **The runner's ruling 1 of 2026-09-27: a restart command the server
     /// refused while it stayed connected.** The machine's words go behind
     /// *What the server said*, whole.
     pub const THE_RESTART_WAS_REFUSED: &str =
         "The server refused the restart. GPU driver install incomplete.";
-    pub const FAILED_FINAL_CHECK: &str = "Final check failed.";
+    // **Scout 3.12, 2026-11-11**: what the final check checks, said.
+    pub const FAILED_FINAL_CHECK: &str = "Blender or the GPU driver did not pass the final check.";
     /// **Smoozy's program on the server stopped answering while a step was
     /// under way.** Added 2026-09-22, step 10c's fourth pass on Vast: a run
     /// that ended that way was told *The server did not pass Smoozy's final
@@ -678,7 +751,7 @@ pub(crate) mod words {
     pub const THE_SERVER_ENDED_THE_SETUP: &str =
         "stopped: the server ended the setup.";
     pub const THE_SERVER_STOPPED_ANSWERING: &str =
-        "stopped: Smoozy's server software stopped responding.";
+        "stopped: Smoozy on this server stopped responding.";
     // ── *Abandon setup* — `Server Setup` S6's second clear, 2026-09-22.
     // **`Design/Server Setup § The two ways out`**: the run goes to the server,
     // makes the setup's final check, says what that check found, and only then
@@ -686,11 +759,29 @@ pub(crate) mod words {
     // with the server's own words behind *What the server said* where it did not
     // pass.
     pub const ABANDONED_AND_THE_CHECK_PASSED: &str =
-        "Setup abandoned. Final check passed.";
-    pub const ABANDONED_AND_THE_CHECK_DID_NOT_PASS: &str = "Setup abandoned. Final check failed.";
-    pub const NOTHING_TO_ABANDON: &str = "No unfinished setup to abandon.";
-    pub const THE_ABANDON_DID_NOT_FINISH: &str = "Could not abandon the setup.";
+        "Setup ended. Final check passed; jobs can run.";
+    pub const ABANDONED_AND_THE_CHECK_DID_NOT_PASS: &str =
+        "Setup ended. Blender or the GPU driver did not pass the final check.";
+    pub const NOTHING_TO_ABANDON: &str = "No unfinished setup to end.";
+    pub const THE_ABANDON_DID_NOT_FINISH: &str = "Could not end the setup.";
     pub const NEEDS_ADMIN_ACCESS_AND_NONE_WAS_GIVEN: &str = "needs admin access; no password given.";
+    // **The Rough what-if answers, share 2 (136): a step the server refused
+    // in `Server Setup` E4's one wrong-password sentence says so plainly**,
+    // after the step's own failure sentence. Until then the card named only
+    // the step, with the server's line behind it.
+    pub const WRONG_PASSWORD: &str = "Wrong password.";
+    // **`Server Setup` S7b's *busy*, said** (the Rough what-if answers, share
+    // 2, 139): the package tool's lock was still held when the wait ended.
+    pub const BUSY_WITH_ITS_OWN_UPDATES: &str =
+        "The server is installing system updates. Try again in a few minutes.";
+    // **The Rough what-if answers, share 2 (142, 143): after the check that
+    // follows a setup's restart fails, *Set up again* only takes that check
+    // again**, so the way on is named.
+    pub const END_SETUP_TO_REINSTALL: &str = "End setup, then set up again to reinstall the driver.";
+    // **The Rough what-if answers, share 2 (120): a folder that could not be
+    // made on a disk with nothing left says so.** The upload's words for the
+    // same fact, without its second sentence.
+    pub const THE_SERVER_DISK_IS_FULL: &str = "Server disk is full.";
     // ── A Blender install from the Blender section, 2026-09-21.
     pub const BLENDER_IS_INSTALLED: &str = "installed.";
     pub const INSTALL_STOPPED: &str = "Install stopped.";
@@ -734,6 +825,9 @@ pub(crate) mod words {
     /// of a server Smoozy has not set up, and the account names that as a hole.
     /// Rule 8 makes a silence the fault, so the sentence says what is true.
     pub const SET_UP_THIS_SERVER_FIRST: &str = "Set up this server first.";
+    /// **In *Install Blender*'s place on a server not set up** —
+    /// `Design/Server Setup § Blender`, added 2026-11-12 (scout 4.7).
+    pub const SET_UP_TO_INSTALL_BLENDER: &str = "Set up this server to install Blender.";
     pub const NOTHING_WAS_INSTALLED_ON_IT: &str = "Nothing was installed.";
     // ── The step an offer names, in the drawing's own shape: *"Installing the
     // GPU driver was refused: …"* The other three are ruled here under the
@@ -747,7 +841,7 @@ pub(crate) mod words {
     // ── The other five R1 steps, in the same shape, added 2026-09-22 under the
     // same standing delegation. **A box that says which step stopped needs a
     // name for every step**, and until this the five answered *This step*.
-    pub const DOING_THE_READINGS: &str = "Reading the server";
+    pub const DOING_THE_READINGS: &str = "Checking what is installed";
     pub const DOING_THE_FETCH: &str = "Downloading Blender";
     pub const DOING_THE_PUBLICATION: &str = "Installing Blender";
     pub const DOING_THE_REMOVAL: &str = "Removing Blender";
@@ -788,6 +882,11 @@ pub struct ASetUpReading {
     /// **`Server Setup` G2: whether Telegram is switched on at all**, which is
     /// what decides whether the card owes an offer.
     pub telegram_is_switched_on: bool,
+    /// **`Server Setup` G2a: what the last try at placing Telegram's material
+    /// failed with**, held for the connection — an *Install*, or the run that
+    /// follows a setup reaching *done* (`Server Setup` G2 as changed 2026-11-11, the four
+    /// questions, scout 1.3). Said on Telegram's own line.
+    pub the_telegram_install_failed_with: Option<String>,
     /// **A setup running now**, with the boundary it has reached.
     pub a_setup_is_running: Option<TheSetupRecord>,
     /// **`Server Setup` S1: which step was in flight**, where the reading says.
@@ -923,7 +1022,7 @@ pub enum WhatTheMachineSaid {
     /// second pass on a real rental's fault 4, 2026-09-21, where the card read
     /// *No setup read from this server* on exactly that machine.
     ConnectedAndNeverSetUp,
-    /// **Connected, and Smoozy's service on the server does not answer** —
+    /// **Connected, and Smoozy on this server does not answer** —
     /// `State, identity and recovery` §8.3's supervisor-unavailable condition
     /// standing (`Desktop app and delivery` V1), on `State, identity and
     /// recovery` Y9's fourth branch while `Servers` Q19 re-takes it. **It is
@@ -933,6 +1032,13 @@ pub enum WhatTheMachineSaid {
     /// this card said *Smoozy has not read this server yet* under a header
     /// saying *Connected*.
     ConnectedAndSmoozyIsNotResponding,
+    /// **Connected, nothing lent yet, and Smoozy's service not said to be
+    /// silent** — `Servers` Q1's own steps after the login still run (the
+    /// installation check and the hardware reading), as in the seconds after
+    /// a repair lands. **The card reads *Connecting…***, never the last card
+    /// seen nor *Connect and set up* (`Design/Server Setup § This server` as
+    /// added 2026-11-15, the re-check before 0.4.0, new fault 1).
+    ConnectedAndStillConnecting,
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -977,6 +1083,11 @@ pub struct TheSetUpTab {
     /// where the driver is below a bar and Smoozy cannot change it. Added
     /// 2026-10-11.
     pub the_driver_warning: Option<TheDriverWarning>,
+    /// **The Help answer beside the card's state line**, where the card says a
+    /// first connection was not made — *Could not connect*'s
+    /// (`Design/Whole app § Help links`, 2026-11-13). Absent on every other
+    /// card, a *not a Linux server* or a passphrase one included.
+    pub the_cards_help: Option<&'static str>,
     /// **The installs Smoozy closed before it began, named on the card under
     /// its state line** — `Server Setup` Y9a, `Design/Server Setup §
     /// Installing`: *Not installed: Blender 5.2.2, Blender 4.5.14. Smoozy
@@ -984,6 +1095,10 @@ pub struct TheSetUpTab {
     /// this copy drives a run on the server.** Added 2026-10-16, step 10c's
     /// owed piece 4.
     pub the_installs_never_begun: Option<Prose>,
+    /// ***Install* on that line, where it names only installs from the list
+    /// and a connection stands** — `Design/Server Setup § Installing`, added
+    /// 2026-11-12 (the four questions, scout 2.14).
+    pub install_the_ones_not_started: Option<Prose>,
     /// ***Server output*, opening what the last run on this server printed** —
     /// `Design/Server Setup § A long step`: *"The window goes when the run
     /// ends; the control stays, opening what that run printed, until the next
@@ -1021,6 +1136,9 @@ pub struct TheDriverWarning {
     pub and: Prose,
     /// **Greyed where the reading is last seen**, as the line above it is.
     pub last_seen: bool,
+    /// **The Help answer the line's Help link opens** — *the NVIDIA driver*'s
+    /// (`Design/Whole app § Help links`, 2026-11-13).
+    pub help: &'static str,
 }
 
 /// **What this tab is handed of the driver** — `Servers` H11b's part of the
@@ -1128,6 +1246,10 @@ pub struct ALinesOffer {
 pub struct TheSetupFault {
     pub said: Prose,
     pub what_to_do: Prose,
+    /// **The Help answer beside the advice, where it has one** — *the NVIDIA
+    /// driver*'s, beside the container's driver advice alone
+    /// (`Design/Whole app § Help links`, 2026-11-13).
+    pub help: Option<&'static str>,
 }
 
 /// The card's one action.
@@ -1159,6 +1281,11 @@ pub struct TheBlenderTable {
     // says how the server was searched."* Creator-stated 2026-10-02, note 13
     // on 0.1.7. *(The table carried that line until then.)*
     pub install: Prose,
+    /// **Where the server is not set up, the line drawn in *Install
+    /// Blender*'s place** — `Design/Server Setup § Blender`, added 2026-11-12
+    /// (the four questions, scout 4.7): an install there is refused, so the
+    /// control is absent, not greyed.
+    pub install_first: Option<Prose>,
 }
 
 /// One row of it — three columns: version, where it sits, and Remove.
@@ -1251,6 +1378,11 @@ pub async fn the_set_up_tab<R: tauri::Runtime>(
     );
     let telegram_is_on = telegram_is_switched_on_here(&here);
     let builds = the_builds_the_table_is_drawn_from(&said, &found);
+    let connected_with_nothing_lent = matches!(
+        said,
+        WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding | WhatTheMachineSaid::ConnectedAndStillConnecting
+    );
+    let still_connecting = matches!(said, WhatTheMachineSaid::ConnectedAndStillConnecting);
     let mut tab = the_tab_with(said, &server, found, telegram_is_on);
     // **Read after the machine was**, so a connection that went live
     // meanwhile is not drawn as still connecting, nor as not made. **An add's
@@ -1266,6 +1398,7 @@ pub async fn the_set_up_tab<R: tauri::Runtime>(
         let connecting = an_add_is_connecting_to_set_up(&here, &server);
         let remembered = the_row_remembers_a_setup(&here, &server);
         let stopped = crate::setting_up::an_adds_setup_never_reached_step_8_on(&server);
+        let remembered = remembered || a_cards_connect_waits_on(&server);
         the_card_where_no_connection_stands(
             &mut tab,
             connecting,
@@ -1275,19 +1408,85 @@ pub async fn the_set_up_tab<R: tauri::Runtime>(
             remembered,
         );
     }
+    // **Where no connection stands, the card's action connects first** —
+    // the four questions, scout 4.6. Read after the card is chosen, so the
+    // add's own cards keep the row's act where the row remembers a setup.
+    // **Not while the server is connected and Smoozy on it does not answer**
+    // — nothing is lent then, yet a connection stands, and *Connect and set
+    // up* would only connect (`Design/Server Setup § This server` as added
+    // 2026-11-15; the what-if live pass, new fault 2). **Nor while Smoozy is
+    // still connecting there** (the re-check before 0.4.0, new fault 1).
+    if the_live_point(&here, &server).is_none() && !connected_with_nothing_lent {
+        let remembered = the_row_remembers_a_setup(&here, &server);
+        the_action_connects_first(&mut tab.the_card, remembered);
+    }
     // **`Servers` H11b and `Server Setup` B12b, drawn last**, once the card is
     // chosen, from the server's row. Added 2026-10-11.
     the_driver_is_drawn_on(&mut tab, &the_driver_as_held_for(&here, &server), &builds);
+    // **`Design/Server Setup § Blender`, added 2026-11-12: no *Install
+    // Blender* where an install is refused** — the row confirms no
+    // installation of Smoozy's (`setting_up`'s *not set up yet*). The four
+    // questions, scout 4.7.
+    let not_set_up = the_record_says(&here, |record| {
+        crate::record::server_rows::all(record)
+            .ok()
+            .and_then(|rows| rows.into_iter().find(|row| row.local_server_identifier == server))
+            .map(|row| row.last_confirmed_installation_identity.is_none())
+    })
+    .flatten();
+    the_install_is_offered_where_set_up(&mut tab.the_table, not_set_up);
+    // **While Smoozy is still connecting, the action is the one this server
+    // takes**: *Set up this server* where the row confirms no installation
+    // (`Design/Server Setup § This server` as added 2026-11-15).
+    if still_connecting && not_set_up == Some(true) {
+        tab.the_card.the_action.name = Prose::new(words::SET_UP_THIS_SERVER);
+    }
     // **`Server Setup` Y9a: the installs an earlier run closed before it
     // began**, from the local record. Added 2026-10-16, owed piece 4.
     tab.the_installs_never_begun = the_record_says(&here, |record| the_installs_smoozy_closed_on(record, &server)).flatten();
+    // **`Design/Server Setup § Installing`, added 2026-11-12: *Install* on
+    // that line**, only where it names installs from the list and a
+    // connection stands (the four questions, scout 2.14).
+    let the_ones_not_started = the_record_says(&here, |record| {
+        crate::record::installs_not_begun::the_acts_waiting_on(record, &server)
+            .ok()
+            .and_then(|waiting| the_installs_to_start_again(&waiting))
+    })
+    .flatten();
+    tab.install_the_ones_not_started = (tab.the_installs_never_begun.is_some()
+        && the_ones_not_started.is_some()
+        && the_live_point(&here, &server).is_some())
+    .then(|| Prose::new(words::INSTALL));
     // **The running card offers the Telegram placement where this card does**
     // (`Server Setup` Y9a item 6). Added 2026-10-27.
     the_telegram_offer_is_held(&server, &tab.the_card);
+    // **`Server Setup` Y7a as changed 2026-11-09: a stopped setup's failed
+    // step, read back from the server, puts its words in *Server output*
+    // where this copy keeps none** — Smoozy reopened — so they are one
+    // control away without a control of the step's own.
+    the_failed_steps_words_are_kept_where_none_are(&server, tab.the_stopped_setup.as_ref());
     // **`Server Setup` Y7a: the last run's words, one control away**, for as
     // long as this copy keeps them. Added 2026-10-18.
     the_servers_words_beside_the_tab(&mut tab, crate::setting_up::the_words_are_kept_for(&server));
     tab
+}
+
+/// **The failed step's words on a stopped setup, kept in *Server output*
+/// where this copy keeps none for `server`** (`Server Setup` Y7a as changed
+/// 2026-11-09, the Creator's twenty-eighth notes, note 1). Nothing where the
+/// card shows no failed step with words.
+pub fn the_failed_steps_words_are_kept_where_none_are(server: &str, stopped: Option<&TheRunPanel>) {
+    let Some(stopped) = stopped else { return };
+    for step in &stopped.steps {
+        let Some(failed) = &step.the_failure else { continue };
+        let words = |one: &Option<Verbatim>| one.as_ref().map(|one| one.as_str().to_string()).unwrap_or_default();
+        crate::setting_up::a_failed_steps_words_are_kept_where_none_are(
+            server,
+            step.boundary.its_step(),
+            &words(&failed.the_output),
+            &words(&failed.the_complaint),
+        );
+    }
 }
 
 /// ***Server output* on the card and on a stopped setup's card, where a run's
@@ -1358,7 +1557,10 @@ pub fn the_installs_smoozy_closed_on(record: &rusqlite::Connection, server: &str
     use crate::record::installs_not_begun::TheActsKind;
     let waiting = crate::record::installs_not_begun::the_acts_waiting_on(record, server).ok()?;
     let named = waiting.iter().map(|act| act.named.clone()).collect::<Vec<_>>();
-    let a_run_is_driven_here = crate::setting_up::the_kind_being_driven_on(server).is_some();
+    // **`Server Setup` Y9a item 11: while Smoozy updates its program there,
+    // the list is the update's line** (2026-11-11).
+    let a_run_is_driven_here =
+        crate::setting_up::the_kind_being_driven_on(server).is_some() || crate::setting_up::an_update_holds(server);
     if !smoozy_server_setup::blender::a_closed_run_left_them(&named, a_run_is_driven_here) {
         return None;
     }
@@ -1366,6 +1568,43 @@ pub fn the_installs_smoozy_closed_on(record: &rusqlite::Connection, server: &str
         return the_installs_never_begun(&named);
     }
     the_acts_never_begun(&waiting)
+}
+
+/// **The installs the line names, to be started again** — the first and the
+/// rest, in the order kept; nothing where any kept act is not an install from
+/// the list. The four questions, scout 2.14.
+pub fn the_installs_to_start_again(
+    waiting: &[crate::record::installs_not_begun::AnActKept],
+) -> Option<(String, Vec<String>)> {
+    use crate::record::installs_not_begun::TheActsKind;
+    if !waiting.iter().all(|act| act.kind == TheActsKind::AnInstallFromTheList) {
+        return None;
+    }
+    let (first, rest) = waiting.split_first()?;
+    Some((first.named.clone(), rest.iter().map(|act| act.named.clone()).collect()))
+}
+
+/// ***Install* on the line, pressed**: the kept installs, read again from the
+/// record, begun as the Install Blender box begins them. The four questions,
+/// scout 2.14.
+fn the_installs_not_started_are_driven<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    queue: &State<'_, std::sync::Arc<TheOneQueue>>,
+    server: String,
+) {
+    let kept = the_record_says(&app, |record| {
+        crate::record::installs_not_begun::the_acts_waiting_on(record, &server)
+            .ok()
+            .and_then(|waiting| the_installs_to_start_again(&waiting))
+    })
+    .flatten();
+    match kept {
+        Some((first, rest)) => a_blender_install_is_driven(app, queue, server, first, rest),
+        None => {
+            let event = the_answer_for(&server);
+            let _ = queue.read_then_post::<(), std::convert::Infallible>(|| Ok(()), |_| event.clone());
+        }
+    }
 }
 
 /// **The line where anything but installs from the list was waiting** —
@@ -1513,6 +1752,12 @@ pub fn the_card_where_no_connection_stands(
         return;
     };
     tab.the_card = card;
+    // ***Could not connect*, and only it, carries its Help answer** — a
+    // card that says *not a Linux server* or the passphrase's sentence is
+    // not *Could not connect* (`Design/Whole app § Help links`).
+    tab.the_cards_help = failed
+        .filter(|what| crate::surface::servers::a_connect_that_could_not_connect(what))
+        .map(|_| crate::the_address_opener::TheHelpAnswer::CouldNotConnect.name());
     tab.the_card_was_last_seen = None;
     tab.the_stopped_setup = None;
 }
@@ -1593,6 +1838,19 @@ pub fn the_card_while_an_add_connects() -> TheCard {
     }
 }
 
+/// **The card while Smoozy is still connecting to a connected server** —
+/// `Design/Server Setup § This server` as added 2026-11-15: *Connecting…*,
+/// with its action under way on itself, as the add's own card draws it, since
+/// no setup can run until the connection is lent. *Set up again*, and
+/// [`the_set_up_tab`] names it *Set up this server* where the row confirms no
+/// installation. The re-check before 0.4.0, new fault 1.
+pub fn the_card_while_smoozy_connects() -> TheCard {
+    let mut card = the_card_while_an_add_connects();
+    card.the_action.name = Prose::new(words::SET_UP_AGAIN);
+    card.the_action.loud = false;
+    card
+}
+
 /// **The card where the first checks stopped an add's connection** — the
 /// sentence the connect ended in and the red dot, as
 /// [`the_card_where_the_connection_was_not_made`], **and the action the card
@@ -1603,6 +1861,89 @@ pub fn the_card_where_the_first_checks_stopped_an_add(said: &str) -> TheCard {
     TheCard {
         the_action: the_card_where_nothing_was_read().the_action,
         ..the_card_where_the_connection_was_not_made(said)
+    }
+}
+
+/// **Where no connection stands, the card's action is *Connect and set up***
+/// — `Design/Server Setup § This server`, added 2026-11-12 (the four
+/// questions, scout 4.6). The ready action and the card's own failed connect
+/// take [`CONNECT_THEN_SET_UP`], keeping how loud the card drew them. **The
+/// row's own *Connect and set up* stays where the row remembers an add's
+/// setup** (`Servers` B6 carries it), and an action under way on itself
+/// (*Connecting…*) is left alone.
+pub fn the_action_connects_first(card: &mut TheCard, the_row_remembers_a_setup: bool) {
+    let action = &mut card.the_action;
+    if action.underway {
+        return;
+    }
+    let the_ready_action = action.act.as_str() == THE_READY_ACTION;
+    let the_cards_own_failed_connect =
+        action.act.as_str() == CONNECT_AND_SET_UP && !the_row_remembers_a_setup;
+    if the_ready_action || the_cards_own_failed_connect {
+        action.name = Prose::new(words::CONNECT_AND_SET_UP);
+        action.act = Verbatim::new(CONNECT_THEN_SET_UP);
+    }
+}
+
+/// **The servers whose card asked to connect and then set up**, held in
+/// memory only (`Architecture/Servers`' build detail of 2026-11-12): taken
+/// once at the lending, dropped by any other connect act on that server.
+fn the_cards_connects() -> &'static Mutex<std::collections::BTreeSet<String>> {
+    static HELD: std::sync::OnceLock<Mutex<std::collections::BTreeSet<String>>> = std::sync::OnceLock::new();
+    HELD.get_or_init(|| Mutex::new(std::collections::BTreeSet::new()))
+}
+
+fn a_cards_connect_waits(server: &str) {
+    if let Ok(mut held) = the_cards_connects().lock() {
+        held.insert(server.to_string());
+    }
+}
+
+fn a_cards_connect_waits_on(server: &str) -> bool {
+    the_cards_connects().lock().is_ok_and(|held| held.contains(server))
+}
+
+fn the_cards_wait_is_taken_on(server: &str) -> bool {
+    the_cards_connects().lock().is_ok_and(|mut held| held.remove(server))
+}
+
+/// **Any other connect act on that server drops the card's wait** — a plain
+/// *Connect*, *Reconnect*, *Connect without setup* or *Disconnect* is not a
+/// setup asked for.
+pub(crate) fn the_cards_wait_is_dropped(server: &str) {
+    let _ = the_cards_wait_is_taken_on(server);
+}
+
+/// **The card's *Connect and set up***: on a connected server it is the ready
+/// action alone; otherwise the wait is held and the user's own connect is
+/// begun (`Servers` O1). A beginning refused drops the wait and is said.
+fn the_card_connects_then_sets_up<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    queue: &State<'_, std::sync::Arc<TheOneQueue>>,
+    server: String,
+) {
+    if the_live_point(&app, &server).is_some() {
+        the_ready_action_is_driven(app, queue, server, false);
+        return;
+    }
+    a_cards_connect_waits(&server);
+    if let Some(answer) = crate::surface::servers::the_cards_connect_is_begun(&app, &server) {
+        the_cards_wait_is_dropped(&server);
+        crate::surface::servers::the_answer_is_said(&app, answer);
+    }
+    the_queue_is_told(queue, the_run_moved_on(&server));
+}
+
+/// **At the lending, the card's wait is taken and its ready action pressed**
+/// — `Server Setup` W3's warning judged as at any press. Called from the
+/// period's step 7 (`src/servers/a_period.rs`).
+pub(crate) fn the_cards_wait_is_driven<R: tauri::Runtime>(app: &tauri::AppHandle<R>, server: &str) {
+    use tauri::Manager;
+    if !the_cards_wait_is_taken_on(server) {
+        return;
+    }
+    if let Some(queue) = app.try_state::<std::sync::Arc<TheOneQueue>>() {
+        the_ready_action_is_driven(app.clone(), &queue, server.to_string(), false);
     }
 }
 
@@ -1742,7 +2083,7 @@ fn the_searches_held(
 /// release and placement — comes before the run and is not one of the run's
 /// boundaries, so a run whose every step found nothing to do reads, on its own
 /// record, exactly like a check that found nothing to prepare. W1 keeps
-/// *Nothing to prepare* for a run where no act was needed, and a placement is
+/// *Nothing to install* for a run where no act was needed, and a placement is
 /// an act. The twelfth pass on Hyperstack met it: *Set up this server* on a
 /// server added plainly placed a new program and the card read *Nothing to
 /// prepare … Nothing was installed and nothing was changed.*
@@ -1835,10 +2176,65 @@ fn what_the_machine_said<R: tauri::Runtime>(
             what_is_said_with_nothing_lent(periods.as_deref().map(|it| it.as_ref()), server),
         );
     };
-    let said = match crate::setting_up::the_setup_on(app, &point, server) {
+    // **The card reads *Not set up* where the server's head does** — the live
+    // connection's check found no Smoozy, or another installation's, so the
+    // runs the machine holds are not this server's (the scout's list, item 2,
+    // the second live pass's fault 7).
+    {
+        use tauri::Manager;
+        let periods = app.try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>();
+        let read = periods
+            .as_ref()
+            .and_then(|periods| periods.what_the_last_connection_read(server));
+        let smoozy_does_not_answer = periods
+            .as_ref()
+            .is_some_and(|periods| periods.smoozy_does_not_answer_on(server));
+        if let Some(said) = what_the_card_says_before_its_reading(read, smoozy_does_not_answer) {
+            the_reading_is_held_as_last_seen(server, &said);
+            return said;
+        }
+    }
+    let said = what_the_card_as_read_says(
+        crate::setting_up::the_setup_on(app, &point, server),
+        || the_servers_name(app, server).unwrap_or_default(),
+        || crate::setting_up::the_machine_holds_no_installation(app, &point, server),
+    );
+    the_reading_is_held_as_last_seen(server, &said);
+    said
+}
+
+/// **What the card says over a live connection before its own reading is
+/// taken, where that is already settled** — *Not set up* where the live
+/// connection's check read no Smoozy ([`what_the_check_says_first`]), and
+/// nothing otherwise.
+///
+/// **And *Smoozy isn't responding.* where V1's condition stands**, as the row
+/// says it, without the card's own reading first waiting out a supervisor the
+/// condition already says does not answer (`Design/Server Setup § This
+/// server` as added 2026-11-15; the re-check before 0.4.0, new fault 2: the
+/// card took 13 seconds where the row took 5). The condition goes at the next
+/// answered reading, and the card is asked again then.
+pub(crate) fn what_the_card_says_before_its_reading(
+    read: Option<crate::servers::a_period::WhatTheLastConnectionRead>,
+    smoozy_does_not_answer: bool,
+) -> Option<WhatTheMachineSaid> {
+    what_the_check_says_first(read)
+        .or_else(|| smoozy_does_not_answer.then_some(WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding))
+}
+
+/// **What the card's reading over a live connection says** — pulled out of
+/// [`what_the_machine_said`] on 2026-11-15 so it is driven at the desk. The
+/// server's name and the no-installation check are asked only where needed.
+pub(crate) fn what_the_card_as_read_says(
+    read: Option<crate::setting_up::TheCardAsRead>,
+    the_servers_name: impl FnOnce() -> String,
+    the_machine_holds_no_installation: impl FnOnce() -> bool,
+) -> WhatTheMachineSaid {
+    match read {
         Some(crate::setting_up::TheCardAsRead {
             the_run: Some(mut read),
             the_rest,
+            ..
         }) => {
             // **§16.1 M3a names the clock a moment is on, and a person names a
             // machine by its server's name** — `AsOfThatMoment`'s own field
@@ -1849,7 +2245,7 @@ fn what_the_machine_said<R: tauri::Runtime>(
             // card. **So the moment is drawn on the clock of the server as the
             // list names it**, and where no name can be read nothing is named
             // rather than the identity.
-            read.the_clock = the_servers_name(app, server).unwrap_or_default();
+            read.the_clock = the_servers_name();
             match the_rest {
                 Some(rest) => WhatTheMachineSaid::ASetupRunAndTheMachine(Box::new(read), Box::new(rest)),
                 None => WhatTheMachineSaid::ASetupRunAlone(Box::new(read)),
@@ -1861,19 +2257,21 @@ fn what_the_machine_said<R: tauri::Runtime>(
         Some(crate::setting_up::TheCardAsRead {
             the_run: None,
             the_rest: Some(rest),
+            ..
         }) if rest.the_ready_actions_run.is_none() => WhatTheMachineSaid::AReading(Box::new(
-            the_reading_where_no_setup_record_stands(
-                &rest,
-                the_servers_name(app, server).unwrap_or_default(),
-            ),
+            the_reading_where_no_setup_record_stands(&rest, the_servers_name()),
         )),
-        _ if crate::setting_up::the_machine_holds_no_installation(app, &point, server) => {
-            WhatTheMachineSaid::ConnectedAndNeverSetUp
+        _ if the_machine_holds_no_installation() => WhatTheMachineSaid::ConnectedAndNeverSetUp,
+        // **Smoozy left the card's reading unanswered on a live connection**:
+        // the card says so, never that no setup was found — the what-if live
+        // pass of 2026-11-15 read *No setup found · This server has not been
+        // set up.* on a set-up server whose program had ended, and for 10 to
+        // 20 seconds after a repair (`Design/Server Setup § This server`).
+        Some(crate::setting_up::TheCardAsRead { the_machine_did_not_answer: true, .. }) => {
+            WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding
         }
         _ => WhatTheMachineSaid::ConnectedAndNoRunWasFound,
-    };
-    the_reading_is_held_as_last_seen(server, &said);
-    said
+    }
 }
 
 /// **What was last read from each server in this run, with this computer's
@@ -1913,25 +2311,54 @@ pub fn what_was_last_seen_or(server: &str, said: WhatTheMachineSaid) -> WhatTheM
         .unwrap_or(said)
 }
 
+/// **Whether the server is connected and Smoozy on it does not answer**, read
+/// the one way the card reads it. Added 2026-11-15 (Sol's look, point 1).
+fn smoozy_does_not_answer_while_connected<R: tauri::Runtime>(app: &tauri::AppHandle<R>, server: &str) -> bool {
+    use tauri::Manager;
+    let periods = app.try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>();
+    what_is_said_with_nothing_lent(periods.as_deref().map(|it| it.as_ref()), server)
+        == WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding
+}
+
 /// **What the card is drawn from where no connection to the server is lent** —
 /// *never read*, or, where the server reads connected and Smoozy's service on
-/// it does not answer, that. **The two facts are the row's own**
+/// it does not answer, that; and where it reads connected and the service is
+/// not said to be silent, that Smoozy is still connecting (added 2026-11-15). **The two facts are the row's own**
 /// (`Design/Servers § A row`), read the one way the row reads them. Added
 /// 2026-09-27, step 10c's eighth-pass fix piece 6.
 pub fn what_is_said_with_nothing_lent(
     periods: Option<&crate::servers::a_period::ThePeriodsThisRun>,
     server: &str,
 ) -> WhatTheMachineSaid {
-    let not_answering = periods.is_some_and(|periods| {
-        smoozy_servers::condition::presentation(periods.what_is_true_of(server))
-            == smoozy_servers::condition::Presentation::Connected
-            && periods.smoozy_does_not_answer_on(server)
-    });
-    if not_answering {
+    let Some(periods) = periods else {
+        return WhatTheMachineSaid::NothingHasEverBeenReadFromIt;
+    };
+    if smoozy_servers::condition::presentation(periods.what_is_true_of(server))
+        != smoozy_servers::condition::Presentation::Connected
+    {
+        return WhatTheMachineSaid::NothingHasEverBeenReadFromIt;
+    }
+    if periods.smoozy_does_not_answer_on(server) {
         WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding
     } else {
-        WhatTheMachineSaid::NothingHasEverBeenReadFromIt
+        // **Connected, Smoozy not said to be silent, and nothing lent yet**:
+        // `Servers` Q1's own steps after the login still run, as in the
+        // seconds after a repair lands. Never what was last seen and never
+        // *Connect and set up* (the re-check before 0.4.0, new fault 1).
+        WhatTheMachineSaid::ConnectedAndStillConnecting
     }
+}
+
+/// **What the card says before any run is read**: *Not set up* where the live
+/// connection's check read no Smoozy, or another installation's
+/// (`crate::surface::servers::the_live_check_reads_not_set_up`, the rule the
+/// row and the head read), and nothing otherwise. Added 2026-11-13, the scout's
+/// list, item 2.
+pub fn what_the_check_says_first(
+    read: Option<crate::servers::a_period::WhatTheLastConnectionRead>,
+) -> Option<WhatTheMachineSaid> {
+    crate::surface::servers::the_live_check_reads_not_set_up(read)
+        .then_some(WhatTheMachineSaid::ConnectedAndNeverSetUp)
 }
 
 /// **The server's name as the list draws it** — `Design/Servers`: by its
@@ -1953,8 +2380,13 @@ fn the_servers_name<R: tauri::Runtime>(app: &tauri::AppHandle<R>, server: &str) 
 /// versions**, so where nothing has been read from the machine no entry carries
 /// one — which B6a permits, nothing anywhere acting on the mark.
 #[tauri::command]
-pub async fn the_install_list(server: String) -> TheInstallList {
+pub async fn the_install_list<R: tauri::Runtime>(app: tauri::AppHandle<R>, server: String) -> TheInstallList {
     let read = smoozy_server_setup::listing::the_list_smoozy_offers().await;
+    // **`Desktop app and delivery` M32b, added 2026-11-13: the reason a read
+    // failed is kept in the diary**, beside the sentence the list shows.
+    if let Err(why) = &read {
+        the_list_reason_goes_to_the_diary(&app, &server, why);
+    }
     let list = the_list(read, the_versions_answered_on(&server));
     the_entries_offered_are_held(&list);
     list
@@ -2014,7 +2446,12 @@ pub fn what_removing_a_blender_costs<R: tauri::Runtime>(
 ) -> TheRemovalWarning {
     let version = the_version_of(&server, &path);
     let live = the_live_jobs_on(&app, &server);
-    let (warning, covered) = the_removal_warning_and_its_set(&path, version, &live);
+    let (mut warning, covered) = the_removal_warning_and_its_set(&path, version, &live);
+    // **`Design/Server Setup § Removing a Blender`, added 2026-11-12: no
+    // *Remove* where the removal cannot take the build** (the four questions,
+    // scout 1.17's first half).
+    let own_area = the_blender_area_of(&app, &server);
+    the_removal_is_offered_where_it_can_be_performed(&mut warning, &path, own_area.as_deref());
     let the_managers_package = smoozy_server_setup::blender::the_managed_package_at(&path);
     if let Ok(mut held) = the_removals_warned().lock() {
         held.insert(
@@ -2175,6 +2612,25 @@ pub fn what_remove_anyway_asks_for(
     Some(asked_for(None))
 }
 
+/// **No *Remove* in the box where *Remove anyway* would reach neither route**
+/// — the same reading the press makes ([`what_remove_anyway_asks_for`]), so
+/// the box never offers what the press refuses. A build the manager holds
+/// already says so in the button's place and keeps its sentence. The four
+/// questions, scout 1.17's first half.
+pub fn the_removal_is_offered_where_it_can_be_performed(
+    warning: &mut TheRemovalWarning,
+    path: &str,
+    smoozys_own_blender_area: Option<&str>,
+) {
+    if warning.remove.is_none() {
+        return;
+    }
+    if what_remove_anyway_asks_for(path, smoozys_own_blender_area, None).is_none() {
+        warning.remove = None;
+        warning.smoozy_cannot_perform_it = Some(Prose::new(words::NOT_INSTALLED_BY_SMOOZY_HERE));
+    }
+}
+
 /// **`Server Setup` B15's removal, started off the drawing thread** (P5) and
 /// answered when it ends — the Telegram placement's shape. **The Blender
 /// table is read again when it ends** (`crate::setting_up::a_run_ends`). The
@@ -2232,7 +2688,7 @@ fn a_removals_ending_saying(
     }) {
         answer
             .saying("the_removed_blender", Said::Value(Verbatim::new(path.to_string())))
-            .saying("no_blender_reading", Said::Prose(Prose::new(words::NO_BLENDER_READING)))
+            .saying("no_blender_reading", Said::Prose(Prose::new(words::NO_BLENDER_ON_THIS_SERVER)))
     } else { answer }
 }
 
@@ -2303,7 +2759,7 @@ pub async fn the_admin_access_box<R: tauri::Runtime>(
 }
 
 /// **The box, composed on the blocking pool.**
-fn the_admin_access_box_is_composed<R: tauri::Runtime>(
+pub(crate) fn the_admin_access_box_is_composed<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     the_step_that_was_refused: &str,
     the_system_would_not_hand_the_password_back: bool,
@@ -2397,6 +2853,10 @@ pub fn a_set_up_act_that_needs_a_connection<R: tauri::Runtime>(
 ) {
     match (act.as_str(), version) {
         (THE_READY_ACTION, _) => the_ready_action_is_driven(app, &queue, server, false),
+        // **The card's *Connect and set up* where no connection stands** — the
+        // four questions, scout 4.6.
+        (CONNECT_THEN_SET_UP, _) => the_card_connects_then_sets_up(app, &queue, server),
+        (INSTALL_THE_ONES_NOT_STARTED, _) => the_installs_not_started_are_driven(app, &queue, server),
         // **`Server Setup` W3's *Set up anyway***: the warning has been shown
         // and the user went ahead, so it is not shown again.
         (THE_READY_ACTION_AFTER_THE_WARNING, _) => {
@@ -2502,7 +2962,16 @@ fn the_ready_action_is_driven<R: tauri::Runtime>(
     after_the_warning: bool,
 ) {
     let Some(point) = the_live_point(&app, &server) else {
-        the_queue_is_told(queue, one_line_about(&server, words::NO_SERVER_IS_CONNECTED));
+        // **Connected, and Smoozy on it not answering**: nothing is lent, so
+        // no setup can run, and *Connect to this server first.* would be
+        // untrue. The next connection repairs it (Sol's look, 2026-11-15,
+        // point 1; `Design/Server Setup § This server`).
+        let said = if smoozy_does_not_answer_while_connected(&app, &server) {
+            words::RECONNECT_TO_REPAIR
+        } else {
+            words::NO_SERVER_IS_CONNECTED
+        };
+        the_queue_is_told(queue, one_line_about(&server, said));
         return;
     };
     // **`Server Setup` Y9a item 6: pressed while a run stands, it waits its
@@ -2513,8 +2982,13 @@ fn the_ready_action_is_driven<R: tauri::Runtime>(
     let told = std::sync::Arc::clone(queue.inner());
     std::thread::spawn(move || {
         let a_render_was_running = if after_the_warning {
+            if the_discard_was_owed_on(&server) {
+                crate::setting_up::the_older_programs_job_may_go(&server);
+            }
             the_warning_was_gone_past(&server)
         } else {
+            // A fresh press: a discard box left unanswered is not a yes.
+            the_discard_is_owed_on(&server, false);
             let owed = the_press_is_marked_while(&told, &server, || {
                 the_warning_owed_before_the_ready_action(&app, &point, &server)
             });
@@ -2601,6 +3075,7 @@ fn a_build_is_chosen<R: tauri::Runtime>(
             how_many: crate::picker::HowMany::One,
             starting_at: None,
             title: Prose::new(words::CHOOSE_A_BLENDER_BUILD),
+            the_value_after_the_title: None,
         };
         let chosen = match crate::picker::ask(&app, &asking) {
             crate::picker::Picked::TheUserChose(paths) => paths
@@ -2687,6 +3162,18 @@ fn the_next_act_is_driven<R: tauri::Runtime>(
     std::thread::spawn(move || the_line_is_driven(&app, &told, &server, next));
 }
 
+/// **`Server Setup` Y9a item 11: the act an ended update began, driven** —
+/// the line as it now stands kept, and the act told and driven off the thread
+/// the update ran on, as the next act after an add's setup is. Registered
+/// once at start. Added 2026-11-11, the Fable review's second sitting,
+/// fault 4.
+pub fn the_line_an_update_began_is_driven<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    crate::setting_up::when_an_update_begins_the_line(Box::new(move |server: &str, first| {
+        the_acts_waiting_are_kept(&app, server, &crate::setting_up::the_acts_still_waiting_on(server));
+        the_next_act_is_driven(&app, server, first);
+    }));
+}
+
 /// **What follows a run that does not drive the line itself, kept** — the
 /// local record written as the line now stands — and handed back as the acts
 /// it stopped, to name, and the next act, to begin once the ending is told.
@@ -2703,12 +3190,19 @@ fn the_line_follows<R: tauri::Runtime>(
             the_acts_waiting_are_kept(app, server, &crate::setting_up::the_acts_still_waiting_on(server));
             (Vec::new(), Some(next))
         }
+        // **Emptied only where no run stands on the server now**: a press
+        // that began its own run as this one ended has written its own line
+        // (Sol's look at the double-check fixes, 2026-11-12).
         WhatFollowsARun::NothingWaits => {
-            the_acts_waiting_are_kept(app, server, &[]);
+            if crate::setting_up::the_kind_being_driven_on(server).is_none() {
+                the_acts_waiting_are_kept(app, server, &[]);
+            }
             (Vec::new(), None)
         }
         WhatFollowsARun::TheseWereNotBegun(stopped) => {
-            the_acts_waiting_are_kept(app, server, &[]);
+            if crate::setting_up::the_kind_being_driven_on(server).is_none() {
+                the_acts_waiting_are_kept(app, server, &[]);
+            }
             (stopped, None)
         }
     }
@@ -2753,6 +3247,19 @@ fn the_line_is_driven<R: tauri::Runtime>(
     the_driver_follows_the_install(app, server, published);
 }
 
+/// **A ready action that took a stopped setup over and could not carry it on
+/// inside a step** — [`crate::setting_up::TheRunsEnding::ItStoppedInsideAStep`].
+/// The four questions, scout 4.8.
+fn the_stop_cannot_resume(came_to: &crate::setting_up::WhereTheSetUpGot) -> bool {
+    matches!(
+        came_to,
+        crate::setting_up::WhereTheSetUpGot::TheRunEnded {
+            ending: crate::setting_up::TheRunsEnding::ItStoppedInsideAStep { .. },
+            ..
+        }
+    )
+}
+
 /// **One act's run, performed on the server's point as it stands now** — so
 /// an act begun after the connection went says so rather than driving a
 /// connection that is not there. Each is the run its own control always
@@ -2786,12 +3293,39 @@ fn the_act_is_performed<R: tauri::Runtime>(
             // **The card's own action asks for no Blender** — `Server Setup`
             // Y6b: a Blender picked in the Blender section is a run of its
             // own kind.
-            let came_to = crate::setting_up::the_ready_action_on(app, &point, server, None);
+            let mut came_to = crate::setting_up::the_ready_action_on(app, &point, server, None);
+            // **`Design/Server Setup § The two ways out`, added 2026-11-12: a
+            // stopped step that cannot resume is ended here, as *End setup*
+            // would end it, and the setup runs again only where that cleared
+            // it** (`Architecture/Server Setup`'s build detail of that day;
+            // the four questions, scout 4.8). The abandon runs on the slot
+            // this press already holds (`Server Setup` Y9).
+            if the_stop_cannot_resume(&came_to) {
+                crate::setting_up::the_act_is_called_in_the_words(server, words::ABANDON_SETUP);
+                an_abandon_is_under_way_on(server, true);
+                let ended = crate::setting_up::the_setup_is_abandoned_on(app, &point, server);
+                an_abandon_is_under_way_on(server, false);
+                if matches!(ended, crate::setting_up::WhatTheAbandonCameTo::Abandoned { .. }) {
+                    crate::setting_up::the_act_is_called_in_the_words(server, words::SET_UP_AGAIN);
+                    came_to = crate::setting_up::the_ready_action_on(app, &point, server, None);
+                }
+            }
             the_ready_action_ended_on(
                 server,
                 confirmed_before.as_deref(),
                 the_installation_the_row_confirms(app, server).as_deref(),
             );
+            // **The Creator's ruling of 2026-11-14 on batch 1 (437): `Server
+            // Setup` F1b's refusal offers to discard the older program's job**,
+            // in W3's box; its yes runs the ready action again with the guard
+            // let go once.
+            if crate::setting_up::an_older_program_holds_work(&came_to) {
+                the_warning_is_held(server, (the_warning_before_discarding_an_older_programs_job(), false));
+                the_discard_is_owed_on(server, true);
+                if let Some(queue) = tauri::Manager::try_state::<std::sync::Arc<TheOneQueue>>(app) {
+                    the_queue_is_told(&queue, the_warning_is_owed_on(server));
+                }
+            }
             came_to
         }
         ASetUpAct::TheTelegramPlacement => {
@@ -2891,7 +3425,13 @@ pub fn the_acts_are_driven_in_turn(
                 act = next;
             }
             _ => {
-                keep(&[]);
+                // **Emptied only where no run stands on the server now**: a
+                // press that began its own run as this one ended has written
+                // its own line, and this would empty it (Sol's look at the
+                // double-check fixes, 2026-11-12).
+                if crate::setting_up::the_kind_being_driven_on(server).is_none() {
+                    keep(&[]);
+                }
                 return any_was_published;
             }
         }
@@ -2917,9 +3457,8 @@ fn the_acts_ending(
     what_a_job_is_called: &mut dyn FnMut(&smoozy_state::identities::Identity) -> Option<String>,
 ) -> Event {
     use crate::setting_up::{ASetUpAct, TheRunsEnding, WhereTheSetUpGot};
-    if let Some(reason) = the_setup_failure_reason(came_to) {
-        crate::setting_up::the_setup_reason_is_kept(server, reason.to_string());
-    }
+    // **`Server Setup` Y7e's reason is among the ending's own words**, which
+    // the answer keeps in *Server output* (changed 2026-11-09).
     let installed = matches!(
         came_to,
         WhereTheSetUpGot::TheRunEnded {
@@ -3161,9 +3700,18 @@ fn an_abandon_is_driven<R: tauri::Runtime>(
     // second way out (`Server Setup` S6) and it is what *Set up again* would
     // otherwise take over.
     if !crate::setting_up::a_run_begins(&server, SetupKind::TheReadyAction) {
-        the_queue_is_told(queue, one_line_about(&server, words::SETUP_IS_ALREADY_RUNNING));
+        // **Refused behind Smoozy's own update, the refusal names the update**
+        // (`Desktop app and delivery` V11, `Design/Server Setup § Asking for
+        // more while a setup runs`, 2026-11-11): no setup is running then.
+        let said = if crate::setting_up::an_update_holds(&server) {
+            crate::surface::servers::the_line_while_smoozys_own_act_holds(&server)
+        } else {
+            words::SETUP_IS_ALREADY_RUNNING
+        };
+        the_queue_is_told(queue, one_line_about(&server, said));
         return;
     }
+    crate::setting_up::the_act_is_called_in_the_words(&server, words::ABANDON_SETUP);
     an_abandon_is_under_way_on(&server, true);
     the_queue_is_told(queue, the_run_moved_on(&server));
     crate::surface::servers::the_work_column_is_told_again(&app);
@@ -3244,6 +3792,15 @@ fn the_live_point<R: tauri::Runtime>(
 pub struct WhatItCameTo {
     pub said: String,
     pub the_machines_own_words: Option<String>,
+    /// **The words are Smoozy's own on this computer, not the server's** —
+    /// its download of its server software (`Server protocol and transfers`
+    /// B10b) and its own record of the switch's phase (`Rented-server
+    /// runtime` G3). **Only where they can be nothing else**: a placement the
+    /// machine refused, or a folder location it would not take, carries the
+    /// machine's words. *Server output* sets them under *From Smoozy on this computer*
+    /// (`Design/Server Setup § The step that failed`, 2026-11-09). Until then
+    /// this named the control the words were opened by.
+    pub the_words_are_smoozys_own: bool,
 }
 
 impl WhatItCameTo {
@@ -3251,6 +3808,7 @@ impl WhatItCameTo {
         WhatItCameTo {
             said: said.into(),
             the_machines_own_words: None,
+            the_words_are_smoozys_own: false,
         }
     }
 
@@ -3258,19 +3816,46 @@ impl WhatItCameTo {
         WhatItCameTo {
             said: said.into(),
             the_machines_own_words: (!words.trim().is_empty()).then(|| words.to_string()),
+            the_words_are_smoozys_own: false,
         }
     }
+
+    /// **The words are Smoozy's own on this computer**, and *Server output*
+    /// says so over them.
+    fn smoozys_own(said: impl Into<String>, words: &str) -> Self {
+        WhatItCameTo {
+            the_words_are_smoozys_own: true,
+            ..WhatItCameTo::with(said, words)
+        }
+    }
+
+    /// **The words are Smoozy's own download's** (`Server protocol and
+    /// transfers` B10b).
+    fn from_the_download(said: impl Into<String>, words: &str) -> Self {
+        WhatItCameTo::smoozys_own(said, words)
+    }
+}
+
+/// **A server setup does not prepare, said as what is supported** — the four
+/// questions, scout 3.4 as Sol narrowed it, 2026-11-11. Both read *Unsupported
+/// operating system.*, and a kind of machine is not an operating system.
+fn the_refusal_of_the_kind(which: &crate::setting_up::WhichReadingRefused) -> WhatItCameTo {
+    use crate::setting_up::WhichReadingRefused;
+    WhatItCameTo::only(format!(
+        "{} {}",
+        match which {
+            WhichReadingRefused::TheFamily => words::ONLY_UBUNTU_AND_DEBIAN,
+            WhichReadingRefused::TheKind => words::THIS_KIND_IS_NOT_SUPPORTED,
+        },
+        words::NOTHING_WAS_CHANGED_ON_IT
+    ))
 }
 
 /// **What a driven setup says, in standard software words** (Rule 9).
 pub fn what_it_came_to(came_to: &crate::setting_up::WhereTheSetUpGot) -> WhatItCameTo {
     use crate::setting_up::{TheRunsEnding, WhereTheSetUpGot};
     match came_to {
-        WhereTheSetUpGot::TheKindOrTheFamilyWouldNotRead { .. } => WhatItCameTo::only(format!(
-            "{} {}",
-            words::NOT_A_MACHINE_SMOOZY_CAN_SET_UP,
-            words::NOTHING_WAS_CHANGED_ON_IT
-        )),
+        WhereTheSetUpGot::TheKindOrTheFamilyWouldNotRead { which } => the_refusal_of_the_kind(which),
         // **Ready to render only where this run published a Blender.** Added
         // 2026-09-22 — a server with no Blender cannot render, and a run that
         // installed none cannot say one is there.
@@ -3290,7 +3875,7 @@ pub fn what_it_came_to(came_to: &crate::setting_up::WhereTheSetUpGot) -> WhatItC
             let reason = the_reason_in(other);
             WhatItCameTo {
                 said: format!("{} {}", words::SETUP_STOPPED, reason.said),
-                the_machines_own_words: reason.the_machines_own_words,
+                ..reason
             }
         }
     }
@@ -3317,7 +3902,16 @@ pub fn what_the_install_came_to(
             ending: TheRunsEnding::AStepFailed { step: smoozy_server_setup::ready_action::Step::Fetch, said },
             ..
         } => WhatItCameTo::with(
-            format!("{} {} {version}.", words::INSTALL_STOPPED, words::COULD_NOT_FETCH_BLENDER),
+            if the_site_refused_this_server(said) {
+                format!(
+                    "{} {} {version}. {}",
+                    words::INSTALL_STOPPED,
+                    words::COULD_NOT_FETCH_BLENDER,
+                    words::BLENDER_ORG_REFUSED_THIS_SERVER
+                )
+            } else {
+                format!("{} {} {version}.", words::INSTALL_STOPPED, words::COULD_NOT_FETCH_BLENDER)
+            },
             said,
         ),
         // **Installed only where the run published a Blender.** A run that
@@ -3336,10 +3930,18 @@ pub fn what_the_install_came_to(
             let reason = the_reason_in(other);
             WhatItCameTo {
                 said: format!("{} {}", words::INSTALL_STOPPED, reason.said),
-                the_machines_own_words: reason.the_machines_own_words,
+                ..reason
             }
         }
     }
+}
+
+/// **Whether blender.org refused the server's download with HTTP 403**, read
+/// off the fetch's own words by the reader beside their composition
+/// (`Design/Server Setup § The step that failed`'s one exception; the night's
+/// live pass, fault 4).
+fn the_site_refused_this_server(the_fetchs_words: &str) -> bool {
+    smoozy_server_setup::the_status_the_fetch_was_refused_with(the_fetchs_words) == Some(403)
 }
 
 /// **The jobs a held-back setup names, called what Queue calls them.** Added
@@ -3418,26 +4020,45 @@ fn the_reason_in(came_to: &crate::setting_up::WhereTheSetUpGot) -> WhatItCameTo 
     use crate::setting_up::{TheRunsEnding, WhereTheSetUpGot};
     use smoozy_server_protocol::placement::performing::WhatThePlacementReached as Reached;
     match came_to {
-        WhereTheSetUpGot::TheKindOrTheFamilyWouldNotRead { .. } => WhatItCameTo::only(format!(
-            "{} {}",
-            words::NOT_A_MACHINE_SMOOZY_CAN_SET_UP,
-            words::NOTHING_WAS_CHANGED_ON_IT
-        )),
+        WhereTheSetUpGot::TheKindOrTheFamilyWouldNotRead { which } => the_refusal_of_the_kind(which),
         WhereTheSetUpGot::TheRentalWouldNotNameItself => {
             WhatItCameTo::only("Could not detect the operating system.")
         }
+        WhereTheSetUpGot::TheProcessorIsNotSupported { named } => WhatItCameTo::smoozys_own(
+            format!("{} {}", words::THE_PROCESSOR_IS_NOT_SUPPORTED, words::NOTHING_WAS_CHANGED_ON_IT),
+            &format!("{} {named}.", words::THE_SERVER_NAMED_ITS_PROCESSOR),
+        ),
         WhereTheSetUpGot::NoCandidateCouldBeOffered { .. }
         | WhereTheSetUpGot::NoRootCouldBeChosen { .. } => {
             WhatItCameTo::only("No writable folder found on the server.")
         }
-        WhereTheSetUpGot::TheHandOverDidNotLand { said } => {
+        // **A full disk is said** (the Rough what-if answers, share 2, 120):
+        // the reading taken at the failure showed nothing left.
+        WhereTheSetUpGot::TheHandOverDidNotLand { said, the_disk_is_full: true } => WhatItCameTo::with(
+            format!("{} {}", words::COULD_NOT_MAKE_ITS_FOLDER, words::THE_SERVER_DISK_IS_FULL),
+            said,
+        ),
+        WhereTheSetUpGot::TheHandOverDidNotLand { said, the_disk_is_full: false } => {
             WhatItCameTo::with(words::COULD_NOT_MAKE_ITS_FOLDER, said)
         }
         WhereTheSetUpGot::TheRootCouldNotBeRecorded { said } => {
             WhatItCameTo::with(words::COULD_NOT_RECORD_ITS_FOLDER, said)
         }
-        WhereTheSetUpGot::TheReleaseWasNotAdmitted { said } => {
-            WhatItCameTo::with(words::COULD_NOT_GET_ITS_PROGRAM, said)
+        WhereTheSetUpGot::SmoozysFolderCouldNotBeFound { said } => {
+            WhatItCameTo::smoozys_own(words::COULD_NOT_FIND_ITS_FOLDER, said)
+        }
+        // **`Server protocol and transfers` B10b: where every try came to no
+        // answer, the card says so and to try again in a few minutes**; the
+        // last address and its answer are Smoozy's own download's words.
+        WhereTheSetUpGot::TheReleaseWasNotAdmitted { said, nothing_answered } => {
+            WhatItCameTo::from_the_download(
+                if *nothing_answered {
+                    words::ITS_PROGRAMS_DOWNLOAD_GOT_NO_RESPONSE
+                } else {
+                    words::COULD_NOT_GET_ITS_PROGRAM
+                },
+                said,
+            )
         }
         WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut { said } => {
             WhatItCameTo::with(words::COULD_NOT_INSTALL_ITS_PROGRAM, said)
@@ -3449,10 +4070,10 @@ fn the_reason_in(came_to: &crate::setting_up::WhereTheSetUpGot) -> WhatItCameTo 
         WhereTheSetUpGot::ThePlacement { reached } => match reached {
             Reached::RolledBack => WhatItCameTo::only(words::ITS_PROGRAM_WAS_PUT_BACK),
             Reached::FailedBeforeCommit { because } => {
-                WhatItCameTo::with(words::COULD_NOT_INSTALL_ITS_PROGRAM, because)
+                WhatItCameTo::smoozys_own(words::COULD_NOT_INSTALL_ITS_PROGRAM, because)
             }
             Reached::RollingBack { because } => {
-                WhatItCameTo::with(words::PUTTING_IT_BACK_DID_NOT_FINISH, because)
+                WhatItCameTo::smoozys_own(words::PUTTING_IT_BACK_DID_NOT_FINISH, because)
             }
             Reached::Deferred { because } => {
                 WhatItCameTo::with(words::WORK_STILL_NEEDS_ITS_PROGRAM, because)
@@ -3477,6 +4098,34 @@ fn the_reason_in(came_to: &crate::setting_up::WhereTheSetUpGot) -> WhatItCameTo 
             words::NOTHING_WAS_INSTALLED_ON_IT
         )),
         WhereTheSetUpGot::TheRunEnded { ending, .. } => match ending {
+            // **`Server Setup` E4's one wrong-password sentence is said as
+            // *Wrong password.*** (the Rough what-if answers, share 2, 136).
+            TheRunsEnding::AStepFailed { step, said }
+                if smoozy_security_and_licence::redaction::read_a_failed_validate(said)
+                    == smoozy_security_and_licence::redaction::ElevationRefusal::WrongPassword =>
+            {
+                WhatItCameTo::with([the_steps_failure_sentence(*step), words::WRONG_PASSWORD].join(" "), said)
+            }
+            // **The check after the setup's restart: Smoozy's own sentence,
+            // whole, with the way on** (the Rough what-if answers, share 2,
+            // 142 and 143). It was said behind *What the server said* under
+            // the driver's failure, and nothing said *Set up again* repeats
+            // only the check.
+            TheRunsEnding::AStepFailed { said, .. }
+                if said == crate::setting_up::THE_GPU_STILL_DOES_NOT_RESPOND =>
+            {
+                WhatItCameTo::only(format!("{said} {}", words::END_SETUP_TO_REINSTALL))
+            }
+            // **`Server Setup` S7b's *busy* is said as such** (the Rough
+            // what-if answers, share 2, 139), never as something broken.
+            TheRunsEnding::AStepFailed { step, said }
+                if smoozy_server_setup::elevated::the_machine_was_busy_with_its_own_updates(said) =>
+            {
+                WhatItCameTo::with(
+                    [the_steps_failure_sentence(*step), words::BUSY_WITH_ITS_OWN_UPDATES].join(" "),
+                    said,
+                )
+            }
             TheRunsEnding::AStepFailed { step, said } => {
                 WhatItCameTo::with(the_steps_failure_sentence(*step), said)
             }
@@ -3714,29 +4363,117 @@ pub fn the_offer_about(server: &str, step: smoozy_server_setup::ready_action::St
 /// with none.** Added 2026-09-21; until then *Try again* started the whole
 /// setup over and carried nothing.
 ///
-/// **The password is handed to the run that asked and to nothing else** — it
-/// crosses the page once, becomes `Security and licence`'s own origin at this
-/// line, and is never written, logged or put on a screen (§13 rules 1, 2 and
-/// 4). **Which lifetime the user chose is taken and is not yet kept past the
-/// run**: the run holds it for its own length, and a later run asks again —
-/// see [`crate::setting_up::TheRunBeingDriven::driven`], where that is said.
+/// **The password is handed to the run that asked** — it crosses the page
+/// once, becomes `Security and licence`'s own origin at this line, and is never
+/// logged or put on a screen (§13 rules 1, 2 and 4); *Save* writes it to the
+/// secret store and nowhere else.
+///
+/// **The choice under the field is kept from 2026-11-11** (the four questions,
+/// scout 1.1): `choice` is the box's own key — *do-not-remember-it*,
+/// *while-connected* or *remember-it* — and the password is kept as it says,
+/// off the drawing thread ([`crate::setting_up::the_password_is_kept_as_chosen`]).
+/// No choice, or one this box does not draw, keeps nothing.
 #[tauri::command]
-pub fn the_admin_access_is_answered(
+pub fn the_admin_access_is_answered<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     queue: State<'_, std::sync::Arc<TheOneQueue>>,
     server: String,
     password: Option<String>,
+    choice: Option<String>,
 ) {
-    let answer = password
-        .filter(|typed| !typed.is_empty())
-        .map(smoozy_security_and_licence::plaintext::Origin::what_the_user_typed);
-    let given = answer.is_some();
-    let taken = crate::setting_up::the_offer_is_answered(&server, answer);
-    // **The run carries on, and the card is asked again** — the run is drawn
-    // on the card since 2026-10-02 (the Creator's notes piece 2), not as a line
-    // in a box.
-    if taken && given {
-        the_queue_is_told(&queue, the_run_moved_on(&server));
+    let told = std::sync::Arc::clone(queue.inner());
+    // **Nothing of the application is needed here since 2026-11-12**: the
+    // keeping is the run's.
+    let _ = &app;
+    std::thread::spawn(move || {
+        the_admin_access_answer_is_taken(
+            &server,
+            password,
+            choice.as_deref(),
+            // **`Server Setup` E2, *a password is kept only once it worked*
+            // (2026-11-12): the choice is noted and the password is not kept
+            // here.** The run keeps it once a step ran behind it
+            // ([`crate::setting_up::the_password_that_worked_is_kept_as_noted`]).
+            &mut |_, choice| crate::setting_up::the_choice_at_the_offer_is_noted(&server, Some(choice)),
+            &mut |_| crate::setting_up::the_choice_at_the_offer_is_noted(&server, None),
+            &mut |event| the_queue_is_told(&told, event),
+        );
+    });
+}
+
+/// **The box's answer, taken** — the command's whole act, with the keeping,
+/// the forgetting and the telling handed in so it can be tested.
+///
+/// **The choice is noted before the run is handed the password** (`keep`),
+/// and the note is let go where the run turns out to have ended (`forget`).
+/// **From 2026-11-12 the password itself is not kept here**: the run keeps it
+/// once a step ran behind it (`Server Setup` E2, *a password is kept only
+/// once it worked*; Fable's fresh look at the admin password, finding 2).
+///
+/// **`Server Setup` E2, *an answer that comes after its run ended*
+/// (2026-11-12, Sol's finding 4): a password for a run that has ended is
+/// neither kept nor used, and the card says so.** Whether the run still waits
+/// is asked before anything is kept; where it ends between that look and the
+/// handing over, what was just kept is forgotten again. *Cancel* on such a box
+/// says nothing. Until then the password was kept, the handing over failed,
+/// and nothing was said.
+pub fn the_admin_access_answer_is_taken(
+    server: &str,
+    password: Option<String>,
+    choice: Option<&str>,
+    keep: &mut dyn FnMut(&smoozy_security_and_licence::plaintext::Origin, MachinePasswordChoice),
+    forget: &mut dyn FnMut(MachinePasswordChoice),
+    told: &mut dyn FnMut(Event),
+) {
+    let password = password.filter(|typed| !typed.is_empty());
+    let Some(password) = password else {
+        // *Cancel*: the offer standing is declined, and nothing is said.
+        crate::setting_up::the_offer_is_answered(server, None);
+        return;
+    };
+    // **The offer is named at the look, and the password goes to that offer
+    // alone**: a run that ends meanwhile, with another run's offer then
+    // standing on the server, is not handed it.
+    let Some(which) = crate::setting_up::the_offer_a_run_still_waits_on(server) else {
+        // **The standing offer, if one is left, goes with its run.**
+        crate::setting_up::the_offer_is_answered(server, None);
+        told(one_line_about(server, words::SETUP_ENDED_THE_PASSWORD_WAS_NOT_USED));
+        return;
+    };
+    let chosen = choice.and_then(the_choice_named);
+    match chosen {
+        Some(choice) => {
+            keep(&smoozy_security_and_licence::plaintext::Origin::what_the_user_typed(password.as_bytes()), choice)
+        }
+        // **No choice: an earlier answer's note is let go**, so this
+        // password is never kept on it.
+        None => forget(MachinePasswordChoice::DoNotRememberIt),
     }
+    let answer = smoozy_security_and_licence::plaintext::Origin::what_the_user_typed(password);
+    // **The run carries on, and the card is asked again** — the run is
+    // drawn on the card since 2026-10-02 (the Creator's notes piece 2), not
+    // as a line in a box.
+    if crate::setting_up::that_offer_is_answered(server, which, Some(answer)) {
+        told(the_run_moved_on(server));
+    } else {
+        // **The run ended between the look and the handing over.**
+        if let Some(choice) = chosen {
+            forget(choice);
+        }
+        told(one_line_about(server, words::SETUP_ENDED_THE_PASSWORD_WAS_NOT_USED));
+    }
+}
+
+/// **The box's key for each choice, read back** — the keys [`a_choice`]
+/// sends. Anything else is no choice.
+pub fn the_choice_named(which: &str) -> Option<MachinePasswordChoice> {
+    [
+        MachinePasswordChoice::DoNotRememberIt,
+        MachinePasswordChoice::WhileThisConnectionLasts,
+        MachinePasswordChoice::RememberIt,
+    ]
+    .into_iter()
+    .find(|choice| a_choice(*choice).which.as_str() == which)
 }
 
 /// One line about a server, on this tab's one kind.
@@ -3903,22 +4640,38 @@ fn what_the_run_is_called_on(server: &str) -> Option<&'static str> {
     })
 }
 
-/// **The answer, with the machine's own words beside it where it printed any**
-/// — behind *What the server said*, whole, never inside the sentence.
+/// **The answer — and the machine's own words, where it printed any, put in
+/// *Server output*, never inside the sentence.**
+///
+/// **`Design/Server Setup § The step that failed` as changed 2026-11-09, the
+/// Creator's twenty-eighth notes, note 1**: the card has no control of its own
+/// for a failure's raw words, so they are kept with the act's words
+/// (`Server Setup` Y7e as changed the same day) — under *From Smoozy on this
+/// computer* where they are this computer's — and the answer says only that
+/// they are there, so the line keeps the failure's shape. *(Until then they
+/// rode the answer behind *What the server said*, and most never reached
+/// *Server output*.)*
 fn the_answer_about(server: &str, came_to: &WhatItCameTo) -> Event {
     let mut event = Event::about(About::TheRun, THE_ANSWER)
         .saying("the_act_is_not_built_yet", Said::Prose(Prose::new(&came_to.said)))
         .saying("close", Said::Prose(Prose::new(words::CLOSE)))
         .saying("server", Said::Value(Verbatim::new(server)));
     if let Some(said) = &came_to.the_machines_own_words {
-        event = event
-            .saying("the_machines_own_words", Said::Value(Verbatim::new(said)))
-            .saying(
-                "what_the_server_said",
-                Said::Prose(Prose::new(words::WHAT_THE_SERVER_SAID)),
-            );
+        crate::setting_up::the_failures_words_are_kept(server, said, came_to.the_words_are_smoozys_own);
+        event = event.saying("its_words_are_in_server_output", Said::Value(Verbatim::new("yes")));
     }
     event
+}
+
+/// **The line an act's words begin under in *Server output*** — the act as
+/// its button names it (`Design/Server Setup § What the last act came to`,
+/// the Creator's twenty-eighth notes, note 7). The ready action is *Set up
+/// this server* whichever of its two buttons took it.
+pub fn the_line_an_acts_words_begin_under(act: &crate::setting_up::ASetUpAct) -> String {
+    match act {
+        crate::setting_up::ASetUpAct::TheReadyAction { .. } => words::SET_UP_THIS_SERVER.to_string(),
+        other => the_act_is_named(&other.as_kept()),
+    }
 }
 
 /// **A run on this server moved on, and the tab is told to ask for its panel**
@@ -3961,7 +4714,13 @@ pub fn the_setup_under_way<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     server: String,
 ) -> Option<TheRunPanel> {
-    the_setup_under_way_on(&server, || the_servers_name(&app, &server).unwrap_or_default())
+    let mut panel = the_setup_under_way_on(&server, || the_servers_name(&app, &server).unwrap_or_default())?;
+    use tauri::Manager;
+    let waited = app.try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>()
+        .and_then(|periods| periods.the_restart_mark_of(&server))
+        .and_then(|mark| mark.waited());
+    the_restart_wait_is_said_on(&mut panel, waited);
+    Some(panel)
 }
 
 /// **[`the_setup_under_way`]'s answer, composed** — with the server's name
@@ -3970,6 +4729,21 @@ pub fn the_setup_under_way<R: tauri::Runtime>(
 /// fourteenth notes, piece S.
 pub fn the_setup_under_way_on(server: &str, the_name: impl FnOnce() -> String) -> Option<TheRunPanel> {
     let server = server.to_string();
+    // **`Design/Server Setup § Asking for more while a setup runs`: what waits
+    // behind Smoozy's own update of the server's program is listed under the
+    // update's line**, with no *Cancel setup*, since the update cannot be
+    // stopped (`Server Setup` Y9a item 11). Added 2026-11-11, the Fable
+    // review's second sitting, fault 4.
+    if crate::setting_up::the_kind_being_driven_on(&server).is_none()
+        && crate::setting_up::an_update_holds(&server)
+        && !crate::setting_up::the_acts_still_waiting_on(&server).is_empty()
+    {
+        let mut panel = the_run_before_its_first_reading(crate::surface::servers::the_line_while_smoozys_own_act_holds(&server), false);
+        panel.cancel = None;
+        panel.what_cancel_leaves = None;
+        the_line_is_drawn_on(&mut panel, &server);
+        return Some(panel);
+    }
     // **A run that has ended answers its steps as its last reading left them,
     // marked as ended** — until the next run begins there (2026-10-26, the
     // worldwide pass's setup faults, fault 4). The card keeps them while its
@@ -4018,6 +4792,12 @@ pub fn the_setup_under_way_on(server: &str, the_name: impl FnOnce() -> String) -
     );
     panel.title = Prose::new(called);
     panel.the_cancel_was_asked = cancelled;
+    // **Once pressed it reads *Cancelling…*** (`Design/Server Setup § A long
+    // step` as changed 2026-11-12).
+    if cancelled && panel.cancel.is_some() {
+        panel.cancel = Some(Prose::new(words::CANCELLING));
+        panel.cancel_held = Some(Prose::new(words::CANCEL_SETUP));
+    }
     panel.the_question = the_question_on(&server);
     // **`Server Setup` Y7a: the newest lines the run has printed**, kept
     // while the steps after them print nothing (`Design/Server Setup § A long
@@ -4186,6 +4966,22 @@ pub struct TheServersOutput {
     pub note: Prose,
     pub close: Prose,
     pub copy: Prose,
+    /// **The panel opens on *Errors*** where the last act ended in a failure
+    /// that carried words and *Errors* holds words (`Design/Server Setup §
+    /// The step that failed`, the Creator's twenty-eighth notes, note 1).
+    pub opens_on_the_errors_tab: bool,
+}
+
+/// **One part of a tab's record**: the line it begins under, where there is
+/// one — the act's name, or *From Smoozy on this computer* — and the words
+/// after it, as shown. **The line is Smoozy's and never a byte of the stream**
+/// (`Desktop app and delivery` M9); the page draws it quieter than the words,
+/// and *Copy* takes it with them. Added 2026-11-09, the twenty-eighth notes,
+/// notes 1 and 7.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ARecordsPart {
+    pub line: Option<Prose>,
+    pub words: Verbatim,
 }
 
 /// One stream's tab.
@@ -4215,6 +5011,11 @@ pub struct AStreamsTab {
     /// Nothing where the two are the same. Added 2026-10-25, the eighteenth
     /// notes, piece 2c.
     pub as_printed: Option<Verbatim>,
+    /// **[`Self::record`] in its parts**, each act's words under the line
+    /// naming it (`Design/Server Setup § What the last act came to`,
+    /// 2026-11-09). Empty where the record is one run of words with no line —
+    /// the record is then drawn as it always was.
+    pub parts: Vec<ARecordsPart>,
 }
 
 /// ***Server output*, opened**: the last run's words on that server, or
@@ -4228,17 +5029,99 @@ pub fn the_servers_output<R: tauri::Runtime>(app: tauri::AppHandle<R>, server: S
 /// apart 2026-10-18 (piece S) so the desk opens the same panel without a
 /// window.
 pub fn the_servers_output_on(server: &str, name: &str) -> Option<TheServersOutput> {
-    let (output, complaints) = crate::setting_up::the_whole_of_what_was_printed_on(server)?;
+    let acts = crate::setting_up::the_acts_words_on(server)?;
     let still_going = crate::setting_up::the_kind_being_driven_on(server).is_some();
     let some_were_not_kept = crate::setting_up::some_of_what_was_printed_was_not_kept_on(server);
-    let mut panel = the_servers_output_kept(name, &output, &complaints, still_going, some_were_not_kept);
-    // `Server Setup` Y7e: a local reason is not the server's output.
-    if !still_going && output.is_empty() && complaints.is_empty() {
-        if let Some(reason) = crate::setting_up::the_setup_reason_on(server) {
-            panel.tabs[0].said = Some(Prose::new(reason));
+    Some(the_servers_output_of_the_acts(
+        name,
+        &acts,
+        still_going,
+        some_were_not_kept,
+        crate::setting_up::the_last_act_failed_on(server),
+    ))
+}
+
+/// **The panel, composed from every act's words kept on the server** —
+/// `Server Setup` Y7a and `Server Setup` Y7e as changed 2026-11-09, the Creator's
+/// twenty-eighth notes, notes 1 and 7: each act's words under the line naming
+/// it, in both tabs; a failure's own words after the act's complaints, under
+/// *From Smoozy on this computer* where they are this computer's. **A tab
+/// holds a record only where some act put words in it**; one that holds none
+/// says what it always said. **It opens on *Errors*** where the last act
+/// failed with words and *Errors* holds words.
+pub fn the_servers_output_of_the_acts(
+    name: &str,
+    acts: &[crate::setting_up::OneActAsKept],
+    still_going: bool,
+    some_were_not_kept: bool,
+    the_last_act_failed: bool,
+) -> TheServersOutput {
+    let parts_of = |errors: bool| -> Vec<(Option<String>, String)> {
+        let mut parts = Vec::new();
+        for act in acts {
+            let printed = if errors { &act.the_complaints } else { &act.the_ordinary_output };
+            if act.called.is_some() || !printed.is_empty() {
+                parts.push((act.called.clone(), printed.clone()));
+            }
+            if errors {
+                if let Some(failed) = &act.its_failures_words {
+                    let line = failed.smoozys_own.then(|| words::FROM_SMOOZY_ON_THIS_COMPUTER.to_string());
+                    parts.push((line, failed.words.clone()));
+                }
+            }
         }
+        // **Each part ends its last line before the next begins**, so a line
+        // or the next act's words never run on from the last word printed.
+        let count = parts.len();
+        for (at, (_, words)) in parts.iter_mut().enumerate() {
+            if at + 1 < count && !words.is_empty() && !words.ends_with('\n') {
+                words.push('\n');
+            }
+        }
+        parts
+    };
+    let holds_words = |parts: &[(Option<String>, String)]| parts.iter().any(|(_, words)| !words.is_empty());
+    let as_one = |parts: &[(Option<String>, String)], shown: bool| -> String {
+        let mut whole = String::new();
+        for (line, words) in parts {
+            if let Some(line) = line {
+                whole.push_str(line);
+                whole.push('\n');
+            }
+            if shown {
+                whole.push_str(&smoozy_server_setup::elevated::as_a_terminal_shows_it(words));
+            } else {
+                whole.push_str(words);
+            }
+        }
+        whole
+    };
+    let (output, complaints) = (parts_of(false), parts_of(true));
+    let mut panel = the_servers_output_kept(
+        name,
+        &if holds_words(&output) { as_one(&output, false) } else { String::new() },
+        &if holds_words(&complaints) { as_one(&complaints, false) } else { String::new() },
+        still_going,
+        some_were_not_kept,
+    );
+    for (tab, parts) in panel.tabs.iter_mut().zip([&output, &complaints]) {
+        if tab.record.is_none() || parts.iter().all(|(line, _)| line.is_none()) {
+            continue;
+        }
+        tab.parts = parts
+            .iter()
+            .map(|(line, words)| ARecordsPart {
+                line: line.as_deref().map(Prose::new),
+                words: Verbatim::new(smoozy_server_setup::elevated::as_a_terminal_shows_it(words)),
+            })
+            .collect();
+        // **Copy takes the words as printed, with the lines as plain text**:
+        // a line is drawn as prose, which may join its last two words.
+        tab.as_printed = Some(Verbatim::new(as_one(parts, false)));
+        tab.record = Some(Verbatim::new(as_one(parts, true)));
     }
-    Some(panel)
+    panel.opens_on_the_errors_tab = the_last_act_failed && panel.tabs[1].record.is_some();
+    panel
 }
 
 /// **The panel's words, composed** — so it can be tested without a window.
@@ -4275,6 +5158,7 @@ pub fn the_servers_output_kept(
                 said_next: None,
                 not_shown: not_shown.clone(),
                 as_printed,
+                parts: Vec::new(),
             };
         }
         if still_going {
@@ -4286,6 +5170,7 @@ pub fn the_servers_output_kept(
                 said_next: Some(Prose::new(SMOOZY_DOES_NOT_KNOW_YET)),
                 not_shown: not_shown.clone(),
                 as_printed: None,
+                parts: Vec::new(),
             };
         }
         AStreamsTab {
@@ -4296,6 +5181,7 @@ pub fn the_servers_output_kept(
             said_next: None,
             not_shown: not_shown.clone(),
             as_printed: None,
+            parts: Vec::new(),
         }
     };
     TheServersOutput {
@@ -4308,6 +5194,7 @@ pub fn the_servers_output_kept(
         note: Prose::new(words::THE_PANELS_NOTE),
         close: Prose::new(words::CLOSE),
         copy: Prose::new(words::COPY),
+        opens_on_the_errors_tab: false,
     }
 }
 
@@ -4327,7 +5214,8 @@ pub fn the_run_before_its_first_reading(called: &str, the_cancel_was_asked: bool
         about_the_render: None,
         what_cancel_leaves: Some(Prose::new(words::CANCEL_SETUP_LEAVES)),
         the_closing_paragraph: None,
-        cancel: Some(Prose::new(words::CANCEL_SETUP)),
+        cancel: Some(Prose::new(if the_cancel_was_asked { words::CANCELLING } else { words::CANCEL_SETUP })),
+        cancel_held: Some(Prose::new(if the_cancel_was_asked { words::CANCEL_SETUP } else { words::CANCELLING })),
         the_cancel_was_asked,
         abandon: None,
         set_up_again: None,
@@ -4340,6 +5228,19 @@ pub fn the_run_before_its_first_reading(called: &str, the_cancel_was_asked: bool
         the_waiting_heading: None,
         the_waiting: Vec::new(),
         install_telegram_while_it_runs: None,
+    }
+}
+
+// `Server Setup` T4: the period's own wait, never a server timestamp.
+fn the_restart_wait_is_said_on(panel: &mut TheRunPanel, waited: Option<std::time::Duration>) {
+    let Some(waited) = waited else { return; };
+    for step in &mut panel.steps {
+        if step.boundary == Boundary::RestartIssued && step.mark.as_str() == "now" {
+            step.the_figure = Some(AStepsFigure {
+                so_far: Verbatim::new(format!("{}m {:02}s", waited.as_secs() / 60, waited.as_secs() % 60)),
+                of: None, whole: None,
+            });
+        }
     }
 }
 
@@ -4471,8 +5372,16 @@ pub(crate) fn the_standing_from(read: Result<String, rusqlite::Error>) -> Option
 }
 
 /// **No machine has been read, so no version has been answered on one.**
-fn the_versions_answered_on(_server: &str) -> Vec<Version> {
-    Vec::new()
+fn the_versions_answered_on(server: &str) -> Vec<Version> {
+    // **`Server Setup` B12's period-held search, the one the Blender table is
+    // drawn from** — `Server Setup` B6a's answered versions. Nothing where none is held, and
+    // then no entry is marked and every entry is offered. *(Until 2026-11-14
+    // this was always empty, so no entry was ever marked: the Rough what-if
+    // answers, share 4, 20 and 366.)*
+    match the_searches_held().lock().ok().and_then(|held| held.get(server).cloned()) {
+        Some(TheBlenderSearch::ItFound { builds, .. }) => builds.iter().map(|build| build.version).collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// **The version that build answered, as the held search read it** — `None`
@@ -4665,6 +5574,8 @@ pub fn the_tab_with(
         WhatTheMachineSaid::AReading(reading) => {
             let mut reading = *reading;
             reading.telegram_is_switched_on = telegram_is_on;
+            reading.the_telegram_install_failed_with =
+                crate::servers::published::what_the_telegram_install_failed_with(server);
             the_card_from(&reading)
         }
         WhatTheMachineSaid::ASetupRunAlone(read) => the_card_from_the_run_alone(
@@ -4684,8 +5595,9 @@ pub fn the_tab_with(
         WhatTheMachineSaid::ConnectedAndNoRunWasFound => the_card_where_no_run_was_found(),
         WhatTheMachineSaid::ConnectedAndNeverSetUp => the_never_set_up_card_with(false),
         WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding => {
-            the_card_where_smoozy_does_not_answer()
+            the_card_where_smoozy_does_not_answer(server)
         }
+        WhatTheMachineSaid::ConnectedAndStillConnecting => the_card_while_smoozy_connects(),
     };
     if the_search_found_no_blender {
         the_card_says_no_blender_was_found(&mut the_card);
@@ -4710,9 +5622,11 @@ pub fn the_tab_with(
         // reading — see [`the_driver_is_drawn_on`].
         the_driver: None,
         the_driver_warning: None,
+        the_cards_help: None,
         // **Drawn beside the tab**, from the local record — see
         // [`the_installs_smoozy_closed_on`].
         the_installs_never_begun: None,
+        install_the_ones_not_started: None,
         // **Drawn beside the tab**, from the run's words this copy keeps —
         // see [`the_servers_words_beside_the_tab`].
         server_output: None,
@@ -4789,6 +5703,13 @@ pub fn the_driver_is_drawn_on(
     let Some(the_driver) = held.the_driver.as_ref() else {
         return;
     };
+    // `Server Setup` W4, advice only: a container's host owns its driver.
+    if the_driver.where_k1_placed_the_machine == smoozy_servers::hardware::WhereK1PlacesIt::AContainer {
+        if let Some(fault) = tab.the_card.the_setup_fault.as_mut() {
+            fault.what_to_do = Prose::new(words::THE_HOSTS_DRIVER);
+            fault.help = Some(crate::the_address_opener::TheHelpAnswer::TheNvidiaDriver.name());
+        }
+    }
     let last_seen = held.last_seen_at.map(|at| Words {
         lead: Prose::new(crate::surface::servers::words::LAST_SEEN),
         values: vec![Verbatim::new(
@@ -4892,7 +5813,7 @@ pub fn the_driver_warning(
     };
     TheDriverWarning {
         said: Prose::new(format!(
-            "{} {}{cuda}, {} {blender} {}",
+            "{} {}{cuda}, {} {blender} {} {} {} {}",
             words::THIS_SERVERS_DRIVER,
             statement.the_drivers_version,
             match statement.below_it {
@@ -4900,6 +5821,9 @@ pub fn the_driver_warning(
                 smoozy_servers::hardware::WhatTheBarStops::CyclesOnTheCard => words::IS_TOO_OLD_FOR_CYCLES_GPU_IN,
             },
             words::AND_LATER,
+            words::WHICH_NEEDS,
+            statement.driver_minimum.iter().map(u32::to_string).collect::<Vec<_>>().join("."),
+            words::OR_NEWER,
         )),
         and: Prose::new(match placed {
             smoozy_servers::hardware::WhereK1PlacesIt::AContainer => {
@@ -4908,6 +5832,7 @@ pub fn the_driver_warning(
             _ => words::SMOOZY_COULDNT_UPDATE_IT,
         }),
         last_seen,
+        help: crate::the_address_opener::TheHelpAnswer::TheNvidiaDriver.name(),
     }
 }
 
@@ -4934,6 +5859,7 @@ pub fn the_no_optix_library_warning(
         )),
         and: Prose::new(words::GPU_JOBS_CANT_RENDER_HERE),
         last_seen,
+        help: crate::the_address_opener::TheHelpAnswer::TheNvidiaDriver.name(),
     }
 }
 
@@ -5197,6 +6123,9 @@ fn the_card_from_the_run_alone(
         // **Only where the machine's own reading of the role was taken**: with
         // no reading of it, *not installed* would be a claim nobody read.
         telegram_is_switched_on: telegram_is_on && what_else.is_some(),
+        // **Read where the full reading is**, which is where a setup that
+        // reached *done* is drawn from.
+        the_telegram_install_failed_with: None,
         a_setup_is_running: read.still_open.then(|| read.record.clone()),
         the_step_in_flight: read.the_step_in_flight,
         the_finished_jobs: the_jobs
@@ -5296,6 +6225,7 @@ pub fn the_reading_where_no_setup_record_stands(
         the_records: Vec::new(),
         telegram_reporting_is_installed: what_else.telegram_reporting_is_installed,
         telegram_is_switched_on: false,
+        the_telegram_install_failed_with: None,
         a_setup_is_running: None,
         the_step_in_flight: None,
         the_finished_jobs,
@@ -5320,10 +6250,22 @@ pub fn the_reading_where_no_setup_record_stands(
 /// as `Design/Server Setup § This server` keeps it on every card; the server
 /// was set up, so it is *Set up again*. Added 2026-09-27, step 10c's
 /// eighth-pass fix piece 6.
-fn the_card_where_smoozy_does_not_answer() -> TheCard {
+///
+/// **While Smoozy repairs its own program there, the state line says the
+/// row's words for the repair, and where the repair failed, the row's words
+/// for that** (`Design/Server Setup § This server` as added 2026-11-15, the
+/// what-if live pass's new fault 2: the card said *Smoozy isn't responding.*
+/// through the whole repair).
+fn the_card_where_smoozy_does_not_answer(server: &str) -> TheCard {
+    use crate::servers::published::WhatSmoozyOnTheServerIs as Carries;
+    let state = match crate::servers::published::what_the_server_carries(server) {
+        Some(Carries::TheRepairIsUnderWay) => crate::surface::servers::words::REPAIRING,
+        Some(Carries::TheRepairFailed { .. }) => crate::surface::servers::words::COULD_NOT_REPAIR,
+        _ => crate::surface::servers::words::SMOOZY_ISNT_RESPONDING,
+    };
     TheCard {
         dot: Verbatim::new("idle"),
-        state: Prose::new(crate::surface::servers::words::SMOOZY_ISNT_RESPONDING),
+        state: Prose::new(state),
         when: None,
         what_was_done: Vec::new(),
         the_render_device: None,
@@ -5358,6 +6300,13 @@ fn the_card_where_no_run_was_found() -> TheCard {
     }
 }
 
+/// **No *Install Blender* on a server the row says is not set up** — the
+/// line stands in its place. `None` is a record that did not answer, and
+/// then the control stays: nothing is taken away on a guess.
+pub fn the_install_is_offered_where_set_up(table: &mut TheBlenderTable, not_set_up: Option<bool>) {
+    table.install_first = (not_set_up == Some(true)).then(|| Prose::new(words::SET_UP_TO_INSTALL_BLENDER));
+}
+
 fn the_table_where_nothing_was_read() -> TheBlenderTable {
     TheBlenderTable {
         version: Prose::new(words::VERSION),
@@ -5365,6 +6314,7 @@ fn the_table_where_nothing_was_read() -> TheBlenderTable {
         rows: Vec::new(),
         instead: Some(plainly(words::NO_BLENDER_READING)),
         install: Prose::new(words::INSTALL_BLENDER),
+        install_first: None,
     }
 }
 
@@ -5388,6 +6338,15 @@ pub const INSTALL_TELEGRAM: &str = "install-telegram";
 /// copy). **It is the row's own act, under the row's own name**, and this tab
 /// hands it to `Servers` rather than performing it.
 pub const CONNECT_AND_SET_UP: &str = "connect-and-set-up";
+/// **The card's own *Connect and set up*, where no connection stands** —
+/// `Design/Server Setup § This server`, added 2026-11-12, and
+/// `Architecture/Servers`' build detail of that day: the user's connect, then
+/// this card's ready action once the connection is lent. The four questions,
+/// scout 4.6.
+pub const CONNECT_THEN_SET_UP: &str = "connect-then-set-up";
+/// ***Install* on the line naming installs Smoozy closed before they
+/// started** — the four questions, scout 2.14.
+pub const INSTALL_THE_ONES_NOT_STARTED: &str = "install-the-ones-not-started";
 /// **`Server Setup` B7's *choose a build on your computer***: the system's
 /// own file picker (`Desktop app and delivery` K11 to K13), then the upload
 /// and the run. Added 2026-10-09, the 38's piece 14b.
@@ -5483,7 +6442,7 @@ fn the_never_set_up_card_with(telegram_only: bool) -> TheCard {
 /// **A ready action that finished** — `Server Setup` Y6a's *that a setup
 /// happened, when, and what it consisted of*.
 fn the_finished_card(reading: &ASetUpReading, record: &TheSetupRecord) -> TheCard {
-    // **W1: *Nothing to prepare* is the run's own ending and not a quiet kind
+    // **W1: *Nothing to install* is the run's own ending and not a quiet kind
     // of failure**, and the step list is what makes it believable.
     let every_step_had_nothing_to_do = matches!(record.ending, Some(HowTheRunEnded::Completed))
         && record
@@ -5678,12 +6637,22 @@ fn what_was_done(reading: &ASetUpReading, record: &TheSetupRecord) -> Vec<ALineO
         // **Pressing it is answered, not acted on, until the machine's program
         // can finish `Server Setup` G2's run** (the 38's piece 11's account,
         // section 1): it gets this tab's one sentence. Added by step 10 piece 8.
-        lines.push(ALineOfWhatWasDone {
-            said: plainly(words::TELEGRAM_NOT_INSTALLED),
-            mark: Some(Prose::new(words::THE_SERVER_IS_NOT_RESTARTED)),
+        //
+        // **Where the last try at placing it failed, the mark is that
+        // failure's sentence in red** — an *Install*'s, or the run that
+        // follows a setup reaching *done*, whose failure is Telegram's and
+        // never the setup's (`Design/Server Setup § Adding Telegram to a
+        // server already set up`, 2026-11-11, the four questions, scout 1.3).
+        let (mark, colour) = match &reading.the_telegram_install_failed_with {
+            Some(failed) => (Prose::new(failed.as_str()), the_marks_colour::FAILED),
             // **Not a step's mark**: it says what *Install* will not do, and
             // the drawing leaves it plain.
-            colour: Verbatim::new(the_marks_colour::PLAIN),
+            None => (Prose::new(words::THE_SERVER_IS_NOT_RESTARTED), the_marks_colour::PLAIN),
+        };
+        lines.push(ALineOfWhatWasDone {
+            said: plainly(words::TELEGRAM_NOT_INSTALLED),
+            mark: Some(mark),
+            colour: Verbatim::new(colour),
             missing: true,
             offer: Some(ALinesOffer { name: Prose::new(words::INSTALL_IT), act: INSTALL_TELEGRAM }),
         });
@@ -5863,6 +6832,7 @@ fn the_setup_fault(reading: &ASetUpReading) -> Option<TheSetupFault> {
     Some(TheSetupFault {
         said: Prose::new(words::THE_LAST_JOB_ASKED_FOR_THE_GPU),
         what_to_do: Prose::new(words::SET_UP_AGAIN_TO_REINSTALL),
+        help: None,
     })
 }
 
@@ -5902,8 +6872,9 @@ pub fn the_table_the_search_found(builds: &[ABuildAsRead]) -> TheBlenderTable {
         version: Prose::new(words::VERSION),
         location: Prose::new(words::WHERE),
         rows: builds.iter().map(a_build_row).collect(),
-        instead: builds.is_empty().then(|| plainly(words::NO_BLENDER_READING)),
+        instead: builds.is_empty().then(|| plainly(words::NO_BLENDER_ON_THIS_SERVER)),
         install: Prose::new(words::INSTALL_BLENDER),
+        install_first: None,
     }
 }
 
@@ -6004,6 +6975,12 @@ pub struct APublishedEntry {
     /// **B6a's mark**, which says a version is present and can never say *this
     /// build*. Absent where nothing has been read from the machine.
     pub mark: Option<Words>,
+    /// **Whether it can be ticked** — `Specs/Server Setup`, *A Blender
+    /// already on the server* (the build runner's ruling of 2026-11-14 on the
+    /// Rough what-if answers 20 and 366): a finished release whose version is
+    /// on this server is not offered, and the page draws it greyed with no
+    /// tick box. An experimental build is always offered.
+    pub offered: bool,
 }
 
 /// **B2 and B6a, composed.**
@@ -6063,13 +7040,13 @@ pub fn the_list(
                     None => part.push((entry, lines_for_entry)),
                 }
             }
-            let drawn = |part: Vec<(&PublishedChannel, Vec<&'static str>)>| -> Vec<APublishedEntry> {
+            let drawn = |part: Vec<(&PublishedChannel, Vec<&'static str>)>, finished: bool| -> Vec<APublishedEntry> {
                 part.into_iter()
-                    .map(|(first, lines)| a_published_entry(first, &lines, &answered_on_the_machine))
+                    .map(|(first, lines)| a_published_entry(first, &lines, &answered_on_the_machine, finished))
                     .collect()
             };
-            let finished = drawn(finished);
-            let unfinished = drawn(unfinished);
+            let finished = drawn(finished, true);
+            let unfinished = drawn(unfinished, false);
             let short = (!listing.entries_that_could_not_be_read.is_empty()).then(|| Words {
                 lead: Prose::new(""),
                 values: vec![Verbatim::new(
@@ -6110,7 +7087,14 @@ fn a_published_entry(
     first: &PublishedChannel,
     lines: &[&'static str],
     answered: &[Version],
+    finished: bool,
 ) -> APublishedEntry {
+    // **`Server Setup` B6a as narrowed 2026-11-14: a finished release already
+    // on this server is not offered.** An experimental build is, whatever its
+    // mark: a version number does not identify a build (`Server Setup` B13). The Rough
+    // what-if answers, share 4 (20, 366).
+    let offered = !(finished
+        && smoozy_server_setup::blender::the_mark_for(first, answered) == TheMark::ThisVersionIsPresent);
     APublishedEntry {
         version: Verbatim::new(format!(
             "{}.{}.{}",
@@ -6125,6 +7109,7 @@ fn a_published_entry(
         ),
         line: Prose::new(lines.join(" \u{b7} ")),
         mark: (!answered.is_empty()).then(|| the_mark(first, answered)),
+        offered,
     }
 }
 
@@ -6271,6 +7256,7 @@ pub fn the_removal_warning(
         })
         .collect();
 
+    let a_job_uses_it = !lines.is_empty();
     TheRemovalWarning {
         title: Words {
             lead: Prose::new(words::REMOVE_BLENDER),
@@ -6294,7 +7280,11 @@ pub fn the_removal_warning(
         the_live_jobs: lines,
         what_is_left: Prose::new(words::SETTINGS_FOLDER_STAYS),
         cancel: Prose::new(words::CANCEL),
-        remove: it_can_be_performed.then(|| Prose::new(words::REMOVE_ANYWAY)),
+        // **`Design/Server Setup` as added 2026-11-11: *anyway* only where a
+        // job uses that Blender.** The four questions, scout 1.17.
+        remove: it_can_be_performed.then(|| {
+            Prose::new(if a_job_uses_it { words::REMOVE_ANYWAY } else { words::REMOVE })
+        }),
         smoozy_cannot_perform_it: (!it_can_be_performed)
             .then(|| Prose::new(words::THE_MANAGER_IS_THE_ROUTE)),
         path: Verbatim::new(path),
@@ -6330,6 +7320,9 @@ pub struct TheAdminAccessBox {
     pub nowhere_to_keep_them: Option<Prose>,
     pub cancel: Prose,
     pub try_again: Prose,
+    /// **The Help answer beside the step's line** — *the login password*'s,
+    /// for every caller (`Design/Whole app § Help links`, 2026-11-13).
+    pub help: &'static str,
 }
 
 /// One of the three lifetimes.
@@ -6379,6 +7372,7 @@ pub fn the_box(
         nowhere_to_keep_them: None,
         cancel: Prose::new(words::CANCEL),
         try_again: Prose::new(words::TRY_AGAIN),
+        help: crate::the_address_opener::TheHelpAnswer::TheLoginPassword.name(),
     }
 }
 
@@ -6445,6 +7439,11 @@ pub struct TheRunPanel {
     /// ***Cancel setup*, the one control while the run goes** — `Server Setup`
     /// Y8's stop.
     pub cancel: Option<Prose>,
+    /// **The other words *Cancel setup* can read** — *Cancelling…* beside
+    /// *Cancel setup* and the other way round — drawn unseen in the control so
+    /// it keeps one width as its words change, and nothing beside it moves
+    /// (UI consistency, finding 45).
+    pub cancel_held: Option<Prose>,
     /// **The user has pressed it**, so it is drawn under way until the run
     /// reaches its boundary and ends.
     pub the_cancel_was_asked: bool,
@@ -6554,35 +7553,26 @@ pub struct AStepsFigure {
     pub whole: Option<Verbatim>,
 }
 
-/// **The step that failed** — one plain sentence, and the machine's own words
-/// behind the control that names them.
+/// **The step that failed** — one plain sentence; the machine's own words
+/// are in *Server output*.
+///
+/// **`Design/Server Setup § The step that failed` as changed 2026-11-09, the
+/// Creator's twenty-eighth notes, note 1: no control of its own.** Until then
+/// the step carried *What the server said* and the panel's tab names and
+/// *Close* for it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct TheFailedStep {
     /// **One plain sentence saying what that step did not do.**
     pub said: Words,
-    /// **The one control the whole app uses for raw text**, named as the
-    /// drawing names it — **and only where there are words to open behind
-    /// it.** *(Until 2026-10-18 it was on every failed step, Smoozy's own
-    /// sentence behind it where a Telegram step stopped on this computer: the
-    /// Creator's twelfth notes, note 2.)*
-    pub what_the_server_said: Option<Prose>,
     /// **The machine's own words, whole and unedited** — S2a. Two streams,
     /// kept apart. Values: they are the machine's text and X7 forbids the point
-    /// touching them.
+    /// touching them. **Never sent to the page**: they are kept in *Server
+    /// output* where this copy keeps no words for the server (`Server Setup`
+    /// Y7a as changed 2026-11-09).
+    #[serde(skip)]
     pub the_output: Option<Verbatim>,
+    #[serde(skip)]
     pub the_complaint: Option<Verbatim>,
-    /// **Each stream's tab is named for its stream**, in the words the shared
-    /// two-stream panel already uses (`Desktop app and delivery` M13a, piece D)
-    /// — must-do 33. *(Until the step 10a round 1 audit of these pieces both tabs
-    /// read *What the server said*.)*
-    pub the_output_tab: Prose,
-    pub the_complaint_tab: Prose,
-    /// **The panel's own control, *Close*** — `Design/Server Setup § The step
-    /// that failed`: *"The panel's Close only closes the panel"*. Added
-    /// 2026-09-21: the second pass on a real rental found the control drawn as
-    /// an empty pill on every panel this tab opened (fault 6), because nothing
-    /// handed the page its word.
-    pub close: Prose,
 }
 
 /// Only Smoozy's recorded failure of this build send has this opening
@@ -6712,6 +7702,7 @@ pub fn the_run_panel(
         // *(Struck 2026-10-02 with the box: *Close* sat beside *Stop* from
         // 2026-09-27, fix piece 9.)*
         cancel: still_going.then(|| Prose::new(words::CANCEL_SETUP)),
+        cancel_held: still_going.then(|| Prose::new(words::CANCELLING)),
         the_cancel_was_asked: false,
         abandon: ended.then(|| Prose::new(words::ABANDON_SETUP)),
         set_up_again: ended.then(|| Prose::new(words::SET_UP_AGAIN)),
@@ -6849,10 +7840,21 @@ fn a_step_line(
                 let build_send = (boundary == Boundary::Started)
                     .then(|| the_recorded_build_send_failure(record)).flatten();
                 let own_sentence = composing.or(build_send);
+                // **`Design/Server Setup § The step that failed`'s one
+                // exception (the night's live pass, fault 4)**: blender.org
+                // refused the download with HTTP 403, read off Smoozy's own
+                // fetch words and nothing of a tool's, so the step says the
+                // cause and what to do. The words stay in *Server output*.
+                let refused = matches!(
+                    (boundary, said),
+                    (Boundary::Fetched, TheFailedStepsWords::SmoozysOwnVerification { what_was_read })
+                        if the_site_refused_this_server(what_was_read)
+                );
                 let sentence = match own_sentence {
-                    Some(own) => Some(own),
-                    None if not_carried_on => Some(words::FAILED_NOT_CARRIED_ON),
-                    None => the_boundarys_failure_sentence(boundary),
+                    Some(own) => Some(own.to_string()),
+                    None if not_carried_on => Some(words::FAILED_NOT_CARRIED_ON.to_string()),
+                    None if refused => Some(format!("{} {}", words::FAILED_FETCH, words::BLENDER_ORG_REFUSED_THIS_SERVER)),
+                    None => the_boundarys_failure_sentence(boundary).map(str::to_string),
                 };
                 sentence.map(|sentence| {
                     // **S2a: the machine's own words are part of the run's
@@ -6868,14 +7870,9 @@ fn a_step_line(
                         ),
                     };
                     TheFailedStep {
-                        said: plainly(sentence),
-                        what_the_server_said: (the_output.is_some() || the_complaint.is_some())
-                            .then(|| Prose::new(words::WHAT_THE_SERVER_SAID)),
+                        said: plainly(&sentence),
                         the_output,
                         the_complaint,
-                        the_output_tab: Prose::new(Stream::TheOrdinaryOutput.the_name_of_the_stream()),
-                        the_complaint_tab: Prose::new(Stream::TheComplaints.the_name_of_the_stream()),
-                        close: Prose::new(words::CLOSE),
                     }
                 })
             }
@@ -7063,6 +8060,42 @@ pub fn the_ready_actions_warning(
     }
 }
 
+/// **Before a setup replaces another copy's** — the Creator's ruling of
+/// 2026-11-14 on batch 1 (58, 128, 353, 354): asked first, saying the other
+/// copy can no longer follow its jobs. W3's box, with no job lines: this copy
+/// cannot read the other's.
+pub fn the_warning_before_replacing_another_copys_setup() -> TheWorkWarning {
+    TheWorkWarning {
+        title: Prose::new(words::ANOTHER_SMOOZY_SET_IT_UP),
+        said: Prose::new(words::REPLACING_IT),
+        the_live_jobs: Vec::new(),
+        not_now: Prose::new(words::NOT_NOW),
+        go_ahead: Prose::new(words::REPLACE),
+    }
+}
+
+/// **Before a setup discards an older program's job** — the Creator's ruling
+/// of 2026-11-14 on batch 1 (437): offered where `Server Setup` F1b refused,
+/// with what is lost said plainly.
+pub fn the_warning_before_discarding_an_older_programs_job() -> TheWorkWarning {
+    TheWorkWarning {
+        title: Prose::new(words::AN_OLDER_SMOOZY_HOLDS_A_JOB),
+        said: Prose::new(words::THAT_JOB_IS_LOST),
+        the_live_jobs: Vec::new(),
+        not_now: Prose::new(words::NOT_NOW),
+        go_ahead: Prose::new(words::DISCARD_AND_SET_UP),
+    }
+}
+
+/// **Whether the live connection found another copy's setup** — the one
+/// reading under which a setup would replace an installation this copy did
+/// not make.
+pub fn another_copys_setup_stands(
+    the_live_connection_read: Option<smoozy_state::identities::InstallationCheck>,
+) -> bool {
+    the_live_connection_read == Some(smoozy_state::identities::InstallationCheck::PresentAndDifferent)
+}
+
 /// **W3's install row**, which warns **only** where the unpack tool has to be
 /// installed on the server first.
 ///
@@ -7072,7 +8105,7 @@ pub fn the_ready_actions_warning(
 pub fn the_unpack_tools_warning(live: &[(String, LiveState)]) -> TheWorkWarning {
     TheWorkWarning {
         title: Prose::new(words::UNPACK_TOOL_FIRST),
-        said: Prose::new(words::THERE_IS_WORK),
+        said: Prose::new(words::JOBS_ARE_RUNNING),
         the_live_jobs: live
             .iter()
             .map(|(name, state)| ALiveJobLine {
@@ -7157,6 +8190,16 @@ fn the_warning_owed_before_the_ready_action<R: tauri::Runtime>(
     server: &str,
 ) -> Option<(TheWorkWarning, bool)> {
     use tauri::Manager;
+    // **Another copy's setup is asked about first** (the Creator's ruling of
+    // 2026-11-14 on batch 1), on the live connection's own reading.
+    let the_live_connection_read = app
+        .try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>()
+        .and_then(|periods| periods.what_the_last_connection_read(server))
+        .filter(|read| read.on_the_connection_that_is_live)
+        .map(|read| read.check);
+    if another_copys_setup_stands(the_live_connection_read) {
+        return Some((the_warning_before_replacing_another_copys_setup(), false));
+    }
     let started = app.try_state::<std::sync::Mutex<crate::start::Started>>()?;
     let record = crate::keys::TheRunsRecord {
         started: started.inner(),
@@ -7232,6 +8275,28 @@ fn the_warning_is_held(server: &str, owed: (TheWorkWarning, bool)) {
     if let Ok(mut held) = the_warnings_shown().lock() {
         held.insert(server.to_string(), owed);
     }
+}
+
+/// **The servers whose standing box is the discard box** (437), so its yes is
+/// known for what it is.
+fn the_discards_owed() -> &'static Mutex<std::collections::HashSet<String>> {
+    static HELD: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    HELD.get_or_init(Default::default)
+}
+
+fn the_discard_is_owed_on(server: &str, owed: bool) {
+    if let Ok(mut held) = the_discards_owed().lock() {
+        if owed {
+            held.insert(server.to_string());
+        } else {
+            held.remove(server);
+        }
+    }
+}
+
+/// Whether the box just answered was the discard box; taken once.
+fn the_discard_was_owed_on(server: &str) -> bool {
+    the_discards_owed().lock().is_ok_and(|mut held| held.remove(server))
 }
 
 /// **The user went ahead past the warning**: it is let go, and what comes back
@@ -7395,6 +8460,41 @@ fn the_setup_reason_goes_to_the_diary<R: tauri::Runtime>(app: &tauri::AppHandle<
         crate::record::server_rows::one(record.connection(), server).ok().flatten())
         .and_then(|row| row.label).unwrap_or_default();
     the_setup_reason_is_recorded(started.diary.as_ref(), started.run.as_ref(), &row, &name, reason);
+}
+
+/// **`Desktop app and delivery` M32b — Blender's download list that could not
+/// be read, and why**, for the server the list was read for. Added
+/// 2026-11-13, the runner's ruling on the scout's list, item 4.
+pub fn the_list_reason_goes_to_the_diary<R: tauri::Runtime>(app: &tauri::AppHandle<R>, server: &str, why: &WhyTheListingCouldNotBeRead) {
+    use tauri::Manager;
+    let Some(started) = app.try_state::<std::sync::Mutex<crate::start::Started>>() else { return };
+    let Ok(started) = started.lock() else { return };
+    let Some(row) = smoozy_state::identities::Identity::read_back(smoozy_state::identities::IdentityKind::LocalServer, server) else { return };
+    let name = started.record.as_ref().and_then(|record|
+        crate::record::server_rows::one(record.connection(), server).ok().flatten())
+        .and_then(|row| row.label).unwrap_or_default();
+    the_list_reason_is_recorded(started.diary.as_ref(), started.run.as_ref(), &row, &name, why);
+}
+
+/// M32b's line: the list's sentence, no file, the server's label, and the
+/// reason the read gave.
+fn the_list_reason_is_recorded(
+    diary: Option<&crate::diary_service::DiaryService>,
+    run: Option<&smoozy_state::identities::Identity>,
+    server: &smoozy_state::identities::Identity,
+    name: &str,
+    why: &WhyTheListingCouldNotBeRead,
+) {
+    use crate::presentation::the_two_hooks::{
+        the_diary_is_handed_a_sentence_and_its_reason, APresentationWithNoRecord, WhoseSentenceItIs,
+    };
+    let _ = the_diary_is_handed_a_sentence_and_its_reason(
+        diary,
+        run,
+        &APresentationWithNoRecord { server_row: server, the_users_label: name, the_files_recorded_path: "" },
+        WhoseSentenceItIs::TheComposersOwn(words::THE_LIST_COULD_NOT_BE_READ),
+        Some(&why.the_reason()),
+    );
 }
 
 /// `Desktop app and delivery` M32a: no installation or file is required.
@@ -7620,6 +8720,68 @@ mod tests {
         assert!(the_run_before_its_first_reading(words::SETTING_UP, true).the_cancel_was_asked);
     }
 
+    /// **`Design/Server Setup § A long step` as changed 2026-11-12: *Cancel
+    /// setup*, once pressed, reads *Cancelling…*.** The live pass of that date,
+    /// the Creator's note 2: the pressed control had no text and no name.
+    #[test]
+    fn cancel_setup_once_pressed_keeps_words() {
+        let pressed = the_run_before_its_first_reading(words::SETTING_UP, true);
+        assert_eq!(pressed.cancel, Some(Prose::new(words::CANCELLING)));
+        let not_pressed = the_run_before_its_first_reading(words::SETTING_UP, false);
+        assert_eq!(not_pressed.cancel, Some(Prose::new(words::CANCEL_SETUP)));
+    }
+
+    /// **The picture of *Cancelling…* on the running card, item 7 of the live
+    /// pass's leftovers**, taken where `SMOOZY_THE_LEFTOVERS_PICTURES` names a
+    /// folder, light and dark, through the real `web/set-up.js` and the
+    /// application's stylesheets, the other screens stood in. The card is the
+    /// application's own composition of a run whose *Cancel setup* was pressed
+    /// (`Design/Server Setup § A long step`, 2026-11-12). Nothing is measured;
+    /// without the variable it does nothing.
+    #[test]
+    fn the_cancelling_picture_is_taken() {
+        let Some(pictures) = std::env::var_os("SMOOZY_THE_LEFTOVERS_PICTURES") else { return };
+        let pictures = std::path::PathBuf::from(pictures);
+        fs::create_dir_all(&pictures).expect("the pictures' folder");
+        let panel = serde_json::to_string(&the_run_before_its_first_reading(words::SETTING_UP, true)).expect("it serialises");
+        let stand_ins: [(&str, &str); 5] = [
+            ("event-route.js", "export function whenTold() {}"),
+            (
+                "a-server.js",
+                "export const FILES = \"files\"; export const SET_UP = \"setupview\"; export function aTabIsRegistered(tab) { globalThis.theTab = tab; } export function theCurrentTabIs() {}",
+            ),
+            ("files.js", "export function theBrowserIsOpenedAt() {}"),
+            ("the-rail.js", "export const TRANSFERS = \"transfersview\"; export function theCurrentPlaceIs() {}"),
+            ("servers.js", "export function theConnectionFailureOn() { return null; } export function theConnectionFailureIsTakenAway() {}"),
+        ];
+        // **A test-only entry on the temporary copy** reaches the card's own
+        // drawing, as `focus.rs`'s exports do; the installed page gains none.
+        let exports: [(&str, &str); 1] = [(
+            "set-up.js",
+            "export function theRunCardIsDrawnForAPicture(into, panel) { globalThis.theTab.itIsDrawn(into); theRunCardIsDrawn(panel, \"row\"); }",
+        )];
+        for theme in ["light", "dark"] {
+            let page = r#"<!doctype html>
+<html lang="en" data-theme="THEME" data-system="macos"><head><meta charset="utf-8"><link rel="stylesheet" href="smoozy.css">
+<style>html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);} .setup{height:100vh;} #out{display:none;}</style></head>
+<body><div class="setup" id="setupview"></div><pre id="out"></pre>
+<script>window.__TAURI__ = { core: { invoke: async () => null } };</script>
+<script type="module">
+import { theRunCardIsDrawnForAPicture } from './set-up.js';
+theRunCardIsDrawnForAPicture(document.getElementById('setupview'), PANEL);
+</script></body></html>"#
+                .replace("THEME", theme)
+                .replace("PANEL", &panel);
+            crate::surface::focus::a_page_with_stand_ins_in_a_real_browser(
+                &format!("cancelling-{theme}"),
+                &page,
+                &[&exports],
+                &stand_ins,
+                Some(&pictures.join(format!("Cancelling on the running card, after, {theme}.png"))),
+            );
+        }
+    }
+
     /// This file's working half — everything before the tests. **The sweeps
     /// below read it rather than the whole file**, because the things they
     /// forbid are written out here in order to forbid them.
@@ -7667,7 +8829,11 @@ mod tests {
     /// *(Twenty-two until 2026-10-02, when the plan pass for the Creator's
     /// notes drew `su-connect` — the card while an add's connection is made,
     /// the Creator's notes piece 3.)*
-    const THE_DRAWN_STATES: [&str; 40] = [
+    /// *(Forty until 2026-11-09, when the twenty-eighth notes' piece 2 drew
+    /// and built `su-dl` and `su-dllog`: a setup whose download got no
+    /// response, and its Server output on Errors with each act named.)*
+    const THE_DRAWN_STATES: [&str; 45] = [
+        "su-unsupported-cpu",
         "su",
         "su-connect",
         "su-connectfail",
@@ -7694,6 +8860,10 @@ mod tests {
         "su-tgnew",
         "su-going",
         "su-busy",
+        // The Creator's ruling of 2026-11-14 on batch 1: replacing another
+        // copy's setup is asked about first.
+        "su-other",
+        "su-discard",
         "su-fail",
         "su-step",
         "su-rm",
@@ -7711,6 +8881,9 @@ mod tests {
         "su-fetchlog",
         "su-stepten",
         "su-steptenlog",
+        // The twenty-eighth notes, notes 1 and 7, 2026-11-09.
+        "su-dl",
+        "su-dllog",
     ];
 
     fn at(seconds: u64) -> std::time::SystemTime {
@@ -7759,6 +8932,7 @@ mod tests {
             the_records: vec![a_finished_run(WhatTheStepDid::Performed)],
             telegram_reporting_is_installed: true,
             telegram_is_switched_on: true,
+            the_telegram_install_failed_with: None,
             a_setup_is_running: None,
             the_step_in_flight: None,
             the_finished_jobs: WhatTheThreeQuestionsAnswered {
@@ -7968,12 +9142,12 @@ mod tests {
     }
 
     /// **`Server Setup` W1: a *Set up* that placed Smoozy's program never reads
-    /// *Nothing to prepare* or *Nothing was installed and nothing was
+    /// *Nothing to install* or *Nothing was installed and nothing was
     /// changed.*** Step 10c's twelfth-pass fix piece 6, in the twelfth pass's
     /// own order: a server added plainly confirms no installation, *Set up this
     /// server* places one, and the run after it finds every step with nothing
     /// to do. **The same run after a press that placed nothing still reads
-    /// *Nothing to prepare***, which is W1's own case.
+    /// *Nothing to install***, which is W1's own case.
     #[test]
     fn a_set_up_that_placed_smoozy_reads_as_a_setup_that_did_something() {
         const SERVER: &str = "twelfth-pass fix piece 6 — Hyperstack A6000 two";
@@ -8124,6 +9298,44 @@ mod tests {
         let card = the_card_from(&reading);
         assert_eq!(said(&card, words::TELEGRAM_STEP), 1);
         assert_eq!(said(&card, words::TELEGRAM_NOT_INSTALLED), 1, "{:?}", card.what_was_done);
+    }
+
+    /// **A Telegram placement that failed after a setup reached *done* shows on
+    /// Telegram's own line, and the setup still reads ready** —
+    /// `Design/Server Setup § Adding Telegram to a server already set up` and
+    /// the architecture's `Server Setup` G2, as changed 2026-11-11 (the four questions, scout
+    /// 1.3). The line's mark is the failure's sentence in red, with *Install*.
+    #[test]
+    fn a_telegram_failure_after_done_is_said_on_telegrams_own_line() {
+        let mut reading = a_reading();
+        let mut record = a_finished_run(WhatTheStepDid::Performed);
+        record.the_composed_list.retain(|it| *it != Boundary::Telegram);
+        record.the_boundaries_reached.retain(|it| it.boundary != Boundary::Telegram);
+        reading.the_records = vec![record];
+        reading.telegram_reporting_is_installed = false;
+        let sentence = "Telegram token no longer saved on this computer. Replace it in Settings.";
+        reading.the_telegram_install_failed_with = Some(sentence.to_string());
+        let card = the_card_from(&reading);
+        assert_eq!(card.dot.as_str(), the_card_from(&a_reading()).dot.as_str(), "the setup still reads ready");
+        assert_eq!(card.state, the_card_from(&a_reading()).state, "the setup still reads ready");
+        let line = card
+            .what_was_done
+            .iter()
+            .find(|line| line.said == plainly(words::TELEGRAM_NOT_INSTALLED))
+            .expect("Telegram's line is there");
+        assert_eq!(line.mark, Some(Prose::new(sentence)));
+        assert_eq!(line.colour.as_str(), the_marks_colour::FAILED);
+        assert!(line.offer.is_some(), "Install is offered");
+
+        // **With no failure held, the line is as it was.**
+        reading.the_telegram_install_failed_with = None;
+        let card = the_card_from(&reading);
+        let line = card
+            .what_was_done
+            .iter()
+            .find(|line| line.said == plainly(words::TELEGRAM_NOT_INSTALLED))
+            .expect("Telegram's line is there");
+        assert_eq!(line.mark, Some(Prose::new(words::THE_SERVER_IS_NOT_RESTARTED)));
     }
 
     /// **The page puts each step mark's colour on the mark, from the value the
@@ -8603,10 +9815,18 @@ mod tests {
             .nth(1)
             .and_then(|rest| rest.split("\n}\n").next())
             .expect("the reading the tab draws from");
+        // **Since 2026-11-15 the deciding is its own function**, handed the
+        // server's name as the list draws it.
         assert!(
-            reading_it.contains("read.the_clock = the_servers_name(app, server).unwrap_or_default();"),
+            reading_it.contains("|| the_servers_name(app, server).unwrap_or_default(),"),
             "the tab draws the run's own clock name, which is the machine's identity"
         );
+        let deciding = source
+            .split("pub(crate) fn what_the_card_as_read_says(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .expect("the deciding");
+        assert!(deciding.contains("read.the_clock = the_servers_name();"));
     }
 
     /// **`su-fail` and `su-step` — the three marks, and the failure shape on
@@ -8661,9 +9881,9 @@ mod tests {
                 words::ABANDON_SETUP,
                 words::THE_CLOSING_PARAGRAPH_TWO
             ),
-            "Server checked just now. Set up again resumes where it stopped. Abandon setup ends it and keeps what is installed."
+            "Set up again resumes where it stopped. End setup keeps what is installed and lets jobs run."
         );
-        assert_eq!(words::THE_RETRY_PARAGRAPH_ONE, "Server checked just now.");
+        assert_eq!(words::THE_RETRY_PARAGRAPH_ONE, "Jobs can still run on this server.");
     }
 
     /// **`su-step` — a step that ran and failed carries the one failure shape,
@@ -9064,6 +10284,26 @@ mod tests {
         assert!(warning.smoozy_cannot_perform_it.is_none());
     }
 
+    /// **`Design/Server Setup` as added 2026-11-11: with no job using that
+    /// Blender, the button reads *Remove*; with one, *Remove anyway*.** The
+    /// four questions, scout 1.17.
+    #[test]
+    fn four_questions_1_17_remove_says_anyway_only_where_a_job_uses_it() {
+        let alone = the_removal_warning("/root/smoozy/blender/5.2.2/blender", None, &[], None);
+        assert_eq!(alone.remove, Some(Prose::new(words::REMOVE)));
+        let rendering = ALiveJob {
+            state: LiveState::Rendering,
+            recorded_build_path: "/root/smoozy/blender/5.2.2/blender".to_string(),
+        };
+        let used = the_removal_warning(
+            "/root/smoozy/blender/5.2.2/blender",
+            None,
+            &[("Kitchen — final".to_string(), rendering)],
+            None,
+        );
+        assert_eq!(used.remove, Some(Prose::new(words::REMOVE_ANYWAY)));
+    }
+
     /// **`Server Setup` §13 item 21: a managed Blender under a package name
     /// outside the fixed set has no admissible removal carriage.**
     ///
@@ -9190,7 +10430,9 @@ mod tests {
             .and_then(|rest| rest.split("\n});\n").next())
             .expect("the answer's handler");
         assert!(!handler.contains("aBox()"), "an answer opens a box");
-        assert!(page.contains("close: word.close,"));
+        // **From 2026-11-09 the answer's line opens no panel of its own**:
+        // its words are in *Server output* (the twenty-eighth notes, note 1).
+        assert!(!page.contains("close: word.close,"));
         assert!(!page.contains("said.the_card.the_action.name, () => theBoxIsClosed()"));
     }
 
@@ -9215,40 +10457,19 @@ mod tests {
     /// word, `Preparation/Design/Mockup/Smoozy.html` line 3112, and
     /// `Design/Server Setup § The step that failed`'s *"The panel's Close only
     /// closes the panel"*. Until then the control was an empty pill.
+    ///
+    /// **From 2026-11-09 the tab opens one panel, *Server output***: the
+    /// failed step's and the last act's own *What the server said* went (the
+    /// Creator's twenty-eighth notes, note 1).
     #[test]
     fn every_words_panel_this_tab_opens_carries_its_close() {
         let page = the_page();
         let opened = page.matches("theWordsPanel({").count();
-        assert_eq!(opened, 3, "a panel was added or removed; hold it to this too");
-        assert!(page.contains("close: word.close,"));
-        assert!(page.contains("close: failed.close,"));
+        assert_eq!(opened, 1, "a panel was added or removed; hold it to this too");
         // ***Server output*'s, from 2026-10-18** (the thirteenth notes,
         // piece H).
         assert!(page.contains("close: output.close,"));
-        let failed = TheFailedStep {
-            said: plainly(words::WHAT_THE_SERVER_SAID),
-            what_the_server_said: Some(Prose::new(words::WHAT_THE_SERVER_SAID)),
-            the_output: None,
-            the_complaint: None,
-            the_output_tab: Prose::new(Stream::TheOrdinaryOutput.the_name_of_the_stream()),
-            the_complaint_tab: Prose::new(Stream::TheComplaints.the_name_of_the_stream()),
-            close: Prose::new(words::CLOSE),
-        };
-        assert_eq!(failed.close, Prose::new(words::CLOSE));
         assert_eq!(words::CLOSE, "Close");
-    }
-
-    /// **The two tabs of a failed step's words are named for their streams**
-    /// (must-do 33), in the shared panel's own words.
-    #[test]
-    fn the_two_stream_tabs_are_named_for_their_streams() {
-        let page = the_page();
-        assert!(page.contains("name: failed.the_output_tab"));
-        assert!(page.contains("name: failed.the_complaint_tab"));
-        assert_ne!(
-            Stream::TheOrdinaryOutput.the_name_of_the_stream(),
-            Stream::TheComplaints.the_name_of_the_stream()
-        );
     }
 
     /// **The one field the box changes between callers is the step's name.**
@@ -9345,6 +10566,52 @@ mod tests {
         assert!(list.short.is_some());
     }
 
+    /// **The Rough what-if answers, share 4 (20, 366), the build runner's
+    /// ruling: a finished release already on this server is not offered**
+    /// (`Server Setup` B6a as narrowed 2026-11-14). It keeps its mark and is
+    /// drawn greyed with no tick box; an experimental build of a version on
+    /// the server is still offered; with nothing read, everything is. *Before,
+    /// the same release could be installed again into a second folder.*
+    #[test]
+    fn rough_share_4_a_finished_release_already_on_the_server_is_not_offered() {
+        let a_channel = |risk: Risk, version: Version, file: Option<&str>| PublishedChannel {
+            track: if risk == Risk::Stable { "latest".to_string() } else { String::new() },
+            risk,
+            version,
+            released_at: String::new(),
+            size_bytes: 0,
+            the_build_services_file: file.map(str::to_string),
+        };
+        let stable = Version { major: 5, minor: 2, patch: 2 };
+        let alpha = Version { major: 5, minor: 3, patch: 0 };
+        let listing = || smoozy_server_setup::listing::TheListingAsRead {
+            channels: vec![
+                a_channel(Risk::Stable, stable, None),
+                a_channel(Risk::Alpha, alpha, Some("blender-5.3.0-alpha+main.64d181010e0d-linux.x86_64-release.tar.xz")),
+            ],
+            entries_that_could_not_be_read: Vec::new(),
+        };
+        let on_the_server = the_list(Ok(listing()), vec![stable, alpha]);
+        assert!(!on_the_server.finished[0].offered, "a release on the server is not offered");
+        assert_eq!(on_the_server.finished[0].mark, Some(plainly(words::ON_THIS_SERVER)), "and keeps its mark");
+        assert!(on_the_server.unfinished[0].offered, "an experimental build of that version still is");
+        let elsewhere = the_list(Ok(listing()), vec![Version { major: 5, minor: 2, patch: 1 }]);
+        assert!(elsewhere.finished[0].offered, "another patch of the line is not this release");
+        let unread = the_list(Ok(listing()), Vec::new());
+        assert!(unread.finished.iter().chain(unread.unfinished.iter()).all(|entry| entry.offered));
+
+        // **The page draws it greyed with no tick box, and a press does
+        // nothing.**
+        let page = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web/set-up.js"))
+            .expect("the page is readable");
+        assert!(page.contains("const offered = entry.offered !== false;"));
+        assert!(page.contains("else mark.setAttribute(\"aria-disabled\", \"true\");"));
+        assert!(page.contains("if (offered) {\n          mark.addEventListener(\"click\", pick);"));
+        let style = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web/set-up.css"))
+            .expect("the style is readable");
+        assert!(style.contains(".fmt[aria-disabled=\"true\"] > .cb { visibility: hidden; }"));
+    }
+
     /// **`Server Setup` B2's line of 2026-11-02: the words the list says are
     /// true**, one entry being one entry, and nothing said where nothing is short.
     #[test]
@@ -9438,6 +10705,38 @@ mod tests {
             "X7: a version never travels inside a sentence the point has touched"
         );
         assert!(warning.dont_install_it.as_str().contains("Don"));
+    }
+
+    /// **The Creator's rulings of 2026-11-14 on batch 1**: a setup that
+    /// would replace another copy's is asked about first, saying what the
+    /// other copy loses (58, 128, 353, 354); an older program's job is
+    /// discarded only on *Discard that job and set up*, which says what is
+    /// lost (437). Before this, the first replaced without a word and the
+    /// second offered no way on.
+    #[test]
+    fn batch_1_rulings_replacing_or_discarding_is_asked_first() {
+        use smoozy_state::identities::InstallationCheck;
+        let plain = |prose: &Prose| prose.as_str().replace('\u{a0}', " ").replace('\u{2019}', "'");
+        assert!(another_copys_setup_stands(Some(InstallationCheck::PresentAndDifferent)));
+        for not_another in [
+            None,
+            Some(InstallationCheck::Absent),
+            Some(InstallationCheck::PresentAndEqualConfirmed),
+            Some(InstallationCheck::PresentAndTheSupervisorDidNotAnswer),
+        ] {
+            assert!(!another_copys_setup_stands(not_another));
+        }
+        let replace = the_warning_before_replacing_another_copys_setup();
+        assert_eq!(plain(&replace.title), "Another Smoozy set up this server");
+        assert!(plain(&replace.said).ends_with("The other copy can no longer follow its jobs."));
+        assert_eq!(plain(&replace.go_ahead), "Replace");
+        assert!(replace.the_live_jobs.is_empty());
+        let discard = the_warning_before_discarding_an_older_programs_job();
+        assert_eq!(plain(&discard.go_ahead), "Discard that job and set up");
+        assert!(plain(&discard.said).contains("that job is lost"));
+        the_discard_is_owed_on("batch-1-ruling", true);
+        assert!(the_discard_was_owed_on("batch-1-ruling"));
+        assert!(!the_discard_was_owed_on("batch-1-ruling"), "taken once");
     }
 
     /// **`su-busy` and `su-unpack` — `Server Setup` W3's two warning rows, and
@@ -9750,6 +11049,61 @@ mod tests {
         )
     }
 
+    /// **The Help links on the Set up tab** (`Design/Whole app § Help
+    /// links`, 2026-11-13): both driver warnings, and the container's driver
+    /// advice on a setup fault, carry *the NVIDIA driver*'s answer; the card
+    /// where a first connection was not made carries *Could not connect*'s,
+    /// and only for a *Could not connect*; the admin password box carries
+    /// *the login password*'s, for every caller.
+    #[test]
+    fn the_set_up_tab_says_which_help_answer_each_line_has() {
+        use smoozy_servers::hardware::WhereK1PlacesIt::{AContainer, ItsOwnKernel};
+        let statement = smoozy_servers::hardware::TheDriverStatement {
+            the_drivers_version: "550.163.01".into(),
+            cuda_version: Some("12.4".into()),
+            from_blender: (5, 2, 0),
+            below_it: smoozy_servers::hardware::WhatTheBarStops::Optix,
+            driver_minimum: &[570],
+        };
+        for placed in [AContainer, ItsOwnKernel] {
+            assert_eq!(the_driver_warning(&statement, placed, false).help, "nvidia-driver");
+        }
+        let no_optix = the_no_optix_library_warning(&the_driver("580.178.04", Some("13.0"), AContainer), false);
+        assert_eq!(no_optix.help, "nvidia-driver");
+        let serialised = serde_json::to_value(&no_optix).expect("it serialises");
+        assert_eq!(serialised["help"], "nvidia-driver");
+
+        // The container's driver advice, and only it, on a setup fault.
+        for (placed, help) in [(AContainer, Some("nvidia-driver")), (ItsOwnKernel, None)] {
+            let mut tab = a_ready_tab_with(&TheDriverAsHeld::default());
+            tab.the_card.the_setup_fault = Some(TheSetupFault {
+                said: Prose::new(words::THE_LAST_JOB_ASKED_FOR_THE_GPU),
+                what_to_do: Prose::new(words::SET_UP_AGAIN_TO_REINSTALL),
+                help: None,
+            });
+            the_driver_is_drawn_on(&mut tab, &held_live(the_driver("550.163.01", None, placed), false), &[]);
+            assert_eq!(tab.the_card.the_setup_fault.unwrap().help, help, "{placed:?}");
+        }
+
+        // The card where a first connection was not made.
+        use crate::surface::servers::{A_CONNECT_THAT_WAS_NOT_MADE_SAYS_WHY, IT_IS_NOT_A_LINUX_MACHINE_ANSWER, THE_CONNECTION_WAS_NOT_MADE_ANSWER};
+        let mut could_not_connect = vec![THE_CONNECTION_WAS_NOT_MADE_ANSWER];
+        could_not_connect.extend(A_CONNECT_THAT_WAS_NOT_MADE_SAYS_WHY);
+        for failed in could_not_connect {
+            let mut tab = a_ready_tab_with(&TheDriverAsHeld::default());
+            the_card_where_no_connection_stands(&mut tab, false, false, false, Some(failed), true);
+            assert_eq!(tab.the_cards_help, Some("could-not-connect"), "{failed}");
+        }
+        let mut tab = a_ready_tab_with(&TheDriverAsHeld::default());
+        assert_eq!(tab.the_cards_help, None);
+        the_card_where_no_connection_stands(&mut tab, false, false, false, Some(IT_IS_NOT_A_LINUX_MACHINE_ANSWER), true);
+        assert_eq!(tab.the_cards_help, None, "not a Linux server is not Could not connect");
+
+        // The admin password box, whoever asks.
+        assert_eq!(the_box("Installing the GPU driver", None, false).help, "login-password");
+        assert_eq!(the_box("Installing the GPU driver", None, true).help, "login-password");
+    }
+
     /// **The card's driver line** — *NVIDIA driver 595.91.07 · CUDA 13.2*,
     /// the two figures as values, on a card read now; greyed with *last seen*
     /// and this computer's moment where the reading is not this connection's
@@ -9806,10 +11160,10 @@ mod tests {
             warning.said,
             Prose::new(
                 "This server's NVIDIA driver, 550.163.01 (CUDA 12.4), is too old for OptiX in \
-                 Blender 5.2 and later."
+                 Blender 5.2 and later, which needs 570 or newer."
             )
         );
-        assert_eq!(warning.and, Prose::new("It can't be updated here."));
+        assert_eq!(warning.and, Prose::new("It can't be updated here: pick an older Blender or render on the CPU."));
         assert!(!warning.last_seen);
         assert_eq!(tab.the_card.dot.as_str(), "busy", "with the amber dot");
 
@@ -9819,10 +11173,10 @@ mod tests {
             warning.said,
             Prose::new(
                 "This server's NVIDIA driver, 570.211.01 (CUDA 12.8), is too old for OptiX in \
-                 Blender 5.2.1 and later."
+                 Blender 5.2.1 and later, which needs 575 or newer."
             )
         );
-        assert_eq!(warning.and, Prose::new("It could not be updated."));
+        assert_eq!(warning.and, Prose::new("It could not be updated: pick an older Blender or render on the CPU."));
         assert_eq!(tab.the_card.dot.as_str(), "busy");
 
         // **`Rendering` L23a's bullet of 2026-11-02, the live pass's own figures:
@@ -9833,10 +11187,10 @@ mod tests {
             warning.said,
             Prose::new(
                 "This server's NVIDIA driver, 575.64.03 (CUDA 12.9), is too old for Cycles GPU rendering in \
-                 Blender 5.3 and later."
+                 Blender 5.3 and later, which needs 580 or newer."
             )
         );
-        assert_eq!(warning.and, Prose::new("It can't be updated here."));
+        assert_eq!(warning.and, Prose::new("It can't be updated here: pick an older Blender or render on the CPU."));
 
         // **`su-optixoff` — a machine Smoozy can update says nothing**: setup
         // brings the driver up, and the Blender rows carry the tag instead.
@@ -10215,7 +11569,7 @@ console.log(JSON.stringify({ before, after, late: versions() }));"#
         // **Nothing else on the card moves**: the steps still say what the run
         // did, and the table says no Blender was read.
         assert!(!none.the_card.what_was_done.is_empty());
-        assert_eq!(none.the_table.instead, Some(plainly(words::NO_BLENDER_READING)));
+        assert_eq!(none.the_table.instead, Some(plainly(words::NO_BLENDER_ON_THIS_SERVER)));
         // **Where a Blender was found, *Ready to render* stands.**
         let one = the_tab_with(set_up(), "server-1", a_build_found, false);
         assert_eq!(one.the_card.state, Prose::new(words::READY_TO_RENDER));
@@ -10351,6 +11705,75 @@ console.log(JSON.stringify(out));"#
         assert!(drawn("another").contains(&plain(Prose::new(ANOTHER).as_str())), "another act's line went: {out}");
     }
 
+    /// **Fable's fresh look at the admin password, finding 3 (2026-11-12):
+    /// the admin-access box never opens over another server.** Server 1's run
+    /// asks for the box; composing it reads the password store, which can
+    /// take seconds. In that gap the user goes to server 2. **Before the fix**
+    /// the box then opened over server 2, naming the step and not the server,
+    /// and what was typed went to server 1's run. Now the box is not drawn
+    /// and the offer is declined, as any offer nobody can see is. Runs
+    /// `web/set-up.js` under Node.
+    #[test]
+    fn fresh_look_3_the_admin_box_does_not_open_over_another_server() {
+        let tab = the_tab(
+            WhatTheMachineSaid::ASetupRunAndTheMachine(
+                Box::new(the_finished_run_as_read()),
+                Box::new(the_rest_with(None, None, Some(false))),
+            ),
+            "server-1",
+        );
+        let asked = the_box("Install the unpack tool", None, false);
+        let opening = THE_RUN_ON_THE_CARD_HARNESS
+            .split("await import(\"./set-up.js\");")
+            .next()
+            .expect("the harness's opening")
+            .replace("THE_RUNNING", "null")
+            .replace("THE_FINISHED", &serde_json::to_string(&tab).expect("serialises"))
+            .replace("THE_STOPPED", "null");
+        assert!(opening.contains("if (command === \"the_setup_under_way\")"), "the harness's stand-in changed");
+        let harness = opening.replace(
+            "if (command === \"the_setup_under_way\")",
+            "if (command === \"the_admin_access_box\") return new Promise((done) => theBoxes.push(done));\n        \
+             if (command === \"the_admin_access_is_answered\") theAnswers.push([args.server, args.password]);\n        \
+             if (command === \"the_setup_under_way\")",
+        );
+        let harness = format!(
+            "const theBoxes = [];\nconst theAnswers = [];\n{harness}{}",
+            r#"await import("./set-up.js");
+const host = anElement("div");
+globalThis.tab.itIsDrawn(host);
+const modals = () => every(host).filter((one) => one.classList && one.classList.contains("modal")).length;
+const out = {};
+const theOfferIsMadeAndTheBoxLands = async (thenShown) => {
+  globalThis.tab.itIsShowing("server-1");
+  await settle();
+  await theReadingLands(finished);
+  tell({ server: "server-1", the_step_that_was_refused: "Install the unpack tool" });
+  await settle();
+  if (thenShown) { globalThis.tab.itIsShowing(thenShown); await settle(); }
+  theAnswers.splice(0);
+  theBoxes.splice(0).forEach((done) => done(ASKED));
+  await settle();
+  return { modals: modals(), answers: theAnswers.splice(0) };
+};
+out.stayed = await theOfferIsMadeAndTheBoxLands(null);
+out.wentElsewhere = await theOfferIsMadeAndTheBoxLands("server-2");
+console.log(JSON.stringify(out));"#
+                .replace("ASKED", &serde_json::to_string(&asked).expect("serialises"))
+        );
+        let Some(out) = the_set_up_page_run(&harness, "fresh-look-3-the-box-over-another-server") else { return };
+        // **The user stayed: the box opens and nothing is answered yet.**
+        assert_eq!(out["stayed"]["modals"], 1, "the box did not open on its own server: {out}");
+        assert_eq!(out["stayed"]["answers"], serde_json::json!([]), "{out}");
+        // **The user went to another server: no box, and the offer is declined.**
+        assert_eq!(out["wentElsewhere"]["modals"], 0, "the box opened over another server: {out}");
+        assert_eq!(
+            out["wentElsewhere"]["answers"],
+            serde_json::json!([["server-1", null]]),
+            "the offer was not declined for the run that asked: {out}"
+        );
+    }
+
     /// **Pressing *Install* runs `Server Setup` G2's dedicated entry point**
     /// and never answers that the act is not built. Wired 2026-10-04; until
     /// then the act fell to the catch-all arm, which says the one sentence for
@@ -10481,6 +11904,24 @@ console.log(JSON.stringify(out));"#
                 "web/set-up.js does not call {command}"
             );
         }
+        // **The choice under the field goes with the password** (the four
+        // questions, scout 1.1, 2026-11-11), by the key the box drew it with.
+        assert!(
+            page.contains("\"the_admin_access_is_answered\", { server, password, choice })"),
+            "the page sends the password without the choice"
+        );
+        for which in ["do-not-remember-it", "while-connected", "remember-it"] {
+            assert!(the_choice_named(which).is_some(), "{which} names no choice");
+        }
+        assert_eq!(the_choice_named("anything else"), None);
+        for command in [
+            "the_admin_access_is_answered",
+        ] {
+            assert!(
+                page.contains(command),
+                "web/set-up.js does not call {command}"
+            );
+        }
     }
 
     /// **Every word the user reads is in `mod words` and nowhere else.**
@@ -10558,6 +11999,19 @@ console.log(JSON.stringify(out));"#
         }
     }
 
+    /// ***Cancel setup* holds the width of *Cancelling…*, and the other way
+    /// round** — UI consistency, finding 45: pressed, it read *Cancelling…*,
+    /// about 5 pixels narrower, and the control beside it moved. The panel
+    /// carries the other words for the page to draw unseen.
+    #[test]
+    fn ui45_cancel_setup_carries_the_words_it_changes_to() {
+        let before = the_run_before_its_first_reading("a server", false);
+        assert_eq!(before.cancel_held, Some(Prose::new(words::CANCELLING)));
+        let asked = the_run_before_its_first_reading("a server", true);
+        assert_eq!(asked.cancel, Some(Prose::new(words::CANCELLING)));
+        assert_eq!(asked.cancel_held, Some(Prose::new(words::CANCEL_SETUP)));
+    }
+
     /// **Every one of this tab's boxes carries `role="dialog"`.**
     ///
     /// **Piece 5's Escape handler steps aside for anything carrying it**, and
@@ -10606,11 +12060,122 @@ console.log(JSON.stringify(out));"#
         for debugging in ["TheMachineWouldNot", "(\"", "\\n", "\\\"", "supervisor"] {
             assert!(!told.said.contains(debugging), "{debugging:?} in {:?}", told.said);
         }
-        // **The event carries the two apart**: the sentence as prose, the
-        // machine's words as a value beside it.
-        let event = format!("{:?}", the_answer_about("server-1", &told));
-        assert!(event.contains("the_machines_own_words"));
-        assert!(event.contains("what_the_server_said"));
+        // **The event carries the sentence and says the words are in
+        // *Server output***, which holds them (the twenty-eighth notes, note
+        // 1, 2026-11-09: until then the event carried them for *What the
+        // server said*).
+        let server = "the-failure-box-keeps-the-machines-apart";
+        let event = format!("{:?}", the_answer_about(server, &told));
+        assert!(event.contains("its_words_are_in_server_output"), "{event}");
+        assert!(!event.contains("the_machines_own_words") && !event.contains("what_the_server_said"), "{event}");
+        let output = the_servers_output_on(server, "A server").expect("the words are kept");
+        assert_eq!(output.tabs[1].record.as_ref().map(Verbatim::as_str), Some(the_rental_said), "the machine's words, unlabelled");
+        crate::setting_up::the_servers_words_go(server);
+    }
+
+    /// **`Server protocol and transfers` B10b, the Creator's twenty-eighth
+    /// notes, note 3: a download that got no response says so and to try
+    /// again in a few minutes**, and its last address and answer are Smoozy's
+    /// own download's words, never *What the server said*. A refusal for
+    /// another reason keeps its sentence, and its words are the download's
+    /// too.
+    #[test]
+    fn a_download_that_got_no_response_says_so_and_its_words_are_the_downloads() {
+        use crate::setting_up::WhereTheSetUpGot;
+        let the_download_said = "https://github.com/a-kislyakov/Smoozy-releases/releases/download/v0.3.1/release returned HTTP 504. Tried 5 times.";
+        let no_response = what_it_came_to(&WhereTheSetUpGot::TheReleaseWasNotAdmitted {
+            said: the_download_said.into(),
+            nothing_answered: true,
+        });
+        assert_eq!(
+            no_response.said,
+            "Setup stopped. Could not download Smoozy for this server: no response. Try again in a few minutes. Nothing was installed."
+        );
+        assert_eq!(no_response.the_machines_own_words.as_deref(), Some(the_download_said));
+        assert!(no_response.the_words_are_smoozys_own);
+
+        let refused = what_it_came_to(&WhereTheSetUpGot::TheReleaseWasNotAdmitted {
+            said: "The release failed the signature check.".into(),
+            nothing_answered: false,
+        });
+        assert_eq!(refused.said, format!("{} {}", words::SETUP_STOPPED, words::COULD_NOT_GET_ITS_PROGRAM));
+        assert!(refused.the_words_are_smoozys_own);
+
+        // **And words the machine may have written are never called Smoozy's.**
+        let placed = what_it_came_to(&WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut { said: "x".into() });
+        assert!(!placed.the_words_are_smoozys_own);
+    }
+
+    /// **The Creator's twenty-eighth notes, note 1 (screenshot 1): a setup
+    /// whose download of Smoozy on this server got no response has no
+    /// control of its own for the words** — not *What the server said*, not
+    /// *Download details*. **The words are in *Server output*, on *Errors*,
+    /// under *From Smoozy on this computer***, after the line naming the act,
+    /// and *Server output* opens there. Before this piece the answer carried
+    /// the words behind *Download details* and *Server output* never had
+    /// them, so this fails.
+    #[test]
+    fn twenty_eighth_1_a_downloads_words_are_in_server_output_under_smoozys_own_line() {
+        use crate::setting_up::WhereTheSetUpGot;
+        let server = "twenty-eighth-1-the-downloads-words";
+        let the_download_said = "https://github.com/a-kislyakov/Smoozy-releases/releases/download/v0.3.1/release returned HTTP 504. Tried 5 times.";
+        crate::setting_up::a_runs_words_begin(server);
+        crate::setting_up::the_act_is_called_in_the_words(server, words::SET_UP_THIS_SERVER);
+        let came = what_it_came_to(&WhereTheSetUpGot::TheReleaseWasNotAdmitted {
+            said: the_download_said.into(),
+            nothing_answered: true,
+        });
+        let event = format!("{:?}", the_answer_about(server, &came));
+        let as_the_event_says = |words: &str| format!("{:?}", Prose::new(words));
+        for control in [words::DOWNLOAD_DETAILS, words::WHAT_THE_SERVER_SAID] {
+            assert!(!event.contains(&as_the_event_says(control)), "the line still has {control}: {event}");
+        }
+        assert!(!event.contains(the_download_said), "the words still ride the answer: {event}");
+        assert!(event.contains("its_words_are_in_server_output"), "{event}");
+
+        let output = the_servers_output_on(server, "RunPod 4090").expect("Server output holds the words");
+        assert!(output.opens_on_the_errors_tab, "Server output does not open on Errors");
+        assert_eq!(output.tabs[0].record, None, "the server printed nothing");
+        let errors = &output.tabs[1];
+        assert_eq!(
+            errors.record.as_ref().map(Verbatim::as_str),
+            Some(format!("{}\n{}\n{the_download_said}", words::SET_UP_THIS_SERVER, words::FROM_SMOOZY_ON_THIS_COMPUTER).as_str()),
+            "{errors:?}"
+        );
+        assert_eq!(
+            errors.parts,
+            vec![
+                ARecordsPart { line: Some(Prose::new(words::SET_UP_THIS_SERVER)), words: Verbatim::new("") },
+                ARecordsPart {
+                    line: Some(Prose::new(words::FROM_SMOOZY_ON_THIS_COMPUTER)),
+                    words: Verbatim::new(the_download_said),
+                },
+            ]
+        );
+        // **A failure the server's own words carry is not labelled**, and the
+        // act's own complaints are not kept a second time.
+        crate::setting_up::a_runs_words_begin(server);
+        crate::setting_up::the_act_is_called_in_the_words(server, "Install Blender 5.2.2");
+        assert!(crate::setting_up::a_piece_is_kept(
+            server,
+            smoozy_server_setup::ready_action::Step::Fetch,
+            &crate::servers::sessions::APiecePrinted::Complaint(b"Download failed: HTTP 404.\n".to_vec()),
+        ));
+        let _ = the_answer_about(server, &WhatItCameTo::with("Install stopped.", "Download failed: HTTP 404."));
+        let errors = the_servers_output_on(server, "RunPod 4090").expect("still kept").tabs[1].record.clone();
+        assert_eq!(
+            errors.as_ref().map(Verbatim::as_str),
+            Some(
+                format!(
+                    "{}\n{}\n{the_download_said}\nInstall Blender 5.2.2\nDownload failed: HTTP 404.\n",
+                    words::SET_UP_THIS_SERVER,
+                    words::FROM_SMOOZY_ON_THIS_COMPUTER
+                )
+                .as_str()
+            ),
+        );
+        crate::setting_up::the_servers_words_go(server);
+        assert!(the_servers_output_on(server, "RunPod 4090").is_none(), "disconnecting kept the words");
     }
 
     /// **Step 10c, 2026-09-21: a setup or an install refused because a setup
@@ -10660,9 +12225,12 @@ console.log(JSON.stringify(out));"#
                 which: WhichReadingRefused::TheKind,
             },
             WhereTheSetUpGot::TheRentalWouldNotNameItself,
-            WhereTheSetUpGot::TheHandOverDidNotLand { said: "x".into() },
+            WhereTheSetUpGot::TheHandOverDidNotLand { said: "x".into(), the_disk_is_full: false },
+            WhereTheSetUpGot::TheHandOverDidNotLand { said: "x".into(), the_disk_is_full: true },
             WhereTheSetUpGot::TheRootCouldNotBeRecorded { said: "x".into() },
-            WhereTheSetUpGot::TheReleaseWasNotAdmitted { said: "x".into() },
+            WhereTheSetUpGot::SmoozysFolderCouldNotBeFound { said: "x".into() },
+            WhereTheSetUpGot::TheReleaseWasNotAdmitted { said: "x".into(), nothing_answered: false },
+            WhereTheSetUpGot::TheReleaseWasNotAdmitted { said: "x".into(), nothing_answered: true },
             WhereTheSetUpGot::ThePlacement {
                 reached: Reached::RolledBack,
             },
@@ -10801,9 +12369,14 @@ console.log(JSON.stringify(out));"#
         let told = the_jobs_are_named(what_it_came_to(&deferred), &deferred, &mut from_the_record);
         assert_eq!(told.said, format!("{} {}", words::SETUP_STOPPED, words::WORK_STILL_NEEDS_ITS_PROGRAM));
         assert_eq!(told.the_machines_own_words.as_deref(), Some("pv busy"), "the bare identity is shown");
-        let answer = format!("{:?}", the_answer_about("a-server", &told));
-        assert!(answer.contains("\"pv busy\""), "{answer}");
+        // **From 2026-11-09 the names reach *Server output*, not the answer**
+        // (the twenty-eighth notes, note 1).
+        let server = "the-work-holding-a-setup-back-is-named";
+        let answer = format!("{:?}", the_answer_about(server, &told));
         assert!(!answer.contains(&busy.job.as_text()), "{answer}");
+        let errors = the_servers_output_on(server, "A server").expect("kept").tabs[1].record.clone();
+        assert_eq!(errors.as_ref().map(Verbatim::as_str), Some("pv busy"), "the bare identity reached Server output");
+        crate::setting_up::the_servers_words_go(server);
 
         let held = WhereTheSetUpGot::JobsOfAnEarlierSetupAreHeld {
             how_many: 1,
@@ -10833,8 +12406,7 @@ console.log(JSON.stringify(out));"#
         assert_eq!(
             two.said,
             format!(
-                "Setup stopped. Smoozy's server software cannot be replaced: {} from an earlier \
-                 setup need an answer this computer cannot give. A new server will not have them.",
+                "Setup stopped. Smoozy on this server can't be updated: {} from an earlier setup are waiting for an answer that can't be given here. Use a new server.",
                 crate::typography::a_figure_with_its_unit(2, "jobs")
             )
         );
@@ -10846,8 +12418,7 @@ console.log(JSON.stringify(out));"#
         assert_eq!(
             one.said,
             format!(
-                "Setup stopped. Smoozy's server software cannot be replaced: {} from an earlier \
-                 setup needs an answer this computer cannot give. A new server will not have it.",
+                "Setup stopped. Smoozy on this server can't be updated: {} from an earlier setup is waiting for an answer that can't be given here. Use a new server.",
                 crate::typography::a_figure_with_its_unit(1, "job")
             )
         );
@@ -10876,7 +12447,7 @@ console.log(JSON.stringify(out));"#
             at: Boundary::Started,
             ending: TheRunsEnding::TheServerStoppedAnswering {
                 step: Step::Done,
-                said: "Smoozy's service on the server stopped responding.".into(),
+                said: "Smoozy on this server stopped responding.".into(),
             },
         };
         let told = what_it_came_to(&came_to);
@@ -10895,7 +12466,7 @@ console.log(JSON.stringify(out));"#
         // sentence.
         assert_eq!(
             told.the_machines_own_words.as_deref(),
-            Some("Smoozy's service on the server stopped responding.")
+            Some("Smoozy on this server stopped responding.")
         );
         // **And the step's own failure sentence is still said where the step
         // itself failed.**
@@ -11002,6 +12573,101 @@ console.log(JSON.stringify(out));"#
     /// out — and an abandoned one reads *Not set up* and opens on nothing.**
     /// Added 2026-09-22: until then the panel was composed and drawn by
     /// nothing, and *Abandon setup* was on no screen.
+    /// **The scout's list, item 2 (the second live pass's fault 7): after a
+    /// rollback on a server added again, the head read *Not set up* and the
+    /// card *Ready to render*.** The card now reads *Not set up* wherever the
+    /// head does, by the head's own rule, and nothing else changes it.
+    #[test]
+    fn the_card_reads_not_set_up_wherever_the_head_does() {
+        use crate::servers::a_period::WhatTheLastConnectionRead;
+        use smoozy_state::identities::InstallationCheck;
+        let read = |check, live| {
+            Some(WhatTheLastConnectionRead {
+                check,
+                a_fresh_reading_was_kept: true,
+                on_the_connection_that_is_live: live,
+            })
+        };
+        for check in [InstallationCheck::Absent, InstallationCheck::PresentAndDifferent] {
+            assert_eq!(
+                what_the_check_says_first(read(check, true)),
+                Some(WhatTheMachineSaid::ConnectedAndNeverSetUp),
+                "{check:?}"
+            );
+            assert!(crate::surface::servers::the_live_check_reads_not_set_up(read(check, true)));
+            // **An earlier connection's check is not this one's** (`Servers` H1a).
+            assert_eq!(what_the_check_says_first(read(check, false)), None, "{check:?} not live");
+        }
+        for check in [
+            InstallationCheck::PresentAndEqualConfirmed,
+            InstallationCheck::PresentAndTheSupervisorDidNotAnswer,
+        ] {
+            assert_eq!(what_the_check_says_first(read(check, true)), None, "{check:?}");
+            assert!(!crate::surface::servers::the_live_check_reads_not_set_up(read(check, true)));
+        }
+        assert_eq!(what_the_check_says_first(None), None);
+        let source = include_str!("set_up.rs");
+        let body = source
+            .split("fn what_the_machine_said<R: tauri::Runtime>(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .expect("the reading");
+        assert!(
+            body.contains("what_the_card_says_before_its_reading(read, smoozy_does_not_answer)"),
+            "the card reads the head's rule"
+        );
+        let first = source
+            .split("pub(crate) fn what_the_card_says_before_its_reading(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .expect("the rule");
+        assert!(first.contains("what_the_check_says_first(read)"));
+    }
+
+    /// **The re-check before 0.4.0, new fault 2: with Smoozy's program ended
+    /// while connected, the row said *Smoozy isn't responding.* in under 5
+    /// seconds and the Set up card took 13** — the card, asked again when the
+    /// condition was raised, first waited out its own reading of a supervisor
+    /// that does not answer. **Where V1's condition stands on the live
+    /// connection, the card says it at once** (`Design/Server Setup § This
+    /// server` as added 2026-11-15); *Not set up* still comes first, and with
+    /// no condition standing the card is read as before.
+    #[test]
+    fn the_card_says_smoozy_is_not_responding_as_soon_as_the_row_does() {
+        use crate::servers::a_period::WhatTheLastConnectionRead;
+        use smoozy_state::identities::InstallationCheck;
+        let read = |check| {
+            Some(WhatTheLastConnectionRead {
+                check,
+                a_fresh_reading_was_kept: true,
+                on_the_connection_that_is_live: true,
+            })
+        };
+        let confirmed = read(InstallationCheck::PresentAndEqualConfirmed);
+        assert_eq!(
+            what_the_card_says_before_its_reading(confirmed, true),
+            Some(WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding)
+        );
+        assert_eq!(what_the_card_says_before_its_reading(None, true), Some(WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding));
+        assert_eq!(what_the_card_says_before_its_reading(confirmed, false), None, "read as before");
+        assert_eq!(
+            what_the_card_says_before_its_reading(read(InstallationCheck::Absent), true),
+            Some(WhatTheMachineSaid::ConnectedAndNeverSetUp),
+            "not set up comes first"
+        );
+        let card = the_tab(WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding, "not-responding-at-once").the_card;
+        assert_eq!(card.state, Prose::new(crate::surface::servers::words::SMOOZY_ISNT_RESPONDING));
+        assert_eq!(card.the_action.name, Prose::new(words::SET_UP_AGAIN));
+        // **The live path asks the condition the row draws.**
+        let source = include_str!("set_up.rs");
+        let body = source
+            .split("fn what_the_machine_said<R: tauri::Runtime>(")
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .expect("the reading");
+        assert!(body.contains("periods.smoozy_does_not_answer_on(server)"));
+    }
+
     #[test]
     fn a_setup_stopped_at_the_driver_opens_on_its_panel_and_an_abandoned_one_reads_not_set_up() {
         use crate::setting_up::TheSetupAsRead;
@@ -11033,9 +12699,9 @@ console.log(JSON.stringify(out));"#
             },
         });
         // **The dependency check asks this tab's own rule** (2026-11-04).
-        let the_card_of = |read: &TheSetupAsRead| crate::setting_up::TheCardAsRead { the_run: Some(read.clone()), the_rest: None };
+        let the_card_of = |read: &TheSetupAsRead| crate::setting_up::TheCardAsRead { the_run: Some(read.clone()), the_rest: None, the_machine_did_not_answer: false };
         assert!(a_stopped_setup_stands(&the_card_of(&failed)));
-        assert!(!a_stopped_setup_stands(&crate::setting_up::TheCardAsRead { the_run: None, the_rest: None }));
+        assert!(!a_stopped_setup_stands(&crate::setting_up::TheCardAsRead { the_run: None, the_rest: None, the_machine_did_not_answer: false }));
         assert!(!a_stopped_setup_stands(&the_card_of(&a_run_ending(HowTheRunEnded::Abandoned {
             what_the_check_found: TheFailedStepsWords::None,
         }))));
@@ -11149,6 +12815,59 @@ console.log(JSON.stringify(out));"#
             "5.2.2",
         );
         assert!(tool.said.contains(words::FAILED_TOOLING), "{}", tool.said);
+        assert!(!tool.said.contains(words::WRONG_PASSWORD), "{}", tool.said);
+        // **The Rough what-if answers, share 2 (136): a wrong password is said
+        // plainly**, with the server's line still behind it.
+        let wrong = what_the_install_came_to(
+            &ended(TheRunsEnding::AStepFailed {
+                step: smoozy_server_setup::ready_action::Step::Tooling,
+                said: format!("Password:\n{}\n", smoozy_security_and_licence::redaction::WRONG_PASSWORD_ENDING),
+            }),
+            "5.2.2",
+        );
+        assert!(wrong.said.ends_with(&format!("{} {}", words::FAILED_TOOLING, words::WRONG_PASSWORD)), "{}", wrong.said);
+        assert!(wrong.the_machines_own_words.is_some_and(|said| said.contains("incorrect password")));
+        // **The Rough what-if answers, share 2 (139): a lock still held when
+        // the wait ended is said as the server being busy with its updates.**
+        let busy = what_the_install_came_to(
+            &ended(TheRunsEnding::AStepFailed {
+                step: smoozy_server_setup::ready_action::Step::Tooling,
+                said: "Unable to acquire the dpkg frontend lock (/var/lib/dpkg/lock-frontend), is another process using it?\n"
+                    .to_string(),
+            }),
+            "5.2.2",
+        );
+        assert!(busy.said.ends_with(words::BUSY_WITH_ITS_OWN_UPDATES), "{}", busy.said);
+        assert!(busy.the_machines_own_words.is_some());
+        // **The Rough what-if answers, share 2 (142, 143): the check after the
+        // restart is said whole, with the way on**, and nothing of Smoozy's
+        // own goes behind *What the server said*.
+        let after = what_it_came_to(&ended(TheRunsEnding::AStepFailed {
+            step: smoozy_server_setup::ready_action::Step::Driver,
+            said: crate::setting_up::THE_GPU_STILL_DOES_NOT_RESPOND.to_string(),
+        }));
+        assert!(
+            after
+                .said
+                .ends_with(&format!("{} {}", crate::setting_up::THE_GPU_STILL_DOES_NOT_RESPOND, words::END_SETUP_TO_REINSTALL)),
+            "{}",
+            after.said
+        );
+        assert!(after.the_machines_own_words.is_none());
+        // **The Rough what-if answers, share 2 (120): a folder not made on a
+        // full disk says the disk is full**; one that read space says nothing
+        // of the disk.
+        let full = what_it_came_to(&WhereTheSetUpGot::TheHandOverDidNotLand {
+            said: "mkdir: failed".to_string(),
+            the_disk_is_full: true,
+        });
+        assert!(full.said.ends_with(&format!("{} {}", words::COULD_NOT_MAKE_ITS_FOLDER, words::THE_SERVER_DISK_IS_FULL)), "{}", full.said);
+        assert!(full.the_machines_own_words.is_some());
+        let not_full = what_it_came_to(&WhereTheSetUpGot::TheHandOverDidNotLand {
+            said: "mkdir: failed".to_string(),
+            the_disk_is_full: false,
+        });
+        assert!(not_full.said.ends_with(words::COULD_NOT_MAKE_ITS_FOLDER), "{}", not_full.said);
         let done = |a_blender_was_published| WhereTheSetUpGot::TheRunEnded {
             at: Boundary::Done,
             ending: TheRunsEnding::ItReachedDone { a_blender_was_published, the_driver_missed_the_optix_bar: false, the_swap_waits: false },
@@ -11249,7 +12968,7 @@ console.log(JSON.stringify(out));"#
             ending: Some(HowTheRunEnded::AStepFailed {
                 step: Step::Driver,
                 words: TheFailedStepsWords::SmoozysOwnVerification {
-                    what_was_read: "The server is back, but its GPU still does not \
+                    what_was_read: "The server restarted, but its GPU still does not \
                                     respond."
                         .to_string(),
                 },
@@ -11284,7 +13003,7 @@ console.log(JSON.stringify(out));"#
             .expect("the run card");
         let abandon = the_card
             .find("aControl(panel.abandon, () => theActIsAskedFor(ABANDON, server), true)")
-            .expect("*Abandon setup* is not on the card");
+            .expect("*End setup* is not on the card");
         let again = the_card
             .find("aControl(panel.set_up_again, () => theActIsAskedFor(THE_READY_ACTION, server))")
             .expect("*Set up again* is not on the card");
@@ -11781,6 +13500,8 @@ console.log(JSON.stringify(out));"#
             the_sweep_left_behind: Vec::new(),
             record: Some(record),
             record_trouble: None,
+            the_record_is_newer_than_this_copy: false,
+            the_record_is_damaged: false,
             diary: None,
             declarations: smoozy_reporting::lines::Declarations::new(),
             what_modules_declare: crate::presentation::declarations::TheDeclarations::default(),
@@ -11827,17 +13548,40 @@ console.log(JSON.stringify(out));"#
         assert_eq!(card.the_action.name, Prose::new(words::SET_UP_AGAIN));
         assert!(!card.the_action.loud);
 
-        // **The service answers, the condition goes, and nothing is claimed.**
+        // **The service answers and the condition goes while nothing is lent
+        // yet** — the seconds after a repair lands, before `Servers` Q1's own
+        // steps hand the connection over. **The re-check before 0.4.0, new
+        // fault 1**: the card read *Smoozy isn't responding. · last seen* with
+        // *Connect and set up* there for about 20 seconds, on a connected
+        // server whose new program ran. **It reads *Connecting…*, its action
+        // under way on itself, and never what was last seen**
+        // (`Design/Server Setup § This server` as added 2026-11-15).
         {
             let held = started.lock().expect("the start");
             FailureRecords::over(held.record.as_ref().expect("the record").connection())
                 .the_observed_value_moved(&key, "the supervisor answering")
                 .expect("withdrawn");
         }
-        assert_eq!(
-            what_is_said_with_nothing_lent(Some(&register), &server),
-            WhatTheMachineSaid::NothingHasEverBeenReadFromIt
-        );
+        the_reading_is_held_as_last_seen(&server, &WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding);
+        let said = what_was_last_seen_or(&server, what_is_said_with_nothing_lent(Some(&register), &server));
+        assert_eq!(said, WhatTheMachineSaid::ConnectedAndStillConnecting);
+        let tab = the_tab(said, &server);
+        assert!(tab.the_card_was_last_seen.is_none(), "never the last card seen");
+        assert_eq!(tab.the_card.state, Prose::new(words::CONNECTING));
+        assert_eq!(tab.the_card.the_action.name, Prose::new(words::SET_UP_AGAIN));
+        assert!(tab.the_card.the_action.underway, "nothing can run until the connection is lent");
+        let mut card = tab.the_card.clone();
+        the_action_connects_first(&mut card, false);
+        assert_ne!(card.the_action.name, Prose::new(words::CONNECT_AND_SET_UP));
+
+        // **Not connected again: what was last seen, as before.**
+        register
+            .where_a_period_publishes()
+            .the_observed_value(&server, ObservedValue::Disconnected);
+        assert!(matches!(
+            what_was_last_seen_or(&server, what_is_said_with_nothing_lent(Some(&register), &server)),
+            WhatTheMachineSaid::LastSeen(..)
+        ));
         drop(register);
         drop(started);
         let _ = std::fs::remove_file(&path);
@@ -12590,11 +14334,10 @@ export function theFailureShape(parts) {
             Some(Prose::new(words::FAILED_TELEGRAM).as_str()),
             "{out}"
         );
-        assert_eq!(
-            the_machines["controls"],
-            serde_json::json!([Prose::new(words::WHAT_THE_SERVER_SAID).as_str()]),
-            "the machine's words have no *What the server said*: {out}"
-        );
+        // **From 2026-11-09 the machine's words are in *Server output*, and
+        // the step has no control of its own** (the twenty-eighth notes,
+        // note 1).
+        assert_eq!(the_machines["controls"], serde_json::json!([]), "the step still has a control of its own: {out}");
     }
 
     /// **The eighteenth notes, notes 3 and 4 — the failure shows once, on the
@@ -12720,8 +14463,6 @@ const out = {
 if (line) {
   out.onTheFailedStep = line.parentNode.tag === "li" && line.parentNode.classList.contains("bad");
   out.line = line.children.map((one) => [one.tag, one.className, theTextOf(one)]);
-  line.children.find((one) => one.tag === "a").press();
-  out.opened = (globalThis.panels || []).slice();
 }
 console.log(JSON.stringify(out));"#
                 .replace("THE_ENDING", &serde_json::Value::Object(heard).to_string())
@@ -12762,18 +14503,18 @@ export function theNewestWordsStayInView() {}"#
         assert_eq!(out["steps"], 10, "{out}");
         assert_eq!(out["stfail"], 1, "the failure is not one line on the step: {out}");
         assert_eq!(out["qfail"], 0, "a failure block is drawn on the card: {out}");
-        assert_eq!(out["said"], serde_json::json!(["a"]), "*What the server said* is not once, as a link: {out}");
+        // **From 2026-11-09 the step has no control of its own**: the
+        // words are in *Server output* (the twenty-eighth notes, note 1).
+        assert_eq!(out["said"], serde_json::json!([]), "*What the server said* is still on the card ({said}): {out}");
         assert_eq!(out["onTheFailedStep"], true, "{out}");
         assert_eq!(
             out["line"],
             serde_json::json!([
                 ["span", "fdot", ""],
                 ["b", "selectable", Prose::new(words::FAILED_FETCH).as_str()],
-                ["a", "", said.as_str()],
             ]),
             "{out}"
         );
-        assert_eq!(out["opened"], serde_json::json!([said.as_str()]), "the link opens no words: {out}");
     }
 
     /// **The Creator's notes 4, 6 and 8 on 0.1.7, and it runs the page code:
@@ -13643,6 +15384,48 @@ console.log(JSON.stringify(out));"#
         said.replace('\u{a0}', " ")
     }
 
+    /// **`Design/Server Setup § Asking for more while a setup runs`, added
+    /// 2026-11-11: a press during Smoozy's own update of the server's program
+    /// is answered by the list** — the card reads the update's line, with
+    /// *Queued* under it and no *Cancel setup*, and the press's own steps take
+    /// the card once the update ends. The Fable review's second sitting,
+    /// fault 4.
+    #[test]
+    fn a_press_during_an_update_is_listed_under_the_updates_line() {
+        use crate::setting_up::{
+            an_update_takes_its_turn, the_acts_are_taken_from_the_card, the_kind_being_driven_on,
+            the_update_lets_the_server_go, HowThePressWasTaken, TheUpdatesTurn,
+        };
+        let server = "fault-4-a-press-during-an-update";
+        assert_eq!(an_update_takes_its_turn(server), TheUpdatesTurn::ItIsTaken);
+        assert_eq!(an_update_takes_its_turn(server), TheUpdatesTurn::AnUpdateHoldsIt, "two updates held one server");
+        assert!(the_setup_under_way_on(server, String::new).is_none(), "a card with nothing waiting changed");
+        assert_eq!(
+            the_acts_are_taken_from_the_card(server, vec![an_install_of("4.5.15")], &mut |_| {}),
+            HowThePressWasTaken::ItWaitsItsTurn
+        );
+        // **A run that does not join the line is refused behind the update.**
+        assert!(!crate::setting_up::a_run_begins(server, SetupKind::TheReadyAction), "a run began during the update");
+
+        let panel = the_setup_under_way_on(server, String::new).expect("the press is not answered by the list");
+        assert_eq!(panel.title, Prose::new(crate::surface::servers::words::UPDATING));
+        assert!(panel.cancel.is_none(), "the update offers a Cancel setup it cannot keep");
+        assert!(panel.what_cancel_leaves.is_none());
+        assert!(!panel.the_run_has_ended);
+        assert_eq!(panel.the_waiting_heading, Some(Prose::new(words::THE_WAITING_HEADING)));
+        assert_eq!(panel.the_waiting, vec![Prose::new("Install Blender 4.5.15")]);
+
+        the_update_lets_the_server_go(server);
+        assert_eq!(the_kind_being_driven_on(server), Some(SetupKind::ABlenderInstall), "the press did not begin");
+        let _ = crate::setting_up::a_run_in_the_line_ends(server, true);
+        assert_eq!(the_kind_being_driven_on(server), None);
+        // **And the running app drives the act the update began.**
+        assert!(
+            include_str!("../main.rs").contains("surface::set_up::the_line_an_update_began_is_driven(app.handle().clone())"),
+            "nothing drives what an update began"
+        );
+    }
+
     /// **A removal and a second install, pressed while an install runs, wait
     /// their turn, are listed on the running card in the order pressed, and
     /// run one after another once it finishes** — each its own run of its own
@@ -13911,6 +15694,303 @@ console.log(JSON.stringify(out));"#
     /// said by the card, so no line repeats it above the steps. Until then the
     /// step read as the unpack's whichever act failed, and the line stayed for
     /// that reason.
+    /// **The four questions, scout 2.11: giving up on the restart says what to
+    /// do**, and still names no cause (`Server Setup` T6).
+    #[test]
+    fn four_questions_2_11_giving_up_on_the_restart_says_what_to_do() {
+        assert_eq!(
+            words::THE_SERVER_DID_NOT_COME_BACK,
+            "Could not reconnect after the restart. Check the server is running, then connect."
+        );
+    }
+
+    /// **The four questions, scout 1.18: the unpack tool's box says what it
+    /// warns of** — `Server Setup` W3: an elevated package install beside live
+    /// jobs was never observed, so the box states only that jobs are running.
+    #[test]
+    fn third_part_2_11_waiting_step_shows_elapsed_and_other_steps_do_not() {
+        let mut panel = the_run_before_its_first_reading(words::SETTING_UP, false);
+        let mut step = a_step_line(&a_reading().the_records[0], Boundary::RestartIssued,
+            WhereAStepGot::StoppedPartWay, Some(Boundary::RestartIssued), true, true).unwrap();
+        step.the_figure = None;
+        panel.steps.push(step);
+        the_restart_wait_is_said_on(&mut panel, Some(std::time::Duration::from_secs(62)));
+        assert_eq!(panel.steps[0].the_figure.as_ref().unwrap().so_far.as_str(), "1m 02s");
+        panel.steps[0].boundary = Boundary::Libraries;
+        panel.steps[0].the_figure = None;
+        the_restart_wait_is_said_on(&mut panel, Some(std::time::Duration::from_secs(62)));
+        assert!(panel.steps[0].the_figure.is_none());
+    }
+
+    #[test]
+    fn third_part_3_11_container_driver_advice_changes_without_changing_the_action() {
+        use smoozy_servers::hardware::WhereK1PlacesIt::{AContainer, ItsOwnKernel};
+        for placed in [AContainer, ItsOwnKernel] {
+            let mut tab = a_ready_tab_with(&TheDriverAsHeld::default());
+            tab.the_card.the_setup_fault = Some(TheSetupFault {
+                said: Prose::new(words::THE_LAST_JOB_ASKED_FOR_THE_GPU),
+                what_to_do: Prose::new(words::SET_UP_AGAIN_TO_REINSTALL),
+                help: None,
+            });
+            let action = tab.the_card.the_action.clone();
+            the_driver_is_drawn_on(&mut tab, &held_live(the_driver("550.163.01", None, placed), false), &[]);
+            let advice = tab.the_card.the_setup_fault.unwrap().what_to_do;
+            assert_eq!(advice, Prose::new(if placed == AContainer {
+                "The GPU driver can’t be updated here. Use another server or render on the CPU."
+            } else { words::SET_UP_AGAIN_TO_REINSTALL }));
+            assert_eq!(tab.the_card.the_action, action);
+        }
+    }
+
+    #[test]
+    fn four_questions_1_18_the_unpack_tools_box_says_what_it_warns_of() {
+        let box_ = the_unpack_tools_warning(&[("Kitchen".to_string(), LiveState::Rendering)]);
+        assert_eq!(
+            box_.said,
+            Prose::new("Jobs are running on this server."),
+            "the box warns about nothing"
+        );
+    }
+
+    /// **The four questions, scout 1.17's first half: a build outside
+    /// Smoozy's own Blender folder gets no *Remove***, and the box says why
+    /// in its place — `Design/Server Setup § Removing a Blender`, added
+    /// 2026-11-12. Before, *Remove anyway* answered that the act was not
+    /// available.
+    #[test]
+    fn fifth_part_1_17_a_build_the_removal_cannot_take_offers_no_remove() {
+        let area = "/root/smoozy/blender";
+        let outside = the_removal_warning("/opt/blender-4.5/blender", None, &[], None);
+        let mut box_ = outside.clone();
+        the_removal_is_offered_where_it_can_be_performed(&mut box_, "/opt/blender-4.5/blender", Some(area));
+        assert!(box_.remove.is_none());
+        assert_eq!(box_.smoozy_cannot_perform_it, Some(Prose::new(words::NOT_INSTALLED_BY_SMOOZY_HERE)));
+        assert_eq!(words::NOT_INSTALLED_BY_SMOOZY_HERE, "Not installed by Smoozy, so it can't be removed here.");
+        // Inside the area, the box is as it was.
+        let inside_path = "/root/smoozy/blender/blender-5.2.2/blender";
+        let inside = the_removal_warning(inside_path, None, &[], None);
+        let mut box_ = inside.clone();
+        the_removal_is_offered_where_it_can_be_performed(&mut box_, inside_path, Some(area));
+        assert_eq!(box_, inside);
+        let this = include_str!("set_up.rs");
+        assert!(this.contains("the_removal_is_offered_where_it_can_be_performed(&mut warning, &path, own_area.as_deref());"));
+    }
+
+    /// **The four questions, scout 2.14: installs Smoozy closed before they
+    /// started can be started from their line** — `Design/Server Setup §
+    /// Installing`, added 2026-11-12. Only where every kept act is an install
+    /// from the list; otherwise nothing is offered.
+    #[test]
+    fn fifth_part_2_14_installs_never_started_have_install() {
+        use crate::record::installs_not_begun::{AnActKept, TheActsKind};
+        let install = |named: &str| AnActKept { kind: TheActsKind::AnInstallFromTheList, named: named.to_string() };
+        assert_eq!(
+            the_installs_to_start_again(&[install("5.2.2"), install("4.5.14")]),
+            Some(("5.2.2".to_string(), vec!["4.5.14".to_string()]))
+        );
+        let removal = AnActKept { kind: TheActsKind::ARemoval, named: "5.2.2".to_string() };
+        assert_eq!(the_installs_to_start_again(&[install("5.2.2"), removal]), None);
+        assert_eq!(the_installs_to_start_again(&[]), None);
+        let this = include_str!("set_up.rs");
+        assert!(this.contains("(INSTALL_THE_ONES_NOT_STARTED, _) => the_installs_not_started_are_driven("));
+        let page = include_str!("../../web/set-up.js");
+        assert!(page.contains("if (answer.install_the_ones_not_started)"));
+    }
+
+    /// **The four questions, scout 2.20: with nothing ticked, the Install
+    /// Blender box's *Install* is greyed** — `Design/Server Setup §
+    /// Installing`, added 2026-11-12. Before, a press with nothing ticked did
+    /// nothing.
+    #[test]
+    fn fifth_part_2_20_install_is_greyed_until_something_is_ticked() {
+        let page = include_str!("../../web/set-up.js");
+        let counts = page
+            .split("function theButtonCounts() {")
+            .nth(1)
+            .and_then(|rest| rest.split("\n    }\n").next())
+            .expect("the count");
+        assert!(counts.contains("install.disabled = !picked.length;"), "{counts}");
+        assert!(page.contains("row.appendChild(install);\n    theButtonCounts();"));
+    }
+
+    /// **The what-if live pass of 2026-11-15, new faults 2 and 3: a card
+    /// whose reading Smoozy left unanswered said *No setup found · This server
+    /// has not been set up.*** on a server that was set up — for 10 to 20
+    /// seconds after a repair, and for good after the program ended while
+    /// connected. **It says *Smoozy isn't responding.* now**
+    /// (`Design/Server Setup § This server` as added that day). A reading
+    /// the machine answered is unchanged, and a machine with no installation
+    /// is still *Not set up*.
+    #[test]
+    fn a_card_reading_left_unanswered_says_smoozy_is_not_responding() {
+        let silent = crate::setting_up::TheCardAsRead { the_run: None, the_rest: None, the_machine_did_not_answer: true };
+        assert_eq!(
+            what_the_card_as_read_says(Some(silent.clone()), String::new, || false),
+            WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding
+        );
+        assert_eq!(
+            what_the_card_as_read_says(Some(silent), String::new, || true),
+            WhatTheMachineSaid::ConnectedAndNeverSetUp,
+            "no installation at all is still not set up"
+        );
+        let unread = crate::setting_up::TheCardAsRead { the_run: None, the_rest: None, the_machine_did_not_answer: false };
+        assert_eq!(
+            what_the_card_as_read_says(Some(unread), String::new, || false),
+            WhatTheMachineSaid::ConnectedAndNoRunWasFound
+        );
+        // **And the card reads the row's words**: the server connected, its
+        // program not answering.
+        let card = the_tab(WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding, "unanswered-card-server").the_card;
+        assert_eq!(card.state, Prose::new(crate::surface::servers::words::SMOOZY_ISNT_RESPONDING));
+        assert_eq!(card.the_action.name, Prose::new(words::SET_UP_AGAIN));
+    }
+
+    /// **The what-if live pass of 2026-11-15, new fault 2: during the
+    /// automatic repair the server's card said *Smoozy isn't responding.*
+    /// with *Connect and set up*.** It now says the row's words for the
+    /// repair, and where it failed, the row's words for that; the action is
+    /// *Set up again* while the server is connected, never *Connect and set
+    /// up* (`Design/Server Setup § This server` as added that day).
+    #[test]
+    fn a_card_during_the_repair_says_so_and_keeps_set_up_again() {
+        use crate::servers::published::{the_server_carries, WhatSmoozyOnTheServerIs, WhereTheUpdateFailed};
+        let server = "a-card-during-the-repair";
+        the_server_carries(server, Some(WhatSmoozyOnTheServerIs::TheRepairIsUnderWay));
+        let card = the_tab(WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding, server).the_card;
+        assert_eq!(card.state, Prose::new(crate::surface::servers::words::REPAIRING));
+        assert_eq!(card.the_action.name, Prose::new(words::SET_UP_AGAIN));
+        the_server_carries(
+            server,
+            Some(WhatSmoozyOnTheServerIs::TheRepairFailed { said: "no".into(), at: WhereTheUpdateFailed::OnTheServer }),
+        );
+        let card = the_tab(WhatTheMachineSaid::ConnectedAndSmoozyIsNotResponding, server).the_card;
+        assert_eq!(card.state, Prose::new(crate::surface::servers::words::COULD_NOT_REPAIR));
+        the_server_carries(server, None);
+        // **Connected, nothing lent: the action does not turn into *Connect
+        // and set up***, which is for a server with no connection.
+        let this = include_str!("set_up.rs");
+        assert!(this.contains("if the_live_point(&here, &server).is_none() && !connected_with_nothing_lent {"));
+        // **And pressed then, it says what is true and what to do** (Sol's
+        // look, point 1): nothing is lent, so no setup can run, and the next
+        // connection repairs it.
+        assert_eq!(words::RECONNECT_TO_REPAIR, "Smoozy isn't responding. Reconnect to repair it.");
+        assert!(this.contains("let said = if smoozy_does_not_answer_while_connected(&app, &server) {\n            words::RECONNECT_TO_REPAIR"));
+    }
+
+    /// **The four questions, scout 4.6: where no connection stands, the
+    /// card's action is *Connect and set up*, and it does both** —
+    /// `Design/Server Setup § This server`, added 2026-11-12, and
+    /// `Architecture/Servers`' build detail of that day. Before, the card
+    /// offered *Set up this server* and the press answered *Connect to this
+    /// server first.*
+    #[test]
+    fn fifth_part_4_6_a_card_with_no_connection_offers_connect_and_set_up() {
+        // Never read, and last seen: both get the act that connects first,
+        // keeping how loud the card drew it.
+        let mut card = the_tab(WhatTheMachineSaid::NothingHasEverBeenReadFromIt, "server-1").the_card;
+        let loud = card.the_action.loud;
+        the_action_connects_first(&mut card, false);
+        assert_eq!(card.the_action.name, Prose::new(words::CONNECT_AND_SET_UP));
+        assert_eq!(card.the_action.act, Verbatim::new(CONNECT_THEN_SET_UP));
+        assert_eq!(card.the_action.loud, loud);
+
+        // The add's own failed connect keeps the row's act, which carries
+        // the remembered setup; once the row no longer remembers one (the
+        // card's own wait), it is the card's act.
+        let not_made = crate::surface::servers::words::THE_CONNECTION_WAS_NOT_MADE;
+        let mut remembered = the_card_where_the_connection_was_not_made(not_made);
+        the_action_connects_first(&mut remembered, true);
+        assert_eq!(remembered.the_action.act, Verbatim::new(CONNECT_AND_SET_UP));
+        let mut waiting = the_card_where_the_connection_was_not_made(not_made);
+        the_action_connects_first(&mut waiting, false);
+        assert_eq!(waiting.the_action.act, Verbatim::new(CONNECT_THEN_SET_UP));
+
+        // Under way on itself (*Connecting…*), nothing changes.
+        let mut connecting = the_card_while_an_add_connects();
+        the_action_connects_first(&mut connecting, false);
+        assert_eq!(connecting.the_action.act, Verbatim::new(THE_READY_ACTION));
+
+        // The wait is taken once, and any other connect act drops it.
+        let server = "fifth-part-4-6-server";
+        a_cards_connect_waits(server);
+        assert!(a_cards_connect_waits_on(server));
+        assert!(the_cards_wait_is_taken_on(server));
+        assert!(!the_cards_wait_is_taken_on(server), "taken once");
+        a_cards_connect_waits(server);
+        the_cards_wait_is_dropped(server);
+        assert!(!a_cards_connect_waits_on(server));
+
+        // The routes: the act is driven, the tab draws it where no
+        // connection stands, the lending takes the wait, and Servers' own
+        // connect acts drop it.
+        let this = include_str!("set_up.rs");
+        assert!(this.contains("(CONNECT_THEN_SET_UP, _) => the_card_connects_then_sets_up("));
+        assert!(this.contains("the_action_connects_first(&mut tab.the_card, remembered);"));
+        let period = include_str!("../servers/a_period.rs");
+        assert!(period.contains("crate::surface::set_up::the_cards_wait_is_driven(&app, &server);"));
+        let servers = include_str!("servers.rs");
+        assert!(servers.contains("crate::surface::set_up::the_cards_wait_is_dropped(server);"));
+        let page = include_str!("../../web/set-up.js");
+        assert!(page.contains("act === CONNECT_THEN_SET_UP"));
+    }
+
+    /// **The four questions, scout 4.7: on a server Smoozy has not set up,
+    /// *Install Blender* is not offered**, and the line in its place says the
+    /// way on — `Design/Server Setup § Blender`, added 2026-11-12. Before,
+    /// the box opened, took a pick, and only then answered *Set up this
+    /// server first.*
+    #[test]
+    fn fifth_part_4_7_install_blender_is_not_offered_before_setup() {
+        let mut table = the_table_where_nothing_was_read();
+        assert!(table.install_first.is_none(), "offered unless the row says otherwise");
+        the_install_is_offered_where_set_up(&mut table, Some(true));
+        assert_eq!(table.install_first, Some(Prose::new(words::SET_UP_TO_INSTALL_BLENDER)));
+        assert_eq!(words::SET_UP_TO_INSTALL_BLENDER, "Set up this server to install Blender.");
+        for known in [Some(false), None] {
+            let mut table = the_table_where_nothing_was_read();
+            the_install_is_offered_where_set_up(&mut table, known);
+            assert!(table.install_first.is_none(), "a set-up row, or a record not read, keeps Install");
+        }
+        let this = include_str!("set_up.rs");
+        assert!(this.contains("the_install_is_offered_where_set_up(&mut tab.the_table, not_set_up);"));
+        let page = include_str!("../../web/set-up.js");
+        assert!(page.contains("if (drawn.install_first)"));
+    }
+
+    /// **The four questions, scout 4.8: *Set up again* on a step that cannot
+    /// resume ends the setup itself and sets up afresh** —
+    /// `Design/Server Setup § The two ways out`, and `Architecture/Server
+    /// Setup`'s build detail of 2026-11-12. Before, the press answered
+    /// *… cannot resume. End setup, then set up again.* and the user pressed
+    /// twice more.
+    #[test]
+    fn fifth_part_4_8_set_up_again_ends_a_setup_that_cannot_resume_then_sets_up() {
+        use crate::setting_up::{TheRunsEnding, WhereTheSetUpGot};
+        use smoozy_server_setup::ready_action::Step;
+        let inside = WhereTheSetUpGot::TheRunEnded {
+            at: Boundary::Started,
+            ending: TheRunsEnding::ItStoppedInsideAStep { step: Step::Driver },
+        };
+        assert!(the_stop_cannot_resume(&inside));
+        for other in [
+            WhereTheSetUpGot::TheConnectionWent,
+            WhereTheSetUpGot::TheRunEnded { at: Boundary::Started, ending: TheRunsEnding::TheUserStoppedIt },
+        ] {
+            assert!(!the_stop_cannot_resume(&other), "{other:?}");
+        }
+        // The ready action's own branch ends the setup on the slot it holds,
+        // and sets up again only where the end cleared it.
+        let this = include_str!("set_up.rs");
+        let branch = this
+            .split("ASetUpAct::TheReadyAction { a_render_was_running } => {")
+            .nth(1)
+            .and_then(|rest| rest.split("ASetUpAct::TheTelegramPlacement =>").next())
+            .expect("the branch");
+        assert!(branch.contains("if the_stop_cannot_resume(&came_to) {"));
+        assert!(branch.contains("crate::setting_up::the_setup_is_abandoned_on(app, &point, server)"));
+        assert!(branch.contains("crate::setting_up::WhatTheAbandonCameTo::Abandoned { .. }"));
+    }
+
     #[test]
     fn small_owed_the_unpack_tools_own_install_says_so_on_its_step() {
         use smoozy_server_protocol::framing::{Answered, Fields, Request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS};
@@ -14055,7 +16135,7 @@ console.log(JSON.stringify(out));"#
         assert_eq!(failed[0].0, Boundary::Fetched);
         assert_eq!(plain(failed[0].1.said.lead.as_str()), plain(Prose::new(&the_steps_own).as_str()));
         assert!(the_steps_own.starts_with(&format!("{} 5.2.2.", words::COULD_NOT_FETCH_BLENDER)), "{the_steps_own:?}");
-        assert!(failed[0].1.what_the_server_said.is_some(), "the step keeps What the server said");
+        assert!(failed[0].1.the_complaint.is_some() || failed[0].1.the_output.is_some(), "the step keeps its words for Server output");
 
         // **A ready action's stopped setup is its own**, whatever was kept.
         let ready = the_tab(a_stopped(SetupKind::TheReadyAction), server).the_stopped_setup.expect("the stopped setup");
@@ -14071,6 +16151,75 @@ console.log(JSON.stringify(out));"#
         let page = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web/set-up.js")).expect("the page");
         assert!(page.contains("if (!panel.the_last_act_is_said_on_its_steps) theLastWordIsDrawnInto(one);"));
         assert_eq!(crate::setting_up::the_kind_being_driven_on(server), None, "the run is let go");
+    }
+
+    /// **The night's live pass, fault 4: where blender.org refused the
+    /// server's download, the step says why and what to do**, without
+    /// opening *Server output* (`Design/Server Setup § The step that
+    /// failed`'s one exception). The words stay in *Server output*. Any other
+    /// status keeps the step's own sentence. **Failed before the fix**: the
+    /// step said only *Could not download Blender.*, and an install only
+    /// *Install stopped. Could not download Blender 5.3.0.*
+    #[test]
+    fn night_pass_4_a_download_blender_org_refused_says_why_and_what_to_do() {
+        use smoozy_server_setup::recovery::TheFailedStepsWords;
+        const REFUSED: &str = "Could not read the published checksum: the checksum file returned HTTP 403";
+        let a_stopped = |what_was_read: &str| {
+            WhatTheMachineSaid::ASetupRunAlone(Box::new(crate::setting_up::TheSetupAsRead {
+                the_run_holds_the_machine: true,
+                record: TheSetupRecord {
+                    kind: SetupKind::TheReadyAction,
+                    the_composed_list: vec![Boundary::Started, Boundary::Fetched, Boundary::Tooling, Boundary::Blender, Boundary::Done],
+                    the_boundaries_reached: vec![a_boundary(Boundary::Started, WhatTheStepDid::Performed)],
+                    ending: Some(HowTheRunEnded::AStepFailed {
+                        step: smoozy_server_setup::ready_action::Step::Fetch,
+                        words: TheFailedStepsWords::SmoozysOwnVerification { what_was_read: what_was_read.to_string() },
+                    }),
+                },
+                still_open: false,
+                the_step_in_flight: Some(Boundary::Fetched),
+                the_admin_step_recorded_as_started: None,
+                the_clock: "RTX 5090".to_string(),
+            }))
+        };
+        let failed = |what_was_read: &str| {
+            the_tab(a_stopped(what_was_read), "night-pass-4-refused")
+                .the_stopped_setup
+                .expect("the stopped setup")
+                .steps
+                .into_iter()
+                .find_map(|step| step.the_failure)
+                .expect("its failed step")
+        };
+        let refused = failed(REFUSED);
+        assert_eq!(
+            refused.said.lead.as_str(),
+            Prose::new(&format!("{} {}", words::FAILED_FETCH, words::BLENDER_ORG_REFUSED_THIS_SERVER)).as_str()
+        );
+        assert!(refused.the_complaint.is_some() || refused.the_output.is_some(), "the words stay in Server output");
+        let missing = failed("Download failed: HTTP 404.");
+        assert_eq!(missing.said.lead.as_str(), Prose::new(words::FAILED_FETCH).as_str(), "another status: as before");
+
+        let install = what_the_install_came_to(
+            &crate::setting_up::WhereTheSetUpGot::TheRunEnded {
+                at: Boundary::Started,
+                ending: crate::setting_up::TheRunsEnding::AStepFailed {
+                    step: smoozy_server_setup::ready_action::Step::Fetch,
+                    said: "Download failed: HTTP 403.".to_string(),
+                },
+            },
+            "5.3.0",
+        );
+        assert_eq!(
+            install.said,
+            format!(
+                "{} {} 5.3.0. {}",
+                words::INSTALL_STOPPED,
+                words::COULD_NOT_FETCH_BLENDER,
+                words::BLENDER_ORG_REFUSED_THIS_SERVER
+            )
+        );
+        assert!(install.the_machines_own_words.as_deref().is_some_and(|it| it.contains("403")));
     }
 
     /// `Server Setup` B12: an install's end drops only its server's held list
@@ -14199,7 +16348,6 @@ console.log(JSON.stringify(out));"#
         assert_eq!(row.name.as_str().replace('\u{a0}', " "), words::UPLOAD_YOUR_BUILD);
         let failure = row.the_failure.expect("the failed send");
         assert_eq!(failure.said.lead.as_str().replace('\u{a0}', " "), said);
-        assert!(failure.what_the_server_said.is_none());
         assert!(failure.the_output.is_none() && failure.the_complaint.is_none());
     }
 
@@ -14489,6 +16637,34 @@ console.log(JSON.stringify(out));"#
             the_installs_smoozy_closed_on(c, server),
             Some(Prose::new("Not installed: Blender 4.5.14. Smoozy closed before it started."))
         );
+        drop(record);
+        let _ = std::fs::remove_dir_all(&path);
+    }
+
+    /// **`Server Setup` Y9a item 11: while Smoozy updates its own program on
+    /// the server, the acts kept are the update's line**, not acts a closed
+    /// Smoozy never began — so the card does not say *Smoozy closed before
+    /// they started.* over a press it has just taken. Added 2026-11-11, the
+    /// Fable review's second sitting, fault 4.
+    #[test]
+    fn the_acts_waiting_behind_an_update_are_not_named_as_left_by_a_closed_smoozy() {
+        let mut path = std::env::temp_dir();
+        path.push(format!("smoozy-set-up-fault-4-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).expect("a scratch folder");
+        let record = crate::record::LocalRecord::open_at(&path.join("local-record.sqlite3")).expect("a record");
+        let c = record.connection();
+        let server = "fault-4-the-closed-line";
+        assert_eq!(
+            crate::setting_up::an_update_takes_its_turn(server),
+            crate::setting_up::TheUpdatesTurn::ItIsTaken
+        );
+        crate::record::installs_not_begun::the_ones_waiting_are_kept(c, server, &["4.5.15".to_string()]).expect("kept");
+        assert_eq!(the_installs_smoozy_closed_on(c, server), None, "the update's line was named as left by a closed Smoozy");
+        // **Once the update has let the server go with nothing begun, a kept
+        // list is one a closed Smoozy left**, as before.
+        crate::setting_up::the_update_lets_the_server_go(server);
+        assert!(the_installs_smoozy_closed_on(c, server).is_some());
         drop(record);
         let _ = std::fs::remove_dir_all(&path);
     }
@@ -14797,12 +16973,8 @@ console.log(JSON.stringify(out));"#
         let mut failed = a_run_at_the_driver_step();
         failed.steps[0].the_failure = Some(TheFailedStep {
             said: plainly(words::FAILED_READINGS),
-            what_the_server_said: Some(Prose::new(words::WHAT_THE_SERVER_SAID)),
             the_output: None,
             the_complaint: Some(Verbatim::new("E: a complaint")),
-            the_output_tab: Prose::new("Output"),
-            the_complaint_tab: Prose::new("Errors"),
-            close: Prose::new(words::CLOSE),
         });
         the_servers_words_beside_the_run(&mut failed, true, three_lines());
         assert!(failed.the_servers_newest_lines.is_empty(), "lines beside a failure sentence");
@@ -15529,6 +17701,160 @@ console.log(JSON.stringify(out));
         assert_eq!(out["ended"]["copy"], "Reading 12%\rReading 57%\rReading 100%\ndone\n", "{out}");
     }
 
+    /// **The Creator's twenty-eighth notes, notes 1 and 7, on the real page
+    /// and the real words panel**: on a card with no steps or list, *Server
+    /// output* sits at the card's own edge (`.suout.alone`, not 28 px in); the
+    /// last act's failure line has no control of its own; *Server output*
+    /// opens on *Errors* where the failure's words are, each act begun under
+    /// its quieter `.lmark` line and Smoozy's own words under theirs; Copy
+    /// takes the lines with the words; and the next act's words join after,
+    /// on the tab the reader had. **Before this piece the card drew the
+    /// failure's words behind their own control, the panel opened on
+    /// *Output* with no line naming any act, and the control stood 28 px
+    /// in**, so this fails.
+    #[test]
+    fn twenty_eighth_1_and_7_server_output_opens_on_errors_with_each_act_named() {
+        use crate::setting_up::{OneActAsKept, TheFailuresWords};
+        let mut finished = the_tab(WhatTheMachineSaid::ConnectedAndNoRunWasFound, "server-1");
+        finished.the_card.what_was_done.clear();
+        the_servers_words_beside_the_tab(&mut finished, true);
+        let the_download_said = "https://github.com/a-kislyakov/Smoozy-releases/releases/download/v0.3.1/release returned HTTP 504. Tried 5 times.";
+        let first = OneActAsKept {
+            called: Some(words::SET_UP_THIS_SERVER.to_string()),
+            the_ordinary_output: String::new(),
+            the_complaints: String::new(),
+            its_failures_words: Some(TheFailuresWords { words: the_download_said.to_string(), smoozys_own: true }),
+        };
+        let second = OneActAsKept {
+            called: Some("Install Blender 5.2.2".to_string()),
+            the_ordinary_output: "x86_64\n".to_string(),
+            the_complaints: "a warning\n".to_string(),
+            its_failures_words: None,
+        };
+        let readings = [
+            the_servers_output_of_the_acts("RunPod 4090", &[first.clone()], false, false, true),
+            the_servers_output_of_the_acts("RunPod 4090", &[first, second], false, false, false),
+        ];
+        assert!(readings[0].opens_on_the_errors_tab);
+        let harness = THE_RUN_ON_THE_CARD_HARNESS
+            .split("const running = THE_RUNNING;").next().unwrap()
+            .replace("function anElement(tag)", "function aBareElement(tag)")
+            + &r#"
+function anElement(tag) {
+  const one = aBareElement(tag);
+  one.attributes = {};
+  one.setAttribute = (key, value) => { one.attributes[key] = String(value); };
+  one.getAttribute = key => one.attributes[key];
+  one.querySelectorAll = selector => every(one).slice(1).filter(node => {
+    if (!node.classList) return false;
+    const [tag, ...classes] = selector.split('.');
+    return (!tag || node.tag === tag) && classes.every(name => node.classList.contains(name));
+  });
+  one.querySelector = selector => one.querySelectorAll(selector)[0] || null;
+  one.closest = selector => {
+    for (let up = one; up; up = up.parentNode) {
+      if (selector[0] === '.' && up.classList && up.classList.contains(selector.slice(1))) return up;
+    }
+    return null;
+  };
+  one.click = one.press;
+  return one;
+}
+document.createElement = anElement;
+document.createElementNS = (namespace, tag) => anElement(tag);
+globalThis.shapes = [];
+const copied = [];
+Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard: { writeText(text) { copied.push(text); return Promise.resolve(); } } } });
+const outputs = OUTPUTS;
+const finished = FINISHED;
+let output = outputs[0];
+globalThis.window = {__TAURI__:{core:{invoke(command) {
+  if (command === 'the_set_up_tab') return Promise.resolve(finished);
+  if (command === 'the_servers_output') return Promise.resolve(output);
+  return Promise.resolve(null);
+}}}};
+const settle = async () => { for (let at = 0; at < 6; at++) await new Promise(setImmediate); };
+const tell = (said) => (told.get('set-up:the-answer') || []).forEach(one => one({ said }));
+await import('./set-up.js');
+const host = anElement('div');
+tab.itIsDrawn(host); tab.itIsShowing('server-1');
+await settle();
+tell({ server: 'server-1', the_act_is_not_built_yet: LINE, its_words_are_in_server_output: 'yes', close: 'Close' });
+await settle();
+const card = host.children[0].children[0];
+const out = {};
+out.under = every(card).filter(one => one.classList && one.classList.contains('suout')).map(one => one.className);
+out.lists = every(card).filter(one => one.classList && (one.classList.contains('sudid') || one.classList.contains('steps'))).length;
+out.lineShapes = shapes.map(one => ({ sentence: one.sentence, controls: (one.controls || []).length }));
+const open = every(card).find(one => one.tag === 'button' && one.textContent === OUTPUT_LABEL);
+open.press(); await settle();
+const panel = () => host.querySelector('.words-panel');
+const selected = () => panel().querySelectorAll('.ltab').map(one => one.getAttribute('aria-selected'));
+const theBody = (at) => panel().querySelectorAll('.words-body')[at].querySelector('pre.lbody');
+const theErrors = () => theBody(1);
+const plain = (text) => text.replace(/\u00a0/g, ' ');
+const lines = (pre) => pre.querySelectorAll('span.lmark').map(theTextOf).map(plain);
+const copy = async () => { panel().querySelector('.words-copy').press(); await settle(); return copied[copied.length - 1]; };
+out.opened = { selected: selected(), shown: plain(theErrors().textContent), lines: lines(theErrors()), hidden: panel().querySelectorAll('.words-body').map(one => one.hidden), copy: await copy() };
+output = outputs[1]; tell({ server: 'server-1', the_servers_words_moved: 'yes' }); await settle();
+out.next = { selected: selected(), errors: lines(theErrors()), output: lines(theBody(0)), shown: plain(theBody(0).textContent), panels: host.querySelectorAll('.words-panel').length };
+console.log(JSON.stringify(out));
+"#.replace("OUTPUTS", &serde_json::to_string(&readings).unwrap())
+                .replace("FINISHED", &serde_json::to_string(&finished).unwrap())
+                .replace("LINE", &serde_json::to_string(words::ITS_PROGRAMS_DOWNLOAD_GOT_NO_RESPONSE).unwrap())
+                .replace("OUTPUT_LABEL", &serde_json::to_string(&Prose::new(words::SERVER_OUTPUT)).unwrap());
+        let folder = std::env::temp_dir().join(format!("smoozy-setup-twenty-eighth-1-and-7-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        for (name, text) in THE_SET_UP_STAND_INS {
+            let text = match name {
+                "harness.js" => harness.as_str(),
+                "the-machines-own-words.js" => include_str!("../../web/the-machines-own-words.js"),
+                "the-failure-shape.js" => "export const EXPANDED='expanded'; export function theFailureShape(parts) { globalThis.shapes.push(parts); const one = document.createElement('div'); one.className = 'qfail'; return one; } export function theControlsFrom() { return []; }",
+                _ => text,
+            };
+            fs::write(folder.join(name), text).unwrap();
+        }
+        fs::write(folder.join("set-up.js"), the_page()).unwrap();
+        let ran = std::process::Command::new("node").arg(folder.join("harness.js")).current_dir(&folder).output();
+        let _ = fs::remove_dir_all(&folder);
+        let ran = match ran {
+            Ok(ran) => ran,
+            Err(why) if why.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!("SKIPPED: no Node on this computer, so the twenty-eighth notes' Server output check was not run");
+                return;
+            }
+            Err(why) => panic!("Node could not run the twenty-eighth notes' Server output check: {why}"),
+        };
+        assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+        let out: serde_json::Value = serde_json::from_slice(&ran.stdout).unwrap();
+        assert_eq!(out["lists"], 0, "the card was meant to have no list: {out}");
+        assert_eq!(out["under"], serde_json::json!(["suout alone"]), "Server output is not at the card's own edge: {out}");
+        assert_eq!(
+            out["lineShapes"],
+            serde_json::json!([{ "sentence": words::ITS_PROGRAMS_DOWNLOAD_GOT_NO_RESPONSE, "controls": 0 }]),
+            "the failure line has a control of its own: {out}"
+        );
+        let whole = format!("{}\n{}\n{the_download_said}", words::SET_UP_THIS_SERVER, words::FROM_SMOOZY_ON_THIS_COMPUTER);
+        assert_eq!(out["opened"]["selected"], serde_json::json!(["false", "true"]), "Server output did not open on Errors: {out}");
+        assert_eq!(out["opened"]["hidden"], serde_json::json!([true, false]), "{out}");
+        assert_eq!(out["opened"]["shown"], whole.as_str(), "{out}");
+        assert_eq!(
+            out["opened"]["lines"],
+            serde_json::json!([words::SET_UP_THIS_SERVER, words::FROM_SMOOZY_ON_THIS_COMPUTER]),
+            "the lines are not drawn as the quieter line: {out}"
+        );
+        assert_eq!(out["opened"]["copy"], whole.as_str(), "Copy did not take the lines with the words: {out}");
+        assert_eq!(out["next"]["panels"], 1, "{out}");
+        assert_eq!(out["next"]["selected"], serde_json::json!(["false", "true"]), "the reader's tab was lost: {out}");
+        assert_eq!(
+            out["next"]["errors"],
+            serde_json::json!([words::SET_UP_THIS_SERVER, words::FROM_SMOOZY_ON_THIS_COMPUTER, "Install Blender 5.2.2"]),
+            "{out}"
+        );
+        assert_eq!(out["next"]["output"], serde_json::json!([words::SET_UP_THIS_SERVER, "Install Blender 5.2.2"]), "{out}");
+        assert_eq!(out["next"]["shown"], format!("{}\nInstall Blender 5.2.2\nx86_64\n", words::SET_UP_THIS_SERVER).as_str(), "{out}");
+    }
+
     /// **The sixteenth notes, note 1 — `Design/Server Setup § A long step`:
     /// where a step's words could not be brought back, each tab says *Some of
     /// what the server printed could not be shown.* under the words it has, and
@@ -15999,10 +18325,15 @@ out.stopped = {
 console.log(JSON.stringify(out));"#;
 
     /// The stand-ins the harness above loads `web/set-up.js` beside.
-    const THE_SET_UP_STAND_INS: [(&str, &str); 11] = [
+    const THE_SET_UP_STAND_INS: [(&str, &str); 13] = [
+        // The real Help links, which the page imports (2026-11-13).
+        ("help-links.js", include_str!("../../web/help-links.js")),
         // The real drawing of a value, which the page imports (step 10c,
         // dependency wave piece 10a).
         ("the-value-drawn.js", include_str!("../../web/the-value-drawn.js")),
+        // The real one way the focus moves, which the page imports (the
+        // twenty-ninth notes, piece A1).
+        ("the-focus-moves.js", include_str!("../../web/the-focus-moves.js")),
         // **The server list's page keeps the connects that did not happen**,
         // and this stand-in answers from what a harness set and records what
         // was taken away (the Creator's note 14 on the test copy).
@@ -16137,28 +18468,38 @@ console.log(JSON.stringify({
 #[cfg(test)]
 mod wait_reason_tests {
     use super::*;
+    /// **`Server Setup` Y7e: both placement failures' reasons reach *Server
+    /// output*** — from 2026-11-09 on *Errors*, after the act's words, and
+    /// under *From Smoozy on this computer* where the reason is Smoozy's own
+    /// record of the phase; never in a server stream; and the next act adds
+    /// after it rather than letting it go (the twenty-eighth notes, notes 1
+    /// and 7). Until then the reason stood in place of *No output.* on the
+    /// first tab, and the next act cleared it.
     #[test]
     fn wait_reason_reaches_the_empty_output_panel_for_both_placement_failures() {
         use crate::setting_up::{ASetUpAct, WhereTheSetUpGot};
         use smoozy_server_protocol::placement::performing::WhatThePlacementReached;
-        for (server, came) in [
-            ("wait-reason-placement", WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut { said: "Permission denied.".into() }),
-            ("wait-reason-commit", WhereTheSetUpGot::ThePlacement { reached: WhatThePlacementReached::FailedBeforeCommit { because: "Disk full.".into() } }),
+        for (server, came, labelled) in [
+            ("wait-reason-placement", WhereTheSetUpGot::ThePlacementCouldNotBeCarriedOut { said: "Permission denied.".into() }, false),
+            ("wait-reason-commit", WhereTheSetUpGot::ThePlacement { reached: WhatThePlacementReached::FailedBeforeCommit { because: "Disk full.".into() } }, true),
         ] {
             crate::setting_up::a_runs_words_begin(server);
             let reason = the_reason_in(&came).the_machines_own_words.unwrap();
             the_acts_ending(server, &ASetUpAct::TheReadyAction { a_render_was_running: false }, &came, &[], false, &mut |_| None);
             let panel = the_servers_output_on(server, "Render server").unwrap();
-            assert_eq!(panel.tabs[0].said, Some(Prose::new(&reason)));
-            assert!(panel.tabs[0].record.is_none(), "the reason is not a server stream");
+            assert_eq!(panel.tabs[0].said, Some(Prose::new(words::THE_SERVER_PRINTED_NO_OUTPUT)), "the reason is not a server stream");
+            let errors = if labelled { format!("{}\n{reason}", words::FROM_SMOOZY_ON_THIS_COMPUTER) } else { reason.clone() };
+            assert_eq!(panel.tabs[1].record, Some(Verbatim::new(&errors)));
+            assert!(panel.opens_on_the_errors_tab);
             assert_eq!(the_servers_output_on(server, "Render server").unwrap(), panel);
+            crate::setting_up::a_runs_words_begin(server);
             crate::setting_up::a_piece_is_kept(server, smoozy_server_setup::ready_action::Step::Libraries,
                 &crate::servers::sessions::APiecePrinted::Output(b"server output\n".to_vec()));
-            assert_eq!(the_servers_output_on(server, "Render server").unwrap().tabs[0].record,
-                Some(Verbatim::new("server output\n")));
-            crate::setting_up::a_runs_words_begin(server);
-            assert_eq!(the_servers_output_on(server, "Render server").unwrap().tabs[0].said,
-                Some(Prose::new(words::THE_SERVER_PRINTED_NO_OUTPUT)));
+            let after = the_servers_output_on(server, "Render server").unwrap();
+            assert_eq!(after.tabs[0].record, Some(Verbatim::new("server output\n")));
+            assert_eq!(after.tabs[1].record, Some(Verbatim::new(&errors)), "the next act let the reason go");
+            assert!(!after.opens_on_the_errors_tab, "a new act still opens on the last one's failure");
+            crate::setting_up::the_servers_words_go(server);
         }
     }
 }
@@ -16183,5 +18524,247 @@ mod wait_diary_tests {
         assert_eq!(lines.lines[0].run, run);
         drop(diary);
         std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    /// **`Desktop app and delivery` M32b: Blender's download list that could
+    /// not be read keeps its reason in the diary**, beside the sentence the
+    /// user read. **Failed before the fix**: the line held the sentence alone
+    /// and the reason was dropped.
+    #[test]
+    fn the_download_lists_reason_is_in_the_diary() {
+        use smoozy_state::identities::{Identity, IdentityKind};
+        let folder = std::env::temp_dir().join(format!("smoozy-list-reason-{}", std::process::id()));
+        let diary = crate::diary_service::DiaryService::open_at(folder.clone()).unwrap();
+        let run = Identity::issue(IdentityKind::Run).unwrap();
+        let row = Identity::issue(IdentityKind::LocalServer).unwrap();
+        let why = WhyTheListingCouldNotBeRead::TheRequestDidNotGetAnAnswer("203.0.113.7:443: io: unexpected end of file".into());
+        the_list_reason_is_recorded(Some(&diary), Some(&run), &row, "Render server", &why);
+        let lines = diary.read_back().unwrap();
+        assert_eq!(lines.lines.len(), 1);
+        let text = &lines.lines[0].text;
+        assert!(text.starts_with(words::THE_LIST_COULD_NOT_BE_READ), "{text}");
+        assert!(text.contains("Render server"), "{text}");
+        assert!(text.contains("no answer: 203.0.113.7:443: io: unexpected end of file"), "{text}");
+        assert_eq!(lines.lines[0].concerning, vec![row]);
+        drop(diary);
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+}
+
+/// **The four questions, batch 3: words a user can't act on** (2026-11-11).
+/// Each line is in the user's words, by `Preparation/Groundwork/Rules.md`
+/// Rule 1 and Rule 9. Written before the words changed, and failed first.
+#[cfg(test)]
+mod the_four_questions_batch_3 {
+    use super::*;
+
+    use crate::setting_up::{WhereTheSetUpGot, WhichReadingRefused};
+
+    /// Scout 3.4: what is supported is named, and a kind is not called an
+    /// operating system.
+    #[test]
+    fn an_unsupported_server_says_what_is_supported() {
+        let family = what_it_came_to(&WhereTheSetUpGot::TheKindOrTheFamilyWouldNotRead {
+            which: WhichReadingRefused::TheFamily,
+        });
+        assert_eq!(family.said, "Only Ubuntu and Debian servers are supported. Nothing was changed.");
+        let kind = what_it_came_to(&WhereTheSetUpGot::TheKindOrTheFamilyWouldNotRead {
+            which: WhichReadingRefused::TheKind,
+        });
+        assert_eq!(kind.said, "This kind of server is not supported. Nothing was changed.");
+    }
+
+    /// Scout 3.5: the driver that would do is named, and what to do instead.
+    #[test]
+    fn the_driver_warning_names_the_driver_needed_and_what_to_do() {
+        let statement = smoozy_servers::hardware::TheDriverStatement {
+            the_drivers_version: "550.163.01".into(),
+            cuda_version: Some("12.4".into()),
+            from_blender: (5, 2, 0),
+            below_it: smoozy_servers::hardware::WhatTheBarStops::Optix,
+            driver_minimum: &[570],
+        };
+        let warning = the_driver_warning(&statement, smoozy_servers::hardware::WhereK1PlacesIt::AContainer, false);
+        assert_eq!(
+            warning.said,
+            Prose::new(
+                "This server's NVIDIA driver, 550.163.01 (CUDA 12.4), is too old for OptiX in Blender 5.2 \
+                 and later, which needs 570 or newer."
+            )
+        );
+        assert_eq!(
+            warning.and,
+            Prose::new("It can't be updated here: pick an older Blender or render on the CPU.")
+        );
+    }
+
+    /// Scouts 3.8, 3.9, 3.10, 3.12 and 3.13.
+    #[test]
+    fn the_set_up_words_say_what_is_true_and_what_to_do() {
+        // 3.8: which password.
+        assert_eq!(words::NEEDS_ADMIN_ACCESS, "This step needs the server's login password");
+        // 3.9: never connected only where that is so.
+        assert_eq!(words::NEVER_READ, "Not connected.");
+        assert_eq!(words::NO_SETUP_WAS_READ_WHY, "This server has not been set up.");
+        assert_eq!(words::NO_BLENDER_ON_THIS_SERVER, "No Blender on this server.");
+        assert_eq!(
+            the_table_the_search_found(&[]).instead,
+            Some(plainly(words::NO_BLENDER_ON_THIS_SERVER))
+        );
+        // 3.10: one word for ending a stopped setup, and whether jobs can run.
+        assert_eq!(words::ABANDON_SETUP, "End setup");
+        assert_eq!(
+            format!(
+                "{} {} {}",
+                words::THE_CLOSING_PARAGRAPH_ONE,
+                words::ABANDON_SETUP,
+                words::THE_CLOSING_PARAGRAPH_TWO
+            ),
+            "Set up again resumes where it stopped. End setup keeps what is installed and lets jobs run."
+        );
+        assert_eq!(words::THE_RETRY_PARAGRAPH_ONE, "Jobs can still run on this server.");
+        assert_eq!(words::ABANDONED_AND_THE_CHECK_PASSED, "Setup ended. Final check passed; jobs can run.");
+        assert_eq!(
+            words::ABANDONED_AND_THE_CHECK_DID_NOT_PASS,
+            "Setup ended. Blender or the GPU driver did not pass the final check."
+        );
+        // 3.12: one name per step, saying what it does.
+        assert_eq!(words::LIBRARIES, "Install system libraries");
+        assert_eq!(words::DOING_THE_READINGS, "Checking what is installed");
+        assert_eq!(words::FAILED_FINAL_CHECK, "Blender or the GPU driver did not pass the final check.");
+        // 3.13: where *there* is.
+        assert_eq!(
+            words::THE_MANAGER_IS_THE_ROUTE,
+            "Installed with the system's package manager (apt), so it can't be removed here."
+        );
+    }
+}
+
+#[cfg(test)]
+mod an_answer_after_its_run_ended {
+    use super::*;
+
+    fn the_key_of(choice: MachinePasswordChoice) -> String {
+        a_choice(choice).which.as_str().to_string()
+    }
+
+    /// **`Server Setup` E2, *an answer that comes after its run ended*
+    /// (2026-11-12, Sol's look at the double-check ideas, finding 4): a
+    /// password given to an offer whose run has ended is neither kept nor
+    /// used, and the card says so.** The run waited on the box; the server
+    /// stopped answering and the run ended, which lets go of the end it
+    /// waited on; the box is still open and *Try again* is pressed with
+    /// *Save* chosen. **It failed before the fix**: the password was kept
+    /// first, then could not be handed over, and nothing was said.
+    #[test]
+    fn double_check_sol_4_a_password_given_after_its_setup_ended_is_not_kept_and_the_card_says_so() {
+        let server = "sol-4-the-run-ended-first";
+        let the_runs_end = crate::setting_up::an_offer_stands_for_a_test(server);
+        drop(the_runs_end);
+
+        let mut kept = 0;
+        let mut told = Vec::new();
+        the_admin_access_answer_is_taken(
+            server,
+            Some("a password".to_string()),
+            Some(&the_key_of(MachinePasswordChoice::RememberIt)),
+            &mut |_, _| kept += 1,
+            &mut |_| {},
+            &mut |event| told.push(event),
+        );
+        assert_eq!(kept, 0, "a password for a run that has ended was kept");
+        assert_eq!(
+            told,
+            vec![one_line_about(server, words::SETUP_ENDED_THE_PASSWORD_WAS_NOT_USED)],
+            "the card says the password was not used"
+        );
+        assert_eq!(words::SETUP_ENDED_THE_PASSWORD_WAS_NOT_USED, "Setup ended. The password was not used or saved.");
+
+        // **The same where no offer stands at all**, and *Cancel* says nothing.
+        let mut kept = 0;
+        let mut told = Vec::new();
+        the_admin_access_answer_is_taken(
+            "sol-4-no-offer-at-all",
+            Some("a password".to_string()),
+            Some(&the_key_of(MachinePasswordChoice::WhileThisConnectionLasts)),
+            &mut |_, _| kept += 1,
+            &mut |_| {},
+            &mut |event| told.push(event),
+        );
+        assert_eq!((kept, told.len()), (0, 1));
+        let mut told = Vec::new();
+        the_admin_access_answer_is_taken(server, None, None, &mut |_, _| {}, &mut |_| {}, &mut |event| told.push(event));
+        assert!(told.is_empty(), "Cancel on a box whose run ended says nothing");
+    }
+
+    /// **Sol's look at this fix: a run that ends while the password is being
+    /// kept is not handed it, another run's offer is not handed it either,
+    /// and only what the choice kept is forgotten.** The keeping stands in
+    /// for the store call during which the run ends; in the second half
+    /// another run's offer stands on the server by then.
+    #[test]
+    fn double_check_sol_4_a_run_that_ends_during_the_keeping_gets_nothing_and_no_other_run_does() {
+        for (choice, forgotten) in [
+            (MachinePasswordChoice::RememberIt, vec![MachinePasswordChoice::RememberIt]),
+            (MachinePasswordChoice::WhileThisConnectionLasts, vec![MachinePasswordChoice::WhileThisConnectionLasts]),
+        ] {
+            let server = "sol-4-the-run-ends-during-the-keeping";
+            let mut the_runs_end = Some(crate::setting_up::an_offer_stands_for_a_test(server));
+            let mut the_next_runs_end = None;
+            let (mut forgot, mut told) = (Vec::new(), Vec::new());
+            the_admin_access_answer_is_taken(
+                server,
+                Some("a password".to_string()),
+                Some(&the_key_of(choice)),
+                &mut |_, _| {
+                    drop(the_runs_end.take());
+                    the_next_runs_end = Some(crate::setting_up::an_offer_stands_for_a_test(server));
+                },
+                &mut |choice| forgot.push(choice),
+                &mut |event| told.push(event),
+            );
+            assert_eq!(forgot, forgotten, "what the choice kept is forgotten again");
+            assert_eq!(told, vec![one_line_about(server, words::SETUP_ENDED_THE_PASSWORD_WAS_NOT_USED)]);
+            let mut the_next = the_next_runs_end.expect("the next run's offer");
+            assert!(
+                matches!(the_next.try_recv(), Err(tokio::sync::oneshot::error::TryRecvError::Empty)),
+                "the next run was handed a password given to the run before it"
+            );
+            crate::setting_up::the_offer_is_answered(server, None);
+        }
+        // ***Don't save* kept nothing, so nothing is forgotten.**
+        let server = "sol-4-dont-save";
+        let mut the_runs_end = Some(crate::setting_up::an_offer_stands_for_a_test(server));
+        let mut forgot = Vec::new();
+        the_admin_access_answer_is_taken(
+            server,
+            Some("a password".to_string()),
+            Some(&the_key_of(MachinePasswordChoice::DoNotRememberIt)),
+            &mut |_, _| drop(the_runs_end.take()),
+            &mut |choice| forgot.push(choice),
+            &mut |_| {},
+        );
+        assert_eq!(forgot, vec![MachinePasswordChoice::DoNotRememberIt], "the choice is handed on, and its forgetting does nothing");
+    }
+
+    /// **And a run still waiting is handed the password as before**: kept as
+    /// chosen first, then handed over, and the card is asked again.
+    #[test]
+    fn double_check_sol_4_a_run_still_waiting_is_handed_the_password_as_before() {
+        let server = "sol-4-the-run-still-waits";
+        let mut the_runs_end = crate::setting_up::an_offer_stands_for_a_test(server);
+        let mut kept = Vec::new();
+        let mut told = Vec::new();
+        the_admin_access_answer_is_taken(
+            server,
+            Some("a password".to_string()),
+            Some(&the_key_of(MachinePasswordChoice::RememberIt)),
+            &mut |_, choice| kept.push(choice),
+            &mut |_| {},
+            &mut |event| told.push(event),
+        );
+        assert_eq!(kept, vec![MachinePasswordChoice::RememberIt]);
+        assert!(matches!(the_runs_end.try_recv(), Ok(Some(_))), "the run was handed the password");
+        assert_eq!(told, vec![the_run_moved_on(server)]);
     }
 }

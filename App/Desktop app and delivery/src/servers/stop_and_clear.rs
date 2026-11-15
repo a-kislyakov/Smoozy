@@ -64,7 +64,8 @@ use smoozy_server_protocol::framing::{Fields, Request, THE_PROTOCOL_VERSION_THIS
 use smoozy_server_protocol::requests::{
     ITS_OWN_ENDING, IT_HAS_A_RECORDED_OUTCOME, IT_IS_STILL_IN_HAND, IT_WAS_CLEARED,
     IT_WAS_LEFT_STOPPED, NOTHING_WAS_RENDERING, THERE_IS_NO_RECORD_OF_IT, THE_CLEARS_OUTCOME_FIELD,
-    THE_CLEAR_REQUEST, THE_GROUP_FIELD, THE_PAIRED_CLEAR_FIELD, THE_PAIRED_STOP_FIELD,
+    THE_CLEAR_REQUEST, THE_FIRST_FRAME_CHECK_FIELD, THE_GROUP_FIELD, THE_PAIRED_CLEAR_FIELD,
+    THE_PAIRED_STOP_FIELD, THE_PAIRS_CLEAR_REQUEST, THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST,
     THE_RENDER_IS_NOT_A_MEMBER, THE_RENDER_THE_DESKTOP_LAST_SAW_FIELD,
     THE_STOPS_OUTCOME_FIELD, THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST, THE_STOP_WAS_NOT_ATTEMPTED,
     THE_TELEGRAM_ROLE_IS_DISABLED_REQUEST, WHAT_BECAME_OF_IT_FIELD, WHAT_THE_ROLE_WORKER_DID_FIELD,
@@ -148,6 +149,13 @@ impl TheWait {
 pub struct WhatThePairCarries {
     pub group: Option<Identity>,
     pub the_render_the_desktop_last_saw: Option<Identity>,
+    /// **`Queue & History` L19a: the first-frame check whose pair the stop
+    /// ends**, where the pair is a first-frame pair's. The two halves then go
+    /// under the pair's own request names, so a program older than `Queue & History` L19a
+    /// refuses them by name ([`WhatThePairCameTo::TheProgramIsOlder`]) and
+    /// is never sent a clear that would empty the machine. The twenty-eighth
+    /// notes, note 16.
+    pub first_frame_check: Option<Identity>,
 }
 
 /// **What the pair came to** — `Queue & History` L17's three results, with
@@ -173,6 +181,11 @@ pub enum WhatThePairCameTo {
     /// K10: *"the stop was sent, and the render had not ended when Smoozy
     /// stopped waiting"*.
     TheRenderHadNotStopped,
+    /// **A first-frame pair's clear refused by name** — a program older than
+    /// `Queue & History` L19a. Nothing on the machine changed, and the caller
+    /// sends the check's ordinary stop instead. Only a pair carrying
+    /// [`WhatThePairCarries::first_frame_check`] meets it.
+    TheProgramIsOlder,
     /// **Nothing that answers the clear came back, and the wait ended.** The
     /// request may have reached the machine, in which case the machine carries
     /// the pair out with nobody connected (`Queue & History` L13). **So the
@@ -296,6 +309,9 @@ fn one_half(
     if let Some(group) = &carries.group {
         fields = fields.and(THE_GROUP_FIELD, group.as_text());
     }
+    if let Some(check) = &carries.first_frame_check {
+        fields = fields.and(THE_FIRST_FRAME_CHECK_FIELD, check.as_text());
+    }
     if let Some(render) = &carries.the_render_the_desktop_last_saw {
         fields = fields.and(THE_RENDER_THE_DESKTOP_LAST_SAW_FIELD, render.as_text());
     }
@@ -336,9 +352,15 @@ pub fn the_pair_is_sent(
     };
     let the_record = Some(writing.identity().clone());
 
-    let the_clear = one_half(THE_CLEAR_REQUEST, &pair.clear, THE_PAIRED_STOP_FIELD, &pair.stop, carries);
+    // **`Queue & History` L19a: a first-frame pair's halves go under their own
+    // names**, never the machine-wide clear's.
+    let (the_clears_name, the_stops_name) = match carries.first_frame_check {
+        Some(_) => (THE_PAIRS_CLEAR_REQUEST, THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST),
+        None => (THE_CLEAR_REQUEST, THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST),
+    };
+    let the_clear = one_half(the_clears_name, &pair.clear, THE_PAIRED_STOP_FIELD, &pair.stop, carries);
     let the_stop = one_half(
-        THE_STOP_PAIRED_WITH_A_CLEAR_REQUEST,
+        the_stops_name,
         &pair.stop,
         THE_PAIRED_CLEAR_FIELD,
         &pair.clear,
@@ -364,6 +386,14 @@ pub fn the_pair_is_sent(
                 return the_wait_is_over(&the_clears, the_clear_is_in_hand, the_record);
             };
             match what_was_heard(machine.ask_within(&the_clear, left), THE_CLEARS_OUTCOME_FIELD) {
+                // **A first-frame pair's clear refused by name is a program
+                // older than `Queue & History` L19a** — said apart, so the
+                // caller can send the ordinary stop. Nothing changed on it.
+                Heard::ARefusal if carries.first_frame_check.is_some() => {
+                    ended(&mut writing, THE_CLEAR, UnitOutcome::Failed);
+                    ended(&mut writing, THE_STOP, the_stops_unit_where_the_clear_was_refused());
+                    return ThePairWent { came_to: WhatThePairCameTo::TheProgramIsOlder, the_record };
+                }
                 Heard::ARefusal | Heard::NoRecord => {
                     // **Nothing on the machine changed**, and the stop is not
                     // sent: it is unsafe without the clear (`State, identity

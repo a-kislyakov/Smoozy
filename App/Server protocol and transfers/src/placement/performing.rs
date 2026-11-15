@@ -105,7 +105,8 @@ use crate::placement::records::{
 use crate::placement::registration::{
     confirm_the_registration, enable_the_unit, grant_lingering, install_the_hook,
     place_the_registration, read_the_linger_flag_back, start_the_supervisor_the_pointer_names,
-    the_container_hooks_content, the_user_manager_answers, TheRootStepOnAContainer,
+    start_the_supervisor_the_pointer_names_after_a_restore, the_container_hooks_content,
+    the_user_manager_answers, TheRootStepOnAContainer,
 };
 use crate::placement::{remove_the_previous_package, sweep_the_abandoned_staging};
 use crate::release::verifying::{
@@ -215,7 +216,16 @@ where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
     Ok(
-        match asked_once(subsystem, connection, package_area, identity).await? {
+        match asked_once(
+            subsystem,
+            connection,
+            package_area,
+            identity,
+            THE_LEAST_ONE_ASKING_OF_THE_ENTRY_POINT_IS_GIVEN,
+            None,
+        )
+        .await?
+        {
             WhatOneAskingCameTo::NothingAnswered => None,
             WhatOneAskingCameTo::AFrameCameBack(answer) => answer,
         },
@@ -237,11 +247,50 @@ enum WhatOneAskingCameTo {
     AFrameCameBack(Option<HealthAnswer>),
 }
 
+/// **The least one asking of the entry point is given before it is read as
+/// *nothing answered*.** A Build figure. A supervisor that is up answers this
+/// reading at once, and where none holds the endpoint the adapter ends at
+/// once with no frame; only an entry point that does not return meets it.
+/// Added 2026-11-12, the live pass's new fault 2.
+pub const THE_LEAST_ONE_ASKING_OF_THE_ENTRY_POINT_IS_GIVEN: std::time::Duration =
+    std::time::Duration::from_secs(30);
+
+/// **How long the asking that ends the running supervisor is given.** A
+/// Build figure: the machine waits up to 20 seconds for the endpoint to be let
+/// go before it answers, and this is past that. Added 2026-11-12, the live
+/// pass's new fault 2.
+pub const HOW_LONG_THE_ENDING_IS_GIVEN: std::time::Duration = std::time::Duration::from_secs(45);
+
+/// **The entry point's one command, carrying one framed request, read to its
+/// end — and its channel closed where the wait is given up.** The begun
+/// command is [`crate::transport::ssh::ACommandUnderWay`], which closes its
+/// channel when it is dropped; the route that reads a command whole in one
+/// call holds a bare channel, and dropped at a limit it sent no close (Sol's
+/// look, 2026-11-12). **What a close does to a program still running on the
+/// machine is not established here**: nothing signals it.
+async fn one_asking_of_the_entry_point(
+    connection: &mut Connection,
+    frame: &[u8],
+) -> Result<crate::transport::CommandResult, crate::transport::ssh::CommandFailure> {
+    let under_way = connection
+        .one_command_begun(THE_HEALTH_EXCHANGE_COMMAND, Some(frame))
+        .await?;
+    Ok(under_way.to_its_end().await)
+}
+
+/// **`within` is this asking's own limit** — `Rented-server runtime` G13 as
+/// added 2026-11-12: *"An entry point that does not return is no answer"*.
+/// Until then the command was awaited with no limit, so a new program that
+/// started and never answered held the exchange for good: the caller's
+/// deadline was only looked at between two askings, and the first never
+/// ended (the live pass of 2026-11-12, new fault 2).
 async fn asked_once<S>(
     subsystem: &mut Subsystem<S>,
     connection: &mut Connection,
     package_area: &str,
     identity: Identity,
+    within: std::time::Duration,
+    gave_up: Option<&TheCallerGaveUp>,
 ) -> Result<WhatOneAskingCameTo, SubsystemFailure>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -266,14 +315,21 @@ where
         THE_HEALTH_ANSWER_REQUEST,
     );
 
-    let said = connection
-        .run_one_command_carrying_a_framed_request_on_its_standard_input(
-            THE_HEALTH_EXCHANGE_COMMAND,
-            &write_request_frame(&request),
-        )
-        .await;
+    let frame = write_request_frame(&request);
+    let said = tokio::select! {
+        said = tokio::time::timeout(
+            within,
+            one_asking_of_the_entry_point(connection, &frame),
+        ) => said.ok(),
+        () = the_caller_gives_up(gave_up) => None,
+    };
     take_it_away(subsystem, &mut planted).await;
 
+    // **An entry point that did not return inside its limit is no answer**,
+    // and so is one the caller stopped waiting on.
+    let Some(said) = said else {
+        return Ok(WhatOneAskingCameTo::NothingAnswered);
+    };
     let Ok(said) = said else {
         return Ok(WhatOneAskingCameTo::NothingAnswered);
     };
@@ -326,9 +382,26 @@ where
 {
     let started = std::time::Instant::now();
     loop {
-        match asked_once(surface.subsystem, surface.connection, area, identity.clone()).await? {
+        // **Each asking is given what is left of the caller's deadline, and
+        // never less than a working program needs to end by itself.**
+        let within = deadline
+            .saturating_sub(started.elapsed())
+            .max(THE_LEAST_ONE_ASKING_OF_THE_ENTRY_POINT_IS_GIVEN);
+        let gave_up = surface.the_caller_gave_up.clone();
+        match asked_once(
+            surface.subsystem,
+            surface.connection,
+            area,
+            identity.clone(),
+            within,
+            gave_up.as_ref(),
+        )
+        .await?
+        {
             WhatOneAskingCameTo::AFrameCameBack(answer) => return Ok(answer),
-            WhatOneAskingCameTo::NothingAnswered if started.elapsed() >= deadline => {
+            WhatOneAskingCameTo::NothingAnswered
+                if started.elapsed() >= deadline || gave_up.as_ref().is_some_and(|asked| asked()) =>
+            {
                 return Ok(None)
             }
             WhatOneAskingCameTo::NothingAnswered => {
@@ -416,6 +489,23 @@ pub async fn ask_the_running_supervisor_to_end<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
 {
+    ask_the_running_supervisor_to_end_unless(subsystem, connection, package_area, identity, None)
+        .await
+}
+
+/// [`ask_the_running_supervisor_to_end`], **given up where the caller stops
+/// waiting** — the commit's own asking, and never the restore's. Added
+/// 2026-11-12.
+async fn ask_the_running_supervisor_to_end_unless<S>(
+    subsystem: &mut Subsystem<S>,
+    connection: &mut Connection,
+    package_area: &str,
+    identity: Identity,
+    gave_up: Option<&TheCallerGaveUp>,
+) -> WhetherTheRunningSupervisorEnded
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
     let mut planted = match plant(
         subsystem,
         THE_ENTRY_POINTS_CARRIAGE_SITE,
@@ -438,13 +528,30 @@ where
         identity,
         THE_SUPERVISOR_ENDS_ITSELF_REQUEST,
     );
-    let said = connection
-        .run_one_command_carrying_a_framed_request_on_its_standard_input(
-            THE_HEALTH_EXCHANGE_COMMAND,
-            &write_request_frame(&request),
-        )
-        .await;
+    let frame = write_request_frame(&request);
+    let said = tokio::select! {
+        said = tokio::time::timeout(
+            HOW_LONG_THE_ENDING_IS_GIVEN,
+            one_asking_of_the_entry_point(connection, &frame),
+        ) => said,
+        () = the_caller_gives_up(gave_up) => {
+            take_it_away(subsystem, &mut planted).await;
+            return WhetherTheRunningSupervisorEnded::ItWouldNot(
+                "the caller stopped waiting for the entry point".to_string(),
+            );
+        }
+    };
     take_it_away(subsystem, &mut planted).await;
+
+    // **An entry point that did not return is an ending that did not
+    // happen**, said as such: the pointer's program may be one that never
+    // answers. Added 2026-11-12, the live pass's new fault 2.
+    let Ok(said) = said else {
+        return WhetherTheRunningSupervisorEnded::ItWouldNot(format!(
+            "the entry point did not answer in {} seconds",
+            HOW_LONG_THE_ENDING_IS_GIVEN.as_secs()
+        ));
+    };
 
     // **An entry point that produced no frame, or ended non-zero, is read as
     // G25's *a first placement has no supervisor to end*.** This build's
@@ -511,6 +618,24 @@ pub struct ThePlacementsSurface<'a, S> {
     /// records without the ordering is one Smoozy knows about rather than one
     /// it merely served.
     the_durability_ordering: WhetherTheDurabilityOrderingApplied,
+    /// **Whether the caller has stopped waiting**, asked while the entry point
+    /// is waited on — see [`ThePlacementsSurface::giving_up_when`].
+    the_caller_gave_up: Option<TheCallerGaveUp>,
+}
+
+/// **The caller's own answer to *have you stopped waiting?*** — the setup's
+/// *Cancel setup*, read at the desk. Added 2026-11-12.
+pub type TheCallerGaveUp = std::sync::Arc<dyn Fn() -> bool + Send + Sync>;
+
+/// **Answers once the caller has stopped waiting**; never, where no caller
+/// can. It is asked four times a second while a command is waited on.
+async fn the_caller_gives_up(asked: Option<&TheCallerGaveUp>) {
+    let Some(asked) = asked else {
+        return std::future::pending().await;
+    };
+    while !asked() {
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
 }
 
 impl<'a, S> ThePlacementsSurface<'a, S> {
@@ -524,7 +649,20 @@ impl<'a, S> ThePlacementsSurface<'a, S> {
             connection,
             the_durability_ordering:
                 WhetherTheDurabilityOrderingApplied::TheStagedBytesWereMadeDurableFirst,
+            the_caller_gave_up: None,
         }
+    }
+
+    /// **The same surface, whose waits on the new program end when the caller
+    /// stops waiting** — `Rented-server runtime` G13 as added 2026-11-12: a
+    /// caller that stops waiting is the *did not answer* branch at once, so
+    /// the restore runs and the previous program is put back. **Only the
+    /// commit's two waits read it**: the asking that ends the running
+    /// supervisor and the health exchange. The restore's own acts never do,
+    /// so a cancel cannot cut the rollback it caused.
+    pub fn giving_up_when(mut self, asked: TheCallerGaveUp) -> ThePlacementsSurface<'a, S> {
+        self.the_caller_gave_up = Some(asked);
+        self
     }
 
     /// **Weakened by any write that did not get the ordering, and never
@@ -827,7 +965,12 @@ where
     // its own** — a fall-through arm here wrote a fresh attempt over six of
     // them, resetting the phase, replacing the carried-forward previous value,
     // sweeping the staging and staging the whole artifact again.
+    // **The outgoing record, kept by value for G4's carry-forward below.** The
+    // drives beneath may write over it on the machine; what is carried forward
+    // is read from what stood when this request arrived.
+    let mut the_outgoing_record: Option<PhaseRecord> = None;
     if let WhatARecordHeld::It(standing) = read_the_phase_record(surface.subsystem, area).await? {
+        the_outgoing_record = Some(standing.clone());
         if standing.attempt == needs.attempt {
             if let Some(reached) =
                 what_this_attempts_own_retry_does(surface, area, standing, needs).await?
@@ -842,10 +985,26 @@ where
     }
 
     // ------------------- act two: G4's one write, carrying everything together
+    // **`Rented-server runtime` G4, *where the request carries no previous
+    // version and the machine has one*.** What the outgoing record and the
+    // pointer say is running comes first, so a failed exchange restores it
+    // rather than taking G6's branch over a running program. **A request's own
+    // value is used only where the machine gives none.** It was taken at its
+    // word at first; the desktop tells the record's two descriptors apart by
+    // release sequence, and after the same release is placed again and rolled
+    // back both carry one number, so it handed in the swept attempt's location
+    // (Sol's read-only look, 2026-11-12).
+    let carried_forward =
+        match the_previous_version_the_machine_holds(surface, area, the_outgoing_record.as_ref())
+            .await?
+        {
+            Some(read) => Some(read),
+            None => needs.previous.clone(),
+        };
     let mut record = a_fresh_attempts_first_write(
         needs.attempt.clone(),
         (*descriptor).clone(),
-        needs.previous.clone(),
+        carried_forward,
         needs.kind,
         crate::placement::the_staging_location_for(area, &needs.attempt),
     );
@@ -862,6 +1021,65 @@ where
     sweep_the_abandoned_staging(surface.subsystem, &record).await?;
 
     from_the_staging(surface, area, &mut record, needs, None).await
+}
+
+/// **`Rented-server runtime` G4's previous version, read off the machine where
+/// the request carries none.** Added 2026-11-12, the night pass's new fault 2.
+///
+/// **Whichever of the outgoing record's two descriptors sits at the location
+/// the active pointer names** — `Rented-server runtime` G31a's rule: the
+/// requested package where the record's staging location is what the pointer
+/// names, the recorded previous one where its location is. The pointer is read
+/// as a value and never followed (`Rented-server runtime` G11).
+///
+/// **Nothing where there is no record, no pointer, or the pointer names
+/// neither**: a package nothing describes cannot be given a descriptor, and
+/// `Rented-server runtime` G6 then stands as written.
+///
+/// **What it answers.** `Server Setup` R2's placement hands in no previous
+/// version, and it also meets a machine that is running Smoozy: one removed
+/// from the desktop and added again, or one another desktop set up. A failed
+/// exchange there removed the pointer over a running program.
+async fn the_previous_version_the_machine_holds<S>(
+    surface: &mut ThePlacementsSurface<'_, S>,
+    area: &str,
+    outgoing: Option<&PhaseRecord>,
+) -> Result<Option<PreviousVersion>, SubsystemFailure>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
+    let Some(outgoing) = outgoing else {
+        return Ok(None);
+    };
+    let Some(named) = the_active_pointers_value(surface.subsystem, area).await? else {
+        return Ok(None);
+    };
+    if outgoing.staging_location == named {
+        let registration = match read_the_boot_registration_record(surface.subsystem, area).await? {
+            WhatARecordHeld::It(standing) => standing.content,
+            _ => Vec::new(),
+        };
+        return Ok(Some(PreviousVersion {
+            descriptor: outgoing.requested.clone(),
+            retained_adapter: outgoing
+                .staged_packages_retained_adapters
+                .first()
+                .cloned()
+                .unwrap_or(smoozy_runtime::package::release::RetainedAdapter {
+                    declared_interval: (
+                        THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS.0,
+                        THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS.0,
+                    ),
+                    declared_request_set: Vec::new(),
+                }),
+            location: named,
+            previous_boot_registration_content: registration,
+        }));
+    }
+    Ok(outgoing
+        .previous
+        .clone()
+        .filter(|previous| previous.location == named))
 }
 
 /// **What a walk that ended in an error leaves, made safe as far as the
@@ -1697,11 +1915,13 @@ where
                     // release's supervisor records it before it acts (C4).
                     let ended = match Identity::issue(IdentityKind::Operation) {
                         Ok(identity) => {
-                            ask_the_running_supervisor_to_end(
+                            let gave_up = surface.the_caller_gave_up.clone();
+                            ask_the_running_supervisor_to_end_unless(
                                 surface.subsystem,
                                 surface.connection,
                                 area,
                                 identity,
+                                gave_up.as_ref(),
                             )
                             .await
                         }
@@ -1901,6 +2121,21 @@ where
     // direction**, from the recorded value and never from a second reading of
     // the machine.
     rename_the_pointer_to(surface.subsystem, area, &previous.location).await?;
+
+    // **`Rented-server runtime` G14's *what runs after the restore*, before the
+    // sweep and before the terminal write.** Before the sweep, so a new program
+    // that stayed up is ended before its file is removed. Before the terminal
+    // write, so a connection lost here leaves *rolling back* and G16's next
+    // request starts it again.
+    //
+    // **Whatever phase the restore began from.** A record at *committing* does
+    // not say G25's ending was never reached: a continuation from *committed,
+    // unverified* goes through [`perform_the_commit`] again, which writes
+    // *committing* once more with the previous supervisor already ended. A
+    // version of this that skipped the start at *committing* left such a walk
+    // rolled back with nothing running (Sol's read-only look, 2026-11-11).
+    the_previous_supervisor_is_put_back_in_place(surface, area, rolling_back.machine_kind).await;
+
     sweep_what_the_rolled_back_attempt_staged(surface.subsystem, &rolling_back).await?;
 
     rolling_back.phase = Phase::RolledBack;
@@ -1908,6 +2143,76 @@ where
     surface.note(ordering);
     release_the_claim_at_the_terminal_write(surface.subsystem, area).await?;
     Ok(WhatThePlacementReached::RolledBack)
+}
+
+/// **`Rented-server runtime` G14's *what runs after the restore*: G25's ending
+/// and G25's start, performed again once the pointer names the previous
+/// package.** Added 2026-11-11, the Fable review's third sitting.
+///
+/// **What it answers.** G25 ended the previous supervisor before the exchange,
+/// and the rename back starts nothing. So a failed swap left the machine with
+/// the program that failed, or with none: on a systemd machine a program that
+/// ends as it starts is given up on by the service manager (quoted at
+/// [`crate::placement::registration::THE_SUPERVISOR_START_AFTER_A_RESTORE`]), long before the caller's deadline
+/// for the exchange runs out.
+///
+/// **The acts are G25's own**, so nothing new reaches the machine:
+///
+/// - **on a container**, the entry point is asked for the ending. The pointer
+///   is back, so the program that reads the asking is the previous one, and it
+///   ends the endpoint's holder only where that runs another program. Then the
+///   keeper is started, which ends at once where one already runs;
+/// - **on a systemd machine**, the one command clears the unit's start limit
+///   and restarts it, which is both acts.
+///
+/// **Nothing is decided by what they answer and no exchange follows.** There is
+/// no second restore to take. A start that is refused does not hold the
+/// transaction at *rolling back*: a rollback that could never complete would
+/// refuse every later setup on the machine. It is said, in the machine's own
+/// words, and the terminal write follows.
+async fn the_previous_supervisor_is_put_back_in_place<S>(
+    surface: &mut ThePlacementsSurface<'_, S>,
+    area: &str,
+    kind: MachineKind,
+) where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
+    if kind == MachineKind::Container {
+        let ended = match Identity::issue(IdentityKind::Operation) {
+            Ok(identity) => {
+                ask_the_running_supervisor_to_end(
+                    surface.subsystem,
+                    surface.connection,
+                    area,
+                    identity,
+                )
+                .await
+            }
+            Err(_) => WhetherTheRunningSupervisorEnded::ItWouldNot(
+                "this machine would not supply random bytes for the ending's own identity"
+                    .to_string(),
+            ),
+        };
+        if let WhetherTheRunningSupervisorEnded::ItWouldNot(why) = ended {
+            eprintln!(
+                "smoozy: after the package rollback, the supervisor still running on this \
+                 container would not end, so the previous one may not be the one serving: {why}"
+            );
+        }
+    }
+    if let Err(why) = start_the_supervisor_the_pointer_names_after_a_restore(
+        surface.subsystem,
+        surface.connection,
+        kind,
+        area,
+    )
+    .await
+    {
+        eprintln!(
+            "smoozy: after the package rollback, the previous supervisor could not be started: \
+             {why}"
+        );
+    }
 }
 
 /// **`Rented-server runtime` G5 and §13 R1: the material a rolled-back attempt

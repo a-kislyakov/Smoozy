@@ -35,6 +35,16 @@
   opacity: 1;
 }
 
+/* **A control that was pressed and keeps its words while the work ends** —
+ * *Cancel setup* reading *Cancelling…* (`Design/Server Setup § A long step`,
+ * 2026-11-12). It does not answer and is not dimmed, as above; its words take
+ * the quiet ink the drawing already has. */
+.btn.asked[aria-disabled="true"] {
+  pointer-events: none;
+  cursor: default;
+  color: var(--ink3);
+}
+
 /* **Design's *on the row*: the row says how far along in its own status
  * column.** */
 .underway-row {
@@ -97,7 +107,8 @@
 /* **The turning mark itself, wherever it is not on a control.** Added
  * 2026-09-27, step 10c's eighth-pass fix piece 5.
  *
- * **The drawing styles `.spin` only inside `.uway` and `.rdwait`**, so the mark
+ * **The drawing styles `.spin` only inside `.uway` and `.rdline`** (`.rdwait`
+ * until 2026-11-13), so the mark
  * `theMarkOverAPane()` and `theMarkOnARow()` put down was an empty `<i>` with no
  * size: the Set up tab's first opening and the *Install Blender…* box showed a
  * pale wash with nothing on it, and the setup step under way showed no mark at
@@ -116,14 +127,21 @@
 .underway-row .spin,
 .underway-reading .spin {
   display: inline-block;
-  width: 11px;
-  height: 11px;
+  width: 10px;
+  height: 10px;
   border: 1.5px solid var(--line);
   border-top-color: var(--ink3);
   border-radius: 50%;
-  vertical-align: middle;
+  vertical-align: -1px;
   animation: sp .7s linear infinite;
 }
+/* **One turning mark on a line, everywhere** (UI consistency, finding 39):
+ * the drawing's line mark, 10 pixels with its foot a pixel under the words'
+ * baseline, 7 pixels from its words: after them on Render Settings' pick
+ * line, before them on Telegram's waiting line. It was 11 pixels and centred
+ * here, with a plain space for its gap. */
+.underway-reading .spin { margin-left: 7px; }
+.msub.underway-reading > .spin { margin-left: 0; margin-right: 7px; }
 
 /* **A setup step's mark sits in the step's own line and moves nothing below
  * it.** Added 2026-09-28, step 10c's ninth-pass fix piece 4.

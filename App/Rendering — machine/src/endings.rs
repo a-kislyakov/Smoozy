@@ -105,6 +105,12 @@ pub enum BeforeTheRenderInstruction {
     /// P1a, `Render Settings` Y13–Y14: a name-shaped payload entry the
     /// reading in force does not carry.
     ANameTheReadingInForceDoesNotCarry { name: String },
+    /// **L17c: a job asking for the file's own range, whose scene was saved
+    /// with its last frame before its first** — nothing to render, and the
+    /// file's own. Added 2026-11-14, the Rough what-if answers, share 3 (233):
+    /// it ended as *could not prepare the render: no frames left to render*,
+    /// which named no cause.
+    TheFilesFrameRangeEndsBeforeItStarts { first: i64, last: i64 },
     /// L23: a card make with no technology to name.
     ACardMakeWithNoTechnologyToName { make: String },
     /// **L24b: the job names `OPTIX` and the system's loader does not find
@@ -173,36 +179,43 @@ impl BeforeTheRenderInstruction {
     /// caller that must act on one reads its own field.
     pub fn in_words(&self) -> String {
         match self {
-            BeforeTheRenderInstruction::TheRemapMaterialCouldNotBeRead { material } => format!(
-                "could not read the job's dependency remap ({material})"
-            ),
-            BeforeTheRenderInstruction::TheVersionConfirmationRefused { reason } => {
-                format!("Blender did not confirm its version: {reason}")
+            // **In the user's words since 2026-11-11** (`Design/Queue & History`,
+            // *Where no render began*; the four questions, scout 3.2): these are
+            // read at once under *Failed before rendering.*, on the desktop and
+            // the phone, so none names a part of Smoozy. The material's path is
+            // Smoozy's own file and is not said.
+            BeforeTheRenderInstruction::TheRemapMaterialCouldNotBeRead { material: _ } => {
+                "could not read the job's dependency list".to_string()
             }
+            // **The reason is already a sentence** — `pipeline::the_refusal_in_words`.
+            BeforeTheRenderInstruction::TheVersionConfirmationRefused { reason } => reason.clone(),
             BeforeTheRenderInstruction::TheReadBackMismatched { read, expected } => format!(
-                "a setting read back wrong (read {}, expected {})",
-                String::from_utf8_lossy(read),
-                String::from_utf8_lossy(expected)
+                "a setting did not apply: set to {}, read back as {}",
+                String::from_utf8_lossy(expected),
+                String::from_utf8_lossy(read)
             ),
             BeforeTheRenderInstruction::AReadingThatDidNotEndSuccessfully => {
-                "reading the job's output folder did not finish".to_string()
+                "could not read the job's output folder".to_string()
             }
             BeforeTheRenderInstruction::TheJobsFileReadingDidNotEndSuccessfully => {
-                "reading the job's .blend file did not finish".to_string()
+                "could not read the .blend file on the server".to_string()
             }
             BeforeTheRenderInstruction::APairWhoseAssignmentRaised { pair } => {
-                format!("Blender rejected a setting ({pair})")
+                format!("Blender refused the setting {pair}")
             }
             BeforeTheRenderInstruction::ASettingsPairWhoseNameTheObjectDoesNotCarry {
                 property,
             } => format!(
-                "setting not found on its object ({property})"
+                "Blender has no setting {property}"
             ),
             BeforeTheRenderInstruction::ANameTheReadingInForceDoesNotCarry { name } => {
                 format!("the file has nothing named {name}")
             }
+            BeforeTheRenderInstruction::TheFilesFrameRangeEndsBeforeItStarts { first, last } => {
+                format!("the file's frame range ends before it starts (frames {first} to {last})")
+            }
             BeforeTheRenderInstruction::ACardMakeWithNoTechnologyToName { make } => format!(
-                "could not choose a GPU backend ({make})"
+                "cannot render on the GPU: {make}"
             ),
             // **L24b's own words**, opened with a small letter and left
             // without a full stop like every other occasion here: the
@@ -214,7 +227,7 @@ impl BeforeTheRenderInstruction {
             BeforeTheRenderInstruction::TheMaterialsPlacementWasNotConfirmed {
                 what_happened,
             } => format!(
-                "the launch script could not be placed: {what_happened}"
+                "could not write the render script on the server: {what_happened}"
             ),
             BeforeTheRenderInstruction::TheAttemptCouldNotBeComposed { what_happened } => {
                 format!("could not prepare the render: {what_happened}")
@@ -223,7 +236,7 @@ impl BeforeTheRenderInstruction {
                 format!("could not start Blender: {why}")
             }
             BeforeTheRenderInstruction::TheAttemptRecordCouldNotBeWritten { why } => {
-                format!("could not save the attempt record: {why}")
+                format!("could not save the frame list on the server: {why}")
             }
             // **Shortened 2026-11-04** (`Design/Queue & History`): it read *the files
             // uploaded for the geometry nodes bake folder (/ephemeral/…) could not be
@@ -506,6 +519,7 @@ fn k14as_value_for(occasion: &BeforeTheRenderInstruction) -> Cause {
         | BeforeTheRenderInstruction::APairWhoseAssignmentRaised { .. }
         | BeforeTheRenderInstruction::ASettingsPairWhoseNameTheObjectDoesNotCarry { .. }
         | BeforeTheRenderInstruction::ANameTheReadingInForceDoesNotCarry { .. }
+        | BeforeTheRenderInstruction::TheFilesFrameRangeEndsBeforeItStarts { .. }
         | BeforeTheRenderInstruction::ACardMakeWithNoTechnologyToName { .. } => Cause::TheFilesOwn,
     }
 }
@@ -1039,6 +1053,109 @@ mod tests {
                 FailedReason::BeforeTheRenderInstruction(occasion.clone()).in_words(),
                 occasion.in_words()
             );
+        }
+    }
+
+    /// **Every reason a job failed before rendering is in the user's words**
+    /// (`Design/Queue & History`, *Where no render began*; the four questions,
+    /// scout 3.2, 2026-11-11). It is read at once under *Failed before
+    /// rendering.*, on the desktop and on the phone, so it names what failed
+    /// in a plain clause — never an inner part of Smoozy (*dependency remap*,
+    /// *attempt record*, *launch script*) or a debugging rendering.
+    #[test]
+    fn every_reason_before_the_render_is_in_the_users_words() {
+        let said = |occasion: BeforeTheRenderInstruction| occasion.in_words();
+        assert_eq!(
+            said(BeforeTheRenderInstruction::TheRemapMaterialCouldNotBeRead {
+                material: "/home/u/.smoozy/remaps/j1".to_string(),
+            }),
+            "could not read the job's dependency list"
+        );
+        assert_eq!(
+            said(BeforeTheRenderInstruction::TheVersionConfirmationRefused {
+                reason: "the server's Blender is 5.1.0, not the 5.2.1 this job uses".to_string(),
+            }),
+            "the server's Blender is 5.1.0, not the 5.2.1 this job uses"
+        );
+        assert_eq!(
+            said(BeforeTheRenderInstruction::TheReadBackMismatched {
+                read: b"50".to_vec(),
+                expected: b"100".to_vec(),
+            }),
+            "a setting did not apply: set to 100, read back as 50"
+        );
+        assert_eq!(
+            said(BeforeTheRenderInstruction::AReadingThatDidNotEndSuccessfully),
+            "could not read the job's output folder"
+        );
+        assert_eq!(
+            said(BeforeTheRenderInstruction::TheJobsFileReadingDidNotEndSuccessfully),
+            "could not read the .blend file on the server"
+        );
+        assert_eq!(
+            said(BeforeTheRenderInstruction::APairWhoseAssignmentRaised {
+                pair: "scene.render.resolution_percentage".to_string(),
+            }),
+            "Blender refused the setting scene.render.resolution_percentage"
+        );
+        assert_eq!(
+            said(BeforeTheRenderInstruction::ASettingsPairWhoseNameTheObjectDoesNotCarry {
+                property: "scene.cycles.samplez".to_string(),
+            }),
+            "Blender has no setting scene.cycles.samplez"
+        );
+        assert_eq!(
+            said(BeforeTheRenderInstruction::ACardMakeWithNoTechnologyToName {
+                make: "no GPU found on this server".to_string(),
+            }),
+            "cannot render on the GPU: no GPU found on this server"
+        );
+        assert_eq!(
+            said(BeforeTheRenderInstruction::TheMaterialsPlacementWasNotConfirmed {
+                what_happened: "No space left on device".to_string(),
+            }),
+            "could not write the render script on the server: No space left on device"
+        );
+        assert_eq!(
+            said(BeforeTheRenderInstruction::TheAttemptRecordCouldNotBeWritten {
+                why: "No space left on device".to_string(),
+            }),
+            "could not save the frame list on the server: No space left on device"
+        );
+        // **The version refusal is said as words, never as its type** — it
+        // was the refusal's debugging rendering until 2026-11-11. The words
+        // live in the pipeline, which is built for Unix alone (the rented
+        // machine), so this part is too; the Windows check found it.
+        #[cfg(unix)]
+        {
+            use crate::versions::VersionRefused;
+            use smoozy_server_setup_machine::blender::Version;
+            let v = |major, minor, patch| Version { major, minor, patch };
+            assert_eq!(
+                crate::acting::pipeline::the_refusal_in_words(VersionRefused::ADifferentVersionAnswered {
+                    the_manifest_names: v(5, 2, 1),
+                    answered: v(5, 1, 0),
+                }),
+                "the server's Blender is 5.1.0, not the 5.2.1 this job uses"
+            );
+            assert_eq!(
+                crate::acting::pipeline::the_refusal_in_words(VersionRefused::TheBinaryDidNotAnswer {
+                    the_manifest_names: v(5, 2, 1),
+                }),
+                "Blender 5.2.1 on the server did not report its version"
+            );
+        }
+        // **No inner name reaches the user**, whatever the occasion.
+        for inner in ["remap", "attempt record", "launch script", "backend", "material"] {
+            for occasion in [
+                BeforeTheRenderInstruction::TheRemapMaterialCouldNotBeRead { material: "x".to_string() },
+                BeforeTheRenderInstruction::TheMaterialsPlacementWasNotConfirmed { what_happened: "x".to_string() },
+                BeforeTheRenderInstruction::TheAttemptRecordCouldNotBeWritten { why: "x".to_string() },
+                BeforeTheRenderInstruction::ACardMakeWithNoTechnologyToName { make: "x".to_string() },
+            ] {
+                let words = occasion.in_words();
+                assert!(!words.contains(inner), "{inner}: {words}");
+            }
         }
     }
 

@@ -20,7 +20,7 @@
 //! What stays open is §21 item 7's observed behaviour, which nothing here
 //! answers.
 
-use crate::job_messages::{AServerLabel, TheServersName};
+use crate::job_messages::TheServersName;
 use crate::job_messages::{AMarkedText, a_user_message};
 use crate::pacing::{HowASendEnded, TheSendQueue};
 use crate::pictures::{ADerivative, WhichPictureItIs};
@@ -66,7 +66,7 @@ pub fn evenly_spread(n: usize, k: usize) -> Vec<usize> {
 /// at most ten of the job's derivatives, in frame order. **Which ten is the
 /// design's** (`#tgview`): *"the first frame, the last, and eight spread evenly
 /// between them"*. Ten or fewer frames are all shown.
-pub fn the_contact_sheet(frames_in_order: &[u64]) -> Vec<u64> {
+pub fn the_contact_sheet<F: Copy>(frames_in_order: &[F]) -> Vec<F> {
     evenly_spread(frames_in_order.len(), THE_MOST_PICTURES_IN_ONE_MESSAGE)
         .into_iter()
         .map(|at| frames_in_order[at])
@@ -108,11 +108,15 @@ pub fn the_contact_sheets_caption(
     of: usize,
 ) -> AMarkedText {
     let named = layer.map(|layer| format!(" · {}", layer.as_said())).unwrap_or_default();
-    if shown == of {
-        a_user_message(server_label, job_label, &format!("{named} · all {of} frame{}", if of == 1 { "" } else { "s" }), "")
-    } else {
-        a_user_message(server_label, job_label, &format!("{named} · {shown} of {of} frames, evenly spread"), "")
-    }
+    // A job name past the caption's bound is cut short (the UI at every size,
+    // C8; `crate::pictures::within_the_caption_bound`).
+    crate::pictures::within_the_caption_bound(job_label, |label| {
+        if shown == of {
+            a_user_message(server_label, label, &format!("{named} · all {of} frame{}", if of == 1 { "" } else { "s" }), "")
+        } else {
+            a_user_message(server_label, label, &format!("{named} · {shown} of {of} frames, evenly spread"), "")
+        }
+    })
 }
 
 /// **`Telegram` M2 — the caption of a named sheet's every other picture**, as
@@ -121,7 +125,7 @@ pub fn the_contact_sheets_caption(
 /// The first picture carries the sheet's line instead, which names the layer
 /// too, so the name shows on a computer's Telegram, where only the first
 /// caption is seen under an album (the plan and drawing pass, 2026-10-31).
-fn a_named_sheets_picture_caption(frame: u64, layer: &WhichPictureItIs) -> AMarkedText {
+fn a_named_sheets_picture_caption(frame: i64, layer: &WhichPictureItIs) -> AMarkedText {
     AMarkedText::plain(format!("Frame {frame} · {} · Not colour-accurate", layer.as_said()))
 }
 
@@ -164,15 +168,19 @@ pub fn offer_the_contact_sheet(
             (_, None) => None,
         })
         .collect();
+    // **`Telegram` V1e: a contact sheet goes without a sound**, the finishing
+    // message having just made one (the twenty-eighth notes, note 18).
+    let silently = crate::transport::HowItIsSent::silent(true);
     Some(queue.offer_an_upload(
         Box::new(move |c: &TheClient| match chosen.as_slice() {
-            [one] => c.send_photo_marked(chat, &one.file_name, one.bytes.clone(), Some(&caption), None),
-            many => c.send_a_marked_album(
+            [one] => c.send_photo_marked_as(chat, &one.file_name, one.bytes.clone(), Some(&caption), None, silently),
+            many => c.send_a_marked_album_as(
                 chat,
                 many.iter()
                     .zip(captions.iter())
                     .map(|(d, caption)| (d.file_name.clone(), d.bytes.clone(), caption.clone()))
                     .collect(),
+                silently,
             ),
         }),
     ))
@@ -208,8 +216,10 @@ pub fn offer_the_finished_video(
     file_name: String,
     bytes: Vec<u8>,
 ) -> Receiver<HowASendEnded> {
+    // **`Telegram` V1e: the finished video goes without a sound** (the
+    // twenty-eighth notes, note 18).
     queue.offer_an_upload(Box::new(move |c: &TheClient| {
-        c.send_video_marked(chat, &file_name, bytes.clone(), Some(&caption), None)
+        c.send_video_marked_as(chat, &file_name, bytes.clone(), Some(&caption), None, crate::transport::HowItIsSent::silent(true))
     }))
 }
 
@@ -359,44 +369,20 @@ pub fn the_moving_pictures_caption(server_label: &(impl TheServersName + ?Sized)
     }
 }
 
-/// **Offer a produced moving picture**, in C6b's upload lane, with C1b's
-/// durable Stop context recorded before markup is attached. No nested queue
-/// wait runs from the upload closure. Refusals remain the caller's to report.
+/// **Offer a produced moving picture**, in C6b's upload lane, **with no
+/// button and without a sound**: no picture, album, moving picture or video
+/// carries a Stop (`Telegram` C1b), and a moving picture is silent (V1e) — both
+/// from 2026-11-09, the twenty-eighth notes, notes 18 and 19. Until then it
+/// carried *Stop this job*. Refusals remain the caller's to report.
 pub fn offer_the_moving_picture(
-    mut messages: crate::actions::TheJobMessages,
-    subject: crate::actions::TheSubject,
-    server: AServerLabel,
-    label: String,
+    queue: &TheSendQueue,
+    chat: i64,
     caption: AMarkedText,
     file_name: String,
     bytes: Vec<u8>,
 ) -> Receiver<HowASendEnded> {
-    let queue = messages.queue.clone();
     queue.offer_an_upload(Box::new(move |client| {
-        let result = client.send_video_marked(
-            messages.conversation,
-            &file_name,
-            bytes.clone(),
-            Some(&caption),
-            None,
-        )?;
-        if let Some(id) = result.get("message_id").and_then(serde_json::Value::as_i64) {
-            if let Some(button) = crate::actions::a_stop_button_on(
-                messages.store.as_mut(),
-                messages.conversation,
-                id,
-                &subject,
-                &server,
-                &label,
-            ) {
-                client.edit_message_reply_markup(
-                    messages.conversation,
-                    id,
-                    serde_json::json!({"inline_keyboard":[[button]]}),
-                )?;
-            }
-        }
-        Ok(result)
+        client.send_video_marked_as(chat, &file_name, bytes.clone(), Some(&caption), None, crate::transport::HowItIsSent::silent(true))
     }))
 }
 
@@ -406,6 +392,7 @@ mod tests {
     use crate::pacing::OnThisComputersClock;
     use crate::transport::a_stand_in::AStandInService;
     use crate::transport::WhatACallCarries;
+    use serde_json::json;
     use std::sync::Arc;
 
     /// **`Telegram` M10: the finished video goes as one `sendVideo` in the
@@ -433,6 +420,7 @@ mod tests {
         };
         assert_eq!(fields["caption"], caption.as_str());
         assert!(fields.get("reply_markup").is_none(), "an ending carries no Stop");
+        assert_eq!(fields["disable_notification"], json!(true), "V1e: the finished video makes no sound");
         assert_eq!(files[0].bytes, [9, 9, 9, 9]);
         assert_eq!(files[0].file_name, "Kitchen_0001-0240.mp4");
         assert_eq!(
@@ -441,64 +429,43 @@ mod tests {
         );
     }
 
+    /// **`Telegram` C1b and V1e as changed 2026-11-09: a moving picture
+    /// carries no Stop and makes no sound** — one upload, no button call after
+    /// it. Until then its Stop was recorded and attached (piece 17).
     #[test]
-    fn piece17_a_video_upload_records_stop_before_attaching_it() {
-        use crate::worker_state::{InMemory, TheTelegramWorkersState};
+    fn twenty_eighth_18_a_moving_picture_goes_silently_with_no_stop() {
         let service = Arc::new(AStandInService::new());
         service.then_answers(r#"{"ok":true,"result":{"message_id":70}}"#);
         let queue = Arc::new(TheSendQueue::new(
             TheClient::over(service.clone()),
             Arc::new(OnThisComputersClock),
         ));
-        let store: Arc<std::sync::Mutex<Box<dyn TheTelegramWorkersState>>> =
-            Arc::new(std::sync::Mutex::new(Box::new(InMemory::with_routing_key(
-                "00112233445566778899aabbccddeeff",
-            ))));
-        let messages = crate::actions::TheJobMessages {
-            conversation: 5,
-            store: Box::new(store.clone()),
-            queue: queue.clone(),
-            notes: Box::new(|_| {}),
-        };
-        let subject = crate::actions::TheSubject {
-            owning_machine: "m".into(),
-            job: Some("job".into()),
-            hold: None,
-            generation: "op:1".into(),
-        };
-        let told = offer_the_moving_picture(
-            messages,
-            subject,
-            "Server".into(),
-            "Kitchen".into(),
-            "Server\nKitchen · frames 1 to 3".into(),
-            "clip.mp4".into(),
-            vec![1, 2, 3],
-        );
+        let told = offer_the_moving_picture(&queue, 5, "Server\nKitchen · frames 1 to 3".into(), "clip.mp4".into(), vec![1, 2, 3]);
         assert_eq!(queue.how_many_uploads_are_waiting(), 1);
         assert!(queue.send_the_next_upload());
         assert!(matches!(told.recv().unwrap(), HowASendEnded::Accepted(_)));
-        let records = store.the_action_contexts_bound_to(70).unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].action, crate::job_messages::ASK_TO_STOP_THIS_JOB);
-        assert_eq!(records[0].job.as_deref(), Some("job"));
-        assert_eq!(records[0].generation, "op:1");
         let heard = service.heard();
-        assert_eq!(
-            heard
-                .iter()
-                .map(|call| call.method.as_str())
-                .collect::<Vec<_>>(),
-            ["sendVideo", "editMessageReplyMarkup"]
-        );
+        assert_eq!(heard.iter().map(|call| call.method.as_str()).collect::<Vec<_>>(), ["sendVideo"]);
         let WhatACallCarries::FieldsAndFiles { fields, files } = &heard[0].carries else {
             panic!()
         };
         assert!(fields.get("reply_markup").is_none());
+        assert_eq!(fields["disable_notification"], json!(true));
         assert_eq!(files[0].bytes, [1, 2, 3]);
     }
 
     /// **`Telegram` M2 and the design — first, last, eight evenly between.**
+    /// **Sol's S2 (the four questions, batch 4, 2026-11-11): frames below
+    /// zero are chosen for the contact sheet like any other**, in frame order.
+    /// Before, the journal dropped them before choosing.
+    #[test]
+    fn four_questions_s2_the_contact_sheet_keeps_frames_below_zero() {
+        let frames: Vec<i64> = (-12..=3).collect();
+        let chosen = the_contact_sheet(&frames);
+        assert_eq!(chosen.len(), 10);
+        assert_eq!((chosen[0], chosen[9]), (-12, 3), "first and last kept");
+    }
+
     #[test]
     fn the_contact_sheet_is_ten_in_frame_order_first_and_last_included() {
         let frames: Vec<u64> = (1..=240).collect();
@@ -514,7 +481,7 @@ mod tests {
         assert_eq!(the_contact_sheets_caption("S", "J", None, 3, 3), "S\nJ \u{b7} all 3 frames");
     }
 
-    fn a_derivative(frame: u64) -> ADerivative {
+    fn a_derivative(frame: i64) -> ADerivative {
         ADerivative {
             job: "j".into(),
             job_label: "J".into(),
@@ -522,6 +489,7 @@ mod tests {
             file_name: format!("{frame}.png"),
             bytes: crate::pictures::tests::a_png_header(320, 180),
             which_picture: None,
+            not_read: Vec::new(),
         }
     }
 
@@ -544,6 +512,12 @@ mod tests {
         assert_eq!(media[0]["caption"], "S\nJ \u{b7} 10 of 240 frames, evenly spread");
         assert!(media[1..].iter().all(|m| m.get("caption").is_none()));
         assert_eq!(heard[1].method, "sendPhoto");
+        // **`Telegram` V1e: a contact sheet makes no sound**, as one album or
+        // one picture (the twenty-eighth notes, note 18).
+        for call in &heard {
+            let WhatACallCarries::FieldsAndFiles { fields, .. } = &call.carries else { panic!() };
+            assert_eq!(fields["disable_notification"], json!(true), "{}", call.method);
+        }
     }
 
     /// **`Telegram` M2 as changed 2026-10-31 (the seventeenth notes, note 10):
@@ -579,7 +553,7 @@ mod tests {
         assert_eq!(fields["caption"], "S\nJ \u{b7} Reflections \u{b7} all 1 frame");
     }
 
-    fn a_heavy_derivative(frame: u64, bytes: usize) -> ADerivative {
+    fn a_heavy_derivative(frame: i64, bytes: usize) -> ADerivative {
         let mut one = a_derivative(frame);
         one.bytes = crate::pictures::tests::a_png_header(3840, 2160);
         one.bytes.resize(bytes, 0);

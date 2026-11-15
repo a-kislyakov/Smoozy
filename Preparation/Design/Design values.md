@@ -33,7 +33,7 @@ Colour is reserved. A screen may not use a colour to mean something new.
 | `--alert-bg` | The same meaning as a ground: the field, the message, the band across the window |
 | `--b1` … `--b8` | Which server. Never anything else |
 | `--tag-up`, `--tag-dn`, `--tag-dep`, `--tag-auto` | Which kind of transfer a row is. Never anything else |
-| `--ok`, `--bad`, `--idle`, `--busy`, on a job's or a transfer's ending | How a finished job ended: green finished, red failed, grey stopped by the user, amber abandoned; a finished transfer's ending word takes the same green, red and grey *(widened 2026-10-10, the Creator's seventh notes, note 9; no auditor has seen it)* |
+| `--ok`, `--bad`, `--idle`, `--busy`, on a job's or a transfer's ending | How a finished job ended: green finished, red failed, grey stopped by the user, amber interrupted; a finished transfer's ending word takes the same green, red and grey *(widened 2026-10-10, the Creator's seventh notes, note 9; no auditor has seen it)* |
 
 **A job's ending is a meaning of its own and is written as one line above.** Two of the four are not covered by those tokens' other meanings — a job the user stopped is not *nothing happening*, and a job abandoned is finished and needs nothing from the user, so it is neither of amber's. Widening either token would make it mean two unrelated things everywhere else it is used, so the ending takes a line instead. The colour is on the word, and the entry's status line repeats it on its dot. The dot is painted, so it takes the fill where the colour has one — an abandoned job has an amber word and a `--busy-fill` dot. [Whole app](Whole%20app.md) holds the decision; this is where the meaning is recorded.
 

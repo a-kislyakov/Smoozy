@@ -1113,6 +1113,7 @@ fn the_document_a_reading_prints(frames: std::ops::RangeInclusive<i64>) -> Strin
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_files_own_scripts_run: None,
                 the_folders_at_the_machines_top: None,
             })
             .expect("the settings half renders"),
@@ -1364,6 +1365,8 @@ impl TheDesksRecord {
                 the_sweep_left_behind: Vec::new(),
                 record: Some(record),
                 record_trouble: None,
+                the_record_is_newer_than_this_copy: false,
+                the_record_is_damaged: false,
                 diary: None,
                 declarations: Default::default(),
                 what_modules_declare,

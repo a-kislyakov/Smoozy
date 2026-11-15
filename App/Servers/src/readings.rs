@@ -60,6 +60,18 @@ pub trait CommandChannel {
     ) -> impl std::future::Future<Output = Result<CommandResult, CommandFailure>> + Send;
 }
 
+/// `Servers`’ bounded-reading rule, also used by setup’s GPU check.
+pub async fn run_a_bounded_reading(
+    channel: &mut impl CommandChannel,
+    command: CommandString,
+) -> Result<CommandResult, CommandFailure> {
+    tokio::time::timeout(std::time::Duration::from_secs(30), channel.run(command.with_reading_limit()))
+        .await
+        .unwrap_or_else(|_| Ok(CommandResult {
+            output: Vec::new(), complaint: b"Server check timed out.".to_vec(), status: None,
+        }))
+}
+
 impl TakesAFreeSpaceReading for smoozy_server_protocol::transport::ssh::Connection {
     /// **F2 route 1, over a subsystem channel opened for the reading.**
     ///
@@ -276,16 +288,19 @@ pub const EVERY_COMMAND_THIS_MODULE_SENDS: [CommandString; 13] = [
 pub async fn read_the_operating_system(
     channel: &mut impl CommandChannel,
 ) -> NotLinuxOutcome {
-    let Ok(result) = channel.run(NAME_YOUR_OPERATING_SYSTEM).await else {
+    let Ok(result) = run_a_bounded_reading(channel, NAME_YOUR_OPERATING_SYSTEM).await else {
         return crate::first_connection::read_the_operating_system(None);
     };
     if !result.ended_cleanly() {
         return crate::first_connection::read_the_operating_system(None);
     }
-    match result.output_as_text().map(str::trim) {
-        Some(named) if !named.is_empty() => {
-            crate::first_connection::read_the_operating_system(Some(named))
-        }
+    let Some(text) = result.output_as_text() else {
+        return crate::first_connection::read_the_operating_system(None);
+    };
+    let lines: Vec<_> = text.lines().map(str::trim).filter(|line| !line.is_empty()).collect();
+    match lines.as_slice() {
+        [named] => crate::first_connection::read_the_operating_system(Some(named)),
+        many if many.last() == Some(&"Linux") => NotLinuxOutcome::ItNamedLinux,
         _ => crate::first_connection::read_the_operating_system(None),
     }
 }
@@ -310,12 +325,12 @@ pub async fn read_the_operating_system(
 /// the reading lands at step 6. It landed at step 8a, and nothing holds the two
 /// copies together — a reader changing one has to change the other by hand.)*
 pub async fn read_the_machine_kind(channel: &mut impl CommandChannel) -> MachineKind {
-    if let Ok(marker) = channel.run(IS_THE_CONTAINER_MARKER_THERE).await {
+    if let Ok(marker) = run_a_bounded_reading(channel, IS_THE_CONTAINER_MARKER_THERE).await {
         if marker.ended_cleanly() {
             return MachineKind::AContainer;
         }
     }
-    if let Ok(tool) = channel.run(ARE_YOU_A_CONTAINER).await {
+    if let Ok(tool) = run_a_bounded_reading(channel, ARE_YOU_A_CONTAINER).await {
         if tool.ended_cleanly() {
             return MachineKind::AContainer;
         }
@@ -337,7 +352,7 @@ pub async fn where_k1_places_it(
 ) -> WhereK1PlacesIt {
     let systemd_is_the_first_process = match kind {
         MachineKind::AContainer => false,
-        MachineKind::NotAContainer => match channel.run(NAME_YOUR_FIRST_PROCESS).await {
+        MachineKind::NotAContainer => match run_a_bounded_reading(channel, NAME_YOUR_FIRST_PROCESS).await {
             Ok(result) if result.ended_cleanly() => result
                 .output_as_text()
                 .is_some_and(|name| name.trim() == SYSTEMDS_OWN_NAME),
@@ -355,7 +370,7 @@ pub async fn where_k1_places_it(
 /// image altogether, so *did not run* is the ordinary state on a whole machine
 /// kind rather than a corner.
 pub async fn scan_the_bus(channel: &mut impl CommandChannel) -> BusScan {
-    let Ok(result) = channel.run(SCAN_THE_BUS_FOR_THE_CARD_VENDOR).await else {
+    let Ok(result) = run_a_bounded_reading(channel, SCAN_THE_BUS_FOR_THE_CARD_VENDOR).await else {
         return BusScan::NoRoute;
     };
     // **Exit 0 is the only answering state the observation records.** Anything
@@ -382,7 +397,7 @@ const NO_DEVICES_WERE_FOUND: u32 = 6;
 /// comes back is one row per card, and the count is however many rows there
 /// are. **Nothing in this module reads a count any other way.**
 pub async fn ask_the_driver(channel: &mut impl CommandChannel) -> DriverAnswer {
-    let Ok(result) = channel.run(ASK_THE_DRIVER_FOR_THE_CARDS).await else {
+    let Ok(result) = run_a_bounded_reading(channel, ASK_THE_DRIVER_FOR_THE_CARDS).await else {
         return DriverAnswer::Absent;
     };
     if result.status == Some(NO_DEVICES_WERE_FOUND) {
@@ -414,14 +429,14 @@ pub async fn ask_the_driver(channel: &mut impl CommandChannel) -> DriverAnswer {
 pub async fn ask_the_drivers_versions(
     channel: &mut impl CommandChannel,
 ) -> (Option<DriverVersion>, Option<String>) {
-    let version = match channel.run(ASK_THE_DRIVER_FOR_ITS_VERSION).await {
+    let version = match run_a_bounded_reading(channel, ASK_THE_DRIVER_FOR_ITS_VERSION).await {
         Ok(result) if result.ended_cleanly() => result
             .output_as_text()
             .and_then(|text| text.lines().find(|line| !line.trim().is_empty()).map(str::to_string))
             .and_then(|line| DriverVersion::parse(&line)),
         _ => None,
     };
-    let cuda_version = match channel.run(ASK_THE_DRIVER_FOR_ITS_SUMMARY).await {
+    let cuda_version = match run_a_bounded_reading(channel, ASK_THE_DRIVER_FOR_ITS_SUMMARY).await {
         Ok(result) if result.ended_cleanly() => result
             .output_as_text()
             .and_then(|text| the_cuda_version_in(&text)),
@@ -503,7 +518,7 @@ pub async fn read_a_cgroup_pair(
         WhichCgroupPair::TheNewer => THE_NEWER_MEMORY_LIMIT,
         WhichCgroupPair::TheOlder => THE_OLDER_MEMORY_LIMIT,
     };
-    let Ok(result) = channel.run(command).await else {
+    let Ok(result) = run_a_bounded_reading(channel, command).await else {
         return CgroupAnswer::NoRoute;
     };
     if !result.ended_cleanly() {
@@ -559,7 +574,7 @@ pub enum WhichCgroupPair {
 pub async fn read_the_machines_own_clock(
     channel: &mut impl CommandChannel,
 ) -> Option<std::time::SystemTime> {
-    let result = channel.run(THE_MACHINES_OWN_CLOCK).await.ok()?;
+    let result = run_a_bounded_reading(channel, THE_MACHINES_OWN_CLOCK).await.ok()?;
     if !result.ended_cleanly() {
         return None;
     }
@@ -583,7 +598,7 @@ pub async fn read_the_machines_own_clock(
 /// caused it. **This is the shape [`read_the_machines_own_clock`] next door
 /// already uses**, for the same reason.
 pub async fn read_the_machines_own_memory(channel: &mut impl CommandChannel) -> Option<u64> {
-    let result = channel.run(THE_MACHINES_OWN_MEMORY).await.ok()?;
+    let result = run_a_bounded_reading(channel, THE_MACHINES_OWN_MEMORY).await.ok()?;
     if !result.ended_cleanly() {
         return None;
     }
@@ -702,7 +717,7 @@ pub async fn take_the_hardware_reading(
 /// `0` or `1`, is not *not found*.** Added 2026-11-02.
 async fn the_loader_does_not_find_the_optix_library(channel: &mut impl CommandChannel) -> bool {
     use smoozy_server_setup_machine::the_optix_library::{what_the_status_says, WhatTheLoaderFound};
-    match channel.run(LOOK_FOR_THE_OPTIX_LIBRARY).await {
+    match run_a_bounded_reading(channel, LOOK_FOR_THE_OPTIX_LIBRARY).await {
         Ok(result) => {
             what_the_status_says(result.status.map(|status| status as i32))
                 == WhatTheLoaderFound::NoLibrary
@@ -756,6 +771,28 @@ mod tests {
         async fn free_space(&mut self, _path: &str) -> Option<crate::hardware::FreeSpace> {
             None
         }
+    }
+
+    #[tokio::test]
+    async fn bad_batch_2_a_login_banner_does_not_turn_linux_into_another_system() {
+        let mut machine = Answers::default().to(NAME_YOUR_OPERATING_SYSTEM, 0, "Welcome to your server\nLinux\n");
+        assert_eq!(read_the_operating_system(&mut machine).await, NotLinuxOutcome::ItNamedLinux);
+        let mut machine = Answers::default().to(NAME_YOUR_OPERATING_SYSTEM, 0, "Welcome\nA question?\n");
+        assert_eq!(read_the_operating_system(&mut machine).await, NotLinuxOutcome::NothingSmoozyCouldRead);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn bad_batch_2_a_gpu_or_system_read_that_never_answers_ends() {
+        struct NeverAnswers;
+        impl CommandChannel for NeverAnswers {
+            async fn run(&mut self, _: CommandString) -> Result<CommandResult, CommandFailure> {
+                std::future::pending().await
+            }
+        }
+        let result = tokio::time::timeout(std::time::Duration::from_secs(31), ask_the_driver(&mut NeverAnswers)).await;
+        assert_eq!(result, Ok(DriverAnswer::Absent));
+        let result = tokio::time::timeout(std::time::Duration::from_secs(31), read_the_operating_system(&mut NeverAnswers)).await;
+        assert_eq!(result, Ok(NotLinuxOutcome::NothingSmoozyCouldRead));
     }
 
     #[tokio::test]

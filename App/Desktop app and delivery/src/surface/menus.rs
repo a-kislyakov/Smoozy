@@ -23,7 +23,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use crate::events::{Event, Posted, Said, Subject, TheOneQueue};
 use crate::menus::{self, Act, Focused, TheSystemsAct, Where};
 use crate::typography::{Prose, Verbatim};
-use crate::updating::checking::{TheReading, TheUpdateCheck};
+use crate::updating::checking::{TheReading, TheStepThatFailed, TheUpdateCheck};
 
 /// **The user chose a menu item that goes somewhere.**
 ///
@@ -203,6 +203,18 @@ pub fn the_item_was_chosen<R: Runtime>(
     if id == "about.source" {
         return the_source_is_asked_with(crate::the_address_opener::open);
     }
+    // ***Help*** (`Design/Whole app § Help links`, K25's third narrowing):
+    // the website's Help page, and a refusal said in its small box.
+    if id == THE_HELP_ITEM {
+        return the_menus_help_is_asked_with(queue, crate::the_address_opener::open);
+    }
+    // ***What's new* in the update box** (Z33, K25's third name): the release
+    // page of the version the box on screen offers, read from the run's one
+    // check and never from the page.
+    if id == THE_WHATS_NEW_ITEM {
+        let offered = app.try_state::<Arc<TheUpdateCheck>>().and_then(|check| check.the_offered_version());
+        return the_release_page_is_asked_with(offered.as_deref(), crate::the_address_opener::open);
+    }
     let Some(item) = menus::the_item(id) else {
         return TheChoice::ThereIsNoSuchItem;
     };
@@ -243,6 +255,101 @@ pub fn the_item_was_chosen<R: Runtime>(
     }
 }
 
+// ── Help — `Design/Whole app § Help links`, K25's third narrowing ──────────
+//
+// **Four places open the website's Help**: the Smoozy menu's item opens the
+// page, and beside three things the user fixes outside Smoozy a small *Help*
+// link opens that thing's own answer. **The page names an answer from K25's
+// closed list and never an address**; the application reads the name and
+// refuses one off the list. Added 2026-11-13, the website ideas' picks.
+
+/// The menu item that opens the Help page.
+pub const THE_HELP_ITEM: &str = "smoozy.help";
+
+/// **The menu's Help could not be opened** — the menu item has no place of
+/// its own, so the page draws a small box with the sentence and *Close*.
+pub const THE_HELP_COULD_NOT_BE_OPENED: &str = "menus:help-could-not-be-opened";
+
+/// **The two words every Help link draws**, through the prose route.
+#[derive(serde::Serialize)]
+pub struct TheHelpLinks {
+    /// The link's one word.
+    pub help: Prose,
+    /// What stands in its place, in the failure shape, where the system would
+    /// not open the browser.
+    pub could_not_open: Prose,
+}
+
+/// **The words a Help link draws** — asked once by the page.
+#[tauri::command]
+pub fn the_help_links() -> TheHelpLinks {
+    TheHelpLinks { help: Prose::new(words::HELP), could_not_open: Prose::new(words::COULD_NOT_OPEN_HELP) }
+}
+
+/// **A Help link was pressed** — `answer` is a name on K25's list, which the
+/// page was handed with the line the link sits beside. A name off the list
+/// opens nothing.
+#[tauri::command]
+pub fn the_help_is_opened(answer: String) -> TheChoice {
+    the_help_is_asked_with(&answer, crate::the_address_opener::open)
+}
+
+fn the_help_is_asked_with(
+    answer: &str,
+    ask: impl FnOnce(crate::the_address_opener::WhichAddress) -> crate::the_address_opener::Opened,
+) -> TheChoice {
+    use crate::the_address_opener::{Opened, TheHelpAnswer, WhichAddress};
+    let Some(answer) = TheHelpAnswer::read(answer) else {
+        return TheChoice::ThereIsNoSuchItem;
+    };
+    match ask(WhichAddress::Help(answer)) {
+        Opened::ItWasAsked => TheChoice::ItWasCarriedOut,
+        Opened::ItCouldNotBeOpened => TheChoice::ItCouldNotBeOpened,
+    }
+}
+
+/// **The menu's Help**: the page, and where the system will not open it, the
+/// small box that says so — a going that would otherwise end in silence.
+fn the_menus_help_is_asked_with(
+    queue: &TheOneQueue,
+    ask: impl FnOnce(crate::the_address_opener::WhichAddress) -> crate::the_address_opener::Opened,
+) -> TheChoice {
+    let choice = the_help_is_asked_with(crate::the_address_opener::TheHelpAnswer::ThePage.name(), ask);
+    if choice == TheChoice::ItCouldNotBeOpened {
+        let _ = queue.read_then_post(
+            || Ok::<(), ()>(()),
+            |_| {
+                Event::about(Subject::TheRun, THE_HELP_COULD_NOT_BE_OPENED)
+                    .saying("heading", Said::Prose(Prose::new(words::HELP)))
+                    .saying("couldNotOpen", Said::Prose(Prose::new(words::COULD_NOT_OPEN_HELP)))
+                    .saying("close", Said::Prose(Prose::new(words::CLOSE)))
+            },
+        );
+    }
+    choice
+}
+
+/// ***What's new*'s name on the existing command** — no address and no
+/// version crosses with it.
+pub const THE_WHATS_NEW_ITEM: &str = "update.whats-new";
+
+/// *What's new*: the opener asked for the release page of `offered`, the
+/// version the box on screen offers. No box, or a version that is not one,
+/// opens nothing and says so.
+fn the_release_page_is_asked_with(
+    offered: Option<&str>,
+    ask: impl FnOnce(crate::the_address_opener::WhichAddress) -> crate::the_address_opener::Opened,
+) -> TheChoice {
+    use crate::the_address_opener::{Opened, TheReleasedVersion, WhichAddress};
+    let Some(version) = offered.and_then(TheReleasedVersion::read) else {
+        return TheChoice::ItCouldNotBeOpened;
+    };
+    match ask(WhichAddress::TheReleasePage(version)) {
+        Opened::ItWasAsked => TheChoice::ItWasCarriedOut,
+        Opened::ItCouldNotBeOpened => TheChoice::ItCouldNotBeOpened,
+    }
+}
+
 // The source action uses the existing command, with a fixed name and no URL.
 fn the_source_is_asked_with(
     ask: impl FnOnce(crate::the_address_opener::WhichAddress) -> crate::the_address_opener::Opened,
@@ -257,31 +364,28 @@ fn the_source_is_asked_with(
 /// The menu item that asks for a check.
 const THE_CHECK_ITEM: &str = "smoozy.check-for-updates";
 
-/// **Z32: *Install now*, pressed in About's held form.** It goes to the run's
-/// one check, which hands it to this system's route on its own sequence (the
-/// Windows one from step 11's Windows update piece): Z31's held
-/// publication, now, and every check bound unchanged. **A press while About
-/// reads anything but the held form does nothing**, the button being drawn on
-/// that form alone. Nothing is answered: what the press comes to is the
-/// application restarting, or About's next reading (P6).
-///
-/// **On Linux the same registered command carries the update box's answers**
-/// (step 11's Linux piece): `linux` names the offered version and what was
-/// pressed, and the run's one check refuses an answer for any other version.
+/// **The update box's answers, and About's *Install now…*** — Z33, on every
+/// system from 2026-11-09 (the Creator's twenty-eighth notes, note 4). Each
+/// goes to the run's one check, which hands it to this system's route on its
+/// own sequence: `offer` is About's press, which opens the box for the version
+/// already found with no second check (Z26's trigger list stays three);
+/// `install` is the box's *Install now*, the only press that publishes; and
+/// `decline` is *Skip this version*, or Escape, which writes the mark (Z10b). **The check
+/// refuses an answer for any version but the one on screen.** Nothing is
+/// answered: what a press comes to is the application restarting, or About's
+/// next reading (P6). *(This command was Linux's box and About's held *Install
+/// now* until then, as `the_held_update_is_installed_anyway`.)*
 ///
 /// **And the rollback box's** (step 11's D6b): in a launch that shows that box
 /// and nothing else, *Reinstall* and *Quit* arrive here too, so no command is
 /// added to the one registration list. So does *Quit* from the box over a
 /// record that could not be read (2026-11-01).
 #[tauri::command]
-pub fn the_held_update_is_installed_anyway<R: Runtime>(
-    app: AppHandle<R>,
-    linux: Option<LinuxBoxChoice>,
-) {
+pub fn the_update_box_is_answered<R: Runtime>(app: AppHandle<R>, choice: Option<ABoxChoice>) {
     if let Some(the_box) =
         app.try_state::<Arc<crate::updating::the_linux_package::TheRollbackBox>>()
     {
-        match linux.as_ref().map(|choice| choice.action.as_str()) {
+        match choice.as_ref().map(|choice| choice.action.as_str()) {
             Some("reinstall") => the_box.reinstall_is_pressed(&app),
             // **Quit leaves the rollback owed**: the next start shows the box
             // again. Nothing is written on the way out; no record is open.
@@ -296,57 +400,85 @@ pub fn the_held_update_is_installed_anyway<R: Runtime>(
         .try_state::<Arc<crate::updating::the_linux_package::TheUnreadableRecordBox>>()
         .is_some()
     {
-        if linux.as_ref().is_some_and(|choice| choice.action == "quit") {
+        if choice.as_ref().is_some_and(|choice| choice.action == "quit") {
             app.exit(0);
         }
         return;
     }
-    if let Some(check) = app.try_state::<Arc<TheUpdateCheck>>() {
-        if let Some(choice) = linux {
-            if !cfg!(target_os = "linux") {
-                return;
-            }
-            match choice.action.as_str() {
-                // About's *Install…*: the box for the version already found,
-                // with no second check (Z26's trigger list stays three).
-                "offer" => {
-                    check.the_user_opens_the_linux_box();
-                }
-                "install" => {
-                    check.answer_linux_offer(&choice.version, true);
-                }
-                "decline" => {
-                    check.answer_linux_offer(&choice.version, false);
-                }
-                _ => {}
-            }
-        } else {
-            check.the_user_installs_anyway();
+    let (Some(check), Some(choice)) = (app.try_state::<Arc<TheUpdateCheck>>(), choice) else {
+        return;
+    };
+    match choice.action.as_str() {
+        "offer" => {
+            check.the_user_opens_the_box();
         }
+        "install" => {
+            check.answer_offer(&choice.version, true);
+        }
+        "decline" => {
+            check.answer_offer(&choice.version, false);
+        }
+        _ => {}
     }
 }
 
-/// Uses the existing registered update command; no second install route.
+/// What the page says was pressed, on the one registered command.
 #[derive(serde::Deserialize)]
-pub struct LinuxBoxChoice {
+pub struct ABoxChoice {
     pub version: String,
     pub action: String,
 }
 
-pub const THE_LINUX_UPDATE_OFFER: &str = "menus:linux-update";
+pub const THE_UPDATE_BOX: &str = "menus:update-box";
 
-/// The drawing's Linux update box. Every word passes through Rust's prose
-/// route, and the release number remains a separately copyable value.
-pub fn the_linux_offer(version: &str) -> Event {
+/// **The update box** (Z33; Design *Updating*), on every system. Every word
+/// passes through Rust's prose route, and the release number remains a
+/// separately copyable value. `running` is Z31's reading, which alone draws
+/// the sentence about jobs; `setups` is whether this copy drives a setup run
+/// on any server, which alone draws the sentence about setups (Z33, widened
+/// 2026-11-14); `linux` draws the password sentence.
+pub fn the_update_box(version: &str, running: bool, setups: bool, linux: bool) -> Event {
     let prose = |s: &str| Said::Prose(Prose::new(s));
-    Event::about(Subject::TheRun, THE_LINUX_UPDATE_OFFER)
-        .saying("beforeVersion", prose("Smoozy"))
+    let mut event = Event::about(Subject::TheRun, THE_UPDATE_BOX)
+        .saying("beforeVersion", prose(words::BEFORE_THE_NEW_VERSION))
         .saying("version", Said::Value(Verbatim::new(version)))
-        .saying("afterVersion", prose("is ready to install"))
-        .saying("password", prose("Your system asks for your computer password to install."))
-        .saying("declining", prose("Not now keeps this version until the next release."))
-        .saying("notNow", prose("Not now"))
-        .saying("install", prose("Install"))
+        .saying("afterVersion", prose(words::IS_READY_TO_INSTALL))
+        .saying("whatsNew", prose(words::WHATS_NEW))
+        .saying("whatsNewFailed", prose(words::THE_RELEASE_PAGE_FAILED))
+        .saying("restarts", prose(words::INSTALLING_RESTARTS))
+        .saying("skip", prose(words::SKIP_THIS_VERSION))
+        .saying("install", prose(words::INSTALL_NOW));
+    if running {
+        event = event
+            .saying("jobsKeepRendering", prose(words::JOBS_KEEP_RENDERING))
+            .saying("transfersStop", prose(words::TRANSFERS_STOP))
+            .saying("transfersAfter", prose(words::TRANSFERS_AFTER));
+    }
+    if setups {
+        event = event.saying("setupsStop", prose(words::SETUPS_STOP));
+    }
+    if linux {
+        event = event
+            .saying("password", prose(words::YOUR_SYSTEM_ASKS_FOR_THE_PASSWORD))
+            .saying("downloading", prose(words::DOWNLOADING));
+    }
+    event
+}
+
+/// **On Linux, the package's download after *Install now*, told to the
+/// update box** (Design *Updating*, 2026-11-12; the four questions, batch 5's
+/// leftover): the bytes read so far, as Files writes a size; and nothing at
+/// the end, however it ends, which closes the box.
+pub const THE_UPDATE_DOWNLOAD: &str = "menus:update-download";
+
+pub fn the_update_download(read_so_far: Option<u64>) -> Event {
+    let event = Event::about(Subject::TheRun, THE_UPDATE_DOWNLOAD);
+    match read_so_far {
+        Some(bytes) => event
+            .saying("downloading", Said::Prose(Prose::new(words::DOWNLOADING)))
+            .saying("readSoFar", Said::Value(Verbatim::new(crate::surface::files::the_size_of(bytes)))),
+        None => event,
+    }
 }
 
 /// **The rollback box** (step 11's D6b, Design *Updating*): what a launch
@@ -390,7 +522,7 @@ pub fn the_unreadable_record_box(underway: bool) -> Event {
     let mut event = Event::about(Subject::TheRun, THE_LINUX_ROLLBACK_BOX)
         .saying("beforeVersion", prose("Smoozy"))
         .saying("afterVersion", prose("could not start"))
-        .saying("failed", prose("Could not read saved data."))
+        .saying("failed", prose("Could not read Smoozy's database."))
         .saying("quit", prose("Quit"));
     if underway {
         event = event.saying("unfinished", prose("Update not finished."));
@@ -503,20 +635,17 @@ fn the_going_with(
 //
 // **About, from step 11's check piece** — `Design/Whole app`, *Checking for
 // updates*: five readings, one box — the version and when it was last
-// checked; checking; a new version found, with the restart on Mac and Windows
-// and the update box on Linux; a check that could not be reached; and a found
-// update that could not be installed. Both failures name no cause. **The third has a held form** while jobs or transfers run
-// (Z31). **Both items open the same box** — *"It does its work in About, and
+// checked; checking; a new version found; a check that could not be reached;
+// and a found update that could not be installed. Both failures name no
+// cause. **Both items open the same box** — *"It does its work in About, and
 // there is no second box"* — and *Check for updates…* asks for a check first.
 //
-// **What is not here, and whose it is.** *Install…* on Linux, which leads to
-// the update box, is step 11's Linux piece's, and **is not drawn until the act
-// behind it exists**, because a button that does nothing is the fault Rule 8
-// names. **The held form's *Install now* is drawn from step 11's Mac update
-// piece** (Z32), under its sentence saying what it does, where the act behind
-// it exists: the Mac route's, the Linux route's, and from step 11's Windows update piece the
-// Windows route's, whose words are the Mac's. Its press is
-// [`the_held_update_is_installed_anyway`], which reaches the run's one check
+// **The third, from 2026-11-09 (Z33, the twenty-eighth notes, note 4)**, is
+// *Smoozy 2.5.0 is ready.* with *Install now…* on every system, which opens
+// the update box ([`the_update_box`]), where what installing does is said.
+// It had a held form while jobs ran (Z31), and on Mac and Windows said
+// *Restarts to install.*; both went, since nothing installs on its own. Its
+// press is [`the_update_box_is_answered`], which reaches the run's one check
 // and through it the route; nothing else installs.
 //
 // **The moment is a moment and never an age** (Z23a): the application hands
@@ -526,13 +655,18 @@ fn the_going_with(
 
 /// **Every word About says, and nowhere else.**
 pub(crate) mod words {
+    /// **A Help link's one word, and the menu item's** (`Design/Whole app §
+    /// Help links`).
+    pub const HELP: &str = "Help";
+    /// Where the system would not open the browser, in the failure shape.
+    pub const COULD_NOT_OPEN_HELP: &str = "Could not open Help.";
     /// About's heading — the drawing's own, which is the app's name.
     pub const ABOUTS_HEADING: &str = "Smoozy";
     /// The word the version stands after — the drawing's *Version 2.4.1*.
     pub const BEFORE_THE_VERSION: &str = "Version";
     pub const CLOSE: &str = "Close";
     pub const COPYRIGHT: &str = "Copyright © 2026 Alexander Kislyakov";
-    pub const FREE_SOFTWARE: &str = "Smoozy is free software. You may share and modify it under the GNU General Public License, version 3 or later. Smoozy comes with no warranty.";
+    pub const FREE_SOFTWARE: &str = "Smoozy is free and open source. You may share and modify it under the GNU General Public License, version 3 or later. Smoozy comes with no warranty.";
     pub const LICENCE: &str = "Licence";
     pub const THIRD_PARTY: &str = "Third-party licences";
     pub const SOURCE_CODE: &str = "Source code";
@@ -540,34 +674,73 @@ pub(crate) mod words {
     /// The first reading, before the moment: the drawing's *Up to date, last
     /// checked 25 Aug 13:52.*
     pub const UP_TO_DATE_LAST_CHECKED: &str = "Up to date, last checked";
-    /// The first reading, after the moment.
-    pub const SMOOZY_CHECKS_ON_ITS_OWN: &str = "Updates install automatically.";
     /// The second reading.
     pub const CHECKING: &str = "Checking\u{2026}";
     /// The third, before the version: the drawing's *Smoozy 2.5.0 is ready.*
     pub const BEFORE_THE_NEW_VERSION: &str = "Smoozy";
     /// The third, after the version.
     pub const IS_READY: &str = "is ready.";
-    /// The third on Mac and Windows.
-    pub const RESTARTS_TO_INSTALL: &str = "Restarts to install.";
-    /// The third's held form (Z31).
-    pub const IT_WILL_INSTALL_WHEN_NOTHING_RUNS: &str =
-        "Installs when no jobs or transfers are running.";
-    /// **The held form's one sentence above *Install now*, said before it is
-    /// pressed** (Z32) — the drawing's three, each its own string (X10).
-    pub const INSTALLING_NOW_RESTARTS: &str = "Installing now restarts Smoozy.";
+    /// **The third's button, on every system** (Z33): it opens the update box.
+    pub const INSTALL_NOW_IN_ABOUT: &str = "Install now\u{2026}";
+    /// **The update box** (Z33, Design *Updating*): its heading after the
+    /// version, the drawing's *Smoozy 2.5.0 is ready to install*.
+    pub const IS_READY_TO_INSTALL: &str = "is ready to install";
+    /// The link to the release's own page.
+    pub const WHATS_NEW: &str = "What's new";
+    /// That page could not be opened, in the failure shape.
+    pub const THE_RELEASE_PAGE_FAILED: &str = "Could not open the release page.";
+    /// What installing does, always.
+    pub const INSTALLING_RESTARTS: &str = "Installing restarts Smoozy.";
+    /// **And while a job runs or a transfer is under way** (Z32's sentence) —
+    /// the drawing's two, each its own string (X10).
     pub const JOBS_KEEP_RENDERING: &str = "Jobs keep rendering on their servers.";
     pub const TRANSFERS_STOP: &str = "Uploads and downloads in progress stop.";
-    /// The held form's button.
+    /// **And what each kind does after** — `Design/Whole app § Updating`,
+    /// 2026-11-11, the four questions, scout 3.47: Transfers' own bottom line
+    /// (`Design/Transfers § Along the bottom`), since installing closes
+    /// Smoozy. One string, one home: `transfers::words`.
+    pub const TRANSFERS_AFTER: &str = crate::surface::transfers::words::AN_AUTO_DOWNLOAD_RESUMES;
+    /// **And while this copy is setting up a server** — `Design/Whole app §
+    /// Updating`, 2026-11-14 (the Rough what-if answers, share 5, 424):
+    /// installing closes Smoozy, which cuts the setup off between steps, and
+    /// the box said nothing of it.
+    pub const SETUPS_STOP: &str = "Server setups in progress stop.";
+    /// On Linux, what the system asks for next (Z10a).
+    pub const YOUR_SYSTEM_ASKS_FOR_THE_PASSWORD: &str = "Your system asks for your computer password to install.";
+    /// The box's two buttons. **The first skips this version** (Z10b): it
+    /// read *Later* until 2026-11-11 and did not mean later (the four
+    /// questions, Sol's S3).
+    pub const SKIP_THIS_VERSION: &str = "Skip this version";
     pub const INSTALL_NOW: &str = "Install now";
-    /// The held form's button on Linux, which opens the update box.
-    pub const INSTALL_NOW_LINUX: &str = "Install now\u{2026}";
-    /// The unheld Linux form's button, which opens the update box.
-    pub const INSTALL: &str = "Install\u{2026}";
     /// The fourth, in the failure shape.
     pub const COULD_NOT_REACH: &str = "Could not reach the update service.";
-    /// A found update could not be installed.
+    /// **The fourth, where every try came to no answer** — `Server protocol
+    /// and transfers` B10b, `Desktop app and delivery` E10a's note of
+    /// 2026-11-09.
+    pub const THE_UPDATE_SERVICE_DID_NOT_RESPOND: &str =
+        "The update service did not respond. Try again in a few minutes.";
+    /// **A found update could not be installed, by the step it stopped at**
+    /// (Design *Updating*; the four questions, Sol's S5).
+    pub const DOWNLOAD_FAILED: &str = "Update download failed.";
+    pub const VERIFICATION_FAILED: &str = "Update verification failed.";
     pub const INSTALLATION_FAILED: &str = "Update installation failed.";
+    /// **On Linux, while the package downloads after *Install now*** —
+    /// Design *Updating*, 2026-11-12: *Downloading… 48 MB*.
+    pub const DOWNLOADING: &str = "Downloading…";
+    // **The reason after the step, where it is known** — Design *Updating*,
+    // 2026-11-12 (the four questions, batch 5's leftover). An upload's
+    // failure says its reason the same way.
+    pub const DOWNLOAD_FAILED_NETWORK: &str = "Update download failed: network error.";
+    pub const DOWNLOAD_FAILED_DISK: &str = "Update download failed: could not write to disk.";
+    /// **Nothing could be staged beside the application** — Design
+    /// *Updating*, 2026-11-14 (the Rough what-if answers, share 5, 426 and
+    /// 61): a read-only volume (a disk image, or a copy the system runs from a
+    /// read-only place), and a folder this login may not write in.
+    pub const DOWNLOAD_FAILED_READ_ONLY: &str =
+        "Update download failed: Smoozy is in a read-only folder. Move it to Applications.";
+    pub const DOWNLOAD_FAILED_NO_PERMISSION: &str = "Update download failed: no permission to write to the folder Smoozy is in.";
+    pub const VERIFICATION_FAILED_NOT_THE_RELEASE: &str = "Update verification failed: file does not match the release.";
+    pub const VERIFICATION_FAILED_SIGNATURE: &str = "Update verification failed: signature rejected by the system.";
     /// **A copy that never checks** (E10a) — Build's words, a development
     /// build's only: Design draws no test copy, and a press that drew nothing
     /// would be Smoozy going quiet.
@@ -609,16 +782,9 @@ fn which_reading(reading: &TheReading) -> &'static str {
     match reading {
         TheReading::NoneYet | TheReading::UpToDate => "idle",
         TheReading::Checking => "checking",
-        TheReading::ANewerVersion { held: true, .. } => "held",
-        TheReading::ANewerVersion { held: false, .. } => {
-            if cfg!(target_os = "linux") {
-                "new-linux"
-            } else {
-                "new"
-            }
-        }
-        TheReading::CouldNotBeReached => "fail",
-        TheReading::CouldNotInstall => "install-fail",
+        TheReading::ANewerVersion { .. } => "new",
+        TheReading::CouldNotBeReached | TheReading::NothingAnswered => "fail",
+        TheReading::CouldNotInstall(..) => "install-fail",
         TheReading::ThisCopyNeverChecks => "never",
         TheReading::ThisBuildCannotUpdate => "no-updates",
     }
@@ -659,48 +825,47 @@ fn about_is_said(event: Event, reads: WhatAboutReads) -> Event {
             if let Some(seconds) = seconds {
                 about = about
                     .saying("upToDate", prose(words::UP_TO_DATE_LAST_CHECKED))
-                    .saying("lastChecked", Said::Value(Verbatim::new(seconds)))
-                    .saying("checksOnItsOwn", prose(words::SMOOZY_CHECKS_ON_ITS_OWN));
+                    .saying("lastChecked", Said::Value(Verbatim::new(seconds)));
             }
         }
         TheReading::Checking => about = about.saying("checking", prose(words::CHECKING)),
-        TheReading::ANewerVersion { version, held } => {
+        TheReading::ANewerVersion { version } => {
             about = about
                 .saying("beforeTheNewVersion", prose(words::BEFORE_THE_NEW_VERSION))
                 .saying("newVersion", Said::Value(Verbatim::new(version.clone())))
                 .saying("isReady", prose(words::IS_READY));
-            if *held {
-                about = about.saying("afterReady", prose(words::IT_WILL_INSTALL_WHEN_NOTHING_RUNS));
-                // **Z32's control and the sentence before it, where the act
-                // behind it exists** — the Mac, Linux and Windows routes' (the
-                // last from step 11's Windows update piece).
-                if cfg!(any(target_os = "macos", target_os = "linux", target_os = "windows")) {
-                    about = about
-                        .saying("installingRestarts", prose(words::INSTALLING_NOW_RESTARTS))
-                        .saying("jobsKeepRendering", prose(words::JOBS_KEEP_RENDERING))
-                        .saying("transfersStop", prose(words::TRANSFERS_STOP))
-                        .saying(
-                            "installNow",
-                            // **On Linux it leads to the update box** (Design,
-                            // *Checking for updates*), so it reads *Install now…*.
-                            prose(if cfg!(target_os = "linux") {
-                                words::INSTALL_NOW_LINUX
-                            } else {
-                                words::INSTALL_NOW
-                            }),
-                        );
-                }
-            } else if which == "new" {
-                about = about.saying("afterReady", prose(words::RESTARTS_TO_INSTALL));
-            } else if which == "new-linux" {
-                about = about.saying("installLinux", prose(words::INSTALL));
+            // **Z33: *Install now…* opens the update box**, on every system
+            // where a route behind it exists.
+            if cfg!(any(target_os = "macos", target_os = "linux", target_os = "windows")) {
+                about = about.saying("installNow", prose(words::INSTALL_NOW_IN_ABOUT));
             }
         }
         TheReading::CouldNotBeReached => {
             about = about.saying("couldNotReach", prose(words::COULD_NOT_REACH))
         }
-        TheReading::CouldNotInstall => {
-            about = about.saying("couldNotInstall", prose(words::INSTALLATION_FAILED))
+        // **`Server protocol and transfers` B10b: every try came to no
+        // answer**, in the failure shape's one sentence.
+        TheReading::NothingAnswered => {
+            about = about.saying("couldNotReach", prose(words::THE_UPDATE_SERVICE_DID_NOT_RESPOND))
+        }
+        TheReading::CouldNotInstall(step, reason) => {
+            use crate::updating::checking::TheReasonBehind as Reason;
+            let says = match (step, reason) {
+                (TheStepThatFailed::Download, Some(Reason::ANetworkError)) => words::DOWNLOAD_FAILED_NETWORK,
+                (TheStepThatFailed::Download, Some(Reason::TheDiskRefused)) => words::DOWNLOAD_FAILED_DISK,
+                (TheStepThatFailed::Download, Some(Reason::ItsFolderIsReadOnly)) => words::DOWNLOAD_FAILED_READ_ONLY,
+                (TheStepThatFailed::Download, Some(Reason::NoPermissionForItsFolder)) => {
+                    words::DOWNLOAD_FAILED_NO_PERMISSION
+                }
+                (TheStepThatFailed::Verification, Some(Reason::NotTheReleasedFile)) => {
+                    words::VERIFICATION_FAILED_NOT_THE_RELEASE
+                }
+                (TheStepThatFailed::Verification, Some(Reason::TheSystemRefusedIt)) => words::VERIFICATION_FAILED_SIGNATURE,
+                (TheStepThatFailed::Download, _) => words::DOWNLOAD_FAILED,
+                (TheStepThatFailed::Verification, _) => words::VERIFICATION_FAILED,
+                (TheStepThatFailed::Installation, _) => words::INSTALLATION_FAILED,
+            };
+            about = about.saying("couldNotInstall", prose(says))
         }
         TheReading::ThisCopyNeverChecks => {
             about = about.saying("neverChecks", prose(words::THIS_COPY_NEVER_CHECKS))
@@ -927,6 +1092,61 @@ mod tests {
     ///
     /// **The version goes by the verbatim route** (X7, X9), as the run's own
     /// first event sends it: a user copies a version into a report.
+    /// **A Help link names an answer on K25's list and nothing else**
+    /// (`Design/Whole app § Help links`, 2026-11-13): a listed name asks the
+    /// opener for that answer, a refusal is said back, and a name off the
+    /// list opens nothing.
+    #[test]
+    fn a_help_link_opens_a_listed_answer_and_nothing_else() {
+        use crate::the_address_opener::{Opened, TheHelpAnswer, WhichAddress};
+        for answer in TheHelpAnswer::EVERY {
+            for (opened, expected) in [(Opened::ItWasAsked, TheChoice::ItWasCarriedOut),
+                                       (Opened::ItCouldNotBeOpened, TheChoice::ItCouldNotBeOpened)] {
+                let mut asked = Vec::new();
+                assert_eq!(the_help_is_asked_with(answer.name(), |which| { asked.push(which); opened }), expected);
+                assert_eq!(asked, vec![WhichAddress::Help(answer)]);
+            }
+        }
+        for refused in ["", "turn-off", "https://smoozy.app/help", "could-not-connect#x"] {
+            let mut asked = 0;
+            assert_eq!(the_help_is_asked_with(refused, |_| { asked += 1; Opened::ItWasAsked }), TheChoice::ThereIsNoSuchItem);
+            assert_eq!(asked, 0, "{refused:?} reached the opener");
+        }
+        let links = the_help_links();
+        assert_eq!(links.help.as_str(), "Help");
+        assert_eq!(links.could_not_open, Prose::new("Could not open Help."));
+    }
+
+    /// **The menu's Help opens the Help page, and a refusal is said in its
+    /// small box** — the menu item has no place of its own (`Design/Whole app
+    /// § Help links`). Asked and opened, nothing is posted.
+    #[test]
+    fn the_menus_help_opens_the_page_and_a_refusal_opens_its_box() {
+        use crate::the_address_opener::{Opened, TheHelpAnswer, WhichAddress};
+        use std::sync::Mutex;
+        struct Held(Arc<Mutex<Vec<crate::events::Delivery>>>);
+        impl crate::events::Delivers for Held {
+            fn deliver(&self, delivery: &crate::events::Delivery) {
+                self.0.lock().expect("the list is held").push(delivery.clone());
+            }
+        }
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let queue = TheOneQueue::new();
+        queue.the_page_is_ready(Box::new(Held(seen.clone())));
+        assert_eq!(the_menus_help_is_asked_with(&queue, |which| {
+            assert_eq!(which, WhichAddress::Help(TheHelpAnswer::ThePage));
+            Opened::ItWasAsked
+        }), TheChoice::ItWasCarriedOut);
+        assert!(seen.lock().unwrap().is_empty());
+        assert_eq!(the_menus_help_is_asked_with(&queue, |_| Opened::ItCouldNotBeOpened), TheChoice::ItCouldNotBeOpened);
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].kind, THE_HELP_COULD_NOT_BE_OPENED);
+        assert_eq!(seen[0].said.get("couldNotOpen"), Some(&Said::Prose(Prose::new("Could not open Help."))));
+        assert_eq!(seen[0].said.get("close"), Some(&Said::Prose(Prose::new(words::CLOSE))));
+        assert_eq!(seen[0].said.get("heading"), Some(&Said::Prose(Prose::new("Help"))));
+    }
+
     #[test]
     fn wave4_source_action_asks_the_named_opener_and_reports_refusal() {
         use crate::the_address_opener::{Opened, WhichAddress};
@@ -1035,28 +1255,177 @@ mod tests {
         seen.remove(0)
     }
 
+    /// **The twenty-eighth notes, note 4: About promises no restart and no
+    /// install on its own.** A found version is *ready*, with *Install now…*
+    /// on every system, and nothing after it; the resting line says when the
+    /// last check was and nothing about installing.
     #[test]
-    fn d5b_about_says_that_the_update_restarts_smoozy() {
-        let said = about_reads(
-            TheReading::ANewerVersion {
-                version: "0.2.0".into(),
-                held: false,
-            },
-            None,
+    fn twenty_eighth_4_about_says_ready_and_asks_nothing() {
+        let said = about_reads(TheReading::ANewerVersion { version: "0.2.0".into() }, None);
+        assert_eq!(said.said.get("afterReady"), None, "About promises a restart");
+        assert_eq!(said.said.get("reading"), Some(&Said::Value(Verbatim::new("new"))));
+        assert_eq!(said.said.get("installNow"), Some(&Said::Prose(Prose::new("Install now\u{2026}"))));
+        let at = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_756_129_920);
+        let idle = about_reads(TheReading::UpToDate, Some(at));
+        assert_eq!(idle.said.get("checksOnItsOwn"), None, "About says updates install automatically");
+    }
+
+    /// **The update box's words** (Z33, Design *Updating*): the version a
+    /// value, *What's new*, *Installing restarts Smoozy.*, the jobs sentence
+    /// only while something runs, the password sentence only on Linux, and
+    /// *Skip this version* and *Install now*.
+    #[test]
+    fn twenty_eighth_4_the_update_box_says_what_installing_does() {
+        let keys = |running: bool, linux: bool| -> Vec<String> {
+            let delivered = delivered(|queue| {
+                let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_update_box("0.3.2", running, false, linux));
+            });
+            assert_eq!(delivered["kind"], THE_UPDATE_BOX);
+            assert_eq!(delivered["said"]["version"], "0.3.2");
+            // **The four questions, Sol's S3**: the button says what it does.
+            let skip = delivered["said"]["skip"].as_str().map(|said| said.replace('\u{a0}', " "));
+            assert_eq!(skip.as_deref(), Some("Skip this version"), "the button says Later and skips the version");
+            delivered["said"].as_object().unwrap().keys().cloned().collect()
+        };
+        let quiet = ["afterVersion", "beforeVersion", "install", "restarts", "skip", "version", "whatsNew", "whatsNewFailed"];
+        assert_eq!(keys(false, false), quiet);
+        let mut running = quiet.to_vec();
+        running.extend(["jobsKeepRendering", "transfersAfter", "transfersStop"]);
+        running.sort();
+        assert_eq!(keys(true, false), running);
+        let mut linux = quiet.to_vec();
+        // *Downloading…*, drawn once *Install now* is pressed (Design
+        // *Updating*, 2026-11-12; the four questions, batch 5's leftover).
+        linux.extend(["downloading", "password"]);
+        linux.sort();
+        assert_eq!(keys(false, true), linux);
+        assert_eq!(words::IS_READY_TO_INSTALL, "is ready to install");
+        assert_eq!(words::INSTALLING_RESTARTS, "Installing restarts Smoozy.");
+        assert_eq!(words::SKIP_THIS_VERSION, "Skip this version");
+        assert_eq!(words::INSTALL_NOW, "Install now");
+        assert_eq!(words::WHATS_NEW, "What's new");
+    }
+
+    /// **The Rough what-if answers, share 5 (424): installing while this copy
+    /// sets up a server says the setup stops** — `Design/Whole app §
+    /// Updating`. The sentence is there only while a setup run is driven, the
+    /// page draws it after the others in the box's one paragraph, and the
+    /// reading is the setup exclusion itself. Before, a setup run was not
+    /// counted and the box said nothing of it.
+    #[test]
+    fn rough_share_5_the_update_box_says_a_setup_in_progress_stops() {
+        let said = |setups: bool| {
+            delivered(|queue| {
+                let _ = queue.read_then_post(|| Ok::<_, ()>(()), move |_| the_update_box("0.3.2", false, setups, false));
+            })["said"]
+                .clone()
+        };
+        let setups = said(true);
+        assert_eq!(
+            setups["setupsStop"].as_str().map(|said| said.replace('\u{a0}', " ")).as_deref(),
+            Some("Server setups in progress stop."),
+            "the box says nothing of a setup it cuts off"
         );
-        if !cfg!(target_os = "linux") {
-            assert_eq!(
-                said.said.get("afterReady"),
-                Some(&Said::Prose(Prose::new(
-                    "Restarts to install."
-                )))
-            );
+        assert!(setups.get("jobsKeepRendering").is_none(), "a setup is not a running job");
+        assert!(said(false).get("setupsStop").is_none(), "the setups sentence with no setup running");
+        let page = include_str!("../../web/menus.js");
+        assert!(
+            page.contains("said.transfersAfter, said.setupsStop]"),
+            "the page does not draw the setups sentence in the box's paragraph"
+        );
+        let design = include_str!("../../../../Preparation/Design/Whole app.md");
+        assert!(design.contains("*Server setups in progress stop.*"), "Design does not say it");
+
+        let server = "rough-5-a-setup-while-the-box-is-offered";
+        assert!(crate::setting_up::a_run_begins(server, smoozy_server_setup::run::SetupKind::TheReadyAction));
+        assert!(crate::setting_up::a_setup_run_is_being_driven(), "a setup run being driven is not read");
+        crate::setting_up::a_run_ends(server);
+    }
+
+    /// **The four questions, scout 3.47: the update box says what each kind of
+    /// transfer does after the restart** — `Design/Whole app § Updating`,
+    /// Transfers' own bottom line, since installing closes Smoozy.
+    #[test]
+    fn four_questions_3_47_the_update_box_says_what_each_transfer_does_after() {
+        let delivered = delivered(|queue| {
+            let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_update_box("0.3.2", true, false, false));
+        });
+        let after = delivered["said"]["transfersAfter"].as_str().map(|said| said.replace('\u{a0}', " "));
+        assert_eq!(
+            after.as_deref(),
+            Some("Auto-downloads resume on the next connection. Other transfers do not."),
+            "the box says transfers stop and not what happens after"
+        );
+        assert!(the_page_module().contains("said.transfersAfter"), "the page does not draw it");
+    }
+
+    /// ***What's new* opens the release page of the version on screen, and
+    /// nothing where no box is** — the version is the run's own, never the
+    /// page's (K25's third name).
+    #[test]
+    fn twenty_eighth_4_whats_new_asks_for_the_offered_versions_page() {
+        use crate::the_address_opener::{Opened, TheReleasedVersion, WhichAddress};
+        let asked = std::cell::RefCell::new(Vec::new());
+        let answer = the_release_page_is_asked_with(Some("0.3.2"), |which| {
+            asked.borrow_mut().push(which);
+            Opened::ItWasAsked
+        });
+        assert_eq!(answer, TheChoice::ItWasCarriedOut);
+        assert_eq!(asked.borrow().clone(), vec![WhichAddress::TheReleasePage(TheReleasedVersion::read("0.3.2").unwrap())]);
+        let never = |_| -> Opened { panic!("the opener was asked with no version on screen") };
+        assert_eq!(the_release_page_is_asked_with(None, never), TheChoice::ItCouldNotBeOpened);
+        assert_eq!(the_release_page_is_asked_with(Some("../x"), never), TheChoice::ItCouldNotBeOpened);
+        assert_eq!(
+            the_release_page_is_asked_with(Some("0.3.2"), |_| Opened::ItCouldNotBeOpened),
+            TheChoice::ItCouldNotBeOpened
+        );
+    }
+
+    /// **About says the reason behind the failed step, where it is known**,
+    /// after a colon (Design *Updating*, 2026-11-12; the four questions,
+    /// batch 5's leftover), and the step alone where it is not.
+    #[test]
+    fn sixth_part_about_says_the_reason_behind_the_step() {
+        use crate::updating::checking::{TheReasonBehind as Reason, TheStepThatFailed as Step};
+        for (step, reason, says) in [
+            (Step::Download, Some(Reason::ANetworkError), "Update download failed: network error."),
+            (Step::Download, Some(Reason::TheDiskRefused), "Update download failed: could not write to disk."),
+            (
+                Step::Download,
+                Some(Reason::ItsFolderIsReadOnly),
+                "Update download failed: Smoozy is in a read-only folder. Move it to Applications.",
+            ),
+            (Step::Download, Some(Reason::NoPermissionForItsFolder), "Update download failed: no permission to write to the folder Smoozy is in."),
+            (Step::Verification, Some(Reason::NotTheReleasedFile), "Update verification failed: file does not match the release."),
+            (Step::Verification, Some(Reason::TheSystemRefusedIt), "Update verification failed: signature rejected by the system."),
+            (Step::Installation, None, "Update installation failed."),
+        ] {
+            let failed = about_reads(TheReading::CouldNotInstall(step, reason), None);
+            assert_eq!(failed.said.get("couldNotInstall"), Some(&Said::Prose(Prose::new(says))), "{step:?} {reason:?}");
+        }
+        let design = include_str!("../../../../Preparation/Design/Whole app.md");
+        assert!(design.contains("*Update download failed: network error.*"), "Design does not say it");
+    }
+
+    /// **The four questions, Sol's S5: About names the step a failed update
+    /// stopped at** (Design *Updating*), in the failure shape.
+    #[test]
+    fn four_questions_s5_about_names_the_step_that_failed() {
+        use crate::updating::checking::TheStepThatFailed as Step;
+        for (step, says) in [
+            (Step::Download, "Update download failed."),
+            (Step::Verification, "Update verification failed."),
+            (Step::Installation, "Update installation failed."),
+        ] {
+            let failed = about_reads(TheReading::CouldNotInstall(step, None), None);
+            assert_eq!(failed.said.get("couldNotInstall"), Some(&Said::Prose(Prose::new(says))), "{step:?}");
+            assert_eq!(failed.said.get("reading"), Some(&Said::Value(Verbatim::new("install-fail"))), "{step:?}");
         }
     }
 
     #[test]
     fn d5b_about_has_words_for_an_installation_that_failed() {
-        let failed = about_reads(TheReading::CouldNotInstall, None);
+        let failed = about_reads(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None), None);
         assert_eq!(
             failed.said.get("couldNotInstall"),
             Some(&Said::Prose(Prose::new("Update installation failed.")))
@@ -1095,10 +1464,7 @@ mod tests {
             prose(words::UP_TO_DATE_LAST_CHECKED)
         );
         assert_eq!(idle.said.get("lastChecked").cloned(), value("1756129920"));
-        assert_eq!(
-            idle.said.get("checksOnItsOwn").cloned(),
-            prose(words::SMOOZY_CHECKS_ON_ITS_OWN)
-        );
+        assert_eq!(idle.said.get("checksOnItsOwn"), None, "the resting line promises an install");
         assert_eq!(
             idle.said.get("notBuiltYet"),
             None,
@@ -1113,82 +1479,21 @@ mod tests {
         );
         assert_eq!(checking.said.get("lastChecked"), None);
 
-        let new = about_reads(
-            TheReading::ANewerVersion {
-                version: "0.2.0".into(),
-                held: false,
-            },
-            Some(at),
-        );
-        let which = if cfg!(target_os = "linux") {
-            "new-linux"
-        } else {
-            "new"
-        };
-        assert_eq!(new.said.get("reading").cloned(), value(which));
+        let new = about_reads(TheReading::ANewerVersion { version: "0.2.0".into() }, Some(at));
+        assert_eq!(new.said.get("reading").cloned(), value("new"));
         assert_eq!(
             new.said.get("beforeTheNewVersion").cloned(),
             prose("Smoozy")
         );
         assert_eq!(new.said.get("newVersion").cloned(), value("0.2.0"));
         assert_eq!(new.said.get("isReady").cloned(), prose("is ready."));
-        if which == "new" {
-            assert_eq!(
-                new.said.get("afterReady").cloned(),
-                prose(words::RESTARTS_TO_INSTALL)
-            );
-        } else {
-            assert_eq!(
-                new.said.get("afterReady"),
-                None,
-                "Linux promises a next start"
-            );
-        }
-
-        let held = about_reads(
-            TheReading::ANewerVersion {
-                version: "0.2.0".into(),
-                held: true,
-            },
-            Some(at),
-        );
-        assert_eq!(held.said.get("reading").cloned(), value("held"));
-        assert_eq!(held.said.get("newVersion").cloned(), value("0.2.0"));
-        assert_eq!(
-            held.said.get("afterReady").cloned(),
-            prose(words::IT_WILL_INSTALL_WHEN_NOTHING_RUNS)
-        );
-        // **Z32: the held form says what *Install now* does, before the
-        // press, in the drawing's three sentences**, where the act exists.
-        let installs = |key: &str| held.said.get(key).cloned();
+        assert_eq!(new.said.get("afterReady"), None, "About promises a restart");
+        // **Z33: *Install now…* on every system**, where a route exists.
         if cfg!(any(target_os = "macos", target_os = "linux", target_os = "windows")) {
-            assert_eq!(
-                installs("installingRestarts"),
-                prose("Installing now restarts Smoozy.")
-            );
-            assert_eq!(
-                installs("jobsKeepRendering"),
-                prose("Jobs keep rendering on their servers.")
-            );
-            assert_eq!(
-                installs("transfersStop"),
-                prose("Uploads and downloads in progress stop.")
-            );
-            let install_now = if cfg!(target_os = "linux") {
-                "Install now\u{2026}"
-            } else {
-                "Install now"
-            };
-            assert_eq!(installs("installNow"), prose(install_now));
+            assert_eq!(new.said.get("installNow").cloned(), prose("Install now\u{2026}"));
         } else {
-            assert_eq!(
-                installs("installNow"),
-                None,
-                "a button with nothing behind it"
-            );
+            assert_eq!(new.said.get("installNow"), None, "a button with nothing behind it");
         }
-        // The unheld form has no button.
-        assert_eq!(new.said.get("installNow"), None);
 
         let fail = about_reads(TheReading::CouldNotBeReached, Some(at));
         assert_eq!(fail.said.get("reading").cloned(), value("fail"));
@@ -1200,6 +1505,15 @@ mod tests {
             fail.said.get("lastChecked"),
             None,
             "the failure names a moment"
+        );
+
+        // **`Server protocol and transfers` B10b: nothing answered**, in the
+        // same failure shape, and its own words.
+        let no_answer = about_reads(TheReading::NothingAnswered, Some(at));
+        assert_eq!(no_answer.said.get("reading").cloned(), value("fail"));
+        assert_eq!(
+            no_answer.said.get("couldNotReach").cloned(),
+            prose("The update service did not respond. Try again in a few minutes.")
         );
 
         let never = about_reads(TheReading::ThisCopyNeverChecks, Some(at));
@@ -1279,20 +1593,26 @@ mod tests {
             "said.readingNumber",
             "said.upToDate",
             "said.lastChecked",
-            "said.checksOnItsOwn",
             "said.checking",
             "said.beforeTheNewVersion",
             "said.newVersion",
             "said.isReady",
-            "said.afterReady",
             "said.couldNotReach",
             "said.neverChecks",
             "said.noUpdates",
-            "said.installingRestarts",
-            "said.jobsKeepRendering",
-            "said.transfersStop",
             "said.installNow",
             "said.close",
+            // **The update box** (Z33, the twenty-eighth notes, note 4).
+            "said.afterVersion",
+            "said.whatsNew",
+            "said.whatsNewFailed",
+            "said.restarts",
+            "said.jobsKeepRendering",
+            "said.transfersStop",
+            "said.transfersAfter",
+            "said.password",
+            "said.skip",
+            "said.install",
         ] {
             assert!(
                 page.contains(read),
@@ -1555,26 +1875,32 @@ mod tests {
             return;
         };
         let at = std::time::UNIX_EPOCH + Duration::from_secs(1_756_129_920);
-        let newer = |held| TheReading::ANewerVersion {
-            version: "0.2.0".into(),
-            held,
+        let newer = TheReading::ANewerVersion { version: "0.2.0".into() };
+        let the_box = |running: bool, linux: bool| {
+            delivered(|queue| {
+                let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_update_box("0.2.0", running, false, linux));
+            })
         };
-        let linux = delivered(|queue| {
-            let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_linux_offer("0.2.0"));
-        });
         let deliveries = serde_json::json!({
             "idle": a_going("smoozy.about", TheReading::UpToDate, 1, Some(at)),
             "checking": a_reading(TheReading::Checking, 2, Some(at)),
-            "new": a_reading(newer(false), 3, Some(at)),
-            "held": a_reading(newer(true), 4, Some(at)),
+            "new": a_reading(newer, 3, Some(at)),
             "fail": a_reading(TheReading::CouldNotBeReached, 5, Some(at)),
-            "installFail": a_reading(TheReading::CouldNotInstall, 6, Some(at)),
+            "installFail": a_reading(TheReading::CouldNotInstall(TheStepThatFailed::Installation, None), 6, Some(at)),
             "whileShut": a_reading(TheReading::UpToDate, 7, Some(at)),
             "crossed": a_going(THE_CHECK_ITEM, TheReading::Checking, 5, Some(at)),
             "never": a_going("smoozy.about", TheReading::ThisCopyNeverChecks, 8, None),
             "noUpdates": a_going(THE_CHECK_ITEM, TheReading::ThisBuildCannotUpdate, 10, None),
             "versionAlone": a_going("smoozy.about", TheReading::NoneYet, 9, None),
-            "linux": linux,
+            "box": the_box(false, false),
+            "boxRunning": the_box(true, false),
+            "boxLinux": the_box(false, true),
+            "downloading": delivered(|queue| {
+                let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_update_download(Some(48 * 1024 * 1024)));
+            }),
+            "downloadEnded": delivered(|queue| {
+                let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_update_download(None));
+            }),
             "rollback": delivered(|queue| {
                 let _ = queue.read_then_post(|| Ok::<_, ()>(()), |_| the_rollback_box("0.3.0", true, false));
             }),
@@ -1713,24 +2039,17 @@ mod tests {
                 assert!(!one.is_null(), "{width}: {state} was not reached: {out}");
                 one
             };
-            for state in ["idle", "checking", "new", "held", "fail", "installFail", "crossed", "never", "noUpdates", "versionAlone"] {
+            for state in ["idle", "checking", "new", "fail", "installFail", "crossed", "never", "noUpdates", "versionAlone"] {
                 let one = at(state);
                 assert_eq!(one["shown"], true, "{width} {state}: the box is not shown");
                 assert_eq!(one["fits"], true, "{width} {state}: the box does not fit: {one}");
                 assert_eq!(one["sideways"], false, "{width} {state}: the box scrolls sideways");
                 assert_eq!(flat(&one["version"]), format!("Version {version}"), "{width} {state}");
-                // **Z32's *Install now* is the held form's, on every system**, where
-                // the act behind it exists; every other reading has *Close*
-                // alone.
-                let buttons = if state == "held" && cfg!(any(target_os = "macos", target_os = "linux", target_os = "windows")) {
-                    let install_now = if cfg!(target_os = "linux") {
-                        words::INSTALL_NOW_LINUX
-                    } else {
-                        words::INSTALL_NOW
-                    };
-                    serde_json::json!(["Close", Prose::new(install_now).as_str()])
-                } else if state == "new" && cfg!(target_os = "linux") {
-                    serde_json::json!(["Close", Prose::new(words::INSTALL).as_str()])
+                // **Z33's *Install now…* is the new version's, on every
+                // system** where the act behind it exists; every other
+                // reading has *Close* alone.
+                let buttons = if state == "new" && cfg!(any(target_os = "macos", target_os = "linux", target_os = "windows")) {
+                    serde_json::json!(["Close", Prose::new(words::INSTALL_NOW_IN_ABOUT).as_str()])
                 } else {
                     serde_json::json!(["Close"])
                 };
@@ -1747,11 +2066,7 @@ mod tests {
             assert!(!moment.contains("ago") && moment.contains(':'), "{width}: {moment:?} is not a moment");
             assert_eq!(
                 flat(&idle["line"]),
-                format!(
-                    "{} {moment}. {}",
-                    plain(words::UP_TO_DATE_LAST_CHECKED),
-                    plain(words::SMOOZY_CHECKS_ON_ITS_OWN)
-                ),
+                format!("{} {moment}.", plain(words::UP_TO_DATE_LAST_CHECKED)),
                 "{width}"
             );
 
@@ -1760,33 +2075,11 @@ mod tests {
             assert_eq!(at("checking")["turning"], true, "{width}: no turning mark");
             assert_eq!(flat(&at("checking")["line"]), plain(words::CHECKING));
 
-            // The third, and its held form.
+            // The third: ready, and nothing promised after it (Z33).
             let ready = format!("{} 0.2.0 {}", plain(words::BEFORE_THE_NEW_VERSION), plain(words::IS_READY));
-            assert_eq!(lines("new"), serde_json::json!([if cfg!(target_os = "linux") { "new-linux" } else { "new" }]));
+            assert_eq!(lines("new"), serde_json::json!(["new"]), "{width}");
             assert_eq!(flat(&at("new")["bold"]), ready, "{width}");
-            if !cfg!(target_os = "linux") {
-                assert_eq!(flat(&at("new")["line"]), format!("{ready} {}", plain(words::RESTARTS_TO_INSTALL)));
-            }
-            if cfg!(any(target_os = "macos", target_os = "linux", target_os = "windows")) {
-                assert_eq!(lines("held"), serde_json::json!(["held", "held"]), "{width}");
-                assert_eq!(
-                    flat(&at("held")["second"]),
-                    format!(
-                        "{} {} {}",
-                        plain(words::INSTALLING_NOW_RESTARTS),
-                        plain(words::JOBS_KEEP_RENDERING),
-                        plain(words::TRANSFERS_STOP)
-                    ),
-                    "{width}: the sentence above *Install now* is not the drawing's"
-                );
-            } else {
-                assert_eq!(lines("held"), serde_json::json!(["held"]), "{width}");
-            }
-            assert_eq!(flat(&at("held")["bold"]), ready, "{width}");
-            assert_eq!(
-                flat(&at("held")["line"]),
-                format!("{ready} {}", plain(words::IT_WILL_INSTALL_WHEN_NOTHING_RUNS))
-            );
+            assert_eq!(flat(&at("new")["line"]), ready, "{width}: the line promises something after *ready*");
 
             // The fourth: the failure shape, naming no cause.
             assert_eq!(lines("fail"), serde_json::json!(["fail"]), "{width}");
@@ -1812,29 +2105,92 @@ mod tests {
             assert_eq!(flat(&at("noUpdates")["line"]), plain(words::NO_AUTOMATIC_UPDATES));
             assert_eq!(at("noUpdates")["dot"], false, "{width}: nothing failed, yet a red dot");
             assert_eq!(lines("versionAlone"), serde_json::json!([]), "{width}: something invented");
-            let linux = &out["linux"];
+            // **Z33: the update box, on every system** (the twenty-eighth
+            // notes, note 4): the version, *What's new* at the box's text
+            // edge, what installing does, *Skip this version* focused and *Install now*;
+            // no password field. The jobs sentence only while something runs,
+            // the password sentence only on Linux. *What's new* asks the
+            // application by name and a refusal is said in the failure shape.
+            // Tab stays on the box's three controls; *Skip this version* and Escape
+            // decline and *Install now* installs, each for the version shown.
+            let restarts = plain(words::INSTALLING_RESTARTS);
+            let running = format!(
+                "{restarts} {} {} {}",
+                plain(words::JOBS_KEEP_RENDERING),
+                plain(words::TRANSFERS_STOP),
+                plain(words::TRANSFERS_AFTER)
+            );
+            for (state, lines) in [
+                ("box", vec![restarts.clone()]),
+                ("boxRunning", vec![running]),
+                ("boxLinux", vec![restarts.clone(), plain(words::YOUR_SYSTEM_ASKS_FOR_THE_PASSWORD)]),
+            ] {
+                let one = &out[state];
+                assert_eq!(one["fits"], true, "{width} {state}: the update box does not fit: {one}");
+                assert_eq!(one["boxes"], 1, "{width} {state}: one box at a time");
+                assert_eq!(one["passwordFields"], 0, "{width} {state}: Smoozy must never ask for a password");
+                assert_eq!(flat(&one["heading"]), "Smoozy 0.2.0 is ready to install", "{width} {state}");
+                assert_eq!(flat(&one["link"]), plain(words::WHATS_NEW), "{width} {state}");
+                assert_eq!(one["linkAtTheEdge"], true, "{width} {state}: What's new is not at the box's text edge: {one}");
+                let drawn: Vec<String> = one["lines"].as_array().unwrap().iter().map(|line| flat(line)).collect();
+                assert_eq!(drawn, lines, "{width} {state}");
+                assert_eq!(
+                    one["buttons"],
+                    serde_json::json!([Prose::new(words::SKIP_THIS_VERSION).as_str(), Prose::new(words::INSTALL_NOW).as_str()]),
+                    "{width} {state}"
+                );
+                assert_eq!(flat(&one["focused"]), plain(words::SKIP_THIS_VERSION), "{width} {state}");
+                assert_eq!(one["pageFailed"], false, "{width} {state}: a failure drawn before any press");
+            }
+            assert_eq!(out["boxAfterLink"]["pageFailed"], false, "{width}: an opened page was said as a failure");
+            assert_eq!(out["boxAfterRefusal"]["pageFailed"], true, "{width}: a refused page was not said");
+            assert_eq!(flat(&out["boxAfterRefusal"]["failure"]), plain(words::THE_RELEASE_PAGE_FAILED), "{width}");
             assert_eq!(
-                linux["fits"], true,
-                "{width}: Linux update box does not fit"
+                out["boxLinkChoices"],
+                serde_json::json!([
+                    {"command": "a_menu_item_was_chosen", "args": {"item": THE_WHATS_NEW_ITEM}},
+                    {"command": "a_menu_item_was_chosen", "args": {"item": THE_WHATS_NEW_ITEM}}
+                ]),
+                "{width}: What's new carried something besides its name"
             );
             assert_eq!(
-                linux["passwordFields"], 0,
-                "{width}: Smoozy must never ask for a password"
+                out["boxTabs"],
+                serde_json::json!([
+                    Prose::new(words::INSTALL_NOW).as_str(),
+                    Prose::new(words::WHATS_NEW).as_str(),
+                    Prose::new(words::SKIP_THIS_VERSION).as_str(),
+                    Prose::new(words::INSTALL_NOW).as_str()
+                ]),
+                "{width}: Tab left the update box"
             );
-            assert_eq!(flat(&linux["heading"]), "Smoozy 0.2.0 is ready to install");
             assert_eq!(
-                linux["buttons"],
-                serde_json::json!([Prose::new("Not now").as_str(), "Install"])
-            );
-            assert_eq!(flat(&linux["password"]), Prose::new("Your system asks for your computer password to install.").as_str().replace('\u{a0}', " "));
-            assert_eq!(
-                out["linuxChoices"],
+                out["boxChoices"],
                 serde_json::json!([
                     {"version":"0.2.0", "action":"decline"},
                     {"version":"0.2.0", "action":"decline"},
                     {"version":"0.2.0", "action":"install"}
-                ])
+                ]),
+                "{width}: the update box's answers"
             );
+            // **On Linux the box stays while the package downloads** (Design
+            // *Updating*, 2026-11-12; the four questions, batch 5's
+            // leftover): its buttons grey, *Downloading…* under them, the
+            // bytes read so far after it, and the end closes the box.
+            let linux_lines = |extra: &str| {
+                serde_json::json!([restarts.clone(), plain(words::YOUR_SYSTEM_ASKS_FOR_THE_PASSWORD), extra])
+            };
+            let drawn = |state: &str| -> serde_json::Value {
+                out[state]["lines"].as_array().unwrap().iter().map(|line| serde_json::Value::String(flat(line))).collect()
+            };
+            assert_eq!(drawn("boxLinuxInstalling"), linux_lines(&plain(words::DOWNLOADING)), "{width}: no download line");
+            assert_eq!(out["boxLinuxGreyed"], serde_json::json!([true, true, true]), "{width}: the buttons stayed live");
+            assert_eq!(
+                drawn("boxLinuxDownloading"),
+                linux_lines(&format!("{} 48 MB", plain(words::DOWNLOADING))),
+                "{width}: the bytes were not drawn"
+            );
+            assert_eq!(out["boxLinuxDownloading"]["fits"], true, "{width}: the downloading box does not fit");
+            assert_eq!(out["boxLinuxEnded"], 0, "{width}: the box stayed after the install ended");
 
             // **Step 11's D6b: the rollback box** — the heading, the password
             // sentence, the sentence saying Smoozy cannot open until then,
@@ -1893,7 +2249,7 @@ mod tests {
                 assert_eq!(flat(&one["heading"]), "Smoozy could not start", "{width} {state}");
                 let drawn: Vec<String> = one["lines"].as_array().unwrap().iter().map(|line| flat(line)).collect();
                 assert_eq!(drawn, lines, "{width} {state}");
-                assert_eq!(flat(&one["failed"]), plain("Could not read saved data."), "{width} {state}");
+                assert_eq!(flat(&one["failed"]), plain("Could not read Smoozy's database."), "{width} {state}");
                 assert_eq!(one["dot"], true, "{width} {state}: no red dot");
                 assert_eq!(one["buttons"], serde_json::json!([Prose::new("Quit").as_str()]), "{width} {state}");
                 assert_eq!(flat(&one["focused"]), plain("Quit"), "{width} {state}: Quit is not focused");
@@ -1969,7 +2325,7 @@ mod tests {
         assert_eq!(flat(&underway["beforeVersion"]), "Smoozy");
         assert_eq!(flat(&underway["afterVersion"]), "could not start");
         assert_eq!(flat(&underway["unfinished"]), "Update not finished.");
-        assert_eq!(flat(&underway["failed"]), "Could not read saved data.");
+        assert_eq!(flat(&underway["failed"]), "Could not read Smoozy’s database.");
         assert_eq!(flat(&underway["quit"]), "Quit");
         let alone = said(false);
         let keys: Vec<&str> = alone.keys().map(String::as_str).collect();
@@ -1983,7 +2339,7 @@ mod tests {
 </head><body><div class="app"><div class="pane" id="pane"></div></div><pre id="out"></pre>
 <script>
   window.__TAURI__ = {
-    core: { invoke(command, args) { if(command === "a_menu_item_was_chosen") { window.__sourceChoices.push({command, args}); return Promise.resolve(window.__sourceRefused ? "ItCouldNotBeOpened" : "ItWasCarriedOut"); } if(args && args.linux) window.__linuxChoices.push(args.linux); return Promise.resolve(command === "the_menu_bar" ? { drawn_by_the_application: false } : null); } },
+    core: { invoke(command, args) { if(command === "a_menu_item_was_chosen") { window.__sourceChoices.push({command, args}); return Promise.resolve(window.__sourceRefused ? "ItCouldNotBeOpened" : "ItWasCarriedOut"); } if(args && args.choice) window.__linuxChoices.push(args.choice); return Promise.resolve(command === "the_menu_bar" ? { drawn_by_the_application: false } : null); } },
     event: { listen(name, back) { window.__listener = back; return Promise.resolve(() => {}); } },
   };
   window.__troubles = [];
@@ -2064,7 +2420,6 @@ try {
     failure: root().querySelector(".ax-bad:not([hidden])")?.textContent || "" };
   await tell(deliveries.checking); look("checking");
   await tell(deliveries.new); look("new");
-  await tell(deliveries.held); look("held");
   await tell(deliveries.fail); look("fail");
   await tell(deliveries.installFail); look("installFail");
   [...root().querySelectorAll(".mact button")].find(shown).click();
@@ -2074,25 +2429,57 @@ try {
   await tell(deliveries.never); look("never");
   await tell(deliveries.versionAlone); look("versionAlone");
   await tell(deliveries.noUpdates); look("noUpdates");
-  await tell(deliveries.linux);
-  let linux = document.querySelector(".linux-update .mbox");
-  const rect = linux.getBoundingClientRect();
-  out.linux = {
-    fits: rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight && linux.scrollWidth <= linux.clientWidth,
-    heading: linux.querySelector("h3").textContent,
-    password: linux.querySelector("p").textContent,
-    passwordFields: linux.querySelectorAll("input").length,
-    buttons: [...linux.querySelectorAll("button")].map(b => b.textContent)
+  const theUpdateBox = () => document.querySelector(".update-box:not(.linux-rollback) .mbox");
+  const lookAtTheBox = () => {
+    const b = theUpdateBox();
+    const r = b.getBoundingClientRect();
+    const link = b.querySelector(".upd-new");
+    const failed = b.querySelector('[data-ub="pagefail"]');
+    return {
+      fits: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight && b.scrollWidth <= b.clientWidth,
+      boxes: document.querySelectorAll(".update-box:not(.linux-rollback)").length,
+      heading: b.querySelector("h3").textContent,
+      link: link ? link.textContent : "",
+      linkAtTheEdge: Boolean(link) && Math.abs(link.getBoundingClientRect().left - b.querySelector("h3").getBoundingClientRect().left) < 1,
+      lines: [...b.querySelectorAll("p.msub")].map((one) => one.textContent),
+      pageFailed: Boolean(failed) && !failed.hidden,
+      failure: failed ? failed.textContent : "",
+      passwordFields: b.querySelectorAll("input").length,
+      buttons: [...b.querySelectorAll(".mact button")].map((one) => one.textContent),
+      focused: document.activeElement ? document.activeElement.textContent : "",
+    };
   };
-  linux.querySelector("button").click();
-  await tell(deliveries.linux);
-  linux = document.querySelector(".linux-update .mbox");
-  linux.dispatchEvent(new KeyboardEvent("keydown", { key:"Escape", bubbles:true, cancelable:true }));
-  await tell(deliveries.linux);
-  linux = document.querySelector(".linux-update .mbox");
-  linux.querySelectorAll("button")[1].click();
-  out.linuxChoices = window.__linuxChoices;
+  await tell(deliveries.box);
+  out.box = lookAtTheBox();
+  window.__sourceChoices = [];
+  window.__sourceRefused = false;
+  theUpdateBox().querySelector(".upd-new").click(); await settle();
+  out.boxAfterLink = lookAtTheBox();
+  window.__sourceRefused = true;
+  theUpdateBox().querySelector(".upd-new").click(); await settle();
+  out.boxAfterRefusal = lookAtTheBox();
+  out.boxLinkChoices = window.__sourceChoices;
+  theUpdateBox().querySelectorAll(".mact button")[0].focus();
+  out.boxTabs = [];
+  for (let at = 0; at < 4; at += 1) {
+    document.activeElement.dispatchEvent(new KeyboardEvent("keydown", { key:"Tab", bubbles:true, cancelable:true }));
+    out.boxTabs.push(document.activeElement.textContent);
+  }
+  theUpdateBox().querySelectorAll(".mact button")[0].click();
+  await tell(deliveries.boxRunning);
+  out.boxRunning = lookAtTheBox();
+  theUpdateBox().dispatchEvent(new KeyboardEvent("keydown", { key:"Escape", bubbles:true, cancelable:true }));
+  await tell(deliveries.boxLinux);
+  out.boxLinux = lookAtTheBox();
+  theUpdateBox().querySelectorAll(".mact button")[1].click();
+  out.boxChoices = window.__linuxChoices;
   window.__linuxChoices = [];
+  out.boxLinuxInstalling = lookAtTheBox();
+  out.boxLinuxGreyed = [...theUpdateBox().querySelectorAll("button")].map((one) => one.disabled);
+  await tell(deliveries.downloading);
+  out.boxLinuxDownloading = lookAtTheBox();
+  await tell(deliveries.downloadEnded);
+  out.boxLinuxEnded = document.querySelectorAll(".update-box:not(.linux-rollback)").length;
   const theRollbackBox = () => document.querySelector(".linux-rollback .mbox");
   const lookAtTheRollback = () => {
     const b = theRollbackBox();

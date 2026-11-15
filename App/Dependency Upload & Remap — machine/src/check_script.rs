@@ -413,6 +413,9 @@ COLLECTIONS = [
 ]
 
 references = []
+# `Dependency Upload & Remap`, *Colour spaces and image sequences*: each picture
+# stored as a sequence, by its place in `references`, given its users below.
+smoozy_sequences = []
 
 # ------------------------------------------------ G6's two tests (DW0-1)
 #
@@ -562,6 +565,8 @@ for collection, kind in COLLECTIONS:
             "scenes": scenes_reaching(datablock),
             "source": stored_source(kind, datablock),
         })
+        if kind == "Image" and getattr(datablock, "source", None) == "SEQUENCE":
+            smoozy_sequences.append((len(references) - 1, datablock))
 
 # ------------------------------------------------------- G8's node-tree walk
 #
@@ -773,6 +778,8 @@ for datablock, paths in mapped.items():
             "scenes": scenes_reaching(datablock),
             "source": stored_source(kind, datablock),
         })
+        if kind == "Image" and getattr(datablock, "source", None) == "SEQUENCE":
+            smoozy_sequences.append((len(references) - 1, datablock))
 
 # ------------------------------------------- G6d, a library as the file writes it
 #
@@ -896,6 +903,51 @@ flat = [
     for one in map(smoozy_a_path_as_the_file_has_it, bpy.utils.blend_paths())
     if not records_nothing(one)
 ]
+
+# ------------------------- a picture stored as a sequence, and the nodes showing it
+#
+# `Dependency Upload & Remap`, *Colour spaces and image sequences*: every Image
+# Texture node (its image user) and every compositor Image node (its own
+# settings) showing a picture stored as a sequence, with the four settings that
+# decide which file each frame reads, and whether any other node names it. 4.5's
+# compositor is the scene's own tree, which `every_tree` does not reach.
+def smoozy_trees_showing_pictures():
+    for tree, _owner in every_tree():
+        yield tree
+    for scene in bpy.data.scenes:
+        if not hasattr(scene, "compositing_node_group"):
+            tree = getattr(scene, "node_tree", None)
+            if tree is not None:
+                yield tree
+
+if smoozy_sequences:
+    smoozy_shown = {}
+    smoozy_trees_seen = set()
+    for tree in smoozy_trees_showing_pictures():
+        if id(tree) in smoozy_trees_seen:
+            continue
+        smoozy_trees_seen.add(id(tree))
+        for node in getattr(tree, "nodes", ()):
+            image = getattr(node, "image", None)
+            if not isinstance(image, bpy.types.Image):
+                continue
+            shown = smoozy_shown.setdefault(image.as_pointer(), {"users": [], "other_users": False})
+            kind_name = getattr(node, "bl_idname", "")
+            if kind_name == "ShaderNodeTexImage":
+                settings = node.image_user
+            elif kind_name == "CompositorNodeImage":
+                settings = node
+            else:
+                shown["other_users"] = True
+                continue
+            shown["users"].append({
+                "start": int(settings.frame_start),
+                "offset": int(settings.frame_offset),
+                "frames": int(settings.frame_duration),
+                "cyclic": bool(settings.use_cyclic),
+            })
+    for at, image in smoozy_sequences:
+        references[at]["sequence"] = smoozy_shown.get(image.as_pointer(), {"users": [], "other_users": False})
 
 # ------------------------------------------------------ G27's weak references
 weak = []

@@ -86,17 +86,28 @@ pub struct WhatTheRecordsSayAboutTheDerivatives {
 ///
 /// **The backlog is bounded by the frame count and by nothing else, and it is
 /// worked off rather than dropped.**
+///
+/// **Only whole frames** (P1a as changed 2026-11-10, the Creator's
+/// twenty-ninth notes, note 11): the prefix ends at the newest frame saved
+/// where the report's frame in hand has moved past it, and at the frame
+/// before it while it is still in hand
+/// ([`crate::previews::the_newest_whole_frame`]).
 pub fn queue_on_a_report(
     job: &Identity,
     the_attempts_list_in_order: &[i64],
     newest_frame_saved: Option<i64>,
+    the_frame_in_hand: Option<i64>,
     records: &WhatTheRecordsSayAboutTheDerivatives,
 ) -> WhatIsQueued {
     WhatIsQueued {
         job: job.clone(),
         frames: the_frames_owed_a_preview(
             the_attempts_list_in_order,
-            newest_frame_saved,
+            crate::previews::the_newest_whole_frame(
+                the_attempts_list_in_order,
+                newest_frame_saved,
+                the_frame_in_hand,
+            ),
             &records.published,
             &records.standing_queued_or_running,
             &records.excluded_by_the_candidate_rules,
@@ -168,6 +179,7 @@ mod tests {
             &job,
             &[10, 11, 12, 13],
             Some(12),
+            None,
             &WhatTheRecordsSayAboutTheDerivatives {
                 published: vec![10],
                 standing_queued_or_running: vec![11],
@@ -178,6 +190,25 @@ mod tests {
         assert_eq!(queued.frames, vec![12]);
     }
 
+    /// **P1a as changed 2026-11-10 (the twenty-ninth notes, note 11): a frame
+    /// still in hand is not whole.** Twelve View Layers write their files one
+    /// after another, each with its own save line; the report naming the
+    /// frame saved while it is still in hand queues only the frames before
+    /// it, and the next frame begun queues it.
+    #[test]
+    fn n1_a_report_queues_only_frames_the_frame_in_hand_has_moved_past() {
+        let job = a_job();
+        let none = WhatTheRecordsSayAboutTheDerivatives::default();
+        let list = [1, 2, 3, 4, 5];
+        assert_eq!(queue_on_a_report(&job, &list, Some(3), Some(3), &none).frames, vec![1, 2]);
+        assert_eq!(queue_on_a_report(&job, &list, Some(3), Some(4), &none).frames, vec![1, 2, 3]);
+        // A one-frame job, its only frame in hand: nothing until the ending.
+        assert!(queue_on_a_report(&job, &[1], Some(1), Some(1), &none).frames.is_empty());
+        // A frame announced and then skipped, outside the list: the saved
+        // frame is behind it.
+        assert_eq!(queue_on_a_report(&job, &[1, 3], Some(1), Some(2), &none).frames, vec![1]);
+    }
+
     /// **No report, nothing queued** — and that is R4's stream that printed
     /// nothing, where P1b is the route the set is produced by.
     #[test]
@@ -186,6 +217,7 @@ mod tests {
         assert!(queue_on_a_report(
             &job,
             &[1, 2, 3],
+            None,
             None,
             &WhatTheRecordsSayAboutTheDerivatives::default()
         )

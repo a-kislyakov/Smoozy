@@ -168,3 +168,45 @@
 2026-11-04 — GPT-6.1 (Codex), outside any round — M32a carries setup’s lost reason through the existing failure capture, before placement too. No auditor has seen it.
 
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — X2's third substitution and M32's wording. The last words read before the release. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 1, two download routes and retries.md`, outside any round — E10a narrowed by `Server protocol and transfers` B10b; About's no-response words. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 2, Server output keeps everything.md`, outside any round — M13b's second narrowing: the Set up card has no *What the server said*; the act's line and Smoozy's label are no bytes of either stream. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 3, updates by the user's choice and the Dock.md`, outside any round — Z33 added (the install is the user's press, on every system); dated notes on Z1, Z10b, Z29, Z31, Z32 and K25; E18's staging-folder build detail under Z7. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 5, the report's address.md`, outside any round — K25 narrowed again: one more name, the report address's fixed mail link, and no other `mailto:` value. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 5, the report's address.md`, on the build runner's ruling, outside any round — F4 widened: the permission class also takes `EPERM` at `open()`. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 6, the dependency check.md`, outside any round — X5: a picker's title may be prose and one value. No auditor has seen it.
+
+2026-11-10 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's rulings at the foot of `Audits/Build/Fable review/Sitting 1 — what landed.md` (sitting 1's follow-up), outside any round — V2: the stopped line's condition, raised and withdrawn at the queue reading. No auditor has seen this text.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — a setup press during an update, and the flaky layers test.md`, outside any round — V11: the update takes its turn as a setup run does; it looks again, in one act with taking its turn, before it fetches; a card act pressed meanwhile joins Server Setup Y9a's line and begins when the update ends. No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 4, the app replacing itself and its record.md`, outside any round — L8: the copy is staged and published, and is not taken again while an update-in-probe record stands. L13: the restore settles the engine's rollback journal before the rename, from SQLite's own pages read that day. Z21a: a launch carrying the token reads the update-in-probe record without migrating and exits where none names it. No clause added. No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), the same sitting, after Sol's read-only look — L13: a journal the engine could not play is left and the restore refused. Z21a: the attempt's token beside the pipes on macOS. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 5, updates.md`, outside any round — Z11: a build detail, the Linux download before the record's lock (Sol's S4). No clause added. No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Extended the visible time drawing to file-read elapsed time.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, sixth part: Z11's build detail: the Linux download's bytes told to the page. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent) — The double-check ideas, idea 10: L9, where it says so: one line in the main window for a record newer than this Smoozy, and no update offered. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the Telegram fixes, Sol's second check.md`, outside any round — M32b, Blender's download list that could not be read, with its reason, in the diary. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Website/Brief — Help, the Creator's picks.md`, outside any round — K25's third narrowing, Help from a closed list of answers; a note under K5 that Help is an item in the Smoozy menu. No auditor has seen it.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — added L9a and corrected the batch 2 failure-reporting section.
+2026-11-14 — Claude Opus 5.5 — added L9b (the Creator's ruling on 97, Rough share 1).
+2026-11-14 — Claude Opus 5.5 — Z33 widened for setups, notes on E18 and V11 (Rough share 5, 424, 426, 61, 432).
+2026-11-14 — Claude Opus 5.5 — added *V3, built — the automatic repair* (V3a to V3c; §22 item 15 narrowed).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: the blocked landing folder's quoted sentence reworded.
+2026-11-15 — Claude Opus 5.5 — the runner's rulings on Codex's word check: the blocked landing folder's sentence and L9b's restart line reworded.
+2026-11-15 — Claude Opus 5.5 — V1: a pass's queue reading raises and withdraws the not-responding condition (what the what-if live pass found).
+2026-11-15 — Claude Opus 5.5 — V3c: a repair that lands withdraws V1's condition at once (the re-check before 0.4.0).

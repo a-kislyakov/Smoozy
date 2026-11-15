@@ -245,6 +245,7 @@ mod tests {
             record.checkpoints.push(Checkpoint {
                 offset: *offset,
                 digest_of_everything_up_to_it: Digest::of(&offset.to_be_bytes()),
+                running_state: None,
             });
         }
         record

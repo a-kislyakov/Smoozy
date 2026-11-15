@@ -15,7 +15,7 @@
 //! `//../Render/_preview`, and proves the same three things of it.
 //!
 //! The two Blenders are found at their usual places on this Mac —
-//! `/Applications/Blender 5.3b.app` and `/Applications/Blender 5.1.2.app` — or
+//! `/Applications/Blender 5.3.app` and `/Applications/Blender 5.1.2.app` — or
 //! at `SMOOZY_DESK_BLENDER_53` and `SMOOZY_DESK_BLENDER_51`. **This crate's own
 //! code starts no process**; this file is a test of it, not part of it.
 //!
@@ -105,7 +105,7 @@ for one in smoozy_redirect:
 
 fn the_two() -> Vec<(u16, u16, PathBuf)> {
     [
-        (5u16, 3u16, "SMOOZY_DESK_BLENDER_53", "/Applications/Blender 5.3b.app/Contents/MacOS/Blender"),
+        (5u16, 3u16, "SMOOZY_DESK_BLENDER_53", "/Applications/Blender 5.3.app/Contents/MacOS/Blender"),
         (5, 1, "SMOOZY_DESK_BLENDER_51", "/Applications/Blender 5.1.2.app/Contents/MacOS/Blender"),
     ]
     .into_iter()

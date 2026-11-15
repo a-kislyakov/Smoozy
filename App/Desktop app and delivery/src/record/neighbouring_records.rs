@@ -1433,6 +1433,7 @@ mod tests {
                         eevee: None,
                     },
                 announced_add_on_case: None,
+                the_files_own_scripts_run: None,
                 the_folders_at_the_machines_top: None,
             },
             Some(&a_blender()),
@@ -1621,6 +1622,7 @@ mod tests {
                 }),
                 set_aside: false,
                 rejected_guess: None,
+                included: false,
                 read_as: Vec::new(),
             }])
             .expect("the root's answer");

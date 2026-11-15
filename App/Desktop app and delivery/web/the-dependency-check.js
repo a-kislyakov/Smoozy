@@ -27,7 +27,7 @@
 //   arrives as pieces — words, or a value, never both — and `saidInto` sets them
 //   side by side.
 // - **Never rebuild a shape the shared half exports.** The one failure shape is
-//   `theFailureShape`; the underway mark is `theMarkOnARow`; the machine's own
+//   `theFailureShape`; the underway mark is the drawing's `.spin` on a `.ckline`; the machine's own
 //   words are `theMachinesOwnWordsFor`. **The mockup draws this panel's own
 //   copies of the failure shape and of the underway mark, and this application
 //   refuses both.** A failed row is not one of them: the drawing writes its
@@ -62,23 +62,21 @@ import { theBrowserIsOpenedAt } from "./files.js";
 import { whenTold } from "./event-route.js";
 import { theFailureShape, EXPANDED } from "./the-failure-shape.js";
 import { theMachinesOwnWordsFor } from "./the-machines-own-words.js";
-import { theMarkOnARow } from "./the-underway-shape.js";
-import { aTransferIsAskedFor } from "./transfers.js";
+import { theMarkOnALine } from "./the-underway-shape.js";
 import { theSettingsSectionIsOpened, SEARCH_FOLDERS_SECTION } from "./settings.js";
 import { theValueDrawn, theValueIsDrawnInto } from "./the-value-drawn.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 const shell = window.__TAURI__;
-
-// The act this panel hands Transfers — `TheAct` in `src/surface/transfers.rs`.
-const UPLOAD_THE_FOUND = "upload-the-found";
 
 // Declared beside the service that posts it — `AN_ACT_ON_THIS_PANEL` in
 // `src/surface/the_dependency_check.rs`. Copy carefully.
 const AN_ACT_ON_THIS_PANEL = "the-dependency-check:an-act";
 
-// server → { head, body, file, said, answer, boxes, folderBoxOpen, foldedOpen }
-// — `file` is the file's bytes; `foldedOpen` is which folded groups the user
-// opened, by the group's key.
+// server → { head, body, file, said, answer, boxes, folderBoxOpen, foldedOpen,
+// rows, focusTo } — `file` is the file's bytes; `foldedOpen` is which folded
+// groups the user opened, by the group's key; `rows` is the list kept across
+// redraws; `focusTo` is the row an arrow moved to, until the redraw lands.
 const panels = new Map();
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -158,6 +156,9 @@ function thePanelFor(server) {
     boxes: [],
     folderBoxOpen: false,
     foldedOpen: {},
+    rows: null,
+    theListIsPlaced: false,
+    focusTo: null,
   };
   panels.set(server, held);
   return held;
@@ -266,11 +267,25 @@ function theCheckIsDrawn(server, said) {
   const held = panels.get(server);
   if (!held || !held.head || !held.body) return;
   const hadFocus = document.activeElement;
+  // **An arrow names the row the focus goes to**; otherwise the focus goes
+  // back where it was.
+  const anArrowMovedIt = Boolean(held.focusTo);
   const theBoxThatHadFocus =
-    hadFocus && held.body.contains(hadFocus) ? hadFocus.dataset.box : null;
+    held.focusTo || (hadFocus && held.body.contains(hadFocus) ? hadFocus.dataset.box : null);
+  held.focusTo = null;
+  // **The row the user was looking at stays in view**, its group opened if it
+  // was folded — rows arriving while the check's upload is read, and the one
+  // rebuild after it (`Design/Dependency Upload & Remap`, 2026-11-09).
+  const inView = theRowInView(held);
 
   held.head.replaceChildren();
-  held.body.replaceChildren();
+  // **The list is kept and only what is in it is drawn again**, so it keeps
+  // its place — `Design/Whole app.md`, *a list drawn again with the same
+  // things in it keeps its place*. A new list starts at its top, and until
+  // the Creator's twenty-ninth notes, note 3, every click on a row made one.
+  const kept = theListOf(held);
+  for (const piece of Array.from(held.body.children)) if (piece !== kept) held.body.removeChild(piece);
+  held.theListIsPlaced = false;
   for (const box of held.boxes) box.remove();
   held.boxes = [];
 
@@ -279,15 +294,24 @@ function theCheckIsDrawn(server, said) {
     const told = document.createElement("p");
     told.className = "cempty";
     told.textContent = said.instead;
-    held.body.appendChild(told);
+    thePieceIsPut(held, told);
   } else {
     theBodyIsDrawn(server, said, held);
   }
-
-  if (theBoxThatHadFocus) {
-    const again = held.body.querySelector(`[data-box="${theBoxThatHadFocus}"]`);
-    if (again) again.focus();
+  if (kept && !held.theListIsPlaced) {
+    held.body.removeChild(kept);
+    held.rows = null;
   }
+
+  // **The focus goes back without scrolling** (the twenty-ninth notes, note
+  // 3): a focus given by script scrolls a row out of view to the middle.
+  let again = null;
+  if (theBoxThatHadFocus) {
+    again = held.body.querySelector(`[data-box="${theBoxThatHadFocus}"]`);
+    if (again) theFocusMovesTo(again, { preventScroll: true });
+  }
+  if (inView) theRowIsKeptInView(held, inView);
+  if (again && anArrowMovedIt) theRowIsBroughtIntoView(held, again);
 
   // **The strip keeps counting**, and no strip carries a mark: *the strip's
   // job is to keep counting, and the figures do it* (the Creator's tenth
@@ -297,6 +321,75 @@ function theCheckIsDrawn(server, said) {
     // In parts, since *Uploading 4 of 12* puts words between two figures.
     reading: said.the_strip_reading.length ? said.the_strip_reading : null,
   });
+}
+
+/// **The list of rows, where it is drawn** — the drawing's `.rows`, which is
+/// the one part of this panel that scrolls (`the-dependency-check.css`).
+function theListOf(held) {
+  return held.rows && held.rows.parentElement === held.body ? held.rows : null;
+}
+
+/// **A piece of the body, put in its order around the kept list**: what
+/// comes before the list goes in before it, the list stays where it stands,
+/// and what comes after goes at the end.
+function thePieceIsPut(held, piece) {
+  const kept = theListOf(held);
+  if (piece === held.rows) {
+    if (!kept) held.body.appendChild(piece);
+    held.theListIsPlaced = true;
+  } else if (kept && !held.theListIsPlaced) {
+    held.body.insertBefore(piece, kept);
+  } else {
+    held.body.appendChild(piece);
+  }
+  return piece;
+}
+
+/// **How far down the page an element starts**, by its own offsets — the panel
+/// measures its rows against itself, never against the window.
+function theTopOf(element) {
+  let top = 0;
+  for (let at = element; at; at = at.offsetParent) top += at.offsetTop;
+  return top;
+}
+
+/// **The first row the user can see, and where it stands in the panel**, where
+/// the panel has been scrolled at all. Rows are known by what the file says and
+/// their name, which a rebuild keeps.
+function theRowInView(held) {
+  const scroller = theListOf(held);
+  if (!scroller || !(scroller.scrollTop > 0)) return null;
+  const seen = theTopOf(scroller) + scroller.scrollTop;
+  for (const row of held.body.querySelectorAll(".row[data-key]")) {
+    if (!row.offsetParent) continue;
+    const top = theTopOf(row);
+    if (top + row.offsetHeight > seen) return { key: row.dataset.key, offset: top - seen, scroller };
+  }
+  return null;
+}
+
+/// **That row back where it stood**, its folded group opened.
+function theRowIsKeptInView(held, inView) {
+  const row = Array.from(held.body.querySelectorAll(".row[data-key]")).find((one) => one.dataset.key === inView.key);
+  if (!row) return;
+  const folded = row.closest("details");
+  if (folded && !folded.open) {
+    folded.open = true;
+    if (folded.dataset.group) held.foldedOpen[folded.dataset.group] = true;
+  }
+  inView.scroller.scrollTop = theTopOf(row) - theTopOf(inView.scroller) - inView.offset;
+}
+
+/// **A row an arrow reached, brought into view by the shortest scroll** —
+/// never to the middle (`Dependency Upload & Remap § Keyboard shortcuts`,
+/// 2026-11-10). A row already in view does not move the list.
+function theRowIsBroughtIntoView(held, row) {
+  const list = theListOf(held);
+  if (!list || !list.contains(row)) return;
+  const top = theTopOf(row) - theTopOf(list);
+  const end = top + row.offsetHeight;
+  if (top < list.scrollTop) list.scrollTop = top;
+  else if (end > list.scrollTop + list.clientHeight) list.scrollTop = end - list.clientHeight;
 }
 
 // ── The header ──────────────────────────────────────────────────────────────
@@ -314,7 +407,10 @@ function theHeadIsDrawn(server, said, head) {
   if (!said.the_reading_line.length && !said.still_reading) return;
 
   const line = document.createElement("div");
-  line.className = "sub";
+  // **`ckline`: its turning mark is Render Settings' read line's**, on the
+  // line's text (`§ While it is still reading below a linked file`, as changed
+  // 2026-11-13, the Creator's notes on the test copy, second round, note 16).
+  line.className = "sub ckline";
   let first = true;
   const between = () => {
     if (!first) line.appendChild(document.createTextNode(" · "));
@@ -330,15 +426,22 @@ function theHeadIsDrawn(server, said, head) {
     between();
     const still = document.createElement("span");
     still.className = "ckstill";
-    still.appendChild(theMarkOnARow(null));
+    // **The drawing's turning mark, on the text** (note 16). Until 2026-11-13
+    // it was a row's mark, a box of its own centred on the line's middle,
+    // which sat seven pixels below the words beside it.
+    still.appendChild(theMarkOnALine());
     // **A count's figures are the sentence's own**; a linked file's name is a path.
-    saidInto(still, said.still_reading, said.the_walks_stop ? { valueTag: "span" } : { valueTag: "span", valueClass: "mono" });
+    saidInto(still, said.still_reading, said.the_line_counts ? { valueTag: "span" } : { valueTag: "span", valueClass: "mono" });
     line.appendChild(still);
-    // ***Stop* beside the walk's count** (`§ While it is still reading below a
-    // linked file`), the same act as *Stop* beside a search.
+    // ***Stop* beside the line for the whole check** (`§ While it is still
+    // reading below a linked file`, 2026-11-13), the same act as *Stop*
+    // beside a search.
+    // **The window's small button, as Transfers' *Stop* is** (the Creator's
+    // notes on the test copy, second round, note 13: *"is it a button
+    // even?"*), held to the line's height (`.mini.inl`).
     if (said.the_walks_stop) {
       between();
-      line.appendChild(aLink(said.the_walks_stop, "stop-the-search", () => theActIsTaken(server, "stop-the-search")));
+      line.appendChild(anInlineButton(said.the_walks_stop, "stop-the-search", () => theActIsTaken(server, "stop-the-search")));
     }
   }
   head.appendChild(line);
@@ -347,8 +450,6 @@ function theHeadIsDrawn(server, said, head) {
 // ── The body ────────────────────────────────────────────────────────────────
 
 function theBodyIsDrawn(server, said, held) {
-  const body = held.body;
-
   const statements = document.createElement("div");
   statements.className = "cstate";
   // **The summary sentence is the first line under the title, and it is the
@@ -361,6 +462,23 @@ function theBodyIsDrawn(server, said, held) {
       told.appendChild(document.createTextNode(" "));
       told.appendChild(aLink(held.installBlender, "install-blender", () => theSetUpTabIsShownAtItsBlender(server)));
     }
+  }
+  // **A search folder added while this check runs, at once** — `§ The
+  // search folders on this panel`, as changed 2026-11-13 (the Creator's notes
+  // on the test copy, second round, note 14): *Added Archive.* and, in grey,
+  // *Searched in this check.*, even while the file itself is read.
+  if (said.the_added_while_it_runs) {
+    const added = said.the_added_while_it_runs;
+    const line = document.createElement("p");
+    line.dataset.statement = "added-while-it-runs";
+    line.appendChild(document.createTextNode("• "));
+    saidInto(line, added.said, { valueClass: "mono", fullPaths: added.the_full_paths });
+    line.appendChild(document.createTextNode(" "));
+    const quiet = document.createElement("span");
+    quiet.className = "q";
+    quiet.textContent = added.quiet;
+    line.appendChild(quiet);
+    statements.appendChild(line);
   }
   for (const one of said.the_statements) {
     const line = document.createElement("p");
@@ -392,16 +510,16 @@ function theBodyIsDrawn(server, said, held) {
     if (one.control) {
       if (itHasWords) line.appendChild(document.createTextNode(" "));
       const act = one.control.act;
-      line.appendChild(aSmallButton(one.control.label, act, () => theActIsTaken(server, act)));
+      const button = line.appendChild(aSmallButton(one.control.label, act, () => theActIsTaken(server, act)));
+      theCheckWaits(button, said);
     }
     statements.appendChild(line);
   }
   if (said.the_once) statements.appendChild(aFailure(server, said, said.the_once));
-  if (statements.childElementCount) body.appendChild(statements);
+  if (statements.childElementCount) thePieceIsPut(held, statements);
 
-  if (said.the_tools) body.appendChild(theTools(server, said, held));
-  if (said.the_selection) body.appendChild(theSelectionBar(server, said));
-  if (said.the_shift) body.appendChild(theShift(server, said));
+  if (said.the_tools) thePieceIsPut(held, theTools(server, said, held));
+  if (said.the_shift) thePieceIsPut(held, theShift(server, said));
 
   // **All four endings take the whole-app failure shape, attached to the check
   // itself**, and none of them shows a list.
@@ -409,7 +527,7 @@ function theBodyIsDrawn(server, said, held) {
     const ending = document.createElement("div");
     ending.className = "ckend";
     ending.appendChild(aFailure(server, said, said.the_ending));
-    body.appendChild(ending);
+    thePieceIsPut(held, ending);
   }
   if (said.nothing_was_read) {
     const empty = document.createElement("p");
@@ -430,15 +548,20 @@ function theBodyIsDrawn(server, said, held) {
       button.dataset.box = start.act;
       button.textContent = start.label;
       button.addEventListener("click", () => theActIsTaken(server, start.act));
+      theCheckWaits(button, said);
       none.appendChild(button);
-      body.appendChild(none);
+      thePieceIsPut(held, none);
     } else {
-      body.appendChild(empty);
+      thePieceIsPut(held, empty);
     }
   }
 
-  if (said.the_table) body.appendChild(theTable(server, said, held));
-  if (said.the_foot) body.appendChild(theFoot(server, said));
+  if (said.the_table) thePieceIsPut(held, theTable(server, said, held));
+  // **The bar over the chosen rows sits under the rows, over the foot**, so
+  // choosing a second row never drops the list under the pointer (UI
+  // consistency, finding 26; it was inserted above them).
+  if (said.the_selection) thePieceIsPut(held, theSelectionBar(server, said));
+  if (said.the_foot) thePieceIsPut(held, theFoot(server, said));
 
   if (said.the_overwrite) theOverwriteIsDrawn(server, said, held);
   if (held.folderBoxOpen) theFolderBoxIsDrawn(server, said, held);
@@ -506,7 +629,7 @@ function theTools(server, said, held) {
     bar.appendChild(far);
   }
   if (tools.stop) {
-    bar.appendChild(aLink(tools.stop, "stop-the-search", () => theActIsTaken(server, "stop-the-search")));
+    bar.appendChild(anInlineButton(tools.stop, "stop-the-search", () => theActIsTaken(server, "stop-the-search")));
   }
   for (const folder of tools.unreadable) {
     const warn = document.createElement("span");
@@ -552,22 +675,46 @@ function theSelectionBar(server, said) {
   if (chosen.undo_the_guess) {
     bar.appendChild(aLink(chosen.undo_the_guess, "undo-over-the-selection", () => theActIsTaken(server, "undo-the-guess")));
   }
+  // **Retry and Verify over the chosen rows** — the four questions, scout
+  // 4.9. No row is named, so the application takes the chosen ones.
+  if (chosen.retry) {
+    bar.appendChild(aLink(chosen.retry, "retry-over-the-selection", () => theActIsTaken(server, "try-again")));
+  }
+  if (chosen.verify) {
+    bar.appendChild(aLink(chosen.verify, "verify-over-the-selection", () => theActIsTaken(server, "confirm")));
+  }
   return bar;
 }
 
+/// **A shift, in one sentence counting files, and *Undo this change* only
+/// where it found any** — the Creator's twenty-eighth notes, note 15. The
+/// count is the sentence's first value, bold as the drawing has it.
 function theShift(server, said) {
   const shift = said.the_shift;
   const band = document.createElement("div");
   band.className = "shift";
-  band.appendChild(saidInto(document.createElement("span"), shift.said, { valueClass: "mono", eachValue: (value) => value.classList.add("selectable") }));
-  band.appendChild(saidInto(document.createElement("span"), shift.resolved, { valueTag: "span" }));
-  const undo = document.createElement("button");
-  undo.type = "button";
-  undo.className = "undo";
-  undo.dataset.box = "undo-the-shift";
-  undo.textContent = shift.undo;
-  undo.addEventListener("click", () => theActIsTaken(server, "undo-the-shift"));
-  band.appendChild(undo);
+  // **The count, where the sentence opens with one, is a figure and not a
+  // path**: bold, and not in the paths' type.
+  const first = shift.said.pieces[0];
+  let values = 0;
+  const theCountComesFirst = Boolean(first && first.value !== null && first.value !== undefined);
+  band.appendChild(saidInto(document.createElement("span"), shift.said, {
+    valueClass: "mono",
+    eachValue: (value) => {
+      value.classList.add("selectable");
+      if (values === 0 && theCountComesFirst) value.classList.remove("mono");
+      values += 1;
+    },
+  }));
+  if (shift.undo) {
+    const undo = document.createElement("button");
+    undo.type = "button";
+    undo.className = "undo";
+    undo.dataset.box = "undo-the-shift";
+    undo.textContent = shift.undo;
+    undo.addEventListener("click", () => theActIsTaken(server, "undo-the-shift"));
+    band.appendChild(undo);
+  }
   return band;
 }
 
@@ -575,8 +722,9 @@ function theShift(server, said) {
 
 function theTable(server, said, held) {
   const table = said.the_table;
-  const rows = document.createElement("div");
-  rows.className = "rows";
+  const rows = theListOf(held) || theListIsMade(server, held);
+  // Drawn aside and put in at once, so the list is never empty in between.
+  const drawn = [];
 
   // **Grouped by state, in the order of what the user has to do about them**,
   // and the order is the application's. **The heading says the state once**:
@@ -585,7 +733,7 @@ function theTable(server, said, held) {
   // (`§ A row`, since the dependency check's fresh look).
   for (const group of table.groups) {
     if (group.folded) {
-      rows.appendChild(aFoldedGroup(server, said, held, group));
+      drawn.push(aFoldedGroup(server, said, held, group));
       continue;
     }
     const heading = document.createElement("div");
@@ -596,20 +744,95 @@ function theTable(server, said, held) {
       dot.className = "cdot";
       heading.appendChild(dot);
     }
+    // ***To upload* carries the up arrow of Files' Upload control in the
+    // heading's own ink**, in place of a dot — the Creator's twenty-eighth
+    // notes, note 8. Not green: green means already on the server here.
+    if (group.marked_with_an_up_arrow) heading.appendChild(theUpArrow());
     heading.dataset.group = group.which;
     heading.appendChild(document.createTextNode(group.heading));
     const count = document.createElement("span");
     count.className = "k";
     saidInto(count, group.how_many, { valueTag: "span" });
     heading.appendChild(count);
-    rows.appendChild(heading);
-    for (const row of group.rows) rows.appendChild(aRow(server, said, row));
+    drawn.push(heading);
+    group.rows.forEach((row, at) => drawn.push(aGroundedRow(server, said, row, at)));
   }
+  rows.replaceChildren(...drawn);
   return rows;
 }
 
+/// **The list of rows, made once** and kept across redraws, with ↑ and ↓ on
+/// it.
+function theListIsMade(server, held) {
+  const rows = document.createElement("div");
+  rows.className = "rows";
+  rows.addEventListener("keydown", (press) => theArrowIsPressed(server, held, rows, press));
+  held.rows = rows;
+  return rows;
+}
+
+/// **↑ and ↓ choose the row above or below; Shift with ↑ or ↓ widens the
+/// choice by one row**, as in Files — `Dependency Upload & Remap § Keyboard
+/// shortcuts` (2026-11-10, the Creator's twenty-ninth notes, note 4). The
+/// choosing is the application's, so an arrow is the act a click or a
+/// Shift-click on the next row would be, and the focus goes to that row when
+/// the panel is drawn again. **The browser's own use of the key, scrolling
+/// the list, is refused.** Rows inside a folded group are skipped while it is
+/// shut. A press before the last one's redraw goes on from the row it reached.
+function theArrowIsPressed(server, held, rows, press) {
+  if (press.key !== "ArrowDown" && press.key !== "ArrowUp") return;
+  if (press.metaKey || press.ctrlKey || press.altKey) return;
+  const reachable = Array.from(rows.querySelectorAll('.row[data-box^="row-"]')).filter((one) => {
+    const folded = one.closest("details");
+    return !folded || folded.open;
+  });
+  const waiting = held.focusTo ? reachable.find((one) => one.dataset.box === held.focusTo) : null;
+  const from = waiting || press.target;
+  const at = reachable.indexOf(from);
+  if (at < 0) return;
+  press.preventDefault();
+  const next = reachable[at + (press.key === "ArrowDown" ? 1 : -1)];
+  if (!next) return;
+  held.focusTo = next.dataset.box;
+  theActIsTaken(server, press.shiftKey ? "choose-a-range" : "choose-a-row", next.dataset.row);
+}
+
+/// **The rows alternate ground, afresh under each group's heading** — `§ How
+/// the rows are grouped and sorted`, the Creator's twenty-eighth notes, note
+/// 21: every second row of a group carries the drawing's `.alt`, in the same
+/// neutral shade the Queue's and Transfers' rows take. The colour stays on the
+/// heading; no group is tinted.
+function aGroundedRow(server, said, row, at) {
+  const line = aRow(server, said, row);
+  if (at % 2 === 1) line.classList.add("alt");
+  return line;
+}
+
+/// **The up arrow on *To upload*'s heading** — the arrow of Files' Upload
+/// control without its tray, the drawing's `#i-up`, drawn here from the same
+/// path data since a symbol would be markup in `index.html`.
+const SVG_NS = "http://www.w3.org/2000/svg";
+function theUpArrow() {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.classList.add("cup");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  for (const d of ["M8 13.6V2.4", "M4.8 5.6 8 2.4l3.2 3.2"]) {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+  }
+  return svg;
+}
+
 /// **A group folded away** — *Already on the server*, green, with its size on
-/// its heading, and *Ignored* at the bottom — the drawing's `details.cside`.
+/// its heading, *Not used by any scene* with its size and *Include all*, and
+/// *Ignored* at the bottom — the drawing's `details.cside`.
 /// Whether the user opened it is kept across redraws.
 function aFoldedGroup(server, said, held, group) {
   const folded = document.createElement("details");
@@ -634,11 +857,27 @@ function aFoldedGroup(server, said, held, group) {
   const grow = document.createElement("span");
   grow.className = "grow";
   summary.appendChild(grow);
+  // ***Include all*, on the heading of the rows no scene uses** — the
+  // twenty-eighth notes, note 14. Pressing it includes them and neither opens
+  // nor closes the group.
+  if (group.include_all) {
+    const all = document.createElement("button");
+    all.type = "button";
+    all.className = "lnk";
+    all.dataset.box = "include-all";
+    all.textContent = group.include_all;
+    all.addEventListener("click", (press) => {
+      press.preventDefault();
+      press.stopPropagation();
+      theActIsTaken(server, "include-all");
+    });
+    summary.appendChild(all);
+  }
   const open = document.createElement("span");
   open.className = "open";
   summary.appendChild(open);
   folded.appendChild(summary);
-  for (const row of group.rows) folded.appendChild(aRow(server, said, row));
+  group.rows.forEach((row, at) => folded.appendChild(aGroundedRow(server, said, row, at)));
   return folded;
 }
 
@@ -657,6 +896,7 @@ function aRow(server, said, row) {
   const line = document.createElement("div");
   line.className = "row";
   line.dataset.row = row.at;
+  line.dataset.key = `${row.the_file_says}\u001f${row.name}`;
   if (row.chosen) line.classList.add("sel");
 
   const what = document.createElement("span");
@@ -706,6 +946,16 @@ function aRow(server, said, row) {
   // note among the notes above.
   const standing = row.notes.find((note) => note.failure);
   if (standing) acts.appendChild(theCrossOn(server, row, standing.failure));
+  else {
+    // **Where there is no cross its room is kept**, the drawing's `.fx.held`,
+    // so ⋯ and the size sit at one place on every row (UI consistency,
+    // finding 12).
+    const room = document.createElement("span");
+    room.className = "fx held";
+    room.setAttribute("aria-hidden", "true");
+    room.textContent = "\u00d7";
+    acts.appendChild(room);
+  }
   line.appendChild(acts);
 
   if (row.choosable) {
@@ -713,6 +963,15 @@ function aRow(server, said, row) {
     line.tabIndex = 0;
     line.dataset.box = `row-${row.at}`;
     line.setAttribute("aria-selected", String(Boolean(row.chosen)));
+    // **A press on a row never scrolls the list** (the Creator's twenty-ninth
+    // notes, note 3): the row takes the focus here, without scrolling, before
+    // the browser can give it the focus and scroll a half-hidden row into
+    // view.
+    line.addEventListener("mousedown", (press) => {
+      if (press.button !== 0 || aControlOnTheRowWasPressed(press.target, line)) return;
+      press.preventDefault();
+      theFocusMovesTo(line, { preventScroll: true });
+    });
     line.addEventListener("click", (press) => {
       if (aControlOnTheRowWasPressed(press.target, line)) return;
       theActIsTaken(server, theWayARowIsChosen(press, adds), row.at);
@@ -756,7 +1015,33 @@ function aNote(server, row, note) {
     holder.textContent = note.failure.sentence;
     return holder;
   }
-  return saidInto(holder, note.said, { valueTag: "span", valueClass: "mono" });
+  saidInto(holder, note.said, { valueTag: "span", valueClass: "mono" });
+  // **An arbitrary pick's matches, after its note** (`§ A row`, the four
+  // questions, scout 2.17): the one in use plain, the others links that use
+  // that file, as *Locate…* does; the whole location on hover.
+  for (const match of note.matches || []) {
+    holder.appendChild(document.createTextNode(" \u00b7 "));
+    const one = document.createElement(match.in_use ? "span" : "button");
+    one.className = match.in_use ? "mono" : "lnk mono";
+    one.title = match.whole;
+    one.textContent = match.place;
+    if (!match.in_use) {
+      one.type = "button";
+      one.dataset.box = `pick-a-match-${match.at}`;
+      one.addEventListener("click", (press) => {
+        press.stopPropagation();
+        shell.core.invoke("an_act_on_the_check", {
+          server,
+          file: (panels.get(server) && panels.get(server).file) || [],
+          act: "pick-a-match",
+          row: Number(row.at),
+          pick: Number(match.at),
+        });
+      });
+    }
+    holder.appendChild(one);
+  }
+  return holder;
 }
 
 /// **The cross on a failed row, last among its buttons** — the drawing's `fx`,
@@ -793,7 +1078,7 @@ function theRowsMenuIsOpened(server, said, row, from) {
   const shut = () => {
     menus.remove();
     held.boxes = held.boxes.filter((box) => box !== menus);
-    from.focus();
+    theFocusMovesTo(from);
   };
   for (const item of row.more_items) {
     const control = aRowControl(server, said, item, row.at);
@@ -813,7 +1098,7 @@ function theRowsMenuIsOpened(server, said, row, from) {
   sheet.appendChild(menus);
   held.boxes.push(menus);
   const first = panel.querySelector("button");
-  if (first) first.focus();
+  if (first) theFocusMovesTo(first);
 }
 
 // ── Along the bottom ────────────────────────────────────────────────────────
@@ -835,13 +1120,12 @@ function theFoot(server, said) {
   upload.disabled = foot.upload_is_unavailable;
   saidInto(upload, foot.upload, { valueTag: "span" });
   // **The upload is this panel's act and it runs in Transfers** —
-  // `Design/Dependency Upload & Remap`: *"its uploads run in Transfers"*, and
-  // the drawing's own `data-go="t"` on this control. The panel holds the rows
-  // and the file's exact bytes, so the act is taken here, and then Transfers
-  // is shown, where the request is (step 10c's dependency wave piece 6).
-  upload.addEventListener("click", () =>
-    theActIsTaken(server, "upload").finally(() => aTransferIsAskedFor(UPLOAD_THE_FOUND, server)),
-  );
+  // `Design/Dependency Upload & Remap`: *"its uploads run in Transfers"*. The
+  // panel holds the rows and the file's exact bytes, so the act is taken here
+  // (step 10c's dependency wave piece 6). **The press leaves the user here**:
+  // the strip, the summary and the rows say it runs (2026-11-11, the four
+  // questions, scout 1.9; the drawing's `data-go="t"` went with it).
+  upload.addEventListener("click", () => theActIsTaken(server, "upload"));
   bar.appendChild(upload);
   return bar;
 }
@@ -929,7 +1213,7 @@ function theOverwriteIsDrawn(server, said, held) {
   });
   sheet.appendChild(box);
   held.boxes.push(box);
-  if (!held.body.contains(document.activeElement)) stop.focus();
+  if (!held.body.contains(document.activeElement)) theFocusMovesTo(stop);
 }
 
 /// **Adding a search folder without leaving the check.** The list, its order
@@ -1014,7 +1298,7 @@ function theFolderBoxIsDrawn(server, said, held) {
     box.remove();
     held.boxes = held.boxes.filter((one) => one !== box);
     const opener = held.body.querySelector('[data-box="search-folders"]');
-    if (opener) opener.focus();
+    if (opener) theFocusMovesTo(opener);
   };
   const row = document.createElement("div");
   row.className = "mrow";
@@ -1053,7 +1337,7 @@ function theFolderBoxIsDrawn(server, said, held) {
   });
   sheet.appendChild(box);
   held.boxes.push(box);
-  if (!box.contains(document.activeElement)) choose.focus();
+  if (!box.contains(document.activeElement)) theFocusMovesTo(choose);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -1155,6 +1439,23 @@ function aSmallButton(label, box, pressed) {
   button.dataset.box = box;
   button.textContent = label;
   button.addEventListener("click", pressed);
+  return button;
+}
+
+/// **A control that starts a check, unavailable while one cannot start, and
+/// why on hover** — `Design/Whole app § While other work runs` (the Creator's
+/// notes on the test copy, second round, note 17).
+function theCheckWaits(button, said) {
+  if (!said.why_a_check_waits) return;
+  button.disabled = true;
+  button.title = said.why_a_check_waits;
+}
+
+/// **The small button, held to the height of the line it sits in** — the
+/// check's *Stop* (the Creator's notes on the test copy, second round, note 13).
+function anInlineButton(label, box, pressed) {
+  const button = aSmallButton(label, box, pressed);
+  button.classList.add("inl");
   return button;
 }
 

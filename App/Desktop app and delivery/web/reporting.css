@@ -9,6 +9,27 @@
  *
  * **What this file adds is only what the drawing never drew**: the one failure
  * shape inside the box, for the write that did not land. It sits in the box's
- * own column with nothing pushed sideways.
+ * own column with nothing pushed sideways. **From 2026-11-09** (the
+ * twenty-eighth notes, note 6) the same shape says, under the address, that
+ * the mail link did not open.
  */
-.rp-box .rp-not-saved .failure { margin: 0; }
+.rp-box .rp-not-saved .failure,
+.rp-box .rp-mail-failed .failure { margin: 0; }
+
+/* **The clipboard's other way in**, as `.ky-away` in `keys.css`: off screen
+ * rather than hidden, because a hidden element cannot be selected and a
+ * selection is what the older route copies. */
+.rp-away {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+/* **The save folder keeps its end in sight** — the last folder, where the
+   report goes — and its start is cut short instead, whole on hover (the UI at
+   every size, E-05). The line runs right to left so the ellipsis falls at the
+   start; the folder is one left-to-right value inside it. */
+#rpwp { direction: rtl; text-align: left; }

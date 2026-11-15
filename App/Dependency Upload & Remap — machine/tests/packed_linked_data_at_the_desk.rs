@@ -160,8 +160,8 @@ for one in bpy.data.libraries:
 
 fn the_blenders() -> Vec<(&'static str, PathBuf)> {
     [
-        ("5.2", "52", "SMOOZY_DESK_BLENDER_52", "/Applications/Blender.app/Contents/MacOS/Blender"),
-        ("5.3", "53", "SMOOZY_DESK_BLENDER_53", "/Applications/Blender 5.3b.app/Contents/MacOS/Blender"),
+        ("5.2", "52", "SMOOZY_DESK_BLENDER_52", "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender"),
+        ("5.3", "53", "SMOOZY_DESK_BLENDER_53", "/Applications/Blender 5.3.app/Contents/MacOS/Blender"),
         ("5.4", "54", "SMOOZY_DESK_BLENDER_54", "/Applications/Blender 5.4a.app/Contents/MacOS/Blender"),
     ]
     .into_iter()
@@ -449,8 +449,8 @@ fn every_blender() -> Vec<(&'static str, PathBuf)> {
         ("4.5", "45", "/Applications/Blender 4.5.12.app/Contents/MacOS/Blender"),
         ("5.0", "50", "/Applications/Blender 5.0.1.app/Contents/MacOS/Blender"),
         ("5.1", "51", "/Applications/Blender 5.1.2.app/Contents/MacOS/Blender"),
-        ("5.2", "52", "/Applications/Blender.app/Contents/MacOS/Blender"),
-        ("5.3", "53", "/Applications/Blender 5.3b.app/Contents/MacOS/Blender"),
+        ("5.2", "52", "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender"),
+        ("5.3", "53", "/Applications/Blender 5.3.app/Contents/MacOS/Blender"),
         ("5.4", "54", "/Applications/Blender 5.4a.app/Contents/MacOS/Blender"),
     ]
     .into_iter()
@@ -930,7 +930,7 @@ print("SMOOZY-DESK-MADE", what, [(l.name, l.filepath) for l in bpy.data.librarie
 #[ignore = "run by hand at the desk with Blender 5.3 beta"]
 fn a_file_named_by_what_it_links_is_fixed_at_the_desk() {
     let out = std::env::var("SMOOZY_DESK_OUT").map(PathBuf::from).unwrap_or_else(|_| std::env::temp_dir().join("smoozy-a-loop"));
-    let blender = PathBuf::from("/Applications/Blender 5.3b.app/Contents/MacOS/Blender");
+    let blender = PathBuf::from("/Applications/Blender 5.3.app/Contents/MacOS/Blender");
     let here = out.join("a-loop");
     let _ = std::fs::remove_dir_all(&here);
     std::fs::create_dir_all(here.join("shot/lib")).expect("a folder");
@@ -988,7 +988,7 @@ fn a_real_files_pairs_are_tried_at_the_desk() {
     let list = std::fs::read_to_string(std::env::var("SMOOZY_DESK_REAL_PAIRS").expect("the pairs")).expect("it reads");
     let here = PathBuf::from(std::env::var("SMOOZY_DESK_OUT").expect("a scratch folder"));
     std::fs::create_dir_all(&here).expect("a folder");
-    let blender = PathBuf::from("/Applications/Blender 5.3b.app/Contents/MacOS/Blender");
+    let blender = PathBuf::from("/Applications/Blender 5.3.app/Contents/MacOS/Blender");
     let pairs: Vec<_> = list
         .lines()
         .filter_map(|line| {

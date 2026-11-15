@@ -74,3 +74,16 @@
 2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a big shot's check and send.md`, outside any round — R6a, E2b. No auditor has seen it.
 
 - 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the downloaded folder's short name.md`, outside any round — P10, the folder on the computer takes the 8-character identity. No auditor has seen it. (Line added by the build runner, which the builder left out.)
+
+2026-11-11 — GPT-6 (Codex) — Planned stalled-download recovery in the saved folder, keeping existing files.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 7, files that move.md`, outside any round — M13: the next start writes *interrupted* into what an earlier run left unended; a part is taken up only at the size it was arranged at. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent) — The double-check ideas, Sol's finding 1: J6, the saved frame is taken once a later frame is in hand. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — M13: a manual request whose leftover was removed is marked, and its row goes. No auditor has seen it.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — corrected the batch 2 blocked landing folder section to what is built.
+2026-11-14 — Claude Opus 5.5 — added An auto-download's folder trouble, said on its row (Rough share 1).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: the blocked landing folder's quoted sentence reworded.
+2026-11-15 — Claude Opus 5.5 — the runner's rulings on Codex's word check: the blocked landing folder's sentence reworded.

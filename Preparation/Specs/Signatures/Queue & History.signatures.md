@@ -65,3 +65,13 @@
 - 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the 5.3 integration's piece 6, outside any round — the closing zero stops at 5.2; three 5.3 cautions. No auditor has seen it.
 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — From 5.3, what the entry says of the driver. No auditor has seen it.
 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), the small fault after the first 5.3 live pass, outside any round — only a Cycles job is held for the driver. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 8, the Queue's dot and the first-frame buttons.md`, outside any round — *A job waiting on the user* and *Acting on a job*: a stop or cancel of a first-frame job ends both parts in one act. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — *Work Smoozy is not tracking*: a job the phone starts from one of Smoozy's own jobs joins the queue by itself. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — *After the last sample, a rendering job says Blender is finishing the frame*, under *What an entry shows*. No auditor has seen this text.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list, Sol's points.md`, outside any round — *After the last sample*: every frame's finishing. No auditor has seen this text.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Kept local jobs unchanged when an endpoint reaches a different installation.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — Continue anyway on a first-frame job that writes nothing sends the rest (the leftovers of the Rough what-if answers, 459).

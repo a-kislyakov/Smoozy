@@ -190,6 +190,11 @@ fn the_store_said(at: &Path, why: impl std::fmt::Display) -> TheJournalRefused {
     TheJournalRefused::TheStore(format!("{}: {why}", at.display()))
 }
 
+// **The measure of one entry** — `the_bytes_it_would_take` and the three
+// beside it — sits in `crate::written_form::the_measure_of_an_entry`, with the
+// written form it measures, so a composer on any system can hold its words to
+// it: this module is the machine's own and is built on Unix alone.
+
 /// The event journal, in the package area.
 #[derive(Debug)]
 pub struct TheEventJournalOnTheMachine {

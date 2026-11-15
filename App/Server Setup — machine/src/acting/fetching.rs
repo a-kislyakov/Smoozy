@@ -376,7 +376,7 @@ fn the_published_checksum(
         .map_err(|why| TheFetchDidNot::TheChecksumWasNotPublished { why })?;
     if let WhatTheLineGave::Neither { status } = gave {
         return Err(TheFetchDidNot::TheChecksumWasNotPublished {
-            why: format!("the checksum file returned HTTP {status}"),
+            why: format!("{}{status}", crate::acting::worker::THE_CHECKSUMS_STATUS),
         });
     }
     read(&String::from_utf8_lossy(&text)).map_err(|why| TheFetchDidNot::TheChecksumWasNotPublished { why })

@@ -66,6 +66,7 @@
 
 import { whenTold } from "./event-route.js";
 import { theMarkOnAControl } from "./the-underway-shape.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 const shell = window.__TAURI__;
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -128,13 +129,23 @@ function open() {
   // listener above; reading it at this moment would read the menu button,
   // because the press that opened the menu has already moved focus to it.
   panel.hidden = false;
+  // **The panel never runs below the window**: held to the room under the
+  // button, it scrolls inside it (the UI at every size, A-02).
+  // The height is a value the stylesheet reads (`--mb-max-h`, `web/menus.css`),
+  // never a declaration on the element (H33).
+  const list = panel.firstElementChild;
+  if (list) {
+    list.style.setProperty("--mb-max-h", "none");
+    const room = window.innerHeight - list.getBoundingClientRect().top - 8;
+    if (list.getBoundingClientRect().height > room) list.style.setProperty("--mb-max-h", `${Math.max(room, 80)}px`);
+  }
   if (opener) opener.setAttribute("aria-expanded", "true");
 }
 
 // **The Edit menu's four, on whatever has focus** — K7. The focused thing may
 // be an engine-drawn field, and this is the one route to it the page has.
 function onWhateverHasFocus(which) {
-  if (hadFocus && typeof hadFocus.focus === "function") hadFocus.focus();
+  theFocusMovesTo(hadFocus);
   if (which === "selectAll") {
     document.execCommand("selectAll");
     return;
@@ -394,17 +405,13 @@ function theBoxIsMade() {
   const version = document.createElement("p");
   version.className = "msub";
 
-  // The readings and the held form, as the drawing has
-  // them; the one that applies is shown.
+  // The readings, as the drawing has them; the one that applies is shown.
   const idle = aLine("msub");
   idle.dataset.ab = "idle";
   const checking = aLine("msub");
   checking.dataset.ab = "check";
   const found = aLine("msub");
   found.dataset.ab = "new";
-  // **The held form's sentence, read before the button is pressed** (Z32).
-  const installing = aLine("msub");
-  installing.dataset.ab = "held";
   const fail = aLine("ax-bad");
   fail.dataset.ab = "fail";
   const never = aLine("msub");
@@ -434,23 +441,16 @@ function theBoxIsMade() {
     root.hidden = true;
   };
   close.addEventListener("click", shut);
-  // **Z32's one press**: the box closes, as the drawing's button does, and the
-  // application is told; what comes of it is the application's.
+  // ***Install now…*, on every system** (Z33): About closes, and the update
+  // box for the version already found is asked for; what comes of it is the
+  // application's.
   const installNow = document.createElement("button");
   installNow.type = "button";
   installNow.className = "btn";
   installNow.hidden = true;
   installNow.addEventListener("click", () => {
     shut();
-    shell.core.invoke("the_held_update_is_installed_anyway");
-  });
-  const installLinux = document.createElement("button");
-  installLinux.type = "button";
-  installLinux.className = "btn";
-  installLinux.hidden = true;
-  installLinux.addEventListener("click", () => {
-    shut();
-    shell.core.invoke("the_held_update_is_installed_anyway", { linux: { version: "", action: "offer" } });
+    shell.core.invoke("the_update_box_is_answered", { choice: { version: "", action: "offer" } });
   });
   box.addEventListener("keydown", (press) => {
     if (press.key !== "Escape" || press.defaultPrevented) return;
@@ -459,13 +459,12 @@ function theBoxIsMade() {
   });
   acts.appendChild(close);
   acts.appendChild(installNow);
-  acts.appendChild(installLinux);
-  for (const one of [heading, version, copyright, notice, links, idle, checking, found, installing, fail, never, sourceFailure, text, acts]) {
+  for (const one of [heading, version, copyright, notice, links, idle, checking, found, fail, never, sourceFailure, text, acts]) {
     box.appendChild(one);
   }
   root.appendChild(box);
   (document.querySelector(".app") || document.body).appendChild(root);
-  return { root, box, heading, version, copyright, notice, links, sourceFailure, text, idle, checking, found, installing, fail, never, close, installNow, installLinux };
+  return { root, box, heading, version, copyright, notice, links, sourceFailure, text, idle, checking, found, fail, never, close, installNow };
 }
 
 /// The moment the last check completed, in this computer's own way of writing
@@ -478,6 +477,7 @@ function theMomentDrawn(seconds) {
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
   });
 }
 
@@ -496,13 +496,12 @@ function theReadingIsDrawn(said) {
   theBox.idle.replaceChildren();
   const idle = reading === "idle" && Boolean(said.lastChecked);
   if (idle) {
-    // The words before the moment, the moment as a value, the full stop, and
-    // the sentence after it — the drawing's one line.
+    // The words before the moment, the moment as a value, and the full stop
+    // — the drawing's one line.
     theBox.idle.appendChild(aSpan(said.upToDate));
     theBox.idle.appendChild(document.createTextNode(" "));
     theBox.idle.appendChild(aSpan(theMomentDrawn(said.lastChecked), "ab-at"));
-    theBox.idle.appendChild(document.createTextNode(". "));
-    theBox.idle.appendChild(aSpan(said.checksOnItsOwn));
+    theBox.idle.appendChild(document.createTextNode("."));
   }
   theBox.idle.hidden = !idle;
 
@@ -514,11 +513,10 @@ function theReadingIsDrawn(said) {
   theBox.checking.hidden = reading !== "checking";
 
   theBox.found.replaceChildren();
-  const found = reading === "new" || reading === "new-linux" || reading === "held";
+  const found = reading === "new";
   if (found) {
     // *Smoozy 2.5.0 is ready.* in bold, the version a value beside the words
-    // rather than inside them (X7), and the sentence after it where this
-    // reading has one.
+    // rather than inside them (X7).
     const bold = document.createElement("b");
     bold.appendChild(aSpan(said.beforeTheNewVersion));
     bold.appendChild(document.createTextNode(" "));
@@ -528,29 +526,14 @@ function theReadingIsDrawn(said) {
     bold.appendChild(document.createTextNode(" "));
     bold.appendChild(aSpan(said.isReady));
     theBox.found.appendChild(bold);
-    if (said.afterReady) {
-      theBox.found.appendChild(document.createTextNode(" "));
-      theBox.found.appendChild(aSpan(said.afterReady));
-    }
   }
-  theBox.found.dataset.ab = reading === "held" ? "held" : reading;
+  theBox.found.dataset.ab = reading;
   theBox.found.hidden = !found;
 
-  // **The held form's sentence and *Install now*, where the going says them.**
-  theBox.installing.replaceChildren();
-  const installs = reading === "held" && Boolean(said.installNow);
-  if (installs) {
-    const sentences = [said.installingRestarts, said.jobsKeepRendering, said.transfersStop];
-    sentences.forEach((one, at) => {
-      if (at > 0) theBox.installing.appendChild(document.createTextNode(" "));
-      theBox.installing.appendChild(aSpan(one));
-    });
-  }
-  theBox.installing.hidden = !installs;
+  // ***Install now…*, where the going says it** (Z33).
+  const installs = found && Boolean(said.installNow);
   theBox.installNow.textContent = installs ? said.installNow : "";
   theBox.installNow.hidden = !installs;
-  theBox.installLinux.textContent = said.installLinux || "";
-  theBox.installLinux.hidden = reading !== "new-linux" || !said.installLinux;
 
   theBox.fail.replaceChildren();
   const failed = reading === "fail" || reading === "install-fail";
@@ -590,15 +573,15 @@ function theBoxOpens(said) {
   theBox.links.replaceChildren();
   const read = (label, content) => {
     for (const one of [theBox.version, theBox.copyright, theBox.notice, theBox.links,
-                       theBox.idle, theBox.checking, theBox.found, theBox.installing,
+                       theBox.idle, theBox.checking, theBox.found,
                        theBox.fail, theBox.never, theBox.sourceFailure,
-                       theBox.installNow, theBox.installLinux]) one.hidden = true;
+                       theBox.installNow]) one.hidden = true;
     theBox.heading.textContent = label;
     theBox.text.textContent = content;
     theBox.text.hidden = false;
     theBox.text.scrollTop = 0;
     theBox.box.classList.add("ab-reading");
-    theBox.text.focus();
+    theFocusMovesTo(theBox.text);
   };
   for (const [label, action] of [
     [said.licence, () => read(said.licence, said.licenceText)],
@@ -643,40 +626,124 @@ function theBoxOpens(said) {
   theReadingIsDrawn(said);
   theBox.close.textContent = said.close || "";
   theBox.root.hidden = false;
-  theBox.close.focus();
+  theFocusMovesTo(theBox.close);
 }
 
-// The drawing's Linux-only box. A dismissal is sent to Rust, where its
-// version is written durably. No password field exists in this page.
-let theLinuxBox = null;
-whenTold("menus:linux-update", (delivery) => {
+// **The menu's *Help* could not be opened** — `Design/Whole app § Help
+// links` (2026-11-13): the item has no place of its own, so a small box says
+// so, in the failure shape, with *Close*. Escape closes it too. The words are
+// the application's.
+let theHelpBox = null;
+whenTold("menus:help-could-not-be-opened", (delivery) => {
+  const said = delivery.said || {};
+  if (theHelpBox) theHelpBox.remove();
+  const root = document.createElement("div");
+  root.className = "modal top about help-box";
+  const box = document.createElement("div");
+  box.className = "mbox";
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-modal", "true");
+  box.tabIndex = -1;
+  const heading = document.createElement("h3");
+  heading.id = "help-box-heading";
+  heading.textContent = said.heading || "";
+  box.setAttribute("aria-labelledby", heading.id);
+  const failed = document.createElement("p");
+  failed.className = "ax-bad";
+  failed.appendChild(aSpan("", "fdot"));
+  const words = document.createElement("b");
+  words.textContent = said.couldNotOpen || "";
+  failed.appendChild(words);
+  const actions = document.createElement("div");
+  actions.className = "mact";
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "btn quiet";
+  close.textContent = said.close || "";
+  const shut = () => {
+    root.remove();
+    if (theHelpBox === root) theHelpBox = null;
+  };
+  close.addEventListener("click", shut);
+  box.addEventListener("keydown", (press) => {
+    if (press.key !== "Escape" || press.defaultPrevented) return;
+    press.preventDefault();
+    shut();
+  });
+  actions.appendChild(close);
+  box.append(heading, failed, actions);
+  root.appendChild(box);
+  (document.querySelector(".app") || document.body).appendChild(root);
+  theHelpBox = root;
+  theFocusMovesTo(close);
+});
+
+// **The update box, on every system** (Z33, the twenty-eighth notes, note 4):
+// the version, *What's new*, what installing does, the password sentence on
+// Linux, *Skip this version* and *Install now*. *Skip this version* and Escape are sent to Rust as the
+// decline, where its version is written durably; *Install now* is the one
+// press that installs. *What's new* asks the application to open the release
+// page of the version on screen, and a refusal is said in the box. No password
+// field exists in this page. Tab stays on the box's own three controls.
+let theUpdateBox = null;
+whenTold("menus:update-box", (delivery) => {
   const said = delivery.said;
-  if (theLinuxBox) theLinuxBox.remove();
+  if (theUpdateBox) theUpdateBox.remove();
   if (theBox) theBox.root.hidden = true;
   const root = document.createElement("div");
-  root.className = "modal top linux-update";
+  root.className = "modal top about update-box";
   const box = document.createElement("div");
   box.className = "mbox";
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-modal", "true");
   const heading = document.createElement("h3");
-  heading.id = "linux-update-heading";
+  heading.id = "update-box-heading";
   box.setAttribute("aria-labelledby", heading.id);
   const version = aSpan(said.version);
   version.className = "selectable";
   heading.append(aSpan(said.beforeVersion), document.createTextNode(" "), version, document.createTextNode(" "), aSpan(said.afterVersion));
-  const password = document.createElement("p");
-  password.className = "msub";
-  password.textContent = said.password || "";
-  const declining = document.createElement("p");
-  declining.className = "msub";
-  declining.textContent = said.declining || "";
+  const whatsNew = document.createElement("button");
+  whatsNew.type = "button";
+  whatsNew.className = "ab-link upd-new";
+  whatsNew.textContent = said.whatsNew || "";
+  const restarts = document.createElement("p");
+  restarts.className = "msub";
+  restarts.dataset.ub = "restarts";
+  for (const one of [said.restarts, said.jobsKeepRendering, said.transfersStop, said.transfersAfter, said.setupsStop]) {
+    if (!one) continue;
+    if (restarts.childNodes.length) restarts.appendChild(document.createTextNode(" "));
+    restarts.appendChild(aSpan(one));
+  }
+  const lines = [heading, whatsNew, restarts];
+  if (said.password) {
+    const password = document.createElement("p");
+    password.className = "msub";
+    password.dataset.ub = "linux";
+    password.textContent = said.password;
+    lines.push(password);
+  }
+  // **The failure shape** for a release page that could not be opened.
+  const pageFailed = document.createElement("p");
+  pageFailed.className = "ax-bad";
+  pageFailed.dataset.ub = "pagefail";
+  pageFailed.hidden = true;
+  pageFailed.appendChild(aSpan("", "fdot"));
+  const failedWords = document.createElement("b");
+  failedWords.textContent = said.whatsNewFailed || "";
+  pageFailed.appendChild(failedWords);
+  lines.push(pageFailed);
+  whatsNew.addEventListener("click", async () => {
+    let opened;
+    try { opened = await shell.core.invoke("a_menu_item_was_chosen", { item: "update.whats-new" }); }
+    catch { opened = "ItCouldNotBeOpened"; }
+    pageFailed.hidden = opened !== "ItCouldNotBeOpened";
+  });
   const actions = document.createElement("div");
   actions.className = "mact";
-  const notNow = document.createElement("button");
-  notNow.type = "button";
-  notNow.className = "btn quiet";
-  notNow.textContent = said.notNow || "";
+  const skip = document.createElement("button");
+  skip.type = "button";
+  skip.className = "btn quiet";
+  skip.textContent = said.skip || "";
   const install = document.createElement("button");
   install.type = "button";
   install.className = "btn";
@@ -685,25 +752,60 @@ whenTold("menus:linux-update", (delivery) => {
   const answer = (action) => {
     if (answered) return;
     answered = true;
-    root.remove();
-    theLinuxBox = null;
-    shell.core.invoke("the_held_update_is_installed_anyway", { linux: { version: said.version, action } });
+    // **On Linux the box stays while the package downloads** (Design
+    // *Updating*, 2026-11-12; the four questions, batch 5's leftover): its
+    // buttons grey and *Downloading…* stands under them, counting up, until
+    // the application says the install has ended.
+    if (action === "install" && said.downloading) {
+      for (const one of [whatsNew, skip, install]) one.disabled = true;
+      const downloading = document.createElement("p");
+      downloading.className = "msub";
+      downloading.dataset.ub = "downloading";
+      downloading.appendChild(aSpan(said.downloading));
+      box.appendChild(downloading);
+      root.theDownloadLine = downloading;
+    } else {
+      root.remove();
+      theUpdateBox = null;
+    }
+    shell.core.invoke("the_update_box_is_answered", { choice: { version: said.version, action } });
   };
-  notNow.addEventListener("click", () => answer("decline"));
+  skip.addEventListener("click", () => answer("decline"));
   install.addEventListener("click", () => answer("install"));
+  const controls = [whatsNew, skip, install];
   box.addEventListener("keydown", (press) => {
     if (press.key === "Escape" && !press.defaultPrevented) { press.preventDefault(); answer("decline"); }
     if (press.key === "Tab") {
       press.preventDefault();
-      (press.target === notNow ? install : notNow).focus();
+      const at = controls.indexOf(press.target);
+      const step = press.shiftKey ? controls.length - 1 : 1;
+      theFocusMovesTo(controls[((at < 0 ? 0 : at) + step) % controls.length], { byTab: true });
     }
   });
-  actions.append(notNow, install);
-  box.append(heading, password, declining, actions);
+  actions.append(skip, install);
+  box.append(...lines, actions);
   root.appendChild(box);
   (document.querySelector(".app") || document.body).appendChild(root);
-  theLinuxBox = root;
-  notNow.focus();
+  theUpdateBox = root;
+  theFocusMovesTo(skip);
+});
+
+// **The Linux download, told to the box that stayed** (Design *Updating*,
+// 2026-11-12): the bytes read so far after *Downloading…*; nothing said
+// closes the box, whether the install ended, failed or was declined.
+whenTold("menus:update-download", (delivery) => {
+  if (!theUpdateBox) return;
+  const said = delivery.said || {};
+  const line = theUpdateBox.theDownloadLine;
+  if (!said.downloading || !line) {
+    theUpdateBox.remove();
+    theUpdateBox = null;
+    return;
+  }
+  line.textContent = "";
+  const readSoFar = aSpan(said.readSoFar);
+  readSoFar.className = "selectable";
+  line.append(aSpan(said.downloading), document.createTextNode(" "), readSoFar);
 });
 
 // **The rollback box** (step 11's D6b): what a launch shows, and nothing else,
@@ -721,7 +823,7 @@ whenTold("menus:linux-rollback", (delivery) => {
   if (theRollbackBox) theRollbackBox.remove();
   if (theBox) theBox.root.hidden = true;
   const root = document.createElement("div");
-  root.className = "modal top linux-update linux-rollback";
+  root.className = "modal top update-box linux-rollback";
   const box = document.createElement("div");
   box.className = "mbox";
   box.setAttribute("role", "dialog");
@@ -766,7 +868,7 @@ whenTold("menus:linux-rollback", (delivery) => {
   reinstall.type = "button";
   reinstall.className = "btn";
   reinstall.textContent = said.reinstall || "";
-  const answer = (action) => shell.core.invoke("the_held_update_is_installed_anyway", { linux: { version: said.version || "", action } });
+  const answer = (action) => shell.core.invoke("the_update_box_is_answered", { choice: { version: said.version || "", action } });
   quit.addEventListener("click", () => answer("quit"));
   let underway = false;
   reinstall.addEventListener("click", () => {
@@ -779,7 +881,7 @@ whenTold("menus:linux-rollback", (delivery) => {
     if (press.key === "Escape" && !press.defaultPrevented) press.preventDefault();
     if (press.key === "Tab") {
       press.preventDefault();
-      (press.target === quit && said.reinstall ? reinstall : quit).focus();
+      theFocusMovesTo(press.target === quit && said.reinstall ? reinstall : quit, { byTab: true });
     }
   });
   if (said.reinstall) {
@@ -792,7 +894,7 @@ whenTold("menus:linux-rollback", (delivery) => {
   root.appendChild(box);
   (document.querySelector(".app") || document.body).appendChild(root);
   theRollbackBox = root;
-  (said.reinstall ? reinstall : quit).focus();
+  theFocusMovesTo(said.reinstall ? reinstall : quit);
 });
 
 // **This module starts itself, so that the shared entry takes one added line

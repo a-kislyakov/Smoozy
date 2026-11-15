@@ -115,3 +115,17 @@
 2026-11-06 — GPT-6.1 (Codex) — Planned grouped publication and folder confirmation reads, and current-file reading status.
 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/After 0.3.0/Brief — the output window, the re-run mark, and the dependency check.md`, outside any round — M14a: a remap that waits for its linked files. No auditor has seen it.
 2026-11-07 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the bake folder named after the file on the computer.md`, outside any round — G6: the default cache folder named after the file on the computer, and not after the file above for a linked object. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 6, the dependency check.md`, outside any round — K4's included mark; A9 leaves out rows no scene uses until included; V11 counts them as set aside; G20a's note. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 11, linked files go first.md`, outside any round — G14b, linked files first and read as they land inside one send; A9c, one send per check per server that a press adds to and that grows while a reading is owed; G15, Stop cancels the readings a send owes; G17, those readings carry on across a repair; G17b, the overlap rule replaces the whole-machine one. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — reading the file, past a minute.md`, outside any round — under G15: the check's reading is waited on per ask, never over the whole reading, as `Render Settings` Q10's build detail says; the contents reading and M14's fixing keep the minute over the whole operation. From the Creator's note 4 on the test copy of 2026-11-12. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the window notes, Sol's points.md`, outside any round — under G15: the contents reading and M14's fixing go on past a minute while the server says they are still running, with an outer limit of 30 minutes. From the build runner's ruling 1. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the window notes, Sol's points.md`, outside any round — under G15: Stop acts at once and its own send waits five seconds at most (Sol's look at reading the file past a minute, point 3). No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — G15's waits. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list, Sol's points.md`, outside any round — G15's waits: Stop in every four-value read, one half hour from the fixing's start. No auditor has seen it.
+2026-11-14 — Claude Opus 5.5 — added the batch 3 section (V14, M16b, G10/G11).
+2026-11-15 — Claude Opus 5.5 — added *Colour spaces and image sequences* (G9 and M4b for a picture stored as a sequence, the job's frames, the frame rule, the missing files said; a colour name the server's Blender lacks as a V3a statement).

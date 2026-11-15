@@ -243,6 +243,10 @@ pub enum WhyTheFetchFailed {
     /// **A partial answer did not start at the byte that was asked for**, so
     /// there is nothing to join what was already held onto.
     TheResumeDidNotLineUp { said: String },
+    /// **The API's list of the release's files does not name this one** —
+    /// `Server protocol and transfers` B10b's second route, and an answer
+    /// rather than an outage: the release is there and the file is not.
+    TheReleaseListsNoSuchFile { file: String },
 }
 
 /// **Where a verified manifest's artifact bytes come from.**

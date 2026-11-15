@@ -61,8 +61,8 @@ use smoozy_server_protocol::requests::{
     NOTHING_WAS_RENDERING, THERE_IS_NO_RECORD_OF_IT, THE_CANCELS_OUTCOME_FIELD, THE_CANCEL_REQUEST,
     THE_GROUP_BLOCK_MOVE_REQUEST, THE_GROUP_FIELD, THE_JOB_FIELD, THE_JOB_IT_GOES_AFTER_FIELD,
     THE_MACHINES_OWN_WORDS_FIELD, THE_MOVES_OUTCOME_FIELD, THE_OPERATION_TO_STOP_FIELD,
-    THE_POSITION_FIELD, THE_REORDER_REQUEST, THE_STOPS_OUTCOME_FIELD, THE_STOP_REQUEST,
-    WHAT_BECAME_OF_IT_FIELD,
+    THE_POSITION_FIELD, THE_REORDER_REQUEST, THE_STOPS_OUTCOME_FIELD, THE_STOP_IS_FORCED_FIELD,
+    THE_STOP_REQUEST, IT_IS_FORCED, WHAT_BECAME_OF_IT_FIELD,
 };
 use smoozy_state::identities::{Identity, IdentityKind};
 
@@ -73,6 +73,11 @@ use crate::servers::the_machines_work::AsksTheSupervisor;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TheQueuesOwnAct {
     TheStop,
+    /// **`Rendering` K11a: the user's *Force stop*** — the stop carrying
+    /// `Server protocol and transfers` C21a's forced mark, offered once a
+    /// stop's waiter gave up. The Creator's
+    /// ruling on the Bad what-if answers' question 287 (Rough share 3).
+    TheForcedStop,
     TheCancel,
     TheGroupsCancel,
 }
@@ -238,12 +243,36 @@ pub fn the_stop_is_sent(
     the_render: &Identity,
     wait: TheWait,
 ) -> Option<WhereTheActStands> {
-    let act = TheQueuesOwnAct::TheStop;
+    a_stop_is_sent(machine, the_render, wait, TheQueuesOwnAct::TheStop)
+}
+
+/// **`Rendering` K11a: the user's *Force stop*** — the same command, under a
+/// fresh identity of its own, carrying `Server protocol and transfers` C21a's
+/// forced mark, and waited on the same way. The Creator's ruling on the Bad
+/// what-if answers' question 287 (Rough share 3).
+pub fn the_forced_stop_is_sent(
+    machine: &mut dyn AsksTheSupervisor,
+    the_render: &Identity,
+    wait: TheWait,
+) -> Option<WhereTheActStands> {
+    a_stop_is_sent(machine, the_render, wait, TheQueuesOwnAct::TheForcedStop)
+}
+
+fn a_stop_is_sent(
+    machine: &mut dyn AsksTheSupervisor,
+    the_render: &Identity,
+    wait: TheWait,
+    act: TheQueuesOwnAct,
+) -> Option<WhereTheActStands> {
     let Ok(command) = Identity::issue(IdentityKind::Operation) else {
         return Some(WhereTheActStands::NotReached(act));
     };
-    let request = Request::speaking(THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, command, THE_STOP_REQUEST)
-        .carrying(Fields::none().and(THE_OPERATION_TO_STOP_FIELD, the_render.as_text()));
+    let mut fields = Fields::none().and(THE_OPERATION_TO_STOP_FIELD, the_render.as_text());
+    if act == TheQueuesOwnAct::TheForcedStop {
+        fields = fields.and(THE_STOP_IS_FORCED_FIELD, IT_IS_FORCED);
+    }
+    let request =
+        Request::speaking(THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, command, THE_STOP_REQUEST).carrying(fields);
     match asked_until_it_ends(machine, &request, THE_STOPS_OUTCOME_FIELD, wait) {
         HowTheAskEnded::AnOutcome(word, words) => match word.as_str() {
             IT_WAS_LEFT_STOPPED | ITS_OWN_ENDING | NOTHING_WAS_RENDERING => None,
@@ -297,7 +326,9 @@ pub fn what_the_groups_cancel_leaves(came_to: WhatThePairCameTo, rendering: bool
     let act = TheQueuesOwnAct::TheGroupsCancel;
     match came_to {
         WhatThePairCameTo::ClearedAndStopped => None,
-        WhatThePairCameTo::NothingWasChanged => Some(WhereTheActStands::NotTaken(act, None)),
+        WhatThePairCameTo::NothingWasChanged | WhatThePairCameTo::TheProgramIsOlder => {
+            Some(WhereTheActStands::NotTaken(act, None))
+        }
         WhatThePairCameTo::TheClearWasRefused => Some(WhereTheActStands::TheClearWasRefused),
         WhatThePairCameTo::TheRenderHadNotStopped if rendering => {
             Some(WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheStop))
@@ -305,6 +336,68 @@ pub fn what_the_groups_cancel_leaves(came_to: WhatThePairCameTo, rendering: bool
         WhatThePairCameTo::TheRenderHadNotStopped => None,
         WhatThePairCameTo::NothingCameBack => Some(WhereTheActStands::TheWaiterGaveUp(act)),
     }
+}
+
+/// **What a first-frame pair's stop leaves each of its two jobs** —
+/// `Queue & History` L19a, read off S2's result as a group's cancel is, and
+/// said as a stop: the check is the one rendering. *Cleared and stopped*
+/// leaves nothing; *the clear was refused* is L16's for both; *the render had
+/// not stopped* is `Rendering` K10's for the check, the range being gone.
+/// `None` for [`WhatThePairCameTo::TheProgramIsOlder`] is never reached: that
+/// pair is followed by the ordinary stop. The twenty-eighth notes, note 16.
+pub fn what_the_pairs_stop_leaves(came_to: WhatThePairCameTo, rendering: bool) -> Option<WhereTheActStands> {
+    let act = TheQueuesOwnAct::TheStop;
+    match came_to {
+        WhatThePairCameTo::ClearedAndStopped => None,
+        WhatThePairCameTo::NothingWasChanged | WhatThePairCameTo::TheProgramIsOlder => {
+            Some(WhereTheActStands::NotTaken(act, None))
+        }
+        WhatThePairCameTo::TheClearWasRefused => Some(WhereTheActStands::TheClearWasRefused),
+        WhatThePairCameTo::TheRenderHadNotStopped if rendering => Some(WhereTheActStands::TheWaiterGaveUp(act)),
+        WhatThePairCameTo::TheRenderHadNotStopped => None,
+        WhatThePairCameTo::NothingCameBack => Some(WhereTheActStands::TheWaiterGaveUp(act)),
+    }
+}
+
+/// **The stop of a job, sent the way the job needs** — `Queue & History`
+/// `Queue & History` L19a's pair where `the_pairs_range` is a range held on this check (the
+/// range removed first, then the check's render, one act on the machine),
+/// and the ordinary stop otherwise, **or where the machine's program is older
+/// than `Queue & History` L19a** and refused the pair by name. Each job the act covers is told
+/// where it stands. The twenty-eighth notes, note 16.
+pub fn the_jobs_stop_is_sent(
+    keeper: &mut dyn smoozy_state::outcomes::Keeps,
+    machine: &mut dyn AsksTheSupervisor,
+    check: &Identity,
+    the_render: Option<&Identity>,
+    the_pairs_range: Option<&Identity>,
+    wait: TheWait,
+) -> Vec<(Identity, Option<WhereTheActStands>)> {
+    let act = TheQueuesOwnAct::TheStop;
+    if let Some(range) = the_pairs_range {
+        use crate::servers::stop_and_clear::{the_pair_is_sent, WhatThePairCarries};
+        let carries = WhatThePairCarries {
+            group: None,
+            the_render_the_desktop_last_saw: the_render.cloned(),
+            first_frame_check: Some(check.clone()),
+        };
+        let came_to = the_pair_is_sent(keeper, machine, &carries, &[], wait).came_to;
+        if came_to != WhatThePairCameTo::TheProgramIsOlder {
+            return vec![
+                (check.clone(), what_the_pairs_stop_leaves(came_to, true)),
+                (range.clone(), what_the_pairs_stop_leaves(came_to, false)),
+            ];
+        }
+    }
+    let stands = match the_render {
+        Some(render) => the_stop_is_sent(machine, render, wait),
+        None => Some(WhereTheActStands::NotReached(act)),
+    };
+    let mut told = vec![(check.clone(), stands)];
+    if let Some(range) = the_pairs_range {
+        told.push((range.clone(), None));
+    }
+    told
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -545,6 +638,7 @@ fn the_queue_is_read_again<R: tauri::Runtime>(
         machine: std::cell::RefCell::new(machine),
         the_connection_is_live: &|| true,
         the_reporting_read: std::cell::RefCell::new(None),
+        why_there_was_none: std::cell::RefCell::new(None),
     };
     let gave = take_the_reading(&asking, &identity, WhetherTheInstallationConfirmed::ItIsTheSameInstallation);
     let the_reporting_read = asking.the_reporting_read.into_inner();
@@ -570,8 +664,32 @@ fn the_queue_is_read_again<R: tauri::Runtime>(
                 }
             }
             let held = crate::servers::the_machines_work::a_reading_is_held_once_its_endings_are_learned(
-                &identity, connection, &record, machine, holds, reading, None,
+                &identity,
+                connection,
+                &record,
+                machine,
+                holds,
+                reading,
+                None,
+                // **The job the reading names as waiting for room**, held
+                // with it as on a P10d pass (`Queue & History` A1 as changed
+                // 2026-11-11).
+                the_reporting_read
+                    .as_ref()
+                    .and_then(|said| said.the_line_waits_for_room_at.clone()),
+                the_reporting_read
+                    .as_ref()
+                    .and_then(|said| said.the_line_waits_for_a_setup.clone()),
+                the_reporting_read.as_ref().map_or(0, |said| said.unreadable_job_records),
             );
+            // **`Telegram` F6: the word, held as on a P10d pass.**
+            if held.it_was_held && held.it_landed {
+                holds.the_reading_says_of_telegram(
+                    &identity.as_text(),
+                    connection,
+                    the_reporting_read.as_ref().and_then(|said| said.telegrams_trouble),
+                );
+            }
             if held.applied_first > 0 {
                 crate::surface::the_history::the_history_is_told_again(app);
             }
@@ -592,6 +710,12 @@ pub enum NothingWasSent {
     ItIsNotInTheQueue,
     /// A stop names a render, and the reading shows this job not rendering.
     ItIsNotRendering,
+    /// **An answer to a hold the reading shows answered already** — the job is
+    /// in the queue and no longer held: the other device's answer won
+    /// (`Queue & History` H4). Sol's fresh look at the twenty-eighth notes'
+    /// piece 8: a box left open over the question met this and said the job
+    /// was no longer in the queue.
+    TheHoldIsAlreadyAnswered,
 }
 
 /// **What one act is sent for**, found in the period-held readings (`Queue &
@@ -602,6 +726,10 @@ struct WhatTheActIsFor {
     the_render: Option<Identity>,
     /// Every job this act marks, and whether it is the one rendering.
     jobs: Vec<(Identity, bool)>,
+    /// **A first-frame check's range, held on it**, where the stop is of
+    /// such a check — `Queue & History` L19a's pair. The twenty-eighth notes,
+    /// note 16.
+    the_pairs_range: Option<Identity>,
 }
 
 fn what_the_act_is_for<R: tauri::Runtime>(
@@ -614,7 +742,7 @@ fn what_the_act_is_for<R: tauri::Runtime>(
     let periods = crate::surface::servers::the_periods_of(app).ok_or(NothingWasSent::ItIsNotInTheQueue)?;
     let every = periods.the_machines_work().every_server();
     match act {
-        TheQueuesOwnAct::TheStop | TheQueuesOwnAct::TheCancel => {
+        TheQueuesOwnAct::TheStop | TheQueuesOwnAct::TheForcedStop | TheQueuesOwnAct::TheCancel => {
             let job = job
                 .and_then(|text| Identity::read_back(IdentityKind::Job, text))
                 .ok_or(NothingWasSent::ItIsNotInTheQueue)?;
@@ -629,13 +757,31 @@ fn what_the_act_is_for<R: tauri::Runtime>(
                     QueueState::Rendering { operation } => Some(operation.clone()),
                     _ => None,
                 };
-                if act == TheQueuesOwnAct::TheStop && rendering.is_none() {
+                if act != TheQueuesOwnAct::TheCancel && rendering.is_none() {
                     return Err(NothingWasSent::ItIsNotRendering);
+                }
+                // **`Queue & History` L19a: a stop of a first-frame check with
+                // its range held on it is the pair's**, read off the hold the
+                // machine names (`Queue & History` P5a: the machine's hold is
+                // the authority, never the saved purpose).
+                let the_pairs_range = (act == TheQueuesOwnAct::TheStop)
+                    .then(|| {
+                        reading.value().jobs.iter().find(|held| {
+                            matches!(held.state, QueueState::Held { .. })
+                                && held.the_hold.as_ref().and_then(|hold| hold.held_behind.as_ref()) == Some(&job)
+                        })
+                    })
+                    .flatten()
+                    .map(|held| held.job.clone());
+                let mut jobs = vec![(job, rendering.is_some())];
+                if let Some(range) = &the_pairs_range {
+                    jobs.push((range.clone(), false));
                 }
                 return Ok(WhatTheActIsFor {
                     server: server.clone(),
-                    jobs: vec![(job, rendering.is_some())],
+                    jobs,
                     the_render: rendering,
+                    the_pairs_range,
                 });
             }
             Err(NothingWasSent::ItIsNotInTheQueue)
@@ -682,6 +828,7 @@ fn what_the_act_is_for<R: tauri::Runtime>(
                     server: server.clone(),
                     the_render,
                     jobs: members,
+                    the_pairs_range: None,
                 });
             }
             Err(NothingWasSent::ItIsNotInTheQueue)
@@ -725,15 +872,46 @@ pub fn the_act_is_begun<R: tauri::Runtime>(
         let mut machine = crate::surface::servers::TheRemovalsOwnEnds { app: &app }.the_machine(&what.server);
         let mut removed: Vec<Identity> = Vec::new();
         let mut it_went_out = true;
+        // **Where each job the act covers now stands**, told to the screen
+        // only once the act is over (`Queue & History` L12a as added
+        // 2026-11-15).
+        let mut endings: Vec<(Identity, Option<WhereTheActStands>)> = Vec::new();
         match act {
             TheQueuesOwnAct::TheStop => {
                 let (job, _) = &what.jobs[0];
-                let stands = match &what.the_render {
-                    Some(render) => the_stop_is_sent(machine.as_mut(), render, TheWait::THE_STOPS_OWN),
+                // **`Queue & History` L19a: a first-frame check's stop is its
+                // pair's**, and the ordinary stop otherwise. The twenty-eighth
+                // notes, note 16.
+                let told = match tauri::Manager::try_state::<Mutex<crate::start::Started>>(&app) {
+                    Some(started) => {
+                        let record = crate::keys::TheRunsRecord { started: started.inner() };
+                        let mut keeper = crate::keys::TheOutcomeRecordsLent(&record);
+                        the_jobs_stop_is_sent(
+                            &mut keeper,
+                            machine.as_mut(),
+                            job,
+                            what.the_render.as_ref(),
+                            what.the_pairs_range.as_ref(),
+                            TheWait::THE_STOPS_OWN,
+                        )
+                    }
+                    None => vec![(job.clone(), Some(WhereTheActStands::NotReached(act)))],
+                };
+                it_went_out = !told
+                    .iter()
+                    .all(|(_, stands)| matches!(stands, Some(WhereTheActStands::NotReached(_))));
+                endings.extend(told);
+            }
+            // **`Rendering` K11a: the forced stop goes to the render alone** —
+            // a first-frame pair's range went with the stop that timed out.
+            TheQueuesOwnAct::TheForcedStop => {
+                let (job, _) = &what.jobs[0];
+                let stands = match what.the_render.as_ref() {
+                    Some(render) => the_forced_stop_is_sent(machine.as_mut(), render, TheWait::THE_STOPS_OWN),
                     None => Some(WhereTheActStands::NotReached(act)),
                 };
                 it_went_out = !matches!(stands, Some(WhereTheActStands::NotReached(_)));
-                it_stands(&job.as_text(), stands);
+                endings.push((job.clone(), stands));
             }
             TheQueuesOwnAct::TheCancel => {
                 let (job, _) = &what.jobs[0];
@@ -742,7 +920,7 @@ pub fn the_act_is_begun<R: tauri::Runtime>(
                 if stands.is_none() {
                     removed.push(job.clone());
                 }
-                it_stands(&job.as_text(), stands);
+                endings.push((job.clone(), stands));
             }
             TheQueuesOwnAct::TheGroupsCancel => {
                 use crate::servers::stop_and_clear::{the_pair_is_sent, WhatThePairCarries};
@@ -753,6 +931,7 @@ pub fn the_act_is_begun<R: tauri::Runtime>(
                         let carries = WhatThePairCarries {
                             group: group.clone(),
                             the_render_the_desktop_last_saw: what.the_render.clone(),
+                            first_frame_check: None,
                         };
                         the_pair_is_sent(&mut keeper, machine.as_mut(), &carries, &[], TheWait::THE_STOPS_OWN)
                             .came_to
@@ -760,16 +939,14 @@ pub fn the_act_is_begun<R: tauri::Runtime>(
                     None => WhatThePairCameTo::NothingWasChanged,
                 };
                 for (job, rendering) in &what.jobs {
-                    it_stands(&job.as_text(), what_the_groups_cancel_leaves(came_to, *rendering));
+                    endings.push((job.clone(), what_the_groups_cancel_leaves(came_to, *rendering)));
                 }
             }
         }
-        the_result_is_presented(
-            || {
-                if it_went_out {
-                    the_machines_journal_is_applied(&app, &what.server, machine.as_mut(), &removed);
-                }
-            },
+        the_endings_are_presented(
+            endings,
+            it_went_out,
+            || the_machines_journal_is_applied(&app, &what.server, machine.as_mut(), &removed),
             || {
                 crate::surface::the_queue::the_queue_is_told_again(&app);
                 crate::surface::the_history::the_history_is_told_again(&app);
@@ -778,6 +955,40 @@ pub fn the_act_is_begun<R: tauri::Runtime>(
         );
     });
     Ok(())
+}
+
+/// **What the act left each job, told to the screen** — at once where it
+/// left something to say (a stop that timed out, a cancel refused), and
+/// **where it did what it was for, only after the read forward that brings
+/// the job's ending or removal into the local record**: until then the job
+/// stays *stopping* or *cancelling* (`Queue & History` L12a as added
+/// 2026-11-15). The what-if live pass on RunPod watched the entry go back to
+/// *Rendering* with *Stop* for 3 to 5 seconds between the stop's outcome and
+/// that read, both times. Where nothing went out, nothing follows.
+fn the_endings_are_presented(
+    told: Vec<(Identity, Option<WhereTheActStands>)>,
+    it_went_out: bool,
+    follow_up: impl FnOnce(),
+    tell: impl Fn(),
+) {
+    let mut done_for: Vec<Identity> = Vec::new();
+    for (job, stands) in told {
+        match stands {
+            None if it_went_out => done_for.push(job),
+            stands => it_stands(&job.as_text(), stands),
+        }
+    }
+    the_result_is_presented(
+        || {
+            if it_went_out {
+                follow_up();
+            }
+            for job in &done_for {
+                it_stands(&job.as_text(), None);
+            }
+        },
+        tell,
+    );
 }
 
 // `Rendering` K10's deadline includes telling the screen. A journal read
@@ -901,6 +1112,92 @@ mod tests {
         Identity::issue(IdentityKind::Operation).unwrap()
     }
 
+    /// **`Queue & History` L19a, the desk's half: a first-frame check's stop
+    /// with its range held is the pair's** — the pair's own two request
+    /// names, each naming the check, and both jobs told nothing once it is
+    /// done; **a program older than `Queue & History` L19a refuses the pair by name and gets
+    /// the ordinary stop of the render**, nothing having changed on it. **It
+    /// failed before the change**: there was no pair stop, and *Stop* sent
+    /// the ordinary stop alone. The Creator's twenty-eighth notes, note 16.
+    #[test]
+    fn twenty_eighth_16_a_checks_stop_is_its_pairs_and_an_older_program_gets_the_ordinary_stop() {
+        use smoozy_server_protocol::requests::{
+            IT_WAS_CLEARED, THE_CLEARS_OUTCOME_FIELD, THE_FIRST_FRAME_CHECK_FIELD, THE_PAIRS_CLEAR_REQUEST,
+            THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST,
+        };
+        use smoozy_state::outcomes::{Keeps, Recorded, Refused};
+        struct APairsMachine {
+            older: bool,
+            asked: Vec<Request>,
+        }
+        impl AsksTheSupervisor for APairsMachine {
+            fn ask(&mut self, request: &Request) -> WhatCameBack {
+                self.asked.push(request.clone());
+                let to = Answered::to(request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS, "test");
+                let a_pairs = request.name == THE_PAIRS_CLEAR_REQUEST
+                    || request.name == THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST;
+                if self.older && a_pairs {
+                    return WhatCameBack::ItAnswered(to.saying_it_does_not_answer_that_request(&request.name));
+                }
+                let fields = Fields::none().and(WHAT_BECAME_OF_IT_FIELD, IT_HAS_A_RECORDED_OUTCOME);
+                WhatCameBack::ItAnswered(to.carrying(if request.name == THE_PAIRS_CLEAR_REQUEST {
+                    fields.and(THE_CLEARS_OUTCOME_FIELD, IT_WAS_CLEARED)
+                } else {
+                    fields.and(THE_STOPS_OUTCOME_FIELD, IT_WAS_LEFT_STOPPED)
+                }))
+            }
+        }
+        #[derive(Default)]
+        struct AKeeper(Vec<Recorded>);
+        impl Keeps for AKeeper {
+            fn enumerate(&mut self, action: &str, units: &[&str]) -> Result<Identity, Refused> {
+                let identity = smoozy_state::outcomes::issue().map_err(|_| Refused::TheStore("no randomness".into()))?;
+                self.0.push(Recorded {
+                    identity: identity.clone(),
+                    action: action.to_string(),
+                    units: units.iter().map(|unit| (unit.to_string(), None)).collect(),
+                });
+                Ok(identity)
+            }
+            fn a_unit_ended(&mut self, record: &Identity, unit: &str, outcome: smoozy_state::outcomes::UnitOutcome) -> Result<(), Refused> {
+                let held = self.0.iter_mut().find(|held| held.identity == *record).ok_or(Refused::ThatUnitWasNotOwed)?;
+                let entry = held.units.iter_mut().find(|(owed, _)| owed == unit).ok_or(Refused::ThatUnitWasNotOwed)?;
+                entry.1 = Some(outcome);
+                Ok(())
+            }
+            fn read(&self, record: &Identity) -> Result<Option<Recorded>, Refused> {
+                Ok(self.0.iter().find(|held| held.identity == *record).cloned())
+            }
+            fn the_user_removed_it(&mut self, record: &Identity) -> Result<(), Refused> {
+                self.0.retain(|held| held.identity != *record);
+                Ok(())
+            }
+        }
+        let check = Identity::issue(IdentityKind::Job).unwrap();
+        let range = Identity::issue(IdentityKind::Job).unwrap();
+        let render = a_render();
+
+        let mut machine = APairsMachine { older: false, asked: Vec::new() };
+        let told = the_jobs_stop_is_sent(&mut AKeeper::default(), &mut machine, &check, Some(&render), Some(&range), QUICK);
+        assert_eq!(told, vec![(check.clone(), None), (range.clone(), None)], "both parts done");
+        let names: Vec<&str> = machine.asked.iter().map(|asked| asked.name.as_str()).collect();
+        assert_eq!(names, [THE_PAIRS_CLEAR_REQUEST, THE_STOP_PAIRED_WITH_THE_PAIRS_CLEAR_REQUEST]);
+        assert!(machine.asked.iter().all(|asked| asked.fields.text(THE_FIRST_FRAME_CHECK_FIELD) == Some(check.as_text().as_str())));
+
+        let mut older = APairsMachine { older: true, asked: Vec::new() };
+        let told = the_jobs_stop_is_sent(&mut AKeeper::default(), &mut older, &check, Some(&render), Some(&range), QUICK);
+        assert_eq!(told, vec![(check.clone(), None), (range.clone(), None)]);
+        let names: Vec<&str> = older.asked.iter().map(|asked| asked.name.as_str()).collect();
+        assert_eq!(names, [THE_PAIRS_CLEAR_REQUEST, THE_STOP_REQUEST], "refused by name, then the ordinary stop");
+        assert_eq!(older.asked[1].fields.text(THE_OPERATION_TO_STOP_FIELD), Some(render.as_text().as_str()));
+
+        // **No range held: the ordinary stop alone.**
+        let mut alone = APairsMachine { older: false, asked: Vec::new() };
+        let told = the_jobs_stop_is_sent(&mut AKeeper::default(), &mut alone, &check, Some(&render), None, QUICK);
+        assert_eq!(told, vec![(check, None)]);
+        assert_eq!(alone.asked.iter().map(|asked| asked.name.as_str()).collect::<Vec<_>>(), [THE_STOP_REQUEST]);
+    }
+
     /// **`Server protocol and transfers` C21 and `Rendering` K8: the stop
     /// names the render, is asked again under its own identity while it is
     /// in hand, and *left stopped*, *its own ending* and *nothing was
@@ -923,6 +1220,32 @@ mod tests {
             let mut machine = AMachine::answering(Answers::AnOutcome(THE_STOPS_OUTCOME_FIELD, word, None), 0);
             assert_eq!(the_stop_is_sent(&mut machine, &render, QUICK), None, "{word}");
         }
+    }
+
+    /// **`Rendering` K11a, the Creator's ruling on 287 (Rough share 3): the
+    /// forced stop is the same command carrying
+    /// `Server protocol and transfers` C21a's mark**, and the
+    /// ordinary stop never carries it. A forced stop the waiter gave up on is
+    /// said as its own. Before, no stop carried the mark.
+    #[test]
+    fn rough_share_3_a_forced_stop_carries_the_mark_and_an_ordinary_one_does_not() {
+        let render = a_render();
+        let mut machine = AMachine::answering(Answers::AnOutcome(THE_STOPS_OUTCOME_FIELD, IT_WAS_LEFT_STOPPED, None), 0);
+        assert_eq!(the_forced_stop_is_sent(&mut machine, &render, QUICK), None);
+        assert_eq!(machine.asked[0].name, THE_STOP_REQUEST);
+        assert_eq!(machine.asked[0].fields.text(THE_OPERATION_TO_STOP_FIELD), Some(render.as_text().as_str()));
+        assert_eq!(machine.asked[0].fields.text(THE_STOP_IS_FORCED_FIELD), Some(IT_IS_FORCED));
+        let mut ordinary = AMachine::answering(Answers::AnOutcome(THE_STOPS_OUTCOME_FIELD, IT_WAS_LEFT_STOPPED, None), 0);
+        assert_eq!(the_stop_is_sent(&mut ordinary, &render, QUICK), None);
+        assert_eq!(ordinary.asked[0].fields.text(THE_STOP_IS_FORCED_FIELD), None);
+        assert_eq!(
+            the_forced_stop_is_sent(
+                &mut AMachine::answering(Answers::AnOutcome(THE_STOPS_OUTCOME_FIELD, "x", None), usize::MAX),
+                &render,
+                QUICK
+            ),
+            Some(WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheForcedStop))
+        );
     }
 
     /// **Every way a stop does not end the render, each told apart.**
@@ -1136,6 +1459,57 @@ mod tests {
         running.await.unwrap();
         point.ends().await;
         assert_eq!(got.ok(), Some(Some(WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheStop))), "no screen event at the deadline ({elapsed:?})");
+    }
+
+    /// **The what-if live pass of 2026-11-15, new fault 4: after *Stop* or
+    /// *Force stop* the entry went back to *Rendering* with *Stop* for 3 to 5
+    /// seconds.** The stop's outcome let go of *stopping* before the read
+    /// forward that brings the job's ending had run, so the screen was told
+    /// in between from the reading, which still said rendering. **A job the
+    /// act was done for stays *stopping* through that read forward** (`Queue
+    /// & History` L12a as added that day); one the act left something to say
+    /// about says it at once, as before.
+    #[test]
+    fn a_stop_that_landed_stays_stopping_until_the_ending_is_read() {
+        let stopped = Identity::issue(IdentityKind::Job).unwrap();
+        let timed_out = Identity::issue(IdentityKind::Job).unwrap();
+        for job in [&stopped, &timed_out] {
+            it_stands(&job.as_text(), Some(WhereTheActStands::InHand(TheQueuesOwnAct::TheStop)));
+        }
+        let seen = std::cell::RefCell::new(Vec::new());
+        let look = |when: &'static str| {
+            seen.borrow_mut().push((when, where_the_act_stands(&stopped.as_text()), where_the_act_stands(&timed_out.as_text())));
+        };
+        the_endings_are_presented(
+            vec![
+                (stopped.clone(), None),
+                (timed_out.clone(), Some(WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheStop))),
+            ],
+            true,
+            || look("the read forward"),
+            || look("told"),
+        );
+        let stopping = Some(WhereTheActStands::InHand(TheQueuesOwnAct::TheStop));
+        let gave_up = Some(WhereTheActStands::TheWaiterGaveUp(TheQueuesOwnAct::TheStop));
+        assert_eq!(
+            seen.into_inner(),
+            vec![
+                ("told", stopping.clone(), gave_up.clone()),
+                ("the read forward", stopping, gave_up.clone()),
+                ("told", None, gave_up),
+            ]
+        );
+        // **Nothing went out, so nothing follows**: the job says what it
+        // says at once.
+        let never = Identity::issue(IdentityKind::Job).unwrap();
+        it_stands(&never.as_text(), Some(WhereTheActStands::InHand(TheQueuesOwnAct::TheCancel)));
+        let followed = std::cell::Cell::new(false);
+        the_endings_are_presented(vec![(never.clone(), None)], false, || followed.set(true), || {});
+        assert!(!followed.get());
+        assert_eq!(where_the_act_stands(&never.as_text()), None);
+        for job in [&stopped, &timed_out] {
+            it_stands(&job.as_text(), None);
+        }
     }
 
     /// **`Rendering` K8 to K9 and `Server protocol and transfers` C16 to C17,

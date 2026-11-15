@@ -113,6 +113,28 @@ pub const THE_SCRIPT_FIELD: &str = "script";
 /// production's.
 pub const THE_PRODUCTION_FIELD: &str = "the production";
 
+/// **`Queue & History` P3 as changed 2026-11-10 (the twenty-ninth notes,
+/// note 11): the main copy, reported as soon as it is published**, before
+/// the frame's other copies are made — one [`TheProductionsEnding`], the main
+/// copy's own, on a report that is not the production's ending. The
+/// supervisor journals its *a preview was published* event at once.
+pub const THE_MAIN_COPY_FIELD: &str = "the main copy";
+/// **Whether the main copy's event is journalled**: the supervisor's answer to
+/// [`THE_MAIN_COPY_FIELD`], and the worker's word beside its ending, so the
+/// supervisor journals the main copy's event once whichever run reads the
+/// ending. Yes or no in the protocol's own words; absent reads as no.
+pub const THE_MAIN_COPY_WAS_JOURNALLED_FIELD: &str = "the main copy was journalled";
+
+/// The main copy a report carries, where it is one ([`THE_MAIN_COPY_FIELD`]).
+pub fn the_main_copy_in(fields: &Fields) -> Option<TheProductionsEnding> {
+    serde_json::from_str(fields.text(THE_MAIN_COPY_FIELD)?).ok()
+}
+
+/// Whether a report or an answer says the main copy's event is journalled.
+pub fn it_says_the_main_copy_was_journalled(fields: &Fields) -> bool {
+    fields.text(THE_MAIN_COPY_WAS_JOURNALLED_FIELD) == Some(asked::THE_ANSWER_IS_YES)
+}
+
 /// **How long one production's Blender is given before the worker ends it.**
 /// A Build bound and nothing of the plan's: `Job files and outputs` B24
 /// measured a derivative at about 2.4 seconds with every core taken by a
@@ -277,6 +299,68 @@ impl TheProductionsEnding {
     }
 }
 
+/// **What the ending's statement gives one frame's copies** — `Queue &
+/// History` P1b's follow-up, added 2026-11-10 (the Creator's twenty-ninth
+/// notes, note 11). Worked out at the ending for a frame whose production is
+/// standing, by `Job files and outputs` B16 to `Job files and outputs` B20 and `Job files and outputs` B31a over the statement's
+/// present files rather than the folder: the file the main copy would be made
+/// of, and each View Layer given a copy, with its file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WhatTheStatementGivesAFrame {
+    pub the_main_copys_file: Vec<u8>,
+    pub the_main_copys_layer: Option<smoozy_job_files_machine::reading::ArtistsText>,
+    pub the_other_layers: Vec<(Vec<u8>, Option<smoozy_job_files_machine::reading::ArtistsText>)>,
+}
+
+impl WhatTheStatementGivesAFrame {
+    /// Read off the frame's choosing.
+    pub fn of(made_of: &smoozy_job_files_machine::derivatives::WhatOneFrameIsMadeOf) -> Self {
+        WhatTheStatementGivesAFrame {
+            the_main_copys_file: made_of.record.the_source_file.clone(),
+            the_main_copys_layer: made_of.record.the_view_layer_its_picture_came_from.clone(),
+            the_other_layers: made_of
+                .the_other_layers
+                .iter()
+                .map(|other| {
+                    (
+                        other.record.the_source_file.clone(),
+                        other.record.the_view_layer_its_picture_came_from.clone(),
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    /// Every copy, the main one first: its file and its View Layer's name.
+    pub fn every_copy(&self) -> impl Iterator<Item = (Vec<u8>, Option<String>)> + '_ {
+        let name = |layer: &Option<smoozy_job_files_machine::reading::ArtistsText>| {
+            layer.as_ref().map(|layer| String::from_utf8_lossy(layer.as_bytes()).into_owned())
+        };
+        std::iter::once((self.the_main_copys_file.clone(), name(&self.the_main_copys_layer)))
+            .chain(self.the_other_layers.iter().map(move |(file, layer)| (file.clone(), name(layer))))
+    }
+
+    /// **Whether a production came out short of it**: its main copy made of
+    /// another file or of none, or a View Layer given a copy here that the
+    /// production made no copy of, whatever that copy came to.
+    pub fn it_came_out_short(&self, ending: &TheProductionsEnding) -> bool {
+        let Some(main) = ending.the_record.as_ref() else {
+            return true;
+        };
+        if main.the_source_file != self.the_main_copys_file {
+            return true;
+        }
+        let made: Vec<&Option<smoozy_job_files_machine::reading::ArtistsText>> = std::iter::once(ending)
+            .chain(ending.the_other_layers.iter())
+            .filter_map(|copy| copy.the_record.as_ref())
+            .map(|record| &record.the_view_layer_its_picture_came_from)
+            .collect();
+        std::iter::once(&self.the_main_copys_layer)
+            .chain(self.the_other_layers.iter().map(|(_, layer)| layer))
+            .any(|layer| !made.contains(&layer))
+    }
+}
+
 /// **`Rented-server runtime` W4: the preview kind's own field of the
 /// operation record**, which `Job files and outputs` shapes (W1 gives it the
 /// kind's declarations). **It names both sinks before the worker starts**
@@ -293,6 +377,16 @@ pub struct ThePreviewKindsOwnField {
     pub complaints_sink: String,
     pub script: String,
     pub ending: Option<TheProductionsEnding>,
+    /// **The main copy, as the supervisor took it at the worker's early
+    /// report** — written into this record before the main copy's early event
+    /// is journalled (`Queue & History` P3 as changed 2026-11-10, the
+    /// Creator's twenty-ninth notes, note 11, piece J, after Sol's fresh
+    /// look). So a reader the event sends to this record for the copy's names
+    /// finds them while the production still stands, and after a worker that
+    /// never reports its ending. **Written only where present**; a record
+    /// written before reads with none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub the_main_copy_told_early: Option<TheProductionsEnding>,
 }
 
 impl ThePreviewKindsOwnField {
@@ -411,8 +505,39 @@ pub fn the_preview_worker(recorded_endpoint_path: &str) -> Result<(), String> {
                 .to_string()
         })?;
     let work = the_work_in(&answered)?;
-    let ending = one_production(&work);
-    report_the_ending(&supervisor, &work, &ending)
+    // **`Queue & History` P3 as changed 2026-11-10: the main copy is told as
+    // soon as it is published**, once, before the other copies are made. An
+    // answer that does not say it was journalled — none at all, a refusal, or
+    // a supervisor from before — leaves it to the ending's report.
+    let mut tell = |main: &TheProductionsEnding| the_main_copy_is_told(&supervisor, &work, main);
+    let (ending, the_main_copy_was_journalled) = one_production(&work, &mut tell);
+    report_the_ending(&supervisor, &work, &ending, the_main_copy_was_journalled)
+}
+
+/// **The main copy's early report** (`Queue & History` P3 as changed
+/// 2026-11-10): one ask, never re-attempted, and true only where the
+/// supervisor answers that it journalled the copy's event.
+fn the_main_copy_is_told(
+    supervisor: &TheEndpointAsACaller,
+    work: &ThePreviewsWork,
+    main: &TheProductionsEnding,
+) -> bool {
+    let request = Request::speaking(
+        THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+        work.operation.clone(),
+        THE_WORKERS_REPORT_REQUEST,
+    )
+    .carrying(
+        Fields::none()
+            .and(THE_RUN_THE_WORKER_WAS_STARTED_UNDER, work.run.as_text())
+            .and(THE_MAIN_COPY_FIELD, serde_json::to_string(main).expect("the main copy renders")),
+    );
+    matches!(
+        supervisor.ask(&request),
+        Ok(Some(answered))
+            if answered.fields.text(WHETHER_THE_REPORT_WAS_ACCEPTED) == Some(IT_WAS_ACCEPTED)
+                && it_says_the_main_copy_was_journalled(&answered.fields)
+    )
 }
 
 /// **`Rented-server runtime` W12: re-attempted until it is accepted**, at the
@@ -421,6 +546,7 @@ fn report_the_ending(
     supervisor: &TheEndpointAsACaller,
     work: &ThePreviewsWork,
     ending: &TheProductionsEnding,
+    the_main_copy_was_journalled: bool,
 ) -> Result<(), String> {
     let request = Request::speaking(
         THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
@@ -433,6 +559,14 @@ fn report_the_ending(
             .and(
                 THE_PRODUCTION_FIELD,
                 serde_json::to_string(ending).expect("the ending renders"),
+            )
+            .and(
+                THE_MAIN_COPY_WAS_JOURNALLED_FIELD,
+                if the_main_copy_was_journalled {
+                    asked::THE_ANSWER_IS_YES
+                } else {
+                    asked::THE_ANSWER_IS_NO
+                },
             ),
     );
     loop {
@@ -470,13 +604,17 @@ struct TheHandshake {
     made: bool,
 }
 
-/// **One production, from the reading to the ending the worker reports.**
-pub fn one_production(work: &ThePreviewsWork) -> TheProductionsEnding {
+/// **One production, from the reading to the ending the worker reports**,
+/// with whether `tell` took the main copy early (`Queue & History` P3).
+pub fn one_production(
+    work: &ThePreviewsWork,
+    tell: &mut dyn FnMut(&TheProductionsEnding) -> bool,
+) -> (TheProductionsEnding, bool) {
     match what_this_frame_is_made_of(work) {
         // **`Job files and outputs` B23: the Blender the manifest names**, by
         // the build's own path.
-        Ok((build, made_of)) => the_derivative_is_made(work, &build, &made_of),
-        Err(nothing) => nothing,
+        Ok((build, made_of)) => the_derivative_is_made_telling(work, &build, &made_of, tell),
+        Err(nothing) => (nothing, false),
     }
 }
 
@@ -539,6 +677,19 @@ pub fn the_derivative_is_made(
     build: &str,
     made_of: &smoozy_job_files_machine::derivatives::WhatOneFrameIsMadeOf,
 ) -> TheProductionsEnding {
+    the_derivative_is_made_telling(work, build, made_of, &mut |_| false).0
+}
+
+/// [`the_derivative_is_made`], **telling the main copy as soon as it is
+/// published**, before any other layer's copy is made (`Queue & History` P3 as
+/// changed 2026-11-10, the twenty-ninth notes, note 11), and giving back
+/// whether `tell` took it.
+pub fn the_derivative_is_made_telling(
+    work: &ThePreviewsWork,
+    build: &str,
+    made_of: &smoozy_job_files_machine::derivatives::WhatOneFrameIsMadeOf,
+    tell: &mut dyn FnMut(&TheProductionsEnding) -> bool,
+) -> (TheProductionsEnding, bool) {
     let mut main = one_copy_is_made(
         work,
         build,
@@ -548,8 +699,9 @@ pub fn the_derivative_is_made(
         &made_of.record,
     );
     if main.came_to != WhatTheProductionCameTo::Published {
-        return main;
+        return (main, false);
     }
+    let it_was_told = tell(&main);
     // **Each other layer's copy is made of its own record's source** — the
     // main copy's file on the multi-layer route, or the file of a destination
     // that layer alone feeds (`Job files and outputs` B31a's last bullet, the
@@ -565,7 +717,7 @@ pub fn the_derivative_is_made(
         );
         main.the_other_layers.push(ending);
     }
-    main
+    (main, it_was_told)
 }
 
 /// **One copy of the frame**, the main one or one other layer's: the script
@@ -761,10 +913,19 @@ fn one_write(
     let ceiling = Arc::new(Mutex::new(work.capture.ceiling));
     let handshake = Arc::new(Mutex::new(TheHandshake::default()));
     let mut its_input = started.stdin.take();
+    // **`Rented-server runtime` M5a, carried to this worker on 2026-11-11:
+    // each stream is read ten seconds past the Blender's ending and no
+    // longer**, so a process it left behind, holding one, cannot keep the
+    // production from ending (the Fable review's fifth sitting, fault 7).
+    let when_it_ended = Arc::new(crate::the_render_worker::WhenTheRenderEnded::default());
     let ordinary = started.stdout.take().map(|out| {
         let sinks = Arc::clone(&sinks);
         let ceiling = Arc::clone(&ceiling);
         let handshake = Arc::clone(&handshake);
+        let out = crate::the_render_worker::AStreamReadWhileItsRenderLives {
+            from: out,
+            ended: Arc::clone(&when_it_ended),
+        };
         std::thread::spawn(move || {
             copy_to_its_end_watching(
                 Stream::Ordinary,
@@ -808,6 +969,10 @@ fn one_write(
     let complaints = started.stderr.take().map(|err| {
         let sinks = Arc::clone(&sinks);
         let ceiling = Arc::clone(&ceiling);
+        let err = crate::the_render_worker::AStreamReadWhileItsRenderLives {
+            from: err,
+            ended: Arc::clone(&when_it_ended),
+        };
         std::thread::spawn(move || {
             copy_to_its_end(Stream::Complaints, Box::new(err), sinks.as_ref(), &ceiling)
         })
@@ -828,6 +993,9 @@ fn one_write(
             Err(_) => break started.wait().ok(),
         }
     };
+    if ended.is_some() {
+        when_it_ended.it_has_ended();
+    }
     let joined = |one: Option<std::thread::JoinHandle<Copied>>| {
         one.and_then(|handle| handle.join().ok()).unwrap_or_default()
     };
@@ -1155,6 +1323,7 @@ mod tests {
             complaints_sink: "/pkg/captured-streams/op/complaints".to_string(),
             script: "/pkg/captured-streams/op/derivative.py".to_string(),
             ending: None,
+            the_main_copy_told_early: None,
         };
         let written = field.as_written();
         let text = String::from_utf8_lossy(&written);
@@ -1328,7 +1497,7 @@ if tuple(one.size) == tuple(two.size):
             ("4.5", "/Applications/Blender 4.5.12.app/Contents/MacOS/Blender"),
             ("5.0", "/Applications/Blender 5.0.1.app/Contents/MacOS/Blender"),
             ("5.1", "/Applications/Blender 5.1.2.app/Contents/MacOS/Blender"),
-            ("5.2", "/Applications/Blender.app/Contents/MacOS/Blender"),
+            ("5.2", "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender"),
         ] {
             let folder = out.join(version);
             std::fs::create_dir_all(&folder).expect("the folder");
@@ -1588,6 +1757,24 @@ if tuple(one.size) == tuple(two.size):
         /// One frame's copies made by the worker's own route, the frame's other
         /// View Layers' among them.
         fn makes(&self, other_layers: u32) -> TheProductionsEnding {
+            self.makes_telling(other_layers, &mut |_| false).0
+        }
+
+        /// [`AStandIn::makes`], with the main copy told as soon as it is
+        /// published (`Queue & History` P3 as changed 2026-11-10).
+        fn makes_telling(
+            &self,
+            other_layers: u32,
+            tell: &mut dyn FnMut(&TheProductionsEnding) -> bool,
+        ) -> (TheProductionsEnding, bool) {
+            let (work, made_of) = self.the_work_and_what_it_is_made_of(other_layers);
+            the_derivative_is_made_telling(&work, &self.program, &made_of, tell)
+        }
+
+        fn the_work_and_what_it_is_made_of(
+            &self,
+            other_layers: u32,
+        ) -> (ThePreviewsWork, smoozy_job_files_machine::derivatives::WhatOneFrameIsMadeOf) {
             use smoozy_job_files_machine::derivatives::{
                 APresentFileAndItsDestination, AnotherLayersCopy, TheTreatment, WhatOneFrameIsMadeOf,
             };
@@ -1651,7 +1838,7 @@ if tuple(one.size) == tuple(two.size):
                     })
                     .collect(),
             };
-            the_derivative_is_made(&work, &self.program, &made_of)
+            (work, made_of)
         }
 
         /// What sits in the record directory besides the stand-in's own files:
@@ -1668,6 +1855,75 @@ if tuple(one.size) == tuple(two.size):
         fn weight_of(&self, name: &str) -> u64 {
             std::fs::metadata(self.folder.join(name)).expect("published").len()
         }
+    }
+
+    /// **`Queue & History` P3 as changed 2026-11-10 (the twenty-ninth notes,
+    /// note 11): the main copy is told once, as soon as it is published,
+    /// before any other layer's copy is made**, and the production says
+    /// whether it was taken. A main copy not published tells nothing.
+    #[test]
+    fn n1_the_main_copy_is_told_before_the_other_layers_are_made() {
+        let blender = AStandIn::weighing((640, 360), "w * h / 10", "");
+        let folder = blender.folder.clone();
+        let mut told = Vec::new();
+        let (ending, taken) = blender.makes_telling(3, &mut |main| {
+            told.push((
+                main.came_to,
+                folder.join("preview-1.png").exists(),
+                folder.join("preview-1-layer-1.png").exists(),
+                main.the_other_layers.len(),
+            ));
+            true
+        });
+        assert!(taken);
+        assert_eq!(told, vec![(WhatTheProductionCameTo::Published, true, false, 0)], "once, before the others");
+        assert_eq!(ending.the_other_layers.len(), 3);
+        assert!(folder.join("preview-1-layer-3.png").exists());
+
+        let failing = AStandIn::weighing((640, 360), "w * h / 10", "exit 1");
+        let mut asked = 0;
+        let (ending, taken) = failing.makes_telling(3, &mut |_| {
+            asked += 1;
+            true
+        });
+        assert_ne!(ending.came_to, WhatTheProductionCameTo::Published);
+        assert!(!taken);
+        assert_eq!(asked, 0, "nothing published, nothing told");
+    }
+
+    /// **`Rented-server runtime` M5a, carried to this worker: a copy whose
+    /// Blender has ended is published though something else holds its
+    /// streams.** The Fable review's fifth sitting, fault 7.
+    ///
+    /// **The case it bites on**: the Blender was reaped and then both streams
+    /// were read to their end, so a process it left behind kept the production
+    /// from ever ending.
+    #[test]
+    fn a_copy_whose_blender_has_ended_is_published_though_something_else_holds_its_streams() {
+        let left_behind = std::env::temp_dir().join(format!(
+            "smoozy-a-copy-held-open-{}",
+            Identity::issue(IdentityKind::Operation).expect("randomness").as_text()
+        ));
+        let leaves_one = format!("sleep 90 &\necho $! > '{}'", left_behind.display());
+        let (tells, hears) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let blender = AStandIn::weighing((640, 360), "w * h / 10", &leaves_one);
+            let _ = tells.send(blender.makes(0));
+        });
+        let heard = hears.recv_timeout(
+            crate::the_render_worker::HOW_LONG_THE_STREAMS_ARE_READ_AFTER_THE_RENDER_HAS_ENDED * 3,
+        );
+        if let Some(process) = std::fs::read_to_string(&left_behind)
+            .ok()
+            .and_then(|written| written.trim().parse::<libc::pid_t>().ok())
+        {
+            // SAFETY: the identifier is the one this test's own stand-in wrote.
+            unsafe { libc::kill(process, libc::SIGKILL) };
+        }
+        std::fs::remove_file(&left_behind).ok();
+        let ending =
+            heard.expect("the Blender ended at once; the copy is published though its streams are held");
+        assert_eq!(ending.came_to, WhatTheProductionCameTo::Published, "{ending:?}");
     }
 
     const THE_CAP: u64 = THE_LARGEST_A_DERIVATIVE_MAY_BE_IN_BYTES;
@@ -1794,7 +2050,7 @@ if tuple(one.size) == tuple(two.size):
     }
 
     /// **`Job files and outputs` B26a on real Blenders, through this worker's
-    /// own route**, 5.2.3 and the 5.3 beta, one at a time. Run by hand at the
+    /// own route**, 5.2 and 5.3, one at a time. Run by hand at the
     /// desk, never beside a build:
     ///
     /// ```text
@@ -1812,7 +2068,7 @@ if tuple(one.size) == tuple(two.size):
     /// View Layer has its halves the other way round, so its copy says it is that
     /// layer's.
     #[test]
-    #[ignore = "run by hand at the desk with Blender 5.2.3 and the 5.3 beta"]
+    #[ignore = "run by hand at the desk with Blender 5.2 and 5.3"]
     fn a_frame_too_heavy_comes_under_the_byte_cap_at_the_desk() {
         use smoozy_job_files_machine::derivatives::{
             APresentFileAndItsDestination, AnotherLayersCopy, TheTreatment, WhatOneFrameIsMadeOf,
@@ -1877,8 +2133,8 @@ print("SMOOZY-DESK-SAME", a.spec().width, a.spec().height,
 "#;
         let out = PathBuf::from(std::env::var("SMOOZY_DESK_OUT").expect("SMOOZY_DESK_OUT"));
         for (version, blender) in [
-            ("5.2.3", "/Applications/Blender.app/Contents/MacOS/Blender"),
-            ("5.3b", "/Applications/Blender 5.3b.app/Contents/MacOS/Blender"),
+            ("5.2.4", "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender"),
+            ("5.3", "/Applications/Blender 5.3.app/Contents/MacOS/Blender"),
         ] {
             let folder = out.join(version);
             std::fs::create_dir_all(&folder).expect("the folder");
@@ -2194,7 +2450,7 @@ second.use = False
 scene.render.filepath = out + "/one-ml.exr"
 bpy.ops.render.render(write_still=True)
 "#;
-        let blender = "/Applications/Blender.app/Contents/MacOS/Blender";
+        let blender = "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender";
         let folder = PathBuf::from(std::env::var("SMOOZY_DESK_OUT").expect("SMOOZY_DESK_OUT"));
         std::fs::create_dir_all(&folder).expect("the folder");
         let script = folder.join("frames.py");
@@ -2343,7 +2599,7 @@ scene.render.resolution_y = 27
 scene.render.filepath = out + "/mattress/mattress_0001.png"
 bpy.ops.render.render(write_still=True)
 "#;
-        let blender = "/Applications/Blender.app/Contents/MacOS/Blender";
+        let blender = "/Applications/Blender 5.2.4.app/Contents/MacOS/Blender";
         let folder = PathBuf::from(std::env::var("SMOOZY_DESK_OUT").expect("SMOOZY_DESK_OUT"));
         std::fs::create_dir_all(&folder).expect("the folder");
         let script = folder.join("frames.py");

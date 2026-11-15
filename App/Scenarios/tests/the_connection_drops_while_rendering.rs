@@ -780,6 +780,27 @@ async fn the_connection_drops_while_rendering() {
             || !connected.supplied.raised.lock().expect("the raises").is_empty(),
         )
         .await;
+        // **The raise is marked before Smoozy writes the record, hands the
+        // notification over and publishes the next attempt's moment**
+        // (`Servers` N5, `Servers` N10a), on Smoozy's own thread. So the three are waited
+        // for, with the step's own bound, before any is checked — never a
+        // fixed sleep, and Smoozy's retry is untouched. Added 2026-11-13: the
+        // Linux run of 2026-11-07 read the moment `Absent` between the
+        // notification and the publishing (`Audits/Build/The four
+        // questions/Sol's look — the Linux timing test.md`).
+        until(
+            "`Servers` N5 and `Servers` N10a: the record, the notification and the next attempt's moment",
+            Duration::from_secs(30),
+            || {
+                the_records_against(&desk, &server).len() == 1
+                    && the_system
+                        .every()
+                        .iter()
+                        .any(|post| post.contains(&format!("{:?}", Kind::AConnectionCouldNotBeRestored)))
+                    && matches!(periods.the_next_attempt_due_for(&server_text), NextAttemptDue::At(_))
+            },
+        )
+        .await;
         let records = the_records_against(&desk, &server);
         assert_eq!(records.len(), 1, "`Servers` N5: one condition record stands against the server: {records:?}");
         let posted = the_system.every();

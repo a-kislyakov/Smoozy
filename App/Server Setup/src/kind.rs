@@ -482,7 +482,7 @@ pub fn what_the_kind_permits(kind: MachineKind) -> Option<WhatTheKindPermits> {
 /// at the refusal rather than at the probe. **What would settle it** is
 /// `sudoers(5)` read as a publication on the per-command `NOPASSWD` tag, and one
 /// rental carrying a per-command policy; neither has been done.
-pub const THE_NON_INTERACTIVE_PROBE: CommandString = CommandString::constant("sudo -n true");
+pub const THE_NON_INTERACTIVE_PROBE: CommandString = CommandString::constant("sudo -k -n true");
 
 /// **M3's two outcomes, and there is no third.**
 ///
@@ -961,7 +961,7 @@ mod tests {
                 assert!(!command.as_str().contains('`'));
             }
         }
-        assert_eq!(THE_NON_INTERACTIVE_PROBE.as_str(), "sudo -n true");
+        assert_eq!(THE_NON_INTERACTIVE_PROBE.as_str(), "sudo -k -n true");
     }
 
     /// **M3: the probe asks whether a command runs without a password, and never

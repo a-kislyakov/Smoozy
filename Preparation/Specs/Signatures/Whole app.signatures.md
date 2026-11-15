@@ -90,3 +90,10 @@
 2026-11-01 — Claude Opus 5.5 (Claude Code), the plan pass for Want 1 of the twenty-sixth notes, outside any round — *Getting the app, and updates* gains one paragraph: the Windows download is signed through SignPath Foundation's free open-source route, Windows names SignPath Foundation as publisher, an unsigned release stays possible; Creator-stated with their words. No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the builder holding `Audits/Build/Step 11/Brief — a build with no update keys says so.md`, outside any round — *Getting the app, and updates* gains one paragraph: a version that cannot update itself says so, never that it could not reach the update service. Creator-stated with their words. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 3, updates by the user's choice and the Dock.md`, outside any round — *Getting the app, and updates*: Smoozy finds and downloads new versions itself, the user chooses whether to install each one, and it never restarts itself without the user's yes; the label and the jobs paragraph follow. Creator-stated with their words (the twenty-eighth notes, note 4). No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Website/Brief — Help, the Creator's picks.md`, outside any round — *Help is one press away*, under *Concerns that span the whole product*. Creator-stated. No auditor has seen it.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — added Damaged saved data (batch 2).
+2026-11-14 — Claude Opus 5.5 — added Damaged saved data — going back to the copy (the Creator's ruling on 97, Rough share 1).

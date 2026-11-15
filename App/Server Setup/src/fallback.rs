@@ -91,6 +91,9 @@ pub struct WhatTheInspectionFound {
 }
 
 /// **F1, performed: which step follows the inspection.**
+/// F1b is checked by the desktop's `setting_up::what_v14_refuses` before
+/// a bootstrap-and-repair request is sent: an active incompatible program
+/// does not supply an empty queue merely because its jobs cannot be read.
 pub fn what_follows_the_inspection(found: WhatTheInspectionFound) -> FallbackStep {
     if found.the_package_is_absent
         || found.the_protocol_is_outside_the_compatibility_window

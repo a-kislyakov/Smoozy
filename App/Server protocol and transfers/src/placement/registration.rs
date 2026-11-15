@@ -181,6 +181,46 @@ pub const THE_SUPERVISOR_START: CommandString = CommandString::constant(
     "XDG_RUNTIME_DIR=/run/user/\"$(id -u)\" systemctl --user restart smoozy-supervisor.service",
 );
 
+/// **`Rented-server runtime` G14's start after the restore, on a systemd
+/// machine: the unit's start limit is cleared and the unit is restarted, in one
+/// command.** Added 2026-11-11, the Fable review's third sitting.
+///
+/// **Why a start is owed at all.** `Rented-server runtime` G25 has already
+/// ended the previous supervisor, and the rename back starts nothing. A new
+/// program that ends as it starts is started a few times and then left:
+/// `systemd.unit(5)`, systemd's own manual source at `v255`,
+/// `https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd.unit.xml`,
+/// read 2026-11-11: *"Units which are started more than burst times within an
+/// interval time span are not permitted to start any more."* and *"units which
+/// are configured for Restart=, and which reach the start limit are not
+/// attempted to be restarted anymore; however, they may still be restarted
+/// manually or from a timer or socket at a later point, after the interval has
+/// passed."* The unit sets neither figure, so the manager's own stand:
+/// `systemd-system.conf(5)`, the same source,
+/// `https://raw.githubusercontent.com/systemd/systemd/v255/man/systemd-system.conf.xml`,
+/// read 2026-11-11: *"DefaultStartLimitIntervalSec= defaults to 10s.
+/// DefaultStartLimitBurst= defaults to 5."*
+///
+/// **Why the limit is cleared first.** The same page of `systemd.unit(5)`: the
+/// limits *"apply to all kinds of starts (including manual), not just those
+/// triggered by the Restart= logic"*. So a restart sent while the counter is
+/// still full would be refused. `systemctl(1)`, the same source,
+/// `https://raw.githubusercontent.com/systemd/systemd/v255/man/systemctl.xml`,
+/// read 2026-11-11, of `reset-failed`: *"the start rate limit counter of all
+/// unit types is reset to zero, as is the restart counter of service units.
+/// Thus, if a unit's start limit (as configured with
+/// StartLimitIntervalSec=/StartLimitBurst=) is hit and the unit refuses to be
+/// started again, use this command to make it startable again."*
+///
+/// **The two are joined by `;` and not `&&`**, so the restart is sent whatever
+/// the clearing answered, and the command's ending is the restart's. `restart`
+/// itself is [`THE_SUPERVISOR_START`]'s, quoted there: it also ends a new
+/// program that stayed up.
+pub const THE_SUPERVISOR_START_AFTER_A_RESTORE: CommandString = CommandString::constant(
+    "XDG_RUNTIME_DIR=/run/user/\"$(id -u)\" systemctl --user reset-failed smoozy-supervisor.service; \
+     XDG_RUNTIME_DIR=/run/user/\"$(id -u)\" systemctl --user restart smoozy-supervisor.service",
+);
+
 /// **Where a user unit sits, as the subsystem names it.**
 ///
 /// **Relative, and that is the same Build decision [`crate::carriage`] already
@@ -714,6 +754,38 @@ where
     }
 }
 
+/// **`Rented-server runtime` G14's start after the restore**: the restarter is
+/// asked to start whatever the pointer names, which the restore has just made
+/// the previous package. Added 2026-11-11, the Fable review's third sitting.
+///
+/// **On a container it is G25's start step, unchanged**: the keeper, harmless
+/// where one already runs. **On a systemd machine it is
+/// [`THE_SUPERVISOR_START_AFTER_A_RESTORE`]**, which clears the unit's start
+/// limit before the restart.
+pub async fn start_the_supervisor_the_pointer_names_after_a_restore<S>(
+    subsystem: &mut Subsystem<S>,
+    connection: &mut Connection,
+    kind: MachineKind,
+    package_area: &str,
+) -> Result<(), String>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+{
+    match kind {
+        MachineKind::Container => {
+            start_the_supervisor_the_pointer_names(subsystem, connection, kind, package_area).await
+        }
+        MachineKind::Systemd => {
+            what_a_user_level_command_said(
+                connection,
+                THE_SUPERVISOR_START_AFTER_A_RESTORE,
+                "start the previous supervisor",
+            )
+            .await
+        }
+    }
+}
+
 /// **Where G25's start step writes the keeper it starts**, relative to the
 /// login's own starting directory — the Smoozy-named directory the carriage
 /// tokens sit in.
@@ -865,7 +937,11 @@ mod tests {
     /// constant the unit is written under.
     #[test]
     fn every_command_that_names_the_unit_names_the_one_the_registration_writes() {
-        for command in [THE_UNIT_ENABLE, THE_SUPERVISOR_START] {
+        for command in [
+            THE_UNIT_ENABLE,
+            THE_SUPERVISOR_START,
+            THE_SUPERVISOR_START_AFTER_A_RESTORE,
+        ] {
             assert!(
                 command.as_str().ends_with(THE_UNIT_NAME),
                 "{} does not name the unit the registration writes",
@@ -897,6 +973,7 @@ mod tests {
             THE_USER_MANAGER_ASKED,
             THE_UNIT_ENABLE,
             THE_SUPERVISOR_START,
+            THE_SUPERVISOR_START_AFTER_A_RESTORE,
         ] {
             assert!(
                 command.as_str().starts_with(THE_RUNTIME_DIRECTORY_PREFIX),
@@ -904,6 +981,22 @@ mod tests {
                 command.as_str()
             );
         }
+    }
+
+    /// **`Rented-server runtime` G14's start after the restore, on a systemd
+    /// machine: the start limit is cleared, then the unit is restarted, and the
+    /// restart is sent whatever the clearing answered.** Both halves name the
+    /// unit and carry K7's export.
+    #[test]
+    fn the_start_after_a_restore_clears_the_start_limit_and_then_restarts() {
+        let text = THE_SUPERVISOR_START_AFTER_A_RESTORE.as_str();
+        let (clearing, restart) = text.split_once("; ").expect("two commands joined by a semicolon");
+        assert!(!text.contains("&&"), "{text}");
+        assert_eq!(
+            clearing,
+            format!("{THE_RUNTIME_DIRECTORY_PREFIX} systemctl --user reset-failed {THE_UNIT_NAME}")
+        );
+        assert_eq!(restart.trim_start(), THE_SUPERVISOR_START.as_str());
     }
 
     /// **K6: the login's name is never carried by Smoozy.** Every command that

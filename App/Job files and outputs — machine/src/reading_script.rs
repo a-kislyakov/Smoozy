@@ -287,7 +287,7 @@ use crate::reading::{
     ArtistsText, Destination, GatingConditions, HowManyViewsTheSceneWrites, RecordedLocation,
     SceneReachedThroughAStrip, TheInvocation, TheOneDocument, TheOutputsHalf, TheVersionInHand,
     WhichBranch, WhyTheDocumentWasNotRead, AtOneFrame, THE_CLOSING_SENTINEL, THE_OPENING_SENTINEL,
-    THE_STARTED_MARK,
+    THE_STARTED_MARK, THE_WALKS_MARK,
 };
 
 /// **The property-name lookup of 2026-09-20** — four running Blenders at the
@@ -1078,6 +1078,9 @@ fn the_script_composed(
         "names": names,
         "the_walk_steps_over": the_walk_steps_over(version)?,
         "the_asking_scenes_name": THE_ASKING_SCENES_NAME,
+        // **`Render Settings` Q5's build detail of 2026-11-13: the walk's step
+        // mark, from this crate's own constant.**
+        "the_walks_mark": String::from_utf8_lossy(THE_WALKS_MARK),
         // **R4b**: only the pre-load reading asks for every scene's half.
         "every_scene": every_scene && the_jobs_scene.is_none(),
         // **R4c: a first-frame check of a job whose only output is a video is
@@ -1539,7 +1542,7 @@ def smoozy_simulation_tail(scene):
 "#;
 
 const THE_BODY: &str = r#"
-import bpy, json, os, sys
+import bpy, json, os, sys, time
 
 # The two marks are the crate's own and travel in the handed-in document, so
 # there is one spelling of each rather than two that could drift apart.
@@ -2646,23 +2649,869 @@ if SMOOZY.get("the_check_is_marked"):
 # 10c/The Creator's notes on 0.1.8, piece 2 — what landed.md`). **The job's
 # own scene follows the same rule**: `frame_path(frame=…)` takes the frame
 # as its argument.
-def something_on_it_moves(scene):
+def the_walk_must_step(scene):
+    # **`Job files and outputs` R4 item 5, narrowed again 2026-11-13 (the
+    # Creator's notes on the test copy, second round, note 15): a scene is
+    # moved only where its animation can reach what the reading reads.**
     # Keys, drivers or strips of its own — which is where its view layers'
     # switches, its render settings and 4.5's Use Nodes are animated.
-    if scene.animation_data is not None:
+    if the_animation_can_reach_the_reading(scene, a_scenes_path_the_reading_never_reads):
         return True
     # Its compositing tree, or any group inside it: a node's mute is read
     # per frame by `gating_of`, and every file output node's after this loop.
     for tree, _stack in every_tree_of(scene):
-        if tree.animation_data is not None:
+        if the_animation_can_reach_the_reading(tree, lambda path, tree=tree: a_trees_path_the_reading_never_reads(tree, path)):
             return True
     # A marker that names a camera changes the scene's camera at its frame
     # with no animation at all — *"Camera that becomes active on this
-    # frame"* — and a path template can name the camera.
+    # frame"* — and a path template can name the camera. Which marker governs
+    # a frame is not in the research, so such a scene is moved as before.
     for marker in scene.timeline_markers:
         if marker.camera is not None:
             return True
     return False
+
+
+# **R4 item 5 as narrowed 2026-11-13: what an animation can reach.** A curve
+# changes the setting its path names (*"RNA Path to property affected by
+# F-Curve"*, every version's API). **A stacked action (an NLA track) or an
+# action set aside while one is tweaked is always taken to reach the
+# reading**: how stacked actions combine is not in the research, so such a
+# scene is moved exactly as before. **A driver reaches the reading where its
+# path is off the two lists, as a curve does (2026-11-14)**: its curve *"maps
+# the output of the driver configuration to the final value to apply to the
+# driven property"* (*Working out a driver*, question 3), so it changes the setting its
+# path names and no other. **A driver whose expression needs Python reaches it
+# wherever it sits**, since a script can change anything, **and so does every
+# driver where a frame-change handler is registered**: the walk ran it at each
+# frame, and it may change anything (Sol's look, 2026-11-14). An action's curves
+# are gathered by both routes the reading knows, so a curve is never missed by
+# taking one route where the other holds it.
+def the_animation_can_reach_the_reading(holder, never_read):
+    data = getattr(holder, "animation_data", None)
+    if data is None:
+        return False
+    if len(data.nla_tracks):
+        return True
+    for driver in data.drivers:
+        if not never_read(driver.data_path) or not smoozy_runs_no_script(driver) or smoozy_a_handler_sees_the_frame():
+            return True
+    if getattr(data, "action_tweak_storage", None) is not None:
+        return True
+    action = data.action
+    if action is None:
+        return False
+    curves = []
+    if NAMES["the_curves_hang_off_the_action"]:
+        curves.extend(action.fcurves)
+    for layer in getattr(action, "layers", ()):
+        for strip in layer.strips:
+            if not hasattr(strip, "channelbags"):
+                return True
+            for bag in strip.channelbags:
+                curves.extend(bag.fcurves)
+    return any(not never_read(curve.data_path) for curve in curves)
+
+
+# **The paths the reading never reads.** Anything not on these short lists is
+# taken to reach it, so a name spelled here that Blender spells otherwise only
+# moves a scene that need not have moved. On a scene: a sequencer strip's look
+# and sound (the reading reads a strip's kind, scene, name and proxy folder,
+# and none of these), and the view's exposure and gamma (the reading reads the
+# view transform alone). On a compositing tree: a node input's value, which
+# the reading never reads, and any setting of a node the reading reads only
+# for its links — never a node's mute.
+THE_STRIPS_SETTINGS_NEVER_READ = (
+    "blend_alpha", "volume", "pan", "color_saturation", "color_multiply",
+)
+THE_STRIPS_GROUPS_NEVER_READ = ("transform.", "crop.")
+THE_SCENES_PATHS_NEVER_READ = ("view_settings.exposure", "view_settings.gamma")
+
+
+def the_name_and_what_follows(data_path, head):
+    """`head["Name"].rest` as (Name, rest), or None where the path is not of
+    that shape."""
+    if not data_path.startswith(head + "["):
+        return None
+    at = len(head) + 1
+    quote = data_path[at:at + 1]
+    if quote not in ('"', "'"):
+        return None
+    at += 1
+    name = []
+    while at < len(data_path):
+        one = data_path[at]
+        if one == "\\" and at + 1 < len(data_path):
+            name.append(data_path[at + 1])
+            at += 2
+            continue
+        if one == quote:
+            break
+        name.append(one)
+        at += 1
+    if data_path[at + 1:at + 3] != "].":
+        return None
+    return "".join(name), data_path[at + 3:]
+
+
+def a_scenes_path_the_reading_never_reads(data_path):
+    if data_path in THE_SCENES_PATHS_NEVER_READ:
+        return True
+    for head in ("sequence_editor.strips_all", "sequence_editor.sequences_all"):
+        found = the_name_and_what_follows(data_path, head)
+        if found is None:
+            continue
+        rest = found[1]
+        return rest in THE_STRIPS_SETTINGS_NEVER_READ or rest.startswith(THE_STRIPS_GROUPS_NEVER_READ)
+    return False
+
+
+def a_trees_path_the_reading_never_reads(tree, data_path):
+    found = the_name_and_what_follows(data_path, "nodes")
+    if found is None:
+        return False
+    name, rest = found
+    node = tree.nodes.get(name)
+    if node is None or rest.startswith("mute"):
+        return False
+    if rest.startswith("inputs[") and rest.endswith("].default_value"):
+        return True
+    for kind in (
+        "the_file_output_nodes_type",
+        "the_render_layers_nodes_type",
+        "the_groups_own_input_type",
+        "the_groups_own_output_type",
+        "the_final_output_nodes_type",
+    ):
+        if is_kind(node, NAMES[kind]):
+            return False
+    return getattr(node, "node_tree", None) is None
+
+
+# **R4 item 5, read off the curves (2026-11-13, the Blender research *Reading
+# at a frame*, all five versions).** A scene the rule above moves is read off
+# its curves where its animation is plain keys, and moved only where what the
+# reading reads at a frame changes. *"evaluate(frame) — Evaluate F-Curve at
+# given frame"* gives what a move to the frame gives and what a render uses,
+# modifiers included, and leaves the scene where it is (question 1, tests 2
+# and 6); a muted curve leaves its setting stored at every frame (test 3); Time
+# Stretching remaps the frame by a rule the research does not give (test 4); a
+# driver on the same setting wins (test 5); markers choose the camera by the
+# rule below (question 4, tests 9 and 10); a move writes every keyed value into
+# the stored settings and runs the frame-change handlers (question 5, test 12). **Every
+# case the research does not settle is walked as before.**
+#
+# Settings only what is read after the walk reads: Cycles' and EEVEE's own,
+# and a view layer's other than its switch. The walk's last move puts them at
+# the span's last frame, and the reading off the curves ends on that frame too.
+THE_SCENES_SETTINGS_READ_ONLY_AFTER_THE_WALK = ("cycles.", "eevee.")
+
+
+def a_scenes_path_read_only_after_the_walk(data_path):
+    if data_path.startswith(THE_SCENES_SETTINGS_READ_ONLY_AFTER_THE_WALK):
+        return True
+    found = the_name_and_what_follows(data_path, "view_layers")
+    return found is not None and found[1] != "use"
+
+
+# Every curve of a block whose animation is plain keys, muted ones included;
+# None where its animation is anything else. The animation-data settings must
+# stand where a first key leaves them (read off all five at the desk,
+# 2026-11-13), and the action must hold one layer, one strip and one
+# channelbag at most: how the active action combines otherwise, and how slots,
+# layers, strips and channelbags fit together, is not in the research. Its
+# drivers are not curves of the action and are asked for on their own.
+def smoozy_every_curve_of(holder):
+    data = getattr(holder, "animation_data", None)
+    if data is None:
+        return []
+    if len(data.nla_tracks):
+        return None
+    if getattr(data, "action_tweak_storage", None) is not None:
+        return None
+    if (
+        getattr(data, "use_nla", None) is not True
+        or getattr(data, "action_influence", None) != 1.0
+        or getattr(data, "action_blend_type", None) != "REPLACE"
+        or getattr(data, "action_extrapolation", None) != "HOLD"
+    ):
+        return None
+    action = data.action
+    if action is None:
+        return []
+    curves = []
+    if NAMES["the_curves_hang_off_the_action"]:
+        curves.extend(action.fcurves)
+    layers = list(getattr(action, "layers", ()))
+    if len(layers) > 1:
+        return None
+    for layer in layers:
+        strips = list(layer.strips)
+        if len(strips) > 1:
+            return None
+        for strip in strips:
+            if not hasattr(strip, "channelbags"):
+                return None
+            bags = list(strip.channelbags)
+            if len(bags) > 1:
+                return None
+            for bag in bags:
+                curves.extend(bag.fcurves)
+    return curves
+
+
+# The curves of a block whose animation is plain keys that can change what the
+# reading reads at a frame, muted ones left out; None where its animation is
+# anything else. A driver on the block is asked for apart from these
+# (`the_curves_the_drivers_follow`, 2026-11-14).
+def the_curves_read_at_a_frame(holder, never_read, after_the_walk):
+    curves = smoozy_every_curve_of(holder)
+    if curves is None:
+        return None
+    return [
+        curve
+        for curve in curves
+        if not curve.mute and not never_read(curve.data_path) and not after_the_walk(curve.data_path)
+    ]
+
+
+# **The markers that name a camera, where hand tests 9 and 10 settle which
+# camera each frame takes** (all five versions, in scripts and in renders):
+# before the first, that marker's camera; on or after one, the camera of the
+# last at or before the frame; a marker naming none, between two that do,
+# changes nothing. None where the tests do not settle it: two on one frame
+# naming different cameras (only one order was tried), and a marker naming
+# none anywhere else, a scene whose markers name no camera at all among them.
+def the_cameras_the_markers_name(scene):
+    naming = sorted(
+        ((marker.frame, marker.camera) for marker in scene.timeline_markers if marker.camera is not None),
+        key=lambda one: one[0],
+    )
+    if not naming:
+        return None if len(scene.timeline_markers) else []
+    for (frame, camera), (after, other) in zip(naming, naming[1:]):
+        if frame == after and camera != other:
+            return None
+    frames = [frame for frame, _camera in naming]
+    for marker in scene.timeline_markers:
+        if marker.camera is None and (not frames[0] < marker.frame < frames[-1] or marker.frame in frames):
+            return None
+    return naming
+
+
+def the_camera_at(naming, frame):
+    if not naming:
+        return None
+    chosen = naming[0][1]
+    for at, camera in naming:
+        if at > frame:
+            break
+        chosen = camera
+    return chosen
+
+
+# **Where a scene read off its curves is moved**: each frame of the span gets a
+# key — its curves' values and its camera — and each run of consecutive frames
+# with one key is read with the scene moved once, to the run's last frame. So
+# the scene's last move is to the span's last frame, as the walk's is. Gives
+# the run's first frame to the frame it is moved to, or None where the scene is
+# walked. Where the output path holds a template expression, no curve is set
+# aside as read only after the walk. Anything going wrong walks the scene.
+def the_frames_the_scene_stands_at(scene, span):
+    try:
+        handlers = bpy.app.handlers
+        if len(handlers.frame_change_pre) or len(handlers.frame_change_post):
+            return None
+        if scene.render.frame_map_old != 100 or scene.render.frame_map_new != 100:
+            return None
+        if "{" in scene.render.filepath:
+            after_the_walk = lambda path: False
+        else:
+            after_the_walk = a_scenes_path_read_only_after_the_walk
+        curves = the_curves_read_at_a_frame(scene, a_scenes_path_the_reading_never_reads, after_the_walk)
+        if curves is None:
+            return None
+        landings = {}
+        followed = the_curves_the_drivers_follow(scene, scene, a_scenes_path_the_reading_never_reads, landings)
+        if followed is None:
+            return None
+        curves.extend(followed)
+        for tree, _stack in every_tree_of(scene):
+            never_read = lambda path, tree=tree: a_trees_path_the_reading_never_reads(tree, path)
+            more = the_curves_read_at_a_frame(tree, never_read, lambda path: False)
+            if more is None:
+                return None
+            curves.extend(more)
+            followed = the_curves_the_drivers_follow(tree, scene, never_read, landings)
+            if followed is None:
+                return None
+            curves.extend(followed)
+        naming = the_cameras_the_markers_name(scene)
+        if naming is None:
+            return None
+        stands = {}
+        run = None
+        held = None
+        for frame in span:
+            key = (tuple(curve.evaluate(float(frame)) for curve in curves), the_camera_at(naming, frame))
+            if run is None or key != held:
+                run = frame
+                held = key
+            stands[run] = frame
+        return stands
+    except Exception:
+        return None
+
+
+# **R4 item 5, drivers followed without a move (2026-11-14, the Blender
+# research *Working out a driver*, every test run in all five versions).** A
+# driver on a path the reading reads no longer walks its scene where
+# everything it reads can be followed by hand; the curves it follows join the
+# key, and each run of frames with one key is read after one move, as above.
+# **No driven value is worked out here**: the research leaves the arithmetic's
+# precision open, so Blender's own move still gives every value read. What is
+# followed is what the driver's value can change with: the driver's output
+# *"changes when the variables change. This value is then evaluated through
+# the driver function curve"* (question 1), and that curve, with a Generator, Cycles,
+# Noise or Stepped modifier, maps the output, not the frame (question 3, test 3). So
+# two frames with one key give each followed driver the same inputs, and the
+# same value; a driver that fails on its inputs fails at both, giving 0 and
+# staying failed while its keys take over (question 5, tests 4 and 5). What a variable
+# reads, by where its path lands: nothing that changes where it names no
+# data-block or leads nowhere (a fallback or a failure, the same at every
+# frame, test 5); another scene's stored value (question 2, tests 9 and 11, and *What
+# a move works out* question 3, test 3: no move of this scene changes it), unless that
+# scene is this scene's Background Scene, which a move works out and writes;
+# a setting of this scene or another data-block at the frame (question 2, test 7;
+# *What a move works out* question 2, test 4), where the curve keying it joins the key
+# and the driver driving it is followed in turn, chains included. **Every case
+# the research leaves open walks the scene as before**: Transform Channel,
+# Rotational Difference, Distance, a Python expression, `frame` named in an
+# expression, a path through a pointer to another data-block, this scene's
+# frame numbers, a read-only setting, an object's matrices or dimensions, an
+# object with a rigid body, a block whose animation is not plain keys, and a
+# loop between drivers.
+class SmoozyKeepsTheWalk(Exception):
+    pass
+
+
+SMOOZY_THE_TYPES_FOLLOWED = ("AVERAGE", "SUM", "MIN", "MAX", "SCRIPTED")
+SMOOZY_THE_DRIVER_CURVES_MODIFIERS_FOLLOWED = ("GENERATOR", "CYCLES", "NOISE", "STEPPED")
+SMOOZY_THE_LONGEST_FOLLOWING = 100000
+
+
+def smoozy_runs_no_script(curve):
+    driver = curve.driver
+    return driver.type != "SCRIPTED" or bool(driver.is_simple_expression)
+
+
+# **`Render Settings` V3a: whether the file holds scripts that run as it opens
+# or renders** — a text whose Register option is on, which runs as the file
+# loads, or a driver whose expression is Python (the security page of the
+# manual names the two; *Settings*, 5.3 hand tests, set both up the same way).
+# Every read and render lets them run, so the page says so. The leftovers of
+# the Rough what-if answers, 222 and 227.
+def smoozy_the_files_own_scripts_run():
+    for text in getattr(bpy.data, "texts", ()):
+        if text.use_module:
+            return True
+    for kind in ("objects", "scenes", "materials", "meshes", "node_groups", "worlds",
+                 "cameras", "lights", "shape_keys", "armatures", "curves"):
+        for one in getattr(bpy.data, kind, ()):
+            data = getattr(one, "animation_data", None)
+            if data is None:
+                continue
+            for curve in data.drivers:
+                if not smoozy_runs_no_script(curve):
+                    return True
+    return False
+
+
+def smoozy_a_handler_sees_the_frame():
+    handlers = bpy.app.handlers
+    return bool(len(handlers.frame_change_pre) or len(handlers.frame_change_post))
+
+
+# A setting a variable reads must be stored, not worked out: not read-only, and
+# not defined by a script, whose getter may compute it from anything (Sol's
+# look, 2026-11-14). A version that cannot say counts as a script's.
+def smoozy_a_stored_setting(owner, last):
+    if last[0] != "name":
+        return
+    setting = owner.bl_rna.properties.get(last[1])
+    if setting is None or setting.is_readonly or getattr(setting, "is_runtime", True):
+        raise SmoozyKeepsTheWalk("a setting that is worked out, not stored")
+
+
+def smoozy_names_the_frame(expression):
+    word = []
+    for one in expression + " ":
+        if one.isalnum() or one == "_":
+            word.append(one)
+            continue
+        if "".join(word) == "frame":
+            return True
+        word = []
+    return False
+
+
+# An RNA path as its pieces, `("name", text)`, `("key", text)` for `["text"]`
+# and `("index", number)` for `[number]`; None where it has another shape.
+def smoozy_the_pieces_of(path):
+    pieces = []
+    at = 0
+    length = len(path)
+    while at < length:
+        one = path[at]
+        if one == "[":
+            at += 1
+            if at < length and path[at] in "\"'":
+                quote = path[at]
+                at += 1
+                text = []
+                while at < length and path[at] != quote:
+                    if path[at] == "\\" and at + 1 < length:
+                        text.append(path[at + 1])
+                        at += 2
+                        continue
+                    text.append(path[at])
+                    at += 1
+                if at + 1 >= length or path[at + 1] != "]":
+                    return None
+                at += 2
+                pieces.append(("key", "".join(text)))
+                continue
+            start = at
+            while at < length and path[at].isdigit():
+                at += 1
+            if at == start or at >= length or path[at] != "]":
+                return None
+            pieces.append(("index", int(path[start:at])))
+            at += 1
+            continue
+        if pieces:
+            if one != "." or at + 1 >= length:
+                return None
+            at += 1
+        start = at
+        while at < length and (path[at].isalnum() or path[at] == "_"):
+            at += 1
+        if at == start:
+            return None
+        pieces.append(("name", path[start:at]))
+    return pieces or None
+
+
+def smoozy_the_path_of(pieces):
+    out = ""
+    for kind, value in pieces:
+        if kind == "name":
+            out += ("." if out else "") + value
+        elif kind == "key":
+            out += '["' + value.replace("\\", "\\\\").replace('"', '\\"') + '"]'
+        else:
+            out += "[" + str(value) + "]"
+    return out
+
+
+# Where a path lands from `root`: the struct that holds its last piece, that
+# piece, the index after it (None where there is none) and its value. None
+# where the path leads nowhere. **A path through a pointer to another
+# data-block keeps the walk**, or is passed over where `leaving_is_fine`.
+def smoozy_where_a_path_lands(root, path, leaving_is_fine=False):
+    pieces = smoozy_the_pieces_of(path)
+    if pieces is None:
+        raise SmoozyKeepsTheWalk("a path of another shape")
+    index = None
+    if pieces[-1][0] == "index":
+        index = pieces[-1][1]
+        pieces = pieces[:-1]
+    if not pieces or pieces[-1][0] == "index":
+        raise SmoozyKeepsTheWalk("a path of another shape")
+    owner = root
+    for at in range(1, len(pieces) + 1):
+        if pieces[at - 1][0] == "key":
+            # `["samples"]` beside a setting called `samples` is that setting
+            # under a second name (Sol's look, 2026-11-14).
+            properties = getattr(getattr(owner, "bl_rna", None), "properties", None)
+            if properties is not None and properties.get(pieces[at - 1][1]) is not None:
+                raise SmoozyKeepsTheWalk("a setting under a second name")
+        if at == len(pieces):
+            break
+        try:
+            owner = root.path_resolve(smoozy_the_path_of(pieces[:at]))
+        except Exception:
+            return None
+        if isinstance(owner, bpy.types.ID):
+            if leaving_is_fine:
+                return None
+            raise SmoozyKeepsTheWalk("a path into another data-block")
+    try:
+        value = root.path_resolve(smoozy_the_path_of(pieces + ([("index", index)] if index is not None else [])))
+    except Exception:
+        return None
+    if isinstance(value, bpy.types.ID):
+        if leaving_is_fine:
+            return None
+        raise SmoozyKeepsTheWalk("a path to another data-block")
+    return owner, pieces[-1], index, value
+
+
+# Each curve and driver on `holder` by the setting it lands on, asked once.
+def smoozy_the_landings_on(holder, landings):
+    key = holder.as_pointer()
+    if key in landings:
+        return landings[key]
+    every = smoozy_every_curve_of(holder)
+    if every is None:
+        raise SmoozyKeepsTheWalk("animation that is not plain keys")
+    data = getattr(holder, "animation_data", None)
+    drivers = list(data.drivers) if data is not None else []
+    out = []
+    for kind, curves in (("curve", every), ("driver", drivers)):
+        for curve in curves:
+            landing = smoozy_where_a_path_lands(holder, curve.data_path, leaving_is_fine=True)
+            if landing is None:
+                continue
+            owner, last, index, _value = landing
+            if index is not None:
+                raise SmoozyKeepsTheWalk("a curve whose path ends in an index")
+            out.append(((owner.as_pointer(), last, int(curve.array_index)), kind, curve))
+    landings[key] = out
+    return out
+
+
+def smoozy_a_background_of(scene, other):
+    seen = set()
+    one = scene.background_set
+    while one is not None and one.as_pointer() not in seen:
+        if one == other:
+            return True
+        seen.add(one.as_pointer())
+        one = one.background_set
+    return False
+
+
+# What one driver reads: (the data-block, the struct its path starts on, the
+# path) for each variable the research covers; the walk for any other.
+def smoozy_what_a_driver_reads(curve, scene):
+    driver = curve.driver
+    if driver.type not in SMOOZY_THE_TYPES_FOLLOWED:
+        raise SmoozyKeepsTheWalk("a driver of another type")
+    if driver.type == "SCRIPTED":
+        if not driver.is_simple_expression:
+            raise SmoozyKeepsTheWalk("a Python expression")
+        if smoozy_names_the_frame(driver.expression):
+            raise SmoozyKeepsTheWalk("an expression naming the frame")
+    if getattr(driver, "use_self", False):
+        raise SmoozyKeepsTheWalk("a driver reading itself")
+    for modifier in curve.modifiers:
+        if modifier.type not in SMOOZY_THE_DRIVER_CURVES_MODIFIERS_FOLLOWED:
+            raise SmoozyKeepsTheWalk("a driver curve modifier the research did not try")
+    out = []
+    for variable in driver.variables:
+        target = variable.targets[0]
+        if variable.type == "SINGLE_PROP":
+            out.append((target.id, target.id, target.data_path))
+        elif variable.type == "CONTEXT_PROP":
+            which = target.context_property
+            if which == "ACTIVE_SCENE":
+                out.append((scene, scene, target.data_path))
+            elif which == "ACTIVE_VIEW_LAYER":
+                for layer in scene.view_layers:
+                    out.append((scene, layer, target.data_path))
+            else:
+                raise SmoozyKeepsTheWalk("a context the research did not try")
+        else:
+            raise SmoozyKeepsTheWalk("a variable the research leaves open")
+    return out
+
+
+# What one setting a variable reads follows: the curves keying it and the
+# drivers driving it, on its own data-block.
+def smoozy_what_a_setting_follows(target, root, path, scene, landings):
+    if target is None or not path:
+        return [], []
+    landing = smoozy_where_a_path_lands(root, path)
+    if landing is None:
+        return [], []
+    owner, last, index, value = landing
+    if not isinstance(value, (bool, int, float)):
+        raise SmoozyKeepsTheWalk("a value that is not a number")
+    name = last[1] if last[0] == "name" else None
+    smoozy_a_stored_setting(owner, last)
+    if isinstance(target, bpy.types.Scene):
+        if target != scene:
+            if smoozy_a_background_of(scene, target):
+                raise SmoozyKeepsTheWalk("the scene's Background Scene")
+            return [], []
+        if name is not None and name.startswith("frame"):
+            raise SmoozyKeepsTheWalk("the scene's frame")
+    else:
+        if isinstance(target, bpy.types.Object) and getattr(target, "rigid_body", None) is not None:
+            raise SmoozyKeepsTheWalk("an object with a rigid body")
+        if name is not None and (name.startswith("matrix") or name == "dimensions"):
+            raise SmoozyKeepsTheWalk("an object's worked-out placing")
+    wanted = (owner.as_pointer(), last, 0 if index is None else index)
+    curves = []
+    drivers = []
+    for landed, kind, curve in smoozy_the_landings_on(target, landings):
+        if landed != wanted:
+            continue
+        if kind == "curve":
+            curves.append(curve)
+        else:
+            drivers.append((target, curve))
+    return curves, drivers
+
+
+# The curves the drivers that reach the reading follow, through every chain;
+# raises where any of them keeps the walk. A loop between drivers keeps it.
+def smoozy_what_the_drivers_follow(holder, starts, scene, landings):
+    followed = []
+    state = {}
+    stack = [(holder, one, False) for one in starts]
+    steps = 0
+    while stack:
+        steps += 1
+        if steps > SMOOZY_THE_LONGEST_FOLLOWING:
+            raise SmoozyKeepsTheWalk("drivers past the longest following")
+        owner, curve, closing = stack.pop()
+        key = (owner.as_pointer(), curve.data_path, int(curve.array_index))
+        if closing:
+            state[key] = "done"
+            continue
+        if key in state:
+            continue
+        state[key] = "open"
+        stack.append((owner, curve, True))
+        # **A driver on a keyed setting walks** (Sol's look, 2026-11-14): where
+        # it fails, the move that fails gives 0 and later moves give the keys
+        # (*Working out a driver* question 5, test 5, `F_keyed`), so one move for a
+        # run of frames is not a move at each.
+        mine = [
+            landed for landed, kind, one in smoozy_the_landings_on(owner, landings)
+            if kind == "driver" and one.data_path == curve.data_path and int(one.array_index) == int(curve.array_index)
+        ]
+        if any(kind == "curve" and landed in mine for landed, kind, _one in smoozy_the_landings_on(owner, landings)):
+            raise SmoozyKeepsTheWalk("a driver on a keyed setting")
+        for target, root, path in smoozy_what_a_driver_reads(curve, scene):
+            curves, drivers = smoozy_what_a_setting_follows(target, root, path, scene, landings)
+            followed.extend(curves)
+            for its_owner, its_driver in drivers:
+                its_key = (its_owner.as_pointer(), its_driver.data_path, int(its_driver.array_index))
+                if state.get(its_key) == "open":
+                    raise SmoozyKeepsTheWalk("drivers in a loop")
+                if its_key not in state:
+                    stack.append((its_owner, its_driver, False))
+    return followed
+
+
+# The curves the drivers on `holder` that reach the reading follow; None where
+# any of them keeps the walk.
+def the_curves_the_drivers_follow(holder, scene, never_read, landings):
+    data = getattr(holder, "animation_data", None)
+    if data is None:
+        return []
+    reaching = [one for one in data.drivers if not never_read(one.data_path) or not smoozy_runs_no_script(one)]
+    if not reaching:
+        return []
+    try:
+        return smoozy_what_the_drivers_follow(holder, reaching, scene, landings)
+    except SmoozyKeepsTheWalk:
+        return None
+
+
+# **R4 item 5, cheap moves (2026-11-14, the Blender research *What a move
+# works out*, question 2, hand test 4, all five versions).** Disabling the heavy
+# object or its collection in viewports, excluding the collection in every
+# view layer, Simplify, and modifiers off each cut a move of a heavy model
+# from about 5.5 s to milliseconds and left every render, Cycles, EEVEE,
+# Workbench, View Layer, compositor and driven setting the same, stored and in
+# every graph; disabling the very object two drivers read changed nothing
+# either (`rig_hide`). *"Objects hidden this way are no longer part of the
+# view layer, so they no longer get evaluated"* (the manual, Disable in
+# Viewports). **The scene's own objects are disabled in viewports before its
+# first move and put back after its last**, before anything else is read: the
+# reading reads Simplify and never an object's own switch, and this needs no
+# collection. A move of the scene the file opened on writes keyed and driven
+# values into the stored ones, and another scene's move does not (question 1 and question 3,
+# tests 1 to 3), so an object left out keeps what the opening gave it; **none
+# is left out whose animation keys or drives what the reading reads of
+# objects** — its visibility, modifiers, particle systems or rigid body, or its
+# particle settings — nor a linked one, a camera, the scene's camera or a
+# marker's. **The scene moves with nothing left out**, as before, where any
+# block in the file carries a Python driver, where a frame-change or
+# graph-update handler is registered, where
+# it has a Background Scene or a rigid-body world (neither tried with objects
+# left out), or where any driver on it or its trees runs a script or reads
+# anything but scenes and the tree it sits on.
+SMOOZY_WHAT_AN_OBJECT_LEFT_OUT_NEVER_ANIMATES = (
+    "hide", "modifiers", "particle_systems", "rigid_body", "use_simulation_cache", "pose.ik",
+)
+SMOOZY_THE_HANDLERS_THAT_SEE_A_MOVE = (
+    "frame_change_pre", "frame_change_post", "depsgraph_update_pre", "depsgraph_update_post",
+)
+
+
+def smoozy_the_paths_an_action_holds(action):
+    paths = []
+    if action is None:
+        return paths
+    for curve in getattr(action, "fcurves", ()):
+        paths.append(curve.data_path)
+    for layer in getattr(action, "layers", ()):
+        for strip in layer.strips:
+            for bag in getattr(strip, "channelbags", ()):
+                paths.extend(curve.data_path for curve in bag.fcurves)
+    return paths
+
+
+def smoozy_its_drivers_read_only_scenes(holder, scene):
+    data = getattr(holder, "animation_data", None)
+    if data is None:
+        return True
+    for curve in data.drivers:
+        if not smoozy_runs_no_script(curve):
+            return False
+        for variable in curve.driver.variables:
+            target = variable.targets[0]
+            if variable.type == "SINGLE_PROP":
+                if target.id is None:
+                    continue
+                if not isinstance(target.id, bpy.types.Scene) and target.id != holder:
+                    return False
+                roots = [target.id]
+            elif variable.type == "CONTEXT_PROP":
+                if target.context_property == "ACTIVE_SCENE":
+                    roots = [scene]
+                elif target.context_property == "ACTIVE_VIEW_LAYER":
+                    roots = list(scene.view_layers)
+                else:
+                    return False
+            else:
+                return False
+            for root in roots:
+                if target.data_path:
+                    landing = smoozy_where_a_path_lands(root, target.data_path)
+                    if landing is not None:
+                        smoozy_a_stored_setting(landing[0], landing[1])
+    return True
+
+
+# Every block in the file that can carry drivers.
+SMOOZY_THE_BLOCKS_THAT_CARRY_DRIVERS = (
+    "scenes", "objects", "meshes", "curves", "lattices", "metaballs", "shape_keys", "materials",
+    "node_groups", "worlds", "armatures", "cameras", "lights", "textures", "particles", "grease_pencils",
+    "grease_pencils_v3", "hair_curves", "pointclouds", "volumes", "speakers", "lightprobes", "masks",
+    "movieclips", "linestyles", "cache_files",
+)
+SMOOZY_A_PYTHON_DRIVER_IN_THE_FILE = [None]
+
+
+# **A Python driver anywhere in the file leaves nothing out** (Sol's look,
+# 2026-11-14): a script can read whether an object is disabled.
+def smoozy_a_python_driver_in_the_file():
+    if SMOOZY_A_PYTHON_DRIVER_IN_THE_FILE[0] is None:
+        found = False
+        for name in SMOOZY_THE_BLOCKS_THAT_CARRY_DRIVERS:
+            for block in getattr(bpy.data, name, ()):
+                animation = getattr(block, "animation_data", None)
+                if animation is not None and any(not smoozy_runs_no_script(one) for one in animation.drivers):
+                    found = True
+                    break
+            if found:
+                break
+        SMOOZY_A_PYTHON_DRIVER_IN_THE_FILE[0] = found
+    return SMOOZY_A_PYTHON_DRIVER_IN_THE_FILE[0]
+
+
+def smoozy_an_object_may_be_left_out(obj):
+    if obj.library is not None or obj.hide_viewport or obj.type == "CAMERA":
+        return False
+    data = getattr(obj, "data", None)
+    for holder in (obj, data, getattr(data, "shape_keys", None)):
+        animation = getattr(holder, "animation_data", None)
+        if animation is None:
+            continue
+        for driver in animation.drivers:
+            if not smoozy_runs_no_script(driver):
+                return False
+        if holder is not obj:
+            continue
+        paths = [driver.data_path for driver in animation.drivers]
+        paths.extend(smoozy_the_paths_an_action_holds(animation.action))
+        strips = [strip for track in animation.nla_tracks for strip in track.strips]
+        while strips:
+            strip = strips.pop()
+            strips.extend(getattr(strip, "strips", ()))
+            paths.extend(smoozy_the_paths_an_action_holds(getattr(strip, "action", None)))
+        if any(path.startswith(SMOOZY_WHAT_AN_OBJECT_LEFT_OUT_NEVER_ANIMATES) for path in paths):
+            return False
+    for system in getattr(obj, "particle_systems", ()):
+        if system.settings is not None and system.settings.animation_data is not None:
+            return False
+    return True
+
+
+# The objects left out of this scene's moves, each already disabled; nothing
+# where the scene moves as before.
+def smoozy_the_objects_left_out_of_the_moves(scene):
+    try:
+        handlers = bpy.app.handlers
+        if any(len(getattr(handlers, one)) for one in SMOOZY_THE_HANDLERS_THAT_SEE_A_MOVE):
+            return []
+        if scene.background_set is not None or scene.rigidbody_world is not None:
+            return []
+        if smoozy_a_python_driver_in_the_file():
+            return []
+        for holder in [scene] + [tree for tree, _stack in every_tree_of(scene)]:
+            if not smoozy_its_drivers_read_only_scenes(holder, scene):
+                return []
+        kept = set()
+        if scene.camera is not None:
+            kept.add(scene.camera.as_pointer())
+        for marker in scene.timeline_markers:
+            if marker.camera is not None:
+                kept.add(marker.camera.as_pointer())
+        chosen = [
+            obj for obj in scene.objects
+            if obj.as_pointer() not in kept and smoozy_an_object_may_be_left_out(obj)
+        ]
+    except Exception:
+        return []
+    left_out = []
+    kept_in_the_moves = []
+    for obj in chosen:
+        try:
+            obj.hide_viewport = True
+            left_out.append(obj)
+        except Exception:
+            kept_in_the_moves.append(obj)
+    return left_out
+
+
+def smoozy_put_back(left_out):
+    for obj in left_out:
+        obj.hide_viewport = False
+
+
+# **`Render Settings` Q5's build detail of 2026-11-13 (the Creator's notes on
+# the test copy, second round, note 15): the walk says where it is**, one line
+# on the ordinary stream for its first step and then at most twice a second,
+# so the page can say *Reading frame 120 of 250*. Only frames a scene is moved
+# to are counted. The line is outside the document's marks and carries neither.
+SMOOZY_THE_WALKS_LAST_WORD = [None]
+
+
+def smoozy_the_walk_is_at(step, steps):
+    now = time.monotonic()
+    last = SMOOZY_THE_WALKS_LAST_WORD[0]
+    if last is not None and step < steps and now - last < 0.5:
+        return
+    SMOOZY_THE_WALKS_LAST_WORD[0] = now
+    sys.stdout.write("\n" + SMOOZY["the_walks_mark"] + str(step) + " " + str(steps) + "\n")
+    sys.stdout.flush()
 
 
 # **A video's name is asked over the job's own range** (the live Telegram
@@ -2723,32 +3572,57 @@ the_jobs_frames = set(FRAMES)
 the_other_scenes = []
 the_other_scenes_frames = {}
 the_other_scenes_errors = {}
+# **Only walked scenes count toward the step line** (R4 item 5, read off the
+# curves, 2026-11-13). Counted before anything moves, and asked again of each
+# scene when the walk reaches it, as before, so a move of one scene that
+# changes another is seen; the line never counts past its own total.
+def smoozy_the_frames_walked_in(scene):
+    span = the_span_of(scene, FRAMES if scene == the_jobs_scene else [])
+    if not the_walk_must_step(scene) or the_frames_the_scene_stands_at(scene, span) is not None:
+        return 0
+    return len(span)
+
+
+THE_WALKS_STEPS = sum(smoozy_the_frames_walked_in(scene) for scene in bpy.data.scenes)
+the_walks_step = 0
 for scene in bpy.data.scenes:
     if EVERY_SCENE and scene != the_jobs_scene:
         the_other_scenes.append(scene)
-    extra = FRAMES if scene == the_jobs_scene else []
-    moves = something_on_it_moves(scene)
-    for frame in the_span_of(scene, extra):
-        if moves:
-            scene.frame_set(frame)
-        if NAMES["the_scenes_effects"]:
-            EFFECTS_ON_AT_SOME_FRAME.setdefault(scene.name, set()).update(
-                one[0] for one in the_effects_of(scene) if one[2]
-            )
-        for layer in scene.view_layers:
-            tables.setdefault((scene.name, layer.name), []).append([frame, bool(layer.use)])
-        if scene == the_jobs_scene and (not the_jobs_frames or frame in the_jobs_frames):
-            per_frame.append(the_entry_at(scene, frame, ERRORS, True))
-        elif EVERY_SCENE and scene != the_jobs_scene:
-            # **R4b: each other scene's per-frame set, recorded inside the
-            # same walk**, so nothing is stepped twice. Its errors are its own:
-            # a scene the job does not name never makes the reading fail.
-            its_errors = the_other_scenes_errors.setdefault(scene.name, {})
-            its_frames = the_other_scenes_frames.setdefault(scene.name, [])
-            try:
-                its_frames.append(the_entry_at(scene, frame, its_errors))
-            except Exception as why:
-                its_errors["the reading of this scene at frame " + str(frame)] = str(why)
+    span = the_span_of(scene, FRAMES if scene == the_jobs_scene else [])
+    moves = the_walk_must_step(scene)
+    stands = the_frames_the_scene_stands_at(scene, span) if moves else None
+    left_out = smoozy_the_objects_left_out_of_the_moves(scene) if moves else []
+    try:
+        for frame in span:
+            if moves:
+                stand_at = frame
+                if stands is None:
+                    the_walks_step += 1
+                    smoozy_the_walk_is_at(the_walks_step, max(THE_WALKS_STEPS, the_walks_step))
+                else:
+                    stand_at = stands.get(frame)
+                if stand_at is not None:
+                    scene.frame_set(stand_at)
+            if NAMES["the_scenes_effects"]:
+                EFFECTS_ON_AT_SOME_FRAME.setdefault(scene.name, set()).update(
+                    one[0] for one in the_effects_of(scene) if one[2]
+                )
+            for layer in scene.view_layers:
+                tables.setdefault((scene.name, layer.name), []).append([frame, bool(layer.use)])
+            if scene == the_jobs_scene and (not the_jobs_frames or frame in the_jobs_frames):
+                per_frame.append(the_entry_at(scene, frame, ERRORS, True))
+            elif EVERY_SCENE and scene != the_jobs_scene:
+                # **R4b: each other scene's per-frame set, recorded inside the
+                # same walk**, so nothing is stepped twice. Its errors are its own:
+                # a scene the job does not name never makes the reading fail.
+                its_errors = the_other_scenes_errors.setdefault(scene.name, {})
+                its_frames = the_other_scenes_frames.setdefault(scene.name, [])
+                try:
+                    its_frames.append(the_entry_at(scene, frame, its_errors))
+                except Exception as why:
+                    its_errors["the reading of this scene at frame " + str(frame)] = str(why)
+    finally:
+        smoozy_put_back(left_out)
 
 # The endings every format in play writes, asked of Blender before anything
 # else reads `bpy.data`, so the scene made for the asking is gone again before
@@ -3033,6 +3907,7 @@ document = {
             "eevee": eevee,
         },
         "announced_add_on_case": None,
+        "the_files_own_scripts_run": smoozy_the_files_own_scripts_run(),
     },
     "dependencies": {},
     "errors": ERRORS,
@@ -3061,6 +3936,70 @@ mod tests {
     use super::*;
     use crate::reading::WhichBranch;
 
+    /// **A stand-in script goes to Python on its standard input, never on its
+    /// command line.** Windows refuses a command line longer than 32,767
+    /// characters (error 206, *the filename or extension is too long*), and a
+    /// stand-in carrying the reading's own rules is longer: three tests here
+    /// failed that way on Windows in hosted run 43746222478. `args` follow
+    /// the script as `sys.argv[1:]`, as they did after `-c`.
+    fn python_runs(script: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
+        use std::io::Write;
+        use std::process::Stdio;
+        let mut python = std::process::Command::new("python3")
+            .arg("-")
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let mut input = python.stdin.take().expect("Python's standard input");
+        let script = script.to_string();
+        // Written beside the reading of what Python prints, so neither waits
+        // on the other; the pipe closing ends the script.
+        let writing = std::thread::spawn(move || input.write_all(script.as_bytes()));
+        let out = python.wait_with_output();
+        let written = writing.join().expect("the script is written");
+        let out = out?;
+        if out.status.success() {
+            written?;
+        }
+        Ok(out)
+    }
+
+    /// **`Render Settings` V3a, the leftovers of the Rough what-if answers
+    /// (222, 227): the reading says whether the file holds scripts that run**
+    /// — a text with Register on, or a driver whose expression is Python —
+    /// and a simple expression, a plain driver or an unregistered text is not
+    /// one. Printed in the settings half.
+    #[test]
+    fn rough_leftovers_222_the_reading_says_whether_the_files_scripts_run() {
+        let function = &THE_BODY[THE_BODY.find("def smoozy_runs_no_script").unwrap()
+            ..THE_BODY.find("def smoozy_a_handler_sees_the_frame").unwrap()];
+        let script = r#"
+from types import SimpleNamespace as NS
+def curve(kind, simple):
+    return NS(driver=NS(type=kind, is_simple_expression=simple))
+def a_file(texts=(), drivers=()):
+    global bpy
+    bpy = NS(data=NS(texts=list(texts), objects=[NS(animation_data=NS(drivers=list(drivers)))], scenes=[NS(animation_data=None)]))
+a_file()
+assert smoozy_the_files_own_scripts_run() is False
+a_file(texts=[NS(use_module=False)], drivers=[curve("SCRIPTED", True), curve("AVERAGE", False)])
+assert smoozy_the_files_own_scripts_run() is False
+a_file(texts=[NS(use_module=True)])
+assert smoozy_the_files_own_scripts_run() is True
+a_file(drivers=[curve("SCRIPTED", False)])
+assert smoozy_the_files_own_scripts_run() is True
+"#;
+        let out = python_runs(&format!("{function}\n{script}"), &[]);
+        let Ok(out) = out else {
+            eprintln!("python3 could not be started; the stand-in did not run");
+            return;
+        };
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        assert!(THE_BODY.contains(r#""the_files_own_scripts_run": smoozy_the_files_own_scripts_run(),"#));
+    }
+
     // `Job files and outputs` D21b-i: cloth preservation was withdrawn.
     #[test]
     fn memory_cloth_reserves_no_fallback_folder_beside_a_disk_cache() {
@@ -3076,7 +4015,7 @@ assert what_each_carrier_of_an_added_write_place_records(None,'ThePointCache') =
 memory.is_baked=True
 assert what_each_carrier_of_an_added_write_place_records(None,'ThePointCache') == ['//other-cache']
 "#;
-        let out=std::process::Command::new("python3").arg("-c").arg(format!("{function}\n{script}")).output().unwrap();
+        let out=python_runs(&format!("{function}\n{script}"), &[]).unwrap();
         assert!(out.status.success(),"{}",String::from_utf8_lossy(&out.stderr));
     }
 
@@ -3188,10 +4127,7 @@ print(json.dumps(results))
             "cases": cases,
         });
         let script = format!("{THE_CHECKS_MARK_IN_BLENDER}{THE_STAND_IN}");
-        let ran = match std::process::Command::new("python3")
-            .args(["-c", &script, &given.to_string()])
-            .output()
-        {
+        let ran = match python_runs(&script, &[&given.to_string()]) {
             Ok(ran) => ran,
             Err(why) => {
                 eprintln!("python3 could not be started ({why}); the stand-in did not run");
@@ -4145,11 +5081,7 @@ broken = thing("Broken", pose=A(ik_solver="ITASC"))
 assert "could not place" in cannot(job(), others=[broken])
 print("all held")
 "#;
-        let out = std::process::Command::new("python3")
-            .arg("-c")
-            .arg(format!("{function}\n{stand_in}"))
-            .output()
-            .unwrap();
+        let out = python_runs(&format!("{function}\n{stand_in}"), &[]).unwrap();
         assert!(
             out.status.success(),
             "{}{}",
@@ -4310,7 +5242,7 @@ print("all held")
             .filter(|line| line.trim_start().starts_with("except"))
             .count();
         assert_eq!(
-            catches, 6,
+            catches, 12,
             "a catch was added or removed without this count moving with it"
         );
         // The first catch writes into the error map, which `Render Settings`
@@ -4322,10 +5254,26 @@ print("all held")
         // page reads as *cannot say*, and it is no part of the file's reading.
         // **The sixth is R4 item 8's *Where the simulations begin*** (added
         // 2026-11-08): what it cannot read is the state *cannot account*, with
-        // its reason, which keeps the old start.
+        // its reason, which keeps the old start. **The seventh is R4 item 5's
+        // reading off the curves** (added 2026-11-13): where the keys cannot
+        // be worked out the state is *walked*, and the scene is walked exactly
+        // as before — the slower route, never a shorter reading. **The eighth
+        // to the twelfth are R4 item 5's drivers and cheap moves** (added
+        // 2026-11-14): a path that cannot be resolved is the state *leads
+        // nowhere*, which a driver reads as a fallback or a failure at every
+        // frame (twice); a driver that cannot be followed is *walked*; a scene
+        // whose objects cannot be weighed is *moved with nothing left out*; and
+        // an object Blender will not disable is *kept in the moves*. Each is
+        // the slower route, never a shorter reading.
+        assert!(text.contains("        except Exception:\n            return None\n        if isinstance(owner, bpy.types.ID):"));
+        assert!(text.contains("    except Exception:\n        return None\n    if isinstance(value, bpy.types.ID):"));
+        assert!(text.contains("    except SmoozyKeepsTheWalk:\n        return None\n"));
+        assert!(text.contains("    except Exception:\n        return []\n    left_out = []\n"));
+        assert!(text.contains("        except Exception:\n            kept_in_the_moves.append(obj)\n"));
         assert!(text.contains("except OSError:\n        return None\n    return sorted(name for name in names"));
         assert!(text.contains("    except Exception as why:\n        return {\"CannotAccount\": \"the reading could not place it: \" + str(why)}"));
         assert!(text.contains("errors[\"the regular output path at frame \""));
+        assert!(text.contains("        return stands\n    except Exception:\n        return None\n"));
         assert!(text.contains("per_frame.append(the_entry_at(scene, frame, ERRORS, True))"));
         assert_eq!(text.matches("its_errors[\"the reading of this scene").count(), 2);
         assert_eq!(text.matches("[\"the reading of this scene's formats\"] = str(why)").count(), 1);
@@ -4354,8 +5302,13 @@ print("all held")
             .filter(|line| line.trim_start().starts_with("try:"))
             .count();
         // Eight from 2026-11-08: R4 item 8's *Where the simulations begin* has
-        // its own, with the sixth catch above.
-        assert_eq!(tries, 8);
+        // its own, with the sixth catch above. Nine from 2026-11-13: R4 item
+        // 5's reading off the curves has its own, with the seventh. Fifteen
+        // from 2026-11-14: five with the eighth to the twelfth catches, and
+        // the walk's own, whose `finally` puts back every object left out of a
+        // scene's moves whatever happens.
+        assert_eq!(tries, 15);
+        assert!(text.contains("    finally:\n        smoozy_put_back(left_out)\n"));
         assert!(text.contains("bpy.data.scenes.remove(throwaway)"));
         assert!(text.contains("    finally:\n        the_range_is_set_on(scene, saved[0], saved[1])"));
     }
@@ -4519,7 +5472,8 @@ print("all held")
             // — the scene's own range by its own step, unioned with the
             // switch's key frames and their neighbours.
             assert!(
-                script.contains("for frame in the_span_of(scene, extra):"),
+                script.contains("    span = the_span_of(scene, FRAMES if scene == the_jobs_scene else [])\n")
+                    && script.contains("    for frame in span:\n"),
                 "{major}.{minor}"
             );
             // **The narrow gate is gone and nothing else narrows the table**,
@@ -4532,43 +5486,601 @@ print("all held")
         }
     }
 
-    /// **A scene is moved to its frames only where something on it can move**
-    /// — the Creator's notes on 0.1.8, piece 2. The condition is read here in
-    /// every version rather than described: animation data on the scene, on
-    /// any tree its compositing reaches, or a marker that names a camera.
-    /// **There is one step in the script and it is behind the condition**, so
-    /// nothing moves a still scene by another road. The four Blenders' own
-    /// proof is `tests/stepping_at_the_desk.rs`, and the sweep is the account
-    /// [`THE_STEPPING_LOOKUP`] names.
+    /// **A scene is moved to its frames only where its animation can reach
+    /// what the reading reads** — the Creator's notes on 0.1.8, piece 2, as
+    /// narrowed 2026-11-13 (the Creator's notes on the test copy, second round,
+    /// note 15). The script's own rule, run against a stand-in Blender in
+    /// every version: a driver, a stacked action, an action set aside for
+    /// tweaking, a curve off the short lists, a strip that keeps no curves
+    /// where the reading looks, or a marker naming a camera moves the scene;
+    /// nothing animated, empty animation data, a strip's look, the view's
+    /// exposure and a node input's value do not. **There is one step in the
+    /// script and it is behind the rule**, so nothing moves a scene by another
+    /// road. The Blenders' own proof is `tests/stepping_at_the_desk.rs`.
     #[test]
-    fn a_scene_is_moved_to_its_frames_only_where_something_on_it_moves() {
+    fn a_scene_is_moved_only_where_its_animation_can_reach_what_the_reading_reads() {
         assert!(THE_STEPPING_LOOKUP.contains("piece 2 — what landed.md"));
-        for (major, minor) in [(4u16, 5u16), (5, 0), (5, 1), (5, 2)] {
+        for (major, minor) in [(4u16, 5u16), (5, 0), (5, 1), (5, 2), (5, 3)] {
             let script = the_script(major, minor);
-            let condition = script
-                .find("def something_on_it_moves(scene):\n")
-                .unwrap_or_else(|| panic!("{major}.{minor}: the condition"));
-            let body = &script[condition..script[condition..].find("\n\n\n").unwrap() + condition];
-            for part in [
-                "    if scene.animation_data is not None:\n        return True\n",
-                "    for tree, _stack in every_tree_of(scene):\n        if tree.animation_data is not None:\n            return True\n",
-                "    for marker in scene.timeline_markers:\n        if marker.camera is not None:\n            return True\n",
-                "    return False",
-            ] {
-                assert!(body.contains(part), "{major}.{minor}: {part}");
-            }
+            let rule = &script[script.find("def the_walk_must_step(scene):\n").expect("the rule")
+                ..script.find("# **`Render Settings` Q5's build detail of 2026-11-13").expect("the rule ends")];
+            let curves_hang_off_the_action = if (major, minor) == (4, 5) { "True" } else { "False" };
+            let stand_in = format!(
+                r#"
+from types import SimpleNamespace as A
+NAMES = {{"the_curves_hang_off_the_action": {curves_hang_off_the_action},
+         "the_file_output_nodes_type": "CompositorNodeOutputFile",
+         "the_render_layers_nodes_type": "CompositorNodeRLayers",
+         "the_groups_own_input_type": "NodeGroupInput",
+         "the_groups_own_output_type": "NodeGroupOutput",
+         "the_final_output_nodes_type": "CompositorNodeComposite"}}
+is_kind = lambda node, kind: node.bl_idname == kind
+bpy = A(app=A(handlers=A(frame_change_pre=[], frame_change_post=[])))
+TREES = {{}}
+every_tree_of = lambda scene: [(tree, None) for tree in TREES.get(scene.name, [])]
+class Nodes(dict):
+    def get(self, name):
+        return dict.get(self, name)
+def curve(path):
+    return A(data_path=path)
+def driver(path, python=False):
+    return A(data_path=path, driver=A(type="SCRIPTED" if python else "AVERAGE", is_simple_expression=not python))
+def action(*paths):
+    if NAMES["the_curves_hang_off_the_action"]:
+        return A(fcurves=[curve(one) for one in paths], layers=[])
+    return A(layers=[A(strips=[A(channelbags=[A(fcurves=[curve(one) for one in paths])])])])
+def anim(act=None, drivers=(), tracks=(), tweak=None):
+    return A(action=act, drivers=list(drivers), nla_tracks=list(tracks), action_tweak_storage=tweak)
+def scene(name, data=None, markers=()):
+    return A(name=name, animation_data=data, timeline_markers=list(markers))
+def tree(nodes, data=None):
+    return A(nodes=Nodes((one.name, one) for one in nodes), animation_data=data)
+def node(name, kind="CompositorNodeBlur", inner=None):
+    return A(name=name, bl_idname=kind, node_tree=inner)
+
+def moves(one, trees=()):
+    TREES.clear()
+    TREES[one.name] = list(trees)
+    return the_walk_must_step(one)
+
+assert not moves(scene("Still"))
+assert not moves(scene("Empty", anim()))
+assert not moves(scene("Driven", anim(drivers=[driver('sequence_editor.strips_all["Fade"].blend_alpha')])))
+assert not moves(scene("DrivenExposure", anim(drivers=[driver("view_settings.exposure")])))
+assert moves(scene("DrivenByPython", anim(drivers=[driver('sequence_editor.strips_all["Fade"].blend_alpha', python=True)])))
+assert moves(scene("DrivenSamples", anim(drivers=[driver("cycles.samples")])))
+assert moves(scene("DrivenSwitch", anim(drivers=[driver('view_layers["Second"].use')])))
+bpy.app.handlers.frame_change_post.append(print)
+assert moves(scene("DrivenWithAHandler", anim(drivers=[driver("view_settings.exposure")])))
+bpy.app.handlers.frame_change_post.clear()
+assert moves(scene("Stacked", anim(tracks=[A()])))
+assert moves(scene("Tweaked", anim(action("view_settings.exposure"), tweak=A())))
+assert not moves(scene("Fade", anim(action('sequence_editor.strips_all["Fade"].blend_alpha', 'sequence_editor.sequences_all["Old"].volume'))))
+assert not moves(scene("Moved", anim(action('sequence_editor.strips_all["Shot \\"1\\""].transform.offset_x', 'sequence_editor.strips_all["A"].crop.min_x'))))
+assert not moves(scene("Exposure", anim(action("view_settings.exposure", "view_settings.gamma"))))
+assert moves(scene("Samples", anim(action("view_settings.exposure", "cycles.samples"))))
+assert moves(scene("Layer", anim(action('view_layers["Second"].use'))))
+assert moves(scene("StripScene", anim(action('sequence_editor.strips_all["Shot"].scene'))))
+assert moves(scene("StripMute", anim(action('sequence_editor.strips_all["Shot"].mute'))))
+assert moves(scene("Proxy", anim(action('sequence_editor.strips_all["Shot"].proxy.directory'))))
+assert moves(scene("Effect", anim(action('compositor_effects["Glow"].enable_for_render'))))
+assert moves(scene("Marked", markers=[A(camera=A())]))
+assert not moves(scene("Unmarked", markers=[A(camera=None)]))
+blur = node("Blur")
+out = node("File Output", "CompositorNodeOutputFile")
+group = node("Group", "CompositorNodeGroup", inner=A())
+plain = tree([blur, out, group])
+assert not moves(scene("Value"), [tree([blur], anim(action('nodes["Blur"].inputs[1].default_value', 'nodes["Blur"].size_x')))])
+assert not moves(scene("OutputValue"), [tree([out], anim(action('nodes["File Output"].inputs[0].default_value')))])
+assert moves(scene("Mute"), [tree([blur], anim(action('nodes["Blur"].mute')))])
+assert moves(scene("OutputSetting"), [tree([out], anim(action('nodes["File Output"].format.quality')))])
+assert moves(scene("GroupSetting"), [tree([group], anim(action('nodes["Group"].width')))])
+assert moves(scene("Gone"), [tree([blur], anim(action('nodes["Missing"].inputs[0].default_value')))])
+assert moves(scene("Links"), [tree([blur], anim(action('links[0].is_muted')))])
+assert not moves(scene("TreeDriven"), [tree([blur], anim(drivers=[driver('nodes["Blur"].inputs[1].default_value')]))])
+assert moves(scene("TreeDrivenByPython"), [tree([blur], anim(drivers=[driver('nodes["Blur"].inputs[1].default_value', python=True)]))])
+assert moves(scene("TreeDrivenSetting"), [tree([out], anim(drivers=[driver('nodes["File Output"].format.quality')]))])
+if not NAMES["the_curves_hang_off_the_action"]:
+    odd = A(layers=[A(strips=[A()])])
+    assert moves(scene("Odd", anim(odd)))
+print("all held")
+"#
+            );
+            let out = python_runs(&format!("{rule}\n{stand_in}"), &[]).unwrap();
+            assert!(
+                out.status.success() && String::from_utf8_lossy(&out.stdout).contains("all held"),
+                "{major}.{minor}: {}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+            assert!(
+                script.contains("    moves = the_walk_must_step(scene)\n")
+                    && script.contains("        for frame in span:\n            if moves:\n"),
+                "{major}.{minor}: the step is behind the rule"
+            );
+            assert_eq!(script.matches("frame_set(").count(), 1, "{major}.{minor}: one step in the whole script");
+        }
+    }
+
+    /// **`Job files and outputs` R4 item 5, read off the curves (2026-11-13,
+    /// the Blender research *Reading at a frame*)**: a scene the walk would
+    /// move is read off its curves where its animation is plain keys, and is
+    /// moved once per run of frames whose key is the same, to the run's last
+    /// frame. The script's own rule, run against a stand-in Blender in every
+    /// version. **Walked as before**: a driver, a stacked action, an action
+    /// set aside for tweaking, animation-data settings other than a first
+    /// key's, more than one layer or strip, a strip that keeps no curves where
+    /// the reading looks, a frame-change handler, Time Stretching, two markers
+    /// on one frame naming different cameras, a marker naming none outside the
+    /// ones that do or on their frame (or with none that does), more than one
+    /// channelbag, and anything that goes wrong while the keys are worked out. **Read off the curves**: a keyed view-layer switch
+    /// (one move per run), a keyed sample count and a view layer's own sample
+    /// count (one move: only what is read after the walk reads them, unless
+    /// the output path holds a template), a muted curve, a never-read curve,
+    /// markers naming cameras by the hand tests' rule, and a keyed tree.
+    #[test]
+    fn a_scene_whose_animation_is_plain_keys_is_read_off_its_curves() {
+        for (major, minor) in [(4u16, 5u16), (5, 0), (5, 1), (5, 2), (5, 3)] {
+            let script = the_script(major, minor);
+            let rule = &script[script.find("def the_walk_must_step(scene):\n").expect("the rule")
+                ..script.find("# **`Render Settings` Q5's build detail of 2026-11-13").expect("the rule ends")];
+            assert!(
+                rule.contains("def the_frames_the_scene_stands_at(scene, span):\n"),
+                "{major}.{minor}: the reading off the curves is in the rule"
+            );
+            let curves_hang_off_the_action = if (major, minor) == (4, 5) { "True" } else { "False" };
+            let stand_in = format!(
+                r#"
+from types import SimpleNamespace as A
+NAMES = {{"the_curves_hang_off_the_action": {curves_hang_off_the_action},
+         "the_file_output_nodes_type": "CompositorNodeOutputFile",
+         "the_render_layers_nodes_type": "CompositorNodeRLayers",
+         "the_groups_own_input_type": "NodeGroupInput",
+         "the_groups_own_output_type": "NodeGroupOutput",
+         "the_final_output_nodes_type": "CompositorNodeComposite"}}
+bpy = A(app=A(handlers=A(frame_change_pre=[], frame_change_post=[])))
+is_kind = lambda node, kind: node.bl_idname == kind
+TREES = {{}}
+every_tree_of = lambda scene: [(tree, None) for tree in TREES.get(scene.name, [])]
+class Nodes(dict):
+    def get(self, name):
+        return dict.get(self, name)
+def curve(path, values=lambda frame: 0.0, mute=False):
+    return A(data_path=path, mute=mute, evaluate=values)
+def driver(path, variable="TRANSFORMS", python=False):
+    return A(data_path=path, array_index=0, modifiers=[],
+             driver=A(type="SCRIPTED" if python else "AVERAGE", is_simple_expression=not python, expression="var",
+                      variables=[A(type=variable, targets=[A(id=None, data_path="")])]))
+def action(*curves, layers=1, strips=1, bags=1):
+    if NAMES["the_curves_hang_off_the_action"]:
+        return A(fcurves=list(curves), layers=[])
+    bag = A(fcurves=list(curves))
+    return A(layers=[A(strips=[A(channelbags=[bag] * bags) for _ in range(strips)]) for _ in range(layers)])
+def anim(act=None, drivers=(), tracks=(), tweak=None, use_nla=True, influence=1.0, blend="REPLACE", extrapolation="HOLD"):
+    return A(action=act, drivers=list(drivers), nla_tracks=list(tracks), action_tweak_storage=tweak,
+             use_nla=use_nla, action_influence=influence, action_blend_type=blend, action_extrapolation=extrapolation)
+def scene(name, data=None, markers=(), old=100, new=100, path="//out/####"):
+    return A(name=name, animation_data=data, timeline_markers=list(markers),
+             render=A(frame_map_old=old, frame_map_new=new, filepath=path))
+def tree(nodes, data=None):
+    return A(nodes=Nodes((one.name, one) for one in nodes), animation_data=data)
+def node(name, kind="CompositorNodeBlur", inner=None):
+    return A(name=name, bl_idname=kind, node_tree=inner)
+def marker(frame, camera):
+    return A(frame=frame, camera=camera)
+SPAN = list(range(1, 13))
+def stands(one, trees=()):
+    TREES.clear()
+    TREES[one.name] = list(trees)
+    return the_frames_the_scene_stands_at(one, SPAN)
+switch = lambda frame: 0.0 if 6 <= frame < 10 else 1.0
+linear = lambda frame: float(frame)
+WHOLE = {{1: 12}}
+EVERY = {{frame: frame for frame in SPAN}}
+
+# Read off the curves.
+assert stands(scene("Switch", anim(action(curve('view_layers["L"].use', switch))))) == {{1: 5, 6: 9, 10: 12}}
+assert stands(scene("Samples", anim(action(curve("cycles.samples", linear), curve("eevee.taa_render_samples", linear))))) == WHOLE
+assert stands(scene("LayerSamples", anim(action(curve('view_layers["L"].samples', linear))))) == WHOLE
+assert stands(scene("Template", anim(action(curve("cycles.samples", linear))), path="//{{camera_name}}/####")) == EVERY
+assert stands(scene("Muted", anim(action(curve('view_layers["L"].use', switch, mute=True))))) == WHOLE
+assert stands(scene("Exposure", anim(action(curve("view_settings.exposure", linear))))) == WHOLE
+assert stands(scene("Shutter", anim(action(curve("render.motion_blur_shutter", linear))))) == EVERY
+assert stands(scene("Empty", anim())) == WHOLE
+cam_a, cam_b = A(name="A"), A(name="B")
+assert stands(scene("Markers", markers=[marker(8, cam_b), marker(4, cam_a)])) == {{1: 7, 8: 12}}
+assert stands(scene("Between", markers=[marker(4, cam_a), marker(6, None), marker(8, cam_b)])) == {{1: 7, 8: 12}}
+assert stands(scene("SameTwice", markers=[marker(4, cam_a), marker(4, cam_a), marker(8, cam_b)])) == {{1: 7, 8: 12}}
+assert stands(scene("Both", anim(action(curve('view_layers["L"].use', switch))), markers=[marker(4, cam_a), marker(8, cam_b)])) == {{1: 5, 6: 7, 8: 9, 10: 12}}
+blur = node("Blur")
+out = node("File Output", "CompositorNodeOutputFile")
+assert stands(scene("TreeValue"), [tree([blur], anim(action(curve('nodes["Blur"].inputs[1].default_value', linear))))]) == WHOLE
+assert stands(scene("TreeSetting"), [tree([out], anim(action(curve('nodes["File Output"].format.quality', switch))))]) == {{1: 5, 6: 9, 10: 12}}
+# A driver on a never-read path moves nothing, whatever it reads (2026-11-14).
+assert stands(scene("DrivenExposure", anim(action(curve("cycles.samples", linear)), drivers=[driver("view_settings.exposure")]))) == WHOLE
+assert stands(scene("TreeDriven"), [tree([blur], anim(drivers=[driver('nodes["Blur"].inputs[1].default_value')]))]) == WHOLE
+
+# Walked as before.
+assert stands(scene("Driven", anim(action(curve("cycles.samples")), drivers=[driver('view_layers["L"].use')]))) is None
+assert stands(scene("DrivenByPython", anim(action(curve("cycles.samples")), drivers=[driver("view_settings.exposure", "SINGLE_PROP", python=True)]))) is None
+assert stands(scene("Stacked", anim(tracks=[A()]))) is None
+assert stands(scene("Tweaked", anim(action(curve("cycles.samples")), tweak=A()))) is None
+assert stands(scene("NoNla", anim(action(curve("cycles.samples")), use_nla=False))) is None
+assert stands(scene("Half", anim(action(curve("cycles.samples")), influence=0.5))) is None
+assert stands(scene("Added", anim(action(curve("cycles.samples")), blend="ADD"))) is None
+assert stands(scene("Nothing", anim(action(curve("cycles.samples")), extrapolation="NOTHING"))) is None
+assert stands(scene("Stretched", anim(action(curve("cycles.samples"))), old=200)) is None
+assert stands(scene("Tie", markers=[marker(4, cam_a), marker(4, cam_b)])) is None
+assert stands(scene("UnboundBefore", markers=[marker(2, None), marker(4, cam_a), marker(8, cam_b)])) is None
+assert stands(scene("UnboundAfter", markers=[marker(4, cam_a), marker(8, cam_b), marker(10, None)])) is None
+assert stands(scene("UnboundOn", markers=[marker(4, cam_a), marker(4, None), marker(8, cam_b)])) is None
+assert stands(scene("UnboundAlone", markers=[marker(4, cam_a), marker(6, None)])) is None
+assert stands(scene("UnboundOnly", anim(action(curve("cycles.samples"))), markers=[marker(6, None)])) is None
+assert stands(scene("TreeDrivenSetting"), [tree([out], anim(drivers=[driver('nodes["File Output"].format.quality')]))]) is None
+def broken(frame):
+    raise RuntimeError("no value")
+assert stands(scene("Broken", anim(action(curve('view_layers["L"].use', broken))))) is None
+bpy.app.handlers.frame_change_post.append(lambda *_: None)
+assert stands(scene("Handler", anim(action(curve("cycles.samples"))))) is None
+bpy.app.handlers.frame_change_post.clear()
+bpy.app.handlers.frame_change_pre.append(lambda *_: None)
+assert stands(scene("HandlerBefore", anim(action(curve("cycles.samples"))))) is None
+bpy.app.handlers.frame_change_pre.clear()
+if not NAMES["the_curves_hang_off_the_action"]:
+    assert stands(scene("TwoLayers", anim(action(curve("cycles.samples"), layers=2)))) is None
+    assert stands(scene("TwoStrips", anim(action(curve("cycles.samples"), strips=2)))) is None
+    assert stands(scene("TwoBags", anim(action(curve("cycles.samples"), bags=2)))) is None
+    assert stands(scene("Odd", anim(A(layers=[A(strips=[A()])])))) is None
+print("all held")
+"#
+            );
+            let out = python_runs(&format!("{rule}\n{stand_in}"), &[]).unwrap();
+            assert!(
+                out.status.success() && String::from_utf8_lossy(&out.stdout).contains("all held"),
+                "{major}.{minor}: {}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+            // **The walk's own loop**: a walked scene counts its steps; a scene
+            // read off its curves is moved only where its plan says, and the
+            // one step in the script serves both.
             assert!(
                 script.contains(
-                    "    moves = something_on_it_moves(scene)\n    for frame in the_span_of(scene, extra):\n        if moves:\n            scene.frame_set(frame)\n"
+                    "    span = the_span_of(scene, FRAMES if scene == the_jobs_scene else [])\n    moves = the_walk_must_step(scene)\n    stands = the_frames_the_scene_stands_at(scene, span) if moves else None\n    left_out = smoozy_the_objects_left_out_of_the_moves(scene) if moves else []\n    try:\n        for frame in span:\n"
                 ),
-                "{major}.{minor}: the step is behind the condition"
+                "{major}.{minor}: each scene is planned when the walk reaches it, and only one the walk would move"
             );
-            assert_eq!(
-                script.matches("frame_set(").count(),
-                1,
-                "{major}.{minor}: one step in the whole script"
+            assert!(
+                script.contains("                if stand_at is not None:\n                    scene.frame_set(stand_at)\n"),
+                "{major}.{minor}: the one step"
+            );
+            assert!(
+                script.contains("    finally:\n        smoozy_put_back(left_out)\n"),
+                "{major}.{minor}: whatever was left out of the moves is put back after the scene's last"
+            );
+            assert!(
+                script.contains("    if not the_walk_must_step(scene) or the_frames_the_scene_stands_at(scene, span) is not None:\n        return 0\n"),
+                "{major}.{minor}: only walked scenes count toward the step line"
             );
         }
+    }
+
+    /// **`Job files and outputs` R4 item 5, drivers followed without a move
+    /// and cheap moves (2026-11-14, the Blender research *Working out a
+    /// driver* and *What a move works out*).** The script's own rules, run
+    /// against a stand-in Blender in every version. **Followed**: a copy of
+    /// another scene's view-layer samples (one move), a switch driven by a
+    /// keyed property of the scene, a chain of two, an object's keyed property,
+    /// the active view layer's keyed samples, a curve keyed by an index where
+    /// the variable names it by name, no data-block, a path that leads
+    /// nowhere, and a driver read only after the walk whose inputs still join
+    /// the key. **Walked as before**: `frame` in an expression, a Python
+    /// expression, a Transform Channel, the scene's Background Scene, a loop,
+    /// a path through a pointer to another data-block, the scene's own frame,
+    /// a read-only setting, a curve modifier the research did not try, an
+    /// object with a rigid body, an object animated through an NLA track.
+    /// **Left out of the moves**: the scene's plain objects; never a camera,
+    /// a linked one, one already disabled, one whose modifiers, visibility or
+    /// particle settings are animated, or one with a Python driver; nothing at
+    /// all where a handler is registered, the scene has a Background Scene or
+    /// a rigid-body world, or a driver reads an object or runs a script.
+    #[test]
+    fn a_driver_whose_inputs_can_be_followed_is_read_off_the_curves_and_a_move_leaves_the_objects_out() {
+        for (major, minor) in [(4u16, 5u16), (5, 0), (5, 1), (5, 2), (5, 3)] {
+            let script = the_script(major, minor);
+            let rule = &script[script.find("def the_walk_must_step(scene):\n").expect("the rule")
+                ..script.find("# **`Render Settings` Q5's build detail of 2026-11-13").expect("the rule ends")];
+            assert!(
+                rule.contains("def the_curves_the_drivers_follow(holder, scene, never_read, landings):\n")
+                    && rule.contains("def smoozy_the_objects_left_out_of_the_moves(scene):\n"),
+                "{major}.{minor}: following drivers and leaving objects out are in the rule"
+            );
+            let curves_hang_off_the_action = if (major, minor) == (4, 5) { "True" } else { "False" };
+            let stand_in = format!(
+                r#"
+from types import SimpleNamespace as A
+NAMES = {{"the_curves_hang_off_the_action": {curves_hang_off_the_action},
+         "the_file_output_nodes_type": "CompositorNodeOutputFile",
+         "the_render_layers_nodes_type": "CompositorNodeRLayers",
+         "the_groups_own_input_type": "NodeGroupInput",
+         "the_groups_own_output_type": "NodeGroupOutput",
+         "the_final_output_nodes_type": "CompositorNodeComposite"}}
+class Props(dict):
+    def get(self, name):
+        return dict.get(self, name)
+WRITABLE = A(is_readonly=False, is_runtime=False)
+class Thing:
+    def __init__(self, props=()):
+        self.bl_rna = A(properties=Props((one, WRITABLE) for one in props))
+        self.paths = {{}}
+    def as_pointer(self):
+        return id(self)
+    def path_resolve(self, path):
+        if path in self.paths:
+            return self.paths[path]
+        raise ValueError(path)
+class ID(Thing):
+    pass
+class Scene(ID):
+    pass
+class Object(ID):
+    pass
+bpy = A(app=A(handlers=A(frame_change_pre=[], frame_change_post=[], depsgraph_update_pre=[], depsgraph_update_post=[])),
+        types=A(ID=ID, Scene=Scene, Object=Object), data=A(scenes=[], objects=[]))
+is_kind = lambda node, kind: node.bl_idname == kind
+every_tree_of = lambda scene: []
+
+def anim(curves=(), drivers=(), tracks=()):
+    if NAMES["the_curves_hang_off_the_action"]:
+        act = A(fcurves=list(curves), layers=[])
+    else:
+        act = A(layers=[A(strips=[A(channelbags=[A(fcurves=list(curves))])])])
+    return A(action=act, drivers=list(drivers), nla_tracks=list(tracks), action_tweak_storage=None,
+             use_nla=True, action_influence=1.0, action_blend_type="REPLACE", action_extrapolation="HOLD")
+def curve(path, values, index=0):
+    return A(data_path=path, array_index=index, mute=False, evaluate=values)
+def drv(path, *variables, kind="AVERAGE", expression="", simple=True, modifiers=()):
+    return A(data_path=path, array_index=0, modifiers=[A(type=one) for one in modifiers],
+             driver=A(type=kind, expression=expression, is_simple_expression=simple, use_self=False, variables=list(variables)))
+def single(target, path):
+    return A(type="SINGLE_PROP", targets=[A(id=target, data_path=path)])
+def context(which, path):
+    return A(type="CONTEXT_PROP", targets=[A(context_property=which, data_path=path)])
+def transform(target):
+    return A(type="TRANSFORMS", targets=[A(id=target, data_path="")])
+def a_scene(name, props=None, background=None):
+    one = Scene(("frame_current", "use_nodes"))
+    one.name = name
+    one.animation_data = None
+    one.timeline_markers = []
+    one.render = A(frame_map_old=100, frame_map_new=100, filepath="//out/####")
+    one.background_set = background
+    one.rigidbody_world = None
+    one.camera = None
+    one.objects = []
+    layer = Thing(("samples", "use"))
+    layer.name = "L"
+    layer.paths.update({{"samples": 64, "use": True}})
+    background_layer = Thing(("samples", "use"))
+    background_layer.name = "Background"
+    background_layer.paths.update({{"samples": 32, "use": True}})
+    one.view_layers = [layer, background_layer]
+    cycles = Thing(("samples", "samples_read_only", "by_a_script"))
+    cycles.bl_rna.properties["samples_read_only"] = A(is_readonly=True, is_runtime=False)
+    cycles.bl_rna.properties["by_a_script"] = A(is_readonly=False, is_runtime=True)
+    one.paths.update({{
+        "view_layers": "a collection",
+        'view_layers["L"]': layer, 'view_layers["L"].samples': 64, 'view_layers["L"].use': True,
+        "view_layers[0]": layer, "view_layers[0].samples": 64,
+        'view_layers["Background"]': background_layer, 'view_layers["Background"].samples': 32,
+        "cycles": cycles, "cycles.samples": 128, "cycles.samples_read_only": 1, "cycles.by_a_script": 1,
+        'cycles["samples"]': 128,
+        "frame_current": 1,
+    }})
+    for key, value in (props or {{}}).items():
+        one.paths['["' + key + '"]'] = value
+    return one
+def an_object(name, props=None, kind="MESH"):
+    one = Object(("location",))
+    one.name = name
+    one.type = kind
+    one.animation_data = None
+    one.rigid_body = None
+    one.library = None
+    one.data = None
+    one.particle_systems = []
+    one.hide_viewport = False
+    for key, value in (props or {{}}).items():
+        one.paths['["' + key + '"]'] = value
+    return one
+SPAN = list(range(1, 13))
+def stands(one):
+    return the_frames_the_scene_stands_at(one, SPAN)
+switch = lambda frame: 0.0 if 6 <= frame < 10 else 1.0
+linear = lambda frame: float(frame)
+WHOLE = {{1: 12}}
+EVERY = {{frame: frame for frame in SPAN}}
+RUNS = {{1: 5, 6: 9, 10: 12}}
+
+# Followed.
+shot_one = a_scene("Shot 1")
+shot = a_scene("Shot 2")
+shot.animation_data = anim(drivers=[drv('view_layers["Background"].samples', single(shot_one, 'view_layers["Background"].samples'))])
+assert stands(shot) == WHOLE, "another scene's stored samples: one move"
+keyed = a_scene("Keyed", {{"a": 1.0}})
+keyed.animation_data = anim([curve('["a"]', switch)], [drv('view_layers["L"].use', single(keyed, '["a"]'))])
+assert stands(keyed) == RUNS, "a switch driven by a keyed property: one move per run"
+chain = a_scene("Chain", {{"a": 1.0, "b": 1.0}})
+chain.animation_data = anim([curve('["a"]', switch)], [drv('["b"]', single(chain, '["a"]')), drv('view_layers["L"].use', single(chain, '["b"]'))])
+assert stands(chain) == RUNS, "a chain of two"
+rig = an_object("Rig", {{"quality": 1.0}})
+rig.animation_data = anim([curve('["quality"]', switch)])
+by_object = a_scene("ByObject")
+by_object.animation_data = anim(drivers=[drv('view_layers["L"].use', single(rig, '["quality"]'))])
+assert stands(by_object) == RUNS, "an object's keyed property"
+layered = a_scene("Layered")
+layered.animation_data = anim([curve('view_layers["L"].samples', switch)], [drv('view_layers["L"].use', context("ACTIVE_VIEW_LAYER", "samples"))])
+assert stands(layered) == RUNS, "the active view layer's keyed samples"
+by_index = a_scene("ByIndex")
+by_index.animation_data = anim([curve('view_layers["L"].samples', switch)], [drv('view_layers["L"].use', single(by_index, "view_layers[0].samples"))])
+assert stands(by_index) == RUNS, "a curve keyed by name, read by index"
+nothing = a_scene("Nothing")
+nothing.animation_data = anim(drivers=[drv('view_layers["L"].use', single(None, '["a"]'), single(nothing, '["missing"]'))])
+assert stands(nothing) == WHOLE, "no data-block, and a path that leads nowhere"
+after = a_scene("After", {{"a": 1.0}})
+after.animation_data = anim([curve('["a"]', linear)], [drv("cycles.samples", single(after, '["a"]'))])
+assert stands(after) == EVERY, "a driver read only after the walk keeps its inputs in the key"
+constant = a_scene("Constant")
+constant.animation_data = anim(drivers=[drv("cycles.samples", kind="SCRIPTED", expression="256")])
+assert stands(constant) == WHOLE, "a constant expression"
+modified = a_scene("Modified", {{"a": 1.0}})
+modified.animation_data = anim([curve('["a"]', switch)], [drv('view_layers["L"].use', single(modified, '["a"]'), modifiers=("GENERATOR", "NOISE"))])
+assert stands(modified) == RUNS, "a driver curve with the modifiers the research tried"
+
+# Walked as before.
+def walked(name, *drivers, props=None, curves=(), background=None):
+    one = a_scene(name, props, background)
+    one.animation_data = anim(list(curves), list(drivers))
+    assert stands(one) is None, name
+walked("Frame", drv('view_layers["L"].use', kind="SCRIPTED", expression="frame > 5"))
+walked("FrameTimes", drv('view_layers["L"].use', kind="SCRIPTED", expression="2*frame"))
+walked("Python", drv('view_layers["L"].use', kind="SCRIPTED", expression="len([1])", simple=False))
+walked("Transform", drv('view_layers["L"].use', transform(rig)))
+walked("Background", drv('view_layers["L"].use', single(shot_one, 'view_layers["Background"].samples')), background=shot_one)
+loop = a_scene("Loop", {{"a": 1.0, "b": 1.0}})
+loop.animation_data = anim(drivers=[drv('["a"]', single(loop, '["b"]')), drv('["b"]', single(loop, '["a"]')), drv('view_layers["L"].use', single(loop, '["a"]'))])
+assert stands(loop) is None, "Loop"
+own = a_scene("Own", {{"a": 1.0}})
+own.animation_data = anim(drivers=[drv('["a"]', single(own, '["a"]')), drv('view_layers["L"].use', single(own, '["a"]'))])
+assert stands(own) is None, "Own"
+pointer = a_scene("Pointer")
+pointer.paths.update({{"camera": rig, "camera.location": "a vector"}})
+pointer.animation_data = anim(drivers=[drv('view_layers["L"].use', single(pointer, "camera.location"))])
+assert stands(pointer) is None, "Pointer"
+frame = a_scene("OwnFrame")
+frame.animation_data = anim(drivers=[drv('view_layers["L"].use', single(frame, "frame_current"))])
+assert stands(frame) is None, "OwnFrame"
+other_frame = a_scene("OtherFrame")
+other_frame.animation_data = anim(drivers=[drv('view_layers["L"].use', single(shot_one, "frame_current"))])
+assert stands(other_frame) == WHOLE, "another scene's frame is its stored one"
+read_only = a_scene("ReadOnly")
+read_only.animation_data = anim(drivers=[drv('view_layers["L"].use', single(read_only, "cycles.samples_read_only"))])
+assert stands(read_only) is None, "ReadOnly"
+walked("Envelope", drv('view_layers["L"].use', single(shot_one, '["a"]'), modifiers=("ENVELOPE",)))
+# Sol's look, 2026-11-14.
+by_a_script = a_scene("ByAScript")
+by_a_script.animation_data = anim(drivers=[drv('view_layers["L"].use', single(by_a_script, "cycles.by_a_script"))])
+assert stands(by_a_script) is None, "a setting a script defines"
+second_name = a_scene("SecondName")
+second_name.animation_data = anim([curve("cycles.samples", switch)], [drv('view_layers["L"].use', single(second_name, 'cycles["samples"]'))])
+assert stands(second_name) is None, "a setting under a second name"
+on_keys = a_scene("OnKeys", {{"p": 1.0}})
+on_keys.animation_data = anim([curve('view_layers["L"].use', switch)], [drv('view_layers["L"].use', single(on_keys, '["p"]'))])
+assert stands(on_keys) is None, "a driver on a keyed setting"
+chained_on_keys = a_scene("ChainedOnKeys", {{"p": 1.0, "q": 1.0}})
+chained_on_keys.animation_data = anim([curve('["q"]', switch)], [drv('["q"]', single(chained_on_keys, '["p"]')), drv('view_layers["L"].use', single(chained_on_keys, '["q"]'))])
+assert stands(chained_on_keys) is None, "a chain through a driver on a keyed setting"
+body = an_object("Body", {{"quality": 1.0}})
+body.rigid_body = A()
+walked("RigidBody", drv('view_layers["L"].use', single(body, '["quality"]')))
+stacked = an_object("Stacked", {{"quality": 1.0}})
+stacked.animation_data = anim(tracks=[A()])
+walked("StackedObject", drv('view_layers["L"].use', single(stacked, '["quality"]')))
+
+# Left out of the moves, and put back.
+def a_set(name, **fields):
+    one = an_object(name)
+    for key, value in fields.items():
+        setattr(one, key, value)
+    return one
+class Stuck(Object):
+    @property
+    def hide_viewport(self):
+        return False
+    @hide_viewport.setter
+    def hide_viewport(self, value):
+        raise AttributeError("linked")
+def a_scene_of_objects(name, extra=()):
+    one = a_scene(name)
+    plain = an_object("Plain")
+    camera = an_object("Camera", kind="CAMERA")
+    marked = an_object("MarkedEmpty", kind="EMPTY")
+    linked = a_set("Linked", library=A())
+    hidden = a_set("Hidden", hide_viewport=True)
+    cached = a_set("Cached", animation_data=anim([curve('modifiers["Cloth"].point_cache.frame_start', linear)]))
+    blinking = a_set("Blinking", animation_data=anim(drivers=[drv("hide_viewport", single(shot_one, '["a"]'))]))
+    scripted = a_set("Scripted", animation_data=anim(drivers=[drv("location", kind="SCRIPTED", simple=False)]))
+    particles = a_set("Particles", particle_systems=[A(settings=A(animation_data=A()))])
+    shaped = a_set("Shaped", data=A(animation_data=None, shape_keys=A(animation_data=anim(drivers=[drv('key_blocks["A"].value', kind="SCRIPTED", simple=False)]))))
+    deformed = a_set("Deformed", data=A(animation_data=None, shape_keys=A(animation_data=anim(drivers=[drv('key_blocks["A"].value', transform(rig))]))))
+    stuck = Stuck(("location",))
+    stuck.name, stuck.type, stuck.animation_data, stuck.library, stuck.data, stuck.particle_systems = "Stuck", "MESH", None, None, None, []
+    one.objects = [plain, camera, marked, linked, hidden, cached, blinking, scripted, particles, shaped, deformed, stuck] + list(extra)
+    one.timeline_markers = [A(camera=marked)]
+    return one
+quiet = a_scene_of_objects("Quiet")
+left = smoozy_the_objects_left_out_of_the_moves(quiet)
+assert [one.name for one in left] == ["Plain", "Deformed"], [one.name for one in left]
+assert all(one.hide_viewport for one in left)
+smoozy_put_back(left)
+assert not any(one.hide_viewport for one in left)
+assert [one.name for one in quiet.objects if one.hide_viewport] == ["Hidden"]
+copying = a_scene_of_objects("Copying")
+copying.animation_data = anim(drivers=[drv('view_layers["Background"].samples', single(shot_one, 'view_layers["Background"].samples'), context("ACTIVE_VIEW_LAYER", "samples"))])
+assert [one.name for one in smoozy_the_objects_left_out_of_the_moves(copying)] == ["Plain", "Deformed"]
+smoozy_put_back([one for one in copying.objects if one.name in ("Plain", "Deformed")])
+for why, change in (
+    ("a frame-change handler", lambda one: bpy.app.handlers.frame_change_post.append(print)),
+    ("a graph-update handler", lambda one: bpy.app.handlers.depsgraph_update_post.append(print)),
+    ("a Background Scene", lambda one: setattr(one, "background_set", shot_one)),
+    ("a rigid-body world", lambda one: setattr(one, "rigidbody_world", A())),
+    ("a driver reading an object", lambda one: setattr(one, "animation_data", anim(drivers=[drv("cycles.samples", single(rig, '["quality"]'))]))),
+    ("a driver reading through a pointer", lambda one: (one.paths.update({{"camera": rig}}), setattr(one, "animation_data", anim(drivers=[drv("cycles.samples", single(one, "camera.location"))])))),
+    ("a Transform Channel", lambda one: setattr(one, "animation_data", anim(drivers=[drv("view_settings.exposure", transform(rig))]))),
+    ("a Python driver", lambda one: setattr(one, "animation_data", anim(drivers=[drv("view_settings.exposure", kind="SCRIPTED", simple=False)]))),
+    ("a Python driver on an object of another scene", lambda one: setattr(bpy.data, "objects", [a_set("Elsewhere", animation_data=anim(drivers=[drv("location", kind="SCRIPTED", simple=False)]))])),
+    ("a driver reading a setting a script defines", lambda one: setattr(one, "animation_data", anim(drivers=[drv("view_settings.exposure", single(one, "cycles.by_a_script"))]))),
+):
+    SMOOZY_A_PYTHON_DRIVER_IN_THE_FILE[0] = None
+    one = a_scene_of_objects(why)
+    change(one)
+    assert smoozy_the_objects_left_out_of_the_moves(one) == [], why
+    assert not any(other.hide_viewport for other in one.objects if other.name != "Hidden"), why
+    bpy.app.handlers.frame_change_post.clear()
+    bpy.app.handlers.depsgraph_update_post.clear()
+    bpy.data.objects = []
+    SMOOZY_A_PYTHON_DRIVER_IN_THE_FILE[0] = None
+print("all held")
+"#
+            );
+            let out = python_runs(&format!("{rule}\n{stand_in}"), &[]).unwrap();
+            assert!(
+                out.status.success() && String::from_utf8_lossy(&out.stdout).contains("all held"),
+                "{major}.{minor}: {}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+    }
+
+    /// **`Render Settings` Q5's build detail of 2026-11-13: the walk's step
+    /// line is read back**, the last whole line winning, a line cut short at
+    /// the end passed over, and nothing where no line stands.
+    #[test]
+    fn the_walks_last_step_is_read_off_the_stream() {
+        use crate::reading::the_walks_last_step_in;
+        let mark = std::str::from_utf8(THE_WALKS_MARK).unwrap();
+        assert!(!THE_WALKS_MARK.windows(THE_OPENING_SENTINEL.len()).any(|w| w == THE_OPENING_SENTINEL));
+        assert!(!THE_WALKS_MARK.windows(THE_STARTED_MARK.len()).any(|w| w == THE_STARTED_MARK));
+        assert_eq!(the_walks_last_step_in(b"Blender 5.3\nnothing moved\n"), None);
+        let stream = format!("Read blend\n{mark}1 250\nFra:1\n{mark}120 250\n{mark}12");
+        assert_eq!(the_walks_last_step_in(stream.as_bytes()), Some((120, 250)));
+        let ended = format!("{mark}1 24\n{mark}24 24\n<<<SMOOZY-READING>>>{{}}");
+        assert_eq!(the_walks_last_step_in(ended.as_bytes()), Some((24, 24)));
+        // The mark rides in the handed-in document, from this crate's constant.
+        let script = the_script(5, 3);
+        assert!(script.contains(&format!("\"the_walks_mark\": \"{mark}\"")) || script.contains(&format!("\"the_walks_mark\":\"{mark}\"")));
+        assert!(script.contains("SMOOZY[\"the_walks_mark\"]"));
     }
 
     /// **Every name the script is composed from is cited, and to one of the
@@ -5101,7 +6613,7 @@ print("all held")
         ));
         assert!(text.contains("if the_other_halves is not None:\n    document[\"the_other_scenes\"] = the_other_halves"));
         // **Each other scene's per-frame set is recorded inside the one walk.**
-        assert_eq!(text.matches("scene.frame_set(frame)").count(), 1);
+        assert_eq!(text.matches("scene.frame_set(stand_at)").count(), 1);
     }
 
     /// **R4b: another scene's half, made into the reading naming it** — its own

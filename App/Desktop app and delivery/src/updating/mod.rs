@@ -75,6 +75,7 @@
 //! Every other document's marker is written with that document at the site.
 
 pub mod checking;
+pub mod the_box;
 pub mod fetching;
 pub mod manifest;
 pub mod the_hold;

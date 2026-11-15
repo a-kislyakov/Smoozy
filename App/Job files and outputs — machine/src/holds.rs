@@ -602,6 +602,7 @@ mod tests {
         let held = vec![ADestinationToMap {
             destination: &destinations[0],
             the_longest_name_it_will_write: Some(b"x".repeat(300)),
+            it_writes_nothing_for_the_jobs_frames: false,
         }];
         let map = compose_the_map(
             &held,

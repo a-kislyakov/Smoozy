@@ -130,8 +130,9 @@ use smoozy_file_browser::wiring::TheReadingChannel;
 use smoozy_server_protocol::subsystem::client::Subsystem;
 use smoozy_server_protocol::subsystem::SubsystemFailure;
 use smoozy_server_protocol::transfers::moving::{
+    carry_on_under_a_publication_gate_asking_the_machine,
     carry_out_a_fresh_file_under_a_publication_gate, carry_out_under_a_publication_gate,
-    KeepsTheRecord, LocalFailure, TheUsersOwnComputer, Transfer,
+    KeepsTheRecord, LocalFailure, TheMachineDigestsAStagedPart, TheUsersOwnComputer, Transfer,
 };
 use smoozy_server_protocol::transfers::publication::Intent;
 use smoozy_server_protocol::transfers::{Direction, Ending, TransferRecord};
@@ -223,12 +224,13 @@ pub trait TheRecordAnUploadWrites: Send + Sync {
 pub trait WhenAFileIsPublished: Send + Sync {
     fn a_file_was_published(&self, landing_path: &[u8], outcome: &UnitOutcome);
 
-    /// **`Dependency Upload & Remap` G17b: a file begins going up to this machine.**
-    /// A reading of the check taken while it does is not kept.
-    fn a_file_begins_going_up(&self) {}
+    /// **`Dependency Upload & Remap` G17b: a file begins going up to this machine**,
+    /// to this landing place. A reading of the check that rests on that place,
+    /// taken while it does, is not kept.
+    fn a_file_begins_going_up(&self, _landing: &[u8]) {}
 
     /// **It has ended, however it ended.**
-    fn a_file_stopped_going_up(&self) {}
+    fn a_file_stopped_going_up(&self, _landing: &[u8]) {}
 }
 
 /// **What the user asked to upload, and where.**
@@ -290,6 +292,12 @@ pub struct AnUploadReadyToRun {
     /// Empty where the user pushed past no live-job warning. Step 10c's Files'
     /// owed acts piece 2.
     pub the_jobs_told: Vec<smoozy_file_browser::warnings::AJobNamed>,
+    /// **Where Smoozy's own program sits on the server** — the package area
+    /// of an installation the server row confirmed — so a file carried on
+    /// across a repair has the part the server holds checked there (`Server
+    /// protocol and transfers` S12b). **`None` reads the part back over the
+    /// line, as before.** Uploads carry on, 2026-11-14.
+    pub the_servers_program: Option<String>,
 }
 
 impl AnUploadReadyToRun {
@@ -380,10 +388,153 @@ pub fn what_the_server_said_refusing(request: &Identity, landing: &[u8]) -> Opti
         .cloned()
 }
 
+/// **The files whose landing folder could not be made, held for the run** —
+/// keyed as [`the_refusals_this_run`] is, and for the same reason: the record
+/// holds only *failed*. `Design/Transfers § A file that failed`, the paragraph
+/// of 2026-11-11 (the four questions, batch 2, fix 1).
+fn the_folders_not_made_this_run() -> &'static Mutex<std::collections::HashSet<(String, Vec<u8>)>> {
+    static HELD: std::sync::OnceLock<Mutex<std::collections::HashSet<(String, Vec<u8>)>>> =
+        std::sync::OnceLock::new();
+    HELD.get_or_init(Default::default)
+}
+
+/// **One file of one request failed because its landing folder was not made**
+/// (`File Browser` N3's failed folder).
+pub fn a_folder_was_not_made_for(request: &Identity, landing: &[u8]) {
+    if let Ok(mut held) = the_folders_not_made_this_run().lock() {
+        held.insert((request.as_text(), landing.to_vec()));
+    }
+}
+
+/// **Why one upload file failed, as far as Smoozy knows** — `Design/Transfers
+/// § A file that failed`, the paragraph of 2026-11-11. **The name reasons are
+/// `File Browser` N2, `File Browser` N4 and `File Browser` X12's pre-flight checks read again from the
+/// landing path**, so a later sitting draws them as this one does; the folder
+/// is this run's alone. A refusal and a change have their own rows and are
+/// read before this.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhyTheUploadFailed {
+    /// `File Browser`'s upload-refusal rule: the server refused the write and
+    /// a reading taken at that failure showed no space left where it lands.
+    ServerDiskFull,
+    /// `File Browser` N2: the landing path is not text.
+    TheNameIsNotValid,
+    /// `File Browser` N4: one name is over the bound.
+    TheNameIsTooLong,
+    /// `File Browser` N4: the whole path is over the bound.
+    ThePathIsTooLong,
+    /// `File Browser` X12: the name is the staging folder's own.
+    TheNameIsReserved,
+    /// `File Browser` N3: its folder could not be made, in this run.
+    ItsFolderWasNotMade,
+    /// **The file could not be read on this computer at the failure** — a
+    /// drive unplugged under it, say (the Rough what-if answers, share 2, 188).
+    ItCouldNotBeReadHere,
+    /// Nothing Smoozy holds says why.
+    NoReasonIsKnown,
+}
+
+impl WhyTheUploadFailed {
+    /// **Whether the same file sent again could go**: a name the server
+    /// cannot take fails the same way every time.
+    pub fn a_retry_could_help(self) -> bool {
+        matches!(
+            self,
+            WhyTheUploadFailed::ItsFolderWasNotMade
+                | WhyTheUploadFailed::NoReasonIsKnown
+                | WhyTheUploadFailed::ServerDiskFull
+                | WhyTheUploadFailed::ItCouldNotBeReadHere
+        )
+    }
+}
+
+/// **The files of this run whose upload failed where their source could not
+/// be read on this computer**, by request and landing path — held for this
+/// run only, as the full-disk reading is (the Rough what-if answers, share 2,
+/// 188).
+fn the_unreadable_sources() -> &'static Mutex<std::collections::HashSet<(String, Vec<u8>)>> {
+    static UNREAD: std::sync::OnceLock<Mutex<std::collections::HashSet<(String, Vec<u8>)>>> =
+        std::sync::OnceLock::new();
+    UNREAD.get_or_init(Default::default)
+}
+
+/// **One read of the source at the failure**: a file this computer cannot open
+/// and read from is the reason, whatever the transfer's ending says.
+fn the_source_could_not_be_read_here(source: &str) -> bool {
+    use std::io::Read;
+    std::fs::File::open(source).and_then(|mut file| file.read(&mut [0u8; 1])).is_err()
+}
+
+fn the_source_was_unreadable_for(request: &str, landing: &[u8], unread: bool) {
+    if let Ok(mut held) = the_unreadable_sources().lock() {
+        if unread {
+            held.insert((request.to_string(), landing.to_vec()));
+        } else {
+            held.remove(&(request.to_string(), landing.to_vec()));
+        }
+    }
+}
+
+/// **The files of this run whose upload failed on a full server disk**, by
+/// request and landing path — held for this run only, as a refusal's words
+/// are ([`the_refusals_this_run`]); a later sitting draws the file as
+/// *Upload failed.* with no reason.
+fn the_full_upload_destinations() -> &'static Mutex<std::collections::HashSet<(String, Vec<u8>)>> {
+    static FULL: std::sync::OnceLock<Mutex<std::collections::HashSet<(String, Vec<u8>)>>> =
+        std::sync::OnceLock::new();
+    FULL.get_or_init(Default::default)
+}
+
+/// One file's failure-time reading, kept or let go: a file that later goes up
+/// clears it.
+fn the_server_disk_was_full_for(request: &str, landing: &[u8], full: bool) {
+    if let Ok(mut held) = the_full_upload_destinations().lock() {
+        if full {
+            held.insert((request.to_string(), landing.to_vec()));
+        } else {
+            held.remove(&(request.to_string(), landing.to_vec()));
+        }
+    }
+}
+
+/// The reason for one failed file of one request.
+pub fn why_this_upload_failed(request: &Identity, landing: &[u8]) -> WhyTheUploadFailed {
+    if the_full_upload_destinations().lock().is_ok_and(|held| held.contains(&(request.as_text(), landing.to_vec()))) {
+        return WhyTheUploadFailed::ServerDiskFull;
+    }
+    if the_unreadable_sources().lock().is_ok_and(|held| held.contains(&(request.as_text(), landing.to_vec()))) {
+        return WhyTheUploadFailed::ItCouldNotBeReadHere;
+    }
+    if std::str::from_utf8(landing).is_err() {
+        return WhyTheUploadFailed::TheNameIsNotValid;
+    }
+    match check_the_length(landing) {
+        TheLengthBound::AComponentIsTooLong { .. } => return WhyTheUploadFailed::TheNameIsTooLong,
+        TheLengthBound::ThePathIsTooLong { .. } => return WhyTheUploadFailed::ThePathIsTooLong,
+        TheLengthBound::Inside => {}
+    }
+    if would_land_on_the_reserved_folder(landing) {
+        return WhyTheUploadFailed::TheNameIsReserved;
+    }
+    let not_made = the_folders_not_made_this_run()
+        .lock()
+        .map(|held| held.contains(&(request.as_text(), landing.to_vec())))
+        .unwrap_or(false);
+    if not_made {
+        WhyTheUploadFailed::ItsFolderWasNotMade
+    } else {
+        WhyTheUploadFailed::NoReasonIsKnown
+    }
+}
+
 /// **The upload requests this run is still holding before their answer** —
 /// written down (`File Browser` U1), and their walk under way or their
 /// question open (`File Browser` U4). Keyed by the request's record identity. Added
-/// 2026-10-02, step 10c's check-before-0.1.7 fix piece 1.
+/// 2026-10-02, step 10c's check-before-0.1.7 fix piece 1. **An answer that goes
+/// keeps the request here until the run's register holds it**
+/// ([`the_hold_passes_to_the_run`]), so a Stop always finds it in one or the
+/// other; its dispositions are written by then, so its row does not read from
+/// here.
 ///
 /// **Run-held, because what it says is about this run's activity** (`File
 /// Browser` U7) and not about the record: a request nothing has decided reads
@@ -441,6 +592,146 @@ impl Drop for HeldBeforeItsAnswer {
 /// Let go of a request held before its answer.
 fn its_answer_is_applied(request: &Identity) {
     drop(HeldBeforeItsAnswer(Some(request.as_text())));
+}
+
+/// **The uploads the user stopped while this run held them before their
+/// answer** — `File Browser` U6 before the request is under way. Run-held, and
+/// let go of when the stop is written. Sol's fresh look on the twenty-eighth
+/// notes, piece 12: until then a Stop pressed during the walk, or while the
+/// question was open, reached nothing, and the upload went on once the walk
+/// ended or the question was answered.
+fn the_uploads_stopped_before_they_went() -> &'static Mutex<std::collections::HashSet<String>> {
+    static STOPPED: std::sync::OnceLock<Mutex<std::collections::HashSet<String>>> = std::sync::OnceLock::new();
+    STOPPED.get_or_init(Default::default)
+}
+
+/// **The user's Stop, on an upload this run holds before its answer** — its
+/// walk under way, its question open, or its answer applied and its run not yet
+/// begun. The walk ends at the press and the stop is written as the request's
+/// answer, whatever answer comes after. Answers whether the request was held.
+///
+/// **The look at the hold and the mark of the press are one step**, under the
+/// hold's own lock (Sol's one look at the fixes after 0.4.0's second try). They
+/// were two: where the comparison ended and the upload went under way between
+/// them, the press was marked where nothing read it again, and the files went
+/// on. The hold is let go under the same lock as the run takes the request
+/// ([`the_hold_passes_to_the_run`]), so a press marked here is read there, and
+/// a press that finds no hold finds the request in the run's register.
+pub fn an_upload_held_before_its_answer_is_stopped(request: &str) -> bool {
+    let held = the_requests_held_before_their_answer()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !held.contains(request) {
+        return false;
+    }
+    a_test_may_hold_this_moment(BETWEEN_THE_LOOK_AND_THE_MARK);
+    the_uploads_stopped_before_they_went()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(request.to_string());
+    true
+}
+
+/// **The hold passes to the run's register**, once the run holds the request
+/// as under way: the hold is let go and a Stop pressed while it stood is
+/// taken, in one step under the hold's lock (`File Browser` U6). Until then
+/// the hold was let go as the answer was applied and the press was read after
+/// the run began, so a Stop pressed between the two, or between a Stop's look
+/// and its mark, reached nothing (Sol's one look at the fixes after 0.4.0's
+/// second try).
+pub(crate) fn the_hold_passes_to_the_run(the_run: &TheRunsTransfers, request: &Identity) {
+    let key = request.as_text();
+    let stopped = {
+        let mut held = the_requests_held_before_their_answer()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        held.remove(&key);
+        the_uploads_stopped_before_they_went()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&key)
+    };
+    if stopped {
+        the_run.the_user_stops(&key, None);
+    }
+}
+
+/// **A request whose answer let it go but whose run will not begin** is held no
+/// longer, and a Stop marked on it is dropped.
+pub(crate) fn it_will_not_go_under_way(request: &Identity) {
+    its_answer_is_applied(request);
+    the_uploads_stopped_before_they_went()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .remove(&request.as_text());
+}
+
+/// **The moment inside a Stop between its look at the hold and its mark** —
+/// one a test may hold ([`a_test_may_hold_this_moment`]).
+pub(crate) const BETWEEN_THE_LOOK_AND_THE_MARK: &str = "between the look at the hold and the mark";
+
+/// **The moment inside a Stop between its look at the run's register and its
+/// look at the hold** — one a test may hold.
+pub(crate) const BETWEEN_THE_RUNS_LOOK_AND_THE_HOLDS: &str = "between the run's look and the hold's";
+
+#[cfg(test)]
+thread_local! {
+    /// The one moment a test on this thread holds, and what it does there.
+    static A_TEST_HOLDS: std::cell::RefCell<Option<(&'static str, Box<dyn FnMut()>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// **A moment a test may hold**, so it can force what another thread does
+/// there. Only this crate's own tests ever hold one; outside them this does
+/// nothing.
+#[inline]
+pub(crate) fn a_test_may_hold_this_moment(moment: &'static str) {
+    #[cfg(test)]
+    A_TEST_HOLDS.with(|held| {
+        if let Some((at, hold)) = held.borrow_mut().as_mut() {
+            if *at == moment {
+                hold();
+            }
+        }
+    });
+    #[cfg(not(test))]
+    let _ = moment;
+}
+
+/// **Whether the user stopped this upload while this run held it before its
+/// answer**, and the stop is not written yet.
+pub fn it_was_stopped_before_it_went(request: &str) -> bool {
+    the_uploads_stopped_before_they_went()
+        .lock()
+        .map(|stopped| stopped.contains(request))
+        .unwrap_or(false)
+}
+
+/// **The stop written as the request's `File Browser` U4 answer, at once** — for
+/// an upload whose question is open when the user presses Stop in Transfers, so
+/// its row ends there rather than when the question is answered. Nothing is
+/// arranged; the row then reads what a request stopped at its question reads.
+pub fn the_stop_is_written_before_it_went(
+    request: &mut UploadRequest,
+    with_the_record: &dyn Fn(&mut dyn FnMut(&rusqlite::Connection)) -> bool,
+) -> bool {
+    let mut applied = None;
+    let wrote = with_the_record(&mut |connection| {
+        let mut keeper = UploadRequests::over(connection);
+        applied = Some(apply_the_collision_answer(
+            request,
+            &[],
+            CollisionAnswer::Stop,
+            &mut std::iter::empty(),
+            &mut keeper,
+            SystemTime::now(),
+        ));
+    });
+    its_answer_is_applied(&request.record);
+    if let Ok(mut stopped) = the_uploads_stopped_before_they_went().lock() {
+        stopped.remove(&request.record.as_text());
+    }
+    wrote && matches!(applied, Some(Ok(request::WhatTheAnswerDid::TheRequestStops)))
 }
 
 // ---------------------------------------------------------------------------
@@ -576,9 +867,9 @@ pub async fn an_upload_is_prepared<C: AHeldConnection>(
     if !the_request_is_written_down(record, &request) {
         return Err(WhyTheUploadDidNotStart::TheRecordWouldNotTakeIt);
     }
-    // **Held from here until its answer**, and let go at once wherever it
-    // goes no further — so its row never reads as under way for a walk that
-    // is not running.
+    // **Held from here until its answer** — and, where it goes, until its
+    // run holds it — and let go at once wherever it goes no further, so its
+    // row never reads as under way for a walk that is not running.
     let held = HeldBeforeItsAnswer::from(&request.record);
 
     // **`File Browser` X1: both sides are walked before a byte moves**, and the
@@ -586,18 +877,54 @@ pub async fn an_upload_is_prepared<C: AHeldConnection>(
     // connection's own reading session.
     let destination = asked.destination.clone();
     let walking = arriving.clone();
-    let walked = sessions
-        .a_reading(true, move |subsystem| {
-            Box::pin(async move {
-                let mut channel = TheReadingChannel::on(subsystem, ONE_READING);
-                Ok(
-                    already_exists::walk(&destination, &walking, &mut channel, SystemTime::now())
-                        .await,
-                )
-            })
+    let given_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let the_walk_is_given_up = Arc::clone(&given_up);
+    let stopped_as = request.record.as_text();
+    let walk = sessions.a_reading(true, move |subsystem| {
+        Box::pin(async move {
+            let mut channel = TheWalkEndsWhenGivenUp {
+                reading: TheReadingChannel::on(subsystem, ONE_READING),
+                given_up: the_walk_is_given_up,
+                stopped_as,
+            };
+            Ok(
+                already_exists::walk(&destination, &walking, &mut channel, SystemTime::now())
+                    .await,
+            )
         })
-        .await
-        .map_err(WhyTheUploadDidNotStart::TheServerLentNothing)?;
+    });
+    // **`File Browser` U6: the user's Stop ends the walk at the press** (Sol's
+    // fresh look on the twenty-eighth notes, piece 12). Nothing collides in a
+    // walk not taken, so no question is asked, and the answer applied next is
+    // the stop ([`the_answer_is_applied`]). The readings already asked of the
+    // machine finish there and change nothing.
+    //
+    // **A Stop pressed while the walk ran is the answer even where the walk
+    // ended between two of the wait's looks** (hosted run 43746222478: on a
+    // fast machine 2,000 folders were walked inside one look, and the walk
+    // stood as though Stop had not been pressed). The walk itself reads no
+    // further folder once Stop is pressed ([`TheWalkEndsWhenGivenUp`]).
+    let stopped_here = request.record.as_text();
+    let Some(walked) = crate::the_found_files_sent::unless_a_stop_is_asked(walk, &mut || {
+        it_was_stopped_before_it_went(&stopped_here)
+    })
+    .await
+    .filter(|_| !it_was_stopped_before_it_went(&stopped_here))
+    else {
+        // **And the walk on the machine reads no further folder** (Sol's second
+        // look on piece 12), so the reading session is not held by it.
+        given_up.store(true, std::sync::atomic::Ordering::SeqCst);
+        held.kept_for_its_answer();
+        return Ok(AnUploadReadyToRun {
+            request,
+            the_walk: TheAnswer { comparisons: Vec::new(), colliding: 0, arriving_files: 0, as_of: SystemTime::now(), readings_taken: 0 },
+            arriving,
+            the_reason_line: None,
+            the_jobs_told: Vec::new(),
+            the_servers_program: None,
+        });
+    };
+    let walked = walked.map_err(WhyTheUploadDidNotStart::TheServerLentNothing)?;
     let the_walk = match walked {
         Ok(Ok(answer)) => answer,
         Ok(Err(TheQuestionStopped::AFolderCouldNotBeRead { folder, met })) => {
@@ -644,7 +971,37 @@ pub async fn an_upload_is_prepared<C: AHeldConnection>(
         arriving,
         the_reason_line,
         the_jobs_told: Vec::new(),
+        the_servers_program: None,
     })
+}
+
+/// **`File Browser` X1's walk, ended at the user's Stop** — each further
+/// receiving folder is answered as not read, so the walk stops at once (X2) and
+/// its answer, which nothing waits for, is dropped. Sol's second look on the
+/// twenty-eighth notes, piece 12: the walk given up went on reading every
+/// receiving folder, and the readings after it waited. **It is given up at the
+/// press itself**, the request's Stop read before each folder, and not only
+/// when the wait next looks.
+struct TheWalkEndsWhenGivenUp<R> {
+    reading: R,
+    given_up: Arc<std::sync::atomic::AtomicBool>,
+    /// The request, as its Stop is kept.
+    stopped_as: String,
+}
+
+impl<R: already_exists::ReadsAReceivingFolder + Send> already_exists::ReadsAReceivingFolder for TheWalkEndsWhenGivenUp<R> {
+    fn read(&mut self, path: &[u8]) -> impl std::future::Future<Output = already_exists::ReceivingFolder> + Send {
+        let given_up = self.given_up.load(std::sync::atomic::Ordering::SeqCst)
+            || it_was_stopped_before_it_went(&self.stopped_as);
+        let read = self.reading.read(path);
+        async move {
+            if given_up {
+                already_exists::ReceivingFolder::CouldNotBeRead(WhatSmoozyMet::Gone)
+            } else {
+                read.await
+            }
+        }
+    }
 }
 
 /// **What an upload's *Replace* says it did to a job's file** — `Queue &
@@ -751,11 +1108,36 @@ pub async fn the_answer_is_applied<C: AHeldConnection>(
     sessions: &ThisServersSessions<C>,
     record: &dyn TheRecordAnUploadWrites,
 ) -> WhatTheAnswerLeft {
-    // **Whatever the answer comes to, this run no longer holds the request
-    // before it** — its dispositions or its *Stop* are written below, or the
-    // record would not take them and nothing moves.
-    let _let_go = LetGoOnceAnswered(ready.request.record.clone());
-    let Some(answer) = answer.filter(|_| ready.something_collides()) else {
+    // **Whatever else the answer comes to, this run no longer holds the
+    // request before it** — its *Stop* is written below, or the record would
+    // not take the answer and nothing moves. **Where it goes, the hold stands
+    // until the run holds the request** ([`the_hold_passes_to_the_run`]), so a
+    // Stop pressed between the two finds it (Sol's one look at the fixes after
+    // 0.4.0's second try).
+    let mut let_go = LetGoOnceAnswered(Some(ready.request.record.clone()));
+    let left = the_answer_is_applied_while_held(ready, answer, sessions, record).await;
+    if left == WhatTheAnswerLeft::ItGoes {
+        let_go.0 = None;
+    }
+    left
+}
+
+/// [`the_answer_is_applied`], while the hold stands.
+async fn the_answer_is_applied_while_held<C: AHeldConnection>(
+    ready: &mut AnUploadReadyToRun,
+    answer: Option<CollisionAnswer>,
+    sessions: &ThisServersSessions<C>,
+    record: &dyn TheRecordAnUploadWrites,
+) -> WhatTheAnswerLeft {
+    // **A Stop pressed before the request was under way is its answer**,
+    // whatever answer comes now (`File Browser` U6; Sol's fresh look on the
+    // twenty-eighth notes, piece 12).
+    let stopped_before = the_uploads_stopped_before_they_went()
+        .lock()
+        .map(|mut stopped| stopped.remove(&ready.request.record.as_text()))
+        .unwrap_or(false);
+    let answer = if stopped_before { Some(CollisionAnswer::Stop) } else { answer.filter(|_| ready.something_collides()) };
+    let Some(answer) = answer else {
         for entry in &mut ready.request.entries {
             // **`File Browser` U13: a unit handed to `Dependency Upload &
             // Remap` keeps its disposition** (the 38's piece 7).
@@ -808,12 +1190,14 @@ pub async fn the_answer_is_applied<C: AHeldConnection>(
 }
 
 /// Lets go of a request held before its answer when the answer has been
-/// applied, however it went.
-struct LetGoOnceAnswered(Identity);
+/// applied, however it went — unless it goes, and the hold is kept for its run.
+struct LetGoOnceAnswered(Option<Identity>);
 
 impl Drop for LetGoOnceAnswered {
     fn drop(&mut self) {
-        its_answer_is_applied(&self.0);
+        if let Some(request) = self.0.take() {
+            its_answer_is_applied(&request);
+        }
     }
 }
 
@@ -947,10 +1331,23 @@ pub async fn the_upload_runs<C: AHeldConnection>(
         &ready.request.server_row,
         sessions,
     );
+    // **A Stop pressed while its answer was being applied** — *Keep both*'s
+    // names being read, say — **or since, is taken now it is under way**
+    // (`File Browser` U6; Sol's second look on the twenty-eighth notes, piece
+    // 12), as the hold passes to the run (Sol's one look at the fixes after
+    // 0.4.0's second try).
+    the_hold_passes_to_the_run(the_run, &ready.request.record);
 
     // **`File Browser` N3: the landing folders, made plainly**, and a folder the
     // walk saw is a merge and is not re-made.
-    let the_folders_that_failed = the_landing_folders_are_made(&ready, sessions).await;
+    //
+    // **`File Browser` U6: the user's Stop reaches this step too**, read before
+    // each folder (the twenty-eighth notes, piece 12: *Stop it* on a folder of
+    // 156,557 files left the row *In progress* while the server kept getting
+    // folders until Smoozy quit).
+    let request_id = ready.request.record.as_text();
+    let the_folders_that_failed =
+        the_landing_folders_are_made(&ready, sessions, &|| the_run.the_user_stopped_it(&request_id)).await;
 
     // **`File Browser` U8's second and third bullets: what an earlier request
     // left on this machine, which this one may take up** — read once as the
@@ -971,6 +1368,7 @@ pub async fn the_upload_runs<C: AHeldConnection>(
         request,
         the_walk,
         the_jobs_told,
+        the_servers_program,
         ..
     } = ready;
     let how_many = request.entries.len();
@@ -985,6 +1383,7 @@ pub async fn the_upload_runs<C: AHeldConnection>(
         next: TheNextFile::default(),
         the_staging_folders: TheStagingFoldersSeen::default(),
         came_to: Mutex::new(Vec::new()),
+        the_servers_program,
     };
     let workers = (0..THE_UPLOAD_DIRECTIONS_CEILING)
         .map(|_| {
@@ -1036,6 +1435,8 @@ struct TheUploadRunning {
     the_staging_folders: TheStagingFoldersSeen,
     /// What each entry came to, by its place in the enumeration.
     came_to: Mutex<Vec<(usize, WhatOneUnitCameTo)>>,
+    /// [`AnUploadReadyToRun::the_servers_program`], for every file of it.
+    the_servers_program: Option<String>,
 }
 
 /// **What one unit of an upload came to in this run.**
@@ -1323,6 +1724,12 @@ async fn one_unit_of_the_upload<C: AHeldConnection>(
         || check_the_length(&landing) != TheLengthBound::Inside
         || would_land_on_the_reserved_folder(&landing);
     if will_not_go {
+        // **The folder's reason is kept for the Transfers row**; the name
+        // reasons are read again from the path there (`Design/Transfers § A
+        // file that failed`, 2026-11-11).
+        if the_folder_failed {
+            a_folder_was_not_made_for(&running.request_record, &entry.landing_path);
+        }
         the_unit_ended(&running.request, at, UnitOutcome::Failed, record.as_ref());
         return WhatOneUnitCameTo::Failed(landing);
     }
@@ -1331,12 +1738,12 @@ async fn one_unit_of_the_upload<C: AHeldConnection>(
         let request = the_request(&running.request);
         the_intent_for(&request, &running.the_walk, at)
     };
-    publishing.a_file_begins_going_up();
+    publishing.a_file_begins_going_up(&landing);
     let went = one_file_goes_up(
         running, at, &landing, intent, sessions, the_run, record, taken_up,
     )
     .await;
-    publishing.a_file_stopped_going_up();
+    publishing.a_file_stopped_going_up(&landing);
     match went {
         Some(UnitOutcome::Done) => {
             publishing.a_file_was_published(&landing, &UnitOutcome::Done);
@@ -1444,9 +1851,7 @@ async fn one_file_goes_up<C: AHeldConnection>(
     // answer is left to the loop exactly as before. **Once per folder per
     // request** ([`TheStagingFoldersSeen`], step 10c's eleventh-pass fix
     // piece 4).
-    let mut the_staging_folder = the_folder_holding(landing);
-    the_staging_folder.push(b'/');
-    the_staging_folder.extend_from_slice(THE_RESERVED_STAGING_FOLDER.as_bytes());
+    let the_staging_folder = the_staging_folder_beside(landing);
     let made_by_this_request = match running
         .the_staging_folders
         .asked_for(&mut subsystem, &the_staging_folder)
@@ -1495,11 +1900,7 @@ async fn one_file_goes_up<C: AHeldConnection>(
         Some(mut part) => {
             part.written_by_run = running.this_run.clone();
             part.ending = None;
-            if !the_part_is_the_files_own_first_part(&part) {
-                part.start_over();
-                started_over =
-                    Some(smoozy_server_protocol::transfers::StartOverCause::TheStagedPrefixDidNotVerify);
-            }
+            started_over = a_part_taken_up_is_made_ready(&mut part, entry.size_as_enumerated);
             (part.transfer.clone(), part)
         }
         None => {
@@ -1592,6 +1993,7 @@ async fn one_file_goes_up<C: AHeldConnection>(
         this_run: running.this_run.clone(),
         landing,
         record,
+        the_servers_program: running.the_servers_program.as_deref(),
     };
     let happened = match TheSourceUnderWatch::arranged(&mut local, &mut identities, source.clone())
     {
@@ -1625,6 +2027,35 @@ async fn one_file_goes_up<C: AHeldConnection>(
             .await
         }
     };
+
+    // **`File Browser`'s upload-refusal rule: one free-space reading where the
+    // file lands, taken at the failure on the same subsystem.** No space left
+    // names a full disk; a reading that does not come back names nothing.
+    // It is not a fit estimate, and nothing is refused before sending.
+    let full = if happened == Ending::Failed {
+        let parent = landing.rsplitn(2, |byte| *byte == b'/').nth(1).unwrap_or(b"/").to_vec();
+        let path = String::from_utf8_lossy(&parent);
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            smoozy_server_protocol::free_space::read_it_at_the_deepest_ancestor_that_exists(&mut subsystem, &path),
+        )
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .is_some_and(|read| read.available_bytes == 0)
+    } else {
+        false
+    };
+    the_server_disk_was_full_for(&request_id, landing, full);
+    // **And one read of the file on this computer, at the same failure**: a
+    // drive unplugged under the upload is said as this computer's, not as an
+    // upload that failed for no reason (the Rough what-if answers, share 2,
+    // 188).
+    the_source_was_unreadable_for(
+        &request_id,
+        landing,
+        happened == Ending::Failed && !full && the_source_could_not_be_read_here(&source),
+    );
 
     // **R5's *at once*, and R17's guarantee with it**: the draw and the seat go
     // back at this file's ending, whatever happened.
@@ -1679,18 +2110,71 @@ async fn one_file_goes_up<C: AHeldConnection>(
 /// pass: `Server protocol and transfers` S12 step 2 would start it over anyway, and starting over is safe
 /// under every reading. The two transfer faults after the 38's pieces 7 and
 /// 9, fault 1.
-fn the_part_is_the_files_own_first_part(part: &TransferRecord) -> bool {
-    matches!(
-        smoozy_dependencies::landing::a_resume_of_this_modules_upload(
-            u64::MAX,
-            &part.checkpoints,
-            &smoozy_dependencies::bytes::StoredLocation::as_the_system_returned_it(
-                part.source_path.as_bytes(),
-            ),
-            &crate::checking_a_file::TheUsersOwnComputer,
-        ),
-        smoozy_dependencies::landing::ResumeVerdict::Proceeds { .. }
-    )
+/// **Whether a part an earlier request left may be carried on** — `File
+/// Browser` U8's paragraph of 2026-11-12 and `File Browser` K10 clause 2: the
+/// file's size now is the size the part was arranged at, and its first part
+/// is the file's own ([`why_the_part_cannot_be_carried_on`]). The Fable
+/// review's seventh sitting, fault 2.
+///
+/// **The case that clause was first read for** is a file changed somewhere in
+/// what was already sent. **The case it now also meets** is a file that only
+/// grew at its end: every checkpoint still digests, the last one covering
+/// the whole file as it was, so a part left in publication pending was
+/// published as it stood, shorter and older than the file, and read as
+/// uploaded. The dependency check's send asks this too
+/// (`crate::the_found_files_sent`).
+pub(crate) fn the_part_carries_on(part: &TransferRecord, the_size_now: u64) -> bool {
+    why_the_part_cannot_be_carried_on(part, the_size_now).is_none()
+}
+
+/// **A part taken up, made ready for the loop**: carried on as it stands, or
+/// started over from zero into a fresh staging path (`Server protocol and
+/// transfers` S12 step 5) **with the file's size as it now stands as its
+/// expected total** — `File Browser` U8's paragraph of 2026-11-12. Until then
+/// a start-over kept the size the part was arranged at, so a file saved at
+/// another size ended *the file changed during upload* on the request that
+/// asked for it as it is now. Answers the cause, for the row.
+fn a_part_taken_up_is_made_ready(
+    part: &mut TransferRecord,
+    the_size_now: u64,
+) -> Option<smoozy_server_protocol::transfers::StartOverCause> {
+    let cause = why_the_part_cannot_be_carried_on(part, the_size_now)?;
+    part.start_over();
+    part.total_size_expected = the_size_now;
+    Some(cause)
+}
+
+/// **`File Browser` K10 clause 2 — `Dependency Upload & Remap` A10's test —
+/// over a part taken up, read once, and why it fails where it does** (`File
+/// Browser` K10a, uploads carry on). `None` where the part is the file's own:
+/// the same size, and the file read up to the part's highest checkpoint
+/// digests to that checkpoint's digest. **Another size, or a file that reads
+/// and digests otherwise, is the file on this computer changed**; no
+/// checkpoint to go on from, or a file that could not be read that far, is a
+/// resume that could not be made. The one read is the outcome both answers
+/// come from (after Sol's look: a second, shorter read could not tell a file
+/// that changed from one that failed part-way).
+fn why_the_part_cannot_be_carried_on(
+    part: &TransferRecord,
+    the_size_now: u64,
+) -> Option<smoozy_server_protocol::transfers::StartOverCause> {
+    use smoozy_dependencies::readings::Readings as _;
+    use smoozy_server_protocol::transfers::StartOverCause;
+    if part.total_size_expected != the_size_now {
+        return Some(StartOverCause::TheFileChangedOnThisComputer);
+    }
+    let Some(checkpoint) = part.highest_checkpoint_at_or_below(u64::MAX) else {
+        return Some(StartOverCause::TheStagedPrefixDidNotVerify);
+    };
+    let read = crate::checking_a_file::TheUsersOwnComputer.the_sources_prefix_digest(
+        &smoozy_dependencies::bytes::StoredLocation::as_the_system_returned_it(part.source_path.as_bytes()),
+        checkpoint.offset,
+    );
+    match read {
+        Some(digest) if digest == checkpoint.digest_of_everything_up_to_it => None,
+        Some(_) => Some(StartOverCause::TheFileChangedOnThisComputer),
+        None => Some(StartOverCause::TheStagedPrefixDidNotVerify),
+    }
 }
 
 /// **The unit's outcome a transfer's ending makes**, and `None` where it makes
@@ -1728,6 +2212,10 @@ pub(crate) struct TheWayBack<'a, C: AHeldConnection> {
     /// wave piece 7.
     pub(crate) landing: &'a [u8],
     pub(crate) record: &'a Arc<dyn TheRecordAnUploadWrites>,
+    /// **Where Smoozy's own program sits on the server**, so a carry-on has
+    /// the part checked there (`Server protocol and transfers` S12b); `None`
+    /// reads it back as before.
+    pub(crate) the_servers_program: Option<&'a str>,
 }
 
 /// **`Server protocol and transfers` S26's deliberate stop, for an upload the
@@ -1932,6 +2420,9 @@ where
             gate,
             (the_run, request, landing),
             std::mem::take(&mut fresh),
+            // **`Server protocol and transfers` S12b: the server's own program
+            // checks the part it holds**, where the server row names one.
+            way_back.the_servers_program.map(|package_area| (sessions, package_area)),
         )
         .await
         else {
@@ -2036,11 +2527,120 @@ where
     }
 }
 
+/// **`Server protocol and transfers` S12b: the server's own program, asked for
+/// the digest of the part an upload staged** — §1.1 item 1's digest over a
+/// byte range, the request the dependency check's contents reading already
+/// sends, answered by a file-inspection worker at the server's disk speed.
+/// Uploads carry on, 2026-11-14.
+///
+/// **Bounded as that reading is**: a minute on each ask, half an hour over the
+/// whole while the server says it is still working. **Anything but a digest of
+/// exactly the length asked is no answer**, and the loop then reads the part
+/// back as before — which is what a server whose program predates the request
+/// gets, since it says it does not take it.
+pub(crate) struct TheServersOwnProgram<'s, C: AHeldConnection> {
+    pub(crate) sessions: &'s ThisServersSessions<C>,
+    pub(crate) package_area: &'s str,
+    pub(crate) the_stop: TheStopOfThisFile<'s>,
+}
+
+/// **The user's Stop of one file, seen while the server checks its part.**
+/// The check draws nothing, so the draw's own stop
+/// ([`crate::downloading::TheStopHoldsTheDraw`]) would land only once it was
+/// over. Seen here, the check's operation is stopped on the server, the loop
+/// is marked as at its pause, and the check waits there to be ended — the
+/// same pause a stopped draw makes, with nothing half-asked on the transfer's
+/// own channel.
+pub(crate) struct TheStopOfThisFile<'s> {
+    pub(crate) the_run: &'s TheRunsTransfers,
+    pub(crate) request: &'s str,
+    pub(crate) landing: &'s [u8],
+    pub(crate) parked: &'s std::sync::atomic::AtomicBool,
+}
+
+impl TheStopOfThisFile<'_> {
+    fn it_was_stopped(&self) -> bool {
+        let stopped = self.the_run.the_user_stopped_this(self.request, self.landing);
+        if stopped {
+            self.parked.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        stopped
+    }
+}
+
+impl<C: AHeldConnection> TheMachineDigestsAStagedPart for TheServersOwnProgram<'_, C> {
+    fn the_digest_of_the_first(
+        &mut self,
+        path: &[u8],
+        up_to: u64,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<smoozy_server_protocol::transfers::integrity::Digest>> + Send + '_>>
+    {
+        let asked = the_parts_digest_asked(path, up_to);
+        Box::pin(async move {
+            use smoozy_dependencies::acting::checking;
+            let asked = asked?;
+            let mut machine = crate::reading_the_file::ThisServersMachine {
+                sessions: self.sessions,
+                package_area: self.package_area,
+                server: "",
+            };
+            let ended = checking::asked_until_it_ends(
+                &mut machine,
+                &asked,
+                checking::THE_LONGEST_AN_ASK_WAITS,
+                Some(checking::THE_OUTER_LIMIT_ON_A_CONTENTS_READING_OR_A_FIXING),
+                checking::BETWEEN_TWO_ASKS_OF_ONE_READING,
+                &mut || self.the_stop.it_was_stopped(),
+            )
+            .await;
+            // **Stopped: wait at the pause** to be ended by
+            // [`crate::downloading::the_stop_lands_or`], rather than go on to a
+            // read-back the user has already stopped.
+            if matches!(ended, Err(checking::TheReadingDidNotRun::TheUserStoppedIt)) {
+                std::future::pending::<()>().await;
+            }
+            the_parts_digest_in(&ended.ok()?.fields, up_to)
+        })
+    }
+}
+
+/// **The one request**: the staged part by its path, as a protocol field and
+/// never a word of a command, from its first byte for `up_to` bytes.
+fn the_parts_digest_asked(path: &[u8], up_to: u64) -> Option<smoozy_server_protocol::framing::Request> {
+    use smoozy_server_protocol::framing::{Fields, Request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS};
+    use smoozy_server_protocol::requests as asked;
+    Some(
+        Request::speaking(
+            THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS,
+            Identity::issue(IdentityKind::Operation).ok()?,
+            asked::THE_DIGEST_OVER_A_BYTE_RANGE_REQUEST,
+        )
+        .carrying(
+            Fields::none()
+                .and(asked::THE_DIGESTED_FILE_FIELD, path)
+                .and(asked::THE_RANGE_STARTS_AT_FIELD, "0")
+                .and(asked::THE_RANGE_LENGTH_FIELD, up_to.to_string()),
+        ),
+    )
+}
+
+/// **The answer, read** — a digest of exactly the length asked, and nothing
+/// else counts.
+fn the_parts_digest_in(
+    fields: &smoozy_server_protocol::framing::Fields,
+    up_to: u64,
+) -> Option<smoozy_server_protocol::transfers::integrity::Digest> {
+    match smoozy_dependencies::acting::machine::what_the_digest_came_to(fields) {
+        smoozy_dependencies::readings::MachineContents::Read(read) if read.size == up_to => Some(read.digest),
+        _ => None,
+    }
+}
+
 /// **One attempt of the loop — or `None` where the user stopped the file and
 /// the loop came to its pause** (`Server protocol and transfers` C22, through
 /// `crate::downloading::TheStopHoldsTheDraw`). Step 10c's transfer wave piece 7.
 #[allow(clippy::too_many_arguments)]
-async fn carried<S, L, K>(
+async fn carried<S, L, K, C>(
     subsystem: &mut Subsystem<S>,
     local: &mut L,
     draw: &mut crate::scheduling::TheChannelsDraw,
@@ -2051,13 +2651,22 @@ async fn carried<S, L, K>(
     gate: &mut TheSourcesPublicationGate<'_, ThePlatformFileAdapter>,
     (the_run, request, landing): (&TheRunsTransfers, &str, &[u8]),
     fresh: bool,
+    the_servers_program: Option<(&ThisServersSessions<C>, &str)>,
 ) -> Option<Ending>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send,
     L: TheUsersOwnComputer,
     K: KeepsTheRecord,
+    C: AHeldConnection,
 {
     let parked = std::sync::atomic::AtomicBool::new(false);
+    // **The user's Stop reaches the server's check too** (after Sol's look):
+    // the check draws nothing, so the draw's own stop would wait for it.
+    let mut the_servers_own = the_servers_program.map(|(sessions, package_area)| TheServersOwnProgram {
+        sessions,
+        package_area,
+        the_stop: TheStopOfThisFile { the_run, request, landing, parked: &parked },
+    });
     let mut budget = TheStopHoldsTheDraw {
         draw,
         the_run,
@@ -2083,6 +2692,14 @@ where
             &parked,
         )
         .await
+    } else if let Some(machine) = the_servers_own.as_mut() {
+        // **`Server protocol and transfers` S12b**: a carry-on whose part the
+        // server's own program checks, reading none of it back.
+        the_stop_lands_or(
+            carry_on_under_a_publication_gate_asking_the_machine(transfer, arranged, gate, machine),
+            &parked,
+        )
+        .await
     } else {
         the_stop_lands_or(
             carry_out_under_a_publication_gate(transfer, arranged, gate),
@@ -2097,9 +2714,19 @@ where
 /// walk did not see is made plainly, parent first.** Answers the folders that
 /// could not be made, so the files beneath them fail by name and the rest of
 /// the request lands (`File Browser` N5).
+///
+/// **`File Browser` U6: the user's Stop ends the making at the next folder**,
+/// and the folders already made stay, as files already landed do. **So each
+/// folder is its own reading**, and the stop is read before each. The case this
+/// was first written for was a few folders made in one reading; the case it now
+/// also meets is a folder of 156,557 files, whose folders took minutes at a
+/// round trip of 0.2 s, with nothing able to stop them (the twenty-eighth notes,
+/// piece 12). Where Stop ends the making, the folders not made are not said to
+/// have failed: every file of the request is then never arranged, as `File Browser` U6 says.
 async fn the_landing_folders_are_made<C: AHeldConnection>(
     ready: &AnUploadReadyToRun,
     sessions: &ThisServersSessions<C>,
+    stopped: &(dyn Fn() -> bool + Sync),
 ) -> Vec<Vec<u8>> {
     let seen: Vec<Vec<u8>> = ready
         .the_walk
@@ -2117,41 +2744,60 @@ async fn the_landing_folders_are_made<C: AHeldConnection>(
             what_to_do_with(folder, &seen) == WhatToDoWithALandingFolder::MakeItPlainly
         })
         .collect();
-    if to_make.is_empty() {
-        return Vec::new();
-    }
-    let making = to_make.clone();
-    let made = sessions
-        .a_reading(true, move |subsystem| {
+    let mut failed: Vec<Vec<u8>> = Vec::new();
+    for folder in &to_make {
+        if stopped() {
+            break;
+        }
+        if failed.iter().any(|above| is_inside(folder, above)) {
+            failed.push(folder.clone());
+            continue;
+        }
+        let making = folder.clone();
+        // **A folder whose reading waits behind another's when Stop is pressed
+        // is given up** — the wait ends at the press, and the reading, when its
+        // turn comes, makes nothing (Sol's fresh look on piece 12).
+        let given_up = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let it_is_given_up = Arc::clone(&given_up);
+        let reading = sessions.a_reading(true, move |subsystem| {
             Box::pin(async move {
-                let mut failed: Vec<Vec<u8>> = Vec::new();
-                for folder in making {
-                    if failed.iter().any(|above| is_inside(&folder, above)) {
-                        failed.push(folder);
-                        continue;
-                    }
-                    let said = subsystem.make_one_folder(&folder).await;
-                    match said {
-                        Ok(()) => {}
-                        // **The race of `File Browser` X4 surfacing early**:
-                        // reported on that branch's files, nothing overwritten.
-                        Err(WhatTheMachineSaidAboutAFolder::ItIsAlreadyThere)
-                        | Err(WhatTheMachineSaidAboutAFolder::TheLoginMayNot)
-                        | Err(WhatTheMachineSaidAboutAFolder::ItRefused) => failed.push(folder),
-                        Err(WhatTheMachineSaidAboutAFolder::TheChannelIsGone) => return Err(
-                            smoozy_server_protocol::subsystem::SubsystemFailure::TheChannelIsGone,
-                        ),
-                    }
+                if it_is_given_up.load(std::sync::atomic::Ordering::SeqCst) {
+                    return Ok(None);
                 }
-                Ok(failed)
+                match subsystem.make_one_folder(&making).await {
+                    Err(WhatTheMachineSaidAboutAFolder::TheChannelIsGone) => Err(
+                        smoozy_server_protocol::subsystem::SubsystemFailure::TheChannelIsGone,
+                    ),
+                    said => Ok(Some(said)),
+                }
             })
-        })
-        .await;
-    match made {
-        Ok(Ok(failed)) => failed,
-        // **No folder could be made at all**, so every one of them failed.
-        _ => to_make,
+        });
+        let Some(said) = crate::the_found_files_sent::unless_a_stop_is_asked(reading, &mut || stopped()).await else {
+            given_up.store(true, std::sync::atomic::Ordering::SeqCst);
+            break;
+        };
+        let said = match said {
+            Ok(Ok(Some(said))) => Ok(Ok(said)),
+            Ok(Ok(None)) => break,
+            Ok(Err(failure)) => Ok(Err(failure)),
+            Err(not_lent) => Err(not_lent),
+        };
+        match said {
+            Ok(Ok(Ok(()))) => {}
+            // **The race of `File Browser` X4 surfacing early**: reported on
+            // that branch's files, nothing overwritten.
+            Ok(Ok(Err(
+                WhatTheMachineSaidAboutAFolder::ItIsAlreadyThere
+                | WhatTheMachineSaidAboutAFolder::TheLoginMayNot
+                | WhatTheMachineSaidAboutAFolder::ItRefused
+                | WhatTheMachineSaidAboutAFolder::TheChannelIsGone,
+            ))) => failed.push(folder.clone()),
+            // **No folder could be made at all**, so every one of them failed,
+            // as when they were made in one reading.
+            _ => return to_make,
+        }
     }
+    failed
 }
 
 // ---------------------------------------------------------------------------
@@ -2338,6 +2984,24 @@ fn the_comparison_for<'a>(
 }
 
 /// The folder a landing path lands in, composed on the bytes.
+/// **The staging folder beside a landing path** — `Server protocol and
+/// transfers` S1, in `File Browser` X12's reserved folder.
+///
+/// **A file landing directly in `/` is staged in `/.smoozy-staging`.** Until
+/// 2026-11-12 the folder and the name were joined with a slash whatever the
+/// folder was, so an upload into `/` recorded `//.smoozy-staging/…`, a
+/// leftover's *Remove* refused that path as stepping outside the staging
+/// folder, and the part stayed on the server with nothing said (the live pass
+/// of that date, new fault 5).
+pub(crate) fn the_staging_folder_beside(landing: &[u8]) -> Vec<u8> {
+    let mut staging = the_folder_holding(landing);
+    if staging != b"/" {
+        staging.push(b'/');
+    }
+    staging.extend_from_slice(THE_RESERVED_STAGING_FOLDER.as_bytes());
+    staging
+}
+
 pub(crate) fn the_folder_holding(landing: &[u8]) -> Vec<u8> {
     let parts = components(landing);
     let mut folder = Vec::new();
@@ -2379,6 +3043,46 @@ mod tests {
     use crate::scheduling::{BytesPerSecond, TheAdmissibleCount, TheCap};
 
     const KIB: u64 = 1024;
+
+    /// **`File Browser`'s upload-refusal rule, 189**: a failed file whose
+    /// failure-time reading showed no space says the server disk is full and
+    /// may be retried; a later success, or a reading that showed space, says
+    /// nothing of the disk. Batch 2 of the Bad what-if answers.
+    #[test]
+    fn bad_batch_2_a_failed_upload_on_a_full_disk_says_so() {
+        let request = Identity::issue(IdentityKind::Operation).unwrap();
+        let landing = b"/home/user/scenes/big.blend";
+        assert_ne!(why_this_upload_failed(&request, landing), WhyTheUploadFailed::ServerDiskFull);
+        the_server_disk_was_full_for(&request.as_text(), landing, true);
+        let why = why_this_upload_failed(&request, landing);
+        assert_eq!(why, WhyTheUploadFailed::ServerDiskFull);
+        assert!(why.a_retry_could_help());
+        the_server_disk_was_full_for(&request.as_text(), landing, false);
+        assert_eq!(why_this_upload_failed(&request, landing), WhyTheUploadFailed::NoReasonIsKnown);
+    }
+
+    /// **The Rough what-if answers, share 2 (188): a file that could not be
+    /// read on this computer at its failure says so**, and may be retried once
+    /// the drive is back. A source that reads is no reason.
+    #[test]
+    fn rough_share_2_a_source_unreadable_at_the_failure_is_said_as_this_computers() {
+        let folder = std::env::temp_dir().join(format!("smoozy-rough-2-unread-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let there = folder.join("scene.blend");
+        std::fs::write(&there, b"BLENDER").expect("a source");
+        assert!(!the_source_could_not_be_read_here(&there.display().to_string()));
+        assert!(the_source_could_not_be_read_here(&folder.join("gone.blend").display().to_string()));
+        let _ = std::fs::remove_dir_all(&folder);
+
+        let request = Identity::issue(IdentityKind::Operation).unwrap();
+        let landing = b"/home/user/scenes/from-a-stick.blend";
+        the_source_was_unreadable_for(&request.as_text(), landing, true);
+        let why = why_this_upload_failed(&request, landing);
+        assert_eq!(why, WhyTheUploadFailed::ItCouldNotBeReadHere);
+        assert!(why.a_retry_could_help());
+        the_source_was_unreadable_for(&request.as_text(), landing, false);
+        assert_eq!(why_this_upload_failed(&request, landing), WhyTheUploadFailed::NoReasonIsKnown);
+    }
 
     /// **R17, by name: an upload holding the single upward slot at a low cap
     /// starves the class behind it — and this file never holds it.**
@@ -2446,6 +3150,189 @@ mod tests {
     /// **R17 kept structurally: this file asks for the slot inside the call
     /// for one file, and gives it back there.** A draw anywhere else would be
     /// the request holding the slot, whatever its comments say.
+    /// **`File Browser` U8's paragraph of 2026-11-12: a part is carried on
+    /// only where the file's size now is the size the part was arranged at,
+    /// and a start-over takes the size as it now stands.** The Fable review's
+    /// seventh sitting, fault 2.
+    ///
+    /// **The fault as it stood.** The upload was cut inside its publication,
+    /// so the part's record says *publication pending* and its last
+    /// checkpoint covers the whole file as it was. The file on this computer
+    /// then grew at its end. Its first bytes still digest to that checkpoint,
+    /// so the part was carried on, the pending publication was retried with
+    /// no check of the whole file, and the older, shorter copy was published
+    /// and read as uploaded. **And where a changed file did start over, the
+    /// old size went with it**, so the upload of a file saved at another size
+    /// ended *the file changed during upload*.
+    /// **`File Browser` K10a: a part a later request takes up and cannot
+    /// carry on says why** — the file on this computer changed (another size,
+    /// or the same size with other bytes), or the part could not be carried on
+    /// for another reason (no checkpoint to go on from). Uploads carry on.
+    #[test]
+    fn uploads_carry_on_a_part_whose_file_changed_says_the_file_changed() {
+        use smoozy_server_protocol::transfers::integrity::Digest;
+        use smoozy_server_protocol::transfers::{Checkpoint, StartOverCause};
+
+        let folder = std::env::temp_dir().join(format!("smoozy-carry-on-cause-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let file = folder.join("scene.blend");
+        let as_sent = vec![7u8; 100_000];
+        std::fs::write(&file, &as_sent).expect("the file as it was sent");
+        let issue = |kind| Identity::issue(kind).expect("random bytes");
+        let mut part = TransferRecord::arranged(
+            issue(IdentityKind::Transfer),
+            Direction::Up,
+            issue(IdentityKind::LocalServer),
+            Some(issue(IdentityKind::Installation)),
+            file.to_string_lossy().into_owned(),
+            "/srv/job/scene.blend".to_string(),
+            "/srv/job/.smoozy-staging",
+            as_sent.len() as u64,
+            issue(IdentityKind::Run),
+        );
+        let mut none_to_go_on_from = part.clone();
+        part.checkpoints.push(Checkpoint {
+            offset: 65_536,
+            digest_of_everything_up_to_it: Digest::of(&as_sent[..65_536]),
+            running_state: None,
+        });
+        part.ending = Some(Ending::Interrupted);
+
+        // Saved at the same size with other bytes.
+        std::fs::write(&file, vec![8u8; 100_000]).expect("saved again");
+        let mut changed = part.clone();
+        assert_eq!(
+            a_part_taken_up_is_made_ready(&mut changed, 100_000),
+            Some(StartOverCause::TheFileChangedOnThisComputer)
+        );
+        // Saved at another size.
+        let mut grown = part.clone();
+        assert_eq!(
+            a_part_taken_up_is_made_ready(&mut grown, 120_000),
+            Some(StartOverCause::TheFileChangedOnThisComputer)
+        );
+        // Nothing to go on from: not a change anybody saw.
+        std::fs::write(&file, &as_sent).expect("as it was");
+        assert_eq!(
+            a_part_taken_up_is_made_ready(&mut none_to_go_on_from, 100_000),
+            Some(StartOverCause::TheStagedPrefixDidNotVerify)
+        );
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    /// **`Server protocol and transfers` S12b: the server's own program is
+    /// asked for the part from its first byte to the checkpoint**, the path as
+    /// a field, and only a digest of exactly that length is an answer.
+    #[test]
+    fn uploads_carry_on_the_servers_program_is_asked_for_the_part_from_its_start() {
+        use smoozy_server_protocol::framing::Fields;
+        use smoozy_server_protocol::requests as asked;
+        use smoozy_server_protocol::transfers::integrity::Digest;
+
+        let request = the_parts_digest_asked(b"/home/ubuntu/jobs/.smoozy-staging/t-1.part", 8_388_608)
+            .expect("composed");
+        assert_eq!(request.name, asked::THE_DIGEST_OVER_A_BYTE_RANGE_REQUEST);
+        assert_eq!(
+            request.fields.value(asked::THE_DIGESTED_FILE_FIELD),
+            Some(&b"/home/ubuntu/jobs/.smoozy-staging/t-1.part"[..])
+        );
+        assert_eq!(request.fields.text(asked::THE_RANGE_STARTS_AT_FIELD), Some("0"));
+        assert_eq!(request.fields.text(asked::THE_RANGE_LENGTH_FIELD), Some("8388608"));
+
+        let digest = Digest::of(b"the part");
+        let digested = |bytes: &str| {
+            Fields::none()
+                .and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_HAS_A_RECORDED_OUTCOME)
+                .and(asked::THE_DIGESTS_OUTCOME_FIELD, asked::IT_WAS_DIGESTED)
+                .and(asked::THE_DIGEST_FIELD, digest.as_text())
+                .and(asked::THE_BYTES_DIGESTED_FIELD, bytes.to_string())
+        };
+        assert_eq!(the_parts_digest_in(&digested("8388608"), 8_388_608), Some(digest.clone()));
+        assert_eq!(the_parts_digest_in(&digested("100"), 8_388_608), None, "another length is no answer");
+        let not = Fields::none()
+            .and(asked::WHAT_BECAME_OF_IT_FIELD, asked::IT_HAS_A_RECORDED_OUTCOME)
+            .and(asked::THE_DIGESTS_OUTCOME_FIELD, asked::IT_WAS_NOT_DIGESTED);
+        assert_eq!(the_parts_digest_in(&not, 8_388_608), None);
+
+        // **The user's Stop reaches the check** (after Sol's look): the ask
+        // hears it, and a stopped check waits at the pause the stop ends
+        // rather than going on to a read-back.
+        let working = include_str!("uploading.rs")
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("the working half");
+        assert!(working.contains("&mut || self.the_stop.it_was_stopped(),"));
+        assert!(working.contains("TheReadingDidNotRun::TheUserStoppedIt)) {\n                std::future::pending::<()>().await;"));
+    }
+
+    #[test]
+    fn a_part_is_carried_on_only_where_the_file_is_the_size_it_was_arranged_at() {
+        use smoozy_server_protocol::transfers::integrity::Digest;
+        use smoozy_server_protocol::transfers::publication::PublicationPreState;
+        use smoozy_server_protocol::transfers::{Checkpoint, StableFileIdentity};
+
+        let folder = std::env::temp_dir().join(format!("smoozy-sitting7-a-part-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        std::fs::create_dir_all(&folder).expect("a scratch folder");
+        let file = folder.join("cache.abc");
+        let as_sent = vec![7u8; 100_000];
+        std::fs::write(&file, &as_sent).expect("the file as it was sent");
+
+        let issue = |kind| Identity::issue(kind).expect("random bytes");
+        let mut part = TransferRecord::arranged(
+            issue(IdentityKind::Transfer),
+            Direction::Up,
+            issue(IdentityKind::LocalServer),
+            Some(issue(IdentityKind::Installation)),
+            file.to_string_lossy().into_owned(),
+            "/srv/job/cache.abc".to_string(),
+            "/srv/job/.smoozy-staging",
+            as_sent.len() as u64,
+            issue(IdentityKind::Run),
+        );
+        part.checkpoints.push(Checkpoint {
+            offset: as_sent.len() as u64,
+            digest_of_everything_up_to_it: Digest::of(&as_sent),
+            running_state: None,
+        });
+        part.publication_pending = Some(PublicationPreState {
+            intent: Intent::CreateIntended,
+            staging_path: part.staging_path.as_text(),
+            final_path: part.final_path.clone(),
+            staged_identity: StableFileIdentity::TheSupplierCouldNotAnswer,
+            staged_byte_length: as_sent.len() as u64,
+            staged_digest: Digest::of(&as_sent),
+        });
+        part.ending = Some(Ending::Interrupted);
+
+        // The file as it was: the part is carried on, and nothing moves.
+        let mut unchanged = part.clone();
+        assert_eq!(a_part_taken_up_is_made_ready(&mut unchanged, as_sent.len() as u64), None);
+        assert_eq!(unchanged, part);
+
+        // The file grew at its end.
+        let mut grown = as_sent.clone();
+        grown.extend_from_slice(&[9u8; 50_000]);
+        std::fs::write(&file, &grown).expect("the file as it is now");
+        let mut taken_up = part.clone();
+        let started_over = a_part_taken_up_is_made_ready(&mut taken_up, grown.len() as u64);
+        let _ = std::fs::remove_dir_all(&folder);
+        assert!(
+            started_over.is_some(),
+            "a part left in publication pending was carried on though the file has grown: the \
+             older, shorter copy is published and reads as uploaded"
+        );
+        assert_eq!(taken_up.publication_pending, None);
+        assert_eq!(taken_up.attempt, 2);
+        assert!(taken_up.checkpoints.is_empty());
+        assert_eq!(
+            taken_up.total_size_expected,
+            grown.len() as u64,
+            "the start-over kept the size the part was arranged at"
+        );
+    }
+
     #[test]
     fn the_slot_is_asked_for_inside_one_files_call_and_nowhere_else() {
         let working = include_str!("uploading.rs")
@@ -2542,6 +3429,87 @@ mod tests {
     fn the_folder_a_path_lands_in_is_composed_on_the_bytes() {
         assert_eq!(the_folder_holding(b"/home/a/b.blend"), b"/home/a".to_vec());
         assert_eq!(the_folder_holding(b"/b.blend"), b"/".to_vec());
+        // **Staged beside it, and never under a doubled slash** (the live
+        // pass of 2026-11-12, new fault 5).
+        assert_eq!(the_staging_folder_beside(b"/home/a/b.blend"), b"/home/a/.smoozy-staging".to_vec());
+        assert_eq!(the_staging_folder_beside(b"/b.blend"), b"/.smoozy-staging".to_vec());
         assert_eq!(the_last_name(b"/home/a/b.blend"), b"b.blend");
+    }
+
+    /// **A Stop pressed at any moment either stops the comparison or reaches
+    /// the running upload** — Sol's one look at the fixes after 0.4.0's second
+    /// try. A Stop looked at the hold and then, as a second step, marked the
+    /// press; where the comparison ended and the upload went under way between
+    /// the two, the press was marked where nothing read it again, and the Stop
+    /// did not look again at the run's register, so the files went on. **Each
+    /// of the Stop's two gaps is held here** while another thread does what the
+    /// upload does as it goes under way: registered in the run, then its hold
+    /// passed to the run ([`the_hold_passes_to_the_run`]).
+    #[test]
+    fn a_stop_pressed_as_the_comparison_ends_reaches_the_running_upload() {
+        use std::sync::mpsc;
+        use crate::surface::transfers::{a_stop_is_taken_wherever_the_request_stands, TheAct, WhatIsKnown};
+
+        struct NoRecord;
+        impl crate::downloading::TheRecordADownloadWrites for NoRecord {
+            fn with_the_record(&self, _act: &mut dyn FnMut(&rusqlite::Connection)) -> bool {
+                false
+            }
+        }
+
+        let the_run = TheRunsTransfers::for_this_run();
+        let server = Identity::issue(IdentityKind::LocalServer).expect("randomness");
+        for moment in [BETWEEN_THE_LOOK_AND_THE_MARK, BETWEEN_THE_RUNS_LOOK_AND_THE_HOLDS] {
+            let request = Identity::issue(IdentityKind::Operation).expect("randomness");
+            HeldBeforeItsAnswer::from(&request).kept_for_its_answer();
+            let (go, goes) = mpsc::channel::<()>();
+            let (said, hears) = mpsc::channel::<&'static str>();
+            let (done, its_done) = mpsc::channel::<()>();
+            let passed_while_held = std::rc::Rc::new(std::cell::Cell::new(false));
+            std::thread::scope(|scope| {
+                // **The upload, going under way** once the Stop is held.
+                let (the_run, request, server) = (&the_run, &request, &server);
+                let upload = scope.spawn(move || {
+                    goes.recv().expect("go");
+                    let _under_way = the_run.a_request_is_under_way(request, server);
+                    said.send("registered").expect("said");
+                    the_hold_passes_to_the_run(the_run, request);
+                    // Unheard where the Stop kept the hold until it marked
+                    // the press: the moment's listener is gone by then.
+                    let _ = said.send("passed");
+                    its_done.recv().expect("the Stop is done");
+                    the_run.the_user_stopped_it(&request.as_text())
+                });
+                let seen = std::rc::Rc::clone(&passed_while_held);
+                A_TEST_HOLDS.with(|held| {
+                    *held.borrow_mut() = Some((
+                        moment,
+                        Box::new(move || {
+                            go.send(()).expect("go");
+                            assert_eq!(hears.recv_timeout(Duration::from_secs(10)), Ok("registered"));
+                            seen.set(hears.recv_timeout(Duration::from_millis(500)) == Ok("passed"));
+                        }),
+                    ));
+                });
+                a_stop_is_taken_wherever_the_request_stands(
+                    the_run,
+                    &WhatIsKnown::default(),
+                    &NoRecord,
+                    TheAct::StopTheRequest,
+                    &request.as_text(),
+                    None,
+                );
+                A_TEST_HOLDS.with(|held| *held.borrow_mut() = None);
+                done.send(()).expect("done");
+                let stopped = upload.join().expect("the upload");
+                assert!(stopped, "a Stop held {moment:?} did not reach the running upload");
+            });
+            if moment == BETWEEN_THE_LOOK_AND_THE_MARK {
+                assert!(
+                    !passed_while_held.get(),
+                    "the upload went under way between the Stop's look at the hold and its mark"
+                );
+            }
+        }
     }
 }

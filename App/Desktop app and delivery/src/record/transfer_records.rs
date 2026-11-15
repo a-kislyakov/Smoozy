@@ -40,7 +40,7 @@
 //! here decides that**, and nothing here sweeps.
 
 use rusqlite::OptionalExtension;
-use smoozy_server_protocol::transfers::integrity::Digest;
+use smoozy_server_protocol::transfers::integrity::{Digest, RunningState};
 use smoozy_server_protocol::transfers::publication::{Intent, PublicationPreState};
 use smoozy_server_protocol::transfers::{
     Checkpoint, Direction, Ending, SourceReading, StableFileIdentity, StagingPath, StoppedReason,
@@ -336,13 +336,18 @@ fn what_changed_is_written(
     // one is not** — a start-over emptied the list, or it was cleared because
     // nothing was staged — the stored marks are the old attempt's, and they
     // are replaced whole by what the record now says.
-    let new: Vec<(i64, String)> = record
+    //
+    // **An upload's mark carries the running digest's state beside its digest**
+    // (`Server protocol and transfers` S12b); a mark is written once and never
+    // changes, so the comparison below stays on the offset and the digest.
+    let new: Vec<(i64, String, Option<String>)> = record
         .checkpoints
         .iter()
         .map(|checkpoint| {
             (
                 checkpoint.offset as i64,
                 checkpoint.digest_of_everything_up_to_it.as_text(),
+                checkpoint.running_state.as_ref().map(|state| state.as_text()),
             )
         })
         .collect();
@@ -358,7 +363,7 @@ fn what_changed_is_written(
             let offset: i64 = row.get(0)?;
             let digest: String = row.get(1)?;
             match new.get(how_many_are_stored) {
-                Some((at, said)) if *at == offset && *said == digest => {}
+                Some((at, said, _)) if *at == offset && *said == digest => {}
                 _ => the_stored_are_its_start = false,
             }
             how_many_are_stored += 1;
@@ -377,11 +382,11 @@ fn what_changed_is_written(
     };
     if from < new.len() {
         let mut insert = connection.prepare_cached(
-            "INSERT INTO transfer_checkpoint (transfer, offset_into_the_staged_file, digest)
-             VALUES (?1, ?2, ?3)",
+            "INSERT INTO transfer_checkpoint (transfer, offset_into_the_staged_file, digest, running_state)
+             VALUES (?1, ?2, ?3, ?4)",
         )?;
-        for (offset, digest) in &new[from..] {
-            insert.execute(rusqlite::params![transfer, offset, digest])?;
+        for (offset, digest, state) in &new[from..] {
+            insert.execute(rusqlite::params![transfer, offset, digest, state])?;
         }
     }
     Ok(())
@@ -585,6 +590,25 @@ pub fn the_downloads_the_start_settles(
     Ok(composed)
 }
 
+/// **Every transfer record with no ending, written *interrupted*** —
+/// `Download` M13's paragraph of 2026-11-12 and `File Browser` U8's, at
+/// application start, where no transfer of the run exists yet and every such
+/// record is one an earlier run died over. Both directions. Answers how many
+/// it wrote. The Fable review's seventh sitting, fault 3.
+///
+/// **Only the ending moves**: the checkpoints, the staging path and a
+/// publication still pending stay as the run left them, which is what a
+/// take-up reads.
+pub fn the_unended_are_written_interrupted(
+    connection: &rusqlite::Connection,
+) -> Result<usize, RecordFailure> {
+    Ok(connection.execute(
+        "UPDATE transfer_record SET ending = 'interrupted', stopped_reason = NULL
+         WHERE ending IS NULL",
+        [],
+    )?)
+}
+
 fn compose(
     connection: &rusqlite::Connection,
     values: &[rusqlite::types::Value],
@@ -618,21 +642,25 @@ fn compose(
 
     {
         let mut statement = connection.prepare_cached(
-            "SELECT offset_into_the_staged_file, digest FROM transfer_checkpoint
+            "SELECT offset_into_the_staged_file, digest, running_state FROM transfer_checkpoint
              WHERE transfer = ?1 ORDER BY offset_into_the_staged_file",
         )?;
         let rows = statement.query_map([&transfer], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?))
         })?;
         for row in rows {
-            let (offset, digest) = row?;
+            let (offset, digest, state) = row?;
             // **A digest that cannot be read back is a checkpoint that cannot
             // be verified against**, so it is left out rather than carried as a
             // value nothing can compare.
             if let Some(digest) = Digest::read_back(&digest) {
+                // **A state that does not read back is none**, and the part
+                // is then read back as `Server protocol and transfers` S12 step 3
+                // always did.
                 record.checkpoints.push(Checkpoint {
                     offset: offset as u64,
                     digest_of_everything_up_to_it: digest,
+                    running_state: state.as_deref().and_then(RunningState::read_back),
                 });
             }
         }
@@ -823,7 +851,30 @@ mod tests {
         Checkpoint {
             offset,
             digest_of_everything_up_to_it: Digest::of(format!("{of} up to {offset}").as_bytes()),
+            running_state: None,
         }
+    }
+
+    /// **`Server protocol and transfers` S12b: an upload's checkpoint keeps
+    /// the running digest's own state, and it comes back from the record**,
+    /// so a carry-on in a later request goes on from it without reading the
+    /// part back. A mark written before it reads back with none.
+    #[test]
+    fn an_uploads_checkpoint_keeps_its_running_state_through_the_record() {
+        use smoozy_server_protocol::transfers::integrity::Running;
+        let (record, folder) = a_record_on_disk("running-state");
+        let mut transfer = an_upload_arranged();
+        let mut running = Running::new();
+        running.take(&[7u8; 4_194_304]);
+        transfer.checkpoints.push(Checkpoint::at(4_194_304, &running, Direction::Up));
+        transfer.checkpoints.push(a_mark_at(8_388_608, "no state"));
+        put(record.connection(), &transfer).expect("written");
+        let back = read(record.connection(), &transfer.transfer).expect("read").expect("there");
+        assert_eq!(back.checkpoints, transfer.checkpoints);
+        assert_eq!(back.checkpoints[0].running_state, Some(running.the_state()));
+        assert_eq!(back.checkpoints[1].running_state, None);
+        drop(record);
+        let _ = std::fs::remove_dir_all(&folder);
     }
 
     /// **How many rows one save wrote**, read off the engine's own count of
@@ -1032,7 +1083,7 @@ mod presentation_tests {
         crate::record::migrations::bring_up_to_date(&c, std::path::Path::new("in-memory"), false).unwrap();
         let issue = |kind| Identity::issue(kind).unwrap();
         let mut send = ASend { request: issue(IdentityKind::Operation), server: issue(IdentityKind::LocalServer).as_text(), file: "/scene.blend".into(),
-            files: vec![AFileSent { landing: b"/texture".to_vec(), size: u64::MAX, transfer: None, ended: None }] };
+            files: vec![AFileSent { landing: b"/texture".to_vec(), size: u64::MAX, transfer: None, ended: None }], readings: Default::default() };
         assert!(crate::record::dependency_records::save_dependency_send(&c, &send).is_err());
         assert_eq!(c.query_row("SELECT count(*) FROM dependency_upload_request", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
         assert_eq!(c.query_row("SELECT count(*) FROM transfer_start_order", [], |r| r.get::<_, i64>(0)).unwrap(), 0);

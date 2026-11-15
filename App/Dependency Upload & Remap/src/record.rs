@@ -236,6 +236,16 @@ pub struct Resolution {
     pub how: HowResolved,
 }
 
+impl Resolution {
+    /// **Whether this is a search's arbitrary pick** (F4, F5): the searched
+    /// folder held several files of the name and this one was the first.
+    /// Such an answer is no proof that two references share a file (batch 3
+    /// of the Bad what-if answers, 455).
+    pub fn is_an_arbitrary_pick(&self) -> bool {
+        matches!(self.how, HowResolved::TheSearch { arbitrary: Some(_), .. })
+    }
+}
+
 /// **K4: what a located answer holds.** Each write of one is one durable write
 /// made at the moment the user acts or the search resolves, never batched to
 /// the end of a sitting (G16).
@@ -250,6 +260,11 @@ pub struct LocatedAnswer {
     /// A **rejected guess** — a proposal the user turned down, kept so it is
     /// not put forward again by itself and can be reinstated.
     pub rejected_guess: Option<StoredLocation>,
+    /// **K4's *included* mark, added 2026-11-09 (Creator-stated, the
+    /// twenty-eighth notes, note 14)**: the user put a row no scene uses back
+    /// among the files that upload (A9). Remembered beyond the sitting like
+    /// the set-aside mark, and carried unchanged by every reading.
+    pub included: bool,
     /// **K4's last limb, added 2026-09-29 (step 10c's dependency wave piece
     /// 7b): what the check read the reference as** — every kind and setting
     /// under which the latest reading of the holding file carried these bytes,
@@ -738,6 +753,7 @@ pub mod tests {
             }),
             set_aside: false,
             rejected_guess: None,
+            included: false,
             read_as: Vec::new(),
         };
         assert!(answer.was_produced_by(ShiftKey(4)));

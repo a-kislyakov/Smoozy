@@ -307,9 +307,26 @@ pub struct TheTelegramWorkersStateAsHeld {
     /// The next Telegram update identity the worker asks from (`Telegram` F3).
     #[serde(default)]
     pub update_position: Option<i64>,
+    /// **`Telegram` F3b — when that position was written**, in seconds since
+    /// 1970 on this machine's clock, written with it in one write. Nothing
+    /// where an earlier program wrote the position. Added 2026-11-12, the
+    /// Fable review, sitting 6.
+    #[serde(default)]
+    pub update_position_written_at: Option<u64>,
+    /// **`Telegram` F3b — the bot these facts belong to**, as `getMe`
+    /// answered its identity at a worker's start. Nothing where an earlier
+    /// program wrote the store. Added 2026-11-12, the Fable review, sitting 6.
+    #[serde(default)]
+    pub bot: Option<i64>,
     /// The board this machine last created (`Telegram` B3).
     #[serde(default)]
     pub board: Option<i64>,
+    /// **`Telegram` B3 as changed 2026-11-12 — the action instructions and
+    /// context-resolution entries of the last board this machine confirmed,
+    /// with the moment**, as the worker wrote them. Nothing where none is
+    /// held. Added by the Fable review's sitting 6 follow-up.
+    #[serde(default)]
+    pub entries_last_held: Option<String>,
     /// This machine's one machinery message (`Telegram` B10).
     #[serde(default)]
     pub machinery_message: Option<i64>,
@@ -339,6 +356,18 @@ pub struct TheTelegramWorkersStateAsHeld {
     /// queue reading carries it (`Queue & History` A1).
     #[serde(default)]
     pub phones_choice: Option<String>,
+    /// **`Telegram` C7a — each live job's message**, by the job's identity,
+    /// each as the worker wrote it and never read here. Added 2026-11-09, the
+    /// twenty-eighth notes, notes 18 and 19.
+    #[serde(default)]
+    pub jobs_messages: BTreeMap<String, String>,
+    /// **`Telegram` F6 — how Telegram is answering this machine's bot**, as
+    /// one of `smoozy_framing::requests::TheTelegramTrouble`'s words, and
+    /// nothing where all is well or nothing is known. Written by the worker
+    /// when it changes; emptied when the role is enabled. Added 2026-11-14,
+    /// when Telegram refuses.
+    #[serde(default)]
+    pub telegrams_trouble: Option<String>,
 }
 
 /// **The Telegram worker's state store, in the package area.**

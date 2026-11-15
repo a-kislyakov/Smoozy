@@ -39,7 +39,7 @@
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
-  padding: 3px 9px;
+  padding: 4px 10px;
 }
 .failure-words:hover { border-color: var(--ink3); color: var(--ink); }
 .failure-words:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -60,6 +60,16 @@
   cursor: pointer;
 }
 .failure-clear:hover { color: var(--ink); }
+
+/* **On a box, the cross sits at the top right**, first in the first line and
+ * floated there — `Design/Whole app § The failure shape`, added 2026-11-13
+ * (the Creator's note 4 on the test copy of 2026-11-12). The first line's
+ * hanging indent is the dot's, and the cross takes none of it. */
+.failure-said > .failure-clear-top {
+  float: right;
+  margin: 0 0 0 12px;
+  text-indent: 0;
+}
 .failure-clear:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Values beside the sentence — a path, a server's name, a host. **Each under
@@ -77,21 +87,6 @@
 .failure-values dt { color: var(--ink3); }
 .failure-values dd { margin: 0; color: var(--ink2); overflow-wrap: anywhere; }
 
-/* Two failures standing at once are two, with a gap between them and nothing
- * drawn across them — M7a: nothing composes a third statement about a shared
- * cause, and a heading over the pair would be one. */
-.failures {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: var(--gutter);
-}
-/* **An empty holder takes no room.** The holder is made the first time a
- * failure stands and is never taken away, so once the failure was cleared
- * its padding alone stood as a blank band 44 pixels tall across the window's
- * foot (the Creator's twenty-seventh notes, both screenshots). */
-.failures:empty { display: none; }
-
 /* The collapsed form on a list row: dot, sentence, cross, on one line. */
 .failure-row {
   display: flex;
@@ -100,3 +95,7 @@
 }
 .failure-row .failure-said { margin: 0; }
 .failure-row .failure-acts { margin-left: auto; }
+
+/* **The controls start under the sentence's words, not under its dot** — the
+   drawing's `.qfail .rdrow`, 15 pixels in (UI consistency, finding 40). */
+.qfail > .failure-acts { padding-left: 15px; }

@@ -592,10 +592,12 @@ pub mod tests {
             Checkpoint {
                 offset: 4,
                 digest_of_everything_up_to_it: Digest::of(b"abcd"),
+                running_state: None,
             },
             Checkpoint {
                 offset: 8,
                 digest_of_everything_up_to_it: Digest::of(b"abcdefgh"),
+                running_state: None,
             },
         ];
         let source = stored(b"/Users/a/big.bin");

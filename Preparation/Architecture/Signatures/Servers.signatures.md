@@ -93,3 +93,21 @@
 2026-11-02 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 11/Brief — the OptiX check and two Render Settings faults.md`, outside any round — H11b: the reading looks for the OptiX library where the driver answers, and a driver without it is told on every kind; nothing installed for it.
 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — H11b: the words follow what the row stops. No auditor has seen it.
 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), a builder on the runner's ruling after the first 5.3 live pass, outside any round — H11b follows `Rendering` L21. No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Recorded the restart wait clock and the ordered Disconnect and Connect from Queue.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: Build detail.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — Q18: a pass's queue reading composes the adoption offer again, so a job made during the connection is offered then. No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — Q19a's different branch. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Batch 1: address checks, single Add press and Telegram setup and retry corrections.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — corrected the batch 2 bounded-readings section: each reading bounded, Q19's pauses outside.
+2026-11-14 — Claude Opus 5.5 — added W21a (Rough share 1, 73).
+2026-11-14 — Claude Opus 5.5 — added S2a (Rough share 1, 6).
+2026-11-14 — Claude Opus 5.5 — added W40b (Rough share 2, 129).
+2026-11-14 — Claude Opus 5.5 — added W20a (Rough share 2, 130).
+2026-11-14 — Claude Opus 5.5 — PL2a: a pasted line through a jump host says so (the leftovers of the Rough what-if answers, 112).
+2026-11-14 — Claude Opus 5.5 — added Q19b (the re-take tells the read's owner once, for the automatic repair).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: the no-answer ending's quoted sentence reworded.

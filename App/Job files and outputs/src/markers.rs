@@ -707,13 +707,29 @@ mod tests {
     ///
     /// **245 from 2026-11-02**: **D10a**, the job's own scene gives the job's
     /// folder.
+    ///
+    /// **247 from 2026-11-10**: **P6a**, an output that writes nothing for the
+    /// job's frames takes no part in the shared run (the twenty-eighth notes,
+    /// piece 13). Built by the same piece: `Job files and outputs — machine`'s
+    /// mapping, inventory and folder choice.
+    ///
+    /// **248 from 2026-11-11**, the Fable review's fifth sitting: **P21a**, the
+    /// record of where the folder sits is given its name only when whole.
+    /// Built by the same sitting: the machine program's
+    /// `where_the_folder_sits_is_written_into`.
+    ///
+    /// **249 from 2026-11-14**, the Rough what-if answers, share 3 (230,
+    /// 231; commit `7245539e6`): **P19a**, a run of `/` alone is case 2, a
+    /// folder Smoozy cannot use. Built by the same share: `Job files and
+    /// outputs — machine`'s `where_the_folder_sits`. That share did not run
+    /// this crate, so the count was moved by the leftovers sitting.
     #[test]
     fn the_plan_defines_two_hundred_and_thirty_eight_distinct_clauses() {
         let plan =
             fs::read_to_string(the_architecture_folder().join(format!("{THIS_PLANS_NAME}.md")))
                 .expect("the plan is readable");
         let defined: HashSet<String> = the_clauses_defined_by(&plan).into_iter().collect();
-        assert_eq!(defined.len(), 246, "{:?}", {
+        assert_eq!(defined.len(), 249, "{:?}", {
             let mut sorted: Vec<&String> = defined.iter().collect();
             sorted.sort();
             sorted

@@ -345,7 +345,8 @@ impl TheEndpointAsACaller {
     ///
     /// **`Ok(None)` is the far end not answering, and it is one answer with three
     /// ways in**: nothing holds the endpoint at the recorded path; the connection
-    /// was made and the result did not arrive inside
+    /// was made (and perhaps let go at once by the far end) and the result did
+    /// not arrive inside
     /// [`Self::how_long_a_result_may_take`]; or something arrived that this
     /// request could not be correlated with. **The third is
     /// `Server protocol and transfers` C2** — a result is matched to a request by
@@ -368,12 +369,11 @@ impl TheEndpointAsACaller {
             }
             Err(why) => return Err(format!("{}: {why}", self.recorded_path)),
         };
-        stream
-            .set_read_timeout(Some(self.how_long_a_result_may_take))
-            .map_err(|why| format!("{}: {why}", self.recorded_path))?;
-        stream
-            .set_write_timeout(Some(self.how_long_a_result_may_take))
-            .map_err(|why| format!("{}: {why}", self.recorded_path))?;
+        if !the_waits_set_unless_the_far_end_has_gone(&stream, self.how_long_a_result_may_take)
+            .map_err(|why| format!("{}: {why}", self.recorded_path))?
+        {
+            return Ok(None);
+        }
         if let Err(why) = write_one_frame(&mut stream, &write_request_frame(request)) {
             return match why {
                 WhyTheFrameCouldNotBeRead::TheSystemRefusedIt(_) => Ok(None),
@@ -417,6 +417,30 @@ impl TheEndpointAsACaller {
             }
         }
     }
+}
+
+/// The caller's read and write waits set on `stream`, **or `false` where the far
+/// end had already let the connection go**.
+///
+/// **A far end that let the connection go before the waits were set is the far
+/// end not answering**, as when it lets it go a moment later — and Z9's refusal
+/// is exactly that. Linux sets the waits either way; the Mac refuses to set them
+/// on a connection already ended, with *"Invalid argument"*, and until
+/// 2026-11-12 that refusal was read as the system not letting this process reach
+/// the path. Found by the second whole run, where Z9's test lost the race under
+/// load.
+fn the_waits_set_unless_the_far_end_has_gone(
+    stream: &UnixStream,
+    how_long: Duration,
+) -> std::io::Result<bool> {
+    for set in [UnixStream::set_read_timeout, UnixStream::set_write_timeout] {
+        match set(stream, Some(how_long)) {
+            Ok(()) => {}
+            Err(why) if why.raw_os_error() == Some(libc::EINVAL) => return Ok(false),
+            Err(why) => return Err(why),
+        }
+    }
+    Ok(true)
 }
 
 /// How long [`TheEndpointAsACaller::ask_waiting_for_a_supervisor`] pauses between
@@ -980,6 +1004,24 @@ mod tests {
             WhatHappenedToTheCaller::RefusedBeforeTheRequestIsFramed
         );
         std::fs::remove_file(&at).ok();
+    }
+
+    /// **Z9's race, made certain rather than left to load.** The far end has let
+    /// the connection go before the caller's waits are set — what a refusal looks
+    /// like when the supervisor is quicker than the caller. **The caller reads
+    /// that as the far end not answering, never as a failure.** On the Mac the
+    /// plain setting of a wait fails here, which is what the second whole run of
+    /// 2026-11-12 met at Z9's test above.
+    #[test]
+    fn a_far_end_gone_before_the_waits_are_set_is_not_answering() {
+        let (caller, far_end) = UnixStream::pair().unwrap();
+        drop(far_end);
+        let set = the_waits_set_unless_the_far_end_has_gone(&caller, Duration::from_millis(200));
+        assert!(set.is_ok(), "{set:?}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(set.unwrap(), false);
+            assert!(caller.set_read_timeout(Some(Duration::from_millis(200))).is_err());
+        }
     }
 
     /// **Nothing at the path is the far end not answering**, and it is not a

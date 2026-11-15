@@ -56,3 +56,55 @@
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the five after the check.md`, outside any round — the SSH-tools line, as Keys says it. The check after the last fix. No auditor has seen it.
 
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-seventh notes/Brief — the key already chosen when there is one.md`, outside any round — § Adding a server: where exactly one usable key exists, the Add dialog opens with it chosen (the build runner's ruling under Rule 10). No auditor has seen it.
+
+2026-11-10 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's rulings at the foot of `Audits/Build/Fable review/Sitting 1 — what landed.md` (sitting 1's follow-up), outside any round — § A row: where a server's queue has stopped over a record Smoozy cannot read, the row's extra line says *Queue stopped: could not read a record on this server.* (the build runner's ruling under Rule 10). No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's rulings at the foot of `Audits/Build/Fable review/The live pass of the night's fixes — what happened.md` (ruling 2), outside any round — § A row: a connected server with no Smoozy of this copy's on it takes the dash, never *Idle* (the build runner's ruling under Rule 10). No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Wrote the runner's ruling: a connected server without this copy's Smoozy reads Not set up.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 1, connecting and setting up.md`, outside any round — *Adding a server*: the line above the list puts a failed connection's reason after the server's name. The four questions, scout 3.1. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — the two connect failures with their own sentence name the server before it. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — B-05: the hardware column takes 1.6 shares to the name's one and a moment keeps one line; B-03: below 780 the actions column is 184 pixels; B-18: a server's own head leaves the dash out, its failure is the row's run of text and its countdown grey. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 3, words a user can't act on.md`, outside any round — *Smoozy on this server isn't responding.* (scout 3.7: the short form read as if the app had frozen; it is longer than the Creator's 2026-09-27 shortening) and *Smoozy on this server is out of date. Not updated: could not check it for jobs.* (3.6). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 4, Telegram.md`, outside any round — *Smoozy isn't responding.* put back (scout 3.7, the build runner's word). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — *Connected* and *Reconnecting…* read *Disconnect* under the pointer or focus (scout 1.10). No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — The Add dialog's setup options say setup may restart the server (scout 1.11, narrowed). No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — The tools line above the list names OpenSSH, with Keys (scout 3.43). No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Clarified the reconnect limit and the changed server identity.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: The guide link in Add a server keeps what was typed for the next opening (scout 4.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the admin fresh look, logs in Telegram, and the empty screen.md`, outside any round — § No servers yet: the renting step names the image to pick (Creator-stated). No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, the window.md`, outside any round — the example moment at every size now on the 24-hour clock. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, the window.md`, outside any round — the connect control keeps one width, and *Disconnect* is red (the Creator's note 7 on the test copy of 2026-11-12). No auditor has seen it.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — one sentence on the free disk under *A row*. No auditor has seen this text.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the night's live pass found.md`, outside any round — no RAM shown where a container hides it. No auditor has seen this text.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep of the app and the website: screen words only, as listed in `Audits/Build/The word sweep, the app and the website — what landed.md`. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Batch 1: address checks, single Add press and Telegram setup and retry corrections.
+2026-11-14 — Claude Opus 5.5 — added the no-answer ending to When stop and clear does not work (Rough share 1, 73).
+2026-11-14 — Claude Opus 5.5 — the update's no-response line (Rough share 1, 81).
+2026-11-14 — Claude Opus 5.5 — the billing line above Remove anyway (Rough share 2, 129).
+2026-11-14 — Claude Opus 5.5 — a switched-off removal warning gives the plain confirmation (Rough share 2, 130).
+2026-11-14 — Claude Opus 5.5 — where the row's setup line comes from, and a rendering record counted as waiting (Rough share 4, 310).
+2026-11-14 — Claude Opus 5.5 — *Too new* only where this copy cannot use the server (Rough share 5, 431).
+2026-11-14 — Claude Opus 5.5 — a pasted line through a jump host says so (the leftovers of the Rough what-if answers, 112).
+2026-11-14 — Claude Opus 5.5 — the repair's two row lines, *Repairing Smoozy on this server…* and *Could not repair Smoozy on this server. Set up again to fix it.* (the automatic repair).
+2026-11-14 — Claude Opus 5.5 — the row's Telegram line, three sentences (when Telegram refuses).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: the Telegram lines, the failed repair and the no-answer ending reworded.
+2026-11-15 — Claude Opus 5.5 — the runner's rulings on Codex's word check: the unreached-Telegram line reworded.
+2026-11-15 — Claude Opus 5.5 — the server page's head says the repair's lines (what the what-if live pass found).

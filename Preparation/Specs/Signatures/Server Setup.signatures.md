@@ -47,3 +47,12 @@
 2026-11-02 — Claude Opus 5.5 (builder), holding `Audits/Build/Step 11/Brief — the OptiX check and two Render Settings faults.md`, outside any round — a driver without its OptiX library is told from the first connection, with the driver's version; nothing is installed on a driver that already works (Creator-stated, 2026-11-02); the observation added to the sources companion.
 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — From 5.3, what a driver too old stops. No auditor has seen it.
 2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — the action offered on the page too. No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Qualified the GPU driver advice for a container; setup behaviour stays.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list.md`, outside any round — *Where a server has a bigger disk, Smoozy's folder goes on it*, under *Getting the machine ready*. Creator-stated. No auditor has seen this text.
+- 2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the scout's list, Sol's points.md`, outside any round — *Where a server has a bigger disk*: a real write, a network volume, an unreadable record stops, the folder checked after a restart. No auditor has seen this text.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.
+2026-11-14 — Claude Opus 5.5 — added the Creator's batch 1 rulings on another copy's setup and an older Smoozy's job.
+2026-11-14 — Claude Opus 5.5 — added *A lost folder mark* (the Creator's ruling on 164, Rough share 2).
+2026-11-14 — Claude Opus 5.5 — added *A Blender already on the server* (the runner's ruling on 20 and 366, Rough share 4).
+2026-11-14 — Claude Opus 5.5 — added *Smoozy's own program put back by itself* (the automatic repair, the runner's ruling).

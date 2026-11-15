@@ -201,6 +201,32 @@ pub fn the_hold_is_tried_at(hold: &Path, door: &Path) -> TheLaunch {
     }
 }
 
+/// **This copy of Smoozy started again, to wait for the hold** — `Desktop app
+/// and delivery` L9b (the Creator's ruling on 97, 2026-11-14). The new launch
+/// is in the update-launch mode with none of the probe's variables, which is
+/// how the build a rollback starts is started: it waits for the hold, which
+/// this process lets go as it exits, and makes no crash offer. **On a Mac
+/// through the system's own app launcher**, as an update's launch is, so the
+/// Dock shows one Smoozy; elsewhere, and where the launcher refuses, the
+/// program itself.
+pub fn this_copy_is_opened_again() -> Result<(), String> {
+    use crate::updating::the_probe::{the_bundle_is_opened, NONE_OF_THE_PROBES_VARIABLES};
+    let argument = crate::start::THE_UPDATE_LAUNCH_ARGUMENT;
+    if let Ok(bundle) = locations::resolve(Location::TheInstalledBundle) {
+        if the_bundle_is_opened(&bundle, &[argument], &NONE_OF_THE_PROBES_VARIABLES).is_ok() {
+            return Ok(());
+        }
+    }
+    let program = std::env::current_exe().map_err(|failed| failed.to_string())?;
+    std::process::Command::new(program)
+        .arg(argument)
+        .envs(NONE_OF_THE_PROBES_VARIABLES)
+        .stdin(std::process::Stdio::null())
+        .spawn()
+        .map(drop)
+        .map_err(|failed| failed.to_string())
+}
+
 /// **The hold waited for, in Smoozy's own folder** — what a launch the update
 /// mechanism started does instead of [`the_launch_takes_the_hold`]: the probe
 /// is started before the old process hands the hold over (P2), and the build a

@@ -102,6 +102,25 @@ pub enum WhyTheListingCouldNotBeRead {
     TheAnswerIsNotTheShapeThatWasRead(String),
 }
 
+/// **`Desktop app and delivery` M32b — how long the reason kept in the diary
+/// may be.**
+pub const THE_LONGEST_REASON_KEPT: usize = 300;
+
+impl WhyTheListingCouldNotBeRead {
+    /// **The reason, for the diary** (`Desktop app and delivery` M32b, added
+    /// 2026-11-13): which of the three it was, with the client's or the
+    /// shop-front's own words, cut to [`THE_LONGEST_REASON_KEPT`] characters.
+    /// The request carries nothing of the user's, so neither does this.
+    pub fn the_reason(&self) -> String {
+        let whole = match self {
+            WhyTheListingCouldNotBeRead::TheRequestDidNotGetAnAnswer(said) => format!("no answer: {said}"),
+            WhyTheListingCouldNotBeRead::TheShopFrontAnswered(status) => format!("answered HTTP {status}"),
+            WhyTheListingCouldNotBeRead::TheAnswerIsNotTheShapeThatWasRead(said) => format!("not the listing's shape: {said}"),
+        };
+        whole.chars().take(THE_LONGEST_REASON_KEPT).collect()
+    }
+}
+
 // ------------------------------------------------------------------ the fetch
 
 /// **B2, performed: the listing fetched from the shop-front's own endpoint.**
@@ -138,7 +157,111 @@ fn the_listing_is_fetched_from(
     address: &str,
     header: Option<(&str, &str)>,
 ) -> Result<String, WhyTheListingCouldNotBeRead> {
-    let agent = the_client_this_request_is_made_on();
+    let began = std::time::Instant::now();
+    let Some(host) = address.parse::<ureq::http::Uri>().ok().and_then(|uri| uri.host().map(str::to_string)) else {
+        return the_listing_is_fetched_on(the_client_this_request_is_made_on(), address, header);
+    };
+    let addresses = match the_addresses_of(address, THE_LISTINGS_OWN_BOUND) {
+        Ok(addresses) => addresses,
+        Err(said) => return Err(WhyTheListingCouldNotBeRead::TheRequestDidNotGetAnAnswer(said)),
+    };
+    the_listing_is_fetched_from_these(address, header, &host, addresses, began)
+}
+
+/// **`Server Setup` B2 as changed 2026-11-13 — every address the listing's
+/// name resolved to, tried in turn**, and one that errors before any answer
+/// left for the next. The client's own connection step gives up at the first
+/// error that is neither a refusal nor a timeout (`ureq` 3.4.1,
+/// `src/unversioned/transport/tcp.rs`, read 2026-11-13), so each address is
+/// its own request here. An address that answers — any status, any body —
+/// ends the read. **The thirty seconds bound the whole read**: each request
+/// has what is left of them, and every address but the last connects within
+/// half of that, so one that never answers the connection leaves the next its
+/// share. Where a proxy is configured, the proxy resolves the name and one
+/// request is made, as before.
+fn the_listing_is_fetched_from_these(
+    address: &str,
+    header: Option<(&str, &str)>,
+    host: &str,
+    addresses: Vec<std::net::SocketAddr>,
+    began: std::time::Instant,
+) -> Result<String, WhyTheListingCouldNotBeRead> {
+    if the_config_this_request_is_made_with(THE_LISTINGS_OWN_BOUND).proxy().is_some() {
+        return the_listing_is_fetched_on(the_client_this_request_is_made_on(), address, header);
+    }
+    let mut reasons = Vec::new();
+    let last = addresses.len().saturating_sub(1);
+    for (at, one) in addresses.into_iter().enumerate() {
+        let left = THE_LISTINGS_OWN_BOUND.saturating_sub(began.elapsed());
+        if left.is_zero() {
+            reasons.push(format!("{one}: not tried, the thirty seconds were spent"));
+            break;
+        }
+        let connect = (at < last).then_some(left / 2);
+        let agent = ureq::Agent::with_parts(
+            the_config_with_a_connect_bound(left, connect),
+            ureq::unversioned::transport::DefaultConnector::default(),
+            TheseAddresses { host: host.to_string(), addresses: vec![one] },
+        );
+        match the_listing_is_fetched_on(agent, address, header) {
+            Err(WhyTheListingCouldNotBeRead::TheRequestDidNotGetAnAnswer(said)) => reasons.push(format!("{one}: {said}")),
+            answered => return answered,
+        }
+    }
+    Err(WhyTheListingCouldNotBeRead::TheRequestDidNotGetAnAnswer(reasons.join("; ")))
+}
+
+/// **The addresses `address`'s name resolves to**, in the system's order,
+/// within `bound`; the resolver's own words where it gives none.
+fn the_addresses_of(address: &str, bound: Duration) -> Result<Vec<std::net::SocketAddr>, String> {
+    use std::net::ToSocketAddrs;
+    let uri = address.parse::<ureq::http::Uri>().map_err(|said| said.to_string())?;
+    let host = uri.host().ok_or("the address names no host")?.trim_start_matches('[').trim_end_matches(']').to_string();
+    let port = uri.port_u16().unwrap_or(443);
+    let (told, heard) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = told.send((host.as_str(), port).to_socket_addrs().map(Iterator::collect::<Vec<_>>).map_err(|said| said.to_string()));
+    });
+    match heard.recv_timeout(bound) {
+        Ok(Ok(addresses)) if !addresses.is_empty() => Ok(addresses),
+        Ok(Ok(_)) => Err("the name resolved to no address".to_string()),
+        Ok(Err(said)) => Err(said),
+        Err(_) => Err("the name did not resolve in time".to_string()),
+    }
+}
+
+/// **A resolver that gives the listing's own name the addresses already
+/// resolved**, and resolves any other name — a redirect's — afresh.
+#[derive(Debug)]
+struct TheseAddresses {
+    host: String,
+    addresses: Vec<std::net::SocketAddr>,
+}
+
+impl ureq::unversioned::resolver::Resolver for TheseAddresses {
+    fn resolve(
+        &self,
+        uri: &ureq::http::Uri,
+        config: &ureq::config::Config,
+        timeout: ureq::unversioned::transport::NextTimeout,
+    ) -> Result<ureq::unversioned::resolver::ResolvedSocketAddrs, ureq::Error> {
+        if uri.host() != Some(self.host.as_str()) {
+            return ureq::unversioned::resolver::DefaultResolver::default().resolve(uri, config, timeout);
+        }
+        let mut these = self.empty();
+        for address in self.addresses.iter().take(16) {
+            these.push(*address);
+        }
+        Ok(these)
+    }
+}
+
+/// One request for the listing, on `agent`.
+fn the_listing_is_fetched_on(
+    agent: ureq::Agent,
+    address: &str,
+    header: Option<(&str, &str)>,
+) -> Result<String, WhyTheListingCouldNotBeRead> {
     let mut asking = agent.get(address);
     if let Some((name, value)) = header {
         asking = asking.header(name, value);
@@ -261,8 +384,20 @@ pub const HOW_MANY_TIMES_THE_SHOP_FRONT_MAY_HAND_THIS_ON: u32 = 2;
 /// is configured with can be read back and held to, which is how the missing
 /// HTTPS-only bound was found in the first place.
 fn the_client_this_request_is_made_on() -> ureq::Agent {
+    the_config_this_request_is_made_with(THE_LISTINGS_OWN_BOUND).new_agent()
+}
+
+/// **What the client is configured with**, the whole request inside `bound`.
+fn the_config_this_request_is_made_with(bound: Duration) -> ureq::config::Config {
+    the_config_with_a_connect_bound(bound, None)
+}
+
+/// The same, with the connection itself inside `connect` where given (B2 as
+/// changed 2026-11-13: every address but the last).
+fn the_config_with_a_connect_bound(bound: Duration, connect: Option<Duration>) -> ureq::config::Config {
     ureq::Agent::config_builder()
-        .timeout_global(Some(THE_LISTINGS_OWN_BOUND))
+        .timeout_global(Some(bound))
+        .timeout_connect(connect)
         // **No hop may leave HTTPS, a redirect included**, and the hops are
         // bounded. Neither is the client's default.
         .https_only(true)
@@ -278,7 +413,6 @@ fn the_client_this_request_is_made_on() -> ureq::Agent {
                 .build(),
         )
         .build()
-        .new_agent()
 }
 
 // ----------------------------------------------------------------- the reading
@@ -1105,6 +1239,46 @@ mod tests {
             client.config().timeouts().global,
             Some(THE_LISTINGS_OWN_BOUND)
         );
+    }
+
+    /// **`Server Setup` B2 as changed 2026-11-13 (the runner's ruling on the
+    /// scout's list, item 4): an address that errors before any answer is
+    /// left for the next.** Two loopback listeners stand for two addresses of
+    /// the listing's name: each takes the connection and drops it at once, the
+    /// shape of an address that cannot be used — an error that is neither a
+    /// refusal nor a timeout. Both must be reached, and the reason must name
+    /// both. **Failed before the fix**: the client's own loop gave up at the
+    /// first, and the second was never tried.
+    #[test]
+    fn an_address_that_errors_is_left_for_the_next() {
+        let taken = |listener: std::net::TcpListener| {
+            let (told, heard) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                if let Ok((stream, _)) = listener.accept() {
+                    let _ = told.send(());
+                    drop(stream);
+                }
+            });
+            heard
+        };
+        let first = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("a loopback listener");
+        let second = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("a loopback listener");
+        let addresses = vec![first.local_addr().unwrap(), second.local_addr().unwrap()];
+        let (first, second) = (taken(first), taken(second));
+        let fetched = the_listing_is_fetched_from_these(
+            "https://listing.invalid/v2/snaps/info/blender",
+            Some(THE_STORES_REQUIRED_HEADER),
+            "listing.invalid",
+            addresses.clone(),
+            std::time::Instant::now(),
+        );
+        println!("two failing addresses came to {fetched:?}");
+        assert!(first.try_recv().is_ok(), "the first address was tried");
+        assert!(second.try_recv().is_ok(), "the second address was tried after the first errored");
+        let Err(WhyTheListingCouldNotBeRead::TheRequestDidNotGetAnAnswer(said)) = fetched else { panic!("{fetched:?}") };
+        for address in addresses {
+            assert!(said.contains(&address.to_string()), "the reason names {address}: {said}");
+        }
     }
 
     /// **No processor check is made here, or anywhere.** There was one reading

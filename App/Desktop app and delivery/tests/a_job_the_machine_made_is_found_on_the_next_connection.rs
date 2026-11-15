@@ -34,6 +34,13 @@
 //! answer adopts nothing (A6's all or nothing). Until that piece *Track it*
 //! answered that it was not built.
 //!
+//! **And since 2026-11-12, a job made from a job this desk holds joins by
+//! itself** (`Queue & History` A5's paragraph of that date, the build
+//! runner's ruling 2 on the second live pass): the read forward that carries
+//! its event takes it in, with no offer. So the offer and *Track it* tests
+//! below stand on a tap on a job a second computer sent, which this desk
+//! never held; the last three tests are the tap on this desk's own job.
+//!
 //! **Nothing of the Creator's is touched.** The local record is a throwaway
 //! file in the build folder's own temporary area.
 //!
@@ -47,7 +54,8 @@ use std::path::PathBuf;
 use smoozy_desktop::record::job_records::{JobRecords, TheKeptSetup};
 use smoozy_desktop::record::LocalRecord;
 use smoozy_desktop::servers::the_machines_work::{
-    a_read_forward_pass, the_offer_is_accepted, the_queue_reading_from, the_step_seven, AsksTheSupervisor,
+    a_read_forward_pass, the_offer_is_accepted, the_queue_is_read, the_queue_reading_from, the_step_seven,
+    AsksTheSupervisor,
     WhatThisRunHolds, WhyNothingWasTracked,
 };
 use smoozy_desktop::surface::the_queue::{what_is_held, TheStopOrCancel};
@@ -108,6 +116,11 @@ enum Stage {
 struct TheMachineAfterTheTap {
     failed: Identity,
     made: Identity,
+    /// **The job the machine's mark says the made job was made from.** One
+    /// a second computer sent, which this desk never held, unless a test says
+    /// the tap was on the job this desk sent (`Queue & History` A5's
+    /// paragraph of 2026-11-12: that one joins by itself).
+    made_from: Identity,
     /// The render operation the failed job ended with.
     its_outcome: Identity,
     /// The made job's render operation, while it renders.
@@ -126,6 +139,9 @@ struct TheMachineAfterTheTap {
     /// **The made job is gone from the machine between the reading and the
     /// press**, so its note reads as not held.
     the_job_is_gone: bool,
+    /// **The phone has not been tapped yet**: the machine holds the failed
+    /// job alone, and its journal carries nothing about a made job.
+    the_tap_has_not_come: bool,
     asked: Vec<String>,
     /// The render operations a stop named.
     stops: Vec<String>,
@@ -137,11 +153,17 @@ impl TheMachineAfterTheTap {
     /// machine's mark and the job it was made from — **then, as the made job
     /// moves, its render's start and its recorded outcome.**
     fn the_journal(&self, from: u64) -> Fields {
+        if self.the_tap_has_not_come {
+            return Fields::none()
+                .and(asked::HOW_MANY_EVENTS_FIELD, "0")
+                .and(asked::THE_OLDEST_RETAINED_FIELD, "1")
+                .and(asked::THE_NEXT_SEQUENCE_FIELD, "7");
+        }
         let mut events: Vec<(u64, &str, String, String)> = vec![(
             7,
             asked::THE_JOB_RECORD_WRITTEN_EVENT,
             self.made.as_text(),
-            format!("{}: submitted again by this machine from {}", asked::IT_IS_WAITING, self.failed.as_text()),
+            format!("{}: submitted again by this machine from {}", asked::IT_IS_WAITING, self.made_from.as_text()),
         )];
         if self.stage != Stage::Waiting {
             events.push((8, asked::THE_RENDER_ATTEMPT_STARTED_EVENT, self.made.as_text(), "attempt 1".to_string()));
@@ -179,6 +201,14 @@ impl TheMachineAfterTheTap {
     /// record by its identity, as the program orders it.
     fn the_queue(&self) -> Fields {
         let item = |at: usize, name: &str| asked::the_field_of_item(asked::THE_JOB_FIELD, at, name);
+        if self.the_tap_has_not_come {
+            return Fields::none()
+                .and(asked::HOW_MANY_JOBS_FIELD, "1")
+                .and(asked::HOW_MANY_DID_NOT_READ_BACK_FIELD, "0")
+                .and(&item(0, asked::THE_JOB_FIELD), self.failed.as_text())
+                .and(&item(0, asked::THE_QUEUE_STATE_FIELD), asked::IT_HAS_ENDED)
+                .and(&item(0, asked::THE_OUTCOME_IT_ENDED_WITH_FIELD), self.its_outcome.as_text());
+        }
         let fields = Fields::none()
             .and(asked::HOW_MANY_JOBS_FIELD, "2")
             .and(asked::HOW_MANY_DID_NOT_READ_BACK_FIELD, "0")
@@ -228,6 +258,7 @@ impl TheMachineAfterTheTap {
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
         }
@@ -353,6 +384,7 @@ fn the_machine_for(desk: &ARecordHere, server: &Identity, failed: &Identity, mad
     TheMachineAfterTheTap {
         failed: failed.clone(),
         made: made.clone(),
+        made_from: Identity::issue(IdentityKind::Job).expect("randomness"),
         its_outcome: Identity::issue(IdentityKind::Operation).expect("randomness"),
         the_render: Identity::issue(IdentityKind::Operation).expect("randomness"),
         the_ending: Identity::issue(IdentityKind::Operation).expect("randomness"),
@@ -362,6 +394,7 @@ fn the_machine_for(desk: &ARecordHere, server: &Identity, failed: &Identity, mad
         folder_record: folder.as_written(),
         silent: false,
         the_job_is_gone: false,
+        the_tap_has_not_come: false,
         asked: Vec::new(),
         stops: Vec::new(),
     }
@@ -499,6 +532,63 @@ fn a_job_the_machine_made_on_a_phones_try_it_again_is_offered_and_shown_in_queue
     assert_eq!((untracked.rendering, untracked.waiting), (0, 1), "one job waiting that Smoozy is not tracking");
     assert_eq!(untracked.server_row, server.as_text());
     assert_eq!(untracked.cause, None, "no removal or address change is claimed for it");
+}
+
+/// **The second live pass's fault 2: a job the phone's *Resume* makes while
+/// the desk is connected is offered at the next reading, not only at the
+/// next connection.** `Queue & History` A5 and `Servers` Q18 as amended
+/// 2026-11-12.
+///
+/// **The story.** Connected, the Queue held nothing of this server's. The
+/// user tapped *Resume* on the failed job in Telegram; the machine made a new
+/// job and rendered it. The Queue read *0 jobs* for over a minute, and the
+/// offer came only after a disconnect and a connect, because step 7 alone
+/// composed it and a pass kept the empty one.
+#[test]
+fn a_job_the_phone_makes_while_connected_is_offered_at_the_next_reading() {
+    let failed = Identity::issue(IdentityKind::Job).expect("randomness");
+    let made = Identity::issue(IdentityKind::Job).expect("randomness");
+    let (desk, server) = the_desk(&failed);
+    let mut machine = the_machine_for(&desk, &server, &failed, &made);
+    machine.the_tap_has_not_come = true;
+    let holds = WhatThisRunHolds::default();
+    let connection = holds.a_connection_begins(&server.as_text());
+
+    let did = the_step_seven(&server, connection, &desk, &mut machine, &holds, &|| true);
+    assert!(did.the_queue_was_read, "{:?}", machine.asked);
+    assert_eq!(did.offered, 0, "before the tap the machine holds only the job this desk sent");
+    assert!(what_is_held(&holds, Some(&desk.0), None).untracked.is_none());
+
+    // The tap: the machine makes the job and starts rendering it. The pass
+    // that follows takes the queue reading as P10d does.
+    machine.the_tap_has_not_come = false;
+    machine.stage = Stage::Rendering;
+    let _ = the_queue_is_read(&server, connection, &desk, &mut machine, &holds, &|| true);
+
+    let period = holds
+        .every_server()
+        .into_iter()
+        .find(|(held, _)| *held == server.as_text())
+        .map(|(_, period)| period)
+        .expect("the period holds the reading");
+    assert_eq!(period.the_offer, vec![made.clone()], "the made job is offered by this reading");
+    let screen = what_is_held(&holds, Some(&desk.0), None);
+    let untracked = screen.untracked.expect("the offer is drawn while connected");
+    assert_eq!((untracked.rendering, untracked.waiting), (1, 0), "one job rendering that is not in this Queue");
+    assert_eq!(untracked.server_row, server.as_text());
+
+    // **A decline covers the jobs it was shown.** Ignored, the banner goes and
+    // stays gone at the next reading; nothing enters the record.
+    smoozy_desktop::surface::the_queue::the_untracked_banner_is_declined(&server.as_text(), untracked.jobs.clone());
+    let _ = the_queue_is_read(&server, connection, &desk, &mut machine, &holds, &|| true);
+    let screen = smoozy_desktop::surface::the_queue::the_queue_as_asked(
+        what_is_held(&holds, Some(&desk.0), None),
+        None,
+        None,
+    );
+    assert!(screen.untracked.is_none(), "Ignore stands for the job it was shown");
+    assert!(JobRecords::over(desk.0.connection()).read(&made).expect("it reads").is_none());
+    smoozy_desktop::surface::the_queue::a_connected_period_ended(&server.as_text());
 }
 
 /// **Owed piece 10: *Track it* on the job the machine made — it is tracked,
@@ -756,6 +846,32 @@ fn an_adopted_job_whose_records_will_not_read_carries_their_absence() {
     assert!(kept.is_none());
 }
 
+/// **`Queue & History` N15's build detail of 2026-11-12: a job the machine
+/// made on a phone's *Resume* carries on from the job its note names**, with
+/// the note's label, which the copy took from that job; a note naming none
+/// gives no mark (the four questions, batch 4's leftover).
+#[test]
+fn sixth_part_an_adopted_resumed_job_carries_on_from_the_job_its_note_names() {
+    let job = Identity::issue(IdentityKind::Job).expect("randomness");
+    let earlier = Identity::issue(IdentityKind::Job).expect("randomness");
+    let server = Identity::issue(IdentityKind::LocalServer).expect("randomness");
+    let stood = TheServerAsItStood { local_server: server.clone(), label: Some("Server A".to_string()), hue: None };
+    let mut note = TheNote::created_with_the_job_record("Hall");
+    note.carries_on_from = Some(earlier.clone());
+    let adopted = smoozy_queue_history::acting::adoption::AnAdoptedJob { job: job.clone(), server: server.clone(), the_note: Some(note) };
+    let (record, _) = smoozy_desktop::servers::the_machines_work::an_adopted_record(&adopted, &stood, None);
+    assert_eq!(
+        record.carries_on_from,
+        Some(smoozy_queue_history::record::CarriesOnFrom { earlier_job: earlier, the_label_as_it_stood: "Hall".to_string() })
+    );
+    let plain = smoozy_queue_history::acting::adoption::AnAdoptedJob {
+        job,
+        server,
+        the_note: Some(TheNote::created_with_the_job_record("Hall")),
+    };
+    assert_eq!(smoozy_desktop::servers::the_machines_work::an_adopted_record(&plain, &stood, None).0.carries_on_from, None);
+}
+
 /// **`Queue & History` A8 and C9: a job already rendering when it is adopted
 /// is in History at once** — its note's start is the learning, carried by the
 /// record's own fill-in at the write, with no pass in between — **and its
@@ -803,4 +919,130 @@ fn a_job_gone_from_the_machine_before_the_press_is_not_adopted() {
     machine.the_job_is_gone = true;
     assert_eq!(the_offer_is_accepted(&server, &desk, &mut machine, &holds), Ok(Vec::new()));
     assert!(JobRecords::over(desk.0.connection()).read(&made).expect("it reads").is_none());
+}
+
+/// **The build runner's ruling 2 on the second live pass: a job the phone
+/// starts from one of this desk's own jobs joins the Queue by itself**
+/// (`Queue & History` A5's paragraph of 2026-11-12, `State, identity and
+/// recovery` Y7a). Smoozy was closed when the tap came; the next connection's
+/// read forward carries the made job's event, whose mark names the job this
+/// desk sent, and takes the made job in — confirmed, under the machine's
+/// identity, with its note's label — before the reading. Nothing is offered,
+/// no banner is drawn, and no *untracked work taken over* line is written,
+/// since the user made no act at the desk.
+#[test]
+fn a_job_the_phone_makes_from_this_desks_job_joins_the_queue_at_the_next_connection() {
+    let failed = Identity::issue(IdentityKind::Job).expect("randomness");
+    let made = Identity::issue(IdentityKind::Job).expect("randomness");
+    let (desk, server) = the_desk(&failed);
+    let mut machine = the_machine_for(&desk, &server, &failed, &made);
+    machine.made_from = failed.clone();
+    let holds = WhatThisRunHolds::default();
+    let connection = holds.a_connection_begins(&server.as_text());
+
+    let did = the_step_seven(&server, connection, &desk, &mut machine, &holds, &|| true);
+    assert!(did.the_queue_was_read, "{:?}", machine.asked);
+    assert_eq!(did.offered, 0, "nothing is offered: the job joined by itself");
+    let held = JobRecords::over(desk.0.connection())
+        .read(&made)
+        .expect("it reads")
+        .expect("the made job is in the local record");
+    assert_eq!(held.standing, Standing::Confirmed);
+    assert_eq!(held.server.local_server, server);
+    assert_eq!(held.label.as_deref(), Some("Hall"), "the note's label");
+    let screen = what_is_held(&holds, Some(&desk.0), None);
+    assert!(screen.untracked.is_none(), "no *Add to Queue* banner");
+    assert!(desk.1.borrow().is_empty(), "no *untracked work taken over* line");
+    assert_eq!(how_many_records(&desk), 2, "the job this desk sent, and the made job; nothing twice");
+
+    // A second connection reads past it again and writes nothing more.
+    let again = holds.a_connection_begins(&server.as_text());
+    the_step_seven(&server, again, &desk, &mut machine, &holds, &|| true);
+    assert_eq!(how_many_records(&desk), 2);
+}
+
+/// **The same, while connected**: the tap comes after step 7, and the next
+/// queue reading — taken alone, as a P10d pass whose read forward came just
+/// before the tap takes it — finds a job its last offer did not hold, reads
+/// forward first, and the made job joins. It is never offered, not even for
+/// one reading.
+#[test]
+fn a_job_the_phone_makes_from_this_desks_job_while_connected_joins_at_the_next_reading() {
+    let failed = Identity::issue(IdentityKind::Job).expect("randomness");
+    let made = Identity::issue(IdentityKind::Job).expect("randomness");
+    let (desk, server) = the_desk(&failed);
+    let mut machine = the_machine_for(&desk, &server, &failed, &made);
+    machine.made_from = failed.clone();
+    machine.the_tap_has_not_come = true;
+    let holds = WhatThisRunHolds::default();
+    let connection = holds.a_connection_begins(&server.as_text());
+    the_step_seven(&server, connection, &desk, &mut machine, &holds, &|| true);
+
+    machine.the_tap_has_not_come = false;
+    machine.stage = Stage::Rendering;
+    let _ = the_queue_is_read(&server, connection, &desk, &mut machine, &holds, &|| true);
+
+    let period = holds
+        .every_server()
+        .into_iter()
+        .find(|(held, _)| *held == server.as_text())
+        .map(|(_, period)| period)
+        .expect("the period holds the reading");
+    assert_eq!(period.the_offer, Vec::<Identity>::new(), "the made job is not offered");
+    let held = JobRecords::over(desk.0.connection())
+        .read(&made)
+        .expect("it reads")
+        .expect("the made job joined");
+    assert!(held.the_render_start_has_been_learned, "it renders, so it is in History at once");
+    let screen = what_is_held(&holds, Some(&desk.0), Some(&made.as_text()));
+    assert!(screen.untracked.is_none(), "no *Add to Queue* banner");
+    assert_eq!(screen.entry.expect("its Queue entry").stop_or_cancel, Some(TheStopOrCancel::Stop));
+    smoozy_desktop::surface::the_queue::a_connected_period_ended(&server.as_text());
+}
+
+/// **`Queue & History` A9 holds for a job that joins by itself**: an entry the
+/// user deleted is never taken in again, and the machine that does not answer
+/// the note reading takes nothing in and moves no cursor, so the next pass
+/// takes it in.
+#[test]
+fn a_job_made_from_this_desks_job_is_not_taken_in_when_deleted_or_unanswered() {
+    let failed = Identity::issue(IdentityKind::Job).expect("randomness");
+    let made = Identity::issue(IdentityKind::Job).expect("randomness");
+    let (desk, server) = the_desk(&failed);
+    let mut machine = the_machine_for(&desk, &server, &failed, &made);
+    machine.made_from = failed.clone();
+    let holds = WhatThisRunHolds::default();
+    let connection = holds.a_connection_begins(&server.as_text());
+
+    // The note reading goes unanswered: nothing joins, and the event is read
+    // again by the next pass.
+    struct NoNote<'a>(&'a mut TheMachineAfterTheTap);
+    impl AsksTheSupervisor for NoNote<'_> {
+        fn ask(&mut self, request: &Request) -> WhatCameBack {
+            if request.name == asked::THE_PER_JOB_NOTE_READING_REQUEST {
+                return WhatCameBack::ItWasNeverAsked;
+            }
+            self.0.ask(request)
+        }
+        fn a_file_of_the_job_record_directory(&mut self, path: &str) -> Option<Vec<u8>> {
+            self.0.a_file_of_the_job_record_directory(path)
+        }
+    }
+    let _ = a_read_forward_pass(&server, &desk, &mut NoNote(&mut machine), &holds);
+    assert!(JobRecords::over(desk.0.connection()).read(&made).expect("it reads").is_none());
+    let _ = a_read_forward_pass(&server, &desk, &mut machine, &holds);
+    let records = JobRecords::over(desk.0.connection());
+    let held = records.read(&made).expect("it reads").expect("the next pass took it in");
+
+    // Deleted, it is never taken in again, however often the event is read.
+    smoozy_desktop::record::deletions::TheDeletions::over(desk.0.connection())
+        .perform_all(&[smoozy_queue_history::deletion::ADeletion::of(&held, std::time::SystemTime::now())])
+        .expect("the entry is deleted");
+    let mut row = smoozy_desktop::record::server_rows::one(desk.0.connection(), &server.as_text())
+        .expect("the row reads")
+        .expect("the row stands");
+    row.event_cursor = None;
+    smoozy_desktop::record::server_rows::write(desk.0.connection(), &row).expect("the cursor goes back");
+    the_step_seven(&server, connection, &desk, &mut machine, &holds, &|| true);
+    assert!(records.read(&made).expect("it reads").is_none(), "the deleted entry stays deleted");
 }

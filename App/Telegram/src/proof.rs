@@ -46,7 +46,9 @@ pub struct TheBot {
 /// message it carries. **Anything else, or either of those without a numeric
 /// identifier there, is a conversation that cannot be established** — P3.
 pub fn the_conversation_an_update_came_from(update: &Value) -> Option<TheConversation> {
-    if let Some(message) = update.get("message") {
+    // `Telegram` P6a as changed 2026-11-13: an edited message comes from
+    // its own chat, as a message does.
+    if let Some(message) = update.get("message").or_else(|| update.get("edited_message")) {
         return message
             .pointer("/chat/id")
             .and_then(Value::as_i64)
@@ -252,10 +254,14 @@ mod tests {
             json!({ "update_id": 6, "message": { "text": "no chat" } }),
             json!({ "update_id": 7, "message": { "chat": { "id": "9001" } } }),
             json!({ "update_id": 8, "callback_query": { "id": "x", "data": "d" } }),
-            json!({ "update_id": 9, "edited_message": { "chat": { "id": 9001 } } }),
+            json!({ "update_id": 9, "edited_message": { "text": "no chat" } }),
         ] {
             assert_eq!(what_an_update_gets(&shape, OURS), WhatAnUpdateGets::Ignored, "{shape}");
         }
+        // **P6a as changed 2026-11-13: an edit comes from its own chat**, and
+        // is answered from the proved one (R15's answer to an edited command).
+        let edited = json!({ "update_id": 10, "edited_message": { "chat": { "id": 9001 } } });
+        assert_eq!(what_an_update_gets(&edited, OURS), WhatAnUpdateGets::Answered);
     }
 
     /// **P4 and S3a: the same bot keeps the proof and takes the new username;

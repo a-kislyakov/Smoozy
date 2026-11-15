@@ -77,7 +77,7 @@ import { theFormatBoxIsOpenedForAFile } from "./transfers.js";
 import { whenTold } from "./event-route.js";
 import { theFailureShape, EXPANDED } from "./the-failure-shape.js";
 import { theMachinesOwnWordsFor } from "./the-machines-own-words.js";
-import { theMarkOnAControl } from "./the-underway-shape.js";
+import { theMarkOnAControl, theElapsed } from "./the-underway-shape.js";
 import { theTypingIsTakenFrom, theTypingIsPutBackInto } from "./the-typed-text.js";
 import { theValueDrawn, theValueIsDrawnInto } from "./the-value-drawn.js";
 // **The moment the band names is written the way every screen writes one** —
@@ -88,6 +88,7 @@ import { theMomentReads } from "./servers.js";
 // ***Show in Queue* opens the queue through the rail**, naming the job it is
 // about — the queue's own way in (the Creator's note 10 on the test copy).
 import { theCurrentPlaceIs, THE_QUEUE } from "./the-rail.js";
+import { theFocusMovesTo } from "./the-focus-moves.js";
 
 const shell = window.__TAURI__;
 
@@ -145,6 +146,8 @@ export async function theSettingsAreOpenedOn(server, file, savedWith) {
   // its space (see `theHeaderIsDrawn`), and no confirmation of a submission
   // made from another page stands on it.
   held.thePickLineThatWent = null;
+  held.theCountLineThatWent = null;
+  held.theGroupsDrawn = new Map();
   held.theSubmissionThatWent = null;
   // **The saved-with version is `File Browser`'s read, taken without opening
   // the file** — `Render Settings` B2 names it as the automatic match's one
@@ -372,7 +375,14 @@ function theSubmissionThatWentIsDrawn(went) {
   tick.setAttribute("aria-hidden", "true");
   tick.textContent = "✓";
   line.appendChild(tick);
-  theSentence(line, went.parts);
+  // **The sentence is cut short where line 2 has no room, whole on hover**, and
+  // *Show in Queue* stays whole beside it, so the line never takes one of its
+  // own and Render never moves (the UI at every size, D-16 and C9).
+  const words = document.createElement("span");
+  words.className = "rs-words";
+  theSentence(words, went.parts);
+  line.appendChild(words);
+  line.title = words.textContent;
   line.appendChild(document.createTextNode(" "));
   const show = document.createElement("a");
   show.href = "#";
@@ -442,6 +452,11 @@ function theSettingsAreDrawn(server, said) {
   held.body.replaceChildren();
   theHeaderIsDrawn(server, said, held.head);
   theBodyIsDrawn(server, said, held.body);
+  // **The body folds to two columns by the panel's own width** (`web/panes.js`,
+  // `Design/Render Settings § The body is three columns`), and a panel just
+  // opened has not been measured yet. Asked of the module already loaded,
+  // and nothing is lost where it cannot be had.
+  import("./panes.js").then((panes) => panes.thePagesAreMarked()).catch(() => {});
 
   // **Every control carries its own `data-box`, so focus comes back to the
   // one that had it** — scene and View Layer boxes, the switches and the
@@ -458,7 +473,7 @@ function theSettingsAreDrawn(server, said) {
       // something is typed, as its own `input` handler does.
       if (again.classList.contains("dashv")) again.classList.toggle("dashv", again.value === "");
     } else if (again) {
-      again.focus();
+      theFocusMovesTo(again);
     }
   }
 
@@ -530,9 +545,13 @@ function theHeaderIsDrawn(server, said, head) {
     // the server's Set up tab (must-do 4).
     state.classList.add("blnone");
     theSentence(state, said.no_blender);
-    const setUp = aLink(said.set_it_up, () => theSetUpTabIsShown(server), "set-it-up");
-    state.appendChild(document.createTextNode(" "));
-    state.appendChild(setUp);
+    // **Where the line says the server's disk is full, no way to Set up is
+    // given and none is drawn** — nothing there frees a disk (2026-11-11).
+    if (said.set_it_up) {
+      const setUp = aLink(said.set_it_up, () => theSetUpTabIsShown(server), "set-it-up");
+      state.appendChild(document.createTextNode(" "));
+      state.appendChild(setUp);
+    }
     state.appendChild(document.createTextNode(" · "));
   } else if (said.read_at.length) {
     // **The reading's moment arrives as seconds**, the value the application
@@ -562,13 +581,16 @@ function theHeaderIsDrawn(server, said, head) {
     "read"
   );
   if (!said.the_read_is_offered) read.disabled = true;
-  if (said.the_read_is_underway) {
-    // **The narrowest of the whole app's three underway shapes — on the
-    // control, not over the pane** — because the architecture leaves the page
-    // usable while the read runs.
-    theMarkOnAControl(read, read.textContent);
-    read.disabled = true;
-  }
+  // **While the read runs the control keeps its words and reads unavailable**,
+  // and the turning mark starts the line under the header — `Design/Render
+  // Settings § Reading the file`, as changed 2026-11-13 (the Creator's note 3
+  // on the test copy of 2026-11-12: a spinner alone where *Read the file* was,
+  // far from *Reading the file · 0:14 · Stop*). Until then the mark took the
+  // control's place, `theMarkOnAControl`.
+  if (said.the_read_is_underway) read.disabled = true;
+  // **Why it waits, on hover** — `Design/Whole app § While other work runs`
+  // (the Creator's notes on the test copy, second round, note 17).
+  if (said.why_the_read_waits) read.title = said.why_the_read_waits;
   state.appendChild(read);
   state.appendChild(document.createTextNode(" · "));
   state.appendChild(
@@ -577,54 +599,126 @@ function theHeaderIsDrawn(server, said, head) {
   row.appendChild(state);
   head.appendChild(row);
 
-  // **The mismatch line sits directly under the version row, above the pick
-  // line** — `Design/Render Settings § The version mismatch warning`, the
-  // Creator's note 12 on 0.1.7: *"the line is too far from the version
-  // picker."*
-  if (said.the_mismatch) theMismatchIsDrawn(said.the_mismatch, head);
+  // **The read's line is drawn in the held line under the version row**, not
+  // added above it, so a read moves nothing on the page (UI consistency,
+  // finding 15): it covers the pick line while it runs, and the line keeps
+  // the height of the taller of the two.
+  let activity = null;
+  if (said.the_read_is_underway) {
+    activity = document.createElement("div");
+    activity.className = "sub rdline";
+    activity.dataset.box = "read-activity";
+    // **The one turning mark, first on the line**, the drawing's `.rdline
+    // .spin` — the narrowest underway shape, beside the words that name it.
+    const turning = document.createElement("i");
+    turning.className = "spin";
+    activity.appendChild(turning);
+    // **Where the walk is, while the server says** — `Design/Render Settings
+    // § A read can take longer`, as changed 2026-11-13 (the Creator's notes on
+    // the test copy, second round, note 15): *Reading frame 120 of 250*.
+    activity.appendChild(document.createTextNode(said.reading_the_walk || said.reading_the_file));
+    if (said.the_read_elapsed_seconds != null) {
+      activity.appendChild(document.createTextNode(" · "));
+      activity.appendChild(theElapsed(said.the_read_elapsed_seconds));
+    }
+    activity.appendChild(document.createTextNode(" · "));
+    // **Stop is the window's small button, the same as the dependency
+    // check's** — `Design/Render Settings § A read can take longer`, as
+    // changed 2026-11-13 (the runner's ruling on the test copy's notes, second
+    // round): it was a link while the check's had become the small button.
+    const stop = anInlineButton(said.the_read_is_stopping ? said.stopping_read : said.stop_read, () => {
+      if (stop.disabled) return;
+      stop.disabled = true;
+      return shell.core.invoke("the_file_read_is_stopped", { server, file: said.file_bytes });
+    }, "stop-read");
+    stop.disabled = Boolean(said.the_read_is_stopping);
+    activity.appendChild(stop);
+  }
 
-  // **What the read answered, where it answered with a sentence** — the line
-  // an act's answer is put on (`theAnswerIsPutOnItsLine`).
-  head.appendChild(anAnswerLine("read"));
-
-  // **The line after the version says how the pick was made, and only that.**
+  // **One line under the version row, and it is held** — `Design/Render
+  // Settings § The header carries the Blender version`, the Creator's
+  // twenty-eighth notes, note 17. Where the picked version and the file's are
+  // different release lines it is the warning (`§ The version mismatch
+  // warning`, directly under the version row, the Creator's note 12 on
+  // 0.1.7); where Smoozy picked an older Blender because nothing newer is on
+  // the server, *Latest on this server.* follows it on the same line; and the
+  // no-version sentences sit there too. **The pick is not otherwise
+  // described.**
   //
-  // **And when it goes, it keeps its space** — `Design/Whole app § The
-  // window`: *nothing already drawn moves when something appears or disappears
-  // above it after the page is up; a line that can go keeps its space when it
-  // goes.* Picking the Blender takes this line away, and every field of the
-  // page sits below it: on the seventh pass on Sesterce the fields jumped up
-  // under the pointer and 4096 went into Resolution instead of Samples. **So
-  // the line that went is drawn again, unseen, holding its own height**, until
-  // another file is opened. The page harness measured every control before and
-  // after the pick: eleven moved 25 to 26 pixels before this, none after.
+  // **It keeps the height of its longest content**: the warning with *Latest
+  // on this server.* after it is drawn unseen beneath whatever the line
+  // holds, so no pick and no *Reset all* moves the page. **And a line that
+  // went is drawn again, unseen, holding its own height**, until another file
+  // is opened — `Design/Whole app § The window`: on the seventh pass on
+  // Sesterce the fields jumped up under the pointer when the line went, and
+  // 4096 went into Resolution instead of Samples.
   const held = panels.get(server);
   const theLine = said.the_pick_line || (held && held.thePickLineThatWent);
-  if (theLine) {
+  const anything = said.the_mismatch || theLine || said.the_version_control_is_drawn;
+  if (anything) {
     const line = document.createElement("div");
-    line.className = said.the_pick_line ? "pkline" : "pkline kept";
-    if (!said.the_pick_line) line.setAttribute("aria-hidden", "true");
-    const words = document.createElement("span");
-    words.className = "sub";
-    words.textContent = theLine;
-    // **The Blender search is work no control started — opening the page
-    // starts it — so the line that will answer it carries the turning mark**:
-    // `Design/Whole app § Anything that isn't instant shows that it's
-    // underway`, *"the reading it produced carries the mark itself."* The
-    // mark is the shared one, dressed in `web/the-underway-shape.css`, and it
-    // sits inside the line, so the line's height is the same with it and
-    // without it. Added 2026-09-27, eighth-pass fix piece 5.
-    if (said.the_pick_line && said.the_search_is_underway) {
-      words.classList.add("underway-reading");
-      words.appendChild(document.createTextNode(" "));
-      const turning = document.createElement("i");
-      turning.className = "spin";
-      words.appendChild(turning);
+    line.className = "pkline";
+    if (said.the_version_line_held.length) {
+      const unseen = document.createElement("span");
+      unseen.className = "vmm pkheld";
+      unseen.setAttribute("aria-hidden", "true");
+      theSentence(unseen, said.the_version_line_held);
+      unseen.appendChild(document.createTextNode(" "));
+      const latest = document.createElement("span");
+      latest.className = "sub";
+      latest.textContent = said.latest_on_this_server;
+      unseen.appendChild(latest);
+      line.appendChild(unseen);
     }
-    line.appendChild(words);
+    // Where the file records no version there is no warning to hold the
+    // line, and the line that went holds it instead.
+    else if (held && held.thePickLineThatWent && !said.the_pick_line) {
+      const went = document.createElement("span");
+      went.className = "sub pkheld";
+      went.setAttribute("aria-hidden", "true");
+      went.textContent = held.thePickLineThatWent;
+      line.appendChild(went);
+    }
+    const shown = document.createElement("span");
+    shown.className = said.the_mismatch ? "vmm" : "sub";
+    if (said.the_mismatch) theSentence(shown, said.the_mismatch.line);
+    if (said.the_pick_line) {
+      const words = document.createElement("span");
+      words.className = "sub";
+      words.textContent = said.the_pick_line;
+      // **The Blender search is work no control started — opening the page
+      // starts it — so the line that will answer it carries the turning
+      // mark**: `Design/Whole app § Anything that isn't instant shows that
+      // it's underway`, *"the reading it produced carries the mark itself."*
+      // The mark sits inside the line, so the line's height is the same with
+      // it and without it. Added 2026-09-27, eighth-pass fix piece 5.
+      if (said.the_search_is_underway) {
+        words.classList.add("underway-reading");
+        const turning = document.createElement("i");
+        turning.className = "spin";
+        words.appendChild(turning);
+      }
+      if (said.the_mismatch) shown.appendChild(document.createTextNode(" "));
+      shown.appendChild(words);
+    }
+    // **The read's own line, unseen**, so the held line is as tall as the
+    // read's line with its Stop (UI consistency, finding 15).
+    line.appendChild(theReadLineHeld(said));
+    // **What the read answered**, then the read's line, then the pick line:
+    // the first of them shown covers those after it (the drawing's `.pkline
+    // > .rdline`), so *Read stopped.* sits where the read's line was, at the
+    // header's left edge (UI consistency, finding 48).
+    line.appendChild(anAnswerLine("read"));
+    if (activity) line.appendChild(activity);
+    line.appendChild(shown);
     head.appendChild(line);
+  } else {
+    if (activity) head.appendChild(activity);
+    // **What the read answered, where it answered with a sentence** — the
+    // line an act's answer is put on (`theAnswerIsPutOnItsLine`).
+    head.appendChild(anAnswerLine("read"));
   }
-  if (held) held.thePickLineThatWent = theLine || null;
+  if (held) held.thePickLineThatWent = said.the_pick_line || (held && held.thePickLineThatWent) || null;
 
   // **A Blender that did not answer when asked is named, and nothing else
   // about the search** (`Server Setup` B11, Creator-stated 2026-10-02). On an
@@ -639,17 +733,6 @@ function theHeaderIsDrawn(server, said, head) {
     }
     head.appendChild(foot);
   }
-}
-
-/// **One line, and it opens nothing** — `Design/Render Settings § The version
-/// mismatch warning`: *Saved with 4.5, rendering with 5.1. Some things may not
-/// work as expected.* *(It carried *What changes* and a panel of break notes
-/// until 2026-10-02, the Creator's note 12 on 0.1.7.)*
-function theMismatchIsDrawn(mismatch, head) {
-  const line = document.createElement("p");
-  line.className = "vmm";
-  theSentence(line, mismatch.line);
-  head.appendChild(line);
 }
 
 // ── The body ────────────────────────────────────────────────────────────────
@@ -702,6 +785,23 @@ function theBandsAreDrawn(server, said, body) {
       : said.where_it_came_from;
     theSentence(line, withTheDate);
     band.appendChild(line);
+    body.appendChild(band);
+  }
+  // **The file's own scripts will run on the server**, said once, only for a
+  // file the reading found them in (`Render Settings` V3a; the leftovers of
+  // the Rough what-if answers, 222 and 227).
+  if (said.the_files_scripts_run) {
+    const band = document.createElement("p");
+    band.className = "noread";
+    band.textContent = said.the_files_scripts_run;
+    body.appendChild(band);
+  }
+  // **A newer copy of this file has not finished uploading**, said once (the
+  // leftovers of the Rough what-if answers, 185).
+  if (said.a_newer_copy_is_uploading) {
+    const band = document.createElement("p");
+    band.className = "noread";
+    band.textContent = said.a_newer_copy_is_uploading;
     body.appendChild(band);
   }
   // **All four endings take the whole-app failure shape, attached to the
@@ -808,7 +908,7 @@ function theLeftColumn(server, said) {
         aValueIsHandedBack(server, said, "frame-range")
       , "range-cross")
     );
-  }
+  } else set.appendChild(theCrossesRoom());
   set.appendChild(theTip(said));
   if (said.the_frame_count.length) {
     // **The frame count sits beside it**, which is what shows the user they got
@@ -819,6 +919,10 @@ function theLeftColumn(server, said) {
     set.appendChild(after);
   }
   frames.appendChild(set);
+  // **No scene ticked greys the range too** (`Design/Render Settings §
+  // Scenes`, *None ticked*; the Creator's twenty-ninth notes, note 6): there
+  // is no set of scenes to impose a range on.
+  if (said.no_scene_is_ticked) frames.classList.add("greyed");
   column.appendChild(frames);
 
   // **View Layers: the setting where what is shown and what the job does are
@@ -838,6 +942,36 @@ function theLeftColumn(server, said) {
 
 function aViewLayer(server, said, layer) {
   const pinned = layer.whose === "the-users";
+  // **Each row is the tick and the name** — `Design/Render Settings § View
+  // Layers`, the Creator's twenty-eighth notes, note 17. The tick sits level
+  // with the name's first line and a long name wraps under itself; the
+  // layer's own count is a second line under the name, at its indent. Until
+  // then a long name wrapped beside a tag that wrapped too, starting at a
+  // different place on every row.
+  const row = document.createElement("span");
+  row.className = "vlrow";
+  // The box is drawn after the name and its slot, below.
+  // **A View Layer whose renderability is animated in the file carries
+  // Blender's keyframe diamond**: solid where it is keyed on the frame being
+  // read, hollow where it is animated but not keyed there. **A pinned box
+  // carries none**, the pin having severed the file's animation.
+  let diamond = null;
+  if (layer.diamond) {
+    diamond = document.createElement("span");
+    diamond.className = layer.diamond === "solid" ? "dia keyed" : "dia";
+    if (layer.diamond_said) diamond.title = theWordsOf(layer.diamond_said);
+  }
+  // **The diamond and the cross share one slot after the name's last word**,
+  // and the name is laid over a copy of itself in the pinned box's bold with
+  // that slot filled, drawn unseen — so the row is as tall as the pinned
+  // name, and pinning or handing back never moves the rows below.
+  const cell = document.createElement("span");
+  cell.className = "vln";
+  const bold = theNameAndItsSlot(layer.name, null);
+  bold.className = "vlb";
+  bold.setAttribute("aria-hidden", "true");
+  cell.appendChild(bold);
+  cell.appendChild(theNameAndItsSlot(layer.name, diamond));
   const box = aBox(layer.name, layer.ticked, pinned ? ["pinned"] : [], () =>
     shell.core.invoke("a_view_layer_is_pinned", {
       server,
@@ -845,51 +979,59 @@ function aViewLayer(server, said, layer) {
       layer: layer.name,
       on: !layer.ticked,
     }),
-    `layer-${layer.name}`
+    `layer-${layer.name}`,
+    cell
   );
-  // **A View Layer whose renderability is animated in the file carries
-  // Blender's keyframe diamond**: solid where it is keyed on the frame being
-  // read, hollow where it is animated but not keyed there. **A pinned box
-  // carries none**, the pin having severed the file's animation.
-  if (layer.diamond) {
-    const mark = document.createElement("span");
-    mark.className = layer.diamond === "solid" ? "dia keyed" : "dia";
-    if (layer.diamond_said) {
-      mark.title = theWordsOf(layer.diamond_said);
-    }
-    box.appendChild(mark);
-  }
-  if (layer.not_known) {
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    tag.textContent = layer.not_known;
-    box.appendChild(tag);
-  }
-  // **A View Layer carrying its own sample count says the number**, and says it
-  // is overridden where the user has typed one.
-  if (layer.tag) {
-    const tag = document.createElement("span");
-    tag.className = "tag";
-    saidInto(tag, layer.tag);
-    box.appendChild(tag);
-  }
-  if (!layer.hand_back_to) return box;
-  // **The cross sits beside the box, outside it**: the whole box is the switch,
-  // so a cross inside it would be a press that also toggled the thing it was
-  // undoing.
-  const row = document.createElement("span");
-  row.className = "vlrow";
   row.appendChild(box);
-  row.appendChild(
-    theCross(layer.hand_back_to, () =>
-      shell.core.invoke("a_pin_is_handed_back", {
-        server,
-        file: said.file_bytes,
-        layer: layer.name,
-      })
-    , `layer-cross-${layer.name}`)
-  );
+  if (layer.hand_back_to) {
+    // **The cross sits outside the box**: the whole box is the switch, so a
+    // cross inside it would be a press that also toggled the thing it was
+    // undoing. It is drawn over the name's place, after its last word, on an
+    // unseen copy of the name.
+    const over = document.createElement("span");
+    over.className = "vlx";
+    over.appendChild(
+      theNameAndItsSlot(
+        layer.name,
+        theCross(layer.hand_back_to, () =>
+          shell.core.invoke("a_pin_is_handed_back", {
+            server,
+            file: said.file_bytes,
+            layer: layer.name,
+          })
+        , `layer-cross-${layer.name}`)
+      )
+    );
+    row.appendChild(over);
+  }
+  // **A View Layer carrying its own sample count says the number**, and says
+  // it is overridden where the user has typed one: *100 samples*, *100
+  // samples, overridden*. A layer not known without a read says so on the
+  // same line.
+  if (layer.not_known || layer.tag) {
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    if (layer.not_known) tag.appendChild(document.createTextNode(layer.not_known));
+    if (layer.not_known && layer.tag) tag.appendChild(document.createTextNode(" · "));
+    if (layer.tag) saidInto(tag, layer.tag);
+    row.appendChild(tag);
+  }
   return row;
+}
+
+/// **A name, then its slot**, held to its last word by a word joiner so the
+/// slot never wraps onto a line of its own. **The slot is there on every row,
+/// empty or not**, so a name wraps as if it were filled.
+function theNameAndItsSlot(name, inTheSlot) {
+  const said = document.createElement("span");
+  said.className = "vlt";
+  said.appendChild(theValueDrawn(name));
+  said.appendChild(document.createTextNode("⁠"));
+  const slot = document.createElement("span");
+  slot.className = "vls";
+  if (inTheSlot) slot.appendChild(inTheSlot);
+  said.appendChild(slot);
+  return said;
 }
 
 // ── The middle column ───────────────────────────────────────────────────────
@@ -920,12 +1062,32 @@ function theMiddleColumn(server, said) {
   }
   samples.dataset.box = "samples";
   group.appendChild(samples);
-  // **Neither line is drawn before the file has been read.**
+  // **Neither line is drawn before the file has been read.** **The file's
+  // own setup takes the grey edge, and only the line a typed count causes
+  // stays amber** — `Design/Render Settings § When the override warning
+  // goes`, the Creator's twenty-eighth notes, note 17.
   for (const line of said.the_samples_lines) {
     const hint = document.createElement("p");
-    hint.className = "hint";
+    hint.className = said.the_samples_lines_are_the_files ? "hint flat" : "hint";
     theSentence(hint, line);
     group.appendChild(hint);
+  }
+  // **The line counting the View Layers that keep their own counts keeps its
+  // space when it goes** — the same section: unticking the last of them takes
+  // it away, and every field under it would move up. It is drawn again,
+  // unseen, until another file is opened or a count is typed, which turns the
+  // two lines into one.
+  const held = panels.get(server);
+  if (held) {
+    const stands = said.the_own_counts_line_stands;
+    if (stands) held.theCountLineThatWent = said.the_samples_lines[said.the_samples_lines.length - 1];
+    else if (held.theCountLineThatWent && said.the_samples_lines_are_the_files) {
+      const hint = document.createElement("p");
+      hint.className = "hint flat held";
+      hint.setAttribute("aria-hidden", "true");
+      theSentence(hint, held.theCountLineThatWent);
+      group.appendChild(hint);
+    }
   }
 
   if (said.simplify) group.appendChild(theSimplify(server, said));
@@ -955,7 +1117,7 @@ function theMiddleColumn(server, said) {
         aValueIsHandedBack(server, said, "resolution-percentage")
       , "resolution-cross")
     );
-  }
+  } else resolution.appendChild(theCrossesRoom());
   const reading = document.createElement("span");
   if (said.the_size_reading) {
     reading.className = "reading mono";
@@ -1043,7 +1205,7 @@ function theEngine(server, said) {
     });
     if (engine.on === which && engine.hand_back_to) {
       const row = document.createElement("span");
-      row.className = "vlrow";
+      row.className = "radx";
       row.appendChild(one);
       row.appendChild(
         theCross(engine.hand_back_to, () =>
@@ -1152,7 +1314,7 @@ function theRendersOn(server, said) {
     });
     if (device.on === which && device.hand_back_to) {
       const row = document.createElement("span");
-      row.className = "vlrow";
+      row.className = "radx";
       row.appendChild(one);
       row.appendChild(
         theCross(device.hand_back_to, () =>
@@ -1244,7 +1406,9 @@ function theTextureLimit(server, said, field, choices) {
   }));
   const shown = rows.find((one) => one.picked);
   set.appendChild(
-    aDropdown({ label: field.label, box: `${which}-field`, rows, shown: shown ? shown.said : field.value || "—" }, (value) =>
+    // **One width whatever is picked**, the drawing's `.w-tex`, so the cross
+    // after it stays put (UI consistency, finding 62).
+    aDropdown({ label: field.label, box: `${which}-field`, width: "w-tex", rows, shown: shown ? shown.said : field.value || "—" }, (value) =>
       anAnswerIsGiven(server, said, which, value)
     )
   );
@@ -1262,7 +1426,7 @@ function theRightColumn(server, said) {
   column.className = "col";
   // **A heading is drawn only where something is under it** — the drawing's
   // own script: *"a page with none has nothing to put there"* (must-do 15).
-  if (said.the_output_group_is_drawn) column.appendChild(theOutputGroup(said));
+  if (said.the_output_group_is_drawn) column.appendChild(theOutputGroup(server, said));
   if (said.the_dependencies_group_is_drawn) {
     // **The dependency warning sits in the right-hand column, and it is a band
     // rather than a line.**
@@ -1273,20 +1437,69 @@ function theRightColumn(server, said) {
   return column;
 }
 
-function theOutputGroup(said) {
+function theOutputGroup(server, said) {
   const output = aGroup(said.output_heading);
-  // **With several scenes ticked the group's own contents go and one line
-  // stands in their place, under this heading**: what a job writes is the read
-  // of one scene and there is no scene in hand.
+  // **With several scenes ticked, and a read from an older server program
+  // that holds one scene, one line stands in the group's place**: what a job
+  // writes is the read of one scene and there is no scene in hand.
   if (said.one_scene_only.length) {
     const line = document.createElement("p");
     line.className = "bar-note";
     theSentence(line, said.one_scene_only);
     output.appendChild(line);
   }
-  // **The two the read finds that are warnings rather than lines**, above the
-  // list, and neither blocks Render.
-  for (const warning of said.the_output_warnings) {
+  // **With several scenes ticked, each one's list under its name**, as one
+  // scene's is drawn (`Design/Render Settings § What it will write`, the four
+  // questions, scout 2.15, 2026-11-12). No folder line: each scene is its own
+  // job with its own folder.
+  for (const scene of said.the_scenes_outputs || []) {
+    const name = document.createElement("p");
+    name.className = "bar-note";
+    name.dataset.box = `output-scene-${scene.scene}`;
+    const bold = document.createElement("b");
+    theValueIsDrawnInto(bold, scene.scene);
+    name.appendChild(bold);
+    output.appendChild(name);
+    theWritesAreDrawnInto(output, server, scene, `${scene.scene}\u0000`);
+  }
+  theWarningsAreDrawnInto(output, said.the_output_warnings);
+  // **Above the list, one line says where the job's folder will sit**, or why
+  // it falls back (`Design/Render Settings § What it will write`; the
+  // Creator's note 18 on their second notes).
+  if (said.the_folder_line) {
+    const line = document.createElement("p");
+    line.className = "bar-note";
+    line.dataset.box = "the-jobs-folder";
+    theSentence(line, said.the_folder_line);
+    line.querySelectorAll("b").forEach((value) => value.classList.add("selectable"));
+    output.appendChild(line);
+  }
+  // **A second line under it where the server's fallback folder is ruled out
+  // before submitting** — the drawing's `res-fallchosen`, in the same grey
+  // (`Design/Render Settings § What it will write`; the Creator's second
+  // notes, piece 4).
+  if (said.the_second_folder_line) {
+    const line = document.createElement("p");
+    line.className = "bar-note";
+    line.dataset.box = "the-jobs-fallback-folder";
+    theSentence(line, said.the_second_folder_line);
+    output.appendChild(line);
+  }
+  theListAndItsLinesAreDrawnInto(output, server, said, "");
+  return output;
+}
+
+/// **One scene's warnings, list and lines**, under its name — the same three
+/// one scene's page draws.
+function theWritesAreDrawnInto(output, server, said, key) {
+  theWarningsAreDrawnInto(output, said.the_output_warnings);
+  theListAndItsLinesAreDrawnInto(output, server, said, key);
+}
+
+/// **The two the read finds that are warnings rather than lines**, above the
+/// list, and neither blocks Render.
+function theWarningsAreDrawnInto(output, warnings) {
+  for (const warning of warnings) {
     const held = document.createElement("div");
     held.className = "owwarn";
     held.dataset.box = `output-${warning.which}`;
@@ -1314,43 +1527,21 @@ function theOutputGroup(said) {
     }
     output.appendChild(held);
   }
-  // **Above the list, one line says where the job's folder will sit**, or why
-  // it falls back (`Design/Render Settings § What it will write`; the
-  // Creator's note 18 on their second notes).
-  if (said.the_folder_line) {
-    const line = document.createElement("p");
-    line.className = "bar-note";
-    line.dataset.box = "the-jobs-folder";
-    theSentence(line, said.the_folder_line);
-    line.querySelectorAll("b").forEach((value) => value.classList.add("selectable"));
-    output.appendChild(line);
-  }
-  // **A second line under it where the server's fallback folder is ruled out
-  // before submitting** — the drawing's `res-fallchosen`, in the same grey
-  // (`Design/Render Settings § What it will write`; the Creator's second
-  // notes, piece 4).
-  if (said.the_second_folder_line) {
-    const line = document.createElement("p");
-    line.className = "bar-note";
-    line.dataset.box = "the-jobs-fallback-folder";
-    theSentence(line, said.the_second_folder_line);
-    output.appendChild(line);
-  }
+}
+
+/// **The list and the lines under it.** `key` keeps one scene's open or
+/// closed groups apart from another's.
+function theListAndItsLinesAreDrawnInto(output, server, said, key) {
   if (said.what_it_will_write) {
     const writes = document.createElement("div");
     writes.className = "writes";
+    // **One row per folder** — `Design/Render Settings § What it will write`,
+    // the Creator's twenty-eighth notes, note 17, and `Job files and outputs`
+    // P11: the set of folders. Siblings sit under their parent, written once;
+    // a group of more than eight starts closed.
     for (const row of said.what_it_will_write.rows) {
-      // Where it writes: its folder under the job's folder, in the order its
-      // bytes run (X9) — or *top of the job's folder*, which is words.
-      if (row.the_top) {
-        writes.appendChild(aCell(["p"], row.the_top));
-      } else {
-        const place = aCell(["p", "mono"], "");
-        theValueIsDrawnInto(place, row.place);
-        writes.appendChild(place);
-      }
-      writes.appendChild(aCell(["n", "mono"], row.how_many));
-      writes.appendChild(aCell(["f", "mono"], row.format || ""));
+      if (row.group) theGroupIsDrawnInto(writes, server, row, key);
+      else aRowIsDrawnInto(writes, row, false);
     }
     const total = document.createElement("span");
     total.className = "p tot";
@@ -1372,7 +1563,103 @@ function theOutputGroup(said) {
     theSentence(one, line);
     output.appendChild(one);
   }
-  return output;
+}
+
+/// **One folder's row**: where it writes, then a count and its format per
+/// line — a folder holding two formats is one row, its place spanning both
+/// lines, so no folder cell is ever left blank and no count drifts from its
+/// format. **Where it writes is its folder under the job's folder, in the
+/// order its bytes run (X9)** — or *top of the job's folder* or *this
+/// folder*, which are words. **A path breaks after a slash, and inside a
+/// folder's name only where that name is wider than the column**: each name
+/// is held whole with the slash after it (`thePathIsDrawnInto`).
+function aRowIsDrawnInto(writes, row, under) {
+  const classes = row.the_top ? ["p"] : ["p", "mono"];
+  if (under) classes.push("in");
+  const place = aCell(classes, row.the_top || "");
+  if (!row.the_top) thePathIsDrawnInto(place, row.place);
+  theCountsAreDrawnBeside(writes, place, row.counts);
+}
+
+/// **A folder's place, then its counts** — a count and its format per line.
+/// **Where it holds more than one format, its counts sit at its top, each on
+/// its own format's line** (the drawing's `.wcounts`, D-11 of the UI at every
+/// size, 2026-11-12): one cell across the two columns, laid on their lines,
+/// so a tall folder or a wrapped format moves no count off its format. Until
+/// then the place spanned one line per format, and a folder that wrapped to
+/// six lines drew its second count halfway down it.
+function theCountsAreDrawnBeside(writes, place, counts) {
+  writes.appendChild(place);
+  let into = writes;
+  if (counts.length > 1) {
+    into = aCell(["wcounts"], "");
+    writes.appendChild(into);
+  }
+  for (const one of counts) {
+    into.appendChild(aCell(["n", "mono"], one.how_many));
+    into.appendChild(aCell(["f", "mono"], one.format || ""));
+  }
+}
+
+/// **A path drawn so it breaks only after a slash** — each folder's name and
+/// the slash after it are one piece (the drawing's `.writes .p bdi bdi`).
+function thePathIsDrawnInto(holder, path) {
+  theValueIsDrawnInto(holder, path);
+  const whole = holder.firstChild;
+  if (!whole || !whole.childNodes) return;
+  for (const name of Array.from(whole.childNodes)) {
+    if (name.nodeType !== 1) continue;
+    const after = name.nextSibling;
+    if (after && after.nodeType === 3 && (after.textContent === "/" || after.textContent === "\\")) {
+      name.appendChild(after);
+    }
+  }
+}
+
+/// **Folders with the same parent, under it** — `Design/Render Settings §
+/// What it will write`, the Creator's twenty-eighth notes, note 17. The
+/// parent's line carries the number of folders and the group's files by
+/// format, and a press opens or closes it in place: the line stays where it
+/// was, under the pointer, and what is below moves. **That is the one stated
+/// exception to `Design/Whole app`'s rule that nothing drawn moves**, because
+/// the move is the user's own press. **Open or closed is kept for the page's
+/// life once drawn**: a redraw keeps it, and a change of range that takes a
+/// group past eight never closes one already open. Another file is a fresh
+/// page.
+function theGroupIsDrawnInto(writes, server, row, key = "") {
+  const held = thePanelFor(server);
+  if (!held.theGroupsDrawn) held.theGroupsDrawn = new Map();
+  const which = `${key}${row.place}`;
+  if (!held.theGroupsDrawn.has(which)) held.theGroupsDrawn.set(which, !row.group.it_starts_closed);
+  const open = held.theGroupsDrawn.get(which);
+  const place = aCell(["p"], "");
+  const line = document.createElement("button");
+  line.type = "button";
+  line.className = "wgrp";
+  line.dataset.box = `output-group-${row.place}`;
+  line.setAttribute("aria-expanded", String(open));
+  const chevron = document.createElement("span");
+  chevron.className = "chev";
+  chevron.textContent = "▼";
+  line.appendChild(chevron);
+  const words = document.createElement("span");
+  const parent = document.createElement("span");
+  parent.className = "mono";
+  thePathIsDrawnInto(parent, row.place);
+  words.appendChild(parent);
+  const folders = document.createElement("span");
+  folders.className = "wfold";
+  saidInto(folders, row.group.folders);
+  words.appendChild(folders);
+  line.appendChild(words);
+  line.addEventListener("click", () => {
+    held.theGroupsDrawn.set(which, !held.theGroupsDrawn.get(which));
+    if (held.said) theSettingsAreDrawn(server, held.said);
+  });
+  place.appendChild(line);
+  theCountsAreDrawnBeside(writes, place, row.counts);
+  if (!open) return;
+  for (const one of row.group.rows) aRowIsDrawnInto(writes, one, true);
 }
 
 function theDependencyBand(server, said) {
@@ -1410,6 +1697,9 @@ function theDependencyBand(server, said) {
     // **Sets the first-frame check and submits, as one act** — `Rendering` W4's
     // `SubmitWithTheFirstFrameCheck` (must-do 10).
     first.addEventListener("click", () => aJobIsSubmitted(server, said, true));
+    // **No scene ticked: both ways to submit grey with Render**; *Check
+    // dependencies…* stays, being about the file (`§ Scenes`, *None ticked*).
+    first.disabled = Boolean(said.no_scene_is_ticked);
     ways.appendChild(first);
   }
   const anyway = document.createElement("button");
@@ -1418,6 +1708,7 @@ function theDependencyBand(server, said) {
   anyway.dataset.box = "band-anyway";
   anyway.textContent = band.submit_anyway;
   anyway.addEventListener("click", () => aJobIsSubmitted(server, said));
+  anyway.disabled = Boolean(said.no_scene_is_ticked);
   ways.appendChild(anyway);
   held.appendChild(ways);
 
@@ -1540,7 +1831,10 @@ function theFoot(server, said) {
         "download-as-they-render",
         said.the_download_is_on ? "off" : "on"
       ),
-      "download-switch"
+      "download-switch",
+      // **No scene ticked, no job** — the switch greys with Render
+      // (`§ Scenes`, *None ticked*), keeping its setting.
+      said.no_scene_is_ticked
     )
   );
   const summary = said.the_format_summary || said.where_they_go;
@@ -1550,6 +1844,9 @@ function theFoot(server, said) {
     control.className = "mini";
     control.dataset.box = "download-choices";
     theSentence(control, summary);
+    // Cut short beside the switch, so it reads whole on hover (the UI at
+    // every size, D-04).
+    control.title = control.textContent;
     // The drawing's own mark that the control opens something. A glyph, not a
     // word.
     control.appendChild(document.createTextNode(" ▾"));
@@ -1600,6 +1897,9 @@ function theFoot(server, said) {
     theMarkOnAControl(render, render.textContent);
   } else if (!said.submitting_is_offered) {
     render.disabled = true;
+    // **Why it waits, on hover** — `Design/Whole app § While other work runs`
+    // (the Creator's notes on the test copy, second round, note 17).
+    if (said.why_render_waits) render.title = said.why_render_waits;
   }
   render.addEventListener("click", () => {
     if (render.getAttribute("aria-disabled") === "true") return;
@@ -1626,7 +1926,7 @@ function theFoot(server, said) {
           said.the_first_frame_is_asked_for ? "off" : "on"
         ),
       "first-frame-switch",
-      said.the_first_frame_switch_is_greyed
+      said.the_first_frame_switch_is_greyed || said.no_scene_is_ticked
     )
   );
   // **How much the job reports to the phone is chosen here too**, beside the
@@ -1642,8 +1942,8 @@ function theFoot(server, said) {
   // never both. **It shares line 2 with the switches and never widens
   // Render's column**, so nothing already drawn moves when it appears, which
   // is what the Creator's second notes, note 8, asked of it (Render jumped
-  // when pressed). Where line 2 has no room for it, it drops under, still at
-  // the right.
+  // when pressed). Where line 2 has no room for it, its sentence is cut short
+  // rather than dropping under (the UI at every size, D-16 and C9).
   const held = panels.get(server);
   if (held && held.theSubmissionThatWent) {
     const went = theSubmissionThatWentIsDrawn(held.theSubmissionThatWent);
@@ -1659,8 +1959,13 @@ function theFoot(server, said) {
     line.className = "so";
     line.dataset.box = "simulation-row";
     if (row.name) {
+      // **A long scene name is cut short, whole on hover, so the switch and the
+      // range stay beside it and in line with the other scenes'** (the UI at
+      // every size, D-13).
       const scene = document.createElement("span");
+      scene.className = "soname";
       scene.textContent = row.name;
+      scene.title = row.name;
       line.appendChild(scene);
     }
     line.appendChild(aSwitch(row.label, row.on, () => anAnswerIsGiven(
@@ -1737,12 +2042,13 @@ function theFoot(server, said) {
     line.appendChild(link);
     third.push(line);
   }
-  if (third.length) {
-    const line = document.createElement("div");
-    line.className = "sfl3";
-    third.forEach((one) => line.appendChild(one));
-    foot.appendChild(line);
-  }
+  // **The third line keeps its room when it has nothing to say** (the
+  // drawing's `.sfoot .sfl3`), so its words coming and going never move
+  // Render (UI consistency, finding 14).
+  const line = document.createElement("div");
+  line.className = "sfl3";
+  third.forEach((one) => line.appendChild(one));
+  foot.appendChild(line);
   return foot;
 }
 
@@ -1880,20 +2186,42 @@ document.addEventListener(
 /// still measures nowhere else.
 function theListIsKeptInsideTheWindow(face, list) {
   list.classList.remove("up");
+  list.classList.remove("left");
+  list.style.setProperty("--ddl-max-h", "none");
+  list.style.setProperty("--ddl-max-w", "none");
   const room = list.getBoundingClientRect();
   const control = face.getBoundingClientRect();
   let top = 0;
   let bottom = window.innerHeight;
+  let left = 0;
+  let right = window.innerWidth;
   const styleOf = typeof globalThis.getComputedStyle === "function" ? globalThis.getComputedStyle : null;
   for (let at = face.parentNode; styleOf && at && at.nodeType === 1; at = at.parentNode) {
-    if (styleOf(at).overflowY === "visible") continue;
+    const style = styleOf(at);
+    if (style.overflowY === "visible" && style.overflowX === "visible") continue;
     const box = at.getBoundingClientRect();
     top = Math.max(top, box.top);
     bottom = Math.min(bottom, box.bottom);
+    left = Math.max(left, box.left);
+    right = Math.min(right, box.right);
   }
-  const below = bottom - control.bottom;
-  const above = control.top - top;
-  if (room.bottom > bottom && above > below) list.classList.add("up");
+  // **Held to the room it has** (the UI at every size, C1): leftward from the
+  // control's right edge where its names are wider than the room right of it,
+  // a name still too long wrapping; and no taller than the side it opens to,
+  // scrolling inside it. Two values the stylesheet reads (`--ddl-max-w`,
+  // `--ddl-max-h`), never a declaration on the element (H33). The gap is the
+  // list's own 4 pixels, twice.
+  const rightward = right - control.left - 8;
+  const leftward = control.right - left - 8;
+  const leftwards = room.width > rightward && leftward > rightward;
+  if (leftwards) list.classList.add("left");
+  list.style.setProperty("--ddl-max-w", `${Math.round(Math.max(leftwards ? leftward : rightward, control.width))}px`);
+  const tall = list.getBoundingClientRect().height;
+  const below = bottom - control.bottom - 8;
+  const above = control.top - top - 8;
+  const up = tall > below && above > below;
+  if (up) list.classList.add("up");
+  if (tall > (up ? above : below)) list.style.setProperty("--ddl-max-h", `${Math.round(Math.max(up ? above : below, 60))}px`);
 }
 
 /// `rows` is `[{ value, said, picked }]`; `shown` is what the closed control
@@ -1949,12 +2277,12 @@ function aDropdown({ label, box, width, rows, shown }, picked) {
     theOpenDropdown = { pick, shut: () => { shut(); theFocusLeaves(); } };
     // **The keys reach the list however it was opened**: from the keyboard
     // the picked row takes the focus, from the mouse the control does.
-    if (byKey && options[first]) options[first].focus();
-    else face.focus();
+    if (byKey && options[first]) theFocusMovesTo(options[first]);
+    else theFocusMovesTo(face);
   };
   function chosen(at, byKey) {
     shut();
-    if (byKey) face.focus();
+    if (byKey) theFocusMovesTo(face);
     else theFocusLeaves();
     if (!rows[at].picked) picked(rows[at].value);
   }
@@ -1971,13 +2299,13 @@ function aDropdown({ label, box, width, rows, shown }, picked) {
     if (press.key === "Escape" && open) {
       press.preventDefault();
       shut();
-      face.focus();
+      theFocusMovesTo(face);
     } else if (press.key === "ArrowDown" || press.key === "ArrowUp") {
       press.preventDefault();
       if (!open) return opened(true);
       const at = options.indexOf(document.activeElement);
       const next = at < 0 ? first : at + (press.key === "ArrowDown" ? 1 : -1);
-      if (options[next]) options[next].focus();
+      if (options[next]) theFocusMovesTo(options[next]);
     } else if (press.key === "Enter" && open) {
       const at = options.indexOf(document.activeElement);
       if (at < 0) return;
@@ -2024,9 +2352,14 @@ function theFileIsRead(server, said) {
 }
 
 function aJobIsSubmitted(server, said, withTheFirstFrameCheck) {
+  // `Queue & History` Y8: take the field with the press. Its change request
+  // can still be in flight, and a redraw can have kept uncommitted typing.
+  const held = panels.get(server);
+  const name = held && held.body.querySelector('[data-box="job-name"]');
   return shell.core.invoke("a_job_is_submitted", {
     server,
     file: said.file_bytes,
+    jobName: name ? name.value : said.the_job_name,
     withTheFirstFrameCheck: Boolean(withTheFirstFrameCheck),
   });
 }
@@ -2121,6 +2454,10 @@ function theRefusalIsPutOnItsBox(server, said) {
       theSentence(own, parts);
     }
     own.hidden = parts.length === 0;
+    // **The submission's answer is cut short on the foot's second line, and
+    // reads whole on hover**, as the submitted line is (UI consistency,
+    // finding 47).
+    if (said.theBox === "submit") own.title = own.textContent;
     // **A typed value whose refusal has a line of its own** — the minutes
     // between pictures, refused on the foot's third line: the field turns red
     // and keeps what was typed, as every refused field on this page does. The
@@ -2333,7 +2670,7 @@ function theField(field, width, answered) {
   box.addEventListener("mousedown", (press) => {
     if (press.button !== 0 || document.activeElement === box) return;
     press.preventDefault();
-    box.focus();
+    theFocusMovesTo(box);
     box.select();
   });
   box.addEventListener("change", () => answered(box.value));
@@ -2344,12 +2681,48 @@ function theField(field, width, answered) {
 /// Hidden until there is something to say. **What the answer says decides its
 /// colour** when it arrives (`theRefusalIsPutOnItsBox`); a refusal is what
 /// every line but the submission's ever carries.
+/// **The read's line as it reads while a read runs, drawn unseen** —
+/// *Reading the file*, a clock and *Stop*, which is what makes it tall — to
+/// hold its height
+/// in the line under the version row (UI consistency, finding 15).
+function theReadLineHeld(said) {
+  const line = document.createElement("div");
+  line.className = "sub rdline pkheld";
+  line.setAttribute("aria-hidden", "true");
+  line.appendChild(document.createTextNode(said.reading_the_file));
+  line.appendChild(document.createTextNode(" · "));
+  const clock = document.createElement("span");
+  clock.className = "tnum";
+  clock.textContent = "0:00";
+  line.appendChild(clock);
+  line.appendChild(document.createTextNode(" · "));
+  const stop = document.createElement("button");
+  stop.type = "button";
+  stop.className = "mini inl";
+  stop.tabIndex = -1;
+  stop.textContent = said.stop_read;
+  line.appendChild(stop);
+  return line;
+}
+
 function anAnswerLine(which) {
   const line = document.createElement("p");
   line.className = "alertnote";
   line.dataset.box = `${which}-answer`;
   line.hidden = true;
   return line;
+}
+
+/// **The cross's room where there is nothing to hand back**, the drawing's
+/// `.clear.held`: what follows a value — *?*, *240 frames*, the pixel reading
+/// — sits where it sits with the cross, so typing a value moves none of it
+/// (UI consistency, finding 24).
+function theCrossesRoom() {
+  const room = document.createElement("span");
+  room.className = "clear held";
+  room.setAttribute("aria-hidden", "true");
+  room.textContent = "✕";
+  return room;
 }
 
 function theCross(handBackTo, pressed, which) {
@@ -2390,10 +2763,17 @@ function theTip(said) {
   }
   bubble.appendChild(list);
   tip.appendChild(bubble);
+  // **The help is brought into view when it opens** (the UI at every size,
+  // C5): near the bottom of the settings it opened under the panel's foot.
+  // The scroll is the engine's, asked of the help itself, so the page still
+  // measures nothing but its one dropdown.
+  const theHelpIsShown = () => bubble.scrollIntoView({ block: "nearest", inline: "nearest" });
+  tip.addEventListener("mouseenter", theHelpIsShown);
+  tip.addEventListener("focusin", theHelpIsShown);
   return tip;
 }
 
-function aBox(name, ticked, extra, pressed, which) {
+function aBox(name, ticked, extra, pressed, which, theNameAsDrawn) {
   const box = document.createElement("span");
   if (which) box.dataset.box = which;
   box.className = ["box", ...extra, ticked ? "on" : ""].filter(Boolean).join(" ");
@@ -2405,7 +2785,7 @@ function aBox(name, ticked, extra, pressed, which) {
   box.appendChild(mark);
   // A scene's or a View Layer's own name, kept apart from the tick and the
   // tag beside it (X9, `web/the-value-drawn.js`).
-  box.appendChild(theValueDrawn(name));
+  box.appendChild(theNameAsDrawn || theValueDrawn(name));
   box.addEventListener("click", pressed);
   box.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
@@ -2446,6 +2826,14 @@ function aLink(label, pressed, which) {
   link.textContent = label;
   link.addEventListener("click", pressed);
   return link;
+}
+
+/// **The small button, held to the height of the line it sits in** — the
+/// drawing's `.mini.inl`, as the dependency check's *Stop* is.
+function anInlineButton(label, pressed, which) {
+  const button = aLink(label, pressed, which);
+  button.className = "mini inl";
+  return button;
 }
 
 function aCell(classes, text) {

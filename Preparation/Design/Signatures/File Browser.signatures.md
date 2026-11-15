@@ -50,3 +50,48 @@
 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the twenty-fourth notes, note 2, plan and drawing pass.md`, outside any round — new § Looking at a picture, and the double-click, Return and key-exception sentences that point to it (the seventeenth notes, note 11). No auditor has seen it.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the desk builder of step 13's second words sweep, outside any round — § Looking at a picture quotes *Can't preview OpenEXR files.* (was *Smoozy can't show OpenEXR files.*) and *Too large to show (over 100 MB).* (was *Too large to show. Smoozy shows pictures up to 100 MB.*). Meaning unchanged. Each carries its inline note. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 7, Files: refresh and the upload's progress.md`, outside any round — § The list: the refresh icon at the path's right end (note 9), and the transfer-count paragraph's last sentence struck for the upload's own line above the list, *Counting files…*, then *Uploading 12 of 40 files to kitchen/* with a thin bar, then the ending (note 10, Creator-stated); § Keyboard shortcuts: ⌘R, or Ctrl+R and F5, and the third exception. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — the drawing pass.md`, outside any round — notes 2 and 12: the refresh icon at the toolbar's right end, the selection note's place, and the board under a picture in *Looking at a picture*. No auditor has seen it.
+
+2026-11-11 — GPT-6.1 (Codex), second UI builder — Kept file tags, status sentences, rename feedback and hover details readable at the window edges.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — C-12: the Kind column is 126 pixels; C-05: *Uploads go to* names the folder, the whole path on hover; C-04: Paste's count grows rightward from right of the icon's middle. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 2, uploads and transfers.md`, outside any round — a partial act names what did not go, with its reason (scout 3.34). No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 3, words a user can't act on.md`, outside any round — The delete box's references line says *other files on this server depend on this file* (scout 3.35, narrowed); an unnamed job is *Another job*, never its identity (3.31); the path's top reads *Server* (3.32). The drawing's references line changed with it. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), second builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — Download leaves the user in Files (scout 1.9). No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Disabled Copy before server setup, with its reason on hover.
+
+2026-11-11 — GPT-6 (Codex), third part continued — Corrected the plural verbs in warnings that name several jobs.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: The already-there box: *Matched by name; contents not compared.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), the builder holding `Audits/Build/The four questions/Brief — the admin password in Files.md` — what pressing *Retry with admin access* does, and its words. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), the builder holding `Audits/Build/The four questions/Brief — a house on the home folder.md` — the login's home folder carries a house on its row and in the path, *Home folder* on hover. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, sixth part: *Uploading*: a drop on a folder's row goes into that folder (scout 2.19). No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent), the fixer holding the runner's brief on `Audits/Build/The four questions/The admin password in Files — Sol's look.md`, outside any round — *Retry with admin access* after Sol's look: the box bound to its server, three new answers, a new folder belongs to the login. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the live pass's leftovers.md`, outside any round — Retry with admin access also after a delete refused part-way inside a folder, where every refusal was for permission. No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the second live pass found.md`, outside any round — After a successful Retry with admin access, the refusal on the line goes with its offer. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, the window.md`, outside any round — *Files stays in the folder it shows* (the Creator's note 1 on the test copy of 2026-11-12). No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, the window.md`, outside any round — the home folder's row says *Home folder* in grey after its name (the Creator's note 0 on the test copy of 2026-11-12). No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the window notes, Sol's points.md`, outside any round — *Files stays in the folder it shows* widened to readings still on their way, older readings, and joined refreshes (Sol's look at the window notes, points 1 to 3). No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+2026-11-14 — Claude Opus 5.5 — added Smoozy's own files and the login's keys (batch 2).
+2026-11-14 — Claude Opus 5.5 — no drop while a box is open (Rough share 1, 24).
+2026-11-14 — Claude Opus 5.5 — a system folder named in the delete box (181), Skip existing on a copy (176), a full disk after a move or copy (449): the leftovers of the Rough what-if answers.
+2026-11-14 — Claude Opus 5.5 — the system-folder line beside *Retry with admin access* too (the runner's ruling on 181).

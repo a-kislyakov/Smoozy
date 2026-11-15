@@ -143,6 +143,7 @@ use crate::scheduling::{
     TheChannelsDraw, TheDesktopSideAdmissionPoint,
 };
 use crate::servers::sessions::{AHeldConnection, NotLent, TheConnectionItSatOn, ThisServersSessions};
+use crate::surface::transfers::TheDestinationTrouble;
 use crate::transfers::{TheLocalRecord, ThePlatformFileAdapter};
 
 // ---------------------------------------------------------------------------
@@ -453,6 +454,21 @@ impl TheRunsTransfers {
         self.moving().a_file_stopped(request, entry);
     }
 
+    /// **A dependency send's file landed**: it stops moving, and its bytes are
+    /// held in the request's figure until the send counts it
+    /// ([`Self::a_landed_file_is_counted`]) — one act, under the register's one
+    /// lock, so no reading of the register finds the file in neither place.
+    pub(crate) fn a_file_landed(&self, request: &str, entry: usize) {
+        self.moving().a_file_landed(request, entry);
+    }
+
+    /// **The send counts a landed file**, so the register lets its bytes go.
+    pub(crate) fn a_landed_file_is_counted(&self, request: &str, entry: usize) {
+        if let Some(under_way) = self.moving().requests.get_mut(request) {
+            under_way.landed.retain(|(one, _)| *one != entry);
+        }
+    }
+
     /// **The user's *Stop*, on a request or on one of its files** —
     /// `Server protocol and transfers` C22: *"A stop closes the channel and
     /// stops the loop"*, and it is desktop-local. `File Browser` U6 and
@@ -722,6 +738,14 @@ pub struct ARequestUnderWay {
     /// `Design/Transfers § Stopping one file`. Step 10c's transfer wave piece
     /// 7.
     pub files_the_user_stopped: Vec<Vec<u8>>,
+    /// **A dependency send's files that landed and that its own count does not
+    /// show yet**, each by its entry with its size — between a file's
+    /// publication and the moment the send counts it, which waits on the
+    /// publication values read back after its group. **Its bytes stay in the
+    /// request's figure there**, so the megabytes never fall while the upload
+    /// grows (the twenty-eighth notes, piece 12: *233.7 → 228.7 MB*). Not drawn
+    /// as a file moving.
+    pub landed: Vec<(usize, u64)>,
 }
 
 /// **What an ended upload or manual download left staged, as the record
@@ -889,6 +913,19 @@ impl WhatIsMovingNow {
         if let Some(under_way) = self.requests.get_mut(request) {
             under_way.moving.retain(|file| file.entry != entry);
         }
+    }
+
+    fn a_file_landed(&mut self, request: &str, entry: usize) {
+        let Some(under_way) = self.requests.get_mut(request) else {
+            return;
+        };
+        let Some(at) = under_way.moving.iter().position(|file| file.entry == entry) else {
+            return;
+        };
+        let file = under_way.moving.remove(at);
+        let bytes = file.report.bytes_expected.max(file.report.bytes_staged);
+        under_way.landed.retain(|(one, _)| *one != entry);
+        under_way.landed.push((entry, bytes));
     }
 }
 
@@ -1518,6 +1555,7 @@ pub fn a_leftover_is_removed(
             })
             .collect();
     });
+    let the_transfers: Vec<Identity> = found.iter().map(|one| one.transfer.clone()).collect();
     for mut one in found {
         // **Durably *stopped* first**, and only then the material.
         one.ending = Some(THE_USERS_STOP);
@@ -1540,6 +1578,21 @@ pub fn a_leftover_is_removed(
         } else {
             removed.owed += 1;
         }
+    }
+    // **`Download` M13 and `File Browser` U8 as amended 2026-11-12: nothing
+    // left, so the request is marked and its row goes.**
+    if removed.removed > 0 && removed.owed + removed.not_written == 0 {
+        record.with_the_record(&mut |connection| {
+            let _ = match direction {
+                Direction::Down => {
+                    crate::record::download_records::the_leftover_of_this_request_was_removed(connection, request)
+                }
+                Direction::Up => the_transfers.iter().try_fold(0, |marked, transfer| {
+                    crate::record::upload_requests::the_leftover_of_this_transfer_was_removed(connection, transfer)
+                        .map(|more| marked + more)
+                }),
+            };
+        });
     }
     the_run.every_leftover_is_read_again();
     record.a_transfer_moved();
@@ -1585,6 +1638,7 @@ pub async fn an_upload_leftover_is_removed_on_the_machine<C: AHeldConnection>(
 ) -> TheLeftoverRemoved {
     use smoozy_server_protocol::subsystem::StatusCode;
     let mut removed = TheLeftoverRemoved::default();
+    let mut the_transfers: Vec<Identity> = Vec::new();
     for mut one in records {
         if one.direction != Direction::Up {
             continue;
@@ -1635,12 +1689,24 @@ pub async fn an_upload_leftover_is_removed_on_the_machine<C: AHeldConnection>(
             });
             if written {
                 removed.removed += 1;
+                the_transfers.push(one.transfer.clone());
             } else {
                 removed.owed += 1;
             }
         } else {
             removed.owed += 1;
         }
+    }
+    // **`File Browser` U8 as amended 2026-11-12: every staged part gone, so
+    // the request is marked and its row goes** (the second live pass, new
+    // fault 3). A part left behind marks nothing, and the row keeps its
+    // *Remove*.
+    if removed.removed > 0 && removed.owed + removed.refused + removed.not_written == 0 {
+        record.with_the_record(&mut |connection| {
+            for transfer in &the_transfers {
+                let _ = crate::record::upload_requests::the_leftover_of_this_transfer_was_removed(connection, transfer);
+            }
+        });
     }
     the_run.every_leftover_is_read_again();
     record.a_transfer_moved();
@@ -1656,6 +1722,21 @@ pub(crate) fn it_lies_inside_a_staging_folder(path: &[u8]) -> bool {
     if !path.starts_with(b"/") {
         return false;
     }
+    // **The root's own doubled slash is the root**: until 2026-11-12 an
+    // upload into `/` recorded its staging path as `//.smoozy-staging/…`
+    // (`crate::uploading::the_staging_folder_beside`), and those records are
+    // still on users' computers. One doubled slash at the very start, and
+    // nowhere else; the path is sent as recorded.
+    let path = match path.strip_prefix(b"//") {
+        Some(rest)
+            if rest
+                .strip_prefix(THE_RESERVED_STAGING_FOLDER.as_bytes())
+                .is_some_and(|after| after.starts_with(b"/")) =>
+        {
+            &path[1..]
+        }
+        _ => path,
+    };
     let components: Vec<&[u8]> = path[1..].split(|byte| *byte == b'/').collect();
     if components.len() < 2
         || components
@@ -2229,6 +2310,28 @@ where
     K: KeepsTheRecord,
     W: WatchesTheTransfer,
 {
+    // **`Download`'s blocked-landing-folder rule: the folder is made before a
+    // byte is asked for**, so a file standing where it goes ends this one
+    // failed, naming the cause, with nothing fetched.
+    if the_folder_a_file_lands_in(landing).is_err() {
+        record.ending = Some(Ending::Failed);
+        record.cleanup_is_owed = true;
+        keeper.write_it_down(record).map_err(|_| WhyNothingCameDown::TheNameCannotBeCarried)?;
+        let said = if a_file_blocks_the_folder_of(landing) {
+            A_FILE_BLOCKS_THE_FOLDER
+        } else {
+            THE_FOLDER_WAS_NOT_MADE
+        };
+        return Ok(WhatTheDownloadCameTo {
+            ending: Ending::Failed,
+            lands_at: the_path_of(landing),
+            bytes_staged: 0,
+            admitted_as: carries,
+            transfer: transfer_identity,
+            what_it_met: Some(said.into()),
+            the_name_was_taken: false,
+        });
+    }
     // **The admission, and it is asked for this one file.** The class this
     // file carries is `Download` Q3's, which falls out of what arranged it.
     // **A manual request's file is admitted before its seat is asked for**
@@ -3278,6 +3381,17 @@ impl WhatThePassHolds<'_, '_> {
             WhatTheUnitsFetchCameTo::ItEnded { ending, .. }
                 if *ending == smoozy_server_protocol::transfers::Ending::Published
         );
+        // **What the job's folder says, kept for its Transfers row** (the
+        // Rough what-if answers, share 1, 85): a file that landed settles it,
+        // and one that did not has its folder probed once.
+        let job = self.owing[at].arrangement.job.as_text();
+        if it_was_fetched {
+            this_download_meets(&job, None);
+        } else if matches!(&came, WhatTheUnitsFetchCameTo::ItEnded { .. }) {
+            if let Some(trouble) = what_the_landing_folder_says(&unit.the_landing_path) {
+                this_download_meets(&job, Some(trouble));
+            }
+        }
         let one = &mut self.owing[at];
         let mut keeper = TheArrangementsKeeper { record };
         let Ok(followed) = one.running.a_fetch_ended(
@@ -3549,6 +3663,26 @@ fn the_units_fetch_is_arranged(
     size: u64,
     the_run_this_is: &Identity,
 ) -> TheFetchArranged {
+    // **P11: the structure the files had on the server is the structure they
+    // have when they land** — so the folder the file lands in has to exist
+    // before the publication's rename, and `Download` M9's own maker is the
+    // manual half's. **An arrangement's landing folders had no maker anywhere,
+    // and this is where that was found**: the publication rename lands on a
+    // path whose parent is not there and the transfer ends *failed*, with the
+    // frame still on the machine and nothing saying why.
+    //
+    // **It is `Desktop app and delivery` F10's one route to the filesystem**,
+    // the same call M9's maker makes, and a folder that already stands merges
+    // rather than colliding. **It is made before anything is arranged**
+    // (`Download`'s blocked-landing-folder rule): a folder that would not be
+    // made leaves the unit owed with no byte fetched, and a later pass tries
+    // again — so a file standing in its way never has the frame fetched over
+    // and over.
+    let job = arrangement.job.as_text();
+    if !the_auto_downloads_folder_is_ready(&job, &unit.the_destination_normalised, &unit.the_landing_path) {
+        record.a_transfer_moved();
+        return TheFetchArranged::AlreadyOver(None);
+    }
     // **`Server protocol and transfers` S28a: the fetch this unit's last one
     // was is given up before its replacement is arranged**, or its staging is
     // never swept. A record that would not take the write arranges nothing,
@@ -3578,19 +3712,6 @@ fn the_units_fetch_is_arranged(
             ))
         }
     };
-
-    // **P11: the structure the files had on the server is the structure they
-    // have when they land** — so the folder the file lands in has to exist
-    // before the publication's rename, and `Download` M9's own maker is the
-    // manual half's. **An arrangement's landing folders had no maker anywhere,
-    // and this is where that was found**: the publication rename lands on a
-    // path whose parent is not there and the transfer ends *failed*, with the
-    // frame still on the machine and nothing saying why.
-    //
-    // **It is `Desktop app and delivery` F10's one route to the filesystem**,
-    // the same call M9's maker makes, and a folder that already stands merges
-    // rather than colliding.
-    let _ = the_folder_a_file_lands_in(&unit.the_landing_path);
 
     TheFetchArranged::ToComeDown {
         file: AFileToBringDown {
@@ -4514,15 +4635,6 @@ async fn one_unit_of_the_manual_request<C: AHeldConnection>(
     if the_run.the_user_stopped_this(request_id, &entry.landing_path) {
         return WhatOneUnitCameTo::DidNotFinish;
     }
-    let taken_up = the_part_here.filter(|part| {
-        smoozy_download::request::may_take_up_the_staged_material(
-            part,
-            &entry.source_path,
-            &entry.landing_path,
-            &disposition,
-        )
-    });
-
     // **Piece 10's sharpest finding, kept on this route as well.**
     // `Server protocol and transfers` S9's record carries the expected
     // total, and its loop treats a total of nothing as a transfer with
@@ -4547,6 +4659,40 @@ async fn one_unit_of_the_manual_request<C: AHeldConnection>(
     };
     let Some(size) = size else {
         return WhatOneUnitCameTo::DidNotFinish;
+    };
+
+    // **`Download` M13's paragraph of 2026-11-12: a part is taken up only
+    // where the size the new request's enumeration gives is the size the
+    // part was arranged at.** Where it differs the file on the server has
+    // changed (`Server protocol and transfers` S13's first value): the part
+    // is abandoned in the record first (`Server protocol and transfers`
+    // S28a), its staging removed at once on the exact match, and the unit
+    // starts fresh. **Until then the part was taken up with its old size**,
+    // and a file rendered again larger came down cut short and read as
+    // downloaded. The Fable review's seventh sitting, fault 1.
+    let taken_up = match the_part_here {
+        Some(part)
+            if part.total_size_expected == size
+                && smoozy_download::request::may_take_up_the_staged_material(
+                    &part,
+                    &entry.source_path,
+                    &entry.landing_path,
+                    &disposition,
+                ) =>
+        {
+            Some(part)
+        }
+        Some(part) => {
+            if a_part_is_abandoned(&the_door, the_run, &part) {
+                let mut abandoned = part;
+                abandoned.ending = Some(Ending::Stopped(
+                    smoozy_server_protocol::transfers::StoppedReason::AbandonedByItsRequest,
+                ));
+                let _ = the_staging_it_names_is_removed_here(&abandoned);
+            }
+            None
+        }
+        None => None,
     };
 
     // **A taken-up unit carries the part's own transfer identity**
@@ -4639,6 +4785,7 @@ async fn one_unit_of_the_manual_request<C: AHeldConnection>(
     }
     let (outcome, what) = match came.ending {
         smoozy_server_protocol::transfers::Ending::Published => {
+            a_file_blocks_this_download(request_id, false);
             (UnitOutcome::Done, WhatOneUnitCameTo::Fetched)
         }
         // **Smoozy's own stop, and a digest that disagreed, end the unit as
@@ -4651,6 +4798,10 @@ async fn one_unit_of_the_manual_request<C: AHeldConnection>(
             if let Some(met) = &came.what_it_met {
                 if let Ok(mut held) = the_failures_this_run().lock() {
                     held.insert((request_id.to_string(), entry.landing_path.clone()), met.clone());
+                }
+                // `Download`'s blocked-landing-folder rule: the row says so.
+                if met == A_FILE_BLOCKS_THE_FOLDER {
+                    a_file_blocks_this_download(request_id, true);
                 }
             }
             (
@@ -4730,6 +4881,151 @@ pub fn the_folder_a_file_lands_in(landing: &[u8]) -> Result<(), WhatTheAdapterSa
         .map(|_| ())
         .map_err(|_| WhatTheAdapterSaid::Unclassified)
 }
+
+/// **`Download`'s blocked-landing-folder rule: a file stands where a folder
+/// this file lands in has to be.** Read only after the folder would not be
+/// made, so a folder that stands costs nothing.
+pub fn a_file_blocks_the_folder_of(landing: &[u8]) -> bool {
+    let folder = the_folder_holding(landing);
+    !folder.is_empty() && the_path_of(&folder).ancestors().any(Path::is_file)
+}
+
+/// **The trouble each download last met at its folder, this run** — a manual
+/// request's record or an auto-download's job, by identity, until a later
+/// file of it lands. Held for this run only, as [`the_failures_this_run`] is:
+/// the Transfers row reads it and makes no filesystem read of its own.
+///
+/// **Until the Rough what-if answers, share 1 (85, 87, 89, 90), it held only a
+/// file blocking the folder**, and an auto-download that met a full disk, a
+/// drive unplugged or a folder deleted stalled with nothing on its row.
+fn the_downloads_in_trouble() -> &'static Mutex<HashMap<String, TheDestinationTrouble>> {
+    static HELD: std::sync::OnceLock<Mutex<HashMap<String, TheDestinationTrouble>>> =
+        std::sync::OnceLock::new();
+    HELD.get_or_init(Default::default)
+}
+
+/// What this download met at its folder, or `None` once a file of it lands.
+pub(crate) fn this_download_meets(request: &str, trouble: Option<TheDestinationTrouble>) {
+    if let Ok(mut held) = the_downloads_in_trouble().lock() {
+        match trouble {
+            Some(trouble) => {
+                held.insert(request.to_string(), trouble);
+            }
+            None => {
+                held.remove(request);
+            }
+        }
+    }
+}
+
+/// The trouble this download last met at its folder, this run.
+pub fn the_trouble_this_download_met(request: &str) -> Option<TheDestinationTrouble> {
+    the_downloads_in_trouble().lock().ok().and_then(|held| held.get(request).copied())
+}
+
+pub(crate) fn a_file_blocks_this_download(request: &str, blocked: bool) {
+    this_download_meets(request, blocked.then_some(TheDestinationTrouble::AFileBlocksTheFolder));
+}
+
+/// Whether a file blocks the download folder of this request — a manual
+/// request's record identity or an auto-download's job identity, as the
+/// Transfers row's own identity is.
+pub fn a_file_blocks_the_download_of(request: &str) -> bool {
+    matches!(the_trouble_this_download_met(request), Some(TheDestinationTrouble::AFileBlocksTheFolder))
+}
+
+/// **`Download` D1's classes, from the adapter's own refusal** — never from an
+/// error number read here. An unmapped refusal claims no class (`Download`
+/// D2).
+fn the_trouble_a_refusal_is(refusal: crate::platform::files::Refusal) -> Option<TheDestinationTrouble> {
+    use crate::platform::files::Refusal;
+    match refusal {
+        Refusal::FullVolume => Some(TheDestinationTrouble::TheVolumeIsFull),
+        Refusal::PermissionRefused => Some(TheDestinationTrouble::WritingIsRefused),
+        Refusal::DestinationGone => Some(TheDestinationTrouble::TheDestinationIsNoLongerThere),
+        Refusal::WriteFailedAtTheDevice => Some(TheDestinationTrouble::TheWriteFailedAtTheDevice),
+        Refusal::Unclassified => None,
+    }
+}
+
+/// **An auto-download's landing folder, made ready or the trouble said** —
+/// the Rough what-if answers, share 1 (87, 89, 90), with batch 2's blocked
+/// folder.
+///
+/// **The download folder itself is never made again.** Only the folders under
+/// it are: a download folder deleted, renamed or on a drive unplugged reads
+/// *Download folder not found.* (`Download` D2's *make the destination exist
+/// again*), and the frames wait on the server. Until then the whole path was
+/// made before each file, so a renamed folder came back empty under its old
+/// name and the job's frames were split across two folders without a word.
+fn the_auto_downloads_folder_is_ready(job: &str, destination: &[u8], landing: &[u8]) -> bool {
+    let the_download_folder = the_path_of(destination);
+    if !destination.is_empty() && !the_download_folder.is_dir() {
+        let trouble = if the_download_folder.exists() {
+            TheDestinationTrouble::AFileBlocksTheFolder
+        } else {
+            TheDestinationTrouble::TheDestinationIsNoLongerThere
+        };
+        this_download_meets(job, Some(trouble));
+        return false;
+    }
+    let folder = the_folder_holding(landing);
+    if folder.is_empty() {
+        return true;
+    }
+    match crate::platform::files::ensure_directory(&the_path_of(&folder)) {
+        Ok(()) => {
+            // **What a made folder settles is the folder's own trouble**; a
+            // full disk stays said until a file of the job lands (`Download`
+            // D5: the next real write succeeding, and nothing else).
+            if matches!(
+                the_trouble_this_download_met(job),
+                Some(TheDestinationTrouble::AFileBlocksTheFolder | TheDestinationTrouble::TheDestinationIsNoLongerThere)
+            ) {
+                this_download_meets(job, None);
+            }
+            true
+        }
+        Err(failure) => {
+            let trouble = if a_file_blocks_the_folder_of(landing) {
+                Some(TheDestinationTrouble::AFileBlocksTheFolder)
+            } else {
+                the_trouble_a_refusal_is(failure.refusal)
+            };
+            if trouble.is_some() {
+                this_download_meets(job, trouble);
+            }
+            false
+        }
+    }
+}
+
+/// **`Download` D7's probe, taken once after an auto-download's file did not
+/// land**: one real byte written into the folder it lands in, and removed. A
+/// write that is refused names the trouble on the job's row; one that goes
+/// through says nothing, since the file failed for some other reason (a line
+/// dropped, a server file that changed). Added for the Rough what-if
+/// answers, share 1 (85): a full disk left the row at *120 of 240 files* with
+/// nothing said.
+fn what_the_landing_folder_says(landing: &[u8]) -> Option<TheDestinationTrouble> {
+    let folder = the_path_of(&the_folder_holding(landing));
+    let probe = folder.join(".smoozy-probe");
+    let written = crate::platform::files::write_whole_file(
+        &probe,
+        &[0],
+        crate::platform::files::Durability::ToTheDevice,
+    );
+    let _ = crate::platform::files::remove_file(&probe);
+    match written.first_error {
+        Some(failure) => the_trouble_a_refusal_is(failure.refusal),
+        None if !written.wrote_the_file() => Some(TheDestinationTrouble::TheDestinationIsNoLongerThere),
+        None => None,
+    }
+}
+
+/// The words a file kept for a folder that would not be made.
+pub const A_FILE_BLOCKS_THE_FOLDER: &str = "A file exists where this download needs a folder.";
+const THE_FOLDER_WAS_NOT_MADE: &str = "Could not create the download folder.";
 
 /// **`Download` M6's read of what is standing in each destination folder**, over
 /// the platform file adapter's one route to the filesystem.
@@ -4835,8 +5131,15 @@ fn the_colliding_landing_paths<R: ReadsTheDestinationsListing + ?Sized>(
         .collect()
 }
 
+/// The folder a landing path on this computer is in. **Its last separator is
+/// this system's**: `/`, and on Windows `\` as well, since a Windows path
+/// written by the system or the folder picker uses `\` (a name holding `\` is
+/// refused there by the name check, so it is never part of a name), read the
+/// way the listing beside a manual request already reads it. Until
+/// hosted run 43746222478 only `/` was read, so a landing written in
+/// Windows' own form had no folder and nothing was made or checked.
 fn the_folder_holding(landing: &[u8]) -> Vec<u8> {
-    match landing.iter().rposition(|byte| *byte == b'/') {
+    match landing.iter().rposition(|byte| *byte == b'/' || (cfg!(windows) && *byte == b'\\')) {
         Some(at) if at > 0 => landing[..at].to_vec(),
         Some(_) => b"/".to_vec(),
         None => Vec::new(),
@@ -5406,6 +5709,132 @@ impl KeepsTheRecord for TheTransferRecordsOverTheDoor<'_> {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn bad_batch_2_a_blocked_download_fetches_no_bytes_from_the_server() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use smoozy_server_protocol::subsystem::wire::{Composed, kind};
+        struct Keeper(Vec<TransferRecord>);
+        impl KeepsTheRecord for Keeper {
+            fn write_it_down(&mut self, record: &TransferRecord) -> Result<(), LocalFailure> {
+                self.0.push(record.clone()); Ok(())
+            }
+        }
+        let area = std::env::temp_dir().join(format!("smoozy-batch-2-no-fetch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&area);
+        std::fs::create_dir_all(&area).unwrap();
+        let job = area.join("job-folder");
+        std::fs::write(&job, b"keep").unwrap();
+        let landing = job.join("0001.png");
+        let (ours, mut theirs) = tokio::io::duplex(1024);
+        let far_end = tokio::spawn(async move {
+            let mut init = [0u8; 9];
+            theirs.read_exact(&mut init).await.unwrap();
+            let mut version = Composed::new(); version.u32(3);
+            theirs.write_all(&version.framed(kind::VERSION)).await.unwrap();
+            let mut later = Vec::new();
+            theirs.read_to_end(&mut later).await.unwrap();
+            later
+        });
+        let mut subsystem = Subsystem::negotiate(ours).await.unwrap();
+        let asked = AFileToBringDown {
+            on_the_machine: b"/outputs/0001.png".to_vec(),
+            lands: WhereTheCallerSaysItLands::TheFolderTheCallerHolds {
+                destination: the_bytes_of(&area), landing: the_bytes_of(&landing),
+            },
+            size: 1_000_000, arranged_by: WhatArrangedIt::AManualRequest,
+            server_row: Identity::issue(IdentityKind::LocalServer).unwrap(), installation: None,
+            run: Identity::issue(IdentityKind::Run).unwrap(), transfer: None,
+        };
+        let mut keeper = Keeper(Vec::new());
+        let came = tokio::time::timeout(std::time::Duration::from_secs(1),
+            one_file_comes_down_for(&mut subsystem, &TheRunsTransfers::default(), &mut keeper,
+                &mut NobodyIsWatching, &asked, &[])).await.expect("the local obstruction is answered before a fetch").unwrap();
+        assert_eq!(came.ending, Ending::Failed);
+        assert_eq!(came.what_it_met.as_deref(), Some(A_FILE_BLOCKS_THE_FOLDER));
+        assert_eq!(came.bytes_staged, 0);
+        assert_eq!(keeper.0.last().unwrap().ending, Some(Ending::Failed));
+        drop(subsystem);
+        assert!(far_end.await.unwrap().is_empty(), "a blocked destination must send no file request");
+        assert_eq!(std::fs::read(job).unwrap(), b"keep");
+        std::fs::remove_dir_all(area).unwrap();
+    }
+
+    #[test]
+    fn bad_batch_2_a_file_blocking_a_download_is_named_and_a_retry_recovers() {
+        let area = std::env::temp_dir().join(format!("smoozy-batch-2-blocked-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&area);
+        std::fs::create_dir_all(&area).unwrap();
+        let job = area.join("job-folder");
+        std::fs::write(&job, b"keep this file").unwrap();
+        let landing = the_bytes_of(&job.join("frames").join("0001.png"));
+        assert!(the_folder_a_file_lands_in(&landing).is_err());
+        assert!(a_file_blocks_the_folder_of(&landing));
+        assert!(!a_file_blocks_the_folder_of(&the_bytes_of(&area.join("other").join("0001.png"))));
+        assert_eq!(std::fs::read(&job).unwrap(), b"keep this file");
+        // The row's account is by identity: one blocked download says nothing
+        // of another going into the same folder.
+        a_file_blocks_this_download("job-a", true);
+        assert!(a_file_blocks_the_download_of("job-a"));
+        assert!(!a_file_blocks_the_download_of("job-b"));
+        std::fs::rename(&job, area.join("kept-file")).unwrap();
+        assert!(the_folder_a_file_lands_in(&landing).is_ok());
+        assert!(!a_file_blocks_the_folder_of(&landing));
+        a_file_blocks_this_download("job-a", false);
+        assert!(!a_file_blocks_the_download_of("job-a"));
+        assert!(job.join("frames").is_dir());
+        std::fs::remove_dir_all(area).unwrap();
+    }
+
+    /// **A download folder deleted, renamed or on a drive unplugged is not made
+    /// again, and the job's row says so** — the Rough what-if answers, share
+    /// 1 (87, 89, 90). Until then the whole path was made before each file:
+    /// the folder came back empty under its old name and nothing was said.
+    #[test]
+    fn rough_share_1_a_download_folder_that_is_gone_is_not_made_again_and_is_said() {
+        let area = std::env::temp_dir().join(format!("smoozy-rough-1-gone-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&area);
+        std::fs::create_dir_all(&area).unwrap();
+        let destination = area.join("Renders");
+        let landing = the_bytes_of(&destination.join("Hallway-1a2b3c4d").join("0001.png"));
+        let job = "job-rough-1-gone";
+        assert!(!the_auto_downloads_folder_is_ready(job, &the_bytes_of(&destination), &landing));
+        assert!(!destination.exists(), "the download folder is never made again");
+        assert_eq!(the_trouble_this_download_met(job), Some(TheDestinationTrouble::TheDestinationIsNoLongerThere));
+        // Put back, the next pass makes the job's own folder and the line goes.
+        std::fs::create_dir_all(&destination).unwrap();
+        assert!(the_auto_downloads_folder_is_ready(job, &the_bytes_of(&destination), &landing));
+        assert!(destination.join("Hallway-1a2b3c4d").is_dir());
+        assert_eq!(the_trouble_this_download_met(job), None);
+        std::fs::remove_dir_all(area).unwrap();
+    }
+
+    /// **A file that did not land has its folder probed once, and a refused
+    /// write is named** — the Rough what-if answers, share 1 (85). A full disk
+    /// cannot be made at the desk; the refused write is the same route, and
+    /// the class each refusal maps to is held below. A folder that takes the
+    /// byte says nothing, and the probe leaves nothing behind.
+    #[cfg(unix)]
+    #[test]
+    fn rough_share_1_a_folder_that_will_not_take_a_file_is_named_by_one_probe() {
+        use std::os::unix::fs::PermissionsExt;
+        use crate::platform::files::Refusal;
+        let area = std::env::temp_dir().join(format!("smoozy-rough-1-probe-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&area);
+        std::fs::create_dir_all(&area).unwrap();
+        let landing = the_bytes_of(&area.join("0001.png"));
+        assert_eq!(what_the_landing_folder_says(&landing), None);
+        assert_eq!(std::fs::read_dir(&area).unwrap().count(), 0, "the probe's byte is removed");
+        std::fs::set_permissions(&area, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let said = what_the_landing_folder_says(&landing);
+        std::fs::set_permissions(&area, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(said, Some(TheDestinationTrouble::WritingIsRefused));
+        assert_eq!(the_trouble_a_refusal_is(Refusal::FullVolume), Some(TheDestinationTrouble::TheVolumeIsFull));
+        assert_eq!(the_trouble_a_refusal_is(Refusal::DestinationGone), Some(TheDestinationTrouble::TheDestinationIsNoLongerThere));
+        assert_eq!(the_trouble_a_refusal_is(Refusal::WriteFailedAtTheDevice), Some(TheDestinationTrouble::TheWriteFailedAtTheDevice));
+        assert_eq!(the_trouble_a_refusal_is(Refusal::Unclassified), None, "an unmapped refusal claims no class");
+        std::fs::remove_dir_all(area).unwrap();
+    }
+
     /// **`File Browser` U8's amended bound on an upload leftover's *Remove***:
     /// only an entry directly inside Smoozy's own staging folder, and nothing
     /// that steps out of it. The 38's piece 9, item 33.
@@ -5414,6 +5843,9 @@ mod tests {
         for inside in [
             b"/home/ubuntu/kitchen/.smoozy-staging/0dd7caa5-1.smoozy-part".as_slice(),
             b"/.smoozy-staging/a-1.smoozy-part",
+            // **As an upload into `/` recorded it before 2026-11-12**: the
+            // root's own doubled slash, and no other.
+            b"//.smoozy-staging/a-1.smoozy-part",
         ] {
             assert!(it_lies_inside_a_staging_folder(inside), "{}", String::from_utf8_lossy(inside));
         }
@@ -5426,6 +5858,8 @@ mod tests {
             b"relative/.smoozy-staging/a-1.smoozy-part",
             b"/home/ubuntu/.smoozy-staging/deeper/a-1.smoozy-part",
             b"/home/ubuntu//.smoozy-staging/a",
+            b"///.smoozy-staging/a-1.smoozy-part",
+            b"//home/.smoozy-staging/a-1.smoozy-part",
         ] {
             assert!(!it_lies_inside_a_staging_folder(outside), "{}", String::from_utf8_lossy(outside));
         }

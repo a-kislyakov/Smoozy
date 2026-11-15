@@ -95,11 +95,11 @@ impl ReadsTheCurrentRelease for TheProgramBuiltAtThisDesk {
     fn the_current_release(
         &mut self,
         detected: &TargetTuple,
-    ) -> Result<(AVerifiedRelease, Vec<u8>), String> {
+    ) -> Result<(AVerifiedRelease, Vec<u8>), crate::setting_up::ADownloadThatFailed> {
         let bytes = std::fs::read(&self.file).map_err(|why| {
             format!("the desk program {} could not be read: {why}", self.file.display())
         })?;
-        the_desk_programs_release(&bytes, detected)
+        Ok(the_desk_programs_release(&bytes, detected)?)
     }
 }
 

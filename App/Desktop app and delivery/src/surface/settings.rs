@@ -193,23 +193,28 @@ pub(crate) mod words {
     pub const SPEED_LIMITS: &str = "Speed limits";
     pub const UPLOADING: &str = "Uploading";
     pub const DOWNLOADING: &str = "Downloading";
-    pub const NO_CAP: &str = "no cap";
+    pub const NO_CAP: &str = "no limit";
     pub const MB_PER_SECOND: &str = "MB/s";
-    pub const UPLOAD_CAP: &str = "Upload cap";
-    pub const DOWNLOAD_CAP: &str = "Download cap";
+    pub const UPLOAD_CAP: &str = "Upload limit";
+    pub const DOWNLOAD_CAP: &str = "Download limit";
     pub const EACH_CAP_IS_A_TOTAL: &str =
-        "Each cap limits all transfers on all servers combined.";
-    pub const EMPTY_MEANS_NO_CAP: &str = "Empty means no cap.";
+        "Each limit is the total across all servers.";
+    pub const EMPTY_MEANS_NO_CAP: &str = "Empty means no limit.";
     /// **`Design/Settings § Transfers`' reading beside a cap** — the drawing's
     /// own *running at 12.4 MB/s*. The figure and its unit are a value.
     pub const RUNNING_AT: &str = "running at";
 
     // `§ Search folders`, and `§ What this document left open`.
+    /// **`§ Search folders` as added 2026-11-11: it opens with what the
+    /// folders are for.** The four questions, scout 3.44.
     pub const A_FOLDER_COVERS_EVERYTHING: &str =
-        "Subfolders are included.";
+        "Missing textures and other linked files are searched for here. Subfolders are included.";
     pub const CHOOSE_THE_FOLDER_HOLDING_ALL: &str =
         "Add the folder that holds all your work, not each project.";
     pub const ADD_A_FOLDER: &str = "Add a folder…";
+    /// `Design/Settings § Search folders`: an empty list says so and draws
+    /// no frame (the UI at every size, E-06).
+    pub const NO_SEARCH_FOLDERS_YET: &str = "No search folders yet.";
     pub const ADD_A_SEARCH_FOLDER: &str = "Add a search folder";
     pub const DRAG_OR_USE_THE_ARROWS: &str = "Drag a row, or use the arrows.";
     /// *Changed 2026-11-06, the last words read before the release*: it went
@@ -217,7 +222,7 @@ pub(crate) mod words {
     /// which file inside it.*, which said again what this says.
     pub const THE_FIRST_FOLDER_HOLDING_A_MATCH: &str = "The first folder with a match is used.";
     pub const WHERE_ONE_FOLDER_HOLDS_TWO: &str =
-        "If one folder has two matches, one is used and named.";
+        "If one folder has two matches, the check picks one and says which.";
     pub const MOVE_UP: &str = "Move up";
     pub const MOVE_DOWN: &str = "Move down";
     pub const REMOVE: &str = "Remove";
@@ -233,8 +238,8 @@ pub(crate) mod words {
     // `§ Warnings and notifications`.
     pub const NOTIFICATIONS: &str = "Notifications";
     pub const A_JOB_FINISHES: &str = "A job finishes";
-    pub const WITH_THE_FRAME: &str = "with the frame, where the job has one";
-    pub const A_JOB_FAILS: &str = "A job fails or is abandoned";
+    pub const WITH_THE_FRAME: &str = "with a preview, if there is one";
+    pub const A_JOB_FAILS: &str = "A job fails or is interrupted";
     pub const A_CONNECTION_COULD_NOT_BE_RESTORED: &str = "A reconnection fails";
     pub const A_SERVER_HAS_HAD_NOTHING_TO_DO: &str =
         "Server idle for 30\u{a0}minutes";
@@ -248,7 +253,7 @@ pub(crate) mod words {
     pub const THE_SETTINGS_WOULD_NOT_READ: &str = "Could not read settings.";
     pub const THE_SETTING_DID_NOT_SAVE: &str = "Could not save the setting.";
     pub const A_CAP_IS_A_SPEED_ABOVE_NOUGHT: &str =
-        "Enter a speed above 0\u{a0}MB/s, or leave empty for no cap.";
+        "Enter a speed above 0\u{a0}MB/s, or leave empty for no limit.";
 
 }
 
@@ -721,6 +726,7 @@ pub fn the_search_folders_say(says: &WhatTheListSays) -> Event {
         ("aFolderCoversEverything", words::A_FOLDER_COVERS_EVERYTHING),
         ("chooseTheFolderHoldingAll", words::CHOOSE_THE_FOLDER_HOLDING_ALL),
         ("addAFolder", words::ADD_A_FOLDER),
+        ("noSearchFoldersYet", words::NO_SEARCH_FOLDERS_YET),
         ("dragOrUseTheArrows", words::DRAG_OR_USE_THE_ARROWS),
         ("theFirstFolderHoldingAMatch", words::THE_FIRST_FOLDER_HOLDING_A_MATCH),
         ("whereOneFolderHoldsTwo", words::WHERE_ONE_FOLDER_HOLDS_TWO),
@@ -933,6 +939,7 @@ pub async fn a_search_folder_is_added<R: Runtime>(app: AppHandle<R>) {
             how_many: HowMany::One,
             starting_at: None,
             title: Prose::new(words::ADD_A_SEARCH_FOLDER),
+            the_value_after_the_title: None,
         },
     )
     .await;
@@ -1002,6 +1009,7 @@ pub async fn the_download_folder_is_chosen<R: Runtime>(app: AppHandle<R>) {
             how_many: HowMany::One,
             starting_at: None,
             title: Prose::new(words::CHOOSE_A_DOWNLOAD_FOLDER),
+            the_value_after_the_title: None,
         },
     )
     .await;
@@ -1142,6 +1150,17 @@ pub fn a_notification_switch_is_turned<R: Runtime>(
     // connected now, at once, and the other three switches no server at all.
     if saved && servers_are_told_of(kind) {
         crate::setting_up::the_tellings_are_delivered_on_every_live_connection(&app);
+    }
+}
+
+#[cfg(test)]
+mod the_four_questions_batch_6 {
+    /// **`Design/Settings § Search folders` as added 2026-11-11: the line
+    /// opens with what the folders are for.** The four questions, scout 3.44.
+    #[test]
+    fn four_questions_3_44_search_folders_say_what_they_are_for() {
+        assert!(super::words::A_FOLDER_COVERS_EVERYTHING
+            .starts_with("Missing textures and other linked files are searched for here."));
     }
 }
 

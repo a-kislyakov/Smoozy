@@ -457,6 +457,8 @@ Plus §2 item 2's last column, raised at [8.3](#83-a-passphrase-that-stops-worki
 
 ---
 
+**S19a. Two endings of a user's own connect that Smoozy knows the cause of are said, in words that stay true whatever lies behind them. Added 2026-11-14, the leftovers of the Rough what-if answers (386, 384), the runner's ruling of that day; no auditor has seen it.** A passphrase typed into S19's box that does not open the key ends the connect as *Could not connect: the passphrase did not unlock the key.* — never *wrong*, since a damaged key gives the same answer (S5). A passphrase held in the system's store that the store will not give back (the Mac keychain's *Deny*, a locked store, no answer) ends it as *Could not connect: the saved passphrase could not be read.* — S7's ordinary failure: nothing is forgotten and nobody is asked. Both took the claimless *Could not connect to this server.* before. Built in the desktop's `servers::a_period::the_reason_no_passphrase_was_handed_over`.
+
 ## 9. Ownership, delete, remove, and the warning (Rows 251, 247, 254 and 252)
 
 **Constraint:** Row 251 — the two branches are *delete the user's files* and *do not*, the wrong branch is unrecoverable, and it was confirmed by a user who was told something else; Row 247 — too wide deletes a stranger's file, too narrow leaves a private half behind after the user was told the key was gone; Fact 36; `Security and licence` §5.1 and §5.2; Rule 8's stated limit on the warning.

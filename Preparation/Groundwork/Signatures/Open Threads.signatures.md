@@ -275,3 +275,31 @@
 2026-11-06 — Claude Opus 5.5 (Claude Code), the 5.3 integration's build runner — Recorded the Creator's four rulings on simulations.
 2026-11-06 — GPT-6.1 (Codex) — Closed the bake-folder batching work at the desk and retained the real-line timing due.
 2026-11-07 — Claude Opus 5.5 (Claude Code), the release runner — Parked the connection-drop scenario's timing, from 0.3.0's hosted run.
+2026-11-10 — Claude Opus 5.5 (Claude Code), the build runner — Parked the ring after a click and Tab on older Macs, from piece A1.
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece J, events that fit the journal.md` — Parked a journal entry refused for its length being said only in the server's own output.
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece E, no foot strip, the words for a failed reconnect.md` — Closed the window's foot drawing a condition twice, and the run-level failure strip; E2 stays open.
+2026-11-10 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 1, the server's queue after a death or a crash.md` — Parked two computers using one server as a want, and four server faults the sitting found and left.
+2026-11-10 — Claude Fable 5.2 (Claude Code subagent), sitting 1's follow-up on the build runner's rulings — Closed two of the four server faults the sitting left: an ending no event tells, and a stopped queue that told nobody.
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 2, sending a job and the desk catching up.md` — Parked two things the second sitting found in the app and left: a setup step that can start during a server update, and the server's reason for refusing a job not shown.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — a setup press during an update, and the flaky layers test.md` — Closed the setup step that could start during a server update: built on the runner's ruling.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 3, replacing programs on a server.md` — Parked five things the third sitting found and left: an untrue sentence for a release below the floor, a release number nothing checks from above, two leftovers after an undone swap, the second repair command's assent, and a cut with no journal.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 4, the app replacing itself and its record.md` — Parked five things the fourth sitting found and left: an older Smoozy that never says why it can't read a newer record, an ordinary start in the moment the lock changes hands, a dead Windows helper with a build that can't start, a put-back step that fails and is not finished, and no shipped record kept to test upgrades against.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), the same sitting — Added a sixth to that entry, from Sol's read-only look: the new sentence for an older Smoozy can be shown for a release file whose number was altered.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 5, how a render ends and what it counts.md` — Added *What the Fable review's fifth sitting found and left*: four things read in the code and not built, one want, and three questions owed to Blender research.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), the same sitting — Added a paragraph to that entry, from Sol's read-only look: three narrow things set aside.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the runner's rulings at the foot of `Audits/Build/Fable review/Sitting 5 — what landed.md` — Added a paragraph to *What the Fable review's fifth sitting found and left*: the four are built, and the desktop's History row for *Missing:* is owed.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), the same follow-up — Added a correcting paragraph: three of the four are built, the third was taken out again, and three points from Sol's look are left.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's rulings at the foot of `Audits/Build/Fable review/The live pass of the night's fixes — what happened.md` — Parked three things building rulings 1 and 2 left: the installation mark after an undone swap, the overwrite option for the dependency repair, and a command outliving a dropped line.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 7, files that move.md` — Parked what the seventh sitting found in transfers and left: two faults read and not built, two wants.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's brief on `Audits/Build/What to double-check — ideas, 2026-11-12.md` — Parked what building the double-check ideas closed and left: seven things left, the fourth and fifth sittings' due items closed.

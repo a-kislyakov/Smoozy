@@ -87,6 +87,9 @@ pub struct TheArrangementsRun {
     series: TheWalkSeries,
     /// `Download` J6: a saved prefix from this connection's matching attempt.
     the_reported_saved_frame: Option<i64>,
+    /// `Download` J6's paragraph of 2026-11-12: the frame the same report
+    /// has in hand.
+    the_reported_frame_in_hand: Option<i64>,
     /// **E1 step 1: the ending, once it has arrived.** `Queue & History`'s,
     /// carried here and never decided here.
     the_ending: Option<Ending>,
@@ -402,8 +405,13 @@ impl TheArrangementsRun {
 
     /// The caller checked this connection, job and attempt (`Download` J6).
     /// Absence supplies no evidence; neither a count nor a range stands in.
-    pub fn the_saved_prefix_was_reported(&mut self, frame: Option<i64>) {
+    ///
+    /// **`in_hand` is the frame the same report has in hand** (J6's paragraph
+    /// of 2026-11-12): the saved frame itself is taken only once that is a
+    /// later frame.
+    pub fn the_saved_prefix_was_reported(&mut self, frame: Option<i64>, in_hand: Option<i64>) {
         self.the_reported_saved_frame = frame;
+        self.the_reported_frame_in_hand = in_hand;
     }
 
     /// **E1 step 1: the ending arrives — one of the four, live or at
@@ -483,6 +491,7 @@ impl TheArrangementsRun {
     pub fn a_connection_began(&mut self) {
         self.series.a_connection_began();
         self.the_reported_saved_frame = None;
+        self.the_reported_frame_in_hand = None;
         self.active_since_the_baseline.clear();
         self.the_catch_up_has_judged = false;
     }
@@ -506,6 +515,7 @@ impl TheArrangementsRun {
         arrangement.a_render_start_re_arms_it(the_attempts_frames);
         self.the_ending = None;
         self.the_reported_saved_frame = None;
+        self.the_reported_frame_in_hand = None;
         self.the_ending_walk_has_completed = false;
         self.the_ending_walks_plain_files.clear();
         // **The re-armed attempt is a fresh window**, so what the previous
@@ -955,7 +965,22 @@ impl TheArrangementsRun {
         let mut judged: Vec<i64> = what_the_live_walk_vouches_for(in_hand.order, &active_frames);
         if let (Some(saved), TheOrder::The(order)) = (self.the_reported_saved_frame, in_hand.order) {
             if let Some(at) = order.frames().iter().position(|frame| *frame == saved) {
-                for frame in &order.frames()[..=at] {
+                // **J6's paragraph of 2026-11-12: the saved frame itself is
+                // taken only once the same report shows a later frame in
+                // hand.** It is named saved at its first announced save, a
+                // frame can owe several files, and nothing on record says
+                // all of them are whole by then; a file fetched part-written
+                // stays so for good (W3, R9). Until that date the prefix ran
+                // through the saved frame whatever was in hand.
+                // **Later is later in the attempt's own order**, never only
+                // another number: a frame in hand the order does not hold,
+                // or one before the saved frame, proves nothing (Sol's look
+                // at this fix).
+                let a_later_frame_is_in_hand = self.the_reported_frame_in_hand.is_some_and(|in_hand| {
+                    order.frames().iter().position(|frame| *frame == in_hand).is_some_and(|its| its > at)
+                });
+                let through = if a_later_frame_is_in_hand { at + 1 } else { at };
+                for frame in &order.frames()[..through] {
                     if !judged.contains(frame) {
                         judged.push(*frame);
                     }
@@ -1546,7 +1571,7 @@ mod tests {
         let mut running = TheArrangementsRun::fresh();
         let narrowed = entries();
         let order = an_order();
-        running.the_saved_prefix_was_reported(Some(2));
+        running.the_saved_prefix_was_reported(Some(2), Some(3));
         let turn = run(running.one_turn(
             &mut machine, &EverythingIsWritable, &mut keeper, &mut queue,
             &mut arrangement, in_hand(&narrowed, &order),
@@ -1580,7 +1605,7 @@ mod tests {
                 TheOrder::The(crate::vouching::TheAttemptsOrder::as_the_attempt_record_carries_it(vec![50, 10, 20]))
             } else { TheOrder::ItCouldNotBeRead };
             let mut running = TheArrangementsRun::fresh();
-            running.the_saved_prefix_was_reported(saved);
+            running.the_saved_prefix_was_reported(saved, Some(20));
             let mut keeper = AList::default();
             let mut queue = TheFetchQueue::at_a_server();
             let mut arrangement = an_arrangement();
@@ -1595,6 +1620,49 @@ mod tests {
     }
 
     /// **J6: the first complete walk is the baseline and judges nothing.**
+
+    /// **`Download` J6's paragraph of 2026-11-12 (Sol's look at the
+    /// double-check ideas, finding 1): the frame a report names as saved is
+    /// taken only once the same report shows a later frame in hand.** Frame
+    /// 10 owes two files; its first save was announced, so the report names
+    /// it saved, and its second file is on the server part-written. While
+    /// frame 10 is still the frame in hand only the frame before it is
+    /// fetched; once frame 20 is in hand, frame 10's two files are. **It
+    /// failed before the fix**: both of frame 10's files were fetched at
+    /// once, the part-written one as it stood, and a fetched file is never
+    /// taken again.
+    #[test]
+    fn double_check_sol_1_a_saved_frame_still_in_hand_is_not_fetched_until_a_later_frame_begins() {
+        let narrowed: Vec<_> = [("50.exr", 50), ("10-a.exr", 10), ("10-b.exr", 10), ("20.exr", 20)].into_iter()
+            .map(|(path, frame)| ANarrowedEntry { predicted_path: path.as_bytes().to_vec(), frame: Some(frame) }).collect();
+        let order = TheOrder::The(crate::vouching::TheAttemptsOrder::as_the_attempt_record_carries_it(vec![50, 10, 20]));
+        for (in_hand_now, expected) in [
+            (Some(10), vec![b"50.exr".to_vec()]),
+            (None, vec![b"50.exr".to_vec()]),
+            // A frame before it in the order, or one the order does not hold,
+            // is not a later frame.
+            (Some(50), vec![b"50.exr".to_vec()]),
+            (Some(99), vec![b"50.exr".to_vec()]),
+            (Some(20), vec![b"50.exr".to_vec(), b"10-a.exr".to_vec(), b"10-b.exr".to_vec()]),
+        ] {
+            let mut machine = AMachine::default();
+            // 10-b is being written: 12 of its 40 bytes are there.
+            machine.holding(b"/jobs/abc", vec![file("50.exr", 40, 1), file("10-a.exr", 40, 1), file("10-b.exr", 12, 1)]);
+            let mut running = TheArrangementsRun::fresh();
+            running.the_saved_prefix_was_reported(Some(10), in_hand_now);
+            let mut keeper = AList::default();
+            let mut queue = TheFetchQueue::at_a_server();
+            let mut arrangement = an_arrangement();
+            let turn = run(running.one_turn(&mut machine, &EverythingIsWritable, &mut keeper, &mut queue,
+                &mut arrangement, in_hand(&narrowed, &order))).unwrap();
+            match turn {
+                WhatTheTurnDid::ItWalked { became_fetchable, .. } => {
+                    assert_eq!(became_fetchable, expected, "with {in_hand_now:?} in hand")
+                }
+                other => panic!("{other:?}"),
+            }
+        }
+    }
 
     /// **J6: the first complete walk is the baseline and judges nothing.**
     #[test]

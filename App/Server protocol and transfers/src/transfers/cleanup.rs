@@ -262,6 +262,7 @@ mod tests {
         record.checkpoints.push(Checkpoint {
             offset: 512,
             digest_of_everything_up_to_it: Digest::of(b"half"),
+            running_state: None,
         });
         record.start_over();
         // The live attempt is still running, so it has no ending.

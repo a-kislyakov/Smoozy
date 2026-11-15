@@ -181,6 +181,18 @@ pub enum OpenFailure {
     /// connection that could not be made, reported as one, with no claim about
     /// the machine.
     TheAddressDidNotAnswer,
+    /// **The host's name found no address.** Told apart from
+    /// [`OpenFailure::TheAddressDidNotAnswer`] by asking the system for the
+    /// name's addresses before connecting, which is the system's own answer
+    /// and not a tool's words. Added 2026-11-11, the four questions, scout
+    /// 3.1: a failed first connection says why where the attempt knows
+    /// (`Design/Server Setup § This server`).
+    TheHostWasNotFound,
+    /// **The address answered and refused the connection on that port** — the
+    /// system's own *connection refused*, read from the error's kind and never
+    /// from its words. Nothing is claimed about why nothing listens there.
+    /// Added 2026-11-11 with [`OpenFailure::TheHostWasNotFound`].
+    TheConnectionWasRefused,
     /// Key exchange did not complete. Nothing is claimed about the machine.
     TheExchangeDidNotComplete,
     /// **[`HostTrust::Stop`] was returned.** The attempt stopped inside key

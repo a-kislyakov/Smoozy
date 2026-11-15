@@ -106,7 +106,7 @@ const WHAT_THE_CONTROL_COVERS: &str = "Restores every warning you switched off."
 /// The second sentence. Design: *"says there is no way back one at a time … the
 /// spec makes it all at once; saying so stops a user hunting for a list that
 /// does not exist."*
-const THERE_IS_NO_WAY_BACK_ONE_AT_A_TIME: &str = "They cannot be restored one at a time.";
+const THERE_IS_NO_WAY_BACK_ONE_AT_A_TIME: &str = "They can’t be restored one at a time.";
 
 /// **What the line reads where the store would not answer** — L8a, and it is
 /// the opposite of drawing a nought.

@@ -987,7 +987,7 @@ fn the_standing(desk: &TheDesk, of: &TheSittingIsOf) -> smoozy_dependencies::sta
 async fn upload_is_pressed(connection: &TheConnection<'_>, of: &TheSittingIsOf) -> (WhatTheSendCameTo, Option<TheCheckCameTo>) {
     let rows = {
         let held = smoozy_desktop::surface::the_dependency_check::the_run_holds().lock().expect("the check's memory");
-        the_rows_the_upload_sends(&held.sittings[&the_checks_key(&of.server, &of.file)].rows)
+        the_rows_the_upload_sends(&held.sittings[&the_checks_key(&of.server, &of.file)])
     };
     let asked = WhatIsSent {
         of: of.clone(),

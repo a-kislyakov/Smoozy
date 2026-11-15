@@ -129,3 +129,23 @@
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — K14b's reason in words. The last words read before the release. No auditor has seen it.
 
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent) — L10b: the later start, frames before it and the shutter's near end, and Sources C24. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 13, an output that writes nothing does not shape the job's folder.md`, outside any round — S13's dated note on the range's frames. Changed 2026-11-10, the runner's ruling on the Creator's twenty-eighth notes (piece 13, Rule 10). No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece N1, a frame's pictures from the whole frame.md`, outside any round — K13: the figure read with the frame in hand (twenty-ninth notes, note 11). No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/Fable review/Brief — sitting 2, sending a job and the desk catching up.md`, outside any round — S8: the job record request's answer is read by its word, and an answer that says the record was not written is a refusal. No auditor has seen this text.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the runner's rulings at the foot of `Audits/Build/Fable review/Sitting 5 — what landed.md`, outside any round — K4 gains a dated paragraph: a stop that finds no render process yet ends the reading outright, and the interrupt still goes to a render that starts after all. No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the runner's rulings at the foot of `Audits/Build/Fable review/Sitting 5 — what landed.md`, outside any round — §3.6 gains **K14c**: a render whose remap left a path unchanged finishes, and says which, one *Missing:* line a file. No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent) — The double-check ideas, idea 5: K4, two orderings its paragraph of 2026-11-11 left. No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the last three owed.md`, outside any round — K14c: the desktop keeps the missing names and History draws them. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — W2: the replaced case's words true of both marks, the word sweep's last step. No auditor has seen it.
+2026-11-14 — Claude Opus 5.5 — added K11a, Force stop (the Creator's ruling on 287, Rough share 3).
+2026-11-14 — Claude Opus 5.5 — added S11a, the rest goes with the first settings and says so (Rough share 3, 462).
+2026-11-14 — Claude Opus 5.5 — added L17c, a file's range ending before it starts says so (Rough share 3, 233).
+2026-11-15 — Claude Opus 5.5 — the word check since the sweep: S11a's banner line reworded.

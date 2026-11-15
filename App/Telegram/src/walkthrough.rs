@@ -475,11 +475,7 @@ impl TheWaitForStart {
     /// **One ask, holding the request open for up to `wait_seconds`.** It
     /// names the kinds, as every ask does (P6).
     ///
-    /// **The Start is the first message with a conversation that can be
-    /// established.** Before Start the bot cannot be messaged at all (entry
-    /// 17), so on a new bot the first message is sent after it. An update of
-    /// the other kind, or one whose conversation cannot be established, is not
-    /// a Start (P3).
+    /// `Telegram` S5b: only an explicit Start from a private chat proves it.
     pub fn ask_once(mut self, wait_seconds: u32) -> WhatOneAskFound {
         let answer = match self.check.client.get_updates(self.confirmed_below, wait_seconds) {
             Ok(answer) => answer,
@@ -492,13 +488,16 @@ impl TheWaitForStart {
             );
         };
         for update in updates {
-            if update.get("message").is_none() {
+            let Some(message) = update.get("message") else { continue };
+            if message.pointer("/chat/type").and_then(Value::as_str) != Some("private")
+                || message.get("text").and_then(Value::as_str) != Some("/start") {
                 continue;
             }
             if let Some(conversation) = the_conversation_an_update_came_from(update) {
                 return WhatOneAskFound::StartArrived(TheProof {
                     check: self.check,
                     conversation,
+                    the_chats_name: the_name_of_the_chat(message),
                 });
             }
         }
@@ -533,6 +532,24 @@ pub const HELLO_BACK: &str = "Connected to this chat.";
 pub struct TheProof {
     check: TheCheckPassed,
     conversation: TheConversation,
+    /// **The Creator's ruling of 2026-11-14 on batch 1: setup names the chat
+    /// it connected to**, so a wrong one is seen at once. Read off the Start
+    /// itself and kept nowhere.
+    the_chats_name: Option<String>,
+}
+
+/// **The chat a private Start came from, as the person reads it**: its
+/// `@username` where it has one, else the name it shows. Nothing where the
+/// message carries neither.
+pub fn the_name_of_the_chat(message: &Value) -> Option<String> {
+    let chat = message.get("chat")?;
+    if let Some(username) = chat.get("username").and_then(Value::as_str).filter(|name| !name.is_empty()) {
+        return Some(format!("@{username}"));
+    }
+    let first = chat.get("first_name").and_then(Value::as_str).unwrap_or_default();
+    let last = chat.get("last_name").and_then(Value::as_str).unwrap_or_default();
+    let name = format!("{first} {last}").trim().to_string();
+    (!name.is_empty()).then_some(name)
 }
 
 impl TheProof {
@@ -542,6 +559,11 @@ impl TheProof {
 
     pub fn the_conversation(&self) -> TheConversation {
         self.conversation
+    }
+
+    /// The chat's name as the person reads it — [`the_name_of_the_chat`].
+    pub fn the_chats_name(&self) -> Option<&str> {
+        self.the_chats_name.as_deref()
     }
 
     /// **S6: the received Start answered, from the desktop.** A failure hands
@@ -590,6 +612,13 @@ pub const THE_STORE_CALLS_DEADLINE: Duration = Duration::from_secs(5);
 #[derive(Debug)]
 pub struct TheHelloWasSaid {
     proof: TheProof,
+}
+
+impl TheHelloWasSaid {
+    /// The chat hello was said to, as the person reads it.
+    pub fn the_chats_name(&self) -> Option<&str> {
+        self.proof.the_chats_name()
+    }
 }
 
 /// **Why keeping did not finish.** Both are ordinary failures.
@@ -985,7 +1014,7 @@ mod tests {
                 { "update_id": 40, "callback_query": { "id": "q", "data": "old" } },
                 { "update_id": 41, "message": { "text": "no chat here" } } ] }).to_string())
             .then_answers(&json!({ "ok": true, "result": [
-                { "update_id": 42, "message": { "message_id": 1, "chat": { "id": 9001 }, "text": "/start" } } ] }).to_string());
+                { "update_id": 42, "message": { "message_id": 1, "chat": { "id": 9001, "type": "private" }, "text": "/start" } } ] }).to_string());
 
         let WhatOneAskFound::NothingYet(wait) = wait.ask_once(25) else { panic!("nothing yet") };
         assert_eq!(wait.confirmed_below(), None);
@@ -1005,6 +1034,25 @@ mod tests {
         assert_eq!(offset(2), Some(json!(42)));
     }
 
+    #[test]
+    fn bad_batch_1_only_a_private_start_can_prove_the_chat() {
+        for message in [
+            json!({"chat":{"id":-7,"type":"group"},"text":"/start"}),
+            json!({"chat":{"id":7,"type":"private"},"text":"hello"}),
+            json!({"chat":{"id":-7,"type":"supergroup"},"new_chat_members":[{}]}),
+            json!({"chat":{"id":7},"text":"/start"}),
+        ] {
+            let service = Arc::new(AStandInService::new());
+            let WhatComesNext::WaitForStart(wait) = a_passed_check(&service).what_comes_next(None) else { panic!() };
+            service.then_answers(&json!({"ok":true,"result":[{"update_id":40,"message":message}]}).to_string())
+                .then_answers(&json!({"ok":true,"result":[{"update_id":41,"message":{"chat":{"id":9001,"type":"private"},"text":"/start"}}]}).to_string());
+            let WhatOneAskFound::NothingYet(wait) = wait.ask_once(0) else { panic!("an unrelated message claimed the chat") };
+            assert_eq!(wait.confirmed_below(), Some(41));
+            let WhatOneAskFound::StartArrived(proof) = wait.ask_once(0) else { panic!("private Start was not accepted") };
+            assert_eq!(proof.the_conversation(), TheConversation(9001));
+        }
+    }
+
     /// **An ask that fails hands the wait back**, to be asked again.
     #[test]
     fn a_failed_ask_hands_the_wait_back() {
@@ -1016,12 +1064,25 @@ mod tests {
         assert!(matches!(wait.ask_once(25), WhatOneAskFound::TheAskFailed(_, WhyTheCallFailed::NotReached(_))));
     }
 
+    /// **The Creator's ruling of 2026-11-14: the chat a Start came from is
+    /// named** — its `@username`, else its shown name, else nothing.
+    #[test]
+    fn the_chat_a_start_came_from_is_named() {
+        let named = |chat: Value| the_name_of_the_chat(&json!({ "chat": chat, "text": "/start" }));
+        assert_eq!(named(json!({ "id": 1, "type": "private", "username": "alex_k", "first_name": "Alex" })).as_deref(), Some("@alex_k"));
+        assert_eq!(named(json!({ "id": 1, "type": "private", "first_name": "Alex", "last_name": "K" })).as_deref(), Some("Alex K"));
+        assert_eq!(named(json!({ "id": 1, "type": "private", "first_name": "Alex" })).as_deref(), Some("Alex"));
+        assert_eq!(named(json!({ "id": 1, "type": "private" })), None);
+        let service = Arc::new(AStandInService::new());
+        assert_eq!(a_proof(&service).the_chats_name(), None, "the stand-in's Start names no one");
+    }
+
     fn a_proof(service: &Arc<AStandInService>) -> TheProof {
         let WhatComesNext::WaitForStart(wait) = a_passed_check(service).what_comes_next(None) else {
             panic!("a new bot waits");
         };
         service.then_answers(&json!({ "ok": true, "result": [
-            { "update_id": 42, "message": { "chat": { "id": 9001 }, "text": "/start" } } ] }).to_string());
+            { "update_id": 42, "message": { "chat": { "id": 9001, "type": "private" }, "text": "/start" } } ] }).to_string());
         match wait.ask_once(25) {
             WhatOneAskFound::StartArrived(proof) => proof,
             other => panic!("the Start arrived, not {other:?}"),

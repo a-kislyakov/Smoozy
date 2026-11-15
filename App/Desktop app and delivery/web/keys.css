@@ -119,3 +119,21 @@
   font-size: var(--t-sm);
   word-break: break-all;
 }
+
+/* **An empty list says so, in the grey of a statement** (the UI at every
+ * size, B-28), at a row's own inset. */
+.ky-none {
+  margin: 0;
+  padding: 14px var(--gutter);
+  font-size: var(--t-md);
+  color: var(--ink3);
+}
+
+/* **While a key is checked, its mark takes no line of its own** (UI
+ * consistency, finding 23): the verdict's place keeps no height and the mark
+ * sits at its left, where the answer will appear — not centred across the
+ * text column, 264 pixels away — and in the row's own bottom padding. So a
+ * usable key's answer moves nothing, and the rows no longer ripple up one by
+ * one each time Keys opens. A failure, when one comes, takes its lines. */
+.ky-slot.uway { height: 0; margin-top: -1px; }
+.ky-slot.uway .spin { top: 2px; left: 0; margin: 0; }

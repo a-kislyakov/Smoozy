@@ -109,7 +109,9 @@ use smoozy_queue_history_machine::ending::CollectionOutcome as TheEntrysCollecti
 use smoozy_render_settings_machine::payload::Payload;
 use smoozy_queue_history_machine::readings::AWorkersReport;
 use smoozy_rendering_machine::acting::copy_loop::{
+    the_files_a_remap_left_unchanged, what_the_marker_said_about_the_remap_pairs,
     with_the_markers_observation, TheMarkersObservation, TheQueuesReaderAsATee,
+    TheRemapPairsAsTheyPass,
     TheWorkersCopyLoop, THE_WORKERS_REPORTING_INTERVAL,
 };
 use smoozy_rendering_machine::acting::launch::{
@@ -126,7 +128,6 @@ use smoozy_job_files_machine::where_the_folder_sits::{
     the_job_output_folder_in_force, MakesFolders, WhatStands, WhereTheJobOutputFolderSits,
     THE_RECORD_OF_WHERE_THE_FOLDER_SITS,
 };
-use smoozy_rendering_machine::acting::reading::TheReadingOnTheMachine;
 use smoozy_rendering_machine::acting::the_optix_library::TheLoadersOwnLookupOnTheMachine;
 use smoozy_rendering_machine::endings::{
     classify, the_outcome_against_the_count, the_outcome_of, Cause, FailedReason, RecordedOutcome,
@@ -164,6 +165,13 @@ pub const THE_RENDER_WORKERS_OWN_WORK_REQUEST: &str = "what the render worker wa
 /// supervisor is the one writer of the operation record (`Rented-server
 /// runtime` S1), so the worker asks.
 pub const THE_RENDER_PROCESS_WAS_STARTED_REQUEST: &str = "the render process was started";
+
+/// **`Rendering` K4's paragraph of 2026-11-11: the pair of the Blender the
+/// worker started for `Rendering` P1 step 4's reading**, told the moment it
+/// was started, so a stop that finds no render yet has a process to end.
+pub const THE_READINGS_PROCESS_WAS_STARTED_REQUEST: &str = "the reading's process was started";
+/// The reading's pair, as `Rented-server runtime` X1 writes it.
+pub const THE_READINGS_PROCESS_FIELD: &str = "reading process";
 
 /// **`Rendering` P1 step 5 and `Rented-server runtime` U6: the supervisor
 /// issues the hold identity, writes the hold record and journals it.** The
@@ -253,6 +261,15 @@ pub const HOW_LONG_ONE_EXCHANGE_MAY_TAKE: Duration = Duration::from_secs(60);
 /// comes back hears the ending. One second.
 pub const BETWEEN_TWO_ATTEMPTS_AT_THE_REPORT: Duration = Duration::from_secs(1);
 
+/// **`Rented-server runtime` M5a: how long the worker goes on reading the
+/// render's two streams after the render process itself has ended.** The
+/// render's own ends of both streams close as it ends, so what it printed is
+/// read within moments; a stream still open after this long is held by some
+/// other process, and waiting on it would keep an ended render unreported for
+/// as long as that process lives. A Build figure; ten seconds.
+pub const HOW_LONG_THE_STREAMS_ARE_READ_AFTER_THE_RENDER_HAS_ENDED: Duration =
+    Duration::from_secs(10);
+
 /// **The longest completeness statement one report carries**, in its written
 /// form. `smoozy_framing::framing::THE_LARGEST_FRAME` bounds a whole request,
 /// and a statement longer than half of it travels through the job record
@@ -311,7 +328,13 @@ pub fn the_layout_this_machine_recorded(package_area: &str) -> Option<smoozy_job
     let written = std::fs::read(std::path::Path::new(package_area).join(THE_RECORD_OF_THE_ROOT)).ok()?;
     // **Judged by where it really leads on this machine as well as by its text**
     // (`Job files and outputs` L3; step 10c owed piece 7).
-    let root = crate::a_root_on_this_machine(String::from_utf8_lossy(&written).trim()).ok()?;
+    // **And by its mark** (`Server Setup` R6a's change of later on 2026-11-13,
+    // item 4): a root that does not hold it is no root to choose a folder in.
+    let root = crate::a_recorded_root_on_this_machine(
+        String::from_utf8_lossy(&written).trim(),
+        &std::path::Path::new(package_area).join(THE_RECORD_OF_THE_ROOT),
+    )
+    .ok()?;
     let under_the_root = TheLayout::of(root.clone(), WhereThePackageAreaSits::UnderTheRoot);
     let package_area = package_area.trim_end_matches('/');
     if package_area == under_the_root.area(Area::Package) {
@@ -402,7 +425,9 @@ pub fn one_attempt(
             start: &start,
             places: &TheWorkersOwnFilesystem,
             asks_the_version: &asks,
-            takes_the_reading: &TheReadingOnTheMachine,
+            // **`Rendering` K4's paragraph of 2026-11-11**: the reading's
+            // Blender is told to the supervisor as it starts.
+            takes_the_reading: &TheReadingToldToTheSupervisor { supervisor, work },
             steps: &mut steps,
             // **`Rendering` L24b**: before a job naming OptiX is launched, the
             // system's own loader is asked for the OptiX library, under this
@@ -454,6 +479,7 @@ pub fn one_attempt(
             statement: None,
             figure: WhatTheFigureIs::TheEndingsStepNeverRan,
             the_device_line: None,
+            the_files_missing: Vec::new(),
         }),
         other => {
             // **An attempt that ended before or at its launch may still have
@@ -479,6 +505,35 @@ pub fn one_attempt(
         );
     }
     ending
+}
+
+/// **`Rendering` P1 step 4's reading, with its Blender told to the supervisor
+/// the moment it is started** (`Rendering` K4's paragraph of 2026-11-11), so a
+/// stop that finds no render yet has a process to end. **The pair is read off
+/// the kernel as the render's is** (`Rented-server runtime` X1); where the
+/// kernel publishes none, nothing is told and the stop waits for the render.
+struct TheReadingToldToTheSupervisor<'a, S> {
+    supervisor: &'a S,
+    work: &'a TheWork,
+}
+
+impl<S: AsksTheSupervisor> smoozy_rendering_machine::acting::reading::TakesTheReading
+    for TheReadingToldToTheSupervisor<'_, S>
+{
+    fn take(
+        &self,
+        taking: &smoozy_rendering_machine::acting::reading::TheReadingToTake<'_>,
+    ) -> Result<smoozy_job_files_machine::reading_script::ThePrintedReading, String> {
+        use smoozy_runtime::execution_group::ValidatesTheRecordedPair as _;
+        smoozy_rendering_machine::acting::reading::take_the_reading_telling(taking, &|process| {
+            if let Ok(Some(pair)) =
+                smoozy_runtime::acting::execution_group::ThePairAsTheKernelReportsIt::the_rented_machine()
+                    .what_is_at(process)
+            {
+                self.supervisor.tell_the_readings_process(self.work, pair);
+            }
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -533,6 +588,62 @@ pub struct TheAttemptAsComposed {
 pub fn where_the_folder_was_recorded_to_sit(record_directory: &str) -> Option<WhereTheJobOutputFolderSits> {
     let at = std::path::Path::new(record_directory).join(THE_RECORD_OF_WHERE_THE_FOLDER_SITS);
     WhereTheJobOutputFolderSits::read_back(&std::fs::read(at).ok()?)
+}
+
+/// **`Job files and outputs` P21's one write, into the job record directory:
+/// written once, durably, and given its name only when it is whole** (`Job
+/// files and outputs` P21a; `State, identity and recovery` §1.3 rule 6).
+///
+/// - **Nothing stands at the name**: the record is written under a name of its
+///   own beside it, flushed, and linked to its real name — a link is refused
+///   where the name stands, so two writers cannot both land.
+/// - **A record that reads back stands**: refused. The choice is made once and
+///   never again (`Job files and outputs` P21).
+/// - **Something stands that does not read back**: a write cut short by an
+///   earlier attempt. It names no choice, and this attempt's record is moved
+///   over it in one step.
+///
+/// **Until the Fable review's fifth sitting the name was made first and
+/// written after**, so a worker that ended, a machine that went down or a
+/// mount with no room between the two left the name over nothing, and every
+/// later attempt of the job was refused here for good.
+pub fn where_the_folder_sits_is_written_into(
+    record_directory: &str,
+    sits: &WhereTheJobOutputFolderSits,
+) -> Result<(), String> {
+    use std::io::Write;
+    let at = std::path::PathBuf::from(record_directory).join(THE_RECORD_OF_WHERE_THE_FOLDER_SITS);
+    let already = || format!("{}: where the job's folder sits is already recorded", at.display());
+    let a_stump_stands = match std::fs::read(&at) {
+        Ok(held) if WhereTheJobOutputFolderSits::read_back(&held).is_some() => return Err(already()),
+        Ok(_) => true,
+        Err(why) if why.kind() == std::io::ErrorKind::NotFound => false,
+        Err(why) => return Err(format!("{}: {why}", at.display())),
+    };
+    let unique = Identity::issue(IdentityKind::Operation)
+        .map_err(|_| "no identity for the folder record's publication".to_string())?;
+    let staged = at.with_extension(format!("{}.part", unique.as_text()));
+    let kept = (|| {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staged)
+            .map_err(|why| format!("{}: {why}", staged.display()))?;
+        file.write_all(&sits.as_written())
+            .and_then(|()| file.sync_all())
+            .map_err(|why| format!("{}: {why}", staged.display()))?;
+        if a_stump_stands {
+            return std::fs::rename(&staged, &at).map_err(|why| format!("{}: {why}", at.display()));
+        }
+        match std::fs::hard_link(&staged, &at) {
+            Ok(()) => Ok(()),
+            Err(why) if why.kind() == std::io::ErrorKind::AlreadyExists => Err(already()),
+            Err(why) => Err(format!("{}: {why}", at.display())),
+        }
+    })();
+    let _ = std::fs::remove_file(&staged);
+    kept?;
+    smoozy_runtime::acting::durable::flush_the_directory_holding(&at).map_err(|why| why.as_text())
 }
 
 /// **The job output folder in force for a job, as the machine holds it** —
@@ -745,6 +856,11 @@ pub trait AsksTheSupervisor {
     fn place_a_hold(&self, work: &TheWork, reason: &str) -> Option<Identity>;
     /// `Rendering` L5.
     fn record_the_render_process(&self, work: &TheWork, pair: RecordedPair) -> Result<(), String>;
+    /// **`Rendering` K4's paragraph of 2026-11-11: the reading's Blender, told
+    /// the moment it was started.** Nothing comes back that the worker acts
+    /// on: a telling that does not land leaves the stop waiting for the
+    /// render, as it did before that date.
+    fn tell_the_readings_process(&self, _work: &TheWork, _pair: RecordedPair) {}
     /// **`Job files and outputs` H9**: the recorded reading is journalled as an
     /// event when it is written, and the supervisor is the one writer of the
     /// journal (`Rented-server runtime` S1).
@@ -801,20 +917,10 @@ impl<S: AsksTheSupervisor> TheWorkersOwnSteps for TheMachineAnswersTheWorker<'_,
         &mut self.folders
     }
 
-    /// **`Job files and outputs` P21: written once, durably, into the job
-    /// record directory** — created only where nothing stands, the bytes
-    /// flushed and the folder holding the name flushed after them, as the
-    /// attempt record is (`State, identity and recovery` §1.3 rule 6).
+    /// **`Job files and outputs` P21 and `Job files and outputs` P21a**: see
+    /// [`where_the_folder_sits_is_written_into`].
     fn write_where_the_folder_sits(&mut self, sits: &WhereTheJobOutputFolderSits) -> Result<(), String> {
-        use std::io::Write;
-        let at = std::path::PathBuf::from(&self.work.record_directory).join(THE_RECORD_OF_WHERE_THE_FOLDER_SITS);
-        let mut file = smoozy_runtime::acting::durable::create_only_if_absent(&at)
-            .map_err(|why| why.as_text())?
-            .ok_or_else(|| format!("{}: where the job's folder sits is already recorded", at.display()))?;
-        file.write_all(&sits.as_written())
-            .and_then(|()| file.sync_all())
-            .map_err(|why| format!("{}: {why}", at.display()))?;
-        smoozy_runtime::acting::durable::flush_the_directory_holding(&at).map_err(|why| why.as_text())
+        where_the_folder_sits_is_written_into(&self.work.record_directory, sits)
     }
 
     fn read_the_remap_material(&mut self, at: &str) -> Option<RemapMaterial> {
@@ -1527,6 +1633,10 @@ pub struct TheEnding {
     /// `Queue & History` N3). Until step 10c's fix piece 2 the tee observed it
     /// and the loop threw it away.
     pub the_device_line: Option<String>,
+    /// **`Rendering` K14c: the file names of the paths the remap left
+    /// unchanged**, from the per-pair lines this worker observed at its own
+    /// copy loop. Empty where there is none and where no launch was made.
+    pub the_files_missing: Vec<String>,
 }
 
 impl TheEnding {
@@ -1544,6 +1654,7 @@ impl TheEnding {
             statement: Some(statement),
             figure,
             the_device_line: None,
+            the_files_missing: Vec::new(),
         }
     }
 }
@@ -1558,6 +1669,110 @@ struct ASinkThatCouldNotBeOpened(String);
 impl CopiesAStreamIntoItsSink for ASinkThatCouldNotBeOpened {
     fn write(&self, _stream: Stream, _bytes: &[u8], _may_write: u64) -> Result<u64, String> {
         Err(self.0.clone())
+    }
+}
+
+/// **The moment the render process ended, as the worker's own reap learned
+/// it** — nothing until then (`Rented-server runtime` M5a).
+#[derive(Default)]
+pub(crate) struct WhenTheRenderEnded(std::sync::Mutex<Option<std::time::Instant>>);
+
+impl WhenTheRenderEnded {
+    pub(crate) fn it_has_ended(&self) {
+        if let Ok(mut at) = self.0.lock() {
+            at.get_or_insert_with(std::time::Instant::now);
+        }
+    }
+
+    /// How long ago, where it has.
+    fn how_long_ago(&self) -> Option<Duration> {
+        self.0.lock().ok().and_then(|at| at.map(|at| at.elapsed()))
+    }
+}
+
+/// How long one look at a stream waits for something to read before the
+/// worker asks again whether the render has ended. A pace and nothing more.
+const BETWEEN_TWO_LOOKS_AT_A_STREAM_IN_MILLISECONDS: libc::c_int = 250;
+
+/// **`Rented-server runtime` M5a: one of the render's two streams, read for as
+/// long as the render process lives and for
+/// [`HOW_LONG_THE_STREAMS_ARE_READ_AFTER_THE_RENDER_HAS_ENDED`] after it.**
+///
+/// **While the render lives nothing here ends the read**, whatever the stream
+/// does and however long it is silent: M5's rule stands and no timer of
+/// Smoozy's ends a render (`Rendering` K15). **Once the render process has
+/// ended**, its own ends of both streams are closed, so what it printed is
+/// read at once and the stream ends by itself — unless another process still
+/// holds it open, and then the read is given up with the reason, which the
+/// copy loop records as the stream's first loss (*collection incomplete*,
+/// `Rented-server runtime` M13).
+///
+/// **The wait is the system's own `poll`** (`Rented-server runtime` sources,
+/// 2.5a): it says when the stream can be read without blocking — bytes, or
+/// its end — and comes back empty-handed after the pace where it cannot. **A
+/// stream that can be read is read by the ordinary `read`**, so every byte and
+/// the end of the stream arrive exactly as they did.
+///
+/// **The file-inspection worker and the preview worker read their Blender's
+/// streams through this too** (M5a's sentence of 2026-11-11), holding the
+/// moment in a shared handle where the render worker lends it.
+pub(crate) struct AStreamReadWhileItsRenderLives<E, R> {
+    pub(crate) from: R,
+    pub(crate) ended: E,
+}
+
+impl<E: std::borrow::Borrow<WhenTheRenderEnded>, R: Read + std::os::fd::AsRawFd> Read
+    for AStreamReadWhileItsRenderLives<E, R>
+{
+    fn read(&mut self, into: &mut [u8]) -> std::io::Result<usize> {
+        loop {
+            let the_ten_seconds_are_over = self.ended.borrow().how_long_ago().is_some_and(|ago| {
+                ago >= HOW_LONG_THE_STREAMS_ARE_READ_AFTER_THE_RENDER_HAS_ENDED
+            });
+            let mut one = libc::pollfd {
+                fd: self.from.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            // SAFETY: `one` is a single initialised `pollfd` that lives across
+            // the call, and the count handed over is one.
+            let found = unsafe {
+                libc::poll(
+                    &mut one,
+                    1,
+                    // **Once the ten seconds are over the stream is looked at
+                    // once more and not waited for.**
+                    if the_ten_seconds_are_over {
+                        0
+                    } else {
+                        BETWEEN_TWO_LOOKS_AT_A_STREAM_IN_MILLISECONDS
+                    },
+                )
+            };
+            if found < 0 {
+                let why = std::io::Error::last_os_error();
+                if why.kind() == std::io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(why);
+            }
+            // **A stream every writer has closed is read to its end whatever
+            // the clock says**: nothing holds it, what is left in it is the
+            // render's own, and it ends by itself. Only a stream something
+            // still holds open is let go (Sol's look, the Fable review's fifth
+            // sitting: the clock alone used to decide, so a copy held up for
+            // ten seconds lost the render's last words).
+            let every_writer_has_closed_it = found > 0 && one.revents & libc::POLLHUP != 0;
+            if the_ten_seconds_are_over && !every_writer_has_closed_it {
+                return Err(std::io::Error::other(format!(
+                    "timed out {} seconds after Blender exited",
+                    HOW_LONG_THE_STREAMS_ARE_READ_AFTER_THE_RENDER_HAS_ENDED.as_secs()
+                )));
+            }
+            if found > 0 {
+                return self.from.read(into);
+            }
+        }
     }
 }
 
@@ -1589,7 +1804,7 @@ pub fn after_the_launch(
         ..
     } = started;
     let observers = (
-        TheMarkersObservation::default(),
+        TheMarkerAndThePairs::default(),
         TheQueuesReaderAsATee::for_the_attempt(
             composed.version.major,
             work.attempt,
@@ -1606,11 +1821,36 @@ pub fn after_the_launch(
     // recovery` D5). Until the Creator's notes on 0.1.8, piece 6a, the tee
     // folded every line and nothing ever sent what it held.
     let clock = composed.the_machines_clock.clone();
-    let report = |held: &(TheMarkersObservation, TheQueuesReaderAsATee)| {
+    let report = |held: &(TheMarkerAndThePairs, TheQueuesReaderAsATee)| {
         held.1.the_report(std::time::SystemTime::now(), clock.clone())
     };
-    let (ordinary_observed, complaints_observed, markers, the_device_line, the_ceiling_was_reached) =
-        match TheCopyIntoTheSinks::opening(&work.capture) {
+    // **`Rented-server runtime` M5a: the reap is taken beside the copy and
+    // never after it.** The render's ending is the system's own word about the
+    // render process; an end of stream is a word about every process holding
+    // that stream, which a script in the user's file can add to. Waiting for
+    // the second before asking for the first left a render that had ended
+    // unreaped and unreported, with a stop's interrupt going to a process
+    // already ended (the Fable review's fifth sitting, fault 1).
+    let the_render_ended = WhenTheRenderEnded::default();
+    let (
+        (ordinary_observed, complaints_observed, markers, the_device_line, the_ceiling_was_reached),
+        exit_status,
+    ) = std::thread::scope(|threads| {
+        let (the_render, ended) = (&mut child, &the_render_ended);
+        // **The ending step's own reap** (`Rendering` P1 step 9), verbatim.
+        let reaped = threads.spawn(move || {
+            let status = the_render.wait();
+            // **Only a reap that answered says the render has ended**: one
+            // the system refused says nothing, and both streams are then read
+            // to their end as before.
+            if status.is_ok() {
+                ended.it_has_ended();
+            }
+            status
+        });
+        let ordinary = AStreamReadWhileItsRenderLives { from: ordinary, ended };
+        let complaints = AStreamReadWhileItsRenderLives { from: complaints, ended };
+        let observed = match TheCopyIntoTheSinks::opening(&work.capture) {
             Ok(copy) => the_loop(
                 &copy,
                 work.capture.ceiling,
@@ -1628,19 +1868,36 @@ pub fn after_the_launch(
                 (&report, figures.to),
             ),
         };
-
-    // **The ending step's own reap** (`Rendering` P1 step 9), verbatim.
-    let exit_status = match child.wait() {
-        Ok(status) => status.code().or_else(|| status.signal().map(|signal| -signal)),
-        Err(_) => None,
-    };
+        let exit_status = match reaped.join() {
+            Ok(Ok(status)) => status.code().or_else(|| status.signal().map(|signal| -signal)),
+            _ => None,
+        };
+        (observed, exit_status)
+    });
     // **The render has ended, so what Smoozy placed is read again now** —
     // before the ending is recorded, so the desktop that learns of the ending
     // finds the reading there. The fixes before 0.1.8, fault 3.
     the_placed_copies_are_read_again(&work.record_directory, work.attempt);
 
+    let (markers, the_pairs_as_they_passed) = markers;
     let ordinary_observed = with_the_markers_observation(ordinary_observed, &markers);
     let complaints_observed = with_the_markers_observation(complaints_observed, &markers);
+    // **`Rendering` K14c: the pairs the material carried against the lines
+    // that passed this loop.** The material is the one `Rendering` P1 step 2
+    // read, read again off the disk; where it does not read, nothing is said.
+    // A pair no line named counts only where the marker passed and the
+    // ordinary stream reached its end. Until the Fable review's fifth sitting
+    // the comparison was built and nothing called it.
+    let the_files_missing = std::fs::read(&composed.remap_material_path)
+        .ok()
+        .and_then(|written| RemapMaterial::read_back(&written))
+        .map(|remap| {
+            the_files_a_remap_left_unchanged(
+                &what_the_marker_said_about_the_remap_pairs(&the_pairs_as_they_passed, &remap),
+                ordinary_observed.end_of_stream && ordinary_observed.the_marker_passed == Some(true),
+            )
+        })
+        .unwrap_or_default();
     let streams = (
         WhatOneStreamCameTo {
             outcome: collection_outcome(true, false, &ordinary_observed, the_ceiling_was_reached),
@@ -1675,26 +1932,32 @@ pub fn after_the_launch(
         statement: Some(statement),
         figure,
         the_device_line,
+        the_files_missing,
     }
 }
 
+/// **The marker's observation, and beside it the remap's per-pair lines as
+/// they pass** (`Rendering` K14c) — two observers of the same bytes, neither
+/// knowing of the other.
+type TheMarkerAndThePairs = (TheMarkersObservation, TheRemapPairsAsTheyPass);
+
 /// What the loop's readings are taken with, and where each report goes.
 type TheReporting<'a> = (
-    &'a (dyn Fn(&(TheMarkersObservation, TheQueuesReaderAsATee)) -> AWorkersReport + Sync),
+    &'a (dyn Fn(&(TheMarkerAndThePairs, TheQueuesReaderAsATee)) -> AWorkersReport + Sync),
     &'a (dyn Fn(AWorkersReport) + Sync),
 );
 
 fn the_loop<C, R1, R2>(
     copy: &C,
     ceiling: CaptureCeiling,
-    observers: (TheMarkersObservation, TheQueuesReaderAsATee),
+    observers: (TheMarkerAndThePairs, TheQueuesReaderAsATee),
     ordinary: R1,
     complaints: R2,
     (take, send): TheReporting<'_>,
 ) -> (
     WhatTheWorkerObserved,
     WhatTheWorkerObserved,
-    TheMarkersObservation,
+    TheMarkerAndThePairs,
     Option<String>,
     bool,
 )
@@ -1787,6 +2050,12 @@ pub fn the_cause_word(cause: Cause) -> &'static str {
 /// Only the supervisor records the ending (`Rendering` P1 step 9).
 pub const THE_STATEMENT_IS_IN_THE_RECORD_DIRECTORY_FIELD: &str = "the completeness statement is in the record directory";
 
+/// **`Rented-server runtime` S14b: the worker's word that its ending's
+/// completeness statement could not be kept in the job record directory yet,
+/// with the machine's own reason.** A report carrying it carries the ending
+/// and no statement; the supervisor holds what it says and writes nothing.
+pub const THE_STATEMENT_IS_NOT_KEPT_YET_FIELD: &str = "the completeness statement is not kept yet";
+
 fn the_large_statements_path(directory: &str, attempt: u32) -> std::path::PathBuf {
     std::path::Path::new(directory).join(format!("attempt-{attempt}-completeness.json"))
 }
@@ -1837,10 +2106,19 @@ impl TheEnding {
         if let Some(Ok(statement)) = &self.statement {
             let written = serde_json::to_vec(statement).map_err(|why| why.to_string())?;
             if written.len() > THE_LONGEST_STATEMENT_ONE_REPORT_CARRIES {
-                keep_the_large_statement(directory, attempt, &written)?;
                 let mut without = self.clone();
                 without.statement = None;
-                return Ok(without.as_fields(fields).and(THE_STATEMENT_IS_IN_THE_RECORD_DIRECTORY_FIELD, "yes"));
+                return Ok(match keep_the_large_statement(directory, attempt, &written) {
+                    Ok(()) => without.as_fields(fields).and(THE_STATEMENT_IS_IN_THE_RECORD_DIRECTORY_FIELD, "yes"),
+                    // **`Rented-server runtime` S14b: the ending is reported
+                    // all the same, saying its statement is not kept yet**, so
+                    // the supervisor holds what it is told for the readings
+                    // and the worker sends it again until it lands whole
+                    // (W12). Until the Fable review's fifth sitting nothing
+                    // was sent, and the job read *rendering* for as long as
+                    // the mount had no room.
+                    Err(why) => without.as_fields(fields).and(THE_STATEMENT_IS_NOT_KEPT_YET_FIELD, why),
+                });
             }
         }
         Ok(self.as_fields(fields))
@@ -1898,6 +2176,13 @@ impl TheEnding {
         }
         if let Some(line) = self.the_device_line.as_deref().filter(|line| !line.is_empty()) {
             fields = fields.and(asked::THE_DEVICE_LINE_FIELD, line);
+        }
+        // **`Rendering` K14c: on whatever ending it is, and only where there
+        // is one.**
+        if !self.the_files_missing.is_empty() {
+            if let Ok(written) = serde_json::to_vec(&self.the_files_missing) {
+                fields = fields.and(asked::THE_FILES_MISSING_FIELD, written);
+            }
         }
         match &self.statement {
             None => {}
@@ -2607,6 +2892,29 @@ impl AsksTheSupervisor for TheSupervisorAsTheWorkerReachesIt {
         )
     }
 
+    fn tell_the_readings_process(&self, work: &TheWork, pair: RecordedPair) {
+        let Ok(identity) = Self::a_fresh_identity() else {
+            return;
+        };
+        let request = Self::a_request(
+            THE_READINGS_PROCESS_WAS_STARTED_REQUEST,
+            identity,
+            Fields::none()
+                .and(THE_OPERATION_FIELD, work.operation.as_text())
+                .and(THE_READINGS_PROCESS_FIELD, pair.as_this_document_records_it()),
+        );
+        if !matches!(
+            self.endpoint.ask(&request),
+            Ok(Some(answered))
+                if answered.fields.text(WHETHER_IT_WAS_RECORDED_FIELD) == Some(IT_WAS_RECORDED)
+        ) {
+            eprintln!(
+                "smoozy-server: the reading's process was not recorded, so a stop will wait for \
+                 the render"
+            );
+        }
+    }
+
     fn journal_the_recorded_reading(&self, work: &TheWork) -> Result<(), String> {
         let request = Self::a_request(
             THE_RECORDED_READING_WAS_WRITTEN_REQUEST,
@@ -2775,6 +3083,13 @@ pub struct OneAttemptsCapture {
     /// `Rendering` L5's pair, as X1 writes it.
     #[serde(default)]
     pub render_process: Option<String>,
+    /// **`Rendering` K4's paragraph of 2026-11-11: the pair of the Blender
+    /// the worker started for `Rendering` P1 step 4's reading**, as X1 writes
+    /// one — what a stop that finds no render process yet ends outright.
+    /// Absent on a record written before that date, which reads back as no
+    /// reading told.
+    #[serde(default)]
+    pub reading_process: Option<String>,
     /// **What the ending brought**, written once when it is reported.
     #[serde(default)]
     pub ending: Option<TheEndingAsRecorded>,
@@ -2846,6 +3161,11 @@ pub struct TheEndingAsRecorded {
     /// as the worker reported it. No on a record written before 2026-11-04.
     #[serde(default)]
     pub no_render_began: bool,
+    /// **`Rendering` K14c: the file names of the paths the remap left
+    /// unchanged**, as the worker reported them. Empty where it reported
+    /// none, and on a record written before 2026-11-11.
+    #[serde(default)]
+    pub missing: Vec<String>,
 }
 
 impl TheEndingAsRecorded {
@@ -2874,8 +3194,23 @@ impl TheEndingAsRecorded {
             something_followed_the_marker: yes(SOMETHING_FOLLOWED_THE_MARKER_FIELD),
             device_line: text(asked::THE_DEVICE_LINE_FIELD),
             no_render_began: fields.text(asked::NO_RENDER_BEGAN_FIELD) == Some(asked::IT_IS_YES),
+            missing: fields
+                .value(asked::THE_FILES_MISSING_FIELD)
+                .and_then(|written| serde_json::from_slice(written).ok())
+                .unwrap_or_default(),
         })
     }
+}
+
+/// `Queue & History` R5: use this attempt's durable process, never the first's.
+pub(crate) fn a_render_is_running_again(record: &smoozy_state::machine_operations::OperationRecord) -> bool {
+    record.recorded_outcome().is_none()
+        && record.attempt_count > 1
+        && record.the_kinds_safe_boundary_marker.as_deref()
+            .and_then(TheRenderKindsOwnField::read_back)
+            .is_some_and(|field| !field.attempts.iter().any(|attempt| {
+                attempt.attempt == record.attempt_count && attempt.render_process.is_some()
+            }))
 }
 
 impl TheRenderKindsOwnField {
@@ -3261,10 +3596,55 @@ pub(crate) mod tests {
         assert_eq!(ending.as_fields_for(Fields::none(), directory_text, 1).unwrap(), fields, "a repeated report reuses the publication");
         assert!(the_fields_with_the_recorded_statement(&fields, directory_text, 2).is_err(), "another attempt cannot borrow this statement");
         ending.statement.as_mut().unwrap().as_mut().unwrap().expected += 1;
-        assert!(ending.as_fields_for(Fields::none(), directory_text, 1).is_err(), "never replace a statement");
+        // **A statement that stands is never replaced**, and the report says
+        // this one is not kept (`Rented-server runtime` S14b) — until the
+        // Fable review's fifth sitting the report could not be composed.
+        let changed = ending.as_fields_for(Fields::none(), directory_text, 1).unwrap();
+        assert!(changed.text(THE_STATEMENT_IS_NOT_KEPT_YET_FIELD).is_some(), "never replace a statement");
+        assert_eq!(changed.text(THE_STATEMENT_IS_IN_THE_RECORD_DIRECTORY_FIELD), None);
         assert_eq!(std::fs::read(the_large_statements_path(directory_text, 1)).unwrap(), before);
         std::fs::write(the_large_statements_path(directory_text, 2), b"incomplete").unwrap();
         assert!(the_fields_with_the_recorded_statement(&fields, directory_text, 2).is_err(), "an unreadable statement is not an empty one");
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    /// **`Rented-server runtime` S14b: an ending whose long statement cannot
+    /// be kept is still reported, saying so.** The job record directory is
+    /// closed to new names, which is how the desk stands in for a mount with
+    /// no room. The Fable review's fifth sitting, fault 2.
+    ///
+    /// **The case it bites on**: the report could not be composed at all, so
+    /// the worker sent nothing and tried again each second, and the supervisor
+    /// was never told the render had ended.
+    #[test]
+    fn an_ending_whose_long_statement_cannot_be_kept_is_reported_saying_so() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = a_scratch_folder("statement-not-kept");
+        let directory_text = directory.to_str().unwrap();
+        let statement = TheCompletenessStatement {
+            expected: 1,
+            present: vec![vec![b'x'; THE_LONGEST_STATEMENT_ONE_REPORT_CARRIES]],
+            absent: Vec::new(), present_at_zero_bytes: Vec::new(), what_the_added_write_places_produced: Vec::new(),
+        };
+        let ending = TheEnding::before_the_launch(RecordedOutcome::Finished, None, Ok(statement.clone()), WhatTheFigureIs::It(1));
+        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let held = ending.as_fields_for(Fields::none(), directory_text, 1);
+        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let held = held.expect("the ending is reported though its statement could not be kept");
+        assert_eq!(held.text(asked::THE_ENDING_FIELD), Some(asked::IT_FINISHED));
+        assert!(held.text(THE_STATEMENT_IS_NOT_KEPT_YET_FIELD).is_some_and(|why| !why.is_empty()));
+        assert_eq!(held.value(THE_COMPLETENESS_STATEMENT_FIELD), None);
+        assert_eq!(held.text(THE_STATEMENT_IS_IN_THE_RECORD_DIRECTORY_FIELD), None);
+        assert_eq!(
+            held.text(asked::WHY_NO_COMPLETENESS_STATEMENT_FIELD),
+            None,
+            "it does not say there is no statement: there is one, waiting for room"
+        );
+        // **Room comes back: the same ending names its statement and says
+        // nothing of waiting.**
+        let landed = ending.as_fields_for(Fields::none(), directory_text, 1).unwrap();
+        assert_eq!(landed.text(THE_STATEMENT_IS_NOT_KEPT_YET_FIELD), None);
+        assert_eq!(landed.text(THE_STATEMENT_IS_IN_THE_RECORD_DIRECTORY_FIELD), Some("yes"));
         std::fs::remove_dir_all(directory).unwrap();
     }
 
@@ -3377,6 +3757,10 @@ pub(crate) mod tests {
             .collect()
     }
 
+    /// Where a stand-in render's remap material is looked for: there only
+    /// where a test put one (`Rendering` K14c).
+    const THE_STAND_INS_REMAP_MATERIAL: &str = "remap-material.json";
+
     fn a_stand_in_render(
         script: &str,
         beside: impl FnOnce(&std::path::Path),
@@ -3431,7 +3815,7 @@ pub(crate) mod tests {
             manifest: smoozy_rendering_machine::composition::testing::a_manifest(&job, "5.2", "Scene"),
             payload: smoozy_rendering_machine::material::testing::an_untouched_payload(),
             version: Version { major: 5, minor: 2, patch: 0 },
-            remap_material_path: String::new(),
+            remap_material_path: root.join(THE_STAND_INS_REMAP_MATERIAL).display().to_string(),
             launch_material_path: String::new(),
             load_time_script_path: String::new(),
             reading_script_path: String::new(),
@@ -3531,6 +3915,236 @@ pub(crate) mod tests {
         assert_eq!(complaints, "a complaint\n", "`Rented-server runtime` M7: never merged");
         // **No inventory, so the ending says why it carries no statement.**
         assert!(matches!(ending.statement, Some(Err(_))));
+    }
+
+    /// **`Rendering` K14c: the names ride whatever ending is reported, and
+    /// read back as the record keeps them.**
+    #[test]
+    fn the_files_a_remap_left_unchanged_ride_the_report_and_read_back() {
+        let mut ending = TheEnding::before_the_launch(
+            RecordedOutcome::Finished,
+            None,
+            Err("no inventory".to_string()),
+            WhatTheFigureIs::It(1),
+        );
+        assert_eq!(ending.as_fields(Fields::none()).value(asked::THE_FILES_MISSING_FIELD), None);
+        ending.the_files_missing = vec!["wood.png".to_string(), "Занавеска.exr".to_string()];
+        let recorded = TheEndingAsRecorded::from_the_report(&ending.as_fields(Fields::none())).expect("an ending");
+        assert_eq!(recorded.missing, ending.the_files_missing);
+        assert_eq!(recorded.ending, asked::IT_FINISHED);
+    }
+
+    /// **`Rendering` K14c, at the worker's own loop: a pair whose line says
+    /// it was not applied, and a pair no line named, are the ending's
+    /// *missing* — and the render still finishes.** The Fable review's fifth
+    /// sitting, fault 5.
+    ///
+    /// **The case it bites on**: the comparison was built and nothing called
+    /// it, so the ending said nothing.
+    #[test]
+    fn a_render_whose_remap_left_paths_unchanged_finishes_and_names_them() {
+        let job = Identity::issue(IdentityKind::Job).expect("randomness");
+        let remap = smoozy_rendering_machine::material::testing::a_remap(&job, true);
+        let line = format!(
+            "{}{}",
+            smoozy_dependencies_machine::material::THE_PER_PAIR_HEAD,
+            serde_json::to_string(&smoozy_dependencies_machine::material::AsTheMarkerCarriesIt {
+                kind: serde_json::to_string(&remap.pairs[0].kind).unwrap().trim_matches('"').to_string(),
+                setting: remap.pairs[0].setting.clone(),
+                match_text: remap.pairs[0].match_text.clone(),
+                applied: false,
+                data_blocks: 0,
+                assignment_alone: smoozy_dependencies_machine::remap::assignment_alone_is(remap.pairs[0].kind),
+                reloaded: false,
+                values_found: Vec::new(),
+            })
+            .unwrap()
+        );
+        let script = format!(
+            "#!/bin/sh\necho 'SMOOZY-MATERIAL {{\"job\":\"a stand-in\"}}'\ncat <<'SMOOZY'\n{line}\nSMOOZY\necho 'Fra:1 a line'\nexit 0\n"
+        );
+        let written = remap.as_written();
+        let (ending, _, _, _) = a_stand_in_render(
+            &script,
+            |root| std::fs::write(root.join(THE_STAND_INS_REMAP_MATERIAL), &written).unwrap(),
+            None,
+            TheFiguresGo { the_plan: None, to: &|_| {} },
+        );
+        assert_eq!(ending.outcome, RecordedOutcome::Finished, "K14's list does not grow");
+        assert_eq!(ending.the_files_missing, ["wood.png", "props.blend"]);
+        // **Every pair applied, or no material to compare with: nothing.**
+        let (ending, _, _) = after_a_stand_in_prints(
+            "#!/bin/sh\necho 'SMOOZY-MATERIAL {\"job\":\"a stand-in\"}'\necho 'Fra:1 a line'\nexit 0\n",
+        );
+        assert!(ending.the_files_missing.is_empty());
+    }
+
+    fn a_scratch_folder(named: &str) -> std::path::PathBuf {
+        let at = std::env::temp_dir().join(format!(
+            "smoozy-{named}-{}",
+            Identity::issue(IdentityKind::Operation).expect("randomness").as_text()
+        ));
+        std::fs::create_dir_all(&at).unwrap();
+        at
+    }
+
+    fn a_folder_record(path: &str) -> WhereTheJobOutputFolderSits {
+        WhereTheJobOutputFolderSits {
+            path: path.to_string(),
+            where_it_is: smoozy_job_files_machine::where_the_folder_sits::WhereItIs::WhereTheFilePoints,
+        }
+    }
+
+    /// **`Job files and outputs` P21a: a record of where the folder sits that
+    /// was cut short names no choice, and the next attempt's record takes its
+    /// place.** The Fable review's fifth sitting, fault 3.
+    ///
+    /// **The case it bites on**: the name was made first and written after, so
+    /// a write cut short left the name over nothing; every later attempt read
+    /// no choice, chose, and was refused its write because the name stood.
+    #[test]
+    fn a_folder_record_cut_short_is_replaced_by_the_next_attempts_and_a_whole_one_never_is() {
+        let directory = a_scratch_folder("folder-record");
+        let directory_text = directory.to_str().unwrap();
+        let at = directory.join(THE_RECORD_OF_WHERE_THE_FOLDER_SITS);
+        for stump in [&b""[..], &b"{\"path\":\"/renders/sh"[..]] {
+            std::fs::write(&at, stump).unwrap();
+            assert_eq!(
+                where_the_folder_was_recorded_to_sit(directory_text),
+                None,
+                "a record cut short names no choice"
+            );
+            let chosen = a_folder_record("/renders/shot/job-1");
+            where_the_folder_sits_is_written_into(directory_text, &chosen)
+                .expect("the next attempt's choice is recorded over the stump");
+            assert_eq!(where_the_folder_was_recorded_to_sit(directory_text), Some(chosen));
+            std::fs::remove_file(&at).unwrap();
+        }
+        // **A record that reads back is never replaced** (`Job files and outputs`
+        // P21: never again).
+        let first = a_folder_record("/renders/shot/job-1");
+        where_the_folder_sits_is_written_into(directory_text, &first).expect("the first choice");
+        assert!(
+            where_the_folder_sits_is_written_into(directory_text, &a_folder_record("/elsewhere/job-1"))
+                .is_err(),
+            "a second choice is refused"
+        );
+        assert_eq!(where_the_folder_was_recorded_to_sit(directory_text), Some(first));
+        // **Nothing is left beside it**: the one name, and no half-written file.
+        let names: Vec<_> = std::fs::read_dir(&directory)
+            .unwrap()
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec![THE_RECORD_OF_WHERE_THE_FOLDER_SITS.to_string()]);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    /// **`Job files and outputs` P21a's other half: a write that cannot be finished leaves no name
+    /// standing.** The job record directory is closed to new names, which is
+    /// how the desk stands in for a mount with no room.
+    #[test]
+    fn a_folder_record_that_cannot_be_written_leaves_no_name_behind() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = a_scratch_folder("folder-record-refused");
+        let directory_text = directory.to_str().unwrap();
+        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let refused = where_the_folder_sits_is_written_into(directory_text, &a_folder_record("/renders/job-1"));
+        std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(refused.is_err());
+        assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 0);
+        let chosen = a_folder_record("/renders/job-1");
+        where_the_folder_sits_is_written_into(directory_text, &chosen).expect("room came back");
+        assert_eq!(where_the_folder_was_recorded_to_sit(directory_text), Some(chosen));
+        std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    /// **`Rented-server runtime` M5a: a render that has ended is reported
+    /// though something else still holds its streams open.** The stand-in
+    /// leaves a process of its own behind, holding both streams, and ends at
+    /// nought — what a script in the user's file can do. The Fable review's
+    /// fifth sitting, fault 1.
+    ///
+    /// **The case it bites on**: the worker read both streams to their end
+    /// before it looked at the render at all, so it never reaped a render that
+    /// had ended, never reported, and a stop's interrupt went to a process
+    /// that had already ended.
+    #[test]
+    fn a_render_that_has_ended_is_reported_though_something_else_holds_its_streams() {
+        // **The process left behind says which it is**, so the test ends it
+        // whatever happens (Sol's look: it used to outlive the test).
+        let left_behind = a_scratch_folder("left-behind").join("its-process");
+        let script = format!(
+            "#!/bin/sh\necho 'SMOOZY-MATERIAL {{\"job\":\"a stand-in\"}}'\necho 'Fra:1 a line'\n\
+             echo 'a complaint' >&2\nsleep 90 &\necho $! > '{}'\nexit 0\n",
+            left_behind.display()
+        );
+        let (tells, hears) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tells.send(after_a_stand_in_prints(&script));
+        });
+        let heard =
+            hears.recv_timeout(HOW_LONG_THE_STREAMS_ARE_READ_AFTER_THE_RENDER_HAS_ENDED * 3);
+        if let Some(process) = std::fs::read_to_string(&left_behind)
+            .ok()
+            .and_then(|written| written.trim().parse::<libc::pid_t>().ok())
+        {
+            // SAFETY: the identifier is the one this test's own stand-in wrote.
+            unsafe { libc::kill(process, libc::SIGKILL) };
+        }
+        std::fs::remove_dir_all(left_behind.parent().unwrap()).ok();
+        let (ending, ordinary, complaints) = heard.expect(
+            "the render ended at once; its ending arrives though its streams are still held open",
+        );
+        assert_eq!(ending.outcome, RecordedOutcome::Finished);
+        assert_eq!(ending.exit_status, Some(0), "the render's own status, reaped");
+        let (on_ordinary, on_complaints) = ending.streams.expect("a launch was made");
+        for stream in [&on_ordinary, &on_complaints] {
+            assert_eq!(
+                stream.outcome,
+                CollectionOutcome::CollectionIncomplete,
+                "`Rented-server runtime` M13: no end of stream was reached"
+            );
+            assert!(!stream.observed.end_of_stream);
+            let why = stream.observed.first_loss_reason.as_deref().expect("the reason is recorded");
+            assert!(why.contains("after Blender exited"), "{why}");
+        }
+        assert_eq!(on_ordinary.observed.the_marker_passed, Some(true));
+        assert!(ordinary.contains("Fra:1 a line"), "what was printed before the ending is kept");
+        assert_eq!(complaints, "a complaint\n");
+    }
+
+    /// **`Rented-server runtime` M5a, from Sol's look: a stream the render
+    /// itself closed is read to its end however late the read comes.** The
+    /// ten seconds are for a stream something else still holds; one nothing
+    /// holds any more ends by itself, and what is left in it is the render's.
+    ///
+    /// **The case it bites on**: the wrapper gave up on the clock alone, so a
+    /// copy held up for ten seconds after the render ended (a slow disk under
+    /// the sinks) lost the render's last words and said the stream was held
+    /// open when it was not.
+    #[test]
+    fn a_stream_the_render_closed_is_read_to_its_end_however_late_the_read_comes() {
+        use std::process::{Command, Stdio};
+        let mut ended = Command::new("/bin/sh")
+            .args(["-c", "printf 'the last words'"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("a shell");
+        let from = ended.stdout.take().expect("its output is held");
+        ended.wait().expect("it ends");
+        let long_ago = WhenTheRenderEnded(std::sync::Mutex::new(Some(
+            std::time::Instant::now()
+                .checked_sub(HOW_LONG_THE_STREAMS_ARE_READ_AFTER_THE_RENDER_HAS_ENDED * 2)
+                .expect("this computer has been up that long"),
+        )));
+        let mut stream = AStreamReadWhileItsRenderLives { from, ended: &long_ago };
+        let mut read = Vec::new();
+        stream
+            .read_to_end(&mut read)
+            .expect("a stream nothing holds is read to its end, never given up");
+        assert_eq!(read, b"the last words");
     }
 
     /// **What a 5.x render prints for its devices, as this test's stand-in

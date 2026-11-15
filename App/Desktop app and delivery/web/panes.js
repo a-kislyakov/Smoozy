@@ -93,6 +93,13 @@ const THE_PAGE_STACKS_BELOW = { at: 534, mark: "stacked" };
 // step folds them. Compared at-or-below, as the mockup is.
 const THE_SERVER_LIST_FOLDS_AT = { at: 806, mark: "folded" };
 
+// **The render settings body's own step** (`Design/Render Settings § The body
+// is three columns`, the Creator's twenty-eighth notes, note 17): the
+// mockup's `@container sheet (width < 916px)` — three columns of 268, two
+// gaps of 34 and two gutters. Below it the body is two columns and the third
+// column's groups sit under the second's. Compared strictly, as the mockup is.
+const THE_SETTINGS_BODY_IS_TWO_COLUMNS_BELOW = { at: 916, mark: "two" };
+
 const app = document.querySelector(".app");
 
 // ── The mark ────────────────────────────────────────────────────────────────
@@ -145,6 +152,8 @@ function theNarrowingIsMarked() {
 //
 // **The server list is marked the same way**, at its own step, at the same
 // moments — showing a screen is one, and `web/the-rail.js` calls this then.
+// **So is a panel's sheet**, which the render settings draw calls too
+// (`web/render-settings.js`), since a panel opens without any of those.
 export function thePagesAreMarked() {
   for (const page of document.querySelectorAll(".qdetail")) {
     const body = page.querySelector(".qdbody");
@@ -158,6 +167,12 @@ export function thePagesAreMarked() {
     if (!across) continue;
     if (across <= THE_SERVER_LIST_FOLDS_AT.at) list.dataset.narrow = THE_SERVER_LIST_FOLDS_AT.mark;
     else delete list.dataset.narrow;
+  }
+  for (const sheet of document.querySelectorAll(".sheet")) {
+    const across = sheet.clientWidth;
+    if (!across) continue;
+    if (across < THE_SETTINGS_BODY_IS_TWO_COLUMNS_BELOW.at) sheet.dataset.narrow = THE_SETTINGS_BODY_IS_TWO_COLUMNS_BELOW.mark;
+    else delete sheet.dataset.narrow;
   }
 }
 
@@ -189,6 +204,19 @@ let theWidthsCouldNotBeRead = false;
 thePaneLayout
   .then((layout) => {
     theFloorPanelIsDrawn(layout.floor);
+    if (layout.this_copy_is_older) {
+      theOlderCopysLineIsDrawn(layout.this_copy_is_older);
+      return;
+    }
+    // **A damaged record says so the same way** (`Desktop app and delivery`
+    // L9a), in place of every screen.
+    if (layout.the_saved_data_is_damaged) {
+      theOlderCopysLineIsDrawn(layout.the_saved_data_is_damaged, "damaged");
+      if (layout.the_copy_can_be_restored) {
+        theCopysOfferIsDrawn(layout.the_copy_can_be_restored);
+      }
+      return;
+    }
     if (layout.the_record_would_not_answer) {
       theWidthsAreUnread(layout.the_widths_could_not_be_read);
       return;
@@ -246,6 +274,64 @@ function theWidthsAreUnread(said) {
     theFailureShape({ sentence: said, controls: [], room: EXPANDED }),
   );
   app.appendChild(held);
+}
+
+// ── An older Smoozy on a newer record ───────────────────────────────────────
+
+// **The one line an older Smoozy shows on a newer record, in place of every
+// screen** — Desktop app and delivery L9, "where it says so" (2026-11-12);
+// Design/Whole app.md. The application refused the record and says so in one
+// sentence, which came through the typography point. The panes are put away,
+// so no screen's own failed read shows under the line, and nothing is written
+// over widths that were never read. The title bar stays.
+function theOlderCopysLineIsDrawn(said, marked) {
+  theWidthsCouldNotBeRead = true;
+  if (!app) return;
+  app.dataset.record = marked || "newer";
+  const pane = document.getElementById("pane");
+  if (pane) pane.hidden = true;
+  const panel = document.createElement("div");
+  panel.className = "older-copy";
+  const line = document.createElement("p");
+  line.className = "older-copy-said";
+  line.textContent = said;
+  const held = document.createElement("div");
+  held.className = "older-copy-held";
+  held.appendChild(line);
+  panel.appendChild(held);
+  app.appendChild(panel);
+}
+
+// **What a damaged record offers where the copy from before the last update
+// stands** — Desktop app and delivery L9b, the Creator's ruling on 97
+// (2026-11-14); Design/Whole app.md. One sentence saying what it costs and one
+// button. The press is answered by this copy ending and opening again on the
+// copy; where it answers instead, its one sentence takes the offer's place.
+// Every word comes from the application.
+function theCopysOfferIsDrawn(offer) {
+  const held = app && app.querySelector(".older-copy-held");
+  if (!held) return;
+  const said = document.createElement("p");
+  said.className = "older-copy-offer";
+  said.textContent = offer.said;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "btn";
+  button.textContent = offer.control;
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    shell.core
+      .invoke("the_copy_before_the_last_update_is_restored")
+      .then((answer) => {
+        said.textContent = answer;
+        button.remove();
+      })
+      .catch(() => {
+        button.disabled = false;
+      });
+  });
+  held.appendChild(said);
+  held.appendChild(button);
 }
 
 // ── The floor ───────────────────────────────────────────────────────────────

@@ -87,6 +87,7 @@ use smoozy_servers::repair::{NextAttemptDue, WhatTheRecordSays};
 use smoozy_servers::store::RememberedHostKey;
 use smoozy_state::identities::{Identity, IdentityKind};
 use smoozy_state::observed::{Clock, Reading};
+use smoozy_server_protocol::requests::TheTelegramTrouble;
 
 use crate::events::{Event, Said, Subject, TheOneQueue};
 use crate::notifications::{HowTheRecordEnded, TheNotificationService};
@@ -192,7 +193,10 @@ pub const THE_CONNECTION_CONDITION_IS_DECLARED: ACondition = ACondition {
 pub fn what_servers_declares() -> Declared {
     Declared {
         conditions: vec![THE_CONNECTION_CONDITION_IS_DECLARED],
-        dismissible_warnings: Vec::new(),
+        // **`Servers` W20's one dismissible warning** — declared at last, so
+        // the removal box's *Don't warn me again* is written rather than
+        // refused at §15 G5's check (the Rough what-if answers, share 2, 130).
+        dismissible_warnings: vec![crate::surface::servers::THE_DISCONNECTED_REMOVAL_WARNING],
         partition_units: Vec::new(),
     }
 }
@@ -238,11 +242,62 @@ pub fn is_the_supervisors_condition(record: &crate::record::failure_records::Sta
         && record.the_values_it_was_raised_over == [THE_SUPERVISOR_NOT_ANSWERING]
 }
 
-/// **What the supplier declares through this document's services**, and it is
-/// the one condition.
+/// **Whether a standing failure record is `Servers` N5's connection
+/// condition** — a condition held over K7's *disconnected* and *reconnecting*
+/// and nothing else, read the same way as [`is_the_supervisors_condition`]
+/// and for the same reason: the record carries no kind of its own. **The order
+/// the values come back in is not trusted**, so the two sets are compared.
+/// Added 2026-11-10, the twenty-ninth notes' piece E, so the failure shape can
+/// give it the Specs' words, *Could not reconnect.*
+pub fn is_the_connection_condition(record: &crate::record::failure_records::Standing) -> bool {
+    if record.kind != crate::record::failure_records::Kind::Condition {
+        return false;
+    }
+    let mut held: Vec<&str> = record
+        .the_values_it_was_raised_over
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let mut expected: Vec<&str> = HOLDS_OVER.to_vec();
+    held.sort_unstable();
+    expected.sort_unstable();
+    held == expected
+}
+
+/// **`State, identity and recovery` F12a's condition: *the machine's line
+/// stopped over a record it cannot read*, supplied by `Rented-server runtime`
+/// through `Queue & History` A1's queue reading.** Added 2026-11-10, the
+/// build runner's ruling out of the Fable review's first sitting. The server
+/// keeps its queue stopped rather than work past a record it cannot read;
+/// this is what puts the reason on the server's row.
+pub const THE_STOPPED_LINES_KIND: &str = "the machine's line stopped over a record it cannot read";
+/// §8.3's *holds over* and *withdrawn on* for it, in that table's words.
+pub const THE_LINE_IS_STOPPED: &str = "the line is stopped";
+const THE_LINE_IS_NOT_STOPPED: &str = "the line is not stopped";
+const THE_STOPPED_LINE_HOLDS_OVER: &[&str] = &[THE_LINE_IS_STOPPED];
+pub const THE_STOPPED_LINES_CONDITION_IS_DECLARED: ACondition = ACondition {
+    kind: THE_STOPPED_LINES_KIND,
+    supplied_by: THE_SUPERVISORS_SUPPLIER,
+    holds_over: THE_STOPPED_LINE_HOLDS_OVER,
+    withdrawn_on: THE_LINE_IS_NOT_STOPPED,
+};
+
+/// **Whether a standing failure record is that condition**, read as
+/// [`is_the_supervisors_condition`] reads its own: by the one value it is held
+/// over.
+pub fn is_the_stopped_lines_condition(record: &crate::record::failure_records::Standing) -> bool {
+    record.kind == crate::record::failure_records::Kind::Condition
+        && record.the_values_it_was_raised_over == [THE_LINE_IS_STOPPED]
+}
+
+/// **What the supplier declares through this document's services**: the two
+/// conditions `State, identity and recovery` §8.3 gives it.
 pub fn what_the_supervisors_supplier_declares() -> Declared {
     Declared {
-        conditions: vec![THE_SUPERVISORS_CONDITION_IS_DECLARED],
+        conditions: vec![
+            THE_SUPERVISORS_CONDITION_IS_DECLARED,
+            THE_STOPPED_LINES_CONDITION_IS_DECLARED,
+        ],
         dismissible_warnings: Vec::new(),
         partition_units: Vec::new(),
     }
@@ -291,8 +346,29 @@ pub enum WhatSmoozyOnTheServerIs {
     TheUpdateIsUnderWay,
     /// **The update failed**: the transaction ended *rolled back* or *failed
     /// before commit*, or could not be carried out, with the transaction's own
-    /// words. The machine is on the release it had.
-    TheUpdateFailed { said: String },
+    /// words. The machine is on the release it had. **`at` says whose words
+    /// they are**: the server's, or Smoozy's own download of the release
+    /// (`Server protocol and transfers` B10b).
+    TheUpdateFailed { said: String, at: WhereTheUpdateFailed },
+    /// **V3c: Smoozy repairs its own program on this server**, from the turn
+    /// taken to the repair's ending. Added 2026-11-14, the automatic repair.
+    TheRepairIsUnderWay,
+    /// **V3c: the repair did not land**, with the transaction's own words or
+    /// the download's. It ends when the supervisor answers, when a later
+    /// repair lands, or at the user's cross.
+    TheRepairFailed { said: String, at: WhereTheUpdateFailed },
+}
+
+/// **Where a server's update failed, which decides whose words stand behind
+/// the row's line.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhereTheUpdateFailed {
+    /// On the server: the transaction's own words.
+    OnTheServer,
+    /// **In Smoozy's own download of the release**, before anything was sent.
+    /// `nothing_answered`: every try came to no answer (`Server protocol and
+    /// transfers` B10b).
+    InTheDownload { nothing_answered: bool },
 }
 
 /// The register, one entry per server, for the run.
@@ -522,7 +598,7 @@ pub fn what_the_telegram_install_failed_with(server: &str) -> Option<String> {
 }
 
 /// **The connection ended**: nothing read over it stands, and a reading still on
-/// its way does not land.
+/// its way does not land. **`Telegram` F6's word goes with it too.**
 pub fn the_telegram_role_goes_with_the_connection(server: &str) {
     if let Ok(mut held) = the_telegram_roles().lock() {
         if let Some(role) = held.get_mut(server) {
@@ -531,6 +607,33 @@ pub fn the_telegram_role_goes_with_the_connection(server: &str) {
             role.failed = None;
         }
     }
+    telegrams_trouble_was_read(server, None);
+}
+
+/// **`Telegram` F6 — how Telegram is answering each server's bot, as that
+/// server's last queue reading on the current connection said** (`Queue &
+/// History` A1 as widened 2026-11-14). Run-held, nothing durable, and gone
+/// with the connection. When Telegram refuses.
+fn telegrams_trouble() -> &'static Mutex<HashMap<String, TheTelegramTrouble>> {
+    static HELD: std::sync::OnceLock<Mutex<HashMap<String, TheTelegramTrouble>>> = std::sync::OnceLock::new();
+    HELD.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// **A reading on the current connection said this** — a word, or none.
+/// Answers whether it moved.
+pub fn telegrams_trouble_was_read(server: &str, trouble: Option<TheTelegramTrouble>) -> bool {
+    let Ok(mut held) = telegrams_trouble().lock() else {
+        return false;
+    };
+    match trouble {
+        Some(trouble) => held.insert(server.to_string(), trouble) != Some(trouble),
+        None => held.remove(server).is_some(),
+    }
+}
+
+/// **`Telegram` F6's word for this server**, where its last reading held one.
+pub fn telegrams_trouble_on(server: &str) -> Option<TheTelegramTrouble> {
+    telegrams_trouble().lock().ok()?.get(server).copied()
 }
 
 /// **Whether this server's program takes the change**, or nothing where its
@@ -832,9 +935,9 @@ impl<R: LendsWhatTheRunHolds> WhatTheDesktopPublishes<R> {
 /// **This is the failure shape's own clearing event**,
 /// [`crate::surface::the_failure_shape::A_FAILURE_WAS_CLEARED`], with the four
 /// values the user's own clearing carries, so every page that draws a failure
-/// hears one ending however the record ended. **The window's foot listens for
-/// it and for nothing else**: `web/the-failure-shape.js` draws every standing
-/// failure the list is told about and takes one away only on this event.
+/// hears one ending however the record ended. **The server's row takes a
+/// failure away on it** (`web/servers.js`). Until the twenty-ninth notes'
+/// piece E the window's foot did too, and took one away on nothing else.
 ///
 /// **Written for**: the user's cross, the one ending that posted it (step 10a,
 /// 2026-09-12). **Now also met**: the withdrawal ([`Self::withdraw_the_connection_condition`],
@@ -985,6 +1088,80 @@ impl<R: LendsWhatTheRunHolds> WhatTheDesktopPublishes<R> {
         );
     }
 
+    /// **`Desktop app and delivery` V2, for `State, identity and recovery`
+    /// F12a's condition: a queue reading said whether the machine's line is
+    /// stopped over a record it cannot read.** Raised where it is, withdrawn
+    /// where it is not, each by that value alone.
+    ///
+    /// **Nothing is told to the operating system**, as for the supervisor's
+    /// own condition: the record is the statement, and the list draws it
+    /// through the one failure shape. A raise against a key that already
+    /// carries an identity is that identity (`State, identity and recovery`
+    /// F11); a withdrawal with nothing standing writes and posts nothing.
+    pub fn the_machines_line_is(&self, server: &str, stopped: bool) {
+        let Some(identity) = self.the_subject_is_known(server) else {
+            return;
+        };
+        let subject = DurableSubject::ServerRow(identity.clone());
+        let about = Subject::Durable(identity.clone());
+        if stopped {
+            let _ = self.queue.write_then_post(
+                || {
+                    let mut raised: Result<Identity, ItDidNotLand> = Err(ItDidNotLand);
+                    self.the_run.lend(&mut |lent| {
+                        // **The reading recurs every pass, and a line that
+                        // stays stopped raises nothing again and posts
+                        // nothing again**: the record that stands is read,
+                        // never a memory of having raised it.
+                        let stands = FailureRecords::over(lent.record)
+                            .standing_against(&subject)
+                            .map(|standing| standing.iter().any(is_the_stopped_lines_condition))
+                            .unwrap_or(false);
+                        if stands {
+                            return;
+                        }
+                        let declared = lent
+                            .declarations
+                            .the_condition_is_declared(THE_SUPERVISORS_SUPPLIER, THE_STOPPED_LINES_KIND);
+                        let key = ConditionKey::over(&subject, THE_STOPPED_LINES_KIND, None);
+                        let mut records = FailureRecords::over(lent.record);
+                        if let Ok(condition) = records.a_condition_was_raised(
+                            &key,
+                            &subject,
+                            THE_STOPPED_LINE_HOLDS_OVER,
+                            declared,
+                        ) {
+                            raised = Ok(condition);
+                        }
+                    });
+                    raised
+                },
+                |condition| Self::the_condition_moved(about.clone(), RAISED, &condition.as_text()),
+            );
+            return;
+        }
+        let mut went: Vec<Identity> = Vec::new();
+        let posted = self.queue.write_then_post(
+            || {
+                let mut withdrew: Result<(), ItDidNotLand> = Err(ItDidNotLand);
+                self.the_run.lend(&mut |lent| {
+                    let key = ConditionKey::over(&subject, THE_STOPPED_LINES_KIND, None);
+                    let before = the_conditions_against(lent.record, &subject);
+                    let mut records = FailureRecords::over(lent.record);
+                    if let Ok(true) = records.the_observed_value_moved(&key, THE_LINE_IS_NOT_STOPPED) {
+                        went = the_ones_that_went(lent.record, &subject, before);
+                        withdrew = Ok(());
+                    }
+                });
+                withdrew
+            },
+            |()| Self::the_condition_moved(about.clone(), WITHDRAWN, ""),
+        );
+        if posted.is_ok() {
+            the_drawings_go(&self.queue, &identity, &went);
+        }
+    }
+
     /// **Whether §8.3's supervisor-unavailable condition stands against this
     /// server**, read from the record that holds it and from nothing kept
     /// beside it. Added 2026-09-27, step 10c's eighth-pass fix piece 6.
@@ -1001,6 +1178,26 @@ impl<R: LendsWhatTheRunHolds> WhatTheDesktopPublishes<R> {
                 .unwrap_or(false);
         });
         stands
+    }
+
+    /// **The identity of that condition's record, where it stands**, read as
+    /// [`Self::the_supervisors_condition_stands`] reads it. Added 2026-11-14.
+    pub fn the_supervisors_condition_identity(&self, server: &str) -> Option<String> {
+        let identity = Identity::read_back(IdentityKind::LocalServer, server)?;
+        let subject = DurableSubject::ServerRow(identity);
+        let mut found = None;
+        self.the_run.lend(&mut |lent| {
+            found = FailureRecords::over(lent.record)
+                .standing_against(&subject)
+                .ok()
+                .and_then(|standing| {
+                    standing
+                        .into_iter()
+                        .find(is_the_supervisors_condition)
+                        .map(|record| record.identity_or_mark)
+                });
+        });
+        found
     }
 
     /// **The supervisor answered: the condition is withdrawn by that value
@@ -1213,7 +1410,7 @@ impl<R: LendsWhatTheRunHolds> WhatServersPublishes for &WhatTheDesktopPublishes<
             },
         );
         // **M4: withdrawn by that change alone and never shown again** — on
-        // every page that drew it, the window's foot included.
+        // every page that drew it.
         if let (Ok(_), Some(server_identity)) = (posted, subject.identity()) {
             the_drawings_go(queue, server_identity, &went);
         }
@@ -1908,10 +2105,53 @@ mod tests {
 
         // **M4: the drawing goes with the record**, on the failure shape's own
         // clearing and on the key a condition is drawn on — or *Smoozy isn't
-        // responding.* stays on the window's foot with nothing behind it.
+        // responding.* stays on the row with nothing behind it.
         // Step 10c's twelfth-pass fix piece 7.
         let cleared = desk.of_kind(crate::surface::the_failure_shape::A_FAILURE_WAS_CLEARED);
         assert_eq!(cleared.len(), 1, "the supervisor answering told no page its drawing goes");
+        assert_eq!(
+            ADesk::said(&cleared[0], "key"),
+            format!("condition:{}", raised[0].identity_or_mark)
+        );
+    }
+
+    /// **`State, identity and recovery` F12a: a queue reading that says the
+    /// line is stopped raises the condition on the server's row, once however
+    /// often it is read, and a reading that does not say it withdraws it** —
+    /// and the drawing goes with the record. The build runner's ruling of
+    /// 2026-11-10; until then nothing told the user why a queue never moved.
+    #[test]
+    fn a_reading_that_says_the_line_is_stopped_raises_its_condition_and_one_that_does_not_withdraws_it() {
+        let desk = a_desk("stopped-line");
+        let server = desk.server.clone();
+        let standing = |desk: &ADesk| {
+            let mut found = Vec::new();
+            desk.publishes.the_run.lend(&mut |lent| {
+                let subject = DurableSubject::ServerRow(
+                    Identity::read_back(IdentityKind::LocalServer, &server).expect("an identity"),
+                );
+                found = FailureRecords::over(lent.record)
+                    .standing_against(&subject)
+                    .expect("the records read");
+            });
+            found
+        };
+
+        desk.publishes.the_machines_line_is(&server, false);
+        assert!(standing(&desk).is_empty(), "a line that moves raises nothing");
+
+        desk.publishes.the_machines_line_is(&server, true);
+        desk.publishes.the_machines_line_is(&server, true);
+        let raised = standing(&desk);
+        assert_eq!(raised.len(), 1, "one record, however often the reading says it");
+        assert!(is_the_stopped_lines_condition(&raised[0]));
+        assert!(!is_the_supervisors_condition(&raised[0]));
+        assert!(desk.posts.lock().expect("the posts").is_empty(), "no notification of its own");
+
+        desk.publishes.the_machines_line_is(&server, false);
+        assert!(standing(&desk).is_empty(), "a reading that does not say it withdraws it");
+        let cleared = desk.of_kind(crate::surface::the_failure_shape::A_FAILURE_WAS_CLEARED);
+        assert_eq!(cleared.len(), 1, "the drawing goes with the record");
         assert_eq!(
             ADesk::said(&cleared[0], "key"),
             format!("condition:{}", raised[0].identity_or_mark)
@@ -1940,7 +2180,7 @@ mod tests {
         assert!(desk.taken_down.lock().expect("the take-downs").is_empty());
     }
 
-    // ------------------------------------- the window's foot, as a person meets it
+    // ------------------------------------- the server's row, as a person meets it
 
     /// A start report holding the record and the declarations this file's
     /// raises are checked against — **the application has no other
@@ -1957,6 +2197,8 @@ mod tests {
             the_sweep_left_behind: Vec::new(),
             record: Some(record),
             record_trouble: None,
+            the_record_is_newer_than_this_copy: false,
+            the_record_is_damaged: false,
             diary: None,
             declarations: smoozy_reporting::lines::Declarations::new(),
             what_modules_declare,
@@ -1967,32 +2209,50 @@ mod tests {
         }))
     }
 
-    /// **The real page's foot, fed the real deliveries in their one order**:
-    /// `web/event-route.js` and `web/the-failure-shape.js` as they ship, over a
-    /// small stand-in for the document. Answers, per step, the sentences the
-    /// foot (`#the-failures`) holds — or nothing where this computer has no
-    /// Node, which the caller says rather than passes over.
-    fn what_the_foot_holds(steps: &[(&str, Vec<Delivery>)]) -> Option<Vec<String>> {
+    /// **The real list's rows, fed the real deliveries in their one order**:
+    /// `web/servers.js`, `web/the-failure-shape.js`, `web/the-value-drawn.js`
+    /// and `web/the-focus-moves.js` as they ship, beside small stand-ins for
+    /// the modules the list imports and for the document. Each step hands the
+    /// rows the list holds at that moment; the list is asked for again, as a
+    /// connection change makes it, and then told that step's deliveries.
+    /// Answers, per step, the failure sentences drawn on the rows — or nothing
+    /// where this computer has no Node, which the caller says rather than
+    /// passes over. **It reads the row and not the window's foot**: since the
+    /// twenty-ninth notes' piece E there is no foot (`Specs/Whole app`: *"there
+    /// is no separate place failures are collected"*).
+    fn what_the_rows_hold(steps: &[(&str, Vec<String>, Vec<Delivery>)]) -> Option<Vec<String>> {
         let mut folder = std::env::temp_dir();
-        folder.push(format!("smoozy-the-foot-{}-{}", std::process::id(), line!()));
+        folder.push(format!("smoozy-the-rows-{}-{}", std::process::id(), line!()));
         let _ = std::fs::remove_dir_all(&folder);
         std::fs::create_dir_all(&folder).expect("a folder for the page");
         let web = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
-        for page in ["event-route.js", "the-failure-shape.js", "the-value-drawn.js"] {
+        for page in [
+            "servers.js",
+            "the-failure-shape.js",
+            "the-value-drawn.js",
+            "the-focus-moves.js",
+            // `web/servers.js` imports it since the Help links of 2026-11-13.
+            "help-links.js",
+        ] {
             std::fs::copy(web.join(page), folder.join(page)).expect("the page file is copied");
+        }
+        for (name, text) in THE_LISTS_STAND_INS {
+            std::fs::write(folder.join(name), text).expect("a stand-in is written");
         }
         let steps: Vec<serde_json::Value> = steps
             .iter()
-            .map(|(name, deliveries)| serde_json::json!({ "step": name, "deliveries": deliveries }))
+            .map(|(name, rows, deliveries)| {
+                serde_json::json!({ "step": name, "rows": rows, "deliveries": deliveries })
+            })
             .collect();
         std::fs::write(
             folder.join("steps.json"),
             serde_json::to_string(&steps).expect("the deliveries serialise"),
         )
         .expect("the steps are written");
-        std::fs::write(folder.join("harness.mjs"), THE_FOOTS_HARNESS).expect("the harness");
+        std::fs::write(folder.join("harness.js"), THE_ROWS_HARNESS).expect("the harness");
         let ran = std::process::Command::new("node")
-            .arg(folder.join("harness.mjs"))
+            .arg(folder.join("harness.js"))
             .current_dir(&folder)
             .output();
         let _ = std::fs::remove_dir_all(&folder);
@@ -2010,71 +2270,139 @@ mod tests {
         )
     }
 
-    const THE_FOOTS_HARNESS: &str = r#"
-import { readFileSync } from "node:fs";
-let byId = new Map();
+    /// The modules `web/servers.js` imports that this reading does not need as
+    /// they ship — each answers what the list asks of it and nothing more.
+    const THE_LISTS_STAND_INS: [(&str, &str); 7] = [
+        ("package.json", r#"{ "type": "module" }"#),
+        (
+            "event-route.js",
+            r#"export function whenTold(kind, handler) {
+  const held = globalThis.told.get(kind) || [];
+  held.push(handler);
+  globalThis.told.set(kind, held);
+}"#,
+        ),
+        (
+            "the-rail.js",
+            r#"export const ALL_SERVERS = "serversview";
+export const A_SERVER = "machineview";
+export const KEYS = "keysview";
+export function aScreenIsRegistered(screen) { globalThis.screen = screen; }
+export function theCurrentPlace() { return ALL_SERVERS; }
+export function theCurrentPlaceIs() {}
+export function theRailIsReadAgain() {}"#,
+        ),
+        (
+            "the-machines-own-words.js",
+            r#"export function theWordsPanel() { return { hidden: true }; }"#,
+        ),
+        ("keys.js", r#"export function aServerDialogPicksAKey() {}"#),
+        (
+            "a-server.js",
+            r#"export const SET_UP = "setupview";
+export function theServerWillOpenOn() {}
+export function theServersAreAskedForAgain() {}"#,
+        ),
+        (
+            "the-underway-shape.js",
+            r#"export function theCountdown() { return document.createElement("span"); }
+export function theMarkOnAControl(control) { return control; }
+export function theMarkComesOffAControl(control) { return control; }"#,
+        ),
+    ];
+
+    const THE_ROWS_HARNESS: &str = r#"import { readFileSync } from "node:fs";
 function anElement(tag) {
+  const names = new Set();
   const element = {
-    tag, children: [], parentNode: null, dataset: {}, className: "", text: "",
-    set id(value) { byId.set(value, element); element._id = value; },
-    get id() { return element._id; },
+    tag, children: [], parentNode: null, dataset: {}, hidden: false, text: "",
+    style: { setProperty() {} },
+    classList: {
+      add: (...more) => more.forEach((one) => names.add(one)),
+      remove: (...less) => less.forEach((one) => names.delete(one)),
+      toggle: (one, on) => { if (on === undefined ? !names.has(one) : on) names.add(one); else names.delete(one); },
+      contains: (one) => names.has(one),
+    },
+    set className(value) { names.clear(); String(value).split(" ").filter(Boolean).forEach((one) => names.add(one)); },
+    get className() { return Array.from(names).join(" "); },
     set textContent(value) { element.children = []; element.text = String(value); },
-    get textContent() { return element.text + element.children.map((one) => one.textContent || "").join(""); },
+    get textContent() { return element.text; },
+    get childNodes() { return element.children; },
     get childElementCount() { return element.children.length; },
     appendChild(child) { child.parentNode = element; element.children.push(child); return child; },
-    remove() {
-      if (!element.parentNode) return;
-      element.parentNode.children = element.parentNode.children.filter((one) => one !== element);
-      element.parentNode = null;
+    insertBefore(child) { return element.appendChild(child); },
+    removeChild(child) { element.children = element.children.filter((one) => one !== child); return child; },
+    replaceChild(fresh, old) {
+      element.children = element.children.map((one) => (one === old ? fresh : one));
+      fresh.parentNode = element;
+      return old;
     },
-    replaceWith(fresh) {
-      const parent = element.parentNode;
-      if (!parent) return;
-      parent.children = parent.children.map((one) => (one === element ? fresh : one));
-      fresh.parentNode = parent;
-      element.parentNode = null;
-    },
-    setAttribute() {}, addEventListener() {}, querySelector() { return null; },
+    replaceChildren(...fresh) { element.children = []; fresh.forEach((one) => element.appendChild(one)); },
+    setAttribute() {}, removeAttribute() {}, addEventListener() {}, focus() {},
+    querySelector() { return null; }, querySelectorAll() { return []; }, closest() { return null; },
+    contains() { return false; },
+    getBoundingClientRect() { return { left: 0, bottom: 0, width: 0, height: 0 }; },
   };
   return element;
 }
-const pane = anElement("div");
-pane.id = "pane";
+function all(element, found) {
+  found.push(element);
+  for (const child of element.children || []) all(child, found);
+  return found;
+}
+function text(element) {
+  return (element.text || "") + (element.children || []).map(text).join("");
+}
+const has = (element, name) => Boolean(element.classList && element.classList.contains(name));
+globalThis.told = new Map();
 globalThis.document = {
   createElement: anElement,
-  createTextNode: (text) => ({ text, children: [], textContent: text }),
-  getElementById: (id) => {
-    const found = byId.get(id);
-    return found && (found === pane || attached(found)) ? found : null;
-  },
-  documentElement: { dataset: {} },
+  createTextNode: (text) => ({ text, children: [] }),
+  addEventListener() {}, removeEventListener() {},
 };
-function attached(element) {
-  for (let at = element; at; at = at.parentNode) if (at === pane) return true;
-  return false;
-}
-let receive = null;
-globalThis.window = {
-  __TAURI__: {
-    event: { listen: async (_name, handler) => { receive = handler; } },
-    core: { invoke: () => Promise.resolve(null) },
+globalThis.window = { innerWidth: 1000, innerHeight: 800 };
+const words = (lead) => ({ lead, values: [], rest: null, the_rest_joins: false });
+const aRow = (server) => ({
+  server, name: "", address: "", badge: null, the_key_mark: null,
+  the_setup_line: null, the_work: [],
+  the_hardware: { state: "never-read", nothing_to_show: words("") },
+  the_connection: { label: "", act: "connect", unavailable: false },
+  the_menu: "", more: "",
+});
+let rows = [];
+const theScreen = () => ({
+  the_screens_own_name: "", add_a_server: "", the_tools_statement: null,
+  rows: rows.map(aRow),
+  footer: { how_many: words(""), how_many_connected: words("") },
+  guidance: { heading: "", how_it_goes: "", steps: [], open_keys: "", add_a_server: "" },
+  menus: [], the_subject_kind: "server row",
+});
+window.__TAURI__ = {
+  core: {
+    invoke(command) {
+      if (command === "the_all_servers_screen") return Promise.resolve(theScreen());
+      return Promise.resolve(null);
+    },
   },
 };
-const route = await import("./event-route.js");
-await import("./the-failure-shape.js");
-await route.theRouteIsOpen();
-function sentences(element, out) {
-  if (element.className && String(element.className).split(" ").includes("failure-said")) {
-    out.push(element.textContent);
-    return out;
-  }
-  for (const child of element.children || []) sentences(child, out);
-  return out;
-}
-for (const { step, deliveries } of JSON.parse(readFileSync("steps.json", "utf8"))) {
-  for (const delivery of deliveries) receive({ payload: delivery });
-  const foot = document.getElementById("the-failures");
-  const said = foot ? sentences(foot, []) : [];
+const settle = async () => { for (let at = 0; at < 8; at += 1) await new Promise((done) => setImmediate(done)); };
+const tell = (delivery) => (globalThis.told.get(delivery.kind) || []).forEach((one) => one(delivery));
+await import("./servers.js");
+const steps = JSON.parse(readFileSync("steps.json", "utf8"));
+rows = steps.length ? steps[0].rows : [];
+const host = anElement("div");
+globalThis.screen.itIsDrawn(host);
+await settle();
+for (const { step, rows: these, deliveries } of steps) {
+  rows = these;
+  // The list is asked for again, as a connection change makes it.
+  tell({ kind: "servers:what-is-observed", subject: "", said: {} });
+  await settle();
+  for (const delivery of deliveries) tell(delivery);
+  await settle();
+  const said = all(host, [])
+    .filter((one) => has(one, "svrow"))
+    .flatMap((row) => all(row, []).filter((one) => has(one, "failure-said")).map(text));
   console.log(step + ": " + said.length + (said.length ? " — " + said.join(" | ") : ""));
 }
 "#;
@@ -2129,20 +2457,24 @@ for (const { step, deliveries } of JSON.parse(readFileSync("steps.json", "utf8")
 
     /// **The twelfth pass's fault 13, in the order the pass met it** —
     /// *Something is not working. — Report a problem…* at the window's foot
-    /// with no failure record in the local record.
+    /// with no failure record in the local record — **read on the server's
+    /// row since the twenty-ninth notes' piece E**, which took the foot away
+    /// and gave the line the Specs' words, *Could not reconnect.*
     ///
     /// Every durable act is the application's own: the repair run's failure
     /// raising the connection condition, the line coming back withdrawing it,
     /// the list's own ask of what stands against each row, the removal the
     /// press performs (the same forget *Stop and clear first* ends with), and a
-    /// new row for the same machine. **The foot is the real page**, fed every
-    /// delivery the queue made in its one order. After each step the foot and
+    /// new row for the same machine. **The list is the real page**, fed every
+    /// delivery the queue made in its one order. After each step the rows and
     /// the failure store are read together, and **they must agree**:
     /// `Desktop app and delivery` M4 shows a condition record *"while, and only
     /// while"* it stands, and `State, identity and recovery` F25 ends it at a
-    /// withdrawal and at its subject's removal.
+    /// withdrawal and at its subject's removal. **Every line drawn reads
+    /// *Could not reconnect.*, and never *Error.*** (the live pass of the
+    /// Creator's file, 2026-11-10).
     #[test]
-    fn the_foot_says_only_what_the_record_holds_through_a_cut_a_removal_and_a_re_add() {
+    fn the_row_says_only_what_the_record_holds_through_a_cut_a_removal_and_a_re_add() {
         let started = a_started_over(a_record("the-foot"));
         let queue = Arc::new(TheOneQueue::new());
         let page = Arc::new(Mutex::new(Vec::new()));
@@ -2190,34 +2522,35 @@ for (const { step, deliveries } of JSON.parse(readFileSync("steps.json", "utf8")
                 .expect("the records read")
                 .len()
         };
-        let mut steps: Vec<(&str, Vec<Delivery>)> = Vec::new();
+        type Steps = Vec<(&'static str, Vec<String>, Vec<Delivery>)>;
+        let mut steps: Steps = Vec::new();
         let mut stored: Vec<String> = Vec::new();
-        let mut a_step = |name: &'static str, held: usize, steps: &mut Vec<(&str, Vec<Delivery>)>| {
+        let mut a_step = |name: &'static str, held: usize, rows: &[&str], steps: &mut Steps| {
             let delivered = std::mem::take(&mut *page.lock().expect("the deliveries"));
-            steps.push((name, delivered));
+            steps.push((name, rows.iter().map(|row| row.to_string()).collect(), delivered));
             stored.push(format!("{name}: {held}"));
         };
 
         let server = a_new_row();
         the_list_asks(&[&server]);
-        a_step("the row is added", the_store_holds(&server), &mut steps);
+        a_step("the row is added", the_store_holds(&server), &[&server], &mut steps);
 
         // **The line is cut long enough for a repair run to fail** (`Servers`
         // N5), and the list is asked again, as a connection change makes it.
         (&publishes).raise_the_connection_condition(&server, WhatTheRecordSays::raised());
         the_list_asks(&[&server]);
-        a_step("the line is cut", the_store_holds(&server), &mut steps);
+        a_step("the line is cut", the_store_holds(&server), &[&server], &mut steps);
 
         // **The line is back** (`Servers` N10).
         (&publishes).withdraw_the_connection_condition(&server);
         the_list_asks(&[&server]);
-        a_step("the line is back", the_store_holds(&server), &mut steps);
+        a_step("the line is back", the_store_holds(&server), &[&server], &mut steps);
 
         // **Cut again, and the server removed while the condition stands** —
         // the thirteenth pass's *Remove while the line is cut*.
         (&publishes).raise_the_connection_condition(&server, WhatTheRecordSays::raised());
         the_list_asks(&[&server]);
-        a_step("the line is cut again", the_store_holds(&server), &mut steps);
+        a_step("the line is cut again", the_store_holds(&server), &[&server], &mut steps);
 
         // **The removal as the press performs it** — the same function both
         // removals end in, *Stop and clear first*'s third unit among them.
@@ -2231,26 +2564,41 @@ for (const { step, deliveries } of JSON.parse(readFileSync("steps.json", "utf8")
         );
         assert_eq!(answer, crate::surface::servers::TheAnswer::ItWasSaved);
         the_list_asks(&[]);
-        a_step("the server is removed", the_store_holds(&server), &mut steps);
+        a_step("the server is removed", the_store_holds(&server), &[], &mut steps);
 
         // **The same machine added again**, as a new row.
         let again = a_new_row();
         the_list_asks(&[&again]);
-        a_step("the machine is added again", the_store_holds(&again), &mut steps);
+        a_step("the machine is added again", the_store_holds(&again), &[&again], &mut steps);
 
-        let Some(foot) = what_the_foot_holds(&steps) else {
-            eprintln!("SKIPPED: no Node on this computer, so the window's foot was not read");
+        let Some(rows) = what_the_rows_hold(&steps) else {
+            eprintln!("SKIPPED: no Node on this computer, so the server's row was not read");
             return;
         };
-        let foot_counts: Vec<String> = foot
+        let row_counts: Vec<String> = rows
             .iter()
             .map(|line| line.split(" — ").next().unwrap_or_default().to_string())
             .collect();
         assert_eq!(
-            foot_counts, stored,
-            "**the foot and the failure store disagree** — the foot read:\n{}",
-            foot.join("\n")
+            row_counts, stored,
+            "**the rows and the failure store disagree** — the rows read:\n{}",
+            rows.join("\n")
         );
+        let the_words = crate::typography::Prose::new(
+            crate::surface::servers::words::COULD_NOT_RECONNECT,
+        );
+        for line in &rows {
+            let Some((_, said)) = line.split_once(" — ") else {
+                continue;
+            };
+            for one in said.split(" | ") {
+                assert_eq!(
+                    one,
+                    the_words.as_str(),
+                    "a server Smoozy could not reconnect read {one:?} on its row"
+                );
+            }
+        }
     }
 
     /// **`State, identity and recovery` F12, and `Desktop app and delivery`

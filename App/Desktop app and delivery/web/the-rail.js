@@ -197,6 +197,10 @@ theRail.then(theShellIsDrawn).catch(() => {
   document.documentElement.dataset.shell = "failed";
 });
 
+/// The rail's answer as it was last drawn, so an answer that changes nothing
+/// rebuilds nothing.
+let theRailAsLastDrawn = null;
+
 function theShellIsDrawn(rail) {
   const pane = document.getElementById("pane");
   if (!pane) return;
@@ -232,6 +236,7 @@ function theShellIsDrawn(rail) {
     });
 
   body.appendChild(theRailIsDrawn(rail));
+  theRailAsLastDrawn = JSON.stringify(rail);
 
   main = document.createElement("div");
   main.className = "main";
@@ -626,6 +631,13 @@ export function theRailIsReadAgain() {
   shell.core.invoke("the_rail").then((rail) => {
     const nav = document.querySelector(".rail");
     if (!nav || !nav.parentNode) return;
+    // **A rail that has not changed is not drawn again.** The second live
+    // pass of 2026-11-12, new fault 8: right after opening, a burst of events
+    // rebuilt the rail several times, and a press on *Transfers* that landed
+    // on a row being replaced did nothing.
+    const drawn = JSON.stringify(rail);
+    if (drawn === theRailAsLastDrawn) return;
+    theRailAsLastDrawn = drawn;
     // **The figures the screens set are kept across the redraw** — Queue's,
     // History's and Transfers' arrive through `theRowsFigureIs` and not with
     // the rail, so a redraw would otherwise take them away until each screen

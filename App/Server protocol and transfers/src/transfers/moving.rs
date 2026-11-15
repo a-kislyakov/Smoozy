@@ -301,6 +301,9 @@ enum WhyTheLoopStopped {
     /// at every reconnection and got the same answer every time, and nothing
     /// anywhere said *your disk is full*.
     ALocalFailureAReconnectionCannotClear,
+    /// `Server protocol and transfers`’ upload-refusal rule: a live server
+    /// refused a filesystem write; reconnecting does not make that a cut.
+    TheMachineRefusedTheWrite,
     /// The channel's inactivity deadline expired (C19).
     TheDeadlineExpired,
     /// The source changed under an upload (S13). **The upload direction alone**
@@ -359,7 +362,7 @@ where
     K: KeepsTheRecord,
     W: WatchesTheTransfer,
 {
-    carry_out_with(transfer, record, None, None, TheStagingFolder::AskedForAsAlways).await
+    carry_out_with(transfer, record, None, None, TheStagingFolder::AskedForAsAlways, None).await
 }
 
 /// **The same transfer, handed S13's four-value reading of the file on the
@@ -400,6 +403,7 @@ where
         None,
         the_source_now,
         TheStagingFolder::AskedForAsAlways,
+        None,
     )
     .await
 }
@@ -433,6 +437,59 @@ where
         Some(gate),
         None,
         TheStagingFolder::AskedForAsAlways,
+        None,
+    )
+    .await
+}
+
+/// **S12b: the machine's own program, asked for the digest of the part an
+/// upload staged.** One ask: the first `up_to` bytes at `path` on the machine,
+/// digested there by S23's function — §1.1 item 1's digest over a byte range.
+///
+/// **`None` where no digest came back**, for any reason: a program placed
+/// before the request existed, a refusal, a worker not admitted, a range the
+/// file does not hold, no answer in time. **Nothing it answers is read as
+/// agreement but a digest**, and `None` sends the loop to S12 step 3's
+/// read-back as before. The implementor bounds its own wait.
+pub trait TheMachineDigestsAStagedPart: Send {
+    fn the_digest_of_the_first(
+        &mut self,
+        path: &[u8],
+        up_to: u64,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Option<Digest>> + Send + '_>>;
+}
+
+/// **The same transfer under the caller's gate, carried on with the machine's
+/// own check of what it already holds** — S12b, uploads carry on, 2026-11-14.
+///
+/// **The case the gated entry point was first written for** is a resume that
+/// reads the staged part back over the line, which on a nearly complete 4 GiB
+/// part took about twelve minutes. **The case this meets** is the same resume
+/// where the machine's own program can digest the part at its disk's speed:
+/// nothing of the part crosses and nothing of it is read here, and the running
+/// digest goes on from the state the record keeps at the checkpoint. Where the
+/// machine gives no digest, or the checkpoint keeps no state, it is that entry
+/// point exactly.
+pub async fn carry_on_under_a_publication_gate_asking_the_machine<S, L, B, K, W>(
+    transfer: Transfer<'_, S, L, B, K, W>,
+    record: &mut TransferRecord,
+    gate: &mut dyn TheCallersPublicationGate,
+    machine: &mut dyn TheMachineDigestsAStagedPart,
+) -> WhatHappened
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+    L: TheUsersOwnComputer,
+    B: DrawsFromTheSharedBudget,
+    K: KeepsTheRecord,
+    W: WatchesTheTransfer,
+{
+    carry_out_with(
+        transfer,
+        record,
+        Some(gate),
+        None,
+        TheStagingFolder::AskedForAsAlways,
+        Some(machine),
     )
     .await
 }
@@ -480,6 +537,7 @@ where
         Some(gate),
         None,
         TheStagingFolder::MadeByTheCallersRequest,
+        None,
     )
     .await
 }
@@ -515,6 +573,7 @@ async fn carry_out_with<S, L, B, K, W>(
     gate: Option<&mut dyn TheCallersPublicationGate>,
     the_source_now: Option<SourceReading>,
     the_staging_folder: TheStagingFolder,
+    machine: Option<&mut dyn TheMachineDigestsAStagedPart>,
 ) -> WhatHappened
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -537,6 +596,7 @@ where
         gate,
         the_source_now.as_ref(),
         the_staging_folder,
+        machine,
     )
     .await;
 
@@ -550,7 +610,8 @@ where
         // work is waiting to be picked up (S26b).
         WhyTheLoopStopped::TheDigestsDisagreed
         | WhyTheLoopStopped::ThePublicationCheckCameBackWrong
-        | WhyTheLoopStopped::ALocalFailureAReconnectionCannotClear => Ending::Failed,
+        | WhyTheLoopStopped::ALocalFailureAReconnectionCannotClear
+        | WhyTheLoopStopped::TheMachineRefusedTheWrite => Ending::Failed,
         WhyTheLoopStopped::TheDeadlineExpired => Ending::Stalled,
         WhyTheLoopStopped::TheSourceChanged => {
             Ending::Stopped(StoppedReason::TheSourceChangedUnderIt)
@@ -672,6 +733,16 @@ where
     }
 }
 
+fn what_a_write_refusal_means(why: SubsystemFailure) -> WhyTheLoopStopped {
+    use crate::subsystem::StatusCode;
+    match why {
+        SubsystemFailure::TheServerRefused(StatusCode::NoConnection | StatusCode::ConnectionLost)
+        | SubsystemFailure::TheChannelIsGone => WhyTheLoopStopped::ItWasInterrupted,
+        SubsystemFailure::TheServerRefused(_) => WhyTheLoopStopped::TheMachineRefusedTheWrite,
+        _ => WhyTheLoopStopped::ItWasInterrupted,
+    }
+}
+
 async fn the_loop<S, L, B, K, W>(
     transfer: &mut Transfer<'_, S, L, B, K, W>,
     record: &mut TransferRecord,
@@ -679,6 +750,7 @@ async fn the_loop<S, L, B, K, W>(
     mut gate: Option<&mut dyn TheCallersPublicationGate>,
     the_source_now: Option<&SourceReading>,
     the_staging_folder: TheStagingFolder,
+    mut machine: Option<&mut dyn TheMachineDigestsAStagedPart>,
 ) -> WhyTheLoopStopped
 where
     S: AsyncRead + AsyncWrite + Unpin + Send,
@@ -768,13 +840,38 @@ where
                     // computed. The plan prices this crossing at **one**, and
                     // measured it at about **twelve minutes** on a nearly
                     // complete 4 GiB prefix at 5.9 MB/s.
-                    let running = match read_the_prefix(transfer, record, checkpoint.offset).await {
-                        Ok(running) => running,
-                        Err(why) => return why,
+                    //
+                    // **S12b first, where it can be asked**: the machine's own
+                    // program digests the part at its disk's speed, and the
+                    // running digest goes on from the state the record keeps,
+                    // so nothing of the part crosses. Where it gives no
+                    // digest, the read-back below, as before.
+                    let said = match the_machines_check_of_the_part(
+                        machine.as_deref_mut(),
+                        record,
+                        checkpoint,
+                    )
+                    .await
+                    {
+                        Some(TheMachinesCheck::ItAgreed(running)) => {
+                            carried_forward = Some(running);
+                            WhatTheComparisonSaid::TheyAgree
+                        }
+                        Some(TheMachinesCheck::ItDisagreed) => WhatTheComparisonSaid::TheyDisagree,
+                        None => {
+                            let running =
+                                match read_the_prefix(transfer, record, checkpoint.offset).await {
+                                    Ok(running) => running,
+                                    Err(why) => return why,
+                                };
+                            let said = compare(
+                                &checkpoint.digest_of_everything_up_to_it,
+                                &running.so_far(),
+                            );
+                            carried_forward = Some(running);
+                            said
+                        }
                     };
-                    let said =
-                        compare(&checkpoint.digest_of_everything_up_to_it, &running.so_far());
-                    carried_forward = Some(running);
                     after_verifying(&what, said)
                 }
                 other => after_verifying(other, WhatTheComparisonSaid::TheyAgree),
@@ -816,6 +913,11 @@ where
                         // stand as the whole report, and nothing has been
                         // reported for this run at all, so nothing falls.
                         record.start_over();
+                        if let Err(why) =
+                            a_download_starting_over_takes_its_size_again(transfer, record, report, None).await
+                        {
+                            return why;
+                        }
                         if transfer.keeper.write_it_down(record).is_err() {
                             return WhyTheLoopStopped::ItWasInterrupted;
                         }
@@ -847,7 +949,27 @@ where
                 // down again put the record down a second time before its
                 // first byte with nothing in it changed — S8's write had just
                 // gone down.
-                if !record.checkpoints.is_empty() {
+                //
+                // **A download whose staged part was made and is gone takes
+                // the file's size again** (S13's paragraph of 2026-11-12, as
+                // widened after Sol's look): the record names a staging
+                // object for this attempt, and nothing stands there. It is no
+                // start-over, but the size is in the same doubt — the line
+                // was cut, or an earlier sitting ended, since it was read.
+                let the_total_before = record.total_size_expected;
+                if record.direction == Direction::Down && record.staging_identity.is_some() {
+                    if let Err(why) = a_download_starting_over_takes_its_size_again(
+                        transfer,
+                        record,
+                        report,
+                        the_source_now,
+                    )
+                    .await
+                    {
+                        return why;
+                    }
+                }
+                if !record.checkpoints.is_empty() || record.total_size_expected != the_total_before {
                     record.checkpoints.clear();
                     if transfer.keeper.write_it_down(record).is_err() {
                         return WhyTheLoopStopped::ItWasInterrupted;
@@ -857,6 +979,14 @@ where
             }
             ResumePlan::StartOverFromZero(cause) => {
                 record.start_over();
+                // **S13's paragraph of 2026-11-12**: the size is taken again,
+                // from the reading handed in for this resume where one was.
+                if let Err(why) =
+                    a_download_starting_over_takes_its_size_again(transfer, record, report, the_source_now)
+                        .await
+                {
+                    return why;
+                }
                 // **G4a's mark**, set when the fresh staging path is opened.
                 report.started_over = Some(cause);
                 if transfer.keeper.write_it_down(record).is_err() {
@@ -1019,7 +1149,7 @@ where
                 .await
                 {
                     Ok(Ok(())) => {}
-                    Ok(Err(_)) => return WhyTheLoopStopped::ItWasInterrupted,
+                    Ok(Err(why)) => return what_a_write_refusal_means(why),
                     Err(why) => return why,
                 }
                 bytes.len()
@@ -1056,7 +1186,7 @@ where
                 {
                     Ok(Ok(())) => {}
                     Err(why) => return why,
-                    Ok(Err(_)) => return WhyTheLoopStopped::ItWasInterrupted,
+                    Ok(Err(why)) => return what_a_write_refusal_means(why),
                 }
             }
 
@@ -1082,12 +1212,9 @@ where
                     // step 4 over it, and a row left saying *interrupted* would
                     // wait for a connection that never went away.
                     Err(why) => return why,
-                    Ok(Err(_)) => return WhyTheLoopStopped::ItWasInterrupted,
+                    Ok(Err(why)) => return what_a_write_refusal_means(why),
                 }
-                record.checkpoints.push(Checkpoint {
-                    offset: from,
-                    digest_of_everything_up_to_it: running.so_far(),
-                });
+                record.checkpoints.push(Checkpoint::at(from, &running, record.direction));
                 if transfer.keeper.write_it_down(record).is_err() {
                     return WhyTheLoopStopped::ItWasInterrupted;
                 }
@@ -1113,6 +1240,15 @@ where
                 {
                     a_short_source_has_already_started_it_over = true;
                     record.start_over();
+                    // **S13's paragraph of 2026-11-12**: the file is shorter
+                    // than the record said, so its size is read again. The
+                    // reading handed in was taken before this attempt and is
+                    // not used.
+                    if let Err(why) =
+                        a_download_starting_over_takes_its_size_again(transfer, record, report, None).await
+                    {
+                        return why;
+                    }
                     // **G4a's mark**, and the count truthfully goes back to
                     // nothing on a transfer nothing has ended.
                     report.started_over = Some(cause);
@@ -1155,7 +1291,7 @@ where
         {
             Ok(Ok(())) => {}
             Err(why) => return why,
-            Ok(Err(_)) => return WhyTheLoopStopped::ItWasInterrupted,
+            Ok(Err(why)) => return what_a_write_refusal_means(why),
         }
 
         // **S20: the staged bytes are made durable before publication, where
@@ -1258,6 +1394,65 @@ where
         }
         return publish(transfer, record).await;
     }
+}
+
+/// **A download that starts over takes the file's size again** — S13's
+/// paragraph of 2026-11-12, the Fable review's seventh sitting, fault 1.
+///
+/// **The case the expected total was first written for** is one attempt,
+/// where the size read at the arrangement is the size fetched. **The case it
+/// now also meets** is a start-over, which is the moment that size is no
+/// longer known to hold: a file rendered again larger landed cut to the old
+/// size and read as downloaded, and one that shrank ended short at every
+/// attempt.
+///
+/// **From the four-value reading handed in for this resume, where one was**,
+/// which then becomes the record's reading, so a later resume compares
+/// against the file as it was fetched. **Otherwise one attribute read of the
+/// source on this channel**, under C19's deadline. Where the machine refuses
+/// it or carries no size, the old total stands and the attempt goes on as
+/// before. **An upload is not touched**: its source is the user's own file and
+/// its size is `File Browser`'s.
+async fn a_download_starting_over_takes_its_size_again<S, L, B, K, W>(
+    transfer: &mut Transfer<'_, S, L, B, K, W>,
+    record: &mut TransferRecord,
+    report: &mut Report,
+    the_source_now: Option<&SourceReading>,
+) -> Result<(), WhyTheLoopStopped>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send,
+    L: TheUsersOwnComputer,
+    B: DrawsFromTheSharedBudget,
+    K: KeepsTheRecord,
+    W: WatchesTheTransfer,
+{
+    if record.direction != Direction::Down {
+        return Ok(());
+    }
+    let size_now = match the_source_now {
+        Some(now) => {
+            record.source_reading = Some(now.clone());
+            Some(now.size)
+        }
+        None => match tokio::time::timeout(
+            transfer.inactivity_deadline,
+            transfer.subsystem.stat(record.source_path.as_bytes()),
+        )
+        .await
+        {
+            Err(_) => return Err(WhyTheLoopStopped::TheDeadlineExpired),
+            Ok(Ok(attributes)) => attributes.size,
+            Ok(Err(SubsystemFailure::TheChannelIsGone)) => {
+                return Err(WhyTheLoopStopped::ItWasInterrupted)
+            }
+            Ok(Err(_)) => None,
+        },
+    };
+    if let Some(size_now) = size_now {
+        record.total_size_expected = size_now;
+        report.bytes_expected = size_now;
+    }
+    Ok(())
 }
 
 /// **S15c: a transfer keeps its source's modification time.** The answer to
@@ -1779,10 +1974,7 @@ where
         // start** (E0-1), which `from` is by construction. The reads still in
         // flight are ahead of it and are not in it.
         if since_the_last_checkpoint >= THE_CHECKPOINT_INTERVAL || *from == total {
-            record.checkpoints.push(Checkpoint {
-                offset: *from,
-                digest_of_everything_up_to_it: running.so_far(),
-            });
+            record.checkpoints.push(Checkpoint::at(*from, running, record.direction));
             if transfer.keeper.write_it_down(record).is_err() {
                 return Err(WhyTheLoopStopped::ItWasInterrupted);
             }
@@ -1941,6 +2133,50 @@ async fn a_wait_on_the_machine<T, W: WatchesTheTransfer>(
             }
         }
     }
+}
+
+/// **What S12b's check came to**, where it could be made at all.
+enum TheMachinesCheck {
+    /// The machine's digest is the checkpoint's: carry on, the running digest
+    /// going on from the recorded state.
+    ItAgreed(Running),
+    /// The machine holds something else: S12 step 5, as for the read-back.
+    ItDisagreed,
+}
+
+/// **S12b: the part an upload staged, checked by the machine's own program
+/// against the record.** `None` — and so S12 step 3's read-back — wherever the
+/// check cannot be made: a download, no machine named, a checkpoint keeping no
+/// state, a state that does not reproduce the checkpoint's own digest, a
+/// staging path that is not absolute, or no digest coming back.
+async fn the_machines_check_of_the_part(
+    machine: Option<&mut (dyn TheMachineDigestsAStagedPart + '_)>,
+    record: &TransferRecord,
+    checkpoint: &Checkpoint,
+) -> Option<TheMachinesCheck> {
+    if record.direction != Direction::Up {
+        return None;
+    }
+    let machine = machine?;
+    let running = Running::carried_on_from(checkpoint.running_state.as_ref()?, checkpoint.offset)?;
+    // **The state is checked before it is trusted**: it must come to the
+    // checkpoint's own digest, or it is not the state at that checkpoint.
+    if compare(&checkpoint.digest_of_everything_up_to_it, &running.so_far())
+        == WhatTheComparisonSaid::TheyDisagree
+    {
+        return None;
+    }
+    let path = record.staging_path.as_bytes();
+    if !path.starts_with(b"/") {
+        return None;
+    }
+    let digest = machine.the_digest_of_the_first(&path, checkpoint.offset).await?;
+    Some(
+        match compare(&checkpoint.digest_of_everything_up_to_it, &digest) {
+            WhatTheComparisonSaid::TheyAgree => TheMachinesCheck::ItAgreed(running),
+            WhatTheComparisonSaid::TheyDisagree => TheMachinesCheck::ItDisagreed,
+        },
+    )
 }
 
 /// **S12 step 3's read-back, and the prefix crosses once.** *"Before hand-over
@@ -2260,6 +2496,20 @@ mod tests {
     use crate::subsystem::wire::{kind, Composed, Fields};
     use crate::subsystem::StatusCode;
 
+    #[test]
+    fn bad_batch_2_a_server_write_refusal_is_not_a_dropped_connection() {
+        for status in [StatusCode::Failure, StatusCode::PermissionDenied, StatusCode::Other(14)] {
+            assert!(matches!(what_a_write_refusal_means(SubsystemFailure::TheServerRefused(status)),
+                WhyTheLoopStopped::TheMachineRefusedTheWrite));
+        }
+        for status in [StatusCode::NoConnection, StatusCode::ConnectionLost] {
+            assert!(matches!(what_a_write_refusal_means(SubsystemFailure::TheServerRefused(status)),
+                WhyTheLoopStopped::ItWasInterrupted));
+        }
+        assert!(matches!(what_a_write_refusal_means(SubsystemFailure::TheChannelIsGone),
+            WhyTheLoopStopped::ItWasInterrupted));
+    }
+
     /// **A far end that serves one file, over a pipe, at the desk.**
     ///
     /// It answers exactly the four packets a download's byte loop sends — the
@@ -2333,6 +2583,16 @@ mod tests {
                         composed.u32(3);
                         composed.framed(kind::VERSION)
                     }
+                    // **The size of the one file it serves, as it stands**
+                    // — what a download starting over asks (S13's paragraph of
+                    // 2026-11-12).
+                    kind::STAT if the_path_asked(payload) == Some(&b"/machine/frame.exr"[..]) => {
+                        let mut fields = Fields::over(payload);
+                        let id = fields.u32().unwrap_or(0);
+                        let mut composed = Composed::new();
+                        composed.u32(id).u32(1).u64(bytes.len() as u64);
+                        composed.framed(kind::ATTRS)
+                    }
                     kind::OPEN if behaves == TheFarEnd::RefusesTheOpen => {
                         let mut fields = Fields::over(payload);
                         let id = fields.u32().unwrap_or(0);
@@ -2380,6 +2640,13 @@ mod tests {
             }
         });
         ours
+    }
+
+    /// The path a `STAT` names, past its identifier.
+    fn the_path_asked(payload: &[u8]) -> Option<&[u8]> {
+        let mut fields = Fields::over(payload);
+        fields.u32()?;
+        fields.string()
     }
 
     fn a_status(id: u32, code: StatusCode) -> Vec<u8> {
@@ -2801,6 +3068,7 @@ mod tests {
         let a_prefix = WhatToVerify::ThePrefixUpTo(Checkpoint {
             offset: 4_194_304,
             digest_of_everything_up_to_it: Digest::of(b"the prefix"),
+            running_state: None,
         });
 
         let read_when_arranged = SourceReading {
@@ -3567,6 +3835,148 @@ mod tests {
         .await
         .expect("the read-back came back inside its bound rather than waiting for ever");
         assert_eq!(came_back.err(), Some(WhyTheLoopStopped::TheDeadlineExpired));
+    }
+
+    /// One download carried against a far end serving `on_the_machine`, the
+    /// record and the disk as the test made them.
+    async fn a_download_carried(
+        on_the_machine: &[u8],
+        record: &mut TransferRecord,
+        local: &mut ADiskInMemory,
+        the_source_now: Option<SourceReading>,
+    ) -> WhatHappened {
+        let mut subsystem = crate::subsystem::client::Subsystem::negotiate(a_far_end_serving(
+            on_the_machine.to_vec(),
+        ))
+        .await
+        .expect("the far end announces revision 3");
+        let mut budget = NoCapIsInForce;
+        let mut keeper = KeepsEveryWrite::default();
+        let mut watcher = NobodyIsWatching;
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            carry_out_with_the_source_as_it_stands(
+                Transfer {
+                    subsystem: &mut subsystem,
+                    local,
+                    budget: &mut budget,
+                    keeper: &mut keeper,
+                    watcher: &mut watcher,
+                    inactivity_deadline: Duration::from_millis(300),
+                    intent: Intent::CreateIntended,
+                },
+                record,
+                the_source_now,
+            ),
+        )
+        .await
+        .expect("the download came to an ending")
+    }
+
+    /// **S13's paragraph of 2026-11-12: a download that starts over takes the
+    /// file's size again.** The Fable review's seventh sitting, fault 1.
+    ///
+    /// **The fault as it stood.** The record's expected total is the size read
+    /// when the download was arranged, and a start-over kept it. A frame
+    /// rendered again larger while the line was down came back cut to the old
+    /// size, was published, and read as downloaded.
+    #[tokio::test]
+    async fn a_download_starting_over_lands_the_whole_of_a_file_that_grew() {
+        let as_arranged = vec![1u8; 1_000];
+        let rendered_again: Vec<u8> = (0..3_000u32).map(|at| (at % 251) as u8).collect();
+
+        // No reading taken at the arrangement and none now: *could not be
+        // confirmed*, which starts the file over.
+        let mut record = a_transfer_of(&as_arranged);
+        record.expected_digest = None;
+        let mut local = ADiskInMemory::that_answers_identities();
+        local
+            .files
+            .insert(record.staging_path.as_text(), as_arranged[..400].to_vec());
+        let happened = a_download_carried(&rendered_again, &mut record, &mut local, None).await;
+        assert_eq!(record.attempt, 2, "the file did not start over");
+        assert_eq!(happened.ending, Ending::Published);
+        assert_eq!(
+            local.files.get("/here/frame.exr").map(Vec::len),
+            Some(rendered_again.len()),
+            "a file that grew landed cut to the size it was arranged at, and reads as downloaded"
+        );
+        assert_eq!(local.files.get("/here/frame.exr"), Some(&rendered_again));
+        assert_eq!(record.total_size_expected, 3_000);
+        assert_eq!(happened.report.bytes_expected, 3_000);
+
+        // The four values read now differ from the four recorded: the size in
+        // the reading is the size taken, and the reading becomes the record's.
+        let arranged_reading = SourceReading {
+            size: 1_000,
+            inode: "7".to_string(),
+            modification_time: 100,
+            change_time: 100,
+        };
+        let now = SourceReading {
+            size: 3_000,
+            inode: "8".to_string(),
+            modification_time: 200,
+            change_time: 200,
+        };
+        let mut record = a_transfer_of(&as_arranged);
+        record.expected_digest = None;
+        record.source_reading = Some(arranged_reading);
+        let mut local = ADiskInMemory::that_answers_identities();
+        local
+            .files
+            .insert(record.staging_path.as_text(), as_arranged[..400].to_vec());
+        let happened =
+            a_download_carried(&rendered_again, &mut record, &mut local, Some(now.clone())).await;
+        assert_eq!(happened.ending, Ending::Published);
+        assert_eq!(local.files.get("/here/frame.exr"), Some(&rendered_again));
+        assert_eq!(record.source_reading, Some(now));
+    }
+
+    /// **And one that shrank is fetched at its size now**, where it used to
+    /// start over once at the old size, end short again, and stay
+    /// *interrupted* at every later asking. S13's paragraph of 2026-11-12.
+    #[tokio::test]
+    async fn a_download_whose_source_ends_short_starts_over_at_the_size_it_now_has() {
+        let now_on_the_machine: Vec<u8> = (0..1_000u32).map(|at| (at % 241) as u8).collect();
+        let mut record = a_transfer_of(&vec![1u8; 3_000]);
+        record.expected_digest = None;
+        let mut local = ADiskInMemory::that_answers_identities();
+        let happened = a_download_carried(&now_on_the_machine, &mut record, &mut local, None).await;
+        assert_eq!(record.attempt, 2, "the file did not start over");
+        assert_eq!(
+            happened.ending,
+            Ending::Published,
+            "a file that shrank never finishes: the fresh attempt read to the old size again"
+        );
+        assert_eq!(local.files.get("/here/frame.exr"), Some(&now_on_the_machine));
+        assert_eq!(happened.report.started_over, Some(StartOverCause::TheSourceChangedUnderADownload));
+    }
+
+    /// **A download carried on whose staged part has gone takes the file's
+    /// size again too** — Sol's look at the Fable review's seventh sitting,
+    /// point 1. The line was cut, the file on the server grew, and the part
+    /// was removed from the staging folder by hand. Nothing is staged, so it
+    /// is not a start-over; **the fix as first built took the size only at a
+    /// start-over**, and the file landed cut to its old size.
+    #[tokio::test]
+    async fn a_download_carried_on_with_its_part_gone_lands_the_whole_of_a_file_that_grew() {
+        let as_arranged = vec![1u8; 1_000];
+        let rendered_again: Vec<u8> = (0..3_000u32).map(|at| (at % 251) as u8).collect();
+        let mut record = a_transfer_of(&as_arranged);
+        record.expected_digest = None;
+        // A staging object was opened for this attempt, and is not there now.
+        record.staging_identity = Some(StableFileIdentity::The("file-1".to_string()));
+        let mut local = ADiskInMemory::that_answers_identities();
+        let happened = a_download_carried(&rendered_again, &mut record, &mut local, None).await;
+        assert_eq!(happened.ending, Ending::Published);
+        assert_eq!(
+            local.files.get("/here/frame.exr").map(Vec::len),
+            Some(rendered_again.len()),
+            "a file that grew landed cut to the size it was arranged at, and reads as downloaded"
+        );
+        assert_eq!(record.attempt, 1, "nothing was staged, so nothing started over");
+        assert_eq!(happened.report.started_over, None);
     }
 
     #[test]

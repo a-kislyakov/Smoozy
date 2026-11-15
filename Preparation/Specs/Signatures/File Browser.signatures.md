@@ -31,3 +31,8 @@
 - 2026-10-12 — Claude Opus 5.5 (Claude Code subagent), the plan writer holding `Audits/Build/Step 10c/Brief — the eighth notes 1 to 4 and ninth notes, the plan pass and the drawing pass.md`, outside any round — line 156: double-clicking a `.blend` opens the settings (the Creator's eighth notes, note 2). No auditor has seen it.
 - 2026-10-30 — Claude Opus 5.5 (Claude Code subagent), the plan writer holding `Audits/Build/Step 10c/Brief — the twenty-third notes, note 2, plan and drawing pass.md`, outside any round — under *Browsing a server*: a folder's size is shown only when the user asks, and counts everything inside at any depth (the Creator's twenty-third note 2). No auditor has seen this text.
 - 2026-10-31 — Claude Opus 5.5 (Claude Code subagent), the plan and drawing writer holding `Audits/Build/Step 10c/Brief — the twenty-fourth notes, note 2, plan and drawing pass.md`, outside any round — *Browsing a server* gains *A picture can be looked at without downloading it*; *Where File Browser fits* and *What File Browser does not do* each gain a sentence (the seventeenth notes, note 11). No auditor has seen it.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned upload refusal and disk-full reporting.
+2026-11-14 — Claude Opus 5.5 — added Smoozy's own files and the login's keys (batch 2).
+2026-11-14 — Claude Opus 5.5 — Skip existing on a colliding copy (the Creator's ruling on the Rough what-if answers, 176).
+2026-11-14 — Claude Opus 5.5 — a delete inside a system folder warns first (the Creator's ruling on the Rough what-if answers, 181).
+2026-11-14 — Claude Opus 5.5 — the system-folder warning stands beside Retry with admin access too (the runner's ruling on 181).

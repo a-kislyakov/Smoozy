@@ -27,6 +27,10 @@ pub enum WhatTheJanitorDoes {
     Unpin { id: i64 },
     /// **B11**: the board is absent — re-pin it.
     PinTheBoardAgain,
+    /// **B11 as changed 2026-11-11 (the four questions, batch 4, Sol's S1):
+    /// a pin of the user's is the reported pin** — never unpinned; the
+    /// holder sends its board again, newer than it.
+    SendTheBoardAgain { over: i64 },
     /// **B4**: the reported pin is a board that is not this holder's own —
     /// stand down and touch nothing.
     StandDown,
@@ -43,6 +47,7 @@ pub fn what_the_janitor_does(top: &WhatIsPinned, my_board_id: i64, my_board: &Th
         WhatIsPinned::AMachineryMessage { id, utterance } => {
             WhatTheJanitorDoes::TakeInAndUnpin { id: *id, utterance: utterance.clone() }
         }
+        WhatIsPinned::AUsersPin { id } => WhatTheJanitorDoes::SendTheBoardAgain { over: *id },
         WhatIsPinned::SomethingElse { id } => WhatTheJanitorDoes::Unpin { id: *id },
     }
 }
@@ -79,7 +84,12 @@ pub fn what_an_utterance_asks(board: &TheBoard, utterance: &TheUtterance, moment
     if let Some(trimmed) = without_the_acknowledged(&current, &utterance.acknowledged) {
         current = trimmed;
     }
-    if utterance.announce {
+    // **B14 as added 2026-11-13: a machine whose role was switched off is
+    // taken off**, and nothing it says beside that is listed again.
+    if utterance.leaving {
+        current.roster.retain(|r| r.machine != utterance.machine);
+    }
+    if utterance.announce && !utterance.leaving {
         let entry = ARosterEntry { colour: utterance.colour.clone(), machine: utterance.machine.clone(), display: utterance.display.clone() };
         match list(&current, &entry) {
             AListing::Listed(with) => current = with,
@@ -130,6 +140,7 @@ mod tests {
         assert_eq!(top(WhatIsPinned::ABoard { id: 9, board: mine.clone() }), WhatTheJanitorDoes::Nothing);
         assert_eq!(top(WhatIsPinned::Nothing), WhatTheJanitorDoes::PinTheBoardAgain);
         assert_eq!(top(WhatIsPinned::SomethingElse { id: 12 }), WhatTheJanitorDoes::Unpin { id: 12 });
+        assert_eq!(top(WhatIsPinned::AUsersPin { id: 13 }), WhatTheJanitorDoes::SendTheBoardAgain { over: 13 }, "S1: never unpinned");
         assert_eq!(top(WhatIsPinned::ABoard { id: 10, board: a_board("m2") }), WhatTheJanitorDoes::StandDown);
         let mut edited = mine.clone();
         edited.heartbeat = "someone else's".into();
@@ -154,6 +165,7 @@ mod tests {
             proposed: vec![an_entry("new", TheAddressee::Machine("m3".into()), AKindOfEntry::Action)],
             replacing: vec![an_entry("late", TheAddressee::Machine("m2".into()), AKindOfEntry::Action)],
             replies: vec![json!({"job": "x"})],
+            leaving: false,
         };
         let asks = what_an_utterance_asks(&board, &utterance, "t");
         let candidate = asks.candidate.unwrap();

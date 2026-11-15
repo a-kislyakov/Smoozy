@@ -30,3 +30,7 @@
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Removed withdrawn paid text or obsolete references in wave 5; the account holds the complete change and check list.
 
 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — V4, the take-order bullet, the act paragraph and §12 item 8 name the box's control *Save report* (was *Save the report*), following the screen's words under Rule 10. Wording only. No auditor has seen it. Appended by the build runner.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 5, the report's address.md`, outside any round — V10 narrowed (the address is a fixed mail link through K25, with a copy control; the file is never handed over); V8a added (a save that did not land says why, and the whole reason goes into the diary); §11 declares the second act, *a report not written*. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece N5a, the diary's lines for a reading that stalls.md`, outside any round — J5 widened for a stalled reading; the forms are `Queue & History` §17's. No auditor has seen it.

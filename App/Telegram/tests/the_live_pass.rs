@@ -15,6 +15,8 @@
 //!   Creator reports what the phone did.
 //! - **B25** — every machinery send and edit carries one spoiler entity after
 //!   the head, checked on each call against its own text.
+//!   **B25a** (2026-11-11): inside one folded quotation of the same range,
+//!   written *folded* or *NOT FOLDED* beside it.
 //! - **E3d over the cap** — job C's words, 50,000,017 bytes held in memory.
 //! - **Item 6 of the bot-and-chat Verdict** — *Stop this job* on a frame
 //!   picture (job F) and on the status message (job D), each reaching the
@@ -151,11 +153,22 @@ fn the_spoiler_on(fields: &Map<String, Value>) -> String {
                 && length > 0
         }
     };
+    // **B25a (2026-11-11)**: the same range is one folded quotation too.
+    let folded = fields
+        .get("entities")
+        .and_then(Value::as_array)
+        .map(|all| all.iter().filter(|e| e["type"] == "expandable_blockquote" || e["type"] == "blockquote").collect::<Vec<_>>())
+        .unwrap_or_default();
+    let folded = folded.len() == 1
+        && folded[0]["type"] == "expandable_blockquote"
+        && folded[0]["offset"].as_u64() == Some(offset as u64)
+        && folded[0]["length"].as_u64() == Some(length as u64);
     format!(
-        "offset {offset} length {length} of {} units, head {} units, {}",
+        "offset {offset} length {length} of {} units, head {} units, {}, {}",
         units.len(),
         head.map_or("missing".into(), |h| h.to_string()),
-        if right { "right" } else { "WRONG" }
+        if right { "right" } else { "WRONG" },
+        if folded { "folded" } else { "NOT FOLDED" }
     )
 }
 
@@ -384,6 +397,7 @@ fn the_status(label: &str, rendering: bool) -> TheStatus {
                 of: 40,
                 percent: 32,
                 this_frame: None,
+                finishing: false,
             }
         } else {
             WhatTheMachineIsDoing::NothingRendering { quiet_for: None }
@@ -594,6 +608,10 @@ fn the_watch(token: &str, conversation: i64, run: &mut TheRun, log: &TheLog, acc
         disk_free_at_the_ending: None,
         no_render_began: false,
         the_reason_the_machine_recorded: None,
+        // Batch 4's two fields (*Submit again* and *Resume*), which this
+        // file was not given; the four questions, batch 6.
+        frames_asked: 40,
+        resume: None,
     };
     let c = messages.send_with_buttons(&the_failure_message(&failed), &a_job("job-c")).expect("job C's failure message and its one button");
 
@@ -611,7 +629,7 @@ fn the_watch(token: &str, conversation: i64, run: &mut TheRun, log: &TheLog, acc
                 frames_held: 39,
                 the_frames: String::new(),
             },
-            Some(&ADerivative { job: "job-e".into(), job_label: "Desk test job E".into(), frame: 1, file_name: "frame-0001.jpg".into(), bytes: frame_e, which_picture: None }),
+            Some(&ADerivative { job: "job-e".into(), job_label: "Desk test job E".into(), frame: 1, file_name: "frame-0001.jpg".into(), bytes: frame_e, which_picture: None, not_read: Vec::new() }),
             &hold,
         )
         .expect("job E's waiting picture and its two buttons")
@@ -652,7 +670,7 @@ fn the_watch(token: &str, conversation: i64, run: &mut TheRun, log: &TheLog, acc
     let mut frames = ThePictures::new(conversation, SERVER);
     let f = frames.send_with_its_stop(
         &mut messages,
-        ADerivative { job: "job-f".into(), job_label: "Desk test job F".into(), frame: 13, file_name: "frame-0013.jpg".into(), bytes: frame_f, which_picture: None },
+        ADerivative { job: "job-f".into(), job_label: "Desk test job F".into(), frame: 13, file_name: "frame-0013.jpg".into(), bytes: frame_f, which_picture: None, not_read: Vec::new() },
         AClassOfSend::FramePicturesAndMedia,
         Some(&a_job("job-f")),
     );

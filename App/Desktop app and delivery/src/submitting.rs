@@ -114,8 +114,9 @@ use smoozy_server_protocol::asking_the_supervisor::WhatCameBack;
 use smoozy_server_protocol::framing::{Fields, Request, THE_PROTOCOL_VERSION_THIS_BUILD_SPEAKS};
 use smoozy_queue_history::record::WhatTheMachineSaidAboutTheJob;
 use smoozy_server_protocol::requests::{
+    IT_IS_ABSENT, IT_IS_PRESENT, ON_THIS_MACHINE_FIELD, THERE_IS_NO_RECORD_OF_IT,
     THE_HELD_BEHIND_FIELD, THE_HOLD_REASON_FIELD, THE_JOB_FIELD, THE_JOB_RECORD_IS_WRITTEN_REQUEST,
-    THE_LABEL_FIELD,
+    THE_LABEL_FIELD, THE_MACHINES_OWN_WORDS_FIELD, WHAT_BECAME_OF_IT_FIELD,
 };
 use smoozy_server_protocol::subsystem::client::Subsystem;
 use smoozy_server_protocol::transfers::moving::{carry_out, NobodyIsWatching, Transfer};
@@ -361,20 +362,72 @@ impl<C: AHeldConnection> TheMachinesFileSurface for OnThisServersPoint<'_, C> {
 /// (step 10c's eleventh-pass fix piece 4c): **both searches in the
 /// application — the Render Settings page's and the Set up tab's — come
 /// through here**, and no two asks on one server are at the site at once.
+/// **Where a full disk would show in a search's answer** (`Render Settings`
+/// B5 as added 2026-11-11): no build answered and at least one is named as
+/// not answering (`Server Setup` B11) — the first such build's own path,
+/// which is where the free-space reading is taken. Nothing everywhere else:
+/// a machine with a Blender that answers is not asked about its disk here.
+pub fn where_a_full_disk_would_show(
+    asked: &smoozy_render_settings::acting::versions::TheVersionListAsk,
+) -> Option<String> {
+    let smoozy_render_settings::acting::versions::TheVersionListAsk::Answered(list) = asked else {
+        return None;
+    };
+    if list.entries.iter().any(|entry| entry.answered.is_some()) {
+        return None;
+    }
+    list.answer.did_not_answer.first().cloned()
+}
+
+/// **Whether that available figure reads as a full disk** — below
+/// `Rented-server runtime` M4a's control-state reserve, the figure under
+/// which the machine starts no render either.
+pub fn a_figure_this_low_reads_full(available_bytes: u64) -> bool {
+    available_bytes < smoozy_runtime::capture::THE_CONTROL_STATE_RESERVE
+}
+
 pub async fn the_blenders_on_the_machine<C: AHeldConnection>(
     sessions: &ThisServersSessions<C>,
     the_server: &str,
     smoozys_own_blender_area: Option<&str>,
 ) -> smoozy_render_settings::acting::versions::TheVersionListAsk {
+    the_blenders_on_the_machine_and_its_disk(sessions, the_server, smoozys_own_blender_area)
+        .await
+        .0
+}
+
+/// **[`the_blenders_on_the_machine`], with what the same search read of the
+/// server's disk** — true where no build answered and the free space where
+/// one sits reads below the reserve (`Render Settings` B5 as added
+/// 2026-11-11). **Handed back with the list it belongs to**, so the caller
+/// that lands the list lands this with it and no other search's reading can
+/// take its place.
+pub async fn the_blenders_on_the_machine_and_its_disk<C: AHeldConnection>(
+    sessions: &ThisServersSessions<C>,
+    the_server: &str,
+    smoozys_own_blender_area: Option<&str>,
+) -> (smoozy_render_settings::acting::versions::TheVersionListAsk, bool) {
     let mut channel = OnThisServersPoint { sessions };
     let mut files = OnThisServersPoint { sessions };
-    smoozy_render_settings::acting::versions::ask_for_the_version_list(
+    let asked = smoozy_render_settings::acting::versions::ask_for_the_version_list(
         &mut channel,
         &mut files,
         the_server,
         smoozys_own_blender_area,
     )
-    .await
+    .await;
+    // **`Render Settings` B5 as added 2026-11-11: where no build answered,
+    // one free-space reading at that build's own path**, before the list
+    // lands, so the page can say the disk is full and not that the server has
+    // no Blender. A reading that could not be taken says nothing. The build
+    // runner's ruling 3 of that date.
+    let full = match where_a_full_disk_would_show(&asked) {
+        Some(path) => crate::setting_up::the_free_space_at(sessions, &path)
+            .await
+            .is_some_and(|reading| a_figure_this_low_reads_full(reading.available_bytes)),
+        None => false,
+    };
+    (asked, full)
 }
 
 /// **The `.blend`'s four values as they stand now** — `Render Settings` Q14
@@ -407,8 +460,16 @@ pub async fn the_four_values_of<C: AHeldConnection>(
 /// by the sender for the driver, because neither seam's return carries it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WhatTheSupervisorSaid {
-    /// An answer that does not refuse the request — the acknowledgement.
+    /// **The answer says the job record stands** — `Rendering` S8's
+    /// *present*, the acknowledgement.
     ItTookIt,
+    /// **The answer says the record was not written** — `Rendering` S8's
+    /// *absent*, or `Server protocol and transfers` C8's *no record of that
+    /// identity* — with the machine's own words for why, where it gave any.
+    /// **A definite answer, and final**: the supervisor never acts again on
+    /// that command identity (`Server protocol and transfers` C4). The Fable
+    /// review's second sitting, fault 1.
+    ItRefusedIt { why: String },
     /// **The package said it does not answer that request**, naming it —
     /// `Server protocol and transfers`' reserved field. **A definite answer**:
     /// the machine did not write the job record.
@@ -513,11 +574,13 @@ impl<'a, C: AHeldConnection> TheOneSender<'a, C> {
                 {
                     WhatTheSupervisorSaid::ItDoesNotTakeJobs
                 } else {
-                    // **Any answer that does not refuse the request by name is
-                    // the acknowledgement** — no answer field is named for it
-                    // yet (step 10c piece 1's owed item 2); piece 5 names them
-                    // and may narrow this.
-                    WhatTheSupervisorSaid::ItTookIt
+                    // **`Rendering` S8 (as added 2026-11-11): the answer is
+                    // read by its word.** ~~Any answer that does not refuse
+                    // the request by name is the acknowledgement~~ — so a
+                    // machine that answered *absent*, its disk full or the
+                    // job's material unreadable, was read as having taken the
+                    // job (the Fable review's second sitting, fault 1).
+                    what_the_job_records_answer_says(&answered.fields)
                 }
             }
             WhatCameBack::NothingCorrelatedCameBack | WhatCameBack::ItWasNeverAsked => {
@@ -531,11 +594,42 @@ impl<'a, C: AHeldConnection> TheOneSender<'a, C> {
     }
 }
 
+/// **What the job record request's answer says, by its word** — `Rendering`
+/// S8 as added 2026-11-11.
+///
+/// - ***present*** (`State, identity and recovery` V1 step 2's word, which
+///   the supervisor carries on this answer) → the acknowledgement;
+/// - ***absent***, or `Server protocol and transfers` C8's *no record of that
+///   identity* → the machine did not write the record, in its own words;
+/// - **neither** — the machine's own *cannot say*, a word this build does not
+///   know, no word at all → not an acknowledgement and not a refusal:
+///   `Rendering` S9's ask follows, which is the one direction that cannot
+///   lose a job the machine has or show one it has not.
+pub fn what_the_job_records_answer_says(fields: &Fields) -> WhatTheSupervisorSaid {
+    let why = || {
+        fields
+            .text(THE_MACHINES_OWN_WORDS_FIELD)
+            .unwrap_or_default()
+            .to_string()
+    };
+    match fields.text(ON_THIS_MACHINE_FIELD) {
+        Some(IT_IS_PRESENT) => WhatTheSupervisorSaid::ItTookIt,
+        Some(IT_IS_ABSENT) => WhatTheSupervisorSaid::ItRefusedIt { why: why() },
+        _ if fields.text(WHAT_BECAME_OF_IT_FIELD) == Some(THERE_IS_NO_RECORD_OF_IT) => {
+            WhatTheSupervisorSaid::ItRefusedIt { why: why() }
+        }
+        _ => WhatTheSupervisorSaid::NothingThatCanBeRead,
+    }
+}
+
 /// **`Rendering`'s seam, implemented by the one sender** (R3).
 impl<C: AHeldConnection> AsksTheSupervisorForTheJobRecord for &TheOneSender<'_, C> {
     async fn write_the_job_record(&mut self, job: &Identity) -> Result<(), String> {
         match self.the_job_record_is_asked_for(job).await {
             WhatTheSupervisorSaid::ItTookIt => Ok(()),
+            WhatTheSupervisorSaid::ItRefusedIt { why } => {
+                Err(format!("the machine did not write the job record: {why}"))
+            }
             WhatTheSupervisorSaid::ItDoesNotTakeJobs => {
                 Err("the machine's program does not answer the job record request".to_string())
             }
@@ -1179,6 +1273,11 @@ pub enum WhatBecameOfOneJob {
     /// identity could be issued, a path will not fit, the record would not
     /// open.
     ThisComputerCouldNotComposeIt,
+    /// **Smoozy closed while the job was being sent, and the server never took
+    /// it** — learned at a later connection, where `State, identity and
+    /// recovery` V1 step 2 removes the provisional record. The Rough what-if
+    /// answers, share 1 (42): until then the job went with no word.
+    SmoozyClosedWhileSendingIt,
 }
 
 /// **What the whole act came to.**
@@ -1307,6 +1406,18 @@ pub fn an_act_is_begun_on_the_file(server: &str, file: &str, name: String) -> Th
     TheActInFlight { which, kept: false }
 }
 
+/// **A job a connection found never taken, said as a row of its own** —
+/// `Queue & History` C10a; the Rough what-if answers, share 1 (42). Smoozy closed while it was being sent,
+/// and `State, identity and recovery` V1 step 2 has just removed its
+/// provisional record because the server never took it. The row is the one a
+/// failed act leaves — *Not submitted.* and why, with the cross — and goes
+/// as that one goes: cleared, that file sent to that server again, or the run
+/// ending.
+pub fn a_submission_was_found_never_taken(server: &str, file: &str, name: String) {
+    let mut act = an_act_is_begun_on_the_file(server, file, name);
+    act.it_ended(&WhatTheActCameTo::TheseJobs(vec![WhatBecameOfOneJob::SmoozyClosedWhileSendingIt]));
+}
+
 /// **The cross on a not-submitted row, pressed** — `Queue & History` C10: the
 /// row goes. **True where a not-submitted row was there to clear**; an act
 /// still running, or one whose row waits for the machine's own, is never
@@ -1320,6 +1431,19 @@ pub fn a_not_submitted_row_is_cleared(which: u64) -> bool {
         return true;
     }
     false
+}
+
+/// **Whether that job is one of an act still running in this run** — its
+/// identities issued (`Rendering` S3) and its ending not yet told. `State,
+/// identity and recovery` V1 step 2 (as added 2026-11-11) does not ask the
+/// machine about such a job: its record is written before its request is
+/// sent. The Fable review's second sitting, fault 3.
+pub fn an_act_still_running_holds(job: &Identity) -> bool {
+    the_acts_in_flight().lock().is_ok_and(|held| {
+        held.values().any(|act| {
+            !act.ended_in_the_line && act.not_submitted.is_none() && act.jobs.contains(job)
+        })
+    })
 }
 
 impl TheActInFlight {
@@ -1627,6 +1751,11 @@ fn the_act_runs<C: AHeldConnection>(
                 // writes the video as the file asks. Added 2026-10-27, the
                 // nineteenth notes, notes 3 and 9.
                 first.the_check_is_written_as_a_picture = true;
+                // **`Render Settings` Y1d: the check names the range's frames**,
+                // so its reading steps them and it decides where the range
+                // job's folder sits by the same frames (`Job files and
+                // outputs` P6a, the runner's ruling of 2026-11-10).
+                first.the_range_jobs_frames = Some(asked.clone());
                 // **The second job is the range exactly as the user asked it**,
                 // in the form they asked it in, so the entry's *Frames* reads
                 // *1–240* and a simulation never baked renders one unbroken run
@@ -2205,6 +2334,24 @@ fn one_scene_job<C: AHeldConnection>(
                     ],
                 )
             }
+            // **`Rendering` S8 (as added 2026-11-11): the machine answered
+            // that it did not write the record.** As definite as a refusal by
+            // name, so the record goes with `Rendering` S4b's debt and the machine is
+            // not asked again; the user is told the server did not accept the job
+            // (`Rendering` S10).
+            Some(WhatTheSupervisorSaid::ItRefusedIt { .. }) => {
+                let _ = writer.remove_it(job);
+                (
+                    WhatBecameOfOneJob::ItStoppedBeforeTheJobRecord {
+                        the_step: THE_ORDERED_UNIT[2],
+                    },
+                    vec![
+                        (THE_ORDERED_UNIT[0], UnitOutcome::Done),
+                        (THE_ORDERED_UNIT[1], UnitOutcome::Done),
+                        (THE_ORDERED_UNIT[2], UnitOutcome::Failed),
+                    ],
+                )
+            }
             // **`Rendering` S9: the machine is asked, never guessed about.**
             _ => match resolve(&mut writer, &sender, job) {
                 HowItResolved::TheMachineHoldsIt => (
@@ -2615,6 +2762,107 @@ pub(crate) mod tests {
     /// refused beside one in the line. *Not known*, one left behind it, and a
     /// lock take it away. *(Until 2026-10-19 every refusal took it away, and
     /// the live pass on Vast saw the row go with nothing said.)*
+    /// **`Rendering` S8 (as added 2026-11-11): the job record request's answer
+    /// is read by its word.** *Present* alone is the acknowledgement; *absent*
+    /// and *no record of that identity* are the machine's refusal, with its
+    /// own words; every other answer is neither, and the machine is asked.
+    /// The Fable review's second sitting, fault 1.
+    #[test]
+    fn the_job_records_answer_is_read_by_its_word() {
+        use smoozy_server_protocol::requests::{
+            IT_HAS_A_RECORDED_OUTCOME, IT_IS_STILL_IN_HAND, THE_MACHINE_CANNOT_SAY,
+        };
+        let says = what_the_job_records_answer_says;
+        assert_eq!(
+            says(&Fields::none()
+                .and(WHAT_BECAME_OF_IT_FIELD, IT_HAS_A_RECORDED_OUTCOME)
+                .and(ON_THIS_MACHINE_FIELD, IT_IS_PRESENT)),
+            WhatTheSupervisorSaid::ItTookIt
+        );
+        assert_eq!(
+            says(&Fields::none()
+                .and(WHAT_BECAME_OF_IT_FIELD, IT_HAS_A_RECORDED_OUTCOME)
+                .and(ON_THIS_MACHINE_FIELD, IT_IS_ABSENT)
+                .and(THE_MACHINES_OWN_WORDS_FIELD, "No space left on device (os error 28)")),
+            WhatTheSupervisorSaid::ItRefusedIt {
+                why: "No space left on device (os error 28)".to_string()
+            },
+            "the machine's own refusal, as `a_refused_submission` answers it"
+        );
+        assert_eq!(
+            says(&Fields::none()
+                .and(WHAT_BECAME_OF_IT_FIELD, THERE_IS_NO_RECORD_OF_IT)
+                .and(THE_MACHINES_OWN_WORDS_FIELD, "the store refused")),
+            WhatTheSupervisorSaid::ItRefusedIt { why: "the store refused".to_string() },
+            "refused before it was recorded: the work did not happen"
+        );
+        // A repeat of a command still in hand whose job is not there yet is
+        // absent, and the supervisor never acts on that identity again.
+        assert!(matches!(
+            says(&Fields::none()
+                .and(WHAT_BECAME_OF_IT_FIELD, IT_IS_STILL_IN_HAND)
+                .and(ON_THIS_MACHINE_FIELD, IT_IS_ABSENT)),
+            WhatTheSupervisorSaid::ItRefusedIt { .. }
+        ));
+        for neither in [
+            Fields::none(),
+            Fields::none().and(WHAT_BECAME_OF_IT_FIELD, IT_HAS_A_RECORDED_OUTCOME),
+            Fields::none().and(ON_THIS_MACHINE_FIELD, THE_MACHINE_CANNOT_SAY),
+            Fields::none().and(ON_THIS_MACHINE_FIELD, "a word this build does not know"),
+        ] {
+            assert_eq!(
+                says(&neither),
+                WhatTheSupervisorSaid::NothingThatCanBeRead,
+                "neither word is no acknowledgement and no refusal: {neither:?}"
+            );
+        }
+    }
+
+    /// **`Render Settings` B5 as added 2026-11-11: the disk is asked about
+    /// only where no build answered and one is named as not answering**, at
+    /// that build's own path; and a figure below `Rented-server runtime`
+    /// M4a's reserve reads full. The build runner's ruling 3 of that date.
+    #[test]
+    fn a_full_disk_is_looked_for_only_where_no_build_answered() {
+        use smoozy_render_settings::acting::versions::TheVersionListAsk;
+        use smoozy_server_setup::search::{what_the_answer_says, ACandidate};
+        let a_search = |builds: &[(&str, bool)]| {
+            let entries: Vec<ACandidate> = builds
+                .iter()
+                .map(|(path, answered)| ACandidate {
+                    path: path.to_string(),
+                    answered: answered.then(|| smoozy_server_setup::blender::Version {
+                        major: 5,
+                        minor: 3,
+                        patch: 0,
+                    }),
+                })
+                .collect();
+            let answer = what_the_answer_says(&entries, 0);
+            TheVersionListAsk::Answered(smoozy_render_settings::version::TheListThisPageAsksFor {
+                entries,
+                answer,
+                at: std::time::SystemTime::now(),
+            })
+        };
+        assert_eq!(
+            where_a_full_disk_would_show(&a_search(&[("/home/u/smoozy/blender/5.3/blender", false)])),
+            Some("/home/u/smoozy/blender/5.3/blender".to_string()),
+            "no build answered, and one is named"
+        );
+        assert_eq!(where_a_full_disk_would_show(&a_search(&[])), None, "a server with no Blender");
+        assert_eq!(
+            where_a_full_disk_would_show(&a_search(&[("/a/blender", true), ("/b/blender", false)])),
+            None,
+            "a Blender answered, so there is one to render with"
+        );
+        assert_eq!(where_a_full_disk_would_show(&TheVersionListAsk::TheMachineCouldNotBeAsked), None);
+
+        assert!(a_figure_this_low_reads_full(0));
+        assert!(a_figure_this_low_reads_full(2 * 1024 * 1024));
+        assert!(!a_figure_this_low_reads_full(smoozy_runtime::capture::THE_CONTROL_STATE_RESERVE));
+    }
+
     #[test]
     fn z7_the_row_is_kept_in_the_line_or_saying_not_submitted() {
         use WhatBecameOfOneJob as Became;
@@ -3427,6 +3675,7 @@ pub(crate) mod tests {
                 }),
                 set_aside,
                 rejected_guess: None,
+                included: false,
                 read_as: read_as(kinds),
             }
         };

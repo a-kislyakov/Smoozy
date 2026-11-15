@@ -720,6 +720,12 @@ pub enum WhatTheEndingCameTo {
     ItWasSentTheEndingAndStillHoldsIt { process: u32 },
     /// Nothing was ended, and why.
     NothingWasEnded(String),
+    /// **Nothing held the endpoint, and a supervisor started through the
+    /// pointer ran another program than it names**, was sent the ending, and
+    /// is gone. G25, added 2026-11-12.
+    ASupervisorHoldingNoEndpointWasEnded { process: u32 },
+    /// **The same, and it was still running when the bound ran out.**
+    ASupervisorHoldingNoEndpointStillRuns { process: u32 },
 }
 
 /// **How long the ending waits for the holder to let the endpoint go.**
@@ -811,7 +817,14 @@ pub fn g25s_ending(package_area: &str, recorded_path: &str) -> WhatTheEndingCame
     };
     let named = the_program_the_pointer_names(package_area);
     match what_the_ending_does(&holder, &named) {
-        WhatTheEndingDoes::ThereIsNothingToEnd => WhatTheEndingCameTo::ThereWasNothingToEnd,
+        // **`Rented-server runtime` G25, *a supervisor that holds no endpoint*,
+        // added 2026-11-12**: nothing holding the endpoint is not nothing
+        // running. A supervisor the keeper started that stays up without
+        // opening the endpoint is found by its command line and ended the same
+        // way, where it runs another program than the pointer names.
+        WhatTheEndingDoes::ThereIsNothingToEnd => {
+            the_ending_of_a_supervisor_holding_no_endpoint(package_area, &named)
+        }
         WhatTheEndingDoes::ItAlreadyRunsThePointersProgram => {
             let TheEndpointsHolder::AProcess { process, .. } = holder else {
                 return WhatTheEndingCameTo::ThereWasNothingToEnd;
@@ -839,6 +852,180 @@ pub fn g25s_ending(package_area: &str, recorded_path: &str) -> WhatTheEndingCame
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
         }
+    }
+}
+
+/// **`Rented-server runtime` G25, *a supervisor that holds no endpoint*: where
+/// nothing holds the endpoint, every process started as the pointer's path
+/// with the supervisor's word after it is a supervisor, and one that runs
+/// another program than the pointer names is ended.** Added 2026-11-12, the
+/// live pass of that date: on a container, a new program whose supervisor
+/// stayed up without opening the endpoint was not ended by the rollback, and
+/// the keeper went on waiting on it, so nothing served.
+///
+/// **Why the command line.** The keeper starts `<pointer> supervise` and
+/// nothing else on the machine is started that way, so the two words name this
+/// installation's supervisor whatever program the pointer named at its start.
+/// A program run through an interpreter shows the interpreter first and the
+/// two words after it, which is why they are looked for anywhere among the
+/// arguments rather than only first. **What decides the ending is still the
+/// kernel's reading of the file the process runs**, compared with the file the
+/// pointer reaches, exactly as for the endpoint's holder: the program the
+/// pointer names is never ended, and a process whose program cannot be read is
+/// left alone.
+///
+/// **The wait is for the process to stop showing as a supervisor**, bounded by
+/// [`HOW_LONG_THE_ENDING_WAITS_FOR_THE_ENDPOINT_TO_BE_LET_GO`]. A process that
+/// has ended shows no command line (below), whether or not its parent has yet
+/// taken its exit. The keeper is not touched: it starts the one the pointer
+/// names at its next turn, [S5](crate::registration_content) unchanged.
+fn the_ending_of_a_supervisor_holding_no_endpoint(
+    package_area: &str,
+    named: &Result<crate::package::commit::TheFileAProgramIs, String>,
+) -> WhatTheEndingCameTo {
+    let Ok(named) = named else {
+        return WhatTheEndingCameTo::ThereWasNothingToEnd;
+    };
+    let Ok(found) = the_supervisors_started_through(package_area) else {
+        return WhatTheEndingCameTo::ThereWasNothingToEnd;
+    };
+    let ours = std::process::id();
+    let to_end: Vec<u32> = found
+        .into_iter()
+        .filter(|process| *process != ours)
+        .filter(|process| {
+            the_file_a_process_runs(*process).is_ok_and(|runs| &runs != named)
+        })
+        .collect();
+    let Some(&first) = to_end.first() else {
+        return WhatTheEndingCameTo::ThereWasNothingToEnd;
+    };
+    for process in &to_end {
+        if let Err(why) = the_ending_is_sent_to(*process) {
+            return WhatTheEndingCameTo::NothingWasEnded(why);
+        }
+    }
+    let started = std::time::Instant::now();
+    loop {
+        match the_supervisors_started_through(package_area) {
+            Ok(still) if to_end.iter().all(|process| !still.contains(process)) => {
+                return WhatTheEndingCameTo::ASupervisorHoldingNoEndpointWasEnded {
+                    process: first,
+                }
+            }
+            _ => {}
+        }
+        if started.elapsed() >= HOW_LONG_THE_ENDING_WAITS_FOR_THE_ENDPOINT_TO_BE_LET_GO {
+            return WhatTheEndingCameTo::ASupervisorHoldingNoEndpointStillRuns { process: first };
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+/// **Whether one process's arguments are `<pointer> supervise`**, the two
+/// side by side anywhere among them.
+pub fn the_arguments_name_a_supervisor_started_through(
+    arguments: &[&[u8]],
+    is_the_pointer: impl Fn(&[u8]) -> bool,
+) -> bool {
+    arguments.windows(2).any(|pair| {
+        pair[1] == crate::the_program::THE_SUPERVISOR_WORD.as_bytes() && is_the_pointer(pair[0])
+    })
+}
+
+/// **Whether one argument names the pointer**, the same pointer however it is
+/// spelled: the entry point is reached through a link to the package area
+/// (`Server protocol and transfers` §1.1 item 1), and the keeper names the
+/// area itself. So the pointer's own name is compared, and the folder it sits
+/// in is compared after both are resolved (`realpath(3)`, through the
+/// standard library's `canonicalize`), never the text.
+fn the_argument_names_the_pointer(argument: &[u8], the_areas_own_folder: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let named = Path::new(std::ffi::OsStr::from_bytes(argument));
+    named.file_name()
+        == Some(std::ffi::OsStr::new(crate::the_program::THE_FIXED_ENTRY_POINT_NAME))
+        && named
+            .parent()
+            .and_then(|folder| std::fs::canonicalize(folder).ok())
+            .is_some_and(|folder| folder == the_areas_own_folder)
+}
+
+/// **Every process whose arguments are `<pointer> supervise`.**
+///
+/// **On the machine**, from the kernel's own process folder. `proc_pid(5)`,
+/// Linux man-pages 6.19 of 2026-03-18, read 2026-11-12 at
+/// `https://man7.org/linux/man-pages/man5/proc_pid.5.html`: *"There is a
+/// numerical subdirectory for each running process; the subdirectory is named
+/// by the process ID."* `proc_pid_cmdline(5)`, Linux man-pages 6.19 of
+/// 2026-02-08, read the same day at
+/// `https://man7.org/linux/man-pages/man5/proc_pid_cmdline.5.html`: *"This
+/// read-only file holds the complete command line for the process, unless the
+/// process is a zombie. In the latter case, there is nothing in this file"*,
+/// and *"it is a set of strings separated by null bytes ('\0'), with a further
+/// null byte after the last string."* The page warns that a process may rewrite
+/// what it shows (*"Think of this file as the command line that the process
+/// wants you to see."*), which is why the line only finds a candidate and the
+/// file the process runs decides.
+///
+/// **At the desk**, which is macOS and has no such folder, the system's `ps`
+/// is asked by its own path (a command's search path is the caller's to set), `ps(1)` of macOS 26.6.2 build 25G83, read 2026-11-12 from the
+/// desk's own manual: `-A`, *"Display information about other users'
+/// processes, including those without controlling terminals"*; `-w` given
+/// twice, *"ps will use as many columns as necessary"*; `-o` with keywords
+/// whose header text is empty, *"If all keywords have empty header texts, no
+/// header line is written"*; and the keyword `command`, *"command and
+/// arguments"*, which joins them with spaces. **It serves the desk's tests and
+/// no rented machine.**
+pub fn the_supervisors_started_through(package_area: &str) -> Result<Vec<u32>, String> {
+    let the_areas_own_folder = std::fs::canonicalize(package_area)
+        .map_err(|why| format!("{package_area}: could not be resolved: {why}"))?;
+    let is_the_pointer =
+        |argument: &[u8]| the_argument_names_the_pointer(argument, &the_areas_own_folder);
+    #[cfg(target_os = "linux")]
+    {
+        let entries = std::fs::read_dir("/proc")
+            .map_err(|why| format!("/proc could not be listed: {why}"))?;
+        let mut found = Vec::new();
+        for entry in entries.flatten() {
+            let Some(process) = entry.file_name().to_str().and_then(|name| name.parse::<u32>().ok())
+            else {
+                continue;
+            };
+            let Ok(line) = std::fs::read(entry.path().join("cmdline")) else {
+                continue;
+            };
+            let arguments: Vec<&[u8]> = line.split(|byte| *byte == 0).collect();
+            if the_arguments_name_a_supervisor_started_through(&arguments, is_the_pointer) {
+                found.push(process);
+            }
+        }
+        Ok(found)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let said = std::process::Command::new("/bin/ps")
+            .args(["-A", "-ww", "-o", "pid=", "-o", "command="])
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+            .map_err(|why| format!("ps could not be run: {why}"))?;
+        let mut found = Vec::new();
+        for line in String::from_utf8_lossy(&said.stdout).lines() {
+            let mut words = line.split_whitespace();
+            let Some(process) = words.next().and_then(|word| word.parse::<u32>().ok()) else {
+                continue;
+            };
+            let arguments: Vec<&[u8]> = words.map(str::as_bytes).collect();
+            if the_arguments_name_a_supervisor_started_through(&arguments, is_the_pointer) {
+                found.push(process);
+            }
+        }
+        Ok(found)
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        let _ = is_the_pointer;
+        Err("this system publishes no process list this program takes".to_string())
     }
 }
 
@@ -957,6 +1144,30 @@ mod tests {
 
     fn an_identity(kind: IdentityKind) -> Identity {
         Identity::issue(kind).expect("the desk has randomness")
+    }
+
+    /// **G25, *a supervisor that holds no endpoint*: what counts as a
+    /// supervisor started through the pointer.** Added 2026-11-12.
+    #[test]
+    fn a_supervisor_started_through_the_pointer_is_known_by_its_two_words() {
+        let pointer = "/home/artist/.smoozy/package/smoozy-server";
+        let word = crate::the_program::THE_SUPERVISOR_WORD.as_bytes();
+        let named = |arguments: &[&[u8]]| {
+            the_arguments_name_a_supervisor_started_through(arguments, |argument| {
+                argument == pointer.as_bytes()
+            })
+        };
+        // The program itself, and the program run through an interpreter.
+        assert!(named(&[pointer.as_bytes(), word, b""]));
+        assert!(named(&[b"/bin/sh", pointer.as_bytes(), word, b""]));
+        // The adapter's own invocation, another installation, the keeper's
+        // single-argument loop, and a word that only begins the same way.
+        assert!(!named(&[pointer.as_bytes(), b"adapter", b""]));
+        assert!(!named(&[b"/home/other/.smoozy/package/smoozy-server", word, b""]));
+        let the_keepers_loop = format!("while :; do {pointer} supervise; done");
+        assert!(!named(&[b"sh", b"-c", the_keepers_loop.as_bytes(), b""]));
+        assert!(!named(&[pointer.as_bytes(), b"supervisex", b""]));
+        assert!(!named(&[]));
     }
 
     fn a_login() -> TheMachinesOwnLogin {

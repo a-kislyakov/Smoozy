@@ -89,7 +89,8 @@ use smoozy_dependencies_machine::placed_copies::{APlacedFile, ThePlacedCopies};
 use smoozy_dependencies_machine::remap::RemapMaterial;
 use smoozy_job_files_machine::attempts::{AttemptRecord, TheMapInForce};
 use smoozy_job_files_machine::composing::{
-    the_reading_and_everything_derived_from, TheReadingAndWhatFollows,
+    the_reading_and_everything_derived_from, the_reading_and_everything_derived_from_its_own_frames,
+    the_reading_as_the_job_renders_it, TheReadingAndWhatFollows,
     WhatTheReadingIsComposedAgainst,
 };
 use smoozy_job_files_machine::inventory::WhatTheInventoryIs;
@@ -770,6 +771,21 @@ where
             FrameRange::TheUsersParsedIntegers(frames) => Some(frames.clone()),
             FrameRange::TheFilesOwn => None,
         };
+        // **`Job files and outputs` P6a, the runner's ruling of 2026-11-10: a
+        // first-frame check's reading steps its range's frames too**
+        // (`Render Settings` Y1d), its own first, so it decides where the range
+        // job's folder sits by the same frames. Everything else it composes
+        // reads its own frames alone (`the_check_reads_its_own_frames`).
+        let stepped: Option<Vec<i64>> = match (&asked, &attempt.payload.the_range_jobs_frames) {
+            (Some(own), Some(range)) if attempt.payload.the_check_writes_into.is_some() => {
+                let mut frames = own.clone();
+                frames.extend(range.explicit_list().into_iter().filter(|frame| !own.contains(frame)));
+                Some(frames)
+            }
+            _ => asked.clone(),
+        };
+        let the_check_reads_its_own_frames: Option<&[i64]> =
+            asked.as_deref().filter(|_| stepped != asked);
         // **`Job files and outputs` R1a: through the folder, where there is one.**
         // Outputs still resolve against the file's real folder, which is handed
         // separately below, and everything else in the reading goes by the file's
@@ -784,7 +800,7 @@ where
                 .as_deref()
                 .unwrap_or(&attempt.manifest.blend_path_on_the_machine),
             the_version_it_will_render_by: the_version_in_hand(attempt.the_manifests_version),
-            the_frames_the_job_covers: asked.as_deref().unwrap_or(&[]),
+            the_frames_the_job_covers: stepped.as_deref().unwrap_or(&[]),
             the_jobs_scene,
             the_scripts_path: attempt.the_readings_script_path,
             // **`Job files and outputs` R4c**: the payload's own entry,
@@ -859,18 +875,61 @@ where
                 },
             ));
         };
+        // **`Rendering` L17c: the file's own range, saved ending before it
+        // starts, fails here and says so** — before, it reached the
+        // composition as *no frames left to render*. The Rough what-if
+        // answers, share 3 (233).
+        if matches!(attempt.manifest.frame_range, FrameRange::TheFilesOwn)
+            && the_jobs_scene.frame_end < the_jobs_scene.frame_start
+        {
+            return Some(failed(
+                step,
+                BeforeTheRenderInstruction::TheFilesFrameRangeEndsBeforeItStarts {
+                    first: the_jobs_scene.frame_start,
+                    last: the_jobs_scene.frame_end,
+                },
+            ));
+        }
         // **`Job files and outputs` R4 item 5: the job's pins apply before the
         // map, the inventory, the holds and the six things are composed**, and
         // before `Job files and outputs` B1's walk is entered — the
         // manifest's, since this reading runs at render start.
         let pins = the_jobs_pins(attempt.payload);
-        let enters_at = where_the_render_enters(the_jobs_scene, &printed.outputs.per_frame, &pins);
+        // A first-frame check enters at its own frame, of the frames it stepped.
+        let its_own_frames: Vec<smoozy_job_files_machine::reading::AtOneFrame> = printed
+            .outputs
+            .per_frame
+            .iter()
+            .filter(|at| the_check_reads_its_own_frames.is_none_or(|own| own.contains(&at.frame)))
+            .cloned()
+            .collect();
+        let enters_at = where_the_render_enters(the_jobs_scene, &its_own_frames, &pins);
         // **`Job files and outputs` P21's second case: the job output
         // folder chosen here, with the map, and made before step 5** — once
         // per job, and only where nothing chose it before. (A manifest that
         // carries a map names its folder, so the branch above never needs one.)
         if settled.job_output_folder.is_none() {
-            match self.the_folder_is_chosen(attempt, &printed, &enters_at, &pins) {
+            // **`Job files and outputs` P6a: the run is read off the reading as
+            // the job renders it**, the frames this reading stepped and the
+            // job's pins applied, the working copy the map is composed from. A
+            // document that is no reading fails here, as the composition below
+            // would, before any folder is made.
+            let Ok(as_the_job_renders_it) =
+                the_reading_as_the_job_renders_it(printed.clone(), &enters_at, &pins)
+            else {
+                return Some(failed(
+                    step,
+                    BeforeTheRenderInstruction::TheJobsFileReadingDidNotEndSuccessfully,
+                ));
+            };
+            match self.the_folder_is_chosen(
+                attempt,
+                &printed,
+                &as_the_job_renders_it,
+                &enters_at,
+                &pins,
+                the_check_reads_its_own_frames,
+            ) {
                 Ok(folder) => settled.job_output_folder = Some(folder),
                 Err(what_happened) => {
                     return Some(failed(
@@ -880,8 +939,9 @@ where
                 }
             }
         }
-        let composed = match the_reading_and_everything_derived_from(
+        let composed = match composed_by_its_own_frames(
             printed,
+            the_check_reads_its_own_frames,
             WhatTheReadingIsComposedAgainst {
                 the_folder_the_blend_sits_in: attempt.the_folder_the_blend_sits_in,
                 job_output_folder: settled
@@ -921,7 +981,9 @@ where
 
     /// **`Job files and outputs` P18 to `Job files and outputs` P23, at render
     /// start**: the run
-    /// worked out over the destinations this reading will write, the place
+    /// worked out over the destinations this reading will write, less those
+    /// that write nothing for the job's frames (`Job files and outputs` P6a),
+    /// read off the working copy the map is composed from; the place
     /// chosen and the folder made by that document's one choice
     /// ([`the_folder_is_chosen_and_made`]), and the choice written into the job
     /// record directory before anything else reads it. **`Job files and
@@ -938,8 +1000,10 @@ where
         &mut self,
         attempt: &TheAttempt<'_>,
         printed: &smoozy_job_files_machine::reading_script::ThePrintedReading,
+        as_the_job_renders_it: &smoozy_job_files_machine::reading::TheOutputsHalf,
         enters_at: &WhereTheRenderEnters,
         pins: &[smoozy_job_files_machine::reading::AViewLayerTheJobPins],
+        the_check_reads_its_own_frames: Option<&[i64]>,
     ) -> Result<String, String> {
         let TheJobOutputFolderForThisAttempt::ToBeChosen {
             layout,
@@ -949,12 +1013,11 @@ where
         else {
             unreachable!("a known folder is settled before step 3")
         };
-        let destinations =
-            smoozy_job_files_machine::reading_script::the_destinations_that_will_be_written(&printed.outputs);
-        let run = the_run_of(&destinations, attempt.the_folder_the_blend_sits_in, printed.outputs.taken_by);
+        let run = the_run_of(as_the_job_renders_it, attempt.the_folder_the_blend_sits_in);
         let mut fits = |candidate: &str| {
-            the_reading_and_everything_derived_from(
+            composed_by_its_own_frames(
                 printed.clone(),
+                the_check_reads_its_own_frames,
                 WhatTheReadingIsComposedAgainst {
                     the_folder_the_blend_sits_in: attempt.the_folder_the_blend_sits_in,
                     job_output_folder: candidate,
@@ -1503,6 +1566,21 @@ fn a_destination_is_video_shaped(settled: &WhatTheStepsSettled) -> bool {
 /// **The step counts forward from the first frame** and a step below one has no
 /// count under that rule, so it is floored at one rather than being given an
 /// arithmetic of this file's own.
+/// **The composition, by the job's own frames where its reading stepped more**:
+/// a first-frame check, whose reading steps its range's frames too, composes
+/// everything from its own frame, and only `Job files and outputs` P6a reads
+/// the rest (the runner's ruling of 2026-11-10).
+fn composed_by_its_own_frames(
+    printed: smoozy_job_files_machine::reading_script::ThePrintedReading,
+    the_check_reads_its_own_frames: Option<&[i64]>,
+    against: WhatTheReadingIsComposedAgainst<'_>,
+) -> Result<TheReadingAndWhatFollows, smoozy_job_files_machine::reading_script::WhyItIsNoReading> {
+    match the_check_reads_its_own_frames {
+        Some(own) => the_reading_and_everything_derived_from_its_own_frames(printed, against, own),
+        None => the_reading_and_everything_derived_from(printed, against),
+    }
+}
+
 fn the_whole_range(attempt: &TheAttempt<'_>, in_force: &RecordedReading) -> Vec<i64> {
     the_whole_range_of(attempt.manifest, &in_force.settings)
 }
@@ -1715,7 +1793,23 @@ fn the_refusal(refused: VersionRefused) -> BeforeTheRenderInstruction {
     // **The reason is recorded verbatim and no number names a cause** (K6):
     // what is written is what the confirmation found, in its own words.
     BeforeTheRenderInstruction::TheVersionConfirmationRefused {
-        reason: format!("{refused:?}"),
+        reason: the_refusal_in_words(refused),
+    }
+}
+
+/// **The version refusal in the user's words** — the four questions, scout 3.2,
+/// 2026-11-11. It was the refusal's debugging rendering until then.
+pub fn the_refusal_in_words(refused: VersionRefused) -> String {
+    let said = |v: smoozy_server_setup_machine::blender::Version| format!("{}.{}.{}", v.major, v.minor, v.patch);
+    match refused {
+        VersionRefused::ADifferentVersionAnswered { the_manifest_names, answered } => format!(
+            "the server's Blender is {}, not the {} this job uses",
+            said(answered),
+            said(the_manifest_names)
+        ),
+        VersionRefused::TheBinaryDidNotAnswer { the_manifest_names } => {
+            format!("Blender {} on the server did not report its version", said(the_manifest_names))
+        }
     }
 }
 
@@ -1869,6 +1963,9 @@ mod tests {
         told_a_check: std::cell::RefCell<Vec<bool>>,
         /// **`Job files and outputs` R1a**: the path each reading opened the file at.
         opened: std::cell::RefCell<Vec<String>>,
+        /// **Prints only the frames it was handed**, as the real reading
+        /// steps only those (`Job files and outputs` P6a's ruling test).
+        steps_what_it_is_handed: bool,
     }
 
     impl AReadingThat {
@@ -1878,6 +1975,7 @@ mod tests {
                 handed: std::cell::RefCell::new(Vec::new()),
                 told_a_check: std::cell::RefCell::new(Vec::new()),
                 opened: std::cell::RefCell::new(Vec::new()),
+                steps_what_it_is_handed: false,
             }
         }
         fn answers_nothing() -> AReadingThat {
@@ -1886,6 +1984,7 @@ mod tests {
                 handed: std::cell::RefCell::new(Vec::new()),
                 told_a_check: std::cell::RefCell::new(Vec::new()),
                 opened: std::cell::RefCell::new(Vec::new()),
+                steps_what_it_is_handed: false,
             }
         }
     }
@@ -1901,9 +2000,11 @@ mod tests {
             self.opened
                 .borrow_mut()
                 .push(taking.the_blend_path_on_the_machine.to_string());
-            self.printed
-                .clone()
-                .ok_or_else(|| "the reading printed no document".to_string())
+            let mut printed = self.printed.clone().ok_or_else(|| "the reading printed no document".to_string())?;
+            if self.steps_what_it_is_handed && !taking.the_frames_the_job_covers.is_empty() {
+                printed.outputs.per_frame.retain(|at| taking.the_frames_the_job_covers.contains(&at.frame));
+            }
+            Ok(printed)
         }
     }
 
@@ -2287,6 +2388,99 @@ mod tests {
         let recorded = machine.order.iter().position(|act| *act == "where the folder sits").unwrap();
         let attempt = machine.order.iter().position(|act| *act == "attempt record").unwrap();
         assert!(recorded < attempt, "{:?}", machine.order);
+    }
+
+    /// **`Job files and outputs` P6a at render start (`Job files and outputs` P21's second case)**: a
+    /// File Output node at `//../../../_OUT/a`, which climbs to `/_OUT/a` and is
+    /// fed only by a view layer no frame renders, takes no part in the run. The
+    /// folder is chosen where the file's own outputs point, as the page said,
+    /// and the node is still handed a folder under the job's folder. Until
+    /// piece 13 the run was `/` alone and the job went to Smoozy's job area.
+    #[test]
+    fn an_output_that_writes_nothing_does_not_shape_the_folder_chosen_at_render_start() {
+        let mut machine = answers();
+        machine.folders.extend(["/ephemeral".to_string(), "/ephemeral/smoozy".to_string()]);
+        let mut unused = a_node_destination("Unused", "Image", "//../../../_OUT/a/");
+        unused.the_view_layers_that_feed_it = vec![text("A layer no frame renders")];
+        let it = ARun {
+            known_folder: None,
+            reading: AReadingThat::prints(a_printed_reading(
+                vec![the_regular_output_path(), a_node_destination("Beauty", "Image", "//nodes/beauty/"), unused],
+                &[(1, true), (2, true), (3, true)],
+            )),
+            ..ARun::ordinary()
+        };
+        let (went, _) = run_it(&mut machine, &it);
+        let folder = "/ephemeral/smoozy/assets/j1-Kitchen";
+        assert_eq!(went.the_job_output_folder.as_deref(), Some(folder));
+        assert_eq!(
+            machine.where_written[0].where_it_is,
+            smoozy_job_files_machine::where_the_folder_sits::WhereItIs::WhereTheFilePoints
+        );
+        // **The node is still handed a folder under the job's folder**: the
+        // whole of its path, since the run does not start it.
+        let mut started = launched(went);
+        started.child.kill().ok();
+        started.child.wait().ok();
+        // The material carries a folder as its bytes.
+        let as_carried = |path: &str| path.bytes().map(|byte| byte.to_string()).collect::<Vec<_>>().join(",");
+        assert!(
+            machine.the_last_text_placed.contains(&format!("\"folder\":[{}]", as_carried(&format!("{folder}/_OUT/a/")))),
+            "the node's folder under the job's folder"
+        );
+    }
+
+    /// **`Job files and outputs` P6a, the runner's ruling of 2026-11-10: a
+    /// first-frame check and its range job choose one place.** A node at
+    /// `//../../../_OUT/late/` writes only from frame 2, where its layer starts
+    /// rendering. The range job (frames 1 to 3) counts it, so the run is `/`
+    /// and the folder falls back. The check renders frame 1 alone, and until
+    /// the ruling it read frame 1 alone, left the node out and put the folder
+    /// where the file points: two places for one folder. Its payload now names
+    /// the range's frames (`Render Settings` Y1d) and its reading steps them;
+    /// its count is still frame 1's.
+    #[test]
+    fn a_check_and_its_range_choose_one_folder_when_an_output_writes_only_later() {
+        let mut late = a_node_destination("Late", "Image", "//../../../_OUT/late/");
+        late.the_view_layers_that_feed_it = vec![text("Late")];
+        let mut printed = a_printed_reading(
+            vec![the_regular_output_path(), a_node_destination("Beauty", "Image", "//nodes/beauty/"), late],
+            &[(1, true), (2, true), (3, true)],
+        );
+        for at in printed.outputs.per_frame.iter_mut().filter(|at| at.frame > 1) {
+            at.view_layers_that_render.push(text("Late"));
+        }
+        let a_reading = || {
+            let mut reading = AReadingThat::prints(printed.clone());
+            reading.steps_what_it_is_handed = true;
+            reading
+        };
+        let mut chose = Vec::new();
+        for check in [false, true] {
+            let mut machine = answers();
+            machine.folders.extend(["/ephemeral".to_string(), "/ephemeral/smoozy".to_string()]);
+            let mut it = ARun { known_folder: None, reading: a_reading(), ..ARun::ordinary() };
+            if check {
+                it.frame_range = FrameRange::TheUsersParsedIntegers(vec![1]);
+                it.payload.the_check_writes_into = Some("the-range-job".to_string());
+                it.payload.the_range_jobs_frames = Some(FrameForm::List(vec![1, 2, 3]));
+            }
+            let (went, _) = run_it(&mut machine, &it);
+            if check {
+                let inventory = match went.inventory.as_ref() {
+                    Some(WhatTheInventoryIs::It(inventory)) => inventory,
+                    other => panic!("{other:?}"),
+                };
+                assert!(inventory.entries.iter().all(|entry| entry.frame == Some(1)), "the check counts its own frame");
+            }
+            chose.push(went.the_job_output_folder.clone());
+            if let WhereTheAttemptEnded::TheRenderWasLaunched(mut started) = went.ended {
+                started.child.kill().ok();
+                started.child.wait().ok();
+            }
+        }
+        assert_eq!(chose[0].as_deref(), Some("/srv/smoozy/jobs/j1-Kitchen"), "the range counts the late node");
+        assert_eq!(chose[1], chose[0], "the check and its range choose one place");
     }
 
     /// **A folder known before the attempt is never chosen again** (`Job
@@ -2871,6 +3065,7 @@ mod tests {
                 .map(|destination| smoozy_job_files_machine::mapping::ADestinationToMap {
                     destination,
                     the_longest_name_it_will_write: None,
+                    it_writes_nothing_for_the_jobs_frames: false,
                 })
                 .collect::<Vec<_>>(),
             BLEND_SITS_IN,
@@ -3216,6 +3411,28 @@ mod tests {
             serde_json::to_value(settings).expect("the settings half renders"),
         );
         printed
+    }
+
+    /// **`Rendering` L17c, the Rough what-if answers, share 3 (233): the
+    /// file's own range saved ending before it starts fails before the
+    /// render instruction and says why**, the file's own. Before, it ended
+    /// as *could not prepare the render: no frames left to render*.
+    #[test]
+    fn rough_share_3_a_files_range_that_ends_before_it_starts_says_so() {
+        let mut machine = answers();
+        let mut it = ARun::ordinary();
+        it.frame_range = FrameRange::TheFilesOwn;
+        it.reading = AReadingThat::prints(a_printed_reading_saved_at(vec![], &[], (10, 1, 1)));
+        let (went, words) = run_it(&mut machine, &it);
+        let WhereTheAttemptEnded::FailedBeforeTheRenderInstruction { reason, .. } = went.ended else {
+            panic!("{:?}", went.ended);
+        };
+        assert_eq!(reason, BeforeTheRenderInstruction::TheFilesFrameRangeEndsBeforeItStarts { first: 10, last: 1 });
+        assert_eq!(
+            reason.in_words(),
+            "the file's frame range ends before it starts (frames 10 to 1)"
+        );
+        assert!(words.is_empty(), "nothing was launched: {words:?}");
     }
 
     /// **`Rendering` L17a's step, the video-range piece: a video job asking for the file's

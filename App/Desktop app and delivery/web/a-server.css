@@ -37,3 +37,22 @@
 
 /* The shared control takes its place directly beside the address. */
 .mconnection { display: contents; }
+
+/* **The head's failure is the row's run of text** (the UI at every size,
+ * B-18): the dot, the sentence and the cross straight after it, as
+ * `servers.css` sets it back inside a row's `.svextra`. The shared shape pushed
+ * the cross to the far end of the head, 900 pixels from its sentence. **The
+ * countdown under it is a time, not a failure**, so it takes the grey a
+ * countdown has on the row. */
+.mconnectnote .failure-row { display: block; }
+.mconnectnote .failure-row .failure-said,
+.mconnectnote .failure-row .failure-acts { display: inline; }
+.mconnectnote .failure-row .failure-said b { font-weight: inherit; }
+.mconnectnote .failure-row .failure-clear {
+  margin-left: 5px;
+  font-size: var(--t-md);
+  padding: 0 3px;
+  border-radius: var(--r-xs);
+}
+.mconnectnote .failure-row .failure-clear:hover { background: var(--sel); }
+.mconnectnote > .sub { display: block; color: var(--ink3); }

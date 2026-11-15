@@ -7,3 +7,5 @@
 - 2026-10-26 — GPT-6.1 Sol (Codex) — Carried the free-and-open-source decision into this plan; preserved the former text.
 
 2026-10-27 — Codex Sol 6.1 high (gpt-6.1-sol) — Removed withdrawn paid text or obsolete references in wave 5; the account holds the complete change and check list.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 5, the report's address.md`, outside any round — *The whole act, in one run through*: the address is a mail link with a copy button beside it; Smoozy still never hands the file to a mail program (the Creator's twenty-eighth notes, note 6). No auditor has seen it.

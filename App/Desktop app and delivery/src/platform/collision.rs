@@ -308,6 +308,12 @@ pub enum WhatTheNextRunDoes {
     /// happened is `Server protocol and transfers` S15's recovery, which reads the
     /// digest and the identity this file does not.
     NothingIsOwedHere,
+    /// **The record has no ending, and a file that is neither empty nor the
+    /// staged length stands at the final name** — not Smoozy's reservation and
+    /// not the published object. **It is left exactly as it stands, nothing is
+    /// completed, and the record owes nothing** (`Server protocol and
+    /// transfers` S15's paragraph of 2026-11-12).
+    WhatStandsThereIsNotSmoozys,
     /// **The record's ending already says the work is over, and what stands at
     /// the final name is not Smoozy's reservation** — the user's own file, most
     /// often, which is why the publication failed. **It is left exactly as it
@@ -355,7 +361,14 @@ pub fn what_the_next_run_does_with(
         Recheck::Present { bytes } if *bytes == the_staged_bytes_recorded => {
             WhatTheNextRunDoes::NothingIsOwedHere
         }
-        Recheck::Present { .. } => WhatTheNextRunDoes::LeaveWhatStandsThere,
+        // **Neither empty nor the staged length: not Smoozy's reservation and
+        // not the published object** — `Server protocol and transfers` S15's
+        // paragraph of 2026-11-12. The user's own file, or the downloaded one
+        // saved again after the run died. Left exactly as it stands, and the
+        // mark goes. *(Until that date this was left pending at every start,
+        // and its server's auto-downloads refused, for as long as the file
+        // stood. The Fable review's seventh sitting, fault 4.)*
+        Recheck::Present { .. } => WhatTheNextRunDoes::WhatStandsThereIsNotSmoozys,
     }
 }
 
@@ -463,6 +476,7 @@ pub fn settle_the_reservation_of(record: &TransferRecord) -> WhatTheNextRunDoes 
         }
         WhatTheNextRunDoes::LeaveWhatStandsThere
         | WhatTheNextRunDoes::NothingIsOwedHere
+        | WhatTheNextRunDoes::WhatStandsThereIsNotSmoozys
         | WhatTheNextRunDoes::TheWorkIsOverAndWhatStandsThereIsNotSmoozys => {}
     }
     decided
@@ -493,10 +507,13 @@ pub fn settle_the_reservation_of(record: &TransferRecord) -> WhatTheNextRunDoes 
 /// - **the work already over and what stands there not Smoozy's**: nothing is
 ///   pending, the ending is left as it was, and the file is untouched
 ///   (`Server protocol and transfers` S15's paragraph of 2026-09-29);
-/// - **what stands there left alone** — something that is not Smoozy's on a
-///   record whose work is not over, a reading that could not be taken, or an
-///   act that did not go through: the record is **not** moved, and the next
-///   start asks again.
+/// - **no ending, and what stands there is not Smoozy's** — a file neither
+///   empty nor the staged length: nothing is pending, the ending is left
+///   absent for the start to write *interrupted*, and the file is untouched
+///   (`Server protocol and transfers` S15's paragraph of 2026-11-12);
+/// - **what stands there left alone** — a reading that could not be taken, a
+///   staged object that is not the whole one recorded, or an act that did not
+///   go through: the record is **not** moved, and the next start asks again.
 ///
 /// *(Until 2026-09-29 a file of the user's own at the final name kept every
 /// record pending, and its server's downloads refused, for good. The runner's
@@ -514,6 +531,7 @@ pub fn the_record_once_settled(
     match decided {
         WhatTheNextRunDoes::CompleteThePublication => settled.ending = Some(Ending::Published),
         WhatTheNextRunDoes::RemoveTheReservation
+        | WhatTheNextRunDoes::WhatStandsThereIsNotSmoozys
         | WhatTheNextRunDoes::TheWorkIsOverAndWhatStandsThereIsNotSmoozys => {}
         WhatTheNextRunDoes::NothingIsOwedHere => {
             if judge_the_recovery(pending, false, the_final_object_now)
@@ -721,8 +739,14 @@ mod tests {
         );
         assert_eq!(
             what_the_next_run_does_with(1024, &Recheck::Absent, &present(77)),
-            WhatTheNextRunDoes::LeaveWhatStandsThere,
-            "bytes the record does not describe may be the user's"
+            WhatTheNextRunDoes::WhatStandsThereIsNotSmoozys,
+            "bytes the record does not describe may be the user's: left as they stand, and \
+             nothing is owed there (`Server protocol and transfers` S15's paragraph of 2026-11-12)"
+        );
+        assert_eq!(
+            what_the_next_run_does_with(1024, &present(1024), &present(77)),
+            WhatTheNextRunDoes::WhatStandsThereIsNotSmoozys,
+            "the same with the staged file whole: it is not completed over the user's file"
         );
         assert_eq!(
             what_the_next_run_does_with(0, &Recheck::Absent, &present(0)),

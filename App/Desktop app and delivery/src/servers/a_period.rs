@@ -279,6 +279,7 @@ struct AStandingPeriod {
     /// — `Servers` §14's *Edit* row: *where the save fails the put-back is not
     /// attempted*.
     the_edits_save: Option<std::sync::mpsc::Receiver<bool>>,
+    reconnect_after: bool,
     /// **`Server protocol and transfers` T5's point for this server**, made
     /// with the period and gone with it. It lends only while a connection under
     /// the period is live.
@@ -442,6 +443,12 @@ impl ThePeriodsThisRun {
         self.publishes.the_supervisors_condition_stands(server)
     }
 
+    /// **The identity of that condition's record, where it stands** — what the
+    /// repair's row line takes the place of (`Desktop app and delivery` V3c).
+    pub fn the_condition_smoozy_does_not_answer_under(&self, server: &str) -> Option<String> {
+        self.publishes.the_supervisors_condition_identity(server)
+    }
+
     /// **`Servers` N10a's moment, where the run holds one for this server.**
     pub fn the_next_attempt_due_for(&self, server: &str) -> NextAttemptDue {
         self.publishes
@@ -510,6 +517,7 @@ impl ThePeriodsThisRun {
             AStandingPeriod {
                 end_it: period.end_it(),
                 the_edits_save: None,
+                reconnect_after: false,
                 sessions: ThisServersSessions::for_one_server(),
                 // **`Servers` S4's mark on this very period**, taken as a
                 // handle rather than copied as a value.
@@ -537,7 +545,7 @@ impl ThePeriodsThisRun {
     pub(crate) fn a_period_has_ended(
         &self,
         server: &str,
-    ) -> Option<std::sync::mpsc::Receiver<bool>> {
+    ) -> (Option<std::sync::mpsc::Receiver<bool>>, bool) {
         // **`Queue & History` C6: the last-known queue reading is period-held,
         // and the period ending drops it entirely.**
         self.the_machines_work.the_period_ended(server);
@@ -545,12 +553,18 @@ impl ThePeriodsThisRun {
         // reading and end with the period.** Step 10c's twelfth-pass fix
         // piece 6b, which first gave the application a reader for them.
         crate::surface::files::the_tags_period_ended(server);
+        // **`Server Setup` E5, *the connected period's end takes the
+        // password, however it ends* (2026-11-12, Fable's fresh look at the
+        // admin password, finding 4).** A password kept *While connected* is
+        // period-held. Until then only a break without Smoozy's own restart
+        // mark let it go, so a restart wait that was given up, a disconnect
+        // during it, or an edit to another address left it in memory.
+        crate::setting_up::the_connections_password_goes(server);
         let Ok(mut standing) = self.standing.lock() else {
-            return None;
+            return (None, false);
         };
-        standing
-            .remove(server)
-            .and_then(|period| period.the_edits_save)
+        standing.remove(server).map(|period| (period.the_edits_save, period.reconnect_after))
+            .unwrap_or((None, false))
     }
 
     /// **`Servers` S10 item 1: the user disconnects.** Available for as long as
@@ -558,7 +572,45 @@ impl ThePeriodsThisRun {
     /// including while it reads as disconnected between runs — and **taking it
     /// stops the repair**.
     pub fn the_user_disconnects(&self, server: &str) -> bool {
-        self.it_ends_at(server, PeriodEnding::TheUserDisconnects)
+        // **`Server Setup` Y7a as changed 2026-11-09: Smoozy disconnecting
+        // from the server lets its *Server output* go** (the Creator's
+        // twenty-eighth notes, note 7, *"Just like in a terminal."*).
+        crate::setting_up::the_servers_words_go(server);
+        let Ok(mut standing) = self.standing.lock() else { return false; };
+        let Some(period) = standing.get_mut(server) else { return false; };
+        period.reconnect_after = false;
+        period.end_it.at(PeriodEnding::TheUserDisconnects);
+        true
+    }
+
+    // `Servers` O1 and `Servers` S10: explicit Disconnect, then one Connect on completion.
+    pub fn the_user_reconnects(&self, server: &str) -> bool {
+        // A stale control must never cut a connection which already recovered.
+        if crate::surface::the_queue::the_servers_connected(&self.the_machines_work).contains(server) { return false; }
+        let Ok(mut standing) = self.standing.lock() else { return false; };
+        let Some(period) = standing.get_mut(server) else { return false; };
+        if period.the_restart_mark.stands() || period.sessions.a_connection_is_live() { return false; }
+        if period.reconnect_after { return true; }
+        if period.end_it.has_ended().is_some() { return false; }
+        period.reconnect_after = true;
+        period.end_it.at(PeriodEnding::TheUserDisconnects);
+        true
+    }
+
+    /// **A Connect pressed while the user's own Disconnect is still closing
+    /// the period is kept for the period's end** — the same one Connect on
+    /// completion [`Self::the_user_reconnects`] owes. The Rough what-if
+    /// answers, share 1 (6): until then the press met the old period still
+    /// standing, began nothing and said nothing, and the user had to press
+    /// again. A period ending for any other reason keeps nothing.
+    pub fn a_connect_waits_for_the_disconnect(&self, server: &str) -> bool {
+        let Ok(mut standing) = self.standing.lock() else { return false; };
+        let Some(period) = standing.get_mut(server) else { return false; };
+        if period.end_it.has_ended() != Some(PeriodEnding::TheUserDisconnects) {
+            return false;
+        }
+        period.reconnect_after = true;
+        true
     }
 
     /// **`Servers` S10 item 3: the edit's save on a server whose period
@@ -582,26 +634,31 @@ impl ThePeriodsThisRun {
     /// removal's local forget is performed and not at the moment it is asked
     /// for.
     pub fn the_row_was_forgotten(&self, server: &str) -> bool {
+        // **`Server Setup` Y7a as changed 2026-11-09: the row's removal lets
+        // its *Server output* go.**
+        crate::setting_up::the_servers_words_go(server);
         self.it_ends_at(server, PeriodEnding::TheRowIsRemovedAtItsLocalForget)
     }
 
     /// **`Servers` S10 item 2: the application run ends, however it ends.**
     pub fn the_application_run_ends(&self) {
-        let Ok(standing) = self.standing.lock() else {
+        let Ok(mut standing) = self.standing.lock() else {
             return;
         };
-        for period in standing.values() {
+        for period in standing.values_mut() {
+            period.reconnect_after = false;
             period.end_it.at(PeriodEnding::TheApplicationRunEnds);
         }
     }
 
     fn it_ends_at(&self, server: &str, ending: PeriodEnding) -> bool {
-        let Ok(standing) = self.standing.lock() else {
+        let Ok(mut standing) = self.standing.lock() else {
             return false;
         };
-        let Some(period) = standing.get(server) else {
+        let Some(period) = standing.get_mut(server) else {
             return false;
         };
+        period.reconnect_after = false;
         period.end_it.at(ending);
         true
     }
@@ -753,7 +810,14 @@ pub fn a_period_is_opened_carrying<R: Runtime>(
 
     let (by, taken_by) = who.as_the_period_reads_it();
     let mut period = APeriod::begun(server, by, taken_by, SystemTime::now());
-    if !periods.a_period_has_begun(server, &period) {
+    // **A period still closing after the user's Disconnect keeps this press
+    // for its end** (the Rough what-if answers, share 1, 6); one that left the
+    // register in between is begun after all.
+    let mut begun = periods.a_period_has_begun(server, &period);
+    if !begun && !periods.a_connect_waits_for_the_disconnect(server) {
+        begun = periods.a_period_has_begun(server, &period);
+    }
+    if !begun {
         return HowItWent::OneAlreadyStands;
     }
 
@@ -772,7 +836,7 @@ pub fn a_period_is_opened_carrying<R: Runtime>(
         // screen drawn from the answer already reads *no period stands*, and a
         // box raised by this connect opens a period of its own when it is
         // answered rather than meeting this one still standing.
-        let the_edits_save = periods.a_period_has_ended(&server);
+        let (the_edits_save, reconnect_after) = periods.a_period_has_ended(&server);
         // **A decline of the queue's *Ignore* made during this period ends
         // with it** — `Servers` S11, and the other Subject's must-do 6 in
         // step 10b's first audit round (the runner's R5 to this one).
@@ -793,7 +857,7 @@ pub fn a_period_is_opened_carrying<R: Runtime>(
             transfers.a_servers_period_ended(&server);
         }
         drop(what_the_box_took);
-        what_the_period_left_is_said(&taking, &server, outcome, the_edits_save);
+        what_the_period_left_is_said(&taking, &server, outcome, the_edits_save, reconnect_after);
     });
     HowItWent::APeriodStands
 }
@@ -899,6 +963,9 @@ fn the_period_is_driven<R: Runtime>(
             .telling(TheSupervisorsConditionIsRaised {
                 periods,
                 server: row.local_server_identifier.clone(),
+                // **`Desktop app and delivery` V3a: the automatic repair**, on
+                // the connections this period makes (2026-11-14).
+                the_repairs_release: Some(the_repairs_release(app)),
             }),
         // **`Servers` §12's act one, written where it is owed** — added
         // 2026-09-22, step 10c's fourth pass on Vast, fault 7: that module's
@@ -1058,14 +1125,32 @@ impl<R: Runtime> WhatServersPublishes for TheConnectedLineIsWritten<R> {
 /// read it, so a channel whose path was too long reached the user as *could
 /// not connect*. Only Smoozy's own sentence is taken; what the system reported
 /// is a diagnostic and stays off the screen.
+///
+/// **`Keys` S19a, the leftovers of the Rough what-if answers (386, 384): two
+/// more endings Smoozy knows the cause of.** A passphrase typed into the box
+/// that did not open the key, and a saved passphrase the system's store would
+/// not give back (the Mac's keychain *Deny* among them), each read only *Could
+/// not connect to this server.* Each is now said in words that stay true
+/// whatever the cause behind it — a wrong passphrase and a damaged key give the
+/// same answer, so neither is called wrong (`Design/Keys`).
 pub fn the_reason_no_passphrase_was_handed_over(
     why: Option<&WhyNothingWasSupplied>,
 ) -> Option<&'static str> {
     match why? {
         WhyNothingWasSupplied::TheLoadCouldNotBeRun { why } => why.said,
+        WhyNothingWasSupplied::WhatWasTypedDidNotOpenTheKey => Some(THE_PASSPHRASE_DID_NOT_UNLOCK_THE_KEY),
+        WhyNothingWasSupplied::TheStoreWouldNotAnswer { .. } => Some(THE_SAVED_PASSPHRASE_COULD_NOT_BE_READ),
         _ => None,
     }
 }
+
+/// **`Keys` S19a: a typed passphrase that did not open the key** (386).
+pub const THE_PASSPHRASE_DID_NOT_UNLOCK_THE_KEY: &str = "Could not connect: the passphrase did not unlock the key.";
+
+/// **`Keys` S19a: a saved passphrase the store would not give back** (384) —
+/// the keychain refused, was locked, or did not answer. Nothing is forgotten
+/// and nobody is asked (`Keys` S7).
+pub const THE_SAVED_PASSPHRASE_COULD_NOT_BE_READ: &str = "Could not connect: the saved passphrase could not be read.";
 
 /// **`Keys`' side of one connect, composed the one way every connect composes
 /// it** — including the passphrase box's *Connect*, whose typed value is
@@ -1092,6 +1177,7 @@ fn what_the_period_left_is_said<R: Runtime>(
     server: &str,
     outcome: Option<TheDrivingsOutcome>,
     the_edits_save: Option<std::sync::mpsc::Receiver<bool>>,
+    reconnect_after: bool,
 ) {
     let Some(outcome) = outcome else {
         // **The driving could not begin, and saying so is the whole answer**
@@ -1115,6 +1201,19 @@ fn what_the_period_left_is_said<R: Runtime>(
         outcome.the_box_was_raised,
         outcome.the_passphrase_could_not_be_used,
     );
+
+    if reconnect_after && outcome.ended == HowTheDrivingEnded::ThePeriodEnded(PeriodEnding::TheUserDisconnects) {
+        // An Edit which arrived before completion must finish saving first.
+        if let Some(saved) = the_edits_save { let _ = saved.recv(); }
+        if let Some(answer) = crate::surface::servers::the_act_is_performed(app, "connect", server) {
+            use tauri::Manager;
+            if let Some(queue) = app.try_state::<Arc<crate::events::TheOneQueue>>() {
+                let event = crate::surface::servers::the_answer_event(answer);
+                let _ = queue.read_then_post::<(), std::convert::Infallible>(|| Ok(()), |_| event.clone());
+            }
+        }
+        return;
+    }
 
     // **`Servers` E2: the put-back, opened from here.** This is the one place
     // that knows the old period has gone — it has just left the register — and
@@ -1176,20 +1275,12 @@ impl TheDesktopsSide for WhatTheDesktopKeeps<'_> {
                 a_fresh_reading_was_kept = server_rows::write(connection, &row).is_ok();
             });
         }
-        // **`State, identity and recovery` V1 step 1, at that document's §7:
-        // where the branch is absent or different, one thing is written before
-        // stopping** — every local job record of this server whose render
-        // start was never learned is marked *start never heard* and enters
-        // history (`Queue & History` C9's second way in). **The Creator's ruling
-        // C1 of 2026-09-18**, built by step 10b at the store and first called
-        // here, by step 10c piece 7. **Neither the confirmed branch nor the
-        // fourth — present, and the supervisor did not answer — writes
-        // anything**: that one stops at step 1 with nothing discarded.
-        if matches!(
-            check,
-            smoozy_state::identities::InstallationCheck::Absent
-                | smoozy_state::identities::InstallationCheck::PresentAndDifferent
-        ) {
+        // `State, identity and recovery` V1: an absent installation marks
+        // starts never heard. A different installation disqualifies foreign
+        // state but preserves our own records, so correcting the endpoint
+        // can restore tracking. Neither an unanswered supervisor nor a
+        // confirmed install changes those records.
+        if check == smoozy_state::identities::InstallationCheck::Absent {
             the_server_is_gone_from_its_machine(self.record, server);
         }
         self.periods.a_connection_read(
@@ -1207,7 +1298,7 @@ impl TheDesktopsSide for WhatTheDesktopKeeps<'_> {
 }
 
 /// **`Queue & History` C9's second way in, performed for `State, identity and
-/// recovery` V1 step 1's absent or different branch** — the Creator's ruling
+/// recovery` V1 step 1's absent branch** — the Creator's ruling
 /// C1 of 2026-09-18. The statement is the store's own
 /// (`crate::record::job_records::JobRecords::the_server_is_gone`), which the
 /// server row's removal runs too, so the two cannot mark different records.
@@ -1237,6 +1328,40 @@ pub(crate) fn the_server_is_gone_from_its_machine(
 struct TheSupervisorsConditionIsRaised<'a> {
     periods: &'a ThePeriodsThisRun,
     server: String,
+    /// **What `Desktop app and delivery` V3b's repair reads this copy's own
+    /// release with**, and nothing where this reader repairs nothing.
+    the_repairs_release: Option<Arc<crate::servers::the_repair::TheRepairsRelease>>,
+}
+
+/// **This copy's own release, read for `Desktop app and delivery` V3b's
+/// repair** — the two reads V11's update makes, through the run's one record.
+/// Added 2026-11-14, the automatic repair.
+fn the_repairs_release<R: Runtime>(app: &AppHandle<R>) -> Arc<crate::servers::the_repair::TheRepairsRelease> {
+    const THE_RECORD_IS_NOT_OPEN: &str = "Could not open Smoozy's saved data.";
+    let (for_the_sequence, for_the_program) = (app.clone(), app.clone());
+    Arc::new(crate::servers::the_repair::TheRepairsRelease {
+        own: Box::new(move || {
+            let started = for_the_sequence
+                .try_state::<Mutex<Started>>()
+                .ok_or_else(|| THE_RECORD_IS_NOT_OPEN.to_string())?;
+            let record = crate::keys::TheRunsRecord {
+                started: started.inner(),
+            };
+            crate::setting_up::this_copys_own_release_sequence_here(&record)
+        }),
+        and_its_program: Box::new(move || {
+            let started = for_the_program
+                .try_state::<Mutex<Started>>()
+                .ok_or_else(|| crate::setting_up::ADownloadThatFailed::from(THE_RECORD_IS_NOT_OPEN.to_string()))?;
+            let record = crate::keys::TheRunsRecord {
+                started: started.inner(),
+            };
+            crate::servers::the_machines_work::the_own_release_and_its_program(
+                &record,
+                &smoozy_server_protocol::release::composing::the_tuple_this_build_is_made_for(),
+            )
+        }),
+    })
 }
 
 impl crate::servers::installation::WhatTheSupervisorDid for TheSupervisorsConditionIsRaised<'_> {
@@ -1244,6 +1369,34 @@ impl crate::servers::installation::WhatTheSupervisorDid for TheSupervisorsCondit
         self.periods
             .the_publisher()
             .the_supervisor_is_unavailable(&self.server);
+    }
+
+    /// **`Desktop app and delivery` V3a to V3c, through the point step 5's
+    /// reader lent** — and nothing where this reader repairs nothing.
+    fn our_own_program_stays_silent(
+        &mut self,
+        sessions: &crate::servers::sessions::ThisServersSessions<ssh::Connection>,
+        silent: &crate::servers::the_repair::OurOwnProgramIsSilent,
+    ) -> impl std::future::Future<Output = bool> + Send {
+        async move {
+            let Some(release) = self.the_repairs_release.clone() else {
+                return false;
+            };
+            let (periods, server) = (self.periods, self.server.clone());
+            let mut ends = crate::servers::the_repair::TheRepairOverThisPoint {
+                sessions,
+                release,
+                the_line_moved: || periods.the_publisher().the_server_is_told_again(&server),
+                // **V3c as changed 2026-11-15: a repair that lands withdraws
+                // V1's condition at once** — the placement's health exchange
+                // is the supervisor answering (the re-check before 0.4.0, new
+                // fault 1).
+                the_program_answered: || periods.the_publisher().the_supervisor_answered(&server),
+            };
+            crate::servers::the_repair::the_repair(&self.server, silent, &mut ends)
+                .await
+                .a_read_should_follow_at_once()
+        }
     }
 
     fn it_answered(&mut self) {
@@ -1508,6 +1661,10 @@ fn the_machines_work_begins<R: Runtime>(
             // The point is serving requests now; Connected was published
             // earlier. Refresh the existing settings panel on every return.
             crate::surface::render_settings::the_connection_is_lent(&app, &server);
+            // **The Set up card's *Connect and set up* presses its ready
+            // action now** (`Architecture/Servers`' build detail of
+            // 2026-11-12; the four questions, scout 4.6).
+            crate::surface::set_up::the_cards_wait_is_driven(&app, &server);
             crate::servers::the_machines_work::the_machines_work_is_read(
                 app.clone(),
                 server.clone(),
@@ -1575,10 +1732,9 @@ pub fn a_placement_committed<R: Runtime>(app: &AppHandle<R>, server: &str) {
     };
     let periods = periods.inner().clone();
     let read = periods.what_the_last_connection_read(server);
-    let owed = read.is_some_and(|read| {
-        read.check == smoozy_state::identities::InstallationCheck::Absent
-            && read.on_the_connection_that_is_live
-    });
+    // **Absent or different** (`Servers` Q19a, the different branch added
+    // 2026-11-13): the two branches that read *Not set up*.
+    let owed = crate::surface::servers::the_live_check_reads_not_set_up(read);
     if !owed {
         return;
     }
@@ -1611,6 +1767,9 @@ fn the_retake_is_taken<R: Runtime>(
         .telling(TheSupervisorsConditionIsRaised {
             periods,
             server: server.to_string(),
+            // **`Servers` Q19a's re-take follows a placement just made**, and
+            // its own loop tells nobody (`Servers` Q19b is the connection's).
+            the_repairs_release: None,
         });
     let mut channel = sessions.clone();
     let mut the_machine =
@@ -1696,6 +1855,19 @@ fn the_remembered_setup_is_taken<R: Runtime>(
 fn the_machines_work_stops<R: Runtime>(app: AppHandle<R>, server: String) -> Arc<dyn Fn() + Send + Sync> {
     Arc::new(move || {
         crate::surface::render_settings::the_connection_ended(&server);
+        // **A password held *While connected* goes with the connection**
+        // (2026-11-11, the four questions, scout 1.1) — **except across a
+        // restart Smoozy's own setup caused**, which `Server Setup` E5 keeps it
+        // through deliberately: the mark standing at the break is what says
+        // this break is that restart. Any other ending takes it
+        // (`Security and licence` §5.2).
+        let a_restart_of_smoozys = app
+            .try_state::<Arc<ThePeriodsThisRun>>()
+            .and_then(|periods| periods.the_restart_mark_of(&server))
+            .is_some_and(|mark| mark.stands());
+        if !a_restart_of_smoozys {
+            crate::setting_up::the_connections_password_goes(&server);
+        }
         if let Some(periods) = app.try_state::<Arc<ThePeriodsThisRun>>() {
             periods.the_machines_work().the_connection_ended(&server);
         }
@@ -1791,6 +1963,13 @@ pub enum WhatTheDrivingLeft {
     /// **`Servers` S10 item 5: the connection the opening act was to make never
     /// became live.** Smoozy says so and claims nothing about why.
     TheConnectionWasNotMade,
+    /// **The same ending, where the attempt itself says why it stopped** —
+    /// `Design/Server Setup § This server` and `Preparation/Specs/Servers.md`
+    /// *When adding connects*, changed 2026-11-11 (the four questions, scout
+    /// 3.1). **This is not the lost-connection rule**: that one is about a
+    /// connection made and then gone, whose causes look alike; here the step
+    /// that stopped the opening attempt is its own answer.
+    TheConnectionWasNotMadeBecause(WhyTheConnectionWasNotMade),
     /// **`Servers` Q13 outcome 2: the machine named something other than
     /// Linux**, so Smoozy says plainly that it is not a Linux machine and
     /// leaves the server disconnected.
@@ -1816,6 +1995,25 @@ pub enum WhatTheDrivingLeft {
     NothingToSay,
 }
 
+/// **Why an opening attempt stopped, where the attempt knows** — each one the
+/// transport's or the key's own answer, and none a claim about the machine.
+/// Added 2026-11-11, the four questions, scout 3.1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhyTheConnectionWasNotMade {
+    /// The machine refused the key for this username (`Server protocol and transfers` A4).
+    TheKeyWasRefused,
+    /// The host's name found no address.
+    TheHostWasNotFound,
+    /// The address refused the connection on that port.
+    ThePortRefused,
+    /// No connection could be made to the address at all.
+    NothingAnswered,
+    /// `Servers` N2's connect deadline arrived.
+    ItTimedOut,
+    /// The key file could not be read or unlocked.
+    TheKeyCouldNotBeLoaded,
+}
+
 /// What to say, taken from what the driving answered.
 pub fn what_the_driving_left(ended: HowTheDrivingEnded) -> WhatTheDrivingLeft {
     match ended {
@@ -1835,12 +2033,21 @@ pub fn what_the_driving_left(ended: HowTheDrivingEnded) -> WhatTheDrivingLeft {
         HowTheDrivingEnded::TheOpeningAttemptStopped(WhereItStopped::TheIdentityDiffers) => {
             WhatTheDrivingLeft::TheWarningIsTheAnswer
         }
-        // **Every other reason, including `Servers` Q13 outcome 3.** Smoozy says
-        // the connection was not made and claims nothing about why, which is
-        // `Preparation/Specs/Whole app.md`'s requirement.
-        HowTheDrivingEnded::TheOpeningAttemptStopped(_) => {
-            WhatTheDrivingLeft::TheConnectionWasNotMade
-        }
+        // **A reason the attempt knows is said** — `Design/Server Setup § This
+        // server`, changed 2026-11-11 (the four questions, scout 3.1). Until
+        // then every reason here took the claimless sentence, reading
+        // `Preparation/Specs/Whole app.md`'s lost-connection rule as covering
+        // an opening attempt too.
+        //
+        // **Every other reason, including `Servers` Q13 outcome 3**, says the
+        // connection was not made and claims nothing about why: the key
+        // check's mark and the passphrase box already say what is wrong, an
+        // exchange that did not complete names no cause, and outcome 3 is the
+        // clause's own claimless case.
+        HowTheDrivingEnded::TheOpeningAttemptStopped(stopped) => match the_reason_it_names(stopped) {
+            Some(why) => WhatTheDrivingLeft::TheConnectionWasNotMadeBecause(why),
+            None => WhatTheDrivingLeft::TheConnectionWasNotMade,
+        },
         HowTheDrivingEnded::ThePeriodEnded(PeriodEnding::TheOpeningConnectionNeverBecameLive) => {
             WhatTheDrivingLeft::TheConnectionWasNotMade
         }
@@ -1849,6 +2056,24 @@ pub fn what_the_driving_left(ended: HowTheDrivingEnded) -> WhatTheDrivingLeft {
         // so — `Servers` K9 makes the two readings independent and the mark is
         // computed at every list draw.
         HowTheDrivingEnded::ThePeriodEnded(_) => WhatTheDrivingLeft::NothingToSay,
+    }
+}
+
+/// **The reason an opening attempt's step names, where it names one.** The
+/// list is written out so a new reason in `Servers`' enum is decided here.
+fn the_reason_it_names(stopped: WhereItStopped) -> Option<WhyTheConnectionWasNotMade> {
+    match stopped {
+        WhereItStopped::TheMachineRefusedTheCredential => Some(WhyTheConnectionWasNotMade::TheKeyWasRefused),
+        WhereItStopped::TheHostWasNotFound => Some(WhyTheConnectionWasNotMade::TheHostWasNotFound),
+        WhereItStopped::TheConnectionWasRefused => Some(WhyTheConnectionWasNotMade::ThePortRefused),
+        WhereItStopped::TheAddressDidNotAnswer => Some(WhyTheConnectionWasNotMade::NothingAnswered),
+        WhereItStopped::TheConnectDeadlineExpired => Some(WhyTheConnectionWasNotMade::ItTimedOut),
+        WhereItStopped::TheKeyCouldNotBeLoaded => Some(WhyTheConnectionWasNotMade::TheKeyCouldNotBeLoaded),
+        WhereItStopped::TheKeyCheck(_)
+        | WhereItStopped::NoCredentialWasSupplied
+        | WhereItStopped::TheExchangeDidNotComplete
+        | WhereItStopped::TheIdentityDiffers
+        | WhereItStopped::TheNotLinuxCheck(_) => None,
     }
 }
 
@@ -1947,7 +2172,9 @@ pub struct TheArrangementsThisConnectionDrives {
     per_job: HashMap<String, WhatOneArrangementRunsOn>,
     /// `Download` J6: job -> (attempt, newest saved frame), from this
     /// connection's queue reading, refreshed before each existing walk pass.
-    saved_prefixes: HashMap<String, (u32, i64)>,
+    /// The attempt, its newest frame saved, and the frame the same report
+    /// has in hand (`Download` J6's paragraph of 2026-11-12).
+    saved_prefixes: HashMap<String, (u32, i64, Option<i64>)>,
     #[cfg(test)]
     recovery_stages: tests::RecoveryStages,
     /// **`Download` N6's whole for each job whose inventory a pass on this
@@ -2337,10 +2564,11 @@ pub async fn one_pass_over_this_servers_arrangements<C: AHeldConnection>(
             the_attempts_window_is_open: says.the_render_start_was_learned
                 && !one.running.the_ending_walk_has_completed(),
         };
+        let reported = holds.saved_prefixes.get(&key)
+            .filter(|(attempt, ..)| *attempt == says.attempts && one.the_order_was_read_for == Some(*attempt));
         one.running.the_saved_prefix_was_reported(
-            holds.saved_prefixes.get(&key)
-                .filter(|(attempt, _)| *attempt == says.attempts && one.the_order_was_read_for == Some(*attempt))
-                .map(|(_, frame)| *frame),
+            reported.map(|(_, frame, _)| *frame),
+            reported.and_then(|(_, _, in_hand)| *in_hand),
         );
         let in_hand = WhatIsInHand {
             the_job_output_folder: &the_job_output_folder,
@@ -3138,19 +3366,20 @@ mod tests {
         );
     }
 
-    /// **Seven of the other eight reasons still answer with the one claimless
-    /// sentence**, which `Preparation/Specs/Whole app.md` requires: Smoozy
-    /// cannot tell a network problem from a machine switched off from a
-    /// machine that no longer exists. **The eighth, `Servers` Q6's third path,
-    /// is answered by the changed-identity warning** and by no sentence beside
-    /// it — [`a_changed_identity_is_answered_by_its_warning_alone`].
+    /// **The reasons an attempt stopped for that Smoozy cannot name still
+    /// answer with the one claimless sentence**: the key check and the supply
+    /// that gave nothing (whose own marks and boxes say what is wrong), an
+    /// exchange that did not complete, and `Servers` Q13 outcome 3. **The
+    /// eighth, `Servers` Q6's third path, is answered by the changed-identity
+    /// warning** and by no sentence beside it —
+    /// [`a_changed_identity_is_answered_by_its_warning_alone`].
     ///
     /// **The list is written out rather than walked, and that is deliberate.**
-    /// A ninth reason arriving in `Servers`' own enum must be met here by
+    /// A new reason arriving in `Servers`' own enum must be met here by
     /// somebody deciding what Smoozy says about it, not swept into the
     /// claimless sentence by a loop that never fails.
     #[test]
-    fn every_other_reason_an_attempt_stopped_says_only_that_the_connection_was_not_made() {
+    fn every_reason_smoozy_cannot_name_says_only_that_the_connection_was_not_made() {
         let answers = TheTwoAnswers {
             the_key_is_usable: false,
             a_passphrase_is_available_without_asking: false,
@@ -3158,18 +3387,38 @@ mod tests {
         for stopped in [
             WhereItStopped::TheKeyCheck(answers),
             WhereItStopped::NoCredentialWasSupplied,
-            WhereItStopped::TheAddressDidNotAnswer,
             WhereItStopped::TheExchangeDidNotComplete,
-            WhereItStopped::TheKeyCouldNotBeLoaded,
-            WhereItStopped::TheMachineRefusedTheCredential,
-            WhereItStopped::TheConnectDeadlineExpired,
             WhereItStopped::TheNotLinuxCheck(NotLinuxOutcome::NothingSmoozyCouldRead),
         ] {
             assert_eq!(
                 what_the_driving_left(HowTheDrivingEnded::TheOpeningAttemptStopped(stopped)),
                 WhatTheDrivingLeft::TheConnectionWasNotMade,
-                "{stopped:?} is not `Servers` Q13 outcome 2, so Smoozy says the \
-                 connection was not made and claims nothing about why"
+                "{stopped:?} is not a reason the attempt can name, so Smoozy says \
+                 the connection was not made and claims nothing about why"
+            );
+        }
+    }
+
+    /// **A failed first connection says why where the attempt knows** —
+    /// `Design/Server Setup § This server` and `Preparation/Specs/Servers.md`
+    /// *When adding connects*, as changed 2026-11-11 (the four questions, scout
+    /// 3.1). The Whole app rule that Smoozy cannot tell the causes apart is
+    /// about a connection that was made and then lost; an opening attempt
+    /// stops at a step that is its own answer.
+    #[test]
+    fn a_reason_the_attempt_knows_is_carried_to_what_is_said() {
+        for (stopped, why) in [
+            (WhereItStopped::TheMachineRefusedTheCredential, WhyTheConnectionWasNotMade::TheKeyWasRefused),
+            (WhereItStopped::TheHostWasNotFound, WhyTheConnectionWasNotMade::TheHostWasNotFound),
+            (WhereItStopped::TheConnectionWasRefused, WhyTheConnectionWasNotMade::ThePortRefused),
+            (WhereItStopped::TheAddressDidNotAnswer, WhyTheConnectionWasNotMade::NothingAnswered),
+            (WhereItStopped::TheConnectDeadlineExpired, WhyTheConnectionWasNotMade::ItTimedOut),
+            (WhereItStopped::TheKeyCouldNotBeLoaded, WhyTheConnectionWasNotMade::TheKeyCouldNotBeLoaded),
+        ] {
+            assert_eq!(
+                what_the_driving_left(HowTheDrivingEnded::TheOpeningAttemptStopped(stopped)),
+                WhatTheDrivingLeft::TheConnectionWasNotMadeBecause(why),
+                "{stopped:?}"
             );
         }
     }
@@ -3217,6 +3466,31 @@ mod tests {
     }
 
     // ------------------------------------------------- the register itself
+
+    /// **The Creator's twenty-eighth notes, note 7: *Server output* goes when
+    /// Smoozy disconnects from the server, and not before** — `Server Setup`
+    /// Y7a as changed 2026-11-09. The user's *Disconnect* and the row's
+    /// removal let the words go; an edit's save keeps them. Before this piece
+    /// nothing a period did touched them, so the first half fails.
+    #[test]
+    fn twenty_eighth_7_disconnecting_lets_the_servers_words_go_and_an_edits_save_keeps_them() {
+        let register = a_register();
+        for (server, the_user_disconnects) in [("twenty-eighth-7-disconnect", true), ("twenty-eighth-7-removed", false)] {
+            crate::setting_up::a_runs_words_begin(server);
+            assert!(crate::setting_up::the_words_are_kept_for(server));
+            if the_user_disconnects {
+                register.the_user_disconnects(server);
+            } else {
+                register.the_row_was_forgotten(server);
+            }
+            assert!(!crate::setting_up::the_words_are_kept_for(server), "{server}: the words outlived Smoozy disconnecting");
+        }
+        let server = "twenty-eighth-7-edit";
+        crate::setting_up::a_runs_words_begin(server);
+        let _ = register.the_edits_save_ends_it(server);
+        assert!(crate::setting_up::the_words_are_kept_for(server), "an edit's save let the words go");
+        crate::setting_up::the_servers_words_go(server);
+    }
 
     /// A register with nothing behind it — no record, no shell — which is
     /// enough to drive `Servers` S10's endings.
@@ -3331,9 +3605,112 @@ mod tests {
         );
     }
 
+    /// **`Server Setup` E5, *the connected period's end takes the password,
+    /// however it ends* (2026-11-12, Fable's fresh look at the admin
+    /// password, finding 4).** A password kept *While connected* is held
+    /// through Smoozy's own restart. **Before the fix** a period that then
+    /// ended — the server never came back, or the user disconnected during
+    /// the wait — left it in memory, and the next connection used it unasked.
+    #[test]
+    fn fresh_look_4_a_period_that_ends_takes_the_password_kept_while_connected() {
+        use smoozy_security_and_licence::plaintext::Origin;
+        use smoozy_security_and_licence::standing::MachinePasswordChoice as Choice;
+        struct ARecordInHand(rusqlite::Connection);
+        impl crate::keys::LendsTheRecord for ARecordInHand {
+            fn lend(&self, act: &mut dyn FnMut(&rusqlite::Connection)) {
+                act(&self.0)
+            }
+            fn write_a_diary_line(&self, _act: &smoozy_keys::diary::Act) {}
+        }
+        let record = ARecordInHand(rusqlite::Connection::open_in_memory().unwrap());
+        let server = "fresh-look-4-the-period-ends";
+        let register = a_register();
+        let period = a_period(server);
+        register.a_period_has_begun(server, &period);
+        crate::setting_up::the_password_is_kept_as_chosen(
+            &record,
+            None,
+            server,
+            &Origin::what_the_user_typed(b"while-connected".to_vec()),
+            Choice::WhileThisConnectionLasts,
+        );
+        // **Smoozy's own restart is under way**, so the break did not take it.
+        period.the_restart_mark().set();
+        assert!(crate::setting_up::the_password_held_for(&record, None, server).is_some());
+        // **The wait is given up and the period ends.**
+        register.a_period_has_ended(server);
+        assert!(
+            crate::setting_up::the_password_held_for(&record, None, server).is_none(),
+            "a password kept While connected outlived its connected period"
+        );
+    }
+
     /// **`Servers` S11: every period-held thing ends the moment the period
     /// ends**, and the register's own entry goes with it — so the screen reads
     /// *no period stands* rather than one that is no longer being driven.
+    /// **A Connect pressed while a Disconnect is still closing is kept for its
+    /// end** — the Rough what-if answers, share 1 (6). Any other ending, or no
+    /// ending at all, keeps nothing.
+    #[test]
+    fn rough_share_1_a_connect_during_a_closing_disconnect_is_kept_for_its_end() {
+        let register = a_register();
+        let period = a_period("rough-1-a");
+        register.a_period_has_begun("rough-1-a", &period);
+        assert!(!register.a_connect_waits_for_the_disconnect("rough-1-a"), "a standing period is not ending");
+        assert!(register.the_user_disconnects("rough-1-a"));
+        assert!(register.a_connect_waits_for_the_disconnect("rough-1-a"));
+        assert!(register.a_period_has_ended("rough-1-a").1, "one Connect follows the period's end");
+        let period = a_period("rough-1-b");
+        register.a_period_has_begun("rough-1-b", &period);
+        register.the_row_was_forgotten("rough-1-b");
+        assert!(!register.a_connect_waits_for_the_disconnect("rough-1-b"));
+        assert!(!register.a_period_has_ended("rough-1-b").1);
+        assert!(!register.a_connect_waits_for_the_disconnect("rough-1-c"), "no period, nothing kept");
+    }
+
+    #[test]
+    fn third_part_2_7_reconnect_ends_the_old_period_before_one_new_connect_is_owed() {
+        let register = a_register();
+        let period = a_period("server-1");
+        register.a_period_has_begun("server-1", &period);
+        assert!(register.the_user_reconnects("server-1"));
+        assert!(register.the_user_reconnects("server-1"));
+        assert_eq!(period.end_it().has_ended(), Some(PeriodEnding::TheUserDisconnects));
+        assert!(register.a_period_has_ended("server-1").1);
+        assert!(!register.a_period_has_ended("server-1").1);
+
+        let period = a_period("server-2");
+        register.a_period_has_begun("server-2", &period);
+        register.the_user_reconnects("server-2");
+        register.the_user_disconnects("server-2");
+        assert!(!register.a_period_has_ended("server-2").1);
+
+        let period = a_period("server-3");
+        register.a_period_has_begun("server-3", &period);
+        period.the_restart_mark().set();
+        assert!(!register.the_user_reconnects("server-3"));
+        assert_eq!(period.end_it().has_ended(), None);
+
+        for (server, close_app) in [("server-4", false), ("server-5", true)] {
+            let period = a_period(server);
+            register.a_period_has_begun(server, &period);
+            assert!(register.the_user_reconnects(server));
+            if close_app { register.the_application_run_ends(); }
+            else { register.the_row_was_forgotten(server); }
+            assert!(!register.a_period_has_ended(server).1);
+        }
+
+        let period = a_period("server-6");
+        register.a_period_has_begun("server-6", &period);
+        assert!(register.the_user_reconnects("server-6"));
+        let saved = register.the_edits_save_ends_it("server-6").unwrap();
+        let (save_answer, reconnect) = register.a_period_has_ended("server-6");
+        assert!(reconnect);
+        assert_eq!(period.end_it().has_ended(), Some(PeriodEnding::TheUserDisconnects));
+        saved.the_save_landed(true);
+        assert_eq!(save_answer.unwrap().recv(), Ok(true));
+    }
+
     #[test]
     fn a_period_that_has_ended_is_no_longer_one_the_run_holds() {
         let register = a_register();
@@ -3472,7 +3849,7 @@ mod tests {
             .expect("a standing period's edit owes the put-back");
         assert_eq!(ended.has_ended(), Some(PeriodEnding::TheEditsSave));
         let told = register
-            .a_period_has_ended("server-1")
+            .a_period_has_ended("server-1").0
             .expect("the period's own thread is handed what the save says");
         assert!(!register.a_period_stands_for("server-1"));
         owed.the_save_landed(true);
@@ -3483,7 +3860,7 @@ mod tests {
         let again = a_period("server-2");
         register.a_period_has_begun("server-2", &again);
         let owed = register.the_edits_save_ends_it("server-2").expect("owed");
-        let told = register.a_period_has_ended("server-2").expect("handed over");
+        let told = register.a_period_has_ended("server-2").0.expect("handed over");
         drop(owed);
         assert!(told.recv().is_err());
     }
@@ -3907,12 +4284,12 @@ mod tests {
 
     /// **The Creator's ruling C1 of 2026-09-18, and step 10c piece 7 is its
     /// first caller.** `State, identity and recovery` V1 step 1: where the
-    /// installation identity is absent or different, every record of the
+    /// installation identity is absent, every record of the
     /// server whose render start was never learned is marked *start never
     /// heard* and enters history. **The confirmed branch and the fourth branch
     /// mark nothing** — the fourth stops at step 1 with nothing discarded.
     #[test]
-    fn an_installation_found_gone_marks_the_jobs_smoozy_never_heard_start() {
+    fn an_absent_installation_marks_jobs_but_a_different_one_preserves_them() {
         use smoozy_state::identities::{Identity, IdentityKind, InstallationCheck};
 
         struct ARecordInHand(rusqlite::Connection);
@@ -3939,7 +4316,7 @@ mod tests {
             (InstallationCheck::PresentAndEqualConfirmed, false),
             (InstallationCheck::PresentAndTheSupervisorDidNotAnswer, false),
             (InstallationCheck::Absent, true),
-            (InstallationCheck::PresentAndDifferent, true),
+            (InstallationCheck::PresentAndDifferent, false),
         ] {
             let connection = rusqlite::Connection::open_in_memory().unwrap();
             for migration in crate::record::migrations::ALL {
@@ -3979,6 +4356,9 @@ mod tests {
                 usize::from(marks),
                 "{check:?}"
             );
+            assert_eq!(crate::record::job_records::JobRecords::over(&record.0)
+                .provisional_for(&server).unwrap().len(), usize::from(!marks),
+                "only a proven absence removes the job from later reconciliation: {check:?}");
             assert!(
                 crate::record::job_records::JobRecords::over(&record.0)
                     .read(&waiting.job)
@@ -4638,6 +5018,7 @@ mod tests {
                     the_attempt_whose_capture_record_holds_the_words: 1,
                     the_reason_the_machine_recorded: None,
                     no_render_began: false,
+                    the_files_missing: Vec::new(),
                     the_device_line_as_observed: None,
                 });
             }
@@ -4881,7 +5262,7 @@ mod tests {
                     let began = std::time::Instant::now();
                     let mut holds = TheArrangementsThisConnectionDrives::fresh();
                     // A different attempt's report cannot release this attempt.
-                    holds.saved_prefixes.insert(job.job.as_text(), (2, 3));
+                    holds.saved_prefixes.insert(job.job.as_text(), (2, 3, Some(4)));
                     let first_pause = one_pass_over_this_servers_arrangements(
                         &mut holds, &sessions, &the_run, &desk.record,
                         &desk.server, &desk.layout, &desk.run,

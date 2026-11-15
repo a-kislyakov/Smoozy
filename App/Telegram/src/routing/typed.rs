@@ -25,11 +25,15 @@ pub const WHICH_JOB: &str = "Which job?";
 /// expired or was rejected.** The holder that removes the entry cannot tell a
 /// machine that is gone from one that rejected the press, so it says both, and
 /// says plainly that nothing was done.
-pub const A_BUTTON_THAT_EXPIRED: &str = "Button expired or its server did not respond. Nothing was done.";
+pub const A_BUTTON_THAT_EXPIRED: &str = "Button expired or its server did not respond. Nothing was changed.";
 
 /// **`Telegram` R3 and R15 — a message that is none of the four requests.**
 /// Changed 2026-10-31 with R15's four: it named *status* and *frame* alone.
 pub const NOT_A_REQUEST: &str = "Unknown request. Send /status, /frame, /reporting or /stop.";
+
+/// **`Telegram` R15 as changed 2026-11-13 — the answer to an edited command**
+/// (Telegram when things aren't ideal, problem 8).
+pub const AN_EDIT_IS_IGNORED: &str = "Edits are ignored. Send it again.";
 
 /// **`Telegram` V1d — `reporting N` with N outside 1 to 60.**
 pub const WHOLE_MINUTES: &str = "Whole minutes, 1 to 60.";
@@ -39,10 +43,49 @@ pub const NOTHING_TO_STOP: &str = "Nothing is rendering or waiting.";
 
 /// **`Telegram` R1a, widened 2026-10-31 — a reply to a message no machine
 /// claimed**, for `stop` and `reporting`, which fail closed.
-pub const COULD_NOT_TELL_WHICH_JOB: &str = "Could not tell which job that message is about. Nothing changed.";
+pub const COULD_NOT_TELL_WHICH_JOB: &str = "Could not tell which job that message is about. Nothing was changed.";
 
 /// **`Telegram` R13 — a frame request with no job on any server to answer it.**
 pub const NO_JOB_TO_SEND_A_FRAME_FROM: &str = "No jobs on your servers.";
+
+/// **`Telegram` R13 as added 2026-11-13 (the Creator's notes on the test
+/// copy, note 9) — no candidate, and a server did not answer or was not
+/// checked**: missing information is never *No jobs on your servers.*; the
+/// servers follow it ([`the_servers_not_reached`]).
+pub const NO_JOBS_FOUND: &str = "No jobs found.";
+
+/// **`Telegram` R10 as added 2026-11-13 (note 8) — a server the gather never
+/// asked**, because the board admitted none of its last group. Not *Did not
+/// answer.*: it was never asked.
+pub const NOT_CHECKED: &str = "Not checked.";
+
+/// **`Telegram` R10 as added 2026-11-13 (note 8) — why a server was not
+/// checked**, said once per command, never once per request.
+pub const THE_PINNED_MESSAGE_IS_FULL: &str = "The pinned message is full. Try again in a minute.";
+
+/// **`Telegram` R10 as changed 2026-11-13 (Sol's third check) — a command
+/// the listener could not answer within the stated interval**, because it
+/// could not be sure it alone was listening: Telegram's answers came too
+/// slowly, or not at all. The listener then gives up listening.
+pub const TELEGRAM_IS_TOO_SLOW: &str = "Telegram is too slow. Try again in a minute.";
+
+/// **`Telegram` R13 as added 2026-11-13 (note 9) — a server held more ended
+/// jobs than its reply carried**; R1a reaches any of them by a reply.
+pub const OLDER_JOBS_ARE_NOT_LISTED: &str = "Older jobs are not listed. Reply /frame to a job's message.";
+
+/// **The lines under an answer naming the servers it did not reach** (R10,
+/// R13, R13a; 2026-11-13): those that did not answer, then those not checked
+/// with why, once. Nothing where every server answered.
+pub fn the_servers_not_reached(silent: &[String], not_checked: &[String]) -> String {
+    let mut under = String::new();
+    if !silent.is_empty() {
+        under.push_str(&format!("\n{} did not answer.", silent.join(", ")));
+    }
+    if !not_checked.is_empty() {
+        under.push_str(&format!("\nNot checked: {}. {THE_PINNED_MESSAGE_IS_FULL}", not_checked.join(", ")));
+    }
+    under
+}
 
 /// **`Telegram` R17 — the bot's command list, in order, each description
 /// exactly as the user reads it.** `BotCommand.command` is 1–32 lowercase
@@ -78,7 +121,7 @@ pub enum ATypedRequest {
     /// R10's gather.
     HowIsItGoing,
     /// R13: a frame number and no job.
-    SendAFrame(u64),
+    SendAFrame(i64),
     /// **R13a: `frame` with no number** — the newest frame the chosen job's
     /// derivative set holds.
     SendTheNewestFrame,
@@ -113,7 +156,16 @@ pub fn what_was_typed(text: &str) -> Option<ATypedRequest> {
         ["frame"] => Some(ATypedRequest::SendTheNewestFrame),
         ["frame", n] | ["send", "frame", n] | ["send", "a", "frame", n] => n.parse().ok().map(ATypedRequest::SendAFrame),
         ["reporting"] => Some(ATypedRequest::Reporting(None)),
-        ["reporting", n] => n.parse().ok().map(|n| ATypedRequest::Reporting(Some(n))),
+        // **V1d: any other number is refused with the range** — a fraction, a
+        // negative or one too large to read is read as nought, which is
+        // outside 1 to 60, so it is told [`WHOLE_MINUTES`] and never
+        // *unknown*. *(Added 2026-11-14, the Rough what-if answers, share 5,
+        // 412: `/reporting 1.5` was told the request was unknown.)*
+        ["reporting", n] => n
+            .parse()
+            .ok()
+            .or_else(|| n.parse::<f64>().is_ok().then_some(0))
+            .map(|n| ATypedRequest::Reporting(Some(n))),
         ["stop"] => Some(ATypedRequest::Stop),
         _ => None,
     }
@@ -139,6 +191,12 @@ pub enum WhatAnUpdateAsks {
     /// Nothing to answer: a message with no text, such as a photo the user
     /// sent. Nothing is routed from it.
     Nothing { update: i64 },
+    /// **R15 as changed 2026-11-13 — `/start` after setup**, answered with the
+    /// setup's own words.
+    Start { update: i64 },
+    /// **The same — a command the user edited**, answered that edits are
+    /// ignored.
+    AnEditedRequest { update: i64 },
 }
 
 /// **Read an update.** The two kinds every ask names are the two read.
@@ -170,6 +228,17 @@ pub fn what_an_update_asks(update: &Value) -> Option<WhatAnUpdateAsks> {
             _ => WhatAnUpdateAsks::NotUnderstood { update: id },
         });
     }
+    // **R15 as changed 2026-11-13: an edit by the user that reads as a
+    // request is answered; any other edit is nothing.**
+    if let Some(edited) = update.get("edited_message") {
+        let from_a_person = edited.pointer("/from/is_bot").and_then(Value::as_bool) == Some(false);
+        let a_request = edited.get("text").and_then(Value::as_str).and_then(what_was_typed).is_some();
+        return Some(if from_a_person && a_request {
+            WhatAnUpdateAsks::AnEditedRequest { update: id }
+        } else {
+            WhatAnUpdateAsks::Nothing { update: id }
+        });
+    }
     let said = update.get("message")?;
     let conversation = said.pointer("/chat/id").and_then(Value::as_i64)?;
     // P3: bot text and pin service updates are not requests from a person.
@@ -184,7 +253,7 @@ pub fn what_an_update_asks(update: &Value) -> Option<WhatAnUpdateAsks> {
     };
     let command = text.split_whitespace().next().unwrap_or_default();
     if command.split('@').next() == Some("/start") {
-        return Some(WhatAnUpdateAsks::Nothing { update: id });
+        return Some(WhatAnUpdateAsks::Start { update: id });
     }
     Some(match what_was_typed(text) {
         Some(request) => WhatAnUpdateAsks::ARequest {
@@ -206,6 +275,17 @@ mod tests {
 
     /// **`Telegram` R15 as widened 2026-10-31: four requests, each with or
     /// without its `/` and the bot's `@` name, the old words still read.**
+    /// **Problem 7 (`Telegram` R15 as changed 2026-11-13): a frame below
+    /// zero is read with its sign.**
+    #[test]
+    fn not_ideal_7_a_frame_number_carries_its_sign() {
+        assert_eq!(what_was_typed("/frame -5"), Some(ATypedRequest::SendAFrame(-5)));
+        assert_eq!(what_was_typed("frame 0"), Some(ATypedRequest::SendAFrame(0)));
+        assert_eq!(what_was_typed("/frame 120"), Some(ATypedRequest::SendAFrame(120)));
+        assert_eq!(what_was_typed("/frame +5"), Some(ATypedRequest::SendAFrame(5)));
+        assert_eq!(what_was_typed("/frame -"), None);
+    }
+
     #[test]
     fn the_four_requests_are_read_in_every_form() {
         for status in ["status", "/status", "/status@SmoozyBot", "/Status@smoozy_bot ", "Status!"] {
@@ -220,6 +300,12 @@ mod tests {
         assert_eq!(what_was_typed("reporting"), Some(ATypedRequest::Reporting(None)));
         assert_eq!(what_was_typed("/reporting@SmoozyBot 10"), Some(ATypedRequest::Reporting(Some(10))));
         assert_eq!(what_was_typed("/reporting 90"), Some(ATypedRequest::Reporting(Some(90))), "the range is checked where it is answered");
+        // **The Rough what-if answers, share 5 (412)**: a number that is not
+        // a whole count of minutes is still a number, and is told the range.
+        for typed in ["/reporting 1.5", "/reporting -3", "/reporting 99999999999999999999999"] {
+            assert_eq!(what_was_typed(typed), Some(ATypedRequest::Reporting(Some(0))), "{typed} was not read as out of range");
+        }
+        assert_eq!(what_was_typed("/reporting soon"), None, "a word read as a number");
         for stop in ["stop", "/stop", "/stop@SmoozyBot", "Stop."] {
             assert_eq!(what_was_typed(stop), Some(ATypedRequest::Stop), "{stop}");
         }
@@ -270,9 +356,9 @@ mod tests {
         let to_a_person = json!({ "update_id": 8, "message": { "message_id": 9, "chat": { "id": 9 }, "text": "/stop",
             "reply_to_message": { "message_id": 6, "from": { "is_bot": false } } } });
         assert!(matches!(what_an_update_asks(&to_a_person), Some(WhatAnUpdateAsks::ARequest { to_a_person: true, request: ATypedRequest::Stop, .. })));
-        // `/start` is still §7's, and nothing here.
+        // `/start` after setup is answered (R15 as changed 2026-11-13).
         let start = json!({ "update_id": 10, "message": { "chat": { "id": 9 }, "text": "/start@SmoozyBot" } });
-        assert_eq!(what_an_update_asks(&start), Some(WhatAnUpdateAsks::Nothing { update: 10 }));
+        assert_eq!(what_an_update_asks(&start), Some(WhatAnUpdateAsks::Start { update: 10 }));
         let neither = json!({ "update_id": 4, "message": { "chat": { "id": 9 }, "text": "hello" } });
         assert_eq!(what_an_update_asks(&neither), Some(WhatAnUpdateAsks::NotUnderstood { update: 4 }));
         let photo = json!({ "update_id": 5, "message": { "chat": { "id": 9 }, "photo": [] } });
@@ -284,7 +370,7 @@ mod tests {
     /// **Rule 9 and `Telegram` R3: the answers say plainly what happened.**
     #[test]
     fn the_answers_say_nothing_was_done() {
-        assert!(A_BUTTON_THAT_EXPIRED.contains("Nothing was done."));
+        assert!(A_BUTTON_THAT_EXPIRED.contains("Nothing was changed."));
         assert_eq!(WHICH_JOB, "Which job?");
     }
 }

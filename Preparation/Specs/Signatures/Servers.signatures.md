@@ -50,3 +50,9 @@
 2026-10-28 — Claude Opus 5.5, step 13 final words sweep, outside any round — four sentences that name the screen's words, each with its inline note: the removal confirmation (*Saying the server is removed from Smoozy covers them*), the duplicate flag (*it may well be a different machine*, without *addresses rotate*), the dropped setup (*Connect without setup*), and the identity warning (*accepting trusts the server without verifying it*). Meaning unchanged. No auditor has seen it. Appended by the build runner.
 
 2026-11-01 — Claude Opus 5.5 (Claude Code subagent), the desk builder of step 13's second words sweep, outside any round — the provider paragraph says a line of a form that cannot carry files says so *in one line* (was *in one sentence*), since the screen's line is now two short sentences naming the direct form by its console label and no provider. Each carries its inline note. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — batch 1, connecting and setting up.md`, outside any round — *When adding connects*: a first connection that fails says why where the attempt knows (key refused, host not found, port refused, no answer, timed out); the Whole app lost-connection rule is about a connection made and then dropped. The build runner's ruling, the four questions, scout 3.1. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the night's live pass found.md`, outside any round — *A machine can be read this way*: memory that could not be established shows no figure. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Batch 1: address checks, single Add press and Telegram setup and retry corrections.
+2026-11-14 — GPT-6.1-Sol (Codex) — Planned the batch 2 repairs and their limits.

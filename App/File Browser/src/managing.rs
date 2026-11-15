@@ -226,6 +226,29 @@ pub fn what_a_delete_of_staging_costs(
 /// front of the user that no spec describes and no ruling grants."*
 pub const NO_THIRD_NON_DISMISSIBLE_WARNING_IS_MADE: bool = true;
 
+/// **M3b: a delete that reaches a system folder says so in the delete box, in
+/// red, and it cannot be switched off** — the leftovers of the Rough what-if
+/// answers (181), on the Creator's ruling of 2026-11-14, which is the ruling
+/// the paragraph above says a further warning would need. The system folders
+/// are the Linux layout's own; a folder a user keeps work in (`/home`,
+/// `/root`, `/mnt`, `/opt`, `/srv`, a second disk) is not one.
+pub const THE_SYSTEMS_OWN_FOLDERS: [&[u8]; 15] = [
+    b"/bin", b"/boot", b"/dev", b"/etc", b"/lib", b"/lib32", b"/lib64", b"/libx32", b"/proc", b"/run",
+    b"/sbin", b"/snap", b"/sys", b"/usr", b"/var",
+];
+
+/// **M3b: whether a path is one of [`THE_SYSTEMS_OWN_FOLDERS`] or sits inside
+/// one.** A trailing `/` reads as the folder itself.
+pub fn is_in_a_system_folder(path: &[u8]) -> bool {
+    let mut path = path;
+    while path.len() > 1 && path.ends_with(b"/") {
+        path = &path[..path.len() - 1];
+    }
+    THE_SYSTEMS_OWN_FOLDERS.iter().any(|folder| {
+        path == *folder || (path.len() > folder.len() && path.starts_with(folder) && path[folder.len()] == b'/')
+    })
+}
+
 /// **M4: a rename is the base rename, and the filesystem's own refusal is the
 /// judgement rather than the backstop.**
 ///
@@ -365,6 +388,13 @@ pub fn what_the_second_half_does(the_copy_published: bool) -> WhatTheSecondHalfO
         }
     }
 }
+
+/// **M6b: a move or a copy the server refused part-way reads the free space
+/// where it lands, once** — the leftovers of the Rough what-if answers (449).
+/// None left is said as a full disk after the counts; nothing is refused
+/// before the act, and a reading that does not come back names nothing. The
+/// reading is the desktop's, taken over the same reading session as the act.
+pub const A_PART_REFUSED_MOVE_OR_COPY_READS_THE_FREE_SPACE_ONCE: bool = true;
 
 /// M6's unit outcome for the delete half, written into the §9.4 record.
 pub fn the_delete_halfs_outcome(what: &WhatTheSecondHalfOfThePairDoes) -> Option<UnitOutcome> {
@@ -531,10 +561,15 @@ pub const NO_BYTE_COUNT_IS_INVENTED_FOR_A_MOVEMENT_SMOOZY_IS_NOT_PERFORMING: boo
 ///
 /// **Both are judged by X5's comparison against the destination listing at the
 /// moment of the act.**
+///
+/// **M8a: a colliding copy also offers Skip existing** — the leftovers of the
+/// Rough what-if answers (176), on the Creator's ruling of 2026-11-14: a large
+/// copy cut off part-way is pasted again and finishes, copying only what is
+/// not there yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TheAnswersOffered {
-    /// A copy: Replace, Keep both, Cancel.
-    ReplaceKeepBothOrCancel,
+    /// A copy: Replace, Keep both, Skip existing, Cancel (M8a).
+    ReplaceKeepBothSkipExistingOrCancel,
     /// A move: Replace, Cancel.
     ReplaceOrCancel,
 }
@@ -543,7 +578,7 @@ pub enum TheAnswersOffered {
 /// it was"* is kept by M12's second field and needs nothing further.
 pub fn the_answers_offered(act: CutOrCopy) -> TheAnswersOffered {
     match act {
-        CutOrCopy::Copy => TheAnswersOffered::ReplaceKeepBothOrCancel,
+        CutOrCopy::Copy => TheAnswersOffered::ReplaceKeepBothSkipExistingOrCancel,
         CutOrCopy::Cut => TheAnswersOffered::ReplaceOrCancel,
     }
 }
@@ -1092,9 +1127,12 @@ mod tests {
 
     #[test]
     fn a_colliding_copy_offers_three_answers_and_a_colliding_move_two() {
+        // **Four since M8a** (the leftovers of the Rough what-if answers,
+        // 176): Skip existing joins the copy's three. The name keeps the old
+        // number.
         assert_eq!(
             the_answers_offered(CutOrCopy::Copy),
-            TheAnswersOffered::ReplaceKeepBothOrCancel
+            TheAnswersOffered::ReplaceKeepBothSkipExistingOrCancel
         );
         assert_eq!(
             the_answers_offered(CutOrCopy::Cut),

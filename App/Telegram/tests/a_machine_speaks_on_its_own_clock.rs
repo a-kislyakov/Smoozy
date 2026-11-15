@@ -87,6 +87,7 @@ fn a_status(frame: u64, now: SystemTime) -> TheStatus {
             of: 240,
             percent: (frame * 100 / 240) as u8,
             this_frame: None,
+            finishing: false,
         },
         card_memory: AReading::Taken { value: CardMemory { used_gb: 9.4, total_gb: 16.0 }, at: now },
         disk_free_gb: AReading::Taken { value: 212.0, at: now },
@@ -160,13 +161,14 @@ fn the_watch(
 
     // **I3 — one picture sent, and two outside the limits said once.**
     let mut pictures = ThePictures::new(chat, "Desk test server");
-    let a_derivative = |frame: u64, (file_name, bytes): (String, Vec<u8>)| ADerivative {
+    let a_derivative = |frame: i64, (file_name, bytes): (String, Vec<u8>)| ADerivative {
         job: "desk-test-job-piece-6".into(),
         job_label: "Desk test job \u{2014} piece 6".into(),
         frame,
         file_name,
         bytes,
         which_picture: None,
+        not_read: Vec::new(),
     };
     match pictures.offer(&queue, a_derivative(148, ten[0].clone()), AClassOfSend::FramePicturesAndMedia) {
         WhatBecameOfAPicture::Offered(told) => match ended(told) {
@@ -180,7 +182,7 @@ fn the_watch(
         other => panic!("the picture was not offered: {other:?}"),
     }
     for (at, picture) in too_large.into_iter().enumerate() {
-        match pictures.offer(&queue, a_derivative(200 + at as u64, picture), AClassOfSend::FramePicturesAndMedia) {
+        match pictures.offer(&queue, a_derivative(200 + at as i64, picture), AClassOfSend::FramePicturesAndMedia) {
             WhatBecameOfAPicture::NotSentAndSaid(told) => {
                 saw.too_large.push("not sent, and said");
                 if let HowASendEnded::Accepted(result) = ended(told) {
@@ -195,7 +197,7 @@ fn the_watch(
     }
 
     // **M2 — the contact sheet: ten of 240 frames, evenly spread.**
-    let frames: Vec<u64> = (1..=240).collect();
+    let frames: Vec<i64> = (1..=240).collect();
     let chosen: Vec<ADerivative> =
         the_contact_sheet(&frames).into_iter().zip(ten).map(|(frame, picture)| a_derivative(frame, picture)).collect();
     let told = offer_the_contact_sheet(&queue, chat, "Desk test server", "Desk test job \u{2014} piece 6", None, 240, chosen)

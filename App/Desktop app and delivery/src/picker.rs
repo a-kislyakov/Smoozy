@@ -109,6 +109,23 @@ pub struct Asking {
     /// the point anyway, which is exactly the surface X5 names and which piece A
     /// recorded as owed because it did not exist.
     pub title: Prose,
+    /// **One value set after the title, on the verbatim route** — X5's
+    /// sentence of 2026-11-09: the prose passes the point alone, the value
+    /// never does, and the two are set side by side after it. The dependency
+    /// check's *Locate* and the row's own name (the twenty-eighth notes, note
+    /// 13). `None` for a title that is prose alone.
+    pub the_value_after_the_title: Option<crate::typography::Verbatim>,
+}
+
+impl Asking {
+    /// **The title the panel shows** — the prose, then the value, a space
+    /// between, joined after the point (X2 joins nothing).
+    pub fn the_title(&self) -> String {
+        match &self.the_value_after_the_title {
+            Some(value) => format!("{} {}", self.title.as_str(), value.as_str()),
+            None => self.title.as_str().to_string(),
+        }
+    }
 }
 
 /// **What came back.**
@@ -178,7 +195,7 @@ pub fn ask<R: Runtime>(app: &AppHandle<R>, asking: &Asking) -> Picked {
         return both_kinds(app, asking);
     }
 
-    let mut panel = app.dialog().file().set_title(asking.title.as_str());
+    let mut panel = app.dialog().file().set_title(asking.the_title());
     if let Some(place) = asking.starting_at.as_ref() {
         panel = panel.set_directory(place);
     }
@@ -218,7 +235,7 @@ fn both_kinds<R: Runtime>(app: &AppHandle<R>, asking: &Asking) -> Picked {
         app,
         asking.how_many == HowMany::Any,
         asking.starting_at.as_deref(),
-        asking.title.as_str(),
+        &asking.the_title(),
     ) {
         Ok(chose) => the_answer_from(chose),
         Err(_) => Picked::ThereIsNoPanelForThisAsk(asking.what),
@@ -609,8 +626,26 @@ mod tests {
             how_many: HowMany::One,
             starting_at: None,
             title: Prose::new("Choose a Blender file"),
+            the_value_after_the_title: None,
         };
         let _: &Prose = &asking.title;
         assert_eq!(asking.title.as_str(), "Choose a Blender\u{00A0}file");
+    }
+
+    /// **X5's sentence of 2026-11-09: a title may be prose and then one value
+    /// on the verbatim route**, set beside it after the point — the dependency
+    /// check's *Locate* and the row's own name (the twenty-eighth notes, note
+    /// 13). The value never passes the point: its spaces stay as they are.
+    #[test]
+    fn twenty_eighth_13_a_title_is_prose_then_one_value_set_beside_it() {
+        let asking = |title: &str, value: Option<&str>| Asking {
+            what: WhatMayBeChosen::Files,
+            how_many: HowMany::One,
+            starting_at: None,
+            title: Prose::new(title),
+            the_value_after_the_title: value.map(crate::typography::Verbatim::new),
+        };
+        assert_eq!(asking("Locate", Some("old plate 01.exr")).the_title(), "Locate old plate 01.exr");
+        assert_eq!(asking("Choose a Blender file", None).the_title(), "Choose a Blender\u{00A0}file");
     }
 }

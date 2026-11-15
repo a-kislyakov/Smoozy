@@ -32,10 +32,11 @@
 //!
 //! **Markers used in this file that belong to another document, each with the
 //! document it belongs to.** `Render Settings` Y1a, Y15. `Servers` W31.
-//! `Rendering` S6, A1a. `Download` H5a, H7a. `File Browser` W8. `Server
+//! `Rendering` S6, A1a. `Download` H5a. `File Browser` W8. `Server
 //! Setup` B13. `Job files and outputs` M9.
 //!
-//! **`Rendering` L15, W1, W2, A1 and A9, `Download` H5 to H9, `File Browser`
+//! **`Rendering` L15, W1, W2, A1 and A9, `Download` H5 to H9 and H7a (this
+//! plan's own H7a since 2026-11-14), `File Browser`
 //! W5 and `File Browser` W9, `Job files and outputs` R13 and `Render Settings` F5 are not
 //! listed above and are written out at each site**, because this plan
 //! defines a clause of each name and a bare one could mean either.
@@ -1397,6 +1398,7 @@ pub(crate) mod tests {
                 the_attempt_whose_capture_record_holds_the_words: 1,
                 the_reason_the_machine_recorded: None,
                 no_render_began: false,
+                the_files_missing: Vec::new(),
                 the_device_line_as_observed: None,
             });
             record.what_the_note_carried.last_frame_figure = figure;
@@ -1873,6 +1875,7 @@ pub(crate) mod tests {
             the_attempt_whose_capture_record_holds_the_words: 2,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         note.attempts = 2;

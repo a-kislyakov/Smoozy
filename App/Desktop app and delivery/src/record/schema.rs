@@ -42,7 +42,7 @@ use super::RecordFailure;
 /// would open a record it had not finished making; one that claimed a version
 /// below a migration it carries would run that migration and then refuse the
 /// record it had just written.
-pub const BINARY_KNOWS: u32 = 60;
+pub const BINARY_KNOWS: u32 = 64;
 
 /// The one-row table the version lives in.
 ///
@@ -2629,3 +2629,68 @@ pub const VERSION_59: &[&str] = &[
 /// carried. Versions 1 to 59 are not edited.**
 pub const VERSION_60: &[&str] = &["ALTER TABLE job_record ADD COLUMN no_render_began INTEGER NOT NULL DEFAULT 0
         CHECK (no_render_began IN (0, 1))"];
+
+/// Version 61 — **`Dependency Upload & Remap` K4's *included* mark** — the
+/// Creator's twenty-eighth notes, note 14, 2026-11-09.
+///
+/// **What it is for.** A row no scene uses is left out of the upload until
+/// the user includes it (`Dependency Upload & Remap` A9), and the inclusion is
+/// remembered beyond the sitting as the set-aside mark is, so a later check
+/// does not leave the row out again.
+///
+/// - `included` — **nought on every record before this version**: nothing was
+///   included, which is how every earlier answer read.
+///
+/// **One column added, as version 58 added its; nothing existing is touched or
+/// carried. Versions 1 to 60 are not edited.**
+pub const VERSION_61: &[&str] = &["ALTER TABLE dependency_located_answer ADD COLUMN included INTEGER NOT NULL DEFAULT 0
+        CHECK (included IN (0, 1))"];
+
+/// Version 62 — **the transfer window's *removed by the user* mark** on the
+/// two request records a user can remove a leftover of (`File Browser` U8 and
+/// `Download` M13 as amended 2026-11-12, the second live pass's new fault 3).
+///
+/// **What it is for.** A *Remove* that cleared every staged part marks its
+/// request, and the transfer window draws no row for a marked request, in
+/// this sitting or a later one. Until then the part went and the row stayed,
+/// reading *did not finish*. **The record itself stays**: `File Browser` U9b
+/// still reads it.
+///
+/// - `removed_by_the_user` — **nought on every record before this version**:
+///   no leftover had been removed in a way that took its row, which is how
+///   every earlier record read.
+///
+/// **Two columns added, as version 61 added its; nothing existing is touched
+/// or carried. Versions 1 to 61 are not edited.**
+pub const VERSION_62: &[&str] = &[
+    "ALTER TABLE upload_request ADD COLUMN removed_by_the_user INTEGER NOT NULL DEFAULT 0
+        CHECK (removed_by_the_user IN (0, 1))",
+    "ALTER TABLE download_request ADD COLUMN removed_by_the_user INTEGER NOT NULL DEFAULT 0
+        CHECK (removed_by_the_user IN (0, 1))",
+];
+
+/// Version 63 — **the files a render went on without** (`Rendering` K14c, the
+/// paragraph after `Queue & History` N3 as added 2026-11-12, the last three
+/// owed): the file names the note's ending carries, kept with the ending so
+/// History's entry says *Missing: <file name>* for each, as the phone does.
+///
+/// - `note_files_missing` — the names as a JSON list, in the order the worker
+///   reported them; **nothing on every record before this version, and where
+///   the ending named none**, which reads as none.
+///
+/// **One optional column added, as version 59 added its; nothing existing is
+/// touched or carried. Versions 1 to 62 are not edited.**
+pub const VERSION_63: &[&str] = &["ALTER TABLE job_record ADD COLUMN note_files_missing TEXT"];
+
+/// Version 64 — **the running digest's state at an upload's checkpoint**
+/// (`Server protocol and transfers` S12b, uploads carry on, 2026-11-14): the
+/// state a carry-on goes on from, so the part already on the server is checked
+/// there and never read back over the line.
+///
+/// - `running_state` — the state's written form; **nothing on every checkpoint
+///   before this version and on every download's**, which reads as none and
+///   keeps the read-back.
+///
+/// **One optional column added; nothing existing is touched or carried.
+/// Versions 1 to 63 are not edited.**
+pub const VERSION_64: &[&str] = &["ALTER TABLE transfer_checkpoint ADD COLUMN running_state TEXT"];

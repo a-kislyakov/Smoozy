@@ -159,11 +159,40 @@ pub async fn produce_one_fixed_copy<M>(
 where
     M: TheMachineAReadingIsAskedOf,
 {
+    // **One half hour over the whole fixing, its report included** (Sol's
+    // look at the window and read points, point 3, 2026-11-13): a worker that
+    // ended at 29:50 could spend half a minute more on its report and publish
+    // past the limit.
+    let deadline = tokio::time::Instant::now() + super::checking::THE_OUTER_LIMIT_ON_A_CONTENTS_READING_OR_A_FIXING;
+    produce_one_fixed_copy_by(machine, fixing, deadline).await
+}
+
+/// **[`produce_one_fixed_copy`], by a deadline its caller set** — G15's waits as
+/// changed later on 2026-11-13: the half hour starts with the whole fixing, so
+/// the folders made before the production count against it too (Sol's look at
+/// the scout's list, point 7).
+pub async fn produce_one_fixed_copy_by<M>(
+    machine: &mut M,
+    fixing: &OneFixing,
+    deadline: tokio::time::Instant,
+) -> Result<(), WhyItCouldNotBeFixed>
+where
+    M: TheMachineAReadingIsAskedOf,
+{
     let did_not = WhyItCouldNotBeFixed::TheProductionDidNotPublish;
+    let what_is_left = deadline.saturating_duration_since(tokio::time::Instant::now());
+    if what_is_left.is_zero() {
+        return Err(did_not);
+    }
     let ended = asked_until_it_ends(
         machine,
         &fixing.the_request(),
-        super::blender::THE_TIME_LIMIT_A_BLENDER_RUN_CARRIES,
+        // **A minute on each ask, and half an hour over the whole fixing**:
+        // it goes on while the server says it is still working, and no user
+        // can stop it (G15's build detail as changed 2026-11-13, the runner's
+        // ruling 1).
+        super::checking::THE_LONGEST_AN_ASK_WAITS,
+        Some(what_is_left),
         BETWEEN_TWO_ASKS_OF_ONE_READING,
         &mut || false,
     )
@@ -183,10 +212,13 @@ where
     ) else {
         return Err(did_not);
     };
-    let stream = machine
-        .read_the_stream_back(path, length)
+    let stream = tokio::time::timeout_at(deadline, machine.read_the_stream_back(path, length))
         .await
+        .map_err(|_| did_not)?
         .map_err(|_| did_not)?;
+    if tokio::time::Instant::now() >= deadline {
+        return Err(did_not);
+    }
     // **The fixing's own report decides whether the copy publishes.** Until
     // 2026-09-05 the run's output was discarded and the outcome judged on the
     // exit status alone, so a copy in which not one pair matched published,

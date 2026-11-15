@@ -738,3 +738,15 @@ Every entry in this part is **shape 3**. Each says what breaks and what was sear
 | 5.4.0 Alpha | 1 of 600 printed, about 2 seconds | 600 of 600, ended at 0 |
 
 **Not covered:** Linux, a graphics card, more than one view layer. C5 stands.
+
+## B33. Animation that reaches nothing the reading reads moves no scene (Q3; Section 13 item 22) — added 2026-11-13
+
+**Label: documented and observed in a test.** The same evidence as [Job files and outputs entry 89](Job%20files%20and%20outputs.sources.md): every version's API on what a curve changes and what a block's animation holds, and a seven-scene file read in 4.5.12, 5.0.1, 5.1.2, 5.2.4 and 5.3.0 both with the narrowing and with every scene moved, byte-identical in all five. The walk's step lines were read off the same runs: 24 of 24 with the narrowing (two scenes of twelve frames moved), 84 of 84 with every scene moved (`the_walk_says_where_it_is_in_all_five`). **Not covered:** Linux, real production files.
+
+## B34. A scene read off its curves instead of walked (Q3, Q5; Section 13 item 22) — added 2026-11-13
+
+**Label: documented and observed in a test.** The same evidence as [Job files and outputs entry 90](Job%20files%20and%20outputs.sources.md): the Blender research *Reading at a frame* (Q1, Q4, Q5, Q6, Q7, hand tests 2 to 13, all five versions on the Creator's Mac), the animation-data values read off the five at the desk, and Smoozy's own reading compared byte for byte with the walk in all five, with times before and after (`Audits/Build/The four questions/Reading at a frame, built — what landed.md`). **Not covered:** Linux, Windows, real production files.
+
+## B35. Drivers followed without a move, and cheap moves (Q3, Q5; Section 13 item 22) — added 2026-11-14
+
+**Label: documented and observed in a test.** The same evidence as [Job files and outputs entry 91](Job%20files%20and%20outputs.sources.md): the Blender research *Working out a driver* and *What a move works out* (hand tests in all five versions on the Creator's Mac), and Smoozy's own reading compared byte for byte with the walk as it stood in all five, both modes, with times before and after (`Audits/Build/The four questions/Drivers and cheap moves, built — what landed.md`). **Not covered:** Linux, Windows, a graphics card.

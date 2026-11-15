@@ -576,11 +576,11 @@ mod on_a_desk_with_a_socket_pair {
             assert!(self.1.load(std::sync::atomic::Ordering::SeqCst) >= self.2.load(std::sync::atomic::Ordering::SeqCst));
         }
 
-        fn a_file_begins_going_up(&self) {
+        fn a_file_begins_going_up(&self, _landing: &[u8]) {
             self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
 
-        fn a_file_stopped_going_up(&self) {
+        fn a_file_stopped_going_up(&self, _landing: &[u8]) {
             self.2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
     }
@@ -634,6 +634,30 @@ mod on_a_desk_with_a_socket_pair {
                 "the free-space figure rode the reading"
             );
         }
+    }
+
+    /// **The house on the home folder: the login's home is the server's own
+    /// answer**, the folder the login's sessions start in, and it is read once
+    /// per connection and kept — `Design/File Browser § The list` (the
+    /// Creator, 2026-11-11). The folder is renamed on the disk after the first
+    /// read: the server would now answer the new name, and the kept answer
+    /// still stands, so the second ask read nothing.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn the_logins_home_is_the_servers_own_answer_kept_for_the_connection() {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+        let scratch = Scratch::new("home");
+        let machine = a_machine(program, &scratch.at, 1);
+        let point = APointLending::over(&machine).await;
+        assert_eq!(point.sessions.the_logins_home_as_read(), None, "held before it was read");
+        let home = the_bytes_of(&scratch.at);
+        assert_eq!(point.sessions.the_logins_home().await, Some(home.clone()), "the server's answer");
+        assert_eq!(point.sessions.the_logins_home_as_read(), Some(home.clone()), "kept");
+        let moved = scratch.at.with_file_name(format!("smzy-point-home-moved-{}", std::process::id()));
+        std::fs::rename(&scratch.at, &moved).expect("renamed");
+        let again = point.sessions.the_logins_home().await;
+        std::fs::rename(&moved, &scratch.at).expect("renamed back");
+        assert_eq!(again, Some(home), "read a second time on one connection");
     }
 
     /// **`File Browser` P1 and P2: a folder this login may not read is told on
@@ -798,6 +822,306 @@ mod on_a_desk_with_a_socket_pair {
         }
     }
 
+    /// **`File Browser` U6: *Stop* reaches an upload still making its folders,
+    /// and ends the making at the next folder** — the twenty-eighth notes,
+    /// piece 12. On a real line a folder of 156,557 files was stopped while its
+    /// folders were being made, and the server kept getting folders until
+    /// Smoozy quit: the making was one reading that never looked at the stop.
+    /// Here 2,000 folders, each with a small file, and the Stop pressed the
+    /// moment the request is under way: far fewer folders are made, no file is
+    /// sent, and every file reads *did not finish*. The folders made before the
+    /// press stay.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn stop_ends_an_upload_still_making_its_folders() {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+        const FOLDERS: usize = 2_000;
+        let scratch = Scratch::new("stop-folders");
+        let here = scratch.folder("here");
+        for at in 0..FOLDERS {
+            let folder = here.join("shot").join(format!("f{at:04}"));
+            std::fs::create_dir_all(&folder).expect("made");
+            std::fs::write(folder.join("a.txt"), b"x").expect("written");
+        }
+        let there = scratch.folder("machine/jobs");
+        let record = ARecordHere(Mutex::new(
+            LocalRecord::open_at(&a_record_file_in(&scratch)).expect("the record opens"),
+        ));
+        let record: Arc<dyn TheRecordAnUploadWrites> = Arc::new(record);
+        let machine = a_machine(program.clone(), &scratch.at, 10);
+        let point = APointLending::over(&machine).await;
+        let the_run = Arc::new(TheRunsTransfers::for_this_run());
+        let published = WhatWasPublished::default();
+        let asked = an_upload_of(vec![here.join("shot")], &there);
+        let mut ready = an_upload_is_prepared(&asked, &point.sessions, record.as_ref())
+            .await
+            .expect("the upload is prepared");
+        assert_eq!(
+            the_answer_is_applied(&mut ready, None, &point.sessions, record.as_ref()).await,
+            WhatTheAnswerLeft::ItGoes
+        );
+        let request = ready.request.record.as_text();
+        // **The press, the moment the request is under way** — from a thread of
+        // its own, so it lands while the folders are being made.
+        let pressing = {
+            let (the_run, request) = (Arc::clone(&the_run), request.clone());
+            std::thread::spawn(move || {
+                let until = std::time::Instant::now() + std::time::Duration::from_secs(60);
+                while std::time::Instant::now() < until {
+                    if the_run.the_user_stops(&request, None) {
+                        return true;
+                    }
+                    std::thread::yield_now();
+                }
+                false
+            })
+        };
+        let came_to = the_upload_runs(ready, &point.sessions, &the_run, Arc::clone(&record), &published).await;
+        assert!(pressing.join().expect("the press"), "the request was never under way");
+        let made = std::fs::read_dir(there.join("shot")).map(|dir| dir.count()).unwrap_or(0);
+        println!("folders made before the stop ended the making: {made} of {FOLDERS}");
+        assert!(made < FOLDERS / 2, "the making went on after Stop: {made} of {FOLDERS} folders made");
+        assert_eq!(came_to.uploaded, 0, "{came_to:?}");
+        assert!(came_to.failed.is_empty(), "a folder Stop did not make is not a failure: {came_to:?}");
+        assert_eq!(came_to.did_not_finish, FOLDERS, "{came_to:?}");
+        assert!(!the_run.what_is_under_way().contains_key(&request), "the request is no longer under way");
+    }
+
+    /// **`File Browser` U6 before the request is under way** — Sol's fresh look
+    /// on the twenty-eighth notes, piece 12: a Stop pressed while the walk ran,
+    /// or while the question was open, reached nothing, and the upload went on
+    /// once the walk ended or the question was answered. **During the walk**:
+    /// 2,000 receiving folders already on the machine, so the walk reads each,
+    /// and the Stop pressed the moment the request is written; the walk ends
+    /// there and the answer applied is the stop. **With the question open**: a
+    /// file that collides, the Stop pressed, then *Replace* answered; the stop
+    /// stands and the file there is untouched.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn stop_before_an_upload_is_under_way_stops_it() {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+        const FOLDERS: usize = 2_000;
+        let scratch = Scratch::new("stop-before");
+        let here = scratch.folder("here");
+        let there = scratch.folder("machine/jobs");
+        for at in 0..FOLDERS {
+            let folder = here.join("shot").join(format!("f{at:04}"));
+            std::fs::create_dir_all(&folder).expect("made");
+            std::fs::write(folder.join("a.txt"), b"x").expect("written");
+            std::fs::create_dir_all(there.join("shot").join(format!("f{at:04}"))).expect("made there");
+        }
+        std::fs::write(here.join("lone.txt"), b"new").expect("written");
+        std::fs::write(there.join("lone.txt"), b"old").expect("written there");
+        let record: Arc<ARecordHere> = Arc::new(ARecordHere(Mutex::new(
+            LocalRecord::open_at(&a_record_file_in(&scratch)).expect("the record opens"),
+        )));
+        let machine = a_machine(program.clone(), &scratch.at, 10);
+        let point = APointLending::over(&machine).await;
+
+        // **During the walk.**
+        let asked = an_upload_of(vec![here.join("shot")], &there);
+        let pressing = {
+            let (record, server) = (Arc::clone(&record), asked.server_row.clone());
+            std::thread::spawn(move || {
+                let until = std::time::Instant::now() + std::time::Duration::from_secs(60);
+                while std::time::Instant::now() < until {
+                    let mut written = Vec::new();
+                    record.with_the_record(&mut |connection| {
+                        written = UploadRequests::over(connection).every_request_for(&server).unwrap_or_default();
+                    });
+                    if let Some(one) = written.first() {
+                        if smoozy_desktop::uploading::an_upload_held_before_its_answer_is_stopped(&one.record.as_text()) {
+                            return true;
+                        }
+                    }
+                    std::thread::yield_now();
+                }
+                false
+            })
+        };
+        let mut ready = an_upload_is_prepared(&asked, &point.sessions, record.as_ref()).await.expect("prepared");
+        assert!(pressing.join().expect("the press"), "the request was never held before its answer");
+        assert!(ready.the_walk.comparisons.is_empty(), "the walk went on after Stop");
+        // **And the walk on the machine stopped too** (Sol's second look): a
+        // reading asked now does not wait behind the rest of it.
+        let asked_at = std::time::Instant::now();
+        let _ = point.sessions.a_reading(true, |_| Box::pin(async { Ok(()) })).await;
+        let behind = asked_at.elapsed();
+        println!("a reading after the stopped walk waited {behind:?}");
+        assert!(behind < std::time::Duration::from_millis(60), "a reading waited behind the walk given up: {behind:?}");
+        assert_eq!(the_answer_is_applied(&mut ready, None, &point.sessions, record.as_ref()).await, WhatTheAnswerLeft::TheUserStoppedIt);
+
+        // **With the question open.**
+        let asked = an_upload_of(vec![here.join("lone.txt")], &there);
+        let mut ready = an_upload_is_prepared(&asked, &point.sessions, record.as_ref()).await.expect("prepared");
+        assert!(ready.something_collides());
+        assert!(smoozy_desktop::uploading::an_upload_held_before_its_answer_is_stopped(&ready.request.record.as_text()));
+        assert_eq!(the_answer_is_applied(&mut ready, Some(CollisionAnswer::Replace), &point.sessions, record.as_ref()).await, WhatTheAnswerLeft::TheUserStoppedIt);
+        assert_eq!(std::fs::read(there.join("lone.txt")).expect("still there"), b"old");
+    }
+
+    /// **A Stop pressed while the answer is applied** — *Keep both*'s names
+    /// being read — **stops the upload once it is under way** (Sol's second look
+    /// on the twenty-eighth notes, piece 12): the stop check at the answer's
+    /// start had passed, so the upload went on. The reading session is held for
+    /// two seconds, so the names wait and the press lands meanwhile.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn stop_while_keep_both_names_are_read_stops_the_upload() {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+        let scratch = Scratch::new("stop-keep-both");
+        let here = scratch.folder("here");
+        let there = scratch.folder("machine/jobs");
+        std::fs::write(here.join("lone.txt"), b"new").expect("written");
+        std::fs::write(there.join("lone.txt"), b"old").expect("written there");
+        let record: Arc<dyn TheRecordAnUploadWrites> = Arc::new(ARecordHere(Mutex::new(
+            LocalRecord::open_at(&a_record_file_in(&scratch)).expect("the record opens"),
+        )));
+        let machine = a_machine(program.clone(), &scratch.at, 10);
+        let point = APointLending::over(&machine).await;
+        let the_run = TheRunsTransfers::for_this_run();
+        let asked = an_upload_of(vec![here.join("lone.txt")], &there);
+        let mut ready = an_upload_is_prepared(&asked, &point.sessions, record.as_ref()).await.expect("prepared");
+        assert!(ready.something_collides());
+        let request = ready.request.record.as_text();
+        // The answer goes only once the reading truly holds the session: a
+        // bare yield let the answer take the session first on a loaded machine
+        // (the whole workspace run of 2026-11-10), the names were read at once,
+        // and the press found nothing held.
+        let (holding, it_holds) = tokio::sync::oneshot::channel::<()>();
+        let busy = {
+            let sessions = point.sessions.clone();
+            tokio::spawn(async move {
+                sessions
+                    .a_reading(true, move |_| Box::pin(async move {
+                        let _ = holding.send(());
+                        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                        Ok(())
+                    }))
+                    .await
+            })
+        };
+        it_holds.await.expect("the reading holds the session");
+        let pressing = {
+            let request = request.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                smoozy_desktop::uploading::an_upload_held_before_its_answer_is_stopped(&request)
+            })
+        };
+        let left = the_answer_is_applied(&mut ready, Some(CollisionAnswer::KeepBoth), &point.sessions, record.as_ref()).await;
+        assert!(pressing.join().expect("the press"), "the request was not held while its answer was applied");
+        let _ = busy.await;
+        assert_eq!(left, WhatTheAnswerLeft::ItGoes);
+        let came_to = the_upload_runs(ready, &point.sessions, &the_run, Arc::clone(&record), &WhatWasPublished::default()).await;
+        assert_eq!(came_to.uploaded, 0, "the upload went on after Stop: {came_to:?}");
+        let names: Vec<_> = std::fs::read_dir(&there).expect("listed").flatten().map(|one| one.file_name()).collect();
+        assert_eq!(names.len(), 1, "{names:?}");
+    }
+
+    /// **A Stop pressed after the answer and before the upload is under way
+    /// stops it** — Sol's one look at the fixes after 0.4.0's second try. The
+    /// hold was let go as the answer was applied, and the run's register took
+    /// the request only once its run began, so a Stop pressed between the two
+    /// found it in neither and the files went. The hold now lasts until the
+    /// run holds the request.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn stop_between_the_answer_and_the_run_stops_the_upload() {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+        let scratch = Scratch::new("stop-between");
+        let here = scratch.folder("here");
+        let there = scratch.folder("machine/jobs");
+        std::fs::write(here.join("lone.txt"), b"new").expect("written");
+        let record: Arc<dyn TheRecordAnUploadWrites> = Arc::new(ARecordHere(Mutex::new(
+            LocalRecord::open_at(&a_record_file_in(&scratch)).expect("the record opens"),
+        )));
+        let machine = a_machine(program.clone(), &scratch.at, 10);
+        let point = APointLending::over(&machine).await;
+        let the_run = TheRunsTransfers::for_this_run();
+        let asked = an_upload_of(vec![here.join("lone.txt")], &there);
+        let mut ready = an_upload_is_prepared(&asked, &point.sessions, record.as_ref()).await.expect("prepared");
+        assert_eq!(the_answer_is_applied(&mut ready, None, &point.sessions, record.as_ref()).await, WhatTheAnswerLeft::ItGoes);
+        let request = ready.request.record.as_text();
+        // **The press, as the Transfers row's Stop takes it**: the run's
+        // register first, then the hold.
+        assert!(!the_run.the_user_stops(&request, None), "the request is not under way yet");
+        assert!(
+            smoozy_desktop::uploading::an_upload_held_before_its_answer_is_stopped(&request),
+            "between its answer and its run the request was held by nothing"
+        );
+        let came_to = the_upload_runs(ready, &point.sessions, &the_run, Arc::clone(&record), &WhatWasPublished::default()).await;
+        assert_eq!(came_to.uploaded, 0, "the upload went on after Stop: {came_to:?}");
+        assert!(!there.join("lone.txt").exists(), "the file was sent after Stop");
+    }
+
+    /// **The folders' Stop does not wait behind another reading** — Sol's fresh
+    /// look on the twenty-eighth notes, piece 12: with the reading session busy,
+    /// the next folder's reading waited its turn, the Stop with it, and that
+    /// folder was made after the press. Here a reading holds the session for
+    /// eight seconds; the Stop pressed as the request goes under way ends the
+    /// upload at once and no folder is made.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn stop_reaches_a_folder_waiting_behind_another_reading() {
+        let _deadline = TheTestsDeadline::started();
+        let program = the_server_or_say_so!();
+        let scratch = Scratch::new("stop-queued");
+        let here = scratch.folder("here");
+        for at in 0..20 {
+            let folder = here.join("shot").join(format!("f{at:02}"));
+            std::fs::create_dir_all(&folder).expect("made");
+            std::fs::write(folder.join("a.txt"), b"x").expect("written");
+        }
+        let there = scratch.folder("machine/jobs");
+        let record: Arc<dyn TheRecordAnUploadWrites> = Arc::new(ARecordHere(Mutex::new(
+            LocalRecord::open_at(&a_record_file_in(&scratch)).expect("the record opens"),
+        )));
+        let machine = a_machine(program.clone(), &scratch.at, 10);
+        let point = APointLending::over(&machine).await;
+        let the_run = Arc::new(TheRunsTransfers::for_this_run());
+        let asked = an_upload_of(vec![here.join("shot")], &there);
+        let mut ready = an_upload_is_prepared(&asked, &point.sessions, record.as_ref()).await.expect("prepared");
+        assert_eq!(the_answer_is_applied(&mut ready, None, &point.sessions, record.as_ref()).await, WhatTheAnswerLeft::ItGoes);
+        let request = ready.request.record.as_text();
+        let busy = {
+            let sessions = point.sessions.clone();
+            tokio::spawn(async move {
+                sessions
+                    .a_reading(true, |_| Box::pin(async {
+                        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+                        Ok(())
+                    }))
+                    .await
+            })
+        };
+        tokio::task::yield_now().await;
+        // **The press lands half a second after the request goes under way**,
+        // while the first folder's reading waits its turn.
+        let pressing = {
+            let (the_run, request) = (Arc::clone(&the_run), request.clone());
+            std::thread::spawn(move || {
+                let until = std::time::Instant::now() + std::time::Duration::from_secs(60);
+                while std::time::Instant::now() < until {
+                    if the_run.what_is_under_way().contains_key(&request) {
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        return the_run.the_user_stops(&request, None);
+                    }
+                    std::thread::yield_now();
+                }
+                false
+            })
+        };
+        let began = std::time::Instant::now();
+        let came_to = the_upload_runs(ready, &point.sessions, &the_run, Arc::clone(&record), &WhatWasPublished::default()).await;
+        let took = began.elapsed();
+        assert!(pressing.join().expect("the press"));
+        assert!(took < std::time::Duration::from_secs(4), "the Stop waited behind the reading: {took:?}");
+        let _ = busy.await;
+        let made = std::fs::read_dir(there.join("shot")).map(|dir| dir.count()).unwrap_or(0);
+        assert_eq!(made, 0, "a folder was made after Stop");
+        assert_eq!(came_to.uploaded, 0, "{came_to:?}");
+    }
+
     /// **A write the machine refuses for permission is a failure, told as one
     /// with the server's own words** — `File Browser` P1 and `File Browser` P6a — **and never
     /// *did not finish*.** The seventh pass on Hyperstack dragged a file onto
@@ -871,7 +1195,7 @@ mod on_a_desk_with_a_socket_pair {
         assert_eq!(came_to.refused.len(), 1, "{came_to:?}");
         assert_eq!(came_to.refused[0].0, came_to.failed[0]);
         assert!(
-            came_to.refused[0].1.contains("permission was denied"),
+            came_to.refused[0].1.contains("permission denied"),
             "not the server's own answer: {:?}",
             came_to.refused[0].1
         );
@@ -1464,7 +1788,7 @@ mod on_a_desk_with_a_socket_pair {
             &|_, _| {},
         )
         .await;
-        let WhatTheDeleteCameTo::Ran { record: id, done, refused, not_attempted, never_learned } = came_to else {
+        let WhatTheDeleteCameTo::Ran { record: id, done, refused, not_attempted, never_learned, .. } = came_to else {
             panic!("the delete did not run: {came_to:?}");
         };
         // The folder, a sub-folder and a deeper one, a file and a hidden
@@ -1519,10 +1843,14 @@ mod on_a_desk_with_a_socket_pair {
         )
         .await;
         std::fs::set_permissions(cache.join("locked"), std::fs::Permissions::from_mode(0o755)).expect("unlocked");
-        let WhatTheDeleteCameTo::Ran { done, refused, not_attempted, .. } = came_to else {
+        let WhatTheDeleteCameTo::Ran { done, refused, not_attempted, refused_for_permission, .. } = came_to else {
             panic!("the delete did not run: {came_to:?}");
         };
         assert_eq!((done, refused, not_attempted), (1, 1, 2), "free.txt; held.txt; locked and cache");
+        // **The live pass of 2026-11-12, new fault 6**: the refusal inside is
+        // known to be a permission one, so `Design/File Browser`'s offer can
+        // follow the report.
+        assert_eq!(refused_for_permission, 1, "held.txt was refused for permission");
         assert!(!cache.join("free.txt").exists());
         assert!(cache.join("locked").join("held.txt").exists());
     }

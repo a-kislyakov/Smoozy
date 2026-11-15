@@ -143,7 +143,9 @@ use tauri::{Manager, State};
 
 use smoozy_dependencies::standing::{Counts, WhatTheRecordSays};
 use smoozy_job_files::holds::the_six_things;
-use smoozy_job_files::inventory::{compose_the_inventory, it_writes_what_the_reading_cannot_name, WhatTheInventoryIs};
+use smoozy_job_files::inventory::{
+    compose_the_inventory, it_writes_what_the_reading_cannot_name, the_destinations_that_write_nothing, WhatTheInventoryIs,
+};
 use smoozy_job_files::layout::{Area, TheLayout};
 use smoozy_job_files::mapping::{compose_the_map, ADestinationToMap, TheMap};
 use smoozy_job_files::reading::{
@@ -231,7 +233,16 @@ pub const THE_LIST_CAME_BACK: &str = "version-list";
 /// both directions. **The count is the array's own and is written nowhere
 /// else**: a number in a name or in a sentence is the one fault this stage
 /// keeps meeting.
-pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 60] = [
+pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 67] = [
+    // **`§ View Layers`, `§ When the override warning goes` and `§ What it
+    // will write` on a file with many long View Layers** — the Creator's
+    // twenty-eighth notes, note 17: the screenshot's case with made-up names,
+    // forty sibling folders closed and open, and the same file at the
+    // window's floor. Drawn and built 2026-11-10.
+    "res-many",
+    "res-manygrp",
+    "res-manygrpopen",
+    "res-manynarrow",
     // **`res-oneframe`: every job the Render control would send has one
     // frame**, so *Render one frame first* is greyed and cannot be pressed but
     // keeps its setting, and the dependency band leaves its first-frame way
@@ -271,6 +282,7 @@ pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 60] = [
     "res-find",
     "res-noread",
     "res-reading",
+    "res-readframes",
     "res-lost",
     "res-smp",
     "res-range",
@@ -279,6 +291,11 @@ pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 60] = [
     "res-gpunocount",
     "res-drvold",
     "res-multi",
+    // **`§ Scenes`, *None ticked*: no scene, no job.** Drawn 2026-11-10 by the
+    // twenty-ninth notes' drawing pass (note 6), on `res-multi`, and built the
+    // same day by Part B's piece 5 ([`no_scene_is_ticked`]); held by the
+    // module `twenty_ninth_notes_6` below.
+    "res-noscene",
     // **`§ Submitting`: the switch on and no folder anybody can name.** Drawn
     // 2026-09-20, and the one state on this page that had never been drawn at
     // all — the silence a job's frames leave when they have nowhere to come
@@ -290,6 +307,7 @@ pub const THE_STATES_THIS_PIECE_DRAWS: [&str; 60] = [
     // piece 3: [`a_submission_that_went`] and the page's
     // `theSubmissionThatWentIsDrawn`.
     "res-sent",
+    "res-first-sent", // Design: only the first frame was submitted.
     // **`§ What it will write`: the line above the list says where the job's
     // folder falls back, and why.** Drawn 2026-10-04 by the drawing pass for
     // the Creator's second notes on the test copy, on their ruling on note 18.
@@ -411,15 +429,23 @@ pub(crate) mod words {
     pub const READ_THE_FILE: &str = "Read the file";
     pub const READ_AGAIN: &str = "Read again";
     pub const READING_THE_FILE: &str = "Reading the file";
+    /// `Design/Render Settings § A read can take longer`, as changed
+    /// 2026-11-13: the walk's step and how many there are fill the two places.
+    pub const READING_FRAME_OF: &str = "Reading frame {step} of {steps}";
+    pub const STOP_READ: &str = "Stop";
+    pub const STOPPING_READ: &str = "Stopping…";
+    pub const READ_STOP_REQUESTED: &str = "Stop requested.";
     pub const READ_AT: &str = "read at";
     pub const RESET_ALL: &str = "Reset all to file values";
     pub const BELOW_THE_FLOOR: &str = "— below 4.5";
 
-    // `§ The header carries the Blender version` — the pick line's three, which
-    // are the drawing's own words.
-    pub const MATCHED_TO_THE_FILE: &str = "matched to the file";
-    pub const NEAREST_ABOVE: &str = "nearest above the file’s";
-    pub const NEAREST_BELOW: &str = "nearest below — nothing above it on this server";
+    // `§ The header carries the Blender version`: **the pick is not described**,
+    // save the one `Render Settings` B2 case that is news — Smoozy picked an
+    // older Blender because nothing newer is on the server — which follows the
+    // warning on its line. Changed 2026-11-10, the Creator's twenty-eighth
+    // notes, note 17: *matched to the file* and *nearest above the file's*
+    // read as stray fragments.
+    pub const LATEST_ON_THIS_SERVER: &str = "Latest on this server.";
 
     // `§ When there is no version to pick` — the three cases.
     pub const SMOOZY_DOES_NOT_CHOOSE_BELOW_THE_FLOOR: &str =
@@ -427,7 +453,12 @@ pub(crate) mod words {
     pub const NOTHING_TO_MATCH_ON: &str =
         "The file does not record its Blender version. Pick one.";
     pub const NO_BLENDER_ON_THIS_SERVER: &str = "This server has no Blender.";
-    pub const SET_IT_UP: &str = "Set it up";
+    // `§ When there is no version to pick` as added 2026-11-11 (`Render
+    // Settings` B5): the line in place of *This server has no Blender.* where
+    // no build answered and the server's disk reads full. The build runner's
+    // ruling 3 of that date.
+    pub const THE_SERVERS_DISK_IS_FULL: &str = "The server’s disk is full.";
+    pub const SET_IT_UP: &str = "Install Blender…";
     pub const NO_MACHINE_IN_HAND: &str =
         "Connect a server to list its Blender versions.";
 
@@ -444,7 +475,7 @@ pub(crate) mod words {
     // **The line says something may not work as expected, and opens nothing**
     // — `Render Settings` B8 as rewritten 2026-10-02, the Creator's note 12 on
     // 0.1.7. *What changes* and its panel of break notes are gone.
-    pub const SOME_THINGS_MAY_NOT_WORK: &str = "Some things may not work as expected.";
+    pub const SOME_THINGS_MAY_NOT_WORK: &str = "The file may render differently.";
 
     // `§ The one thing this page says about add-ons`.
     pub const THE_ADD_ON_IS_MISSING_LEAD: &str = "lacks the add-on for this file’s engine.";
@@ -453,31 +484,48 @@ pub(crate) mod words {
 
     // `§ Before the file has been read` — the band, said once at the top.
     pub const NOT_READ_LEAD: &str = "File not read.";
-    pub const NOT_READ_REST: &str = "Values are the file’s own until changed. Scenes and View Layers appear after a read. You can still submit.";
-    pub const THE_CONNECTION_ENDED_LEAD: &str =
-        "Connection lost.";
-    pub const THE_CONNECTION_ENDED_REST: &str = "Your changes are kept. Scenes and View Layers appear after a read. You can still submit.";
+    /// **`Render Settings` Q14 item 2**: the reading was dropped because the
+    /// file changed on the server since (the leftovers of the Rough what-if
+    /// answers, 215).
+    pub const THE_FILE_CHANGED_LEAD: &str = "File changed on the server since the read.";
+    pub const NOT_READ_REST: &str = "Values are the file’s until changed. Scenes and View Layers appear after a read. You can still submit.";
+    // ~~*Connection lost. Your changes are kept. …*~~ went on 2026-11-13: it
+    // only ever showed beside a failed read's *Could not reach the server.*,
+    // two boxes saying one thing (the Creator's note 4 on the test copy of
+    // 2026-11-12). A failed read's box now stands in for the band.
 
     // `§ Scenes`, *More than one ticked* — said once, in the same band.
     pub const SCENES_ARE_TICKED_LEAD: &str = "scenes ticked:";
     pub const SCENES_ARE_TICKED_REST: &str =
         "jobs. Each uses its own settings; only the frame range is shared.";
+    // `§ Scenes`, *None ticked* — said once, in the same band (the Creator's
+    // twenty-ninth notes, note 6).
+    pub const NO_SCENE_IS_TICKED_LEAD: &str = "No scene ticked.";
+    pub const NO_SCENE_IS_TICKED_REST: &str = "Tick a scene to render.";
 
     // `§ When the read gives nothing` — Q8's four endings, each saying
     // something different, and only the second carrying a second sentence.
     pub const COULD_NOT_REACH_THE_SERVER: &str = "Could not reach the server.";
+    // **The first ending's second sentence** — what the user can do next, the
+    // one thing Smoozy knows works (the Creator's note 4 on the test copy of
+    // 2026-11-12: "I don't know what to do next").
+    pub const READ_THE_FILE_AGAIN: &str = "Read the file again.";
     pub const THE_SERVER: &str = "Server";
     pub const COULD_NOT_OPEN_THIS_FILE: &str = "This Blender could not open this file.";
     pub const PICK_A_DIFFERENT_BLENDER: &str = "Pick another Blender and read again.";
     pub const THE_READ_DID_NOT_FINISH: &str = "Reading the file did not finish.";
     pub const SMOOZY_STOPPED_THE_READ: &str = "Read stopped.";
+    /// The Rough what-if answers, share 1 (7, 8): a read thrown away because
+    /// the Blender version changed while it ran.
+    pub const THE_VERSION_CHANGED_DURING_THE_READ: &str =
+        "Blender version changed during the read. Read the file again.";
     pub const BLENDER_OUTPUT: &str = "Blender output";
     pub const DISMISS: &str = "Dismiss";
 
     // The three columns.
     pub const SCENE: &str = "Scene";
     pub const ALL_SCENES: &str = "All scenes";
-    pub const JOBS_ONE_EACH: &str = "jobs, one each";
+    pub const JOBS_ONE_EACH: &str = "jobs, one per scene";
     /// **The *All scenes* tag where the file has one scene**: *1 job*. Added
     /// 2026-11-02 — the showcase pictures read *1 jobs, one each*.
     pub const ONE_JOB: &str = "job";
@@ -498,7 +546,10 @@ pub(crate) mod words {
     pub const READ_AT_FRAME: &str = "— read at frame";
     pub const ANIMATED_KEYED_ON_FRAME: &str = "Animated — keyed on frame";
     pub const ANIMATED_NOT_KEYED_ON_FRAME: &str = "Animated — not keyed on frame";
-    pub const SAMPLES_OF_ITS_OWN: &str = "samples of its own";
+    /// **A layer's own count, on a second line under its name**: *100
+    /// samples* — `§ View Layers`, the twenty-eighth notes, note 17 (it read
+    /// *100 samples of its own* beside the name).
+    pub const SAMPLES_OF_ITS_OWN: &str = "samples";
     pub const SAMPLES_OVERRIDDEN: &str = "samples, overridden";
     pub const NOT_KNOWN_WITHOUT_A_READ: &str = "unknown until read";
     pub const BACK_TO_THE_FILES_VALUE_AT_FRAME: &str = "Back to the file’s value at frame";
@@ -513,21 +564,40 @@ pub(crate) mod words {
     pub const AND_AFTER_A_TIME_LIMIT_OF: &str = "and after a time limit of";
     pub const ON_EACH_FRAME: &str = "on each frame.";
     pub const OVERRIDES_LEAD: &str = "Overrides noise threshold";
-    pub const OVERRIDES_A_TIME_LIMIT_OF: &str = "Overrides the time limit of";
-    pub const A_TIME_LIMIT_OF: &str = "the time limit of";
-    pub const AND_THE_TIME_LIMIT_OF: &str = "and the time limit of";
-    pub const OVERRIDES_THE_OWN_COUNTS_OF: &str = "Overrides the sample counts of";
-    pub const AND_THE_OWN_COUNTS_OF: &str = "and the sample counts of";
+    // **The typed line** — `§ The sample count`, the twenty-eighth notes,
+    // note 17: *Overrides noise threshold 0.01, time limit 30s per frame, and
+    // sample counts for 6 View Layers. Rendering all samples may take longer
+    // and cost more.*, and *the sample count for 1 View Layer* for one. It
+    // named each layer and its count until then.
+    pub const OVERRIDES_A_TIME_LIMIT_OF: &str = "Overrides time limit";
+    pub const A_TIME_LIMIT_OF: &str = "time limit";
+    pub const AND_THE_TIME_LIMIT_OF: &str = "and time limit";
+    pub const PER_FRAME_AND_A_COMMA: &str = "per frame,";
+    pub const PER_FRAME_AND_A_FULL_STOP: &str = "per frame.";
+    pub const OVERRIDES_THE_OWN_COUNTS_OF: &str = "Overrides sample counts for";
+    pub const AND_THE_OWN_COUNTS_OF: &str = "and sample counts for";
+    pub const OVERRIDES_THE_ONE_OWN_COUNT_OF: &str = "Overrides the sample count for";
+    pub const AND_THE_ONE_OWN_COUNT_OF: &str = "and the sample count for";
+    pub const VIEW_LAYERS_AND_A_FULL_STOP: &str = "View Layers.";
+    pub const VIEW_LAYER_AND_A_FULL_STOP: &str = "View Layer.";
     pub const THE_COMMA: &str = ",";
     pub const EVERY_FRAME_NOW_RENDERS_ALL: &str =
-        "Every frame renders all samples, so the job may take longer and cost more.";
-    pub const RENDER_AT_THEIR_OWN_COUNT: &str =
-        "keep their own sample counts.";
+        "Rendering all samples may take longer and cost more.";
+    /// **`§ When the override warning goes`: the line counts and never
+    /// names**, even for one layer — *6 View Layers use their own sample
+    /// counts.* The twenty-eighth notes, note 17: it named every layer.
+    pub const VIEW_LAYERS_USE_THEIR_OWN_COUNTS: &str = "View Layers use their own sample counts.";
+    pub const VIEW_LAYER_USES_ITS_OWN_COUNT: &str = "View Layer uses its own sample count.";
     pub const RESOLUTION: &str = "Resolution";
     pub const SIZE_NOT_KNOWN: &str = "size unknown";
     pub const ENGINE: &str = "Engine";
     pub const THE_FILES: &str = "— the file’s";
     pub const THE_FILES_NOT_READ_YET: &str = "the file’s — not read yet";
+    /// **`Render Settings` V3a** — the leftovers of the Rough what-if
+    /// answers (222, 227).
+    pub const THE_FILES_SCRIPTS_RUN: &str = "This file's scripts will run on the server.";
+    /// The leftovers of the Rough what-if answers (185).
+    pub const A_NEWER_COPY_IS_UPLOADING: &str = "A newer copy of this file has not finished uploading.";
     pub const CYCLES: &str = "Cycles";
     pub const EEVEE: &str = "EEVEE";
     pub const LEAVE_IT_UNCHANGED_READ: &str =
@@ -589,13 +659,19 @@ pub(crate) mod words {
     /// **The second line, where the server's fallback folder is ruled out
     /// before submitting** — the drawing's `res-fallchosen`, shorter than the
     /// queue entry's because the sentence above already names Smoozy's folder.
-    pub const THIS_SERVERS_FALLBACK_FOLDER_CANT_BE_USED: &str = "This server’s fallback folder can’t be used.";
+    pub const THIS_SERVERS_FALLBACK_FOLDER_CANT_BE_USED: &str =
+        "This server’s fallback folder can’t be used; change it on its Edit page.";
     /// **A destination at the top of the job's folder**, in the list and in
     /// the download box alike — the drawing's own words, one string for both.
     pub const TOP_OF_THE_JOBS_FOLDER: &str = "top of the job’s folder";
+    /// **A parent's own files, first in its group** — `§ What it will write`,
+    /// the twenty-eighth notes, note 17.
+    pub const THIS_FOLDER: &str = "this folder";
+    /// *40 folders*, on a group's line.
+    pub const FOLDERS_WORD: &str = "folders";
     pub const FILES_WORD: &str = "files";
     pub const FILE_WORD: &str = "file";
-    pub const ONE_FILE_MAY_GROW: &str = "1\u{a0}file, may grow";
+    pub const ONE_FILE_MAY_GROW: &str = "1\u{a0}file, maybe more";
     pub const READ_FROM_ONE_SCENE_LEAD: &str = "Outputs are listed for one scene at a time;";
     pub const READ_FROM_ONE_SCENE_REST: &str =
         "are ticked. See each job’s queue entry.";
@@ -607,7 +683,9 @@ pub(crate) mod words {
         "One will overwrite the other.";
     pub const THE_SCENES_OUTPUT_PATH: &str = "— the scene’s output path";
     pub const A_FILE_OUTPUT_NODE_NAMED: &str = "— File Output node";
-    pub const AN_ADDED_WRITE_PLACE: &str = "— an added write place";
+    // **A folder Smoozy adds to the job's writes** is named after the dash,
+    // as the reading names it (scout 2.16, 2026-11-12); *— an added write
+    // place* stood here until then.
     // **The duplicate-picture line names the places the walk found** — the
     // runner's ruling of 2026-10-12, *The duplicate-picture warning names what
     // it found*, and `Design/Render Settings § Warnings` that day: *Beauty pass
@@ -675,7 +753,10 @@ pub(crate) mod words {
     pub const NOBODY_HAS_CHECKED_LEAD: &str = "Dependencies not checked on";
     pub const NOBODY_HAS_CHECKED_REST: &str =
         "Assets may be missing from the server.";
-    pub const REPLACED_LEAD: &str = "File re-uploaded since its dependency check.";
+    // **`Rendering` W2 as changed 2026-11-13: true of both marks** — a new
+    // upload of the file, and a tree an act disturbed — and History's words
+    // for the same mark.
+    pub const REPLACED_LEAD: &str = "Files were changed after the dependency check.";
     pub const UNFOUND_LEAD: &str = "assets this file needs are not on the server.";
     // **One asset is one asset** — the pass before 0.1.9 on Vast read *1
     // assets … are not … leave them there*.
@@ -684,6 +765,7 @@ pub(crate) mod words {
     pub const VERSION_MIDDLE: &str = ", not the";
     pub const _VERSION_MIDDLE_IS_PUNCTUATION_FIRST: () = ();
     pub const VERSION_REST: &str = "this job renders with.";
+    pub const A_CHECK_COVERS_ITS_BLENDER: &str = "A check is valid only for the Blender version it ran with.";
     pub const CHECK_DEPENDENCIES: &str = "Check dependencies…";
     pub const OPEN_THE_CHECK: &str = "Open dependency check";
     // `§ Submitting`: the check's uploads, counted above Render. The
@@ -696,11 +778,23 @@ pub(crate) mod words {
     pub const CHECK_DEPENDENCIES_FIRST_STOP: &str = "Check dependencies first.";
     pub const CHECKING_DEPENDENCIES: &str = "Checking dependencies…";
     pub const DEPENDENCIES_ARE_UPLOADING: &str = "Dependencies are uploading.";
+    /// `Design/Whole app § While other work runs`, 2026-11-13: why Render,
+    /// *Read the file* and *Check again* wait while the file goes up.
+    pub const THIS_FILE_IS_UPLOADING: &str = "This file is uploading.";
+    /// The same: why *Read the file* waits while it reads.
+    pub const THE_FILE_IS_BEING_READ: &str = "The file is being read.";
     pub const DEPENDENCIES_ARE_BEING_CHECKED: &str = "Dependencies are being checked.";
     pub const FILES_FULL_STOP: &str = "files.";
     pub const FILE_FULL_STOP: &str = "file.";
+    /// `§ Submitting`, 2026-11-09: while a reading can still add files.
+    pub const FILES_SO_FAR: &str = "files so far.";
+    pub const FILE_SO_FAR: &str = "file so far.";
     pub const RENDER_ONE_FRAME_FIRST: &str = "Render one frame first";
     pub const SUBMIT_ANYWAY: &str = "Submit anyway";
+    /// **`§ The dependency warning` as changed 2026-11-11: the band's
+    /// first-frame way sends the job, so it says *Submit*** — the foot's
+    /// switch keeps [`RENDER_ONE_FRAME_FIRST`]. The four questions, scout 1.4.
+    pub const SUBMIT_ONE_FRAME_FIRST: &str = "Submit one frame first";
     pub const ONE_FRAME_FIRST_BUYS: &str =
         "Missing assets then cost one frame, not the whole job.";
     pub const DONT_WARN_ME_AGAIN: &str = "Don’t warn me again";
@@ -737,7 +831,7 @@ pub(crate) mod words {
     pub const EVERYTHING: &str = "Everything";
     pub const PICTURES_ONLY: &str = "Pictures only";
     pub const OFF: &str = "Off";
-    pub const ANSWER_IN_QUEUE: &str = "Answer the first frame in Queue.";
+    pub const ANSWER_IN_QUEUE: &str = "Answer the first-frame check in Queue.";
     /// **`Server Setup` G2a: the Telegram line where the server has no role.**
     pub const NOT_INSTALLED: &str = "Not installed";
     pub const INSTALLING: &str = "Installing…";
@@ -774,15 +868,15 @@ pub(crate) mod words {
     pub const NO_SERVER_CONNECTED_LEAD: &str = "No server is connected.";
     pub const NO_SERVER_CONNECTED_REST: &str = "Connect a server to submit.";
     pub const CARRYING_ON_LEAD: &str = "Resuming";
-    /// *Resuming Kitchen — final v3 from frame 149, after the last frame on
-    /// the server. Settings from 8 Aug. A partly written frame may be skipped.*
+    /// *Resuming Kitchen — final v3 from frame 149. Settings from 8 Aug. The starting
+    /// frame is rendered again; it may be incomplete.*
     /// Changed 2026-11-06, the last words read before the release (it was
     /// four sentences: *Resuming Kitchen — final v3. Settings from 8 Aug.
     /// Frame 148 is the last on the server, so the range starts at 149. A
     /// partly written frame counts as finished and may be skipped.*).
     pub const CARRYING_ON_FROM_FRAME: &str = "from frame";
-    pub const CARRYING_ON_CHECKED: &str = ", after the last frame on the server.";
-    pub const CARRYING_ON_SHORT_FILE: &str = "A partly written frame may be skipped.";
+    pub const CARRYING_ON_CHECKED: &str = ".";
+    pub const CARRYING_ON_SHORT_FILE: &str = "The starting frame is rendered again; it may be incomplete.";
     /// *Resuming Kitchen — final v3 from frame 149, the frame recorded when
     /// the job ended. Settings from 8 Aug. Could not read the server's
     /// output.* — the checked band's shape, still saying where the figure came
@@ -791,7 +885,7 @@ pub(crate) mod words {
     /// Aug. Could not read the server's output, so the range starts at the
     /// frame recorded when the job ended: 149.*).
     pub const CARRYING_ON_UNREAD: &str = concat!(", ", the_recorded_figure!(), ".");
-    pub const CARRYING_ON_COULD_NOT_READ: &str = "Could not read the server’s output.";
+    pub const CARRYING_ON_COULD_NOT_READ: &str = "Could not check which frames are on the server.";
     pub const THESE_ARE_THE_SETTINGS_IT_USED_ON: &str = "Settings from";
     pub const USED_ON: &str = "used on";
     /// Punctuation rather than a word, so that a part ending a sentence can
@@ -813,6 +907,9 @@ pub(crate) mod words {
     pub const SUBMITTING: &str = "Submitting.";
     pub const SUBMITTED: &str = "Submitted.";
     pub const JOBS_SUBMITTED: &str = "jobs submitted.";
+    /// **A first-frame pair whose rest did not go** — `Design/Render Settings
+    /// § Submitting`, added 2026-11-12 (scout 3.49).
+    pub const ONLY_THE_FIRST_FRAME_WAS_SUBMITTED: &str = "Only the first frame was submitted.";
     // **A submission that went, said as a confirmation** — `Design/Render
     // Settings § Submitting` (2026-10-03, the Creator's note 10 on the test
     // copy): *Submitted to Vast 4090.*, or *3 jobs submitted to Vast 4090.*,
@@ -821,11 +918,17 @@ pub(crate) mod words {
     pub const JOBS_SUBMITTED_TO: &str = "jobs submitted to";
     pub const SHOW_IN_QUEUE: &str = "Show in Queue";
     pub const NOT_SUBMITTED: &str = "Not submitted.";
+    /// The Rough what-if answers, share 1 (42): a job a later connection found
+    /// the server never took, because Smoozy closed while sending it.
+    pub const SMOOZY_CLOSED_WHILE_SENDING_IT: &str = "Smoozy closed during submission.";
     pub const NOT_SUBMITTED_OF: &str = "of";
-    pub const THE_SERVER_DOES_NOT_TAKE_JOBS: &str =
-        "Smoozy on this server does not accept jobs.";
+    // **An older Smoozy on the server that does not know the request** — what
+    // the user does about it, in Telegram's words for the same case (the word
+    // sweep's last step, 2026-11-13; it read *Smoozy on this server does not
+    // accept jobs.*).
+    pub const THE_SERVER_DOES_NOT_TAKE_JOBS: &str = "Update Smoozy on this server.";
     pub const NOT_KNOWN_WHETHER_IT_WAS_TAKEN: &str =
-        "Could not tell whether the server accepted the job.";
+        "Submission not confirmed. Check the Queue before submitting again.";
     pub const THE_FILES_COULD_NOT_BE_PLACED: &str =
         "Could not upload the job’s files to the server.";
     /// **The job's files were placed and the server did not take the job** —
@@ -834,7 +937,7 @@ pub(crate) mod words {
     /// [`NOT_KNOWN_WHETHER_IT_WAS_TAKEN`] in the page's own style. Added
     /// 2026-09-27: until then this said the files could not be placed, which
     /// was untrue — they were on the server.
-    pub const THE_SERVER_DID_NOT_TAKE_THE_JOB: &str = "The server did not accept the job.";
+    pub const THE_SERVER_DID_NOT_TAKE_THE_JOB: &str = "The server refused the job.";
     pub const THE_RECORD_REFUSED_THE_JOB: &str = "Could not save the job to Smoozy’s database.";
     pub const THE_BUILD_LACKS_THE_ENGINE_LEAD: &str = "does not have";
     // ~~*Only the first frame was submitted. Smoozy cannot send the rest of
@@ -854,7 +957,7 @@ pub(crate) mod words {
     pub const THE_FIRST_FRAME_IS_NOT_KNOWN: &str = "Type the frames.";
     pub const THE_FIRST_FRAME_IS_NOT_KNOWN_OF_SEVERAL_SCENES: &str = "Type the frames or tick a scene.";
     pub const STOPPED_BEHIND_AN_UNKNOWN_ONE: &str =
-        "An earlier job’s status is unknown, so the rest were not sent.";
+        "An earlier job’s status is unknown, so the rest were not submitted.";
     pub const THE_FILE_ON_THE_SERVER_COULD_NOT_BE_READ: &str =
         "Could not read the file on the server.";
     pub const IT_COULD_NOT_BE_PREPARED: &str = "Could not prepare the job on this computer.";
@@ -957,8 +1060,18 @@ pub struct WhatTheRunHolds {
     pub the_read_that_gave_nothing: BTreeMap<String, AReadThatGaveNothing>,
     /// Whether a read is in flight for that (server, file) — Q5's join.
     pub reading_now: BTreeMap<String, bool>,
+    /// **The (server, file)s whose reading `Render Settings` Q14's item 2 dropped**,
+    /// so the band says the file changed rather than that it was never read.
+    /// Period-held with the readings; a reading that stands again outranks it.
+    pub the_file_changed_since_the_read: std::collections::BTreeSet<String>,
+    pub read_controls: BTreeMap<String, std::sync::Arc<crate::reading_the_file::AReadControl>>,
     /// B1's list, per server, where a machine answered one.
     pub version_lists: BTreeMap<String, TheListThisPageAsksFor>,
+    /// **The servers whose list landed with no build answering and the disk
+    /// reading full** (`Render Settings` B5 as added 2026-11-11). Period-held
+    /// with the list and set or cleared at every landing
+    /// ([`the_version_list_came_back`]).
+    pub the_disk_reads_full_on: std::collections::BTreeSet<String>,
     /// **Where B1's list is being asked for, or the machine could not be
     /// asked**, per server — so the header never says *no server is
     /// connected* about a server that is being searched. Period-held with the
@@ -986,7 +1099,7 @@ pub struct WhatTheRunHolds {
     pub the_saved_with: BTreeMap<String, String>,
     /// **The folder the system's panel gave the open download box**, per
     /// (server, file), before the box's *Done* — `Design/Render Settings`:
-    /// *"Choosing Somewhere else… puts the system's folder panel up at once,
+    /// *"Choosing Other… puts the system's folder panel up at once,
     /// and the folder chosen there is shown in the box as the choice, which
     /// Done then keeps like any other."* The box offers it first, so *Done*
     /// hands it back by its row like every other folder (H34), and the page
@@ -1075,6 +1188,10 @@ impl Default for TheSubmissionChoices {
 /// cannot vouch for is left out rather than guessed.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WhatTheRecordHolds {
+    /// **An upload onto this very file that has not ended** — the leftovers
+    /// of the Rough what-if answers (185): the file the page reads is the
+    /// old one, and the newer copy is still in its staging folder.
+    pub a_newer_copy_has_not_finished_uploading: bool,
     pub the_reporting_default: Option<String>,
     /// **The stored default's minutes** (version 56, `Telegram` V1a as
     /// amended), nothing where none were typed or taken.
@@ -1103,6 +1220,10 @@ pub struct WhatTheRecordHolds {
     /// though read beside it. `None` where nothing of the check is going. The
     /// Creator's note 6 on 0.1.8.
     pub the_checks_uploads: Option<(usize, usize)>,
+    /// **`Dependency Upload & Remap` G14b: a reading the check's upload owes can
+    /// still add files**, so its count is *so far*
+    /// (`crate::the_found_files_sent::the_readings_of_the_send`).
+    pub the_checks_upload_can_grow: bool,
     /// **`Dependency Upload & Remap` A9e: why *Render* makes no job now**, read
     /// from the check's own memory (`crate::surface::the_dependency_check::what_holds_render`).
     /// Not the record's, though read beside it. `None` where nothing holds it.
@@ -1304,6 +1425,8 @@ impl WhatTheRecordHolds {
             // which server (`the_layout` below is read the same way).
             the_servers_fallback_folder: None,
             a_missed_swap_stands: false,
+            // **Read by the caller that knows which file** (185).
+            a_newer_copy_has_not_finished_uploading: false,
             the_reporting_default: telegram.as_ref().and_then(|t| t.the_reporting_default.clone()),
             the_default_minutes: telegram.as_ref().and_then(|t| t.the_default_minutes),
             telegram_is_on: telegram.as_ref().is_some_and(|t| t.switched_on),
@@ -1319,6 +1442,7 @@ impl WhatTheRecordHolds {
             // **Read from what Transfers lists, for one file** — see the
             // command. Nothing is claimed here.
             the_checks_uploads: None,
+            the_checks_upload_can_grow: false,
             the_hold_on_render: None,
             // **Read beside the record, for one server** — see
             // `the_record_now`. Nothing is claimed here.
@@ -1601,7 +1725,7 @@ fn the_hardware_is_read_now<R: tauri::Runtime>(
 
 /// The one key every map above is keyed by. **A rendering and never a
 /// meaning** — nothing parses one.
-fn keyed(server: &str, file: &str) -> String {
+pub(crate) fn keyed(server: &str, file: &str) -> String {
     format!("{server}\u{1f}{file}")
 }
 
@@ -1713,7 +1837,8 @@ pub struct TheReadFailure {
     /// under its own name — so the sentence names none of them.
     pub what_did_not_happen: Prose,
     /// **The second sentence, only where Smoozy knows what to do next** —
-    /// which is the second of the four and no other.
+    /// the first of the four (*Read the file again.*, from 2026-11-13) and the
+    /// second.
     pub what_to_do_about_it: Option<Prose>,
     /// The values that belong beside the sentence, each with its own name.
     pub values: Vec<AChoice>,
@@ -1793,19 +1918,47 @@ pub struct TheWrites {
     pub by_format: Vec<AWriteTotal>,
 }
 
+/// **One row per folder** — `§ What it will write`, the twenty-eighth notes,
+/// note 17, and `Job files and outputs` P11: the user is shown *the set* of
+/// folders. Outputs sharing a folder add their counts; a folder holding two
+/// formats is one row with a count and its format per line. **Until then the
+/// page drew one row per destination**, and twenty outputs sharing one folder
+/// were twenty rows of the same path.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct AWriteRow {
-    /// Where it writes: its folder under the job's folder, as `PNG/`. A value.
-    /// Empty where [`AWriteRow::the_top`] says it.
+    /// Where it writes: its folder under the job's folder, as `PNG/` — or,
+    /// in a group, its last folder alone; on a group's line, the parent. A
+    /// value. Empty where [`AWriteRow::the_top`] says it.
     pub place: Verbatim,
-    /// ***top of the job's folder***, where the destination writes there.
-    /// Words, so the page draws them as prose and not as a path.
+    /// ***top of the job's folder***, where the destination writes there, or
+    /// ***this folder*** for a parent's own files, first in its group. Words,
+    /// so the page draws them as prose and not as a path.
     pub the_top: Option<Prose>,
-    /// How many files. A value.
-    pub how_many: Verbatim,
-    /// Which format, where the destination has one. A value.
-    pub format: Option<Verbatim>,
+    /// How many files, and which format, one line each — the group's files by
+    /// format on a group's line. An output with no format is a line with an
+    /// empty format.
+    pub counts: Vec<AWriteTotal>,
+    /// **Where this row is a group's line**: the folders under it.
+    pub group: Option<AWriteGroup>,
 }
+
+/// **Two or more folders with the same parent sit under it, written once** —
+/// one level only, and the job's folder is never a parent.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AWriteGroup {
+    /// *40 folders* — the folders under it, its own files apart.
+    pub folders: Words,
+    /// Its rows: *this folder* first where the parent holds files itself.
+    pub rows: Vec<AWriteRow>,
+    /// **More than eight folders: the group starts closed.** Ruled by the
+    /// build runner on the designer's and Sol's number. Open or closed is the
+    /// page's to keep for its life once drawn.
+    pub it_starts_closed: bool,
+}
+
+/// **A group of more than this many folders starts closed** — `§ What it
+/// will write`; the runner's ruling of 2026-11-09 on the design's choice.
+pub const THE_MOST_FOLDERS_A_GROUP_OPENS_WITH: usize = 8;
 
 /// **A sentence, as a sequence of parts.**
 ///
@@ -1829,6 +1982,20 @@ pub struct AChoice {
 pub struct AWriteTotal {
     pub how_many: Verbatim,
     pub format: Verbatim,
+}
+
+/// **`§ What it will write` with several scenes ticked: each ticked scene's
+/// list under its name** — its own total, warnings and lines, composed as one
+/// scene's are, against what that scene's job is composed with (`Render
+/// Settings` F5). The four questions, scout 2.15, 2026-11-12: until then the
+/// group held one line and no list.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AScenesOutputs {
+    /// The scene's own name. A value.
+    pub scene: Verbatim,
+    pub what_it_will_write: Option<TheWrites>,
+    pub the_output_warnings: Vec<TheOutputWarning>,
+    pub the_output_lines: Vec<ASentence>,
 }
 
 /// One of the two warnings under `§ What it will write` that hold a job.
@@ -1931,6 +2098,16 @@ pub struct TheRenderSettings {
     pub the_search_is_underway: bool,
     pub the_search_marks: Vec<Words>,
     pub the_mismatch: Option<TheMismatch>,
+    /// **The version line is held at the height of its longest content: the
+    /// warning with *Latest on this server.* after it** — `§ The header
+    /// carries the Blender version`, the twenty-eighth notes, note 17. This is
+    /// that warning for this file (its own release line, and the picked one or
+    /// its own again), which the page draws unseen under whatever the line
+    /// holds, so no pick and no *Reset all* moves the page. Empty where the
+    /// file records no version, since no warning can then stand.
+    pub the_version_line_held: ASentence,
+    /// *Latest on this server.*, for the held line's unseen copy.
+    pub latest_on_this_server: Prose,
     pub read_at: ASentence,
     /// **The moment in *read at*, in seconds**, which the page writes in its
     /// own time style wherever the line carries it as a value — the band's
@@ -1940,6 +2117,21 @@ pub struct TheRenderSettings {
     pub read_the_file: Prose,
     pub read_again: Prose,
     pub reading_the_file: Prose,
+    /// **Where the read's walk is**, in place of *Reading the file* while the
+    /// server says — `Design/Render Settings § A read can take longer`, as
+    /// changed 2026-11-13 (the Creator's notes on the test copy, second round,
+    /// note 15): *Reading frame 120 of 250*. Nothing before the walk's first
+    /// step, where nothing is moved, or from an older server program.
+    pub reading_the_walk: Option<Prose>,
+    pub stop_read: Prose,
+    pub stopping_read: Prose,
+    pub the_read_elapsed_seconds: Option<u64>,
+    /// **Why *Read the file* cannot be pressed now, shown on hover** —
+    /// `Design/Whole app § While other work runs`, 2026-11-13.
+    pub why_the_read_waits: Option<Prose>,
+    /// **Why *Render* cannot be pressed now, shown on hover** — the same.
+    pub why_render_waits: Option<Prose>,
+    pub the_read_is_stopping: bool,
     pub a_reading_stands: bool,
     pub the_read_is_offered: bool,
     pub the_read_is_underway: bool,
@@ -1954,6 +2146,15 @@ pub struct TheRenderSettings {
     /// came from no entry.
     pub where_it_came_from_moment: Option<String>,
     pub the_read_failure: Option<TheReadFailure>,
+    /// **The file's own scripts will run on the server** — `Design/Render
+    /// Settings § The file's scripts`, `Render Settings` V3a: said once, in
+    /// the bands, only where the reading standing found scripts that run (a
+    /// text with Register on, or a Python driver). The leftovers of the Rough
+    /// what-if answers (222, 227), the runner's ruling of 2026-11-14.
+    pub the_files_scripts_run: Option<Prose>,
+    /// **A newer copy of this file has not finished uploading** — said once,
+    /// in the bands (the leftovers of the Rough what-if answers, 185).
+    pub a_newer_copy_is_uploading: Option<Prose>,
 
     // The left column.
     pub scene_heading: Prose,
@@ -1977,8 +2178,23 @@ pub struct TheRenderSettings {
     // The middle column.
     pub render_heading: Prose,
     pub the_render_group_is_greyed: bool,
+    /// **`§ Scenes`, *None ticked*: a reading stands and no scene is ticked**,
+    /// so no job can be sent (the spec's *None ticked renders nothing*,
+    /// `Render Settings` F5 of 2026-11-10; the Creator's twenty-ninth notes,
+    /// note 6, the drawing's `res-noscene`). Everything a scene owns is greyed
+    /// and composed empty here; the page greys what it draws of its own —
+    /// the Frames group, the download switch, *Render one frame first* and
+    /// the dependency warning's two ways to submit.
+    pub no_scene_is_ticked: bool,
     pub samples: AField,
     pub the_samples_lines: Vec<ASentence>,
+    /// **Whether the lines under the box state the file's own setup**, and so
+    /// take the grey edge — or say what a typed count sets aside, in amber
+    /// (`§ When the override warning goes`, the twenty-eighth notes, note 17).
+    pub the_samples_lines_are_the_files: bool,
+    /// **Whether the last of them counts the View Layers that keep their own
+    /// counts** — the line the page holds in its place when it goes.
+    pub the_own_counts_line_stands: bool,
     pub simplify: Option<TheSimplify>,
     pub resolution: AField,
     pub the_size_reading: Option<Verbatim>,
@@ -2003,6 +2219,11 @@ pub struct TheRenderSettings {
     pub the_output_warnings: Vec<TheOutputWarning>,
     pub the_output_lines: Vec<ASentence>,
     pub the_output_group_is_drawn: bool,
+    /// **With several scenes ticked, each one's list under its name**, in
+    /// the reading's order ([`AScenesOutputs`]); empty otherwise, and where
+    /// any ticked scene has no half of its own (an older server program),
+    /// whose one line is [`Self::one_scene_only`].
+    pub the_scenes_outputs: Vec<AScenesOutputs>,
     pub one_scene_only: ASentence,
     pub dependencies_heading: Prose,
     pub the_dependency_band: Option<TheDependencyBand>,
@@ -2132,9 +2353,21 @@ pub fn the_render_settings_panel<R: tauri::Runtime>(
     let file = the_path_as_it_is_keyed(&file);
     let mut record = the_record_now(&started, &server);
     record.the_check = the_check_is_read_now(&started, &server, &file);
+    record.a_newer_copy_has_not_finished_uploading = started
+        .lock()
+        .ok()
+        .and_then(|started| {
+            started
+                .record
+                .as_ref()
+                .and_then(|record| crate::record::transfer_records::all(record.connection()).ok())
+        })
+        .is_some_and(|transfers| a_newer_copy_has_not_finished_uploading(&transfers, &server, &file));
     // **The check's uploads of this file, as Transfers lists them** — the
     // Creator's note 6 on 0.1.8. Read before the run's lock, like the rest.
     record.the_checks_uploads = crate::surface::transfers::the_checks_uploads_on(&app, &server, &file);
+    record.the_checks_upload_can_grow = crate::the_found_files_sent::the_readings_of_the_send(&server, &file)
+        .is_some_and(|send| send.it_can_grow());
     // **`Dependency Upload & Remap` A9e.**
     record.the_hold_on_render = crate::surface::the_dependency_check::what_holds_render(crate::surface::the_dependency_check::the_run_holds(), &server, &file);
     // **D5's reading, taken with the page rather than remembered** — the
@@ -2601,6 +2834,54 @@ pub async fn the_file_was_pointed_at<R: tauri::Runtime>(
     // choice of a file, with no pick in hand, changes nothing here.
     crate::a_new_job_from_an_old_one::the_pick_lands(&mut held, &server, &key);
     the_queue_is_told(&queue, an_act_said(&server, &key, "the-file", Vec::new()));
+    // **`Render Settings` Q14 item 2, wired** — the leftovers of the Rough
+    // what-if answers (215): opening the page onto a file a reading stands for
+    // reads its four values fresh and compares them, **off the drawing thread
+    // and after the page is drawn**, so the open waits on nothing. The
+    // comparison was built and nothing called it, so a file replaced outside
+    // Smoozy kept showing the old file's frames, size and samples.
+    let a_reading_stands = held
+        .readings
+        .standing(&FileKey { server: an_identity(&server), path: key.clone() })
+        .is_some();
+    drop(held);
+    if let (true, Some(point)) = (a_reading_stands, point) {
+        let queue = std::sync::Arc::clone(queue.inner());
+        std::thread::spawn(move || {
+            let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else {
+                return;
+            };
+            let now = runtime.block_on(crate::submitting::the_four_values_of(&point, &server, &key));
+            let changed = the_run_holds()
+                .lock()
+                .is_ok_and(|mut held| the_comparison_at_the_open_lands(&mut held, &server, &key, now));
+            if changed {
+                the_queue_is_told(&queue, an_act_said(&server, &key, "the-file", Vec::new()));
+            }
+        });
+    }
+}
+
+/// **`Render Settings` Q14 item 2's comparison, landed** (`Render Settings`
+/// Q13): where the four values differ the file's half is dropped
+/// (`Render Settings` J10) and the page says the file
+/// changed; where they match, or the channel could not answer, nothing moves.
+/// Gives back whether the page is to be drawn again. The leftovers of the
+/// Rough what-if answers (215).
+pub fn the_comparison_at_the_open_lands(
+    held: &mut WhatTheRunHolds,
+    server: &str,
+    file: &str,
+    now: smoozy_render_settings::readings::FourValuesNow,
+) -> bool {
+    let key = FileKey { server: an_identity(server), path: file.to_string() };
+    match held.readings.noticing_at_the_open(&key, now) {
+        smoozy_render_settings::file_half::Noticed::Changed => {
+            held.the_file_changed_since_the_read.insert(keyed(server, file));
+            true
+        }
+        _ => false,
+    }
 }
 
 /// **The version handed, or `File Browser`'s reading where none was** — the
@@ -2668,6 +2949,9 @@ pub fn the_file_is_read<R: tauri::Runtime>(
     file: Vec<u8>,
 ) {
     let file = the_path_as_it_is_keyed(&file);
+    if the_run_holds().lock().is_ok_and(|held| held.reading_now.get(&keyed(&server, &file)) == Some(&true)) {
+        return;
+    }
     let point = app
         .try_state::<std::sync::Arc<crate::servers::a_period::ThePeriodsThisRun>>()
         .and_then(|periods| periods.the_sessions_of(&server))
@@ -2715,7 +2999,15 @@ pub fn the_file_is_read<R: tauri::Runtime>(
     };
     match the_run_holds().lock() {
         Ok(mut held) => {
-            held.reading_now.insert(keyed(&server, &file), true);
+            let mark = keyed(&server, &file);
+            if held.reading_now.get(&mark) == Some(&true) { return; }
+            let control = crate::reading_the_file::AReadControl::new();
+            // `Render Settings` Q5's build detail of 2026-11-13: the page is
+            // drawn again when the server says the walk moved.
+            let (told, at, of) = (std::sync::Arc::clone(queue.inner()), server.clone(), file.clone());
+            control.redraws_with(move || the_queue_is_told(&told, an_act_said(&at, &of, "read", Vec::new())));
+            held.read_controls.insert(mark.clone(), std::sync::Arc::new(control));
+            held.reading_now.insert(mark, true);
         }
         Err(_) => {
             the_queue_is_told(
@@ -2753,6 +3045,30 @@ pub fn the_file_is_read<R: tauri::Runtime>(
     });
 }
 
+/// **The read line's words while the walk moves** (`Design/Render Settings §
+/// A read can take longer`, as changed 2026-11-13).
+fn the_walks_words(step: u64, steps: u64) -> Prose {
+    Prose::new(words::READING_FRAME_OF.replace("{step}", &step.to_string()).replace("{steps}", &steps.to_string()))
+}
+
+/// **Whether this page's submission is being sent now** — a second press
+/// then does nothing (`Design/Whole app § While other work runs`, 2026-11-13).
+pub(crate) fn a_submission_is_being_sent(held: &WhatTheRunHolds, server: &str, file: &str) -> bool {
+    held.submitting_now.get(&keyed(server, file)).copied().unwrap_or(false)
+}
+
+/// `Render Settings` Q5 and W2: a second Stop is the same one-way request.
+#[tauri::command]
+pub fn the_file_read_is_stopped(
+    queue: State<'_, std::sync::Arc<TheOneQueue>>, server: String, file: Vec<u8>,
+) {
+    let file = the_path_as_it_is_keyed(&file);
+    if let Ok(held) = the_run_holds().lock() {
+        if let Some(control) = held.read_controls.get(&keyed(&server, &file)) { control.stop(); }
+    }
+    the_queue_is_told(&queue, an_act_said(&server, &file, "read", Vec::new()));
+}
+
 /// **Where what a press came to lands, and what the read line says.**
 ///
 /// - **A reading stored** (`Render Settings` Q6): a failure the page was
@@ -2760,8 +3076,10 @@ pub fn the_file_is_read<R: tauri::Runtime>(
 ///   Settings` §12 declares** is written through the diary service with `Render
 ///   Settings` Q18's own stamp. Nothing is said on the line: the page itself now holds the
 ///   file's values.
-/// - **A reading discarded on landing** (`Render Settings` Q17): nothing is written and nothing
-///   is said, and the page is where it was with the read offered again.
+/// - **A reading discarded on landing** (`Render Settings` Q17): nothing is written, and the
+///   page is where it was with the read offered again. **Where the version moved, the line
+///   says so** (the Rough what-if answers, share 1, 7 and 8); where the file moved, nothing
+///   is said.
 /// - **No reading** (`Render Settings` Q8): [`the_read_gave_nothing`], which holds the ending
 ///   beside the page and hands the sentence to the diary once.
 /// - **No four values to start under**: said on the read line in the sentence
@@ -2798,6 +3116,23 @@ pub(crate) fn the_read_lands_in(
 
     let mark = keyed(server, file);
     held.reading_now.remove(&mark);
+    let control = held.read_controls.remove(&mark);
+    let stopped = control.as_ref().is_some_and(|control| control.is_stopped());
+    // **The server said the stopped read ended** (`Design/Render Settings §
+    // A read can take longer`, changed 2026-11-13, the night's live pass,
+    // fault 3): the line says *Read stopped.*, and *Stop requested.* otherwise.
+    let confirmed = control.as_ref().is_some_and(|control| control.the_stop_was_confirmed());
+    // **A reading already stored is not turned into a stop** — the Rough
+    // what-if answers, share 1 (10): a Stop that landed between the store and
+    // this ending left the file's values on the page under *Read stopped.*
+    let it_was_stored = matches!(
+        &came_to,
+        WhatTheReadCameTo::ThePreLoad { went: HowThePreLoadWent::AReading { landed: Landed::Stored, .. }, .. }
+    );
+    let stopped = stopped && !it_was_stored;
+    let came_to = if stopped {
+        WhatTheReadCameTo::ThePreLoad { went: HowThePreLoadWent::NoReading(Ending::SmoozyStoppedIt), operation: None }
+    } else { came_to };
     match came_to {
         WhatTheReadCameTo::TheFourValuesCouldNotBeRead => {
             vec![plainly(words::THE_FILE_ON_THE_SERVER_COULD_NOT_BE_READ)]
@@ -2858,6 +3193,14 @@ pub(crate) fn the_read_lands_in(
                 }
                 Vec::new()
             }
+            // **A reading thrown away because the Blender version moved under
+            // it is said** — the Rough what-if answers, share 1 (7, 8): the
+            // picker, or *Reset all to file values* clearing a hand pick,
+            // during the read left the page with *Read the file* offered again
+            // and no word why.
+            HowThePreLoadWent::AReading { landed: Landed::DiscardedTheVersionMoved, .. } => {
+                vec![plainly(words::THE_VERSION_CHANGED_DURING_THE_READ)]
+            }
             HowThePreLoadWent::AReading { .. } | HowThePreLoadWent::TheReadIsNotOffered => Vec::new(),
             HowThePreLoadWent::NoReading(ending) => {
                 let name = started
@@ -2868,14 +3211,22 @@ pub(crate) fn the_read_lands_in(
                     held,
                     server,
                     file,
-                    ending,
+                    match (stopped, confirmed) {
+                        (true, true) => AReadThatGaveNothing::TheStopWasConfirmed,
+                        (true, false) => AReadThatGaveNothing::TheStopWasRequested,
+                        _ => ending.into(),
+                    },
                     &TheDiaryInHand {
                         diary: started.as_ref().and_then(|started| started.diary.as_ref()),
                         run: started.as_ref().and_then(|started| started.run.as_ref()),
                         the_servers_name: &name,
                     },
                 );
-                Vec::new()
+                match (stopped, confirmed) {
+                    (true, true) => vec![plainly(words::SMOOZY_STOPPED_THE_READ)],
+                    (true, false) => vec![plainly(words::READ_STOP_REQUESTED)],
+                    _ => Vec::new(),
+                }
             }
         },
     }
@@ -3013,6 +3364,7 @@ pub fn a_job_is_submitted<R: tauri::Runtime>(
     queue: State<'_, std::sync::Arc<TheOneQueue>>,
     server: String,
     file: Vec<u8>,
+    job_name: Option<String>,
     with_the_first_frame_check: Option<bool>,
 ) {
     let file = the_path_as_it_is_keyed(&file);
@@ -3076,10 +3428,19 @@ pub fn a_job_is_submitted<R: tauri::Runtime>(
         }
         (_, _, _, None) => Err(vec![plainly(words::NOT_SUBMITTED), plainly(words::NO_SERVER_IS_CONNECTED)]),
         (Ok(mut held), Some(row), Some(run), Some(point)) => {
+            // **A second press while this page's submission is sent does
+            // nothing** (`Design/Whole app § While other work runs`, the
+            // Creator's notes on the test copy, second round, note 17): the
+            // control turns as it is sent, and a press before the page drew it
+            // turning sent a second job.
+            if a_submission_is_being_sent(&held, &server, &file) {
+                return;
+            }
             if let Some(hardware) = hardware {
                 the_hardware_stands_at(&mut held, &server, hardware);
             }
-            match the_act_as_the_page_composed_it(&held, &server, &file, &record, &row, run) {
+            match the_act_at_the_render_press(&mut held, &server, &file, job_name.as_deref(), &record, &row, run,
+                periods.as_deref().and_then(|periods| periods.what_the_last_connection_read(&server))) {
                 Ok(mut given) => {
                     // **`Server Setup` R1c's readings, taken at the press.**
                     // Held-job piece A, 2026-10-12.
@@ -3153,6 +3514,7 @@ pub fn a_job_is_submitted<R: tauri::Runtime>(
         let event = a_submission_that_went(&server, &file, &the_servers_name, how_many, &came_to, &named)
             .unwrap_or_else(|| {
                 let (said, plain) = the_acts_answer(&came_to);
+                let (said, plain) = a_first_frame_pair_is_one_job(&came_to, how_many, said, plain);
                 a_submission_said(&server, &file, said, plain)
             });
         the_queue_is_told(&queue, event);
@@ -3264,19 +3626,24 @@ pub fn the_version_list_is_asked_for<R: tauri::Runtime>(
     let queue = std::sync::Arc::clone(queue.inner());
     std::thread::spawn(move || {
         let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
-        let asked = match runtime {
-            Ok(runtime) => runtime.block_on(crate::submitting::the_blenders_on_the_machine(
+        // **The list, and what the same search read of the server's disk**
+        // (`Render Settings` B5 as added 2026-11-11).
+        let (asked, the_disk_reads_full) = match runtime {
+            Ok(runtime) => runtime.block_on(crate::submitting::the_blenders_on_the_machine_and_its_disk(
                 &point,
                 &server,
                 own_area.as_deref(),
             )),
-            Err(_) => smoozy_render_settings::acting::versions::TheVersionListAsk::TheMachineCouldNotBeAsked,
+            Err(_) => (
+                smoozy_render_settings::acting::versions::TheVersionListAsk::TheMachineCouldNotBeAsked,
+                false,
+            ),
         };
         // **`Server Setup` R1b's comparison, at `Server Setup` B12's moment of
         // `Render Settings` asking for the version list.** Added 2026-10-12.
         crate::servers::the_driver_swap::the_search_is_compared(&app, &server, &asked);
         if let Ok(mut held) = the_run_holds().lock() {
-            if !the_version_search_came_back(&mut held, &server, &search, asked) {
+            if !the_version_search_came_back(&mut held, &server, &search, asked, the_disk_reads_full) {
                 return;
             }
         }
@@ -3302,12 +3669,43 @@ fn the_version_search_came_back(
     server: &str,
     search: &std::sync::Arc<()>,
     asked: smoozy_render_settings::acting::versions::TheVersionListAsk,
+    the_disk_reads_full: bool,
 ) -> bool {
     if !held.version_searches_in_flight.get(server).is_some_and(|current| std::sync::Arc::ptr_eq(current, search)) {
         return false;
     }
-    the_version_list_came_back(held, server, asked);
+    the_version_list_came_back_with_the_disk(held, server, asked, the_disk_reads_full);
     true
+}
+
+/// **[`the_version_list_came_back`], with what the same search read of the
+/// server's disk** (`Render Settings` B5 as added 2026-11-11) — handed in
+/// with the list it belongs to, so no other search's reading can land with
+/// it (Sol's second point on the full disk).
+pub fn the_version_list_came_back_with_the_disk(
+    held: &mut WhatTheRunHolds,
+    server: &str,
+    asked: smoozy_render_settings::acting::versions::TheVersionListAsk,
+    the_disk_reads_full: bool,
+) {
+    held.version_searches_in_flight.remove(server);
+    match asked.as_the_page_reads_it() {
+        Some(list) => {
+            held.version_searches.remove(server);
+            held.version_lists.insert(server.to_string(), list);
+            if the_disk_reads_full {
+                held.the_disk_reads_full_on.insert(server.to_string());
+            } else {
+                held.the_disk_reads_full_on.remove(server);
+            }
+        }
+        None => {
+            held.the_disk_reads_full_on.remove(server);
+            held.version_lists.remove(server);
+            held.version_searches
+                .insert(server.to_string(), TheSearchStands::TheMachineCouldNotBeAsked);
+        }
+    }
 }
 
 /// **Where B1's answer lands.** A list replaces the searching mark; a machine
@@ -3317,18 +3715,8 @@ pub fn the_version_list_came_back(
     server: &str,
     asked: smoozy_render_settings::acting::versions::TheVersionListAsk,
 ) {
-    held.version_searches_in_flight.remove(server);
-    match asked.as_the_page_reads_it() {
-        Some(list) => {
-            held.version_searches.remove(server);
-            held.version_lists.insert(server.to_string(), list);
-        }
-        None => {
-            held.version_lists.remove(server);
-            held.version_searches
-                .insert(server.to_string(), TheSearchStands::TheMachineCouldNotBeAsked);
-        }
-    }
+    // **A list landed with no word of the disk says nothing of it.**
+    the_version_list_came_back_with_the_disk(held, server, asked, false);
 }
 
 /// **`§ What it will write`'s material, stored in the same act as the reading
@@ -3378,7 +3766,7 @@ pub(crate) fn the_outputs_half_landed(
 /// re-keyed, never copied — so a range typed before the read stays in its
 /// box. [`smoozy_render_settings::store::Store::a_reading_first_landed`] had
 /// been built and nothing but its own test called it.
-pub(crate) fn the_read_ticks_its_scene(
+pub fn the_read_ticks_its_scene(
     held: &mut WhatTheRunHolds,
     server: &str,
     file: &str,
@@ -3500,14 +3888,37 @@ pub fn the_period_ended_for(held: &mut WhatTheRunHolds, server: &str) {
     // Added at step 10c's dependency wave piece 3, when a reading could first
     // stand on this page.
     held.readings.the_period_ended(&an_identity(server));
+    let this_server = keyed(server, "");
+    held.the_file_changed_since_the_read.retain(|mark| !mark.starts_with(&this_server));
+}
+
+/// `Queue & History` Y8 and `Design/Render Settings § Submitting`: take the
+/// name carried by Render under the same lock as the rest of the submission.
+/// An empty name clears an older one. An absent value keeps the saved answer.
+fn the_act_at_the_render_press(
+    held: &mut WhatTheRunHolds,
+    server: &str,
+    file: &str,
+    job_name: Option<&str>,
+    record: &WhatTheRecordHolds,
+    row: &smoozy_servers::store::ServerRow,
+    run: Identity,
+    live_check: Option<crate::servers::a_period::WhatTheLastConnectionRead>,
+) -> Result<crate::submitting::WhatThePageHandsOver, ASentence> {
+    // `Render Settings` Y1: a saved setup never overrides the live check.
+    if crate::surface::servers::the_live_check_reads_not_set_up(live_check) {
+        return Err(vec![plainly(words::NOT_SUBMITTED), plainly(words::NOT_SET_UP_ON_THIS_SERVER)]);
+    }
+    if let Some(name) = job_name {
+        the_answer_is_taken(held, server, file, WhichSetting::JobName, name);
+    }
+    the_act_as_the_page_composed_it(held, server, file, record, row, run)
 }
 
 /// **The act, as the page composed it** — `Render Settings` Y1's payload per
 /// scene-job from the store and the resolved pick, and everything else the
-/// driver needs, taken from the page, the run and the server row at the moment
-/// of Submit.
-///
-/// **An answer the page cannot compose is said, never sent.**
+/// driver needs, taken from the page, the run and the server row at Submit.
+/// An answer the page cannot compose is said, never sent.
 pub fn the_act_as_the_page_composed_it(
     held: &WhatTheRunHolds,
     server: &str,
@@ -3521,6 +3932,12 @@ pub fn the_act_as_the_page_composed_it(
     // **`Dependency Upload & Remap` A9e: no job, and none composed later.**
     if let Some(hold) = record.the_hold_on_render {
         return Err(not_submitted(the_holds_words(hold).2));
+    }
+    // **`Render Settings` F5 of 2026-11-10: a reading stands and no scene is
+    // ticked, so no job is composed** — the guard behind the greyed Render
+    // (the spec's *None ticked renders nothing*).
+    if no_scene_is_ticked(held, server, file) {
+        return Err(not_submitted(words::NO_SCENE_IS_TICKED_LEAD));
     }
 
     let key = FileKey {
@@ -3536,12 +3953,11 @@ pub fn the_act_as_the_page_composed_it(
         let wanted = scene_name.as_ref()?;
         reading.settings.scenes.iter().find(|scene| scene.name.as_bytes() == wanted.as_bytes())
     });
-    let saved_with = held
-        .the_saved_with
-        .get(&mark)
-        .cloned()
-        .or_else(|| scene.map(|scene| scene.saved_with.clone()))
-        .and_then(|text| the_release_line(&text));
+    // **One saved-with, the page's own** ([`the_saved_with_of`]), so the
+    // version the act resolves is the one the page shows — a page from a
+    // history entry with no scene ticked included (the twenty-ninth notes,
+    // note 6).
+    let saved_with = the_saved_with_of(held, server, file, scene);
     let resolution = version::resolve(
         per_file.and_then(|per_file| per_file.version_pick.as_ref()),
         saved_with,
@@ -3585,34 +4001,17 @@ pub fn the_act_as_the_page_composed_it(
         answers.frame_range.and(answers.frame_range_text)
     };
     let scene_jobs = match ticked.as_slice() {
-        // **`Render Settings` F5, the sentence settled 2026-10-01: where a
-        // reading stands and no scene is ticked, a scene is in hand** — the one
-        // the page stands in (`Render Settings` J3), [`the_scene_in_hand`], the same one
-        // [`the_answer_is_taken`] writes under and the panel draws from — **and
-        // the job composes from that scene's own entries.** Where the reading
-        // holds one scene the job carries its name, with J7's provenance as a
-        // tick would give it; where it holds several the job carries none
-        // (`Render Settings` Y10), and so no pins (`Render Settings` C8). With
-        // nothing read there is no scene in hand and the pre-read set is read,
-        // as before.
+        // **No scene ticked is only ever the pre-read page here** — no reading
+        // stands, so the job carries no scene name (`Render Settings` Y10) and
+        // composes from `Render Settings` J3's pre-read answer set (`Render
+        // Settings` F5). With a reading and none ticked nothing reaches this
+        // line: the guard above refuses it (`Render Settings` F5 of 2026-11-10).
         //
-        // *Until step 10c's Sesterce-pass fix piece 1 this composed with no
-        // scene in hand whenever none was ticked, so after* Read the file *it
-        // read the pre-read set — re-keyed into the scene's own entry the
-        // moment the reading landed (`Render Settings` J3), so empty — and a range the page drew
-        // as typed reached the job as the file's own.*
-        [] => {
-            let the_one_scene = standing
-                .filter(|reading| reading.settings.scenes.len() == 1)
-                .and(scene_name.clone())
-                .and_then(|name| {
-                    Some(NamedAnswer {
-                        name,
-                        provenance: the_provenance(held, &key)?,
-                    })
-                });
-            vec![payload_for(the_one_scene.as_ref(), scene_name.as_ref())]
-        }
+        // *From step 10c's Sesterce-pass fix piece 1 (`Render Settings` F5's sentence of
+        // 2026-10-01) to the Creator's twenty-ninth notes, a reading with none
+        // ticked composed from the first scene's entries and rendered the
+        // scene the file was saved showing; that sentence is struck.*
+        [] => vec![payload_for(None, scene_name.as_ref())],
         several => several
             .iter()
             .map(|scene| payload_for(Some(scene), Some(&scene.name)))
@@ -3782,6 +4181,11 @@ pub fn the_act_as_the_page_composed_it(
 /// (`Design/Render Settings § When the read gives nothing`, 2026-09-29).
 #[derive(Debug, Clone, PartialEq)]
 pub enum AReadThatGaveNothing {
+    TheStopWasRequested,
+    /// **Stopped, and the server said the read ended there** — said on the
+    /// read line as *Read stopped.*, with no failure box (the night's live
+    /// pass, fault 3).
+    TheStopWasConfirmed,
     Ended(Ending),
     TheServerRanNoBlender,
 }
@@ -3790,6 +4194,34 @@ impl From<Ending> for AReadThatGaveNothing {
     fn from(ending: Ending) -> AReadThatGaveNothing {
         AReadThatGaveNothing::Ended(ending)
     }
+}
+
+/// **A first-frame submission of one scene whose first frame went and whose
+/// rest did not, said as one job** — `Design/Render Settings § Submitting`,
+/// added 2026-11-12 (the four questions, scout 3.49). `how_many` counts
+/// scene-jobs, as the confirmation does; the pair is two jobs of one. The
+/// leading count gives way to *Only the first frame was submitted.*, and the
+/// reasons stay.
+pub fn a_first_frame_pair_is_one_job(
+    came_to: &crate::submitting::WhatTheActCameTo,
+    how_many: usize,
+    said: ASentence,
+    plain: usize,
+) -> (ASentence, usize) {
+    use crate::submitting::{WhatBecameOfOneJob as Became, WhatTheActCameTo as CameTo};
+    let CameTo::TheseJobs(jobs) = came_to else {
+        return (said, plain);
+    };
+    let the_pair_half_went = how_many == 1
+        && jobs.len() == 2
+        && jobs[0] == Became::ItIsInTheLine
+        && jobs[1] != Became::ItIsInTheLine;
+    if !the_pair_half_went || plain == 0 {
+        return (said, plain);
+    }
+    let mut one = vec![plainly(words::ONLY_THE_FIRST_FRAME_WAS_SUBMITTED)];
+    one.extend(said.into_iter().skip(plain));
+    (one, 1)
 }
 
 /// **What the act says, on the control that asked** — `Rendering` S10: which
@@ -3873,6 +4305,7 @@ pub fn the_acts_answer(came_to: &crate::submitting::WhatTheActCameTo) -> (ASente
                 ("file", vec![plainly(words::THE_FILE_ON_THE_SERVER_COULD_NOT_BE_READ)])
             }
             Became::ThisComputerCouldNotComposeIt => ("computer", vec![plainly(words::IT_COULD_NOT_BE_PREPARED)]),
+            Became::SmoozyClosedWhileSendingIt => ("closed", vec![plainly(words::SMOOZY_CLOSED_WHILE_SENDING_IT)]),
         };
         if !reasons.iter().any(|(held, _)| *held == which) {
             reasons.push((which, reason));
@@ -3926,6 +4359,25 @@ pub fn the_answer_is_taken(
         path: file.to_string(),
     };
     let scene = the_scene_in_hand(held, server, file);
+    // **`Render Settings` F5 of 2026-11-10: with a reading standing and no
+    // scene ticked, a scene's answer that arrives anyway is not taken** —
+    // there is no scene to key it by. The page greys every one of these.
+    if no_scene_is_ticked(held, server, file)
+        && matches!(
+            which,
+            WhichSetting::FrameRange
+                | WhichSetting::SampleCount
+                | WhichSetting::ResolutionPercentage
+                | WhichSetting::EnginePick
+                | WhichSetting::Device
+                | WhichSetting::Simplify
+                | WhichSetting::SimplifySubdivision
+                | WhichSetting::SimplifyChildParticles
+                | WhichSetting::SimplifyTextureLimit
+        )
+    {
+        return None;
+    }
     let ticked = held
         .store
         .per_file(&key)
@@ -4247,25 +4699,84 @@ fn the_provenance(held: &WhatTheRunHolds, key: &FileKey) -> Option<Provenance> {
 }
 
 /// **The one scene in hand**, which is the ticked one where exactly one is
-/// ticked, else the first the reading holds. **Where nothing has been read
-/// there is no scene at all**, which is J3's pre-read state.
+/// ticked. **Where none is ticked there is no scene at all**: before a read
+/// that is `Render Settings` J3's pre-read state, and after one it is the page with nothing to
+/// render ([`no_scene_is_ticked`]). Several ticked is no one scene either.
+///
+/// *Changed 2026-11-10, the Creator's twenty-ninth notes, note 6 (`Render
+/// Settings` F5 of that day). Until then a reading with no tick put the
+/// reading's first scene in hand, so the page drew that scene while the job
+/// rendered the one the file was saved showing.*
 fn the_scene_in_hand(held: &WhatTheRunHolds, server: &str, file: &str) -> Option<ExactName> {
     let key = FileKey {
         server: an_identity(server),
         path: file.to_string(),
     };
-    if let Some(per_file) = held.store.per_file(&key) {
-        if per_file.scenes_ticked.len() == 1 {
-            return Some(per_file.scenes_ticked[0].name.clone());
-        }
-        if per_file.scenes_ticked.len() > 1 {
-            return None;
-        }
+    match held.store.per_file(&key)?.scenes_ticked.as_slice() {
+        [one] => Some(one.name.clone()),
+        _ => None,
     }
-    held.readings
-        .standing(&key)
-        .and_then(|reading| reading.settings.scenes.first())
-        .map(|scene| scene.name.clone())
+}
+
+/// **The frames this file's jobs render on this server, as this page holds
+/// them** — what `Dependency Upload & Remap`'s *Colour spaces and image
+/// sequences* works a picture stored as a sequence out over. With a reading
+/// standing, every ticked scene's range as composition reads it (F5), or the
+/// scene's own where none is typed (F4), joined; with none, the range typed
+/// before any read; otherwise nothing, since the file's own is not known here.
+pub(crate) fn the_frames_this_files_jobs_render(held: &WhatTheRunHolds, server: &str, file: &str) -> Option<Vec<i64>> {
+    let key = FileKey {
+        server: an_identity(server),
+        path: file.to_string(),
+    };
+    let Some(reading) = held.readings.standing(&key) else {
+        return held
+            .store
+            .the_answers_composition_reads(&key, None)
+            .frame_range
+            .as_ref()
+            .map(FrameForm::explicit_list);
+    };
+    let ticked: Vec<ExactName> = held
+        .store
+        .per_file(&key)
+        .map(|per_file| per_file.scenes_ticked.iter().map(|one| one.name.clone()).collect())
+        .unwrap_or_default();
+    let mut frames = std::collections::BTreeSet::new();
+    for one in reading.settings.scenes.iter().filter(|one| ticked.contains(&one.name)) {
+        let form = held
+            .store
+            .the_answers_composition_reads(&key, Some(&one.name))
+            .frame_range
+            .unwrap_or(FrameForm::Triple { first: one.frame_start, last: one.frame_end, step: one.frame_step });
+        frames.extend(form.explicit_list());
+    }
+    Some(frames.into_iter().collect())
+}
+
+/// **A reading stands and no scene is ticked: nothing renders** — the spec's
+/// *None ticked renders nothing* and `Render Settings` F5 of 2026-11-10 (the
+/// Creator's twenty-ninth notes, note 6: *"no scene rendering is no job at
+/// all"*). The page greys everything a scene owns and offers no Render; a
+/// submission or a scene's answer that arrives anyway is refused or not
+/// taken. **Before any read nothing changes**: with no reading the pre-read
+/// answer set stands and the page still submits (`Render Settings` J3 and
+/// `Render Settings` F5). **Nor on a page from a history entry whose job
+/// named no scene**: its kept setup is loaded into the pre-read set whether
+/// or not a reading stands (`Render Settings` Y15,
+/// `smoozy_rendering::again::a_kept_setup_with_no_scene_is_loaded`), and the
+/// job composes from it with no name, as `Render Settings` F5 keeps.
+pub(crate) fn no_scene_is_ticked(held: &WhatTheRunHolds, server: &str, file: &str) -> bool {
+    let key = FileKey {
+        server: an_identity(server),
+        path: file.to_string(),
+    };
+    let per_file = held.store.per_file(&key);
+    let from_a_history_entry_with_no_scene =
+        held.where_it_came_from.contains_key(&keyed(server, file)) && per_file.is_some_and(|per_file| per_file.pre_read.is_some());
+    held.readings.standing(&key).is_some()
+        && per_file.is_none_or(|per_file| per_file.scenes_ticked.is_empty())
+        && !from_a_history_entry_with_no_scene
 }
 
 /// **The outputs half, only where the scene it was read from is the page's
@@ -4370,6 +4881,17 @@ fn the_saved_with_of(
         .get(&keyed(server, file))
         .cloned()
         .or_else(|| scene.map(|scene| scene.saved_with.clone()))
+        // **With no scene ticked the version stays as it was** (`§ Scenes`,
+        // *None ticked*, and a page from a history entry whose job named
+        // none): the reading's own field is the file's, carried alike by
+        // every scene of it, so its first scene still says it.
+        .or_else(|| {
+            let key = FileKey { server: an_identity(server), path: file.to_string() };
+            let nothing_ticked = held.store.per_file(&key).is_none_or(|per_file| per_file.scenes_ticked.is_empty());
+            nothing_ticked
+                .then(|| held.readings.standing(&key)?.settings.scenes.first().map(|scene| scene.saved_with.clone()))
+                .flatten()
+        })
         .and_then(|text| the_release_line(&text))
 }
 
@@ -4615,17 +5137,29 @@ fn the_holds_words(hold: crate::surface::the_dependency_check::WhyRenderIsHeld) 
         WhyRenderIsHeld::CheckFirst => {
             (words::CHECK_DEPENDENCIES_FIRST, words::CHECK_DEPENDENCIES, words::CHECK_DEPENDENCIES_FIRST_STOP)
         }
+        WhyRenderIsHeld::ThisFileIsUploading => {
+            (words::WAITING_FOR_UPLOAD, words::THIS_FILE_IS_UPLOADING, words::THIS_FILE_IS_UPLOADING)
+        }
     }
 }
 
 /// ***Uploading dependencies: 4 of 12 files.*** — the two figures values,
 /// the words around them the sentence's.
-fn the_dependencies_uploading(done: usize, whole: usize) -> ASentence {
+///
+/// ***Uploading dependencies: 4 of 12 files so far.*** while a reading of a
+/// linked `.blend` can still add files — 2026-11-09, the twenty-eighth notes,
+/// note 11.
+fn the_dependencies_uploading(done: usize, whole: usize, so_far: bool) -> ASentence {
     vec![
         with_values(words::UPLOADING_DEPENDENCIES, vec![done.to_string()], Some(words::OF)),
         a_figure(
             whole.to_string(),
-            if whole == 1 { words::FILE_FULL_STOP } else { words::FILES_FULL_STOP },
+            match (so_far, whole == 1) {
+                (false, true) => words::FILE_FULL_STOP,
+                (false, false) => words::FILES_FULL_STOP,
+                (true, true) => words::FILE_SO_FAR,
+                (true, false) => words::FILES_SO_FAR,
+            },
         ),
     ]
 }
@@ -4814,12 +5348,7 @@ fn the_simulation_rows(held: &WhatTheRunHolds, key: &FileKey, ticked: &[ExactNam
             let job = played(*low, *high);
             let check = held.submission.get(&keyed(&key.server.as_text(), &key.path))
                 .is_some_and(|choice| choice.the_first_frame_check) && list.len() > 1;
-            match (job, check.then(|| played(list[0], list[0]))) {
-                (None, _) => format!("Plays nothing: simulations start at frame {}.", one.simulations_begin.unwrap_or(one.frame_start)),
-                (Some((from, to)), Some(Some((check_from, check_to)))) => format!("Plays frames {check_from}–{check_to} for the check and {from}–{to} for the job, on every attempt."),
-                (Some((from, to)), Some(None)) => format!("Plays frames {from}–{to} for the job and nothing for the check, on every attempt."),
-                (Some((from, to)), None) => format!("Plays frames {from}–{to} before rendering, on every attempt."),
-            }
+            the_simulation_range_words(job, check.then(|| played(list[0], list[0])), one.simulations_begin.unwrap_or(one.frame_start))
         } else { return None; };
         Some(TheSimulationRow { scene: one.name.as_text().to_string(), name: (ticked.len() > 1).then(|| Verbatim::new(one.name.as_text())), label: Prose::new("Prepare simulations"), on, range: Prose::new(range) })
     }).collect()
@@ -4850,6 +5379,12 @@ pub fn the_panel_starting_from(
         })
         .unwrap_or_default();
     let several = ticked.len() > 1;
+    // **`§ Scenes`, *None ticked*: a reading stands and no scene is ticked**,
+    // so nothing renders — every value greys and empties, the range too, and
+    // no scene's View Layers or outputs are drawn (the Creator's twenty-ninth
+    // notes, note 6; `Render Settings` F5 of 2026-11-10).
+    let none = no_scene_is_ticked(held, server, file);
+    let greyed = several || none;
     let scene_name = the_scene_in_hand(held, server, file);
     let scene: Option<&SceneReading> = standing.and_then(|reading| {
         let wanted = scene_name.as_ref()?;
@@ -4859,9 +5394,11 @@ pub fn the_panel_starting_from(
             .iter()
             .find(|scene| scene.name.as_bytes() == wanted.as_bytes())
     });
-    let answers: SceneEntries = held
-        .store
-        .the_answers_composition_reads(&key, scene_name.as_ref());
+    let answers: SceneEntries = if none {
+        SceneEntries::default()
+    } else {
+        held.store.the_answers_composition_reads(&key, scene_name.as_ref())
+    };
     let submission = held.submission.get(&mark).cloned().unwrap_or_default();
     let the_reporting_choice = the_reporting_choice_composed(submission.what_it_reports, the_reporting_default);
 
@@ -4876,7 +5413,7 @@ pub fn the_panel_starting_from(
     let the_read_failure = held
         .the_read_that_gave_nothing
         .get(&mark)
-        .and_then(|ending| the_read_failure(ending, record.the_servers_name.as_deref(), picked.as_ref()));
+        .and_then(|ending| the_read_failure(ending, picked.as_ref()));
 
     // ── The two bands ───────────────────────────────────────────────────────
     let the_band: ASentence = if several {
@@ -4884,20 +5421,25 @@ pub fn the_panel_starting_from(
             a_figure(ticked.len().to_string(), words::SCENES_ARE_TICKED_LEAD),
             a_figure(ticked.len().to_string(), words::SCENES_ARE_TICKED_REST),
         ]
+    } else if none {
+        vec![plainly(words::NO_SCENE_IS_TICKED_LEAD), plainly(words::NO_SCENE_IS_TICKED_REST)]
     } else if standing.is_none() {
         // **J10's three drops leave the page exactly as it was before any read
-        // except that the user's own values are still standing in it**, and the
-        // band's wording is the one thing that differs.
-        match held.the_read_that_gave_nothing.get(&mark) {
-            Some(AReadThatGaveNothing::Ended(Ending::TheMachineCouldNotBeReached))
-                if held.hardware.contains_key(server) =>
-            {
-                vec![
-                    plainly(words::THE_CONNECTION_ENDED_LEAD),
-                    plainly(words::THE_CONNECTION_ENDED_REST),
-                ]
-            }
-            _ => vec![plainly(words::NOT_READ_LEAD), plainly(words::NOT_READ_REST)],
+        // except that the user's own values are still standing in it.**
+        // **Where a read failed, its box stands in for the band**, so the page
+        // says one thing once — `Design/Render Settings § When the read gives
+        // nothing`, as changed 2026-11-13 (the Creator's note 4 on the test
+        // copy of 2026-11-12: *Connection lost. …* over *Could not reach the
+        // server.*). Clearing the box brings the band back.
+        if the_read_failure.is_some() {
+            Vec::new()
+        } else if held.the_file_changed_since_the_read.contains(&mark) {
+            // **`Render Settings` Q14 item 2: the comparison at the open found
+            // the file changed** (the leftovers of the Rough what-if answers,
+            // 215).
+            vec![plainly(words::THE_FILE_CHANGED_LEAD), plainly(words::NOT_READ_REST)]
+        } else {
+            vec![plainly(words::NOT_READ_LEAD), plainly(words::NOT_READ_REST)]
         }
     } else {
         Vec::new()
@@ -4929,7 +5471,14 @@ pub fn the_panel_starting_from(
         tag: Some(the_all_scenes_tag(reading.settings.scenes.len())),
     });
 
-    let the_range = the_range_field(&answers, scene, several);
+    let mut the_range = the_range_field(&answers, scene, several);
+    // **With none ticked the range greys too**: there is no set of scenes to
+    // impose a range on (`§ Scenes`, *None ticked*).
+    if none {
+        the_range.greyed = true;
+        the_range.value = None;
+        the_range.hand_back_to = None;
+    }
     let the_frame_count = the_frame_count(&answers, standing, &ticked, scene, several);
     // **Where every job the Render control would send has one frame, the
     // first-frame check has nothing to save** — the switch is greyed and the
@@ -4957,21 +5506,21 @@ pub fn the_panel_starting_from(
     // not show under EEVEE. **Where neither says, nothing is assumed**: no
     // file's count is drawn and the pair stays, which is the unread page's own
     // reading.
-    let samples = the_samples_field(&answers, scene, engine_in_force, several);
-    let the_samples_lines = the_samples_lines(
+    let samples = the_samples_field(&answers, scene, engine_in_force, greyed);
+    let (the_samples_lines, the_own_counts_line_stands) = the_samples_lines_and_the_count(
         &answers,
         scene,
         engine_in_force,
         standing.map(|reading| reading.taken_by.version),
-        several,
+        greyed,
     );
-    let (resolution_field, size, size_not_known) = the_resolution(&answers, scene, several);
+    let (resolution_field, size, size_not_known) = the_resolution(&answers, scene, greyed);
     let engine = the_engine(&answers, standing, scene);
     let renders_on = the_renders_on(
         &answers,
         scene,
         held.hardware.get(server),
-        several,
+        greyed,
         engine_in_force,
         picked.as_ref(),
         record.a_missed_swap_stands,
@@ -5008,6 +5557,12 @@ pub fn the_panel_starting_from(
     }
     let (what_it_will_write, the_output_warnings, the_output_lines) =
         the_output_group(outputs, scene, &ticked, several, &ground);
+    let the_scenes_outputs = if several {
+        every_ticked_scenes_outputs(held, server, file, &key, record, &ticked)
+    } else {
+        None
+    };
+    let one_scene_at_a_time = several && the_scenes_outputs.is_none();
     // **A reading with no list cannot say the folder is there**, so no *In …*
     // line is drawn (`Design/Render Settings § What it will write`).
     let it_can_be_claimed = |sits: &&WhereTheJobsFolderSits| {
@@ -5075,8 +5630,15 @@ pub fn the_panel_starting_from(
         blender_version: Prose::new(words::BLENDER_VERSION),
         the_versions: the_versions(list, picked.as_ref()),
         the_version_control_is_drawn: list.is_some_and(|list| !list.entries.is_empty()),
-        no_blender: the_no_blender_line(&resolution),
-        set_it_up: Prose::new(words::SET_IT_UP),
+        no_blender: the_no_blender_line(&resolution, held.the_disk_reads_full_on.contains(server)),
+        // **Nothing at Set up frees a disk**, so the way there is not drawn
+        // beside *The server’s disk is full.* (`Design/Render Settings § When
+        // there is no version to pick` as added 2026-11-11).
+        set_it_up: Prose::new(if held.the_disk_reads_full_on.contains(server) {
+            ""
+        } else {
+            words::SET_IT_UP
+        }),
         // **A server being searched, or one that could not be, is not a
         // server that is missing** — the line says which.
         the_pick_line: match (list, held.version_searches.get(server)) {
@@ -5090,14 +5652,35 @@ pub fn the_panel_starting_from(
             && matches!(held.version_searches.get(server), Some(TheSearchStands::Searching)),
         the_search_marks: the_search_marks(list),
         the_mismatch: the_mismatch(saved_with, picked.as_ref()),
+        the_version_line_held: the_version_line_held(saved_with, picked.as_ref()),
+        latest_on_this_server: Prose::new(words::LATEST_ON_THIS_SERVER),
+        the_files_scripts_run: the_files_scripts_line(standing),
+        a_newer_copy_is_uploading: record
+            .a_newer_copy_has_not_finished_uploading
+            .then(|| Prose::new(words::A_NEWER_COPY_IS_UPLOADING)),
         read_at: the_read_at_line(standing.map(|reading| reading.stored_at.taken_at())),
         read_at_moment: the_read_at_moment(standing.map(|reading| reading.stored_at.taken_at())),
         read_the_file: Prose::new(words::READ_THE_FILE),
         read_again: Prose::new(words::READ_AGAIN),
         reading_the_file: Prose::new(words::READING_THE_FILE),
+        reading_the_walk: held.read_controls.get(&mark).and_then(|control| control.walk()).map(|(step, steps)| the_walks_words(step, steps)),
+        stop_read: Prose::new(words::STOP_READ),
+        stopping_read: Prose::new(words::STOPPING_READ),
+        the_read_elapsed_seconds: held.read_controls.get(&mark).map(|control| control.elapsed()),
+        the_read_is_stopping: held.read_controls.get(&mark).is_some_and(|control| control.is_stopped()),
         a_reading_stands: standing.is_some(),
-        the_read_is_offered: resolution.the_read_is_offered(),
+        the_read_is_offered: resolution.the_read_is_offered()
+            && record.the_hold_on_render != Some(crate::surface::the_dependency_check::WhyRenderIsHeld::ThisFileIsUploading),
         the_read_is_underway: underway,
+        // **Why *Read the file* waits, on hover** (`Design/Whole app § While
+        // other work runs`, 2026-11-13): it is reading, or the file is going up.
+        why_the_read_waits: if underway {
+            Some(Prose::new(words::THE_FILE_IS_BEING_READ))
+        } else if record.the_hold_on_render == Some(crate::surface::the_dependency_check::WhyRenderIsHeld::ThisFileIsUploading) {
+            Some(Prose::new(words::THIS_FILE_IS_UPLOADING))
+        } else {
+            None
+        },
         reset_all: Prose::new(words::RESET_ALL),
 
         the_band,
@@ -5122,7 +5705,7 @@ pub fn the_panel_starting_from(
                 vec![ticked.len().to_string()],
                 None,
             ))
-        } else if answers.frame_range.is_some() {
+        } else if none || answers.frame_range.is_some() {
             None
         } else {
             Some(plainly(words::THE_FILES_RANGE))
@@ -5139,9 +5722,12 @@ pub fn the_panel_starting_from(
         the_view_layers,
 
         render_heading: Prose::new(words::RENDER),
-        the_render_group_is_greyed: several,
+        the_render_group_is_greyed: greyed,
+        no_scene_is_ticked: none,
         samples,
         the_samples_lines,
+        the_samples_lines_are_the_files: answers.sample_count.is_none(),
+        the_own_counts_line_stands,
         simplify: the_simplify(came_from, &answers, scene),
         resolution: resolution_field,
         the_size_reading: size,
@@ -5164,7 +5750,8 @@ pub fn the_panel_starting_from(
         what_it_will_write,
         the_output_warnings,
         the_output_lines,
-        one_scene_only: if several {
+        the_scenes_outputs: the_scenes_outputs.unwrap_or_default(),
+        one_scene_only: if one_scene_at_a_time {
             vec![part(
                 words::READ_FROM_ONE_SCENE_LEAD,
                 vec![ticked.len().to_string()],
@@ -5190,9 +5777,14 @@ pub fn the_panel_starting_from(
         the_frames_have_nowhere_to_go,
         the_dependency_link_starts_a_check: record.the_checks_uploads.is_none()
             && record.the_hold_on_render == Some(crate::surface::the_dependency_check::WhyRenderIsHeld::CheckFirst),
+        // **`Dependency Upload & Remap` G14b: every file landed and a linked
+        // file still read** — the hold's own line, *Checking dependencies…*,
+        // over the count; and the count says *so far* while a reading can still
+        // add files (`Design/Render Settings § Submitting`, 2026-11-09).
         the_dependencies_uploading: record
             .the_checks_uploads
-            .map(|(done, whole)| the_dependencies_uploading(done, whole))
+            .filter(|_| record.the_hold_on_render != Some(crate::surface::the_dependency_check::WhyRenderIsHeld::ItsCheckIsRunning))
+            .map(|(done, whole)| the_dependencies_uploading(done, whole, record.the_checks_upload_can_grow))
             .or_else(|| record.the_hold_on_render.map(|hold| vec![plainly(the_holds_words(hold).1)])),
         simulation_rows: the_simulation_rows(held, &key, &ticked, scene_name.as_ref()),
         render_one_frame_first: Prose::new(words::RENDER_ONE_FRAME_FIRST),
@@ -5237,10 +5829,14 @@ pub fn the_panel_starting_from(
             Some(hold) => vec![plainly(the_holds_words(hold).0)],
             None => the_render_control,
         },
+        // **Why Render waits, on hover** (`Design/Whole app § While other work
+        // runs`, 2026-11-13).
+        why_render_waits: record.the_hold_on_render.map(|hold| Prose::new(the_holds_words(hold).2)),
         // **One act at a time from one page**: while a submission runs, the
         // control is not offered again (step 10c piece 6).
         submitting_is_offered: resolution.submitting_is_offered()
             && record.the_hold_on_render.is_none()
+            && !none
             && !held.submitting_now.get(&mark).copied().unwrap_or(false),
         the_submission_is_underway: held.submitting_now.get(&mark).copied().unwrap_or(false),
         the_machines_words_subject: Verbatim::new(
@@ -5302,16 +5898,19 @@ fn the_versions(list: Option<&TheListThisPageAsksFor>, picked: Option<&BlenderId
         .collect()
 }
 
-/// **`§ The header carries the Blender version`: the line after the version
-/// says how the pick was made, and only that** — three outcomes, and the third
-/// does not share a word with the other two.
+/// **`§ The header carries the Blender version`: the line after the version is
+/// the mismatch warning, and the pick is not described** — save the one
+/// `Render Settings` B2 case that is news: Smoozy picked an older Blender
+/// because nothing newer is on the server. Then *Latest on this server.*
+/// follows the warning on its line, and never for the user's own pick.
+/// Changed 2026-11-10, the Creator's twenty-eighth notes, note 17: *matched to
+/// the file* and *nearest above the file's* read as stray fragments.
 fn the_pick_line(resolution: &Resolution) -> Option<Prose> {
     match resolution {
-        Resolution::Automatic { how, .. } => Some(Prose::new(match how {
-            HowItMatched::TheExactLine => words::MATCHED_TO_THE_FILE,
-            HowItMatched::TheNearestLineAbove => words::NEAREST_ABOVE,
-            HowItMatched::TheNearestLineBelow => words::NEAREST_BELOW,
-        })),
+        Resolution::Automatic { how, .. } => match how {
+            HowItMatched::TheExactLine | HowItMatched::TheNearestLineAbove => None,
+            HowItMatched::TheNearestLineBelow => Some(Prose::new(words::LATEST_ON_THIS_SERVER)),
+        },
         Resolution::TheUsersOverride(_) => None,
         Resolution::NoVersionResolves(WhyNone::NothingButBuildsBelowTheFloor) => Some(Prose::new(
             words::SMOOZY_DOES_NOT_CHOOSE_BELOW_THE_FLOOR,
@@ -5328,12 +5927,20 @@ fn the_pick_line(resolution: &Resolution) -> Option<Prose> {
     }
 }
 
-fn the_no_blender_line(resolution: &Resolution) -> ASentence {
+/// **`§ When there is no version to pick`: the line in place of the
+/// dropdown** — that the server has no Blender, or, where no build answered
+/// and its disk reads full, that its disk is full (`Render Settings` B5 as
+/// added 2026-11-11, the build runner's ruling 3 of that date).
+fn the_no_blender_line(resolution: &Resolution, the_disk_reads_full: bool) -> ASentence {
     if matches!(
         resolution,
         Resolution::NoVersionResolves(WhyNone::TheListIsEmpty)
     ) {
-        vec![plainly(words::NO_BLENDER_ON_THIS_SERVER)]
+        vec![plainly(if the_disk_reads_full {
+            words::THE_SERVERS_DISK_IS_FULL
+        } else {
+            words::NO_BLENDER_ON_THIS_SERVER
+        })]
     } else {
         Vec::new()
     }
@@ -5376,22 +5983,41 @@ fn the_mismatch(
         return None;
     }
     Some(TheMismatch {
-        line: vec![
-            part(
-                words::SAVED_WITH,
-                vec![format!("{}.{}", files.major, files.minor)],
-                Some(words::THE_COMMA),
-                true,
-            ),
-            part(
-                words::RENDERING_WITH,
-                vec![format!("{}.{}", rendering.major, rendering.minor)],
-                Some(words::THE_FULL_STOP),
-                true,
-            ),
-            plainly(words::SOME_THINGS_MAY_NOT_WORK),
-        ],
+        line: the_warning(files, rendering),
     })
+}
+
+/// **The held version line's unseen copy** — the warning this file would
+/// carry, with the picked release line or the file's own where none differs.
+fn the_version_line_held(
+    saved_with: Option<version::ReleaseLine>,
+    picked: Option<&BlenderIdentity>,
+) -> ASentence {
+    let Some(files) = saved_with else {
+        return Vec::new();
+    };
+    let rendering = picked.map_or(files, |picked| version::ReleaseLine::of(picked.version));
+    the_warning(files, rendering)
+}
+
+/// *Saved with 4.5, rendering with 5.1. Some things may not work as
+/// expected.* — `Render Settings` B8: the two versions and nothing else.
+fn the_warning(files: version::ReleaseLine, rendering: version::ReleaseLine) -> ASentence {
+    vec![
+        part(
+            words::SAVED_WITH,
+            vec![format!("{}.{}", files.major, files.minor)],
+            Some(words::THE_COMMA),
+            true,
+        ),
+        part(
+            words::RENDERING_WITH,
+            vec![format!("{}.{}", rendering.major, rendering.minor)],
+            Some(words::THE_FULL_STOP),
+            true,
+        ),
+        plainly(words::SOME_THINGS_MAY_NOT_WORK),
+    ]
 }
 
 /// **The plain sentence each of Q8's endings is said with**, before the
@@ -5400,6 +6026,8 @@ fn the_mismatch(
 /// an ending and has none.
 fn the_read_failures_sentence(ending: &AReadThatGaveNothing) -> Option<&'static str> {
     let ending = match ending {
+        AReadThatGaveNothing::TheStopWasRequested => return Some(words::READ_STOP_REQUESTED),
+        AReadThatGaveNothing::TheStopWasConfirmed => return Some(words::SMOOZY_STOPPED_THE_READ),
         // **The one case beside the four**: the sentence the page already says
         // when the file on the server cannot be read at Submit.
         AReadThatGaveNothing::TheServerRanNoBlender => {
@@ -5421,11 +6049,11 @@ fn the_read_failures_sentence(ending: &AReadThatGaveNothing) -> Option<&'static 
 /// something different, and **only the second carries a second sentence**.
 fn the_read_failure(
     gave: &AReadThatGaveNothing,
-    the_servers_name: Option<&str>,
     picked: Option<&BlenderIdentity>,
 ) -> Option<TheReadFailure> {
     let what_did_not_happen = the_read_failures_sentence(gave)?;
     let ending = match gave {
+        AReadThatGaveNothing::TheStopWasRequested | AReadThatGaveNothing::TheStopWasConfirmed => return None,
         // **No Blender ran, so there is no Blender output to open and nothing
         // Smoozy knows the user should do next** — one sentence and the cross.
         AReadThatGaveNothing::TheServerRanNoBlender => {
@@ -5443,20 +6071,18 @@ fn the_read_failure(
     let (which, what_to_do, values, raw) = match ending {
         Ending::AReading(_) => return None,
         // **Ending 1. This ending is not about the file at all**, and anything
-        // said about the `.blend` would be a claim Smoozy cannot make. **The
-        // value beside it is what the user calls the server** — never the
-        // local identifier, which is a key (must-do 5) — and where the record
-        // would not give the name, no value is drawn at all.
+        // said about the `.blend` would be a claim Smoozy cannot make. **What
+        // the user can do next is the one thing Smoozy knows works: read
+        // again** — `Design/Render Settings § When the read gives nothing`, as
+        // changed 2026-11-13 (the Creator's note 4 on the test copy of
+        // 2026-11-12: *"I don't know what to do next"*). **No value is drawn
+        // beside it**: the panel is the server's, and the server's name under
+        // the sentence made the box taller than its words. (Until that date
+        // the name sat there, by what the user calls it — must-do 5.)
         Ending::TheMachineCouldNotBeReached => (
             "the-machine",
-            None,
-            the_servers_name
-                .map(|name| AChoice {
-                    value: Verbatim::new(name.to_string()),
-                    said: Prose::new(words::THE_SERVER),
-                })
-                .into_iter()
-                .collect(),
+            Some(Prose::new(words::READ_THE_FILE_AGAIN)),
+            Vec::new(),
             None,
         ),
         // **Ending 2 is the one of the four where Smoozy knows what to do
@@ -5925,11 +6551,25 @@ fn the_samples_lines(
     taken_by: Option<smoozy_server_setup::blender::Version>,
     several: bool,
 ) -> Vec<ASentence> {
+    the_samples_lines_and_the_count(answers, scene, engine_in_force, taken_by, several).0
+}
+
+/// **[`the_samples_lines`], and whether its last line is the one counting the
+/// View Layers that keep their own counts** — the line that keeps its space
+/// when it goes (`§ When the override warning goes`, the twenty-eighth notes,
+/// note 17), which the page needs to know to hold it.
+fn the_samples_lines_and_the_count(
+    answers: &SceneEntries,
+    scene: Option<&SceneReading>,
+    engine_in_force: Option<OfferedEngine>,
+    taken_by: Option<smoozy_server_setup::blender::Version>,
+    several: bool,
+) -> (Vec<ASentence>, bool) {
     let Some(scene) = scene else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
     if several {
-        return Vec::new();
+        return (Vec::new(), false);
     }
     let under_cycles = engine_in_force == Some(OfferedEngine::Cycles);
     let the_layers_own_counts_count = match engine_in_force {
@@ -5986,7 +6626,7 @@ fn the_samples_lines(
         enum SetAside {
             TheThreshold(String),
             TheTimeLimit(String),
-            TheLayersOwnCounts(Vec<String>),
+            TheLayersOwnCounts(usize),
         }
         let mut set_aside: Vec<SetAside> = Vec::new();
         if the_early_stop_is_on {
@@ -5996,50 +6636,51 @@ fn the_samples_lines(
             set_aside.push(SetAside::TheTimeLimit(the_time_limit(the_time_limit_in_force)));
         }
         if the_layers_still_override {
-            set_aside.push(SetAside::TheLayersOwnCounts(overriding));
+            set_aside.push(SetAside::TheLayersOwnCounts(overriding.len()));
         }
         if set_aside.is_empty() {
-            return Vec::new();
+            return (Vec::new(), false);
         }
+        // **The layers are counted, never named** — `§ The sample count`, the
+        // twenty-eighth notes, note 17 — and they are always the last part.
         let last = set_aside.len() - 1;
         let mut said: ASentence = Vec::new();
         for (at, one) in set_aside.into_iter().enumerate() {
-            let (first_lead, and_lead, middle_lead, values) = match one {
+            let (lead, values, rest, joins) = match one {
                 SetAside::TheThreshold(value) => (
                     words::OVERRIDES_LEAD,
-                    words::OVERRIDES_LEAD,
-                    words::OVERRIDES_LEAD,
                     vec![value],
+                    if at == last { words::THE_FULL_STOP } else { words::THE_COMMA },
+                    true,
                 ),
                 SetAside::TheTimeLimit(value) => (
-                    words::OVERRIDES_A_TIME_LIMIT_OF,
-                    words::AND_THE_TIME_LIMIT_OF,
-                    words::A_TIME_LIMIT_OF,
+                    if at == 0 {
+                        words::OVERRIDES_A_TIME_LIMIT_OF
+                    } else if at == last {
+                        words::AND_THE_TIME_LIMIT_OF
+                    } else {
+                        words::A_TIME_LIMIT_OF
+                    },
                     vec![value],
+                    if at == last { words::PER_FRAME_AND_A_FULL_STOP } else { words::PER_FRAME_AND_A_COMMA },
+                    false,
                 ),
-                SetAside::TheLayersOwnCounts(names) => (
-                    words::OVERRIDES_THE_OWN_COUNTS_OF,
-                    words::AND_THE_OWN_COUNTS_OF,
-                    words::AND_THE_OWN_COUNTS_OF,
-                    names,
+                SetAside::TheLayersOwnCounts(how_many) => (
+                    match (at == 0, how_many == 1) {
+                        (true, false) => words::OVERRIDES_THE_OWN_COUNTS_OF,
+                        (true, true) => words::OVERRIDES_THE_ONE_OWN_COUNT_OF,
+                        (false, false) => words::AND_THE_OWN_COUNTS_OF,
+                        (false, true) => words::AND_THE_ONE_OWN_COUNT_OF,
+                    },
+                    vec![how_many.to_string()],
+                    if how_many == 1 { words::VIEW_LAYER_AND_A_FULL_STOP } else { words::VIEW_LAYERS_AND_A_FULL_STOP },
+                    false,
                 ),
             };
-            let lead = if at == 0 {
-                first_lead
-            } else if at == last {
-                and_lead
-            } else {
-                middle_lead
-            };
-            let rest = if at == last {
-                words::THE_FULL_STOP
-            } else {
-                words::THE_COMMA
-            };
-            said.push(part(lead, values, Some(rest), true));
+            said.push(part(lead, values, Some(rest), joins));
         }
         said.push(plainly(words::EVERY_FRAME_NOW_RENDERS_ALL));
-        return vec![said];
+        return (vec![said], false);
     }
 
     let mut out: Vec<ASentence> = Vec::new();
@@ -6077,18 +6718,23 @@ fn the_samples_lines(
         }
         out.push(said);
     }
-    // **`§ When the override warning goes`: a second line says which View
-    // Layers do not render at the count on screen**, naming them rather than
-    // repeating their numbers.
+    // **`§ When the override warning goes`: a second line counts the View
+    // Layers that do not render at the count on screen, and never names
+    // them**, even for one, so it is one height whatever the names are — the
+    // tags in the left column say which (the twenty-eighth notes, note 17).
     if the_layers_still_override {
         out.push(vec![part(
             "",
-            overriding,
-            Some(words::RENDER_AT_THEIR_OWN_COUNT),
+            vec![overriding.len().to_string()],
+            Some(if overriding.len() == 1 {
+                words::VIEW_LAYER_USES_ITS_OWN_COUNT
+            } else {
+                words::VIEW_LAYERS_USE_THEIR_OWN_COUNTS
+            }),
             false,
         )]);
     }
-    out
+    (out, the_layers_still_override)
 }
 
 /// **The noise threshold, written as the shortest decimal that is the same
@@ -6197,6 +6843,34 @@ fn the_engine_in_force(
 
 /// **`§ The render engine`: Cycles and EEVEE are the choice, and a file naming
 /// anything else is named beside them rather than refused.**
+/// **Whether an upload onto this file has not ended** — the leftovers of the
+/// Rough what-if answers (185). The upload lands whole or not at all
+/// (`File Browser` X7), so until it ends the file on the server, and every
+/// reading of it, is the old copy. An upload stopped when Smoozy closed
+/// counts too: it has not finished either.
+pub fn a_newer_copy_has_not_finished_uploading(
+    transfers: &[smoozy_server_protocol::transfers::TransferRecord],
+    server: &str,
+    file: &str,
+) -> bool {
+    transfers.iter().any(|transfer| {
+        transfer.direction == smoozy_server_protocol::transfers::Direction::Up
+            && transfer.server.as_text() == server
+            && transfer.final_path == file
+            && transfer.ending.is_none()
+    })
+}
+
+/// **`Render Settings` V3a: the band's line, where the reading standing found
+/// the file's own scripts**, and nothing where it found none, nothing is read,
+/// or an older server program did not say.
+pub fn the_files_scripts_line(standing: Option<&smoozy_render_settings::file_half::RecordedReading>) -> Option<Prose> {
+    standing
+        .and_then(|reading| reading.settings.the_files_own_scripts_run)
+        .filter(|they_run| *they_run)
+        .map(|_| Prose::new(words::THE_FILES_SCRIPTS_RUN))
+}
+
 fn the_engine(
     answers: &SceneEntries,
     standing: Option<&smoozy_render_settings::file_half::RecordedReading>,
@@ -6459,6 +7133,56 @@ fn the_device_hand_back(answers: &SceneEntries, scene: Option<&SceneReading>) ->
 /// each writes — then the total, split by format.** With more than one scene
 /// ticked the group's contents go and one line stands in their place.
 #[allow(clippy::type_complexity)]
+/// **Each ticked scene's list, under its name** — `Design/Render Settings §
+/// What it will write`, changed 2026-11-12 (the four questions, scout 2.15).
+/// Each is [`the_output_group`] over that scene's own half (`Job files and
+/// outputs` R4b), against the answers its job is composed with (`Render
+/// Settings` F5: its own entries, the group range in the range's place) and
+/// where its folder will sit. **Nothing where any ticked scene has no half**:
+/// a reading from an older server program holds one scene, and the one line
+/// stands in their place, as before.
+fn every_ticked_scenes_outputs(
+    held: &WhatTheRunHolds,
+    server: &str,
+    file: &str,
+    key: &FileKey,
+    record: &WhatTheRecordHolds,
+    ticked: &[ExactName],
+) -> Option<Vec<AScenesOutputs>> {
+    let reading = held.readings.standing(key)?;
+    let the_machines_top = reading.settings.the_folders_at_the_machines_top.as_deref();
+    let mut every = Vec::new();
+    for scene in reading
+        .settings
+        .scenes
+        .iter()
+        .filter(|scene| ticked.iter().any(|one| one.as_bytes() == scene.name.as_bytes()))
+    {
+        let outputs = the_outputs_of_the_scene(held, server, file, scene.name.as_bytes())?;
+        let answers = held.store.the_answers_composition_reads(key, Some(&scene.name));
+        let mut ground = the_ground_on_this_page(file, &answers);
+        if let Some(layout) = record.the_layout.as_ref() {
+            let sits = where_the_jobs_folder_sits(
+                layout,
+                outputs,
+                &ground,
+                record.the_servers_fallback_folder.as_deref(),
+                the_machines_top,
+            );
+            ground.the_jobs_folder = Some(sits.the_pages_job_folder());
+        }
+        let (what_it_will_write, the_output_warnings, the_output_lines) =
+            the_output_group(Some(outputs), Some(scene), ticked, false, &ground);
+        every.push(AScenesOutputs {
+            scene: Verbatim::new(scene.name.as_text().to_string()),
+            what_it_will_write,
+            the_output_warnings,
+            the_output_lines,
+        });
+    }
+    (every.len() == ticked.len()).then_some(every)
+}
+
 fn the_output_group(
     outputs: Option<&TheOutputsHalf>,
     scene: Option<&SceneReading>,
@@ -6525,6 +7249,20 @@ fn the_output_group(
     (writes, warnings, lines)
 }
 
+/// **Every folder a submitted job writes into, as this page lists them** —
+/// [`the_writes`] over the job's own reading, map and inventory, read once
+/// when the reading is filled in. The queue's entry opens it under the folder
+/// line where the job writes into more than three (`Design/Queue & History §
+/// What the job writes`; the Creator's twenty-ninth notes, notes 8 and 10).
+pub(crate) fn every_folder_a_job_writes(
+    reading: &TheOutputsHalf,
+    map: &TheMap,
+    inventory: &WhatTheInventoryIs,
+    job_folder: &str,
+) -> Option<TheWrites> {
+    the_writes(inventory, false, reading, map, job_folder)
+}
+
 /// **The collision warning, naming every colliding pair** in the order
 /// `Job files and outputs` gives them (must-do 14), or nothing where none
 /// collides.
@@ -6587,7 +7325,8 @@ fn the_writes(
 ) -> Option<TheWrites> {
     match (inventory, it_is_writing_nothing) {
         (WhatTheInventoryIs::It(it), false) => {
-            let rows: Vec<AWriteRow> = outputs
+            let mut merged: Vec<AFolderOfTheList> = Vec::new();
+            for (at, destination) in outputs
                 .destinations
                 .iter()
                 .enumerate()
@@ -6598,25 +7337,32 @@ fn the_writes(
                 .filter(|(at, destination)| {
                     it.the_figure_for(*at) > 0 || it_writes_what_the_reading_cannot_name(outputs, destination)
                 })
-                .map(|(at, destination)| {
-                    let (place, the_top) = match where_under_the_jobs_folder(map, job_folder, destination) {
-                        WhereUnderTheJobsFolder::TheTop => {
-                            (String::new(), Some(Prose::new(words::TOP_OF_THE_JOBS_FOLDER)))
-                        }
-                        WhereUnderTheJobsFolder::AFolder(folder) => (folder, None),
-                        WhereUnderTheJobsFolder::NotUnderIt => (the_place(destination), None),
-                    };
-                    AWriteRow {
-                        place: Verbatim::new(place),
-                        the_top,
-                        how_many: Verbatim::new(it.the_figure_for(at).to_string()),
-                        format: destination
-                            .format
-                            .as_ref()
-                            .map(|format| Verbatim::new(a_format_in_smoozys_words(format.as_the_file_records_it.as_bytes()))),
+            {
+                let place = match where_under_the_jobs_folder(map, job_folder, destination) {
+                    WhereUnderTheJobsFolder::NotUnderIt => WhereUnderTheJobsFolder::AFolder(the_place(destination)),
+                    place => place,
+                };
+                // A path the file records, where nothing maps it, is never
+                // taken for a folder under the job's folder.
+                let not_under_it = matches!(where_under_the_jobs_folder(map, job_folder, destination), WhereUnderTheJobsFolder::NotUnderIt);
+                let format = destination
+                    .format
+                    .as_ref()
+                    .map(|format| a_format_in_smoozys_words(format.as_the_file_records_it.as_bytes()))
+                    .unwrap_or_default();
+                let one = match merged.iter_mut().find(|one| one.place == place && one.not_under_it == not_under_it) {
+                    Some(one) => one,
+                    None => {
+                        merged.push(AFolderOfTheList { place, not_under_it, counts: Vec::new() });
+                        merged.last_mut().expect("just pushed")
                     }
-                })
-                .collect();
+                };
+                match one.counts.iter_mut().find(|(said, _)| *said == format) {
+                    Some((_, how_many)) => *how_many += it.the_figure_for(at),
+                    None => one.counts.push((format, it.the_figure_for(at))),
+                }
+            }
+            let rows = the_rows_by_folder(merged);
             let by_format: Vec<AWriteTotal> = it
                 .the_split_by_format(&outputs.destinations)
                 .into_iter()
@@ -6648,6 +7394,254 @@ fn the_writes(
         }
         _ => None,
     }
+}
+
+/// **One folder of the list, before its row is drawn**: where it is, and its
+/// counts by format in the reading's order.
+struct AFolderOfTheList {
+    place: WhereUnderTheJobsFolder,
+    /// A path the file records, where nothing maps it (`Job files and
+    /// outputs` P12): listed whole and never grouped.
+    not_under_it: bool,
+    counts: Vec<(String, usize)>,
+}
+
+impl AFolderOfTheList {
+    /// Its folder under the job's folder, where it is one that can be grouped.
+    fn the_folder(&self) -> Option<&str> {
+        match &self.place {
+            WhereUnderTheJobsFolder::AFolder(folder) if !self.not_under_it => Some(folder.as_str()),
+            _ => None,
+        }
+    }
+
+    fn the_counts(&self) -> Vec<AWriteTotal> {
+        self.counts
+            .iter()
+            .map(|(format, how_many)| AWriteTotal {
+                how_many: Verbatim::new(how_many.to_string()),
+                format: Verbatim::new(format.clone()),
+            })
+            .collect()
+    }
+}
+
+/// **The folder a folder sits in, under the job's folder** — `Q_012/PNG/` for
+/// `Q_012/PNG/04. Lamps + Shades/`. **Nothing for a folder straight under the
+/// job's folder: the job's folder is never a parent**, so its own folders
+/// (`beauty/`, `mist/`) are listed whole, as they always were.
+fn the_parent_of(folder: &str) -> Option<String> {
+    let trimmed = folder.strip_suffix('/').unwrap_or(folder);
+    let (parent, _) = trimmed.rsplit_once('/')?;
+    (!parent.is_empty()).then(|| format!("{parent}/"))
+}
+
+/// **A folder's last folder alone** — `Background/`, under its parent.
+fn the_last_folder_of(folder: &str) -> String {
+    let trimmed = folder.strip_suffix('/').unwrap_or(folder);
+    let last = trimmed.rsplit_once('/').map_or(trimmed, |(_, last)| last);
+    format!("{last}/")
+}
+
+/// **The rows by folder, with siblings under their parent** — `§ What it will
+/// write`, the twenty-eighth notes, note 17. Two or more folders with the
+/// same parent sit under it, written once, each showing its last folder; one
+/// level only; the job's folder is never a parent; and a parent's own files
+/// are its group's first row, *this folder*. **A folder that is a group's
+/// parent is that group's *this folder* and nobody's sibling**, so nothing
+/// sits in two groups; that can leave its own parent with one folder and no
+/// group, which is worked out again until nothing changes. A group sits where
+/// its first folder in the reading's order would have sat.
+fn the_rows_by_folder(merged: Vec<AFolderOfTheList>) -> Vec<AWriteRow> {
+    let parents: Vec<Option<String>> = merged
+        .iter()
+        .map(|one| one.the_folder().and_then(the_parent_of))
+        .collect();
+    let mut groups: Vec<String> = Vec::new();
+    // Bounded: each round can only take folders out of groups or put them
+    // back, and the list is short; a few rounds settle any real file.
+    for _ in 0..merged.len().max(1) {
+        let heads: Vec<bool> = merged
+            .iter()
+            .map(|one| one.the_folder().is_some_and(|folder| groups.iter().any(|group| group == folder)))
+            .collect();
+        let mut next: Vec<String> = Vec::new();
+        for parent in parents.iter().flatten() {
+            if next.contains(parent) {
+                continue;
+            }
+            let siblings = parents
+                .iter()
+                .zip(&heads)
+                .filter(|(one, head)| one.as_ref() == Some(parent) && !**head)
+                .count();
+            if siblings >= 2 {
+                next.push(parent.clone());
+            }
+        }
+        if next == groups {
+            break;
+        }
+        groups = next;
+    }
+    let heads: Vec<bool> = merged
+        .iter()
+        .map(|one| one.the_folder().is_some_and(|folder| groups.iter().any(|group| group == folder)))
+        .collect();
+    let the_group_of = |at: usize| -> Option<&String> {
+        if heads[at] {
+            return merged[at].the_folder().and_then(|folder| groups.iter().find(|group| *group == folder));
+        }
+        parents[at].as_ref().and_then(|parent| groups.iter().find(|group| *group == parent))
+    };
+    let mut rows: Vec<AWriteRow> = Vec::new();
+    let mut drawn: Vec<&String> = Vec::new();
+    for (at, one) in merged.iter().enumerate() {
+        let Some(group) = the_group_of(at) else {
+            let (place, the_top) = match &one.place {
+                WhereUnderTheJobsFolder::TheTop => (String::new(), Some(Prose::new(words::TOP_OF_THE_JOBS_FOLDER))),
+                WhereUnderTheJobsFolder::AFolder(folder) => (folder.clone(), None),
+                WhereUnderTheJobsFolder::NotUnderIt => (String::new(), None),
+            };
+            rows.push(AWriteRow { place: Verbatim::new(place), the_top, counts: one.the_counts(), group: None });
+            continue;
+        };
+        if drawn.contains(&group) {
+            continue;
+        }
+        drawn.push(group);
+        let members: Vec<usize> = (0..merged.len()).filter(|other| the_group_of(*other) == Some(group)).collect();
+        let mut under: Vec<AWriteRow> = Vec::new();
+        // *this folder* first, then the folders in the reading's order.
+        for &member in members.iter().filter(|member| heads[**member]) {
+            under.push(AWriteRow {
+                place: Verbatim::new(String::new()),
+                the_top: Some(Prose::new(words::THIS_FOLDER)),
+                counts: merged[member].the_counts(),
+                group: None,
+            });
+        }
+        let folders: Vec<usize> = members.iter().copied().filter(|member| !heads[*member]).collect();
+        for &member in &folders {
+            under.push(AWriteRow {
+                place: Verbatim::new(the_last_folder_of(merged[member].the_folder().unwrap_or_default())),
+                the_top: None,
+                counts: merged[member].the_counts(),
+                group: None,
+            });
+        }
+        let mut by_format: Vec<(String, usize)> = Vec::new();
+        for &member in &members {
+            for (format, how_many) in &merged[member].counts {
+                match by_format.iter_mut().find(|(said, _)| said == format) {
+                    Some((_, sum)) => *sum += how_many,
+                    None => by_format.push((format.clone(), *how_many)),
+                }
+            }
+        }
+        rows.push(AWriteRow {
+            place: Verbatim::new(group.clone()),
+            the_top: None,
+            counts: AFolderOfTheList { place: WhereUnderTheJobsFolder::TheTop, not_under_it: false, counts: by_format }.the_counts(),
+            group: Some(AWriteGroup {
+                folders: part("", vec![folders.len().to_string()], Some(words::FOLDERS_WORD), false),
+                rows: under,
+                it_starts_closed: folders.len() > THE_MOST_FOLDERS_A_GROUP_OPENS_WITH,
+            }),
+        });
+    }
+    rows
+}
+
+/// **Three folders or fewer are listed whole** — `Design/Queue & History §
+/// What the job writes`; the rule below starts at four.
+pub(crate) const THE_MOST_FOLDERS_LISTED_WHOLE: usize = 3;
+
+/// **More than three tops name the first three**, then how many folders are
+/// left.
+const THE_MOST_TOPS_NAMED: usize = 3;
+
+/// **Where a job's folders sit, where there are more than three** — the
+/// first three tops, each with how many written folders it holds, and how
+/// many folders sit under the tops past the third.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WhereTheFoldersSit {
+    pub tops: Vec<ATop>,
+    pub more: usize,
+}
+
+/// **One top**: the folder, as `_OUT/V_012/`, or empty for the job's folder
+/// itself; and how many written folders it holds, itself among them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ATop {
+    pub folder: String,
+    pub folders: usize,
+}
+
+/// **The shortest shared folders** — `Design/Queue & History § What the job
+/// writes` and `Design/Render Settings § What it will write`, the download
+/// box's paragraph; the Creator's twenty-ninth notes, notes 8 and 10. One rule
+/// for the job's page and the box, so the two never name a job's folders two
+/// ways.
+///
+/// The folders are laid out as a tree under the job's folder. **From each
+/// first folder, a folder that holds exactly one folder and is not itself
+/// written into is passed through; where that stops is a top.** A top's count
+/// is every written folder under it, itself among them. Tops come in the
+/// order their first folder comes; **the job's own folder (empty) is a top of
+/// its own, last**. **Three folders or fewer: nothing**, for they are listed
+/// whole. Each folder is written as the list writes it, ending in `/`.
+pub(crate) fn where_the_folders_sit(folders: &[String]) -> Option<WhereTheFoldersSit> {
+    if folders.len() <= THE_MOST_FOLDERS_LISTED_WHOLE {
+        return None;
+    }
+    let names = |folder: &str| -> Vec<String> {
+        let trimmed = folder.strip_suffix('/').unwrap_or(folder);
+        if trimmed.is_empty() {
+            Vec::new()
+        } else {
+            trimmed.split('/').map(str::to_string).collect()
+        }
+    };
+    let written: Vec<Vec<String>> = folders.iter().map(|folder| names(folder)).collect();
+    let is_written = |path: &[String]| written.iter().any(|one| one.as_slice() == path);
+    // The folders straight inside `path`, among the written folders' own.
+    let held_in = |path: &[String]| -> Vec<&String> {
+        let mut inside: Vec<&String> = Vec::new();
+        for one in written.iter().filter(|one| one.len() > path.len() && one.starts_with(path)) {
+            if !inside.contains(&&one[path.len()]) {
+                inside.push(&one[path.len()]);
+            }
+        }
+        inside
+    };
+    let mut tops: Vec<(Vec<String>, usize)> = Vec::new();
+    let mut the_jobs_folder = false;
+    for folder in &written {
+        if folder.is_empty() {
+            the_jobs_folder = true;
+            continue;
+        }
+        let mut depth = 1;
+        while depth < folder.len() && !is_written(&folder[..depth]) && held_in(&folder[..depth]).len() == 1 {
+            depth += 1;
+        }
+        let top = folder[..depth].to_vec();
+        match tops.iter_mut().find(|(one, _)| *one == top) {
+            Some((_, count)) => *count += 1,
+            None => tops.push((top, 1)),
+        }
+    }
+    let mut tops: Vec<ATop> = tops
+        .into_iter()
+        .map(|(path, folders)| ATop { folder: format!("{}/", path.join("/")), folders })
+        .collect();
+    if the_jobs_folder {
+        tops.push(ATop { folder: String::new(), folders: 1 });
+    }
+    let named: Vec<ATop> = tops.iter().take(THE_MOST_TOPS_NAMED).cloned().collect();
+    let more = tops.iter().skip(THE_MOST_TOPS_NAMED).map(|top| top.folders).sum();
+    Some(WhereTheFoldersSit { tops: named, more })
 }
 
 /// The lines under the list, with the list and the warnings handed through.
@@ -6802,7 +7796,7 @@ pub fn what_the_format_box_knows(
                     .is_none_or(|chosen| chosen.contains(&name));
                 Some(AFormatKnown {
                     name: shown(&name),
-                    where_in_the_job: folders.join(THE_FOLDERS_ARE_LISTED_WITH),
+                    where_in_the_job: folders,
                     at_the_top,
                     files,
                     chosen,
@@ -6982,14 +7976,14 @@ pub fn the_download_box(
     }
 }
 
-/// **`Design/Render Settings`: *"Choosing Somewhere else… puts the system's
+/// **`Design/Render Settings`: *"Choosing Other… puts the system's
 /// folder panel up at once, and the folder chosen there is shown in the box as
 /// the choice, which Done then keeps like any other. Closing the panel leaves
 /// the box as it was."*** Added 2026-09-30, from the Creator's press on step
 /// 10c's eleventh pass (fault 11): the panel waited for *Done*, and they found
 /// it *"a little confusing"*.
 ///
-/// **The panel goes up the moment *Somewhere else…* is chosen**, through the
+/// **The panel goes up the moment *Other…* is chosen**, through the
 /// adapter every panel goes through (`Desktop app and delivery` K11), and
 /// **`async`**, because a plain command runs on the drawing thread and a panel
 /// put up there froze the window on the seventh pass on Hyperstack (see
@@ -7015,6 +8009,7 @@ pub async fn the_folder_is_asked_for_in_the_box<R: tauri::Runtime>(
             how_many: HowMany::One,
             starting_at: None,
             title: Prose::new(words::WHERE_THEY_GO),
+            the_value_after_the_title: None,
         },
     )
     .await;
@@ -7098,7 +8093,7 @@ fn a_typed_frame_lies_outside_what_the_box_reads(
 
 /// **The box's line where a typed frame lies outside the read**:
 /// `Design/Render Settings § What it will write`'s one line, in place of the
-/// figures, then what downloads — *Everything downloads.*, or the narrowing
+/// figures, then what downloads — *All files are downloaded.*, or the narrowing
 /// that stands (the box ruling of 2026-10-17). **The box's shape for a file read that gives no list** —
 /// the same as the read-for-another-scene case, and with no *Read it now* for
 /// the same reason: a read steps the file's own range again, so it would
@@ -7165,17 +8160,11 @@ fn what_the_open_box_knows_of(
                 Some(known) => {
                     known.files += format.files;
                     known.at_the_top |= format.at_the_top;
-                    let mut folders: Vec<&str> = known
-                        .where_in_the_job
-                        .split(THE_FOLDERS_ARE_LISTED_WITH)
-                        .filter(|folder| !folder.is_empty())
-                        .collect();
-                    for folder in format.where_in_the_job.split(THE_FOLDERS_ARE_LISTED_WITH) {
-                        if !folder.is_empty() && !folders.contains(&folder) {
-                            folders.push(folder);
+                    for folder in format.where_in_the_job {
+                        if !known.where_in_the_job.contains(&folder) {
+                            known.where_in_the_job.push(folder);
                         }
                     }
-                    known.where_in_the_job = folders.join(THE_FOLDERS_ARE_LISTED_WITH);
                 }
                 None => formats.push(format),
             }
@@ -7219,7 +8208,7 @@ pub enum TheFolderLeftChosen {
     /// application matched on it~~, which turns the folder into text and back
     /// again and cannot survive a name that is not valid text.
     ThisOne { at: usize },
-    /// *Somewhere else…* left chosen at *Done* — the system's own picker,
+    /// *Other…* left chosen at *Done* — the system's own picker,
     /// asked then (`Desktop app and delivery` K11). **A page that asks at the
     /// choice sends this no longer**: Render Settings' box puts the panel up
     /// the moment the row is chosen ([`the_folder_is_asked_for_in_the_box`])
@@ -7240,7 +8229,7 @@ pub enum TheFolderTaken {
 /// **The box's Done.** The two choices are kept on the submission (J2's volatile
 /// store: nothing durable), and the panel is drawn again from them.
 ///
-/// **`async`, because *Somewhere else…* puts the system's folder panel up**
+/// **`async`, because *Other…* puts the system's folder panel up**
 /// (`Desktop app and delivery` §3.2, K11), and a plain command runs on the
 /// drawing thread — see [`crate::picker::asked`]. It froze the window on the
 /// seventh pass on Hyperstack.
@@ -7269,6 +8258,7 @@ pub async fn the_download_choices_are_made<R: tauri::Runtime>(
                     how_many: HowMany::One,
                     starting_at: None,
                     title: Prose::new(words::WHERE_THEY_GO),
+                    the_value_after_the_title: None,
                 },
             )
             .await;
@@ -7529,6 +8519,49 @@ const THE_PAGES_JOB_FOLDER: &str = "/ephemeral/smoozy/jobs/job";
 /// caller shows a figure from it. **On the machine the job's own reading steps
 /// the typed frames**, so its count is exact either way.
 fn the_inventory_of(outputs: &TheOutputsHalf, ground: &TheGroundOfTheCount) -> AsTheJobRendersIt {
+    let (as_the_job_renders_it, a_typed_frame_lies_outside_the_read) = as_the_job_renders_it(outputs, ground);
+    // **`Job files and outputs` P6a: an output that writes nothing for the
+    // job's frames takes no part in the shared run**, by that crate's one
+    // answer over this same working copy, which [`where_the_jobs_folder_sits`]
+    // reads too.
+    let writes_nothing = the_destinations_that_write_nothing(&as_the_job_renders_it);
+    let to_map: Vec<ADestinationToMap<'_>> = as_the_job_renders_it
+        .destinations
+        .iter()
+        .zip(writes_nothing)
+        .map(|(destination, writes_nothing)| ADestinationToMap {
+            destination,
+            // **N8's budget is measured against the predicted deepest file
+            // path**, and the recipe that predicts it is `Job files and
+            // outputs` §7's. The page draws the destinations and the counts
+            // and measures no budget, so nothing here supplies one.
+            the_longest_name_it_will_write: None,
+            it_writes_nothing_for_the_jobs_frames: writes_nothing,
+        })
+        .collect();
+    let map = compose_the_map(
+        &to_map,
+        &ground.the_folder_the_blend_sits_in,
+        ground.the_folder_composed_under(),
+        as_the_job_renders_it.taken_by,
+    );
+    drop(to_map);
+    let inventory = compose_the_inventory(&as_the_job_renders_it, &map);
+    AsTheJobRendersIt {
+        outputs: as_the_job_renders_it,
+        map,
+        inventory,
+        a_typed_frame_lies_outside_the_read,
+    }
+}
+
+/// **The reading as the job renders it**: the per-frame list cut to the typed
+/// frames, or whole where a typed frame lies outside the read, and the job's
+/// pins applied — the one working copy the page's map, its count and the run
+/// the job's folder sits in are all read from (`Job files and outputs` R4 item
+/// 5 and `Job files and outputs` P6a). With whether a typed frame lies outside
+/// the read.
+fn as_the_job_renders_it(outputs: &TheOutputsHalf, ground: &TheGroundOfTheCount) -> (TheOutputsHalf, bool) {
     let a_typed_frame_lies_outside_the_read =
         a_typed_frame_the_read_did_not_step(&outputs.per_frame, ground.the_jobs_frames.as_deref());
     let per_frame = match ground.the_jobs_frames.as_deref() {
@@ -7547,32 +8580,7 @@ fn the_inventory_of(outputs: &TheOutputsHalf, ground: &TheGroundOfTheCount) -> A
         per_frame: the_per_frame_set_with_the_jobs_pins(&per_frame, &ground.the_jobs_pins),
         ..outputs.clone()
     };
-    let to_map: Vec<ADestinationToMap<'_>> = as_the_job_renders_it
-        .destinations
-        .iter()
-        .map(|destination| ADestinationToMap {
-            destination,
-            // **N8's budget is measured against the predicted deepest file
-            // path**, and the recipe that predicts it is `Job files and
-            // outputs` §7's. The page draws the destinations and the counts
-            // and measures no budget, so nothing here supplies one.
-            the_longest_name_it_will_write: None,
-        })
-        .collect();
-    let map = compose_the_map(
-        &to_map,
-        &ground.the_folder_the_blend_sits_in,
-        ground.the_folder_composed_under(),
-        as_the_job_renders_it.taken_by,
-    );
-    drop(to_map);
-    let inventory = compose_the_inventory(&as_the_job_renders_it, &map);
-    AsTheJobRendersIt {
-        outputs: as_the_job_renders_it,
-        map,
-        inventory,
-        a_typed_frame_lies_outside_the_read,
-    }
+    (as_the_job_renders_it, a_typed_frame_lies_outside_the_read)
 }
 
 /// **[`the_inventory_of`]'s answer**: the reading as the job renders it, its
@@ -7630,7 +8638,7 @@ fn where_under_the_jobs_folder(map: &TheMap, job_folder: &str, destination: &Des
 
 /// **What sits between two folders where one format writes into several** —
 /// the drawing's own *beauty/ · mist/*. A list, so punctuation and never a word.
-const THE_FOLDERS_ARE_LISTED_WITH: &str = " · ";
+pub(crate) const THE_FOLDERS_ARE_LISTED_WITH: &str = " · ";
 
 /// **Formats in Smoozy's words, from one table** — hole 17 of the map of the
 /// Creator's second notes, ruled by the build runner: *Smoozy's words for the
@@ -7744,7 +8752,11 @@ pub fn where_the_jobs_folder_sits(
     the_machines_top: Option<&[String]>,
 ) -> WhereTheJobsFolderSits {
     use smoozy_job_files::where_the_folder_sits::{the_run_of, where_it_would_sit, WhatTheChoiceIsMadeFrom, WhereItIs};
-    let run = the_run_of(&outputs.destinations, &ground.the_folder_the_blend_sits_in, outputs.taken_by);
+    // **`Job files and outputs` P6a: read off the same working copy the page's
+    // map is composed from**, so an output that writes nothing for the job's
+    // frames shapes neither.
+    let (as_the_job_renders_it, _) = as_the_job_renders_it(outputs, ground);
+    let run = the_run_of(&as_the_job_renders_it, &ground.the_folder_the_blend_sits_in);
     let sits = where_it_would_sit(
         &WhatTheChoiceIsMadeFrom {
             the_run: &run,
@@ -7832,7 +8844,12 @@ fn where_it_comes_from(origin: &WhereItComesFrom) -> ASentence {
             vec![String::from_utf8_lossy(name.as_bytes()).to_string()],
             None,
         )],
-        WhereItComesFrom::AnAddedWritePlaceNamed(_) => vec![plainly(words::AN_ADDED_WRITE_PLACE)],
+        // **The folder is named, as the reading names it** — `Design/Render
+        // Settings § Warnings`, added 2026-11-12 (the four questions, scout
+        // 2.16); it read *— an added write place* until then.
+        WhereItComesFrom::AnAddedWritePlaceNamed(place) => {
+            vec![plainly(&format!("{} {}", words::THE_DASH, place.in_words()))]
+        }
     }
 }
 
@@ -7844,6 +8861,15 @@ fn the_dependency_band(
     the_first_frame_is_asked_for: bool,
 ) -> Option<TheDependencyBand> {
     let picked = picked?;
+    // **While the control reads *Waiting for check*, no band is drawn**: the
+    // check it would point to is running, and its answer brings the band back
+    // as the record then stands (`§ The dependency warning`, 2026-11-10). On a
+    // real line the band read *0 assets this file needs are not on the server.*
+    // for 76 s while the control read *Waiting for check* (the twenty-eighth
+    // notes, piece 12).
+    if the_record.the_hold_on_render == Some(crate::surface::the_dependency_check::WhyRenderIsHeld::ItsCheckIsRunning) {
+        return None;
+    }
     // **No standing is *nobody has ever checked*** — `Dependency Upload &
     // Remap` V14 and `standing::what_the_record_says` — and that is the case
     // the band exists for (must-do 3). *(Until the step 10a round 1 audit of
@@ -7905,6 +8931,9 @@ fn the_dependency_band(
                     Some(words::VERSION_REST),
                     false,
                 ),
+                // **Why the difference matters** — `§ The dependency
+                // warning`, added 2026-11-12 (the four questions, scout 3.48).
+                plainly(words::A_CHECK_COVERS_ITS_BLENDER),
             ],
             words::CHECK_DEPENDENCIES,
         ),
@@ -7926,7 +8955,7 @@ fn the_dependency_band(
         // it is the same thing they already have, so the band drops to two ways
         // on and the note goes with the control it explained.
         render_one_frame_first: (!the_first_frame_is_asked_for)
-            .then(|| Prose::new(words::RENDER_ONE_FRAME_FIRST)),
+            .then(|| Prose::new(words::SUBMIT_ONE_FRAME_FIRST)),
         what_one_frame_first_buys: (!the_first_frame_is_asked_for)
             .then(|| Prose::new(words::ONE_FRAME_FIRST_BUYS)),
         submit_anyway: Prose::new(words::SUBMIT_ANYWAY),
@@ -8116,7 +9145,7 @@ pub(crate) mod tests {
         assert_eq!(one.rest, Some(super::Prose::new("job")));
         let three = super::the_all_scenes_tag(3);
         assert_eq!(three.values, vec![super::Verbatim::new("3")]);
-        assert_eq!(three.rest, Some(super::Prose::new("jobs, one each")));
+        assert_eq!(three.rest, Some(super::Prose::new("jobs, one per scene")));
     }
 
     /// **The header's *read at* carries the reading's own moment as a value**,
@@ -8165,7 +9194,8 @@ pub(crate) mod tests {
     /// **The Creator's note 12 on 0.1.7: the mismatch is one line naming the
     /// two versions and saying something may not work as expected, and it opens
     /// nothing** — `Render Settings` B8 as rewritten 2026-10-02. **And it sits
-    /// directly under the version row, above the pick line.** Before the piece
+    /// directly under the version row** — above the pick line until the
+    /// twenty-eighth notes, note 17, took the pick line away. Before the piece
     /// it carried *What changes*, a panel of break notes, and sat after the pick
     /// line.
     #[test]
@@ -8178,26 +9208,29 @@ pub(crate) mod tests {
             .expect("4.5 and 5.1 are different release lines");
         // **Compared as words**: the typography point binds some spaces.
         let printed = serde_json::to_string(&line).expect("it serialises").replace('\u{a0}', " ");
-        for said in ["Saved with", "4.5", "rendering with", "5.1", "Some things may not work as expected."] {
+        for said in ["Saved with", "4.5", "rendering with", "5.1", "The file may render differently."] {
             assert!(printed.contains(said), "{said}: {printed}");
         }
         assert!(!printed.contains("What changes") && !printed.contains("crossed"), "{printed}");
         assert_eq!(serde_json::to_value(&line).expect("a value").as_object().map(|it| it.len()), Some(1));
         assert!(the_mismatch(Some(version::ReleaseLine { major: 5, minor: 1 }), Some(&picked)).is_none());
 
+        // **On the held version line, directly under the version row** — the
+        // twenty-eighth notes, note 17, where the pick line it sat above went.
         let page = the_page();
-        let drawn = page
-            .split("function theMismatchIsDrawn(mismatch, head) {")
-            .nth(1)
-            .and_then(|rest| rest.split("\n}\n").next())
-            .expect("the mismatch line");
-        assert!(!drawn.contains("aLink(") && !drawn.contains("addEventListener"), "the line carries a control");
         assert!(!page.contains("break-notes"), "the panel of break notes is still drawn");
-        let mismatch = page.find("if (said.the_mismatch) theMismatchIsDrawn(said.the_mismatch, head);").expect("drawn");
-        let answer = page.find("head.appendChild(anAnswerLine(\"read\"));").expect("the read's line");
-        let pick = page.find("const theLine = said.the_pick_line").expect("the pick line");
-        assert!(mismatch < answer && mismatch < pick, "the mismatch is not directly under the version row");
-        assert_eq!(page.matches("theMismatchIsDrawn(said.the_mismatch, head)").count(), 1);
+        let header = the_pages_function("function theHeaderIsDrawn(server, said, head) {");
+        let line = header
+            .split("const anything = said.the_mismatch")
+            .nth(1)
+            .and_then(|rest| rest.split("head.appendChild(line);").next())
+            .expect("the version line");
+        assert!(line.contains("theSentence(shown, said.the_mismatch.line)"), "the warning is not on the line");
+        assert!(!line.contains("aLink(") && !line.contains("addEventListener"), "the line carries a control");
+        let row = header.find("head.appendChild(row);").expect("the version row");
+        let at = header.find("const anything = said.the_mismatch").expect("the line");
+        let answer = header.find("head.appendChild(anAnswerLine(\"read\"));").expect("the read's line");
+        assert!(row < at && at < answer, "the mismatch is not directly under the version row");
     }
 
     /// **The Creator's sixth notes, note 5: Render Settings draws no amber
@@ -8251,6 +9284,7 @@ pub(crate) mod tests {
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -8415,7 +9449,7 @@ console.log(JSON.stringify({
         held.store.answer(Where::AScene { file: key.clone(), scene: interior.clone() }, Answer::FrameRange(frames::parse_the_frame_field("121-125").unwrap()));
         assert!(rows(&held)[0].range.as_str().contains("101–125"));
         held.submission.entry(keyed(&server, file)).or_default().the_first_frame_check = true;
-        assert_eq!(rows(&held)[0].range.as_str().replace('\u{a0}', " "), "Plays frames 101–121 for the check and 101–125 for the job, on every attempt.");
+        assert_eq!(rows(&held)[0].range.as_str().replace('\u{a0}', " "), "Plays frames 101–121 for the first frame and 101–125 for the job, on every attempt.");
         held.submission.entry(keyed(&server, file)).or_default().the_first_frame_check = false;
         held.store.answer(Where::AScene { file: key.clone(), scene: interior.clone() }, Answer::FrameRange(frames::parse_the_frame_field("-3,121,125").unwrap()));
         assert!(rows(&held)[0].range.as_str().contains("-3–125"));
@@ -8480,11 +9514,11 @@ console.log(JSON.stringify({
         assert_eq!(line(&mut held, Some(-5), "10-60", false), "Plays frames 1–60 before rendering, on every attempt.");
         assert_eq!(line(&mut held, None, "998-1000", false), "Plays frames 1–1000 before rendering, on every attempt.");
         // Nothing left to play.
-        assert_eq!(line(&mut held, Some(900), "1-10", false), "Plays nothing: simulations start at frame 900.");
-        assert_eq!(line(&mut held, Some(900), "1-10", true), "Plays nothing: simulations start at frame 900.");
+        assert_eq!(line(&mut held, Some(900), "1-10", false), "Nothing to play: simulations start at frame 900, after the last frame.");
+        assert_eq!(line(&mut held, Some(900), "1-10", true), "Nothing to play: simulations start at frame 900, after the last frame.");
         // The check plays nothing and the job does.
-        assert_eq!(line(&mut held, Some(900), "1-1000", true), "Plays frames 900–1000 for the job and nothing for the check, on every attempt.");
-        assert_eq!(line(&mut held, Some(20), "30-60", true), "Plays frames 20–30 for the check and 20–60 for the job, on every attempt.");
+        assert_eq!(line(&mut held, Some(900), "1-1000", true), "Plays frames 900–1000 for the job and nothing for the first frame, on every attempt.");
+        assert_eq!(line(&mut held, Some(20), "30-60", true), "Plays frames 20–30 for the first frame and 20–60 for the job, on every attempt.");
     }
 
     // `Render Settings` Q2b and `Rendering` L10b: each job has its own shutter tail.
@@ -8514,7 +9548,7 @@ console.log(JSON.stringify({
             held.submission.entry(keyed(&server, file)).or_default().the_first_frame_check = true;
             let rows = the_simulation_rows(&held, &key, &[], Some(&interior));
             assert_eq!(rows[0].range.as_str().replace('\u{a0}', " "),
-                format!("Plays frames 101–{} for the check and 101–{} for the job, on every attempt.", 121+tail,125+tail));
+                format!("Plays frames 101–{} for the first frame and 101–{} for the job, on every attempt.", 121+tail,125+tail));
         }
     }
 
@@ -8543,6 +9577,7 @@ console.log(JSON.stringify({
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_files_own_scripts_run: None,
                 the_folders_at_the_machines_top: the_machines_top,
             },
             Some(&picked),
@@ -8564,6 +9599,10 @@ console.log(JSON.stringify({
                 at: std::time::SystemTime::now(),
             },
         );
+        // **As a real landing does, the read ticks its scene** (`Render
+        // Settings` J7's third act); with none ticked after a read nothing
+        // renders (`Render Settings` F5 of 2026-11-10).
+        the_read_ticks_its_scene(&mut held, &a_server(), "/ephemeral/smoozy/assets/kitchen_v14.blend", None);
         held
     }
 
@@ -8641,6 +9680,109 @@ console.log(JSON.stringify({
     /// **`Dependency Upload & Remap` A9e: while a send of this file's check runs,
     /// and until the check has answered for a library that landed, Render is held
     /// and says why**, the line beneath it says what is happening, and a press that
+    /// **The twenty-eighth notes, piece 12: while the control reads *Waiting for
+    /// check*, no dependency band is drawn** — `§ The dependency warning`,
+    /// 2026-11-10. On a real line the band read *0 assets this file needs are
+    /// not on the server.* while the control said the check was running. With
+    /// no hold, or another one, the band stands as the record says.
+    #[test]
+    fn twenty_eighth_12_no_band_while_render_waits_for_the_check() {
+        use crate::surface::the_dependency_check::WhyRenderIsHeld;
+        let (held, file) = a_run_that_read_and_can_submit(vec![a_scene("Scene")]);
+        let the_page = |hold: Option<WhyRenderIsHeld>| {
+            the_panel_starting_from(&held, &a_server(), file, &WhatTheRecordHolds { the_hold_on_render: hold, ..WhatTheRecordHolds::default() })
+        };
+        assert!(the_page(None).the_dependency_band.is_some(), "the record says nobody has checked");
+        assert!(the_page(Some(WhyRenderIsHeld::CheckFirst)).the_dependency_band.is_some());
+        assert!(the_page(Some(WhyRenderIsHeld::ItsCheckIsRunning)).the_dependency_band.is_none(), "the band stood while Render waits for the check");
+        let design = include_str!("../../../../Preparation/Design/Render Settings.md");
+        assert!(design.contains("While the control reads *Waiting for check*, no band is drawn"));
+    }
+
+    /// **The twenty-eighth notes, note 11 (`Design/Render Settings § Submitting`,
+    /// 2026-11-09): while a reading of a linked `.blend` can still add files the
+    /// line says *so far*; and where every file has landed and a linked file is
+    /// still read, the control and the line are the check's** — the line does
+    /// not go when the last file lands.
+    #[test]
+    fn twenty_eighth_11_the_uploading_line_says_so_far_and_waits_for_the_check_while_a_reading_is_owed() {
+        use crate::surface::the_dependency_check::WhyRenderIsHeld;
+        let (held, file) = a_run_that_read_and_can_submit(vec![a_scene("Scene")]);
+        let the_page = |record: &WhatTheRecordHolds| the_panel_starting_from(&held, &a_server(), file, record);
+        let growing = WhatTheRecordHolds {
+            the_hold_on_render: Some(WhyRenderIsHeld::ASendIsGoing),
+            the_checks_uploads: Some((4, 12)),
+            the_checks_upload_can_grow: true,
+            ..WhatTheRecordHolds::default()
+        };
+        let page = the_page(&growing);
+        assert_eq!(
+            the_uploading_words_of(page.the_dependencies_uploading.as_ref().expect("the line")),
+            "Uploading dependencies: 4 of 12 files so far."
+        );
+        let read_last = WhatTheRecordHolds {
+            the_hold_on_render: Some(WhyRenderIsHeld::ItsCheckIsRunning),
+            the_checks_uploads: Some((12, 12)),
+            the_checks_upload_can_grow: true,
+            ..WhatTheRecordHolds::default()
+        };
+        let page = the_page(&read_last);
+        assert_eq!(the_uploading_words_of(&page.the_render_control), "Waiting for check");
+        assert_eq!(
+            the_uploading_words_of(page.the_dependencies_uploading.as_ref().expect("the line")),
+            "Checking dependencies…"
+        );
+        let design = include_str!("../../../../Preparation/Design/Render Settings.md");
+        assert!(design.contains("*Uploading dependencies: 4 of 12 files so far.*"));
+        let command = include_str!("render_settings.rs");
+        assert!(command.contains("record.the_checks_upload_can_grow = crate::the_found_files_sent::the_readings_of_the_send(&server, &file)"));
+    }
+
+    /// **The Creator's notes on the test copy, second round, note 17
+    /// (`Design/Whole app § While other work runs`): while the file itself goes
+    /// up through Files, *Render* and *Read the file* wait and say why on
+    /// hover, and a press makes no job.** A second press while this page's
+    /// submission is sent does nothing.
+    #[test]
+    fn while_the_file_goes_up_render_and_read_wait_and_say_why() {
+        use crate::surface::the_dependency_check::WhyRenderIsHeld;
+        let (held, file) = a_run_that_read_and_can_submit(vec![a_scene("Scene")]);
+        // **The hold is read off the run, as Files tells it** (`what_holds_render`).
+        let check = std::sync::Mutex::new(crate::surface::the_dependency_check::WhatTheRunHolds::default());
+        let machine = smoozy_dependencies::record::MachineKey {
+            server_row: Identity::read_back(IdentityKind::LocalServer, &a_server()).expect("the row"),
+            installation: Identity::issue(IdentityKind::Installation).expect("an installation"),
+        };
+        check.lock().unwrap().the_files_going_up.one_begins(&machine, file.as_bytes());
+        assert_eq!(
+            crate::surface::the_dependency_check::what_holds_render(&check, &a_server(), file),
+            Some(WhyRenderIsHeld::ThisFileIsUploading)
+        );
+        let record = WhatTheRecordHolds { the_hold_on_render: Some(WhyRenderIsHeld::ThisFileIsUploading), ..WhatTheRecordHolds::default() };
+        let page = the_panel_starting_from(&held, &a_server(), file, &record);
+        assert!(!page.submitting_is_offered);
+        assert_eq!(the_uploading_words_of(&page.the_render_control), "Waiting for upload");
+        assert_eq!(page.why_render_waits.as_ref().map(|said| said.as_str().replace('\u{a0}', " ")), Some("This file is uploading.".to_string()));
+        assert!(!page.the_read_is_offered, "the file can be read while it goes up");
+        assert_eq!(page.why_the_read_waits.as_ref().map(|said| said.as_str().replace('\u{a0}', " ")), Some("This file is uploading.".to_string()));
+        let Err(refused) = the_act_as_the_page_composed_it(&held, &a_server(), file, &record, &a_row_on(&a_server(), true), a_run()) else {
+            panic!("a job was composed while the file goes up");
+        };
+        assert_eq!(the_uploading_words_of(&refused), "Not submitted. This file is uploading.");
+        check.lock().unwrap().the_files_going_up.one_ends(&machine, file.as_bytes());
+        assert_eq!(crate::surface::the_dependency_check::what_holds_render(&check, &a_server(), file), None);
+        let free = the_panel_starting_from(&held, &a_server(), file, &WhatTheRecordHolds::default());
+        assert!(free.why_render_waits.is_none() && free.why_the_read_waits.is_none());
+        // **A second press while the first is sent does nothing.**
+        let mut sending = WhatTheRunHolds::default();
+        assert!(!a_submission_is_being_sent(&sending, &a_server(), file));
+        sending.submitting_now.insert(keyed(&a_server(), file), true);
+        assert!(a_submission_is_being_sent(&sending, &a_server(), file));
+        let command = include_str!("render_settings.rs");
+        let body = command.split("pub fn a_job_is_submitted<").nth(1).expect("the command").split("\n}\n").next().expect("its body");
+        assert!(body.contains("if a_submission_is_being_sent(&held, &server, &file) {\n                return;"), "a second press is not ignored");
+    }
+
     /// arrives anyway makes no job.
     #[test]
     fn render_is_held_and_says_why_and_a_press_makes_no_job() {
@@ -8707,6 +9849,7 @@ console.log(JSON.stringify({
                     },
                 })
                 .collect(),
+            readings: Default::default(),
         };
         let sends = [
             a_send(here, file, 5, 2, 1),
@@ -8771,6 +9914,7 @@ console.log(JSON.stringify({
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -8839,6 +9983,7 @@ console.log(JSON.stringify({
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -8925,6 +10070,7 @@ console.log(JSON.stringify(out));
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -8968,6 +10114,7 @@ console.log(JSON.stringify(out));
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -8999,17 +10146,17 @@ console.log(JSON.stringify(out));
             assert!(held.readings.standing(&FileKey { server: an_identity(&server), path: file.to_string() }).is_some());
             let fresh = the_version_search_begins(&mut held, &server).expect("a fresh search can begin");
             if old_answers_first {
-                assert!(!the_version_search_came_back(&mut held, &server, &old, TheVersionListAsk::Answered(old_list.clone())));
+                assert!(!the_version_search_came_back(&mut held, &server, &old, TheVersionListAsk::Answered(old_list.clone()), false));
                 assert!(held.version_lists.get(&server).is_none());
                 assert_eq!(held.version_searches.get(&server), Some(&TheSearchStands::Searching));
             }
-            assert!(the_version_search_came_back(&mut held, &server, &fresh, TheVersionListAsk::Answered(a_list_of(&[(5, 4, 0)]))));
-            assert!(!the_version_search_came_back(&mut held, &server, &old, TheVersionListAsk::Answered(old_list)));
+            assert!(the_version_search_came_back(&mut held, &server, &fresh, TheVersionListAsk::Answered(a_list_of(&[(5, 4, 0)])), false));
+            assert!(!the_version_search_came_back(&mut held, &server, &old, TheVersionListAsk::Answered(old_list), false));
             assert_eq!(held.version_lists[&server].entries[0].answered.as_ref().expect("a version").minor, 4);
             assert!(held.version_searches.get(&server).is_none());
             let next = the_version_search_begins(&mut held, &server).expect("another ask");
             the_period_ended_for(&mut held, &server);
-            assert!(!the_version_search_came_back(&mut held, &server, &next, TheVersionListAsk::Answered(a_list_of(&[(5, 4, 0)]))));
+            assert!(!the_version_search_came_back(&mut held, &server, &next, TheVersionListAsk::Answered(a_list_of(&[(5, 4, 0)])), false));
             assert!(!held.version_lists.contains_key(&server));
         }
     }
@@ -9054,6 +10201,7 @@ console.log(JSON.stringify(out));
             }
             for name in ["render-settings.js", "the-typed-text.js"] {
                 fs::copy(web.join(name), folder.join(name)).expect("the page code");
+                fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
             }
             fs::write(folder.join("the-click.mjs"), THE_CLICK_STAND_IN).expect("the document's focus");
             fs::write(folder.join("answers.json"), serde_json::json!({
@@ -9093,16 +10241,109 @@ console.log(JSON.stringify(out));
             let fresh = the_version_search_begins(&mut held, &server).expect("the restored connection can search");
             assert!(the_version_search_begins(&mut held, &server).is_none(), "only one search runs");
             if old_answers_first {
-                assert!(!the_version_search_came_back(&mut held, &server, &old, TheVersionListAsk::Answered(old_list.clone())));
+                assert!(!the_version_search_came_back(&mut held, &server, &old, TheVersionListAsk::Answered(old_list.clone()), false));
                 assert_eq!(held.version_searches.get(&server), Some(&TheSearchStands::Searching));
                 assert!(!held.version_lists.contains_key(&server));
             }
-            assert!(the_version_search_came_back(&mut held, &server, &fresh, TheVersionListAsk::Answered(a_list_of(&[(5, 4, 0)]))));
-            assert!(!the_version_search_came_back(&mut held, &server, &old, TheVersionListAsk::Answered(old_list)));
+            assert!(the_version_search_came_back(&mut held, &server, &fresh, TheVersionListAsk::Answered(a_list_of(&[(5, 4, 0)])), false));
+            assert!(!the_version_search_came_back(&mut held, &server, &old, TheVersionListAsk::Answered(old_list), false));
             assert_eq!(held.version_lists[&server].entries[0].answered.as_ref().unwrap().minor, 4);
             assert!(!held.version_searches.contains_key(&server));
         }
     }
+
+    #[test]
+    fn bad_batch_1_a_live_mismatch_refuses_a_stale_rows_render_press() {
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let mut held = a_run_with_a_reading();
+        let row = a_row_on(&a_server(), true);
+        for check in [smoozy_state::identities::InstallationCheck::Absent,
+            smoozy_state::identities::InstallationCheck::PresentAndDifferent] {
+            let given = the_act_at_the_render_press(&mut held, &a_server(), file, None,
+                &WhatTheRecordHolds::default(), &row, a_run(),
+                Some(crate::servers::a_period::WhatTheLastConnectionRead {
+                    check, a_fresh_reading_was_kept: false, on_the_connection_that_is_live: true,
+                }));
+            assert!(given.is_err(), "a job was composed under a known-wrong installation: {check:?}");
+        }
+    }
+
+    #[test]
+    fn thirtieth_render_uses_the_name_at_the_press_over_the_older_answer() {
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        for name in ["J1 the Creator's file", "", "Kitchen — final 🟩"] {
+            let mut held = a_run_with_a_reading();
+            the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::JobName, "Older name");
+            let given = the_act_at_the_render_press(
+                &mut held, &a_server(), file, Some(name), &WhatTheRecordHolds::default(),
+                &a_row_on(&a_server(), true), a_run(), None,
+            ).unwrap();
+            assert_eq!(given.label.as_deref(), (!name.is_empty()).then_some(name));
+            assert_eq!(the_panel(&held, &a_server(), file).the_job_name.as_str(), name);
+        }
+    }
+
+    #[test]
+    fn thirtieth_render_carries_the_name_still_in_the_field() {
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let panel = the_panel(&a_run_with_a_reading(), &a_server(), file);
+        let folder = std::env::temp_dir().join(format!("smoozy-name-at-render-{}", std::process::id()));
+        fs::create_dir_all(&folder).unwrap();
+        let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for (name, text) in THE_UPLOADING_LINES_STAND_INS {
+            fs::write(folder.join(name), text).unwrap();
+        }
+        for name in ["render-settings.js", "the-focus-moves.js", "the-typed-text.js"] {
+            fs::copy(web.join(name), folder.join(name)).unwrap();
+        }
+        fs::write(folder.join("the-click.mjs"), THE_CLICK_STAND_IN).unwrap();
+        fs::write(folder.join("answers.json"), serde_json::json!({ "panel": panel, "server": a_server() }).to_string()).unwrap();
+        fs::write(folder.join("harness.mjs"), THE_NAME_AT_RENDER_HARNESS).unwrap();
+        let ran = std::process::Command::new("node").arg(folder.join("harness.mjs")).current_dir(&folder).output();
+        let _ = fs::remove_dir_all(&folder);
+        let ran = ran.expect("Node is required for the job name test");
+        assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+        let got: serde_json::Value = serde_json::from_slice(&ran.stdout).unwrap();
+        assert_eq!(got, serde_json::json!([
+            ["J1 the Creator's file", false], ["", false], ["Kitchen — final 🟩", false],
+            ["J1 the Creator's file", true], ["", true], ["Kitchen — final 🟩", true],
+            ["J1 the Creator's file", false], ["", false], ["Kitchen — final 🟩", false]
+        ]), "every submission must carry the field's value, even while its change has not returned");
+    }
+
+    const THE_NAME_AT_RENDER_HARNESS: &str = r#"import { everyPiece } from "./document.mjs";
+import { fire } from "./the-click.mjs";
+import { readFileSync } from "node:fs";
+const { panel, server } = JSON.parse(readFileSync("./answers.json", "utf8"));
+panel.the_job_name = "Old name";
+panel.submitting_is_offered = true;
+panel.the_dependency_band = { which: "unchecked", said: [], the_way_to_the_check: "", render_one_frame_first: "First", submit_anyway: "Anyway" };
+const asked = [];
+globalThis.window = { addEventListener() {}, __TAURI__: { core: { invoke(command, args) {
+  if (command === "the_render_settings_panel") return Promise.resolve(panel);
+  if (command === "an_answer_was_given") return new Promise(() => {});
+  if (command === "a_job_is_submitted") asked.push([args.jobName ?? null, args.withTheFirstFrameCheck]);
+  return Promise.resolve(null);
+} } } };
+const { panels } = await import("./a-server.js");
+const { theSettingsAreOpenedOn } = await import("./render-settings.js");
+await theSettingsAreOpenedOn(server, panel.file_bytes, "");
+const head = document.createElement("div"), body = document.createElement("div");
+head.inThePage = body.inThePage = true;
+panels[0].itIsDrawn({ head, body }, server);
+for (let at = 0; at < 8; at++) await new Promise(go => setImmediate(go));
+const find = box => everyPiece(body).find(one => one.dataset.box === box);
+for (const control of ["render", "band-first-frame", "band-anyway"]) {
+  for (const text of ["J1 the Creator's file", "", "Kitchen — final 🟩"]) {
+    const name = find("job-name");
+    name.focus(); name.value = text; fire(name, "input");
+    // The ordinary change is still in flight when Render is pressed.
+    fire(name, "change");
+    fire(find(control), "click");
+  }
+}
+console.log(JSON.stringify(asked));
+"#;
 
     const THE_RECONNECT_HARNESS: &str = r#"import { everyPiece } from "./document.mjs";
 import { fire } from "./the-click.mjs";
@@ -9237,11 +10478,14 @@ console.log(JSON.stringify(out));
 
         let mut held = with_a_list();
         the_saved_with_version_lands(&mut held, &a_server(), file, &handed("5.1.0"));
-        assert_eq!(
-            the_panel(&held, &a_server(), file).the_pick_line,
-            Some(Prose::new(words::MATCHED_TO_THE_FILE)),
-            "the version Files read is the one the page matches on"
-        );
+        // **The pick is not described** (the twenty-eighth notes, note 17):
+        // a match draws no pick line and no warning, and the held line is the
+        // warning this file would carry, naming 5.1 twice.
+        let panel = the_panel(&held, &a_server(), file);
+        assert_eq!(panel.the_pick_line, None, "the version Files read is the one the page matches on");
+        assert!(panel.the_mismatch.is_none());
+        let held_line = serde_json::to_string(&panel.the_version_line_held).expect("it serialises");
+        assert_eq!(held_line.matches("\"5.1\"").count(), 2, "{held_line}");
 
         let mut held = with_a_list();
         the_saved_with_version_lands(&mut held, &a_server(), file, &handed(""));
@@ -9252,8 +10496,140 @@ console.log(JSON.stringify(out));
         );
     }
 
-    const THE_UPLOADING_LINES_STAND_INS: [(&str, &str); 14] = [
+    /// **The Creator's notes on the test copy, second round, note 15: the
+    /// read line says where the walk is** — `Design/Render Settings § A read
+    /// can take longer`, as changed 2026-11-13. The server says the walk is at
+    /// 120 of 250: the page is drawn again once, and the line reads *Reading
+    /// frame 120 of 250 · 0:42 · Stop*. Told the same step again, nothing is
+    /// drawn again; before any step it reads *Reading the file*.
+    #[test]
+    fn the_read_line_says_where_the_walk_is() {
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let mut held = a_run_with_a_reading();
+        held.reading_now.insert(keyed(&server, file), true);
+        let control = std::sync::Arc::new(crate::reading_the_file::AReadControl::new());
+        let redrawn = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = std::sync::Arc::clone(&redrawn);
+        control.redraws_with(move || { counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst); });
+        held.read_controls.insert(keyed(&server, file), std::sync::Arc::clone(&control));
+        assert_eq!(the_panel(&held, &server, file).reading_the_walk, None, "no step yet");
+        control.the_walk_is_at(120, 250);
+        control.the_walk_is_at(120, 250);
+        assert_eq!(redrawn.load(std::sync::atomic::Ordering::SeqCst), 1, "drawn again once for one step");
+        let panel = the_panel(&held, &server, file);
+        assert_eq!(
+            panel.reading_the_walk.as_ref().map(|said| said.as_str().replace('\u{a0}', " ")),
+            Some("Reading frame 120 of 250".to_string())
+        );
+        let mut answer = serde_json::to_value(panel).unwrap();
+        answer["the_read_elapsed_seconds"] = 42.into();
+        let folder = std::env::temp_dir().join(format!("smoozy-the-walk-page-{}", Identity::issue(IdentityKind::Operation).unwrap().as_text()));
+        fs::create_dir_all(&folder).unwrap();
+        for (name, text) in THE_UPLOADING_LINES_STAND_INS { fs::write(folder.join(name), text).unwrap(); }
+        let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for file in ["render-settings.js", "the-focus-moves.js", "the-underway-shape.js"] { fs::copy(web.join(file), folder.join(file)).unwrap(); }
+        fs::write(folder.join("answers.json"), answer.to_string()).unwrap();
+        fs::write(folder.join("harness.mjs"), r#"
+import { everyPiece } from './document.mjs';
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+const answer = JSON.parse(readFileSync('./answers.json'));
+globalThis.performance = { now: () => 0 };
+globalThis.setInterval = () => 1;
+globalThis.clearInterval = () => {};
+globalThis.window = { addEventListener() {}, __TAURI__: { core: { invoke(command) {
+  return Promise.resolve(command === 'the_render_settings_panel' ? answer : null);
+} } } };
+const { panels } = await import('./a-server.js');
+const { theSettingsAreOpenedOn } = await import('./render-settings.js');
+await theSettingsAreOpenedOn(answer.server, answer.file_bytes, '');
+const head = document.createElement('div'), body = document.createElement('div');
+panels[0].itIsDrawn({head, body}, answer.server);
+await new Promise(setImmediate);
+const activity = everyPiece(head).find(one => one.dataset.box === 'read-activity');
+assert(activity, 'the read has no activity line');
+assert.match(activity.textContent.replace(/ /g, " "), /^Reading frame 120 of 250 · 0:42 · Stop/, activity.textContent);
+"#).unwrap();
+        let ran = std::process::Command::new("node").arg(folder.join("harness.mjs")).current_dir(&folder).output().unwrap();
+        let _ = fs::remove_dir_all(folder);
+        assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+    }
+
+    #[test]
+    fn fourth_part_4_3_the_page_draws_elapsed_and_sends_stop_once() {
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let mut held = a_run_with_a_reading();
+        held.reading_now.insert(keyed(&server, file), true);
+        held.read_controls.insert(keyed(&server, file), std::sync::Arc::new(crate::reading_the_file::AReadControl::new()));
+        let mut answer = serde_json::to_value(the_panel(&held, &server, file)).unwrap();
+        answer["the_read_elapsed_seconds"] = 42.into();
+        let folder = std::env::temp_dir().join(format!("smoozy-fourth-read-page-{}", Identity::issue(IdentityKind::Operation).unwrap().as_text()));
+        fs::create_dir_all(&folder).unwrap();
+        for (name, text) in THE_UPLOADING_LINES_STAND_INS { fs::write(folder.join(name), text).unwrap(); }
+        let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for file in ["render-settings.js", "the-focus-moves.js", "the-underway-shape.js"] { fs::copy(web.join(file), folder.join(file)).unwrap(); }
+        fs::write(folder.join("answers.json"), answer.to_string()).unwrap();
+        fs::write(folder.join("harness.mjs"), r#"
+import { everyPiece } from './document.mjs';
+import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
+const answer = JSON.parse(readFileSync('./answers.json'));
+let now = 0, tick, cleared = 0, intervals = 0, connected = true, hidden = false;
+globalThis.performance = { now: () => now };
+globalThis.setInterval = fn => { tick = fn; intervals++; return 1; };
+globalThis.clearInterval = () => { cleared++; };
+Object.defineProperty(Object.getPrototypeOf(document.createElement('div')), 'isConnected', {get() {return connected;}});
+Object.getPrototypeOf(document.createElement('div')).closest = selector => selector === '[hidden]' && hidden ? {} : null;
+const calls = [];
+globalThis.window = { addEventListener() {}, __TAURI__: { core: { invoke(command, args) {
+  calls.push([command,args]);
+  return Promise.resolve(command === 'the_render_settings_panel' ? answer : null);
+} } } };
+const { panels } = await import('./a-server.js');
+const { theSettingsAreOpenedOn } = await import('./render-settings.js');
+await theSettingsAreOpenedOn(answer.server, answer.file_bytes, '');
+const head = document.createElement('div'), body = document.createElement('div');
+panels[0].itIsDrawn({head, body}, answer.server);
+await new Promise(setImmediate);
+const find = box => everyPiece(head).find(one => one.dataset.box === box);
+const activity = find('read-activity');
+assert(activity, 'the read has no activity line');
+assert.match(activity.textContent.replace(/\u00a0/g, " "), /Reading the file.*0:42.*Stop/);
+// **The Creator's note 3 on the test copy of 2026-11-12, the lonely spinner**:
+// `Design/Render Settings § Reading the file`, as changed 2026-11-13. *Read
+// the file* keeps its words and reads unavailable, and the one turning mark
+// starts the line under the header, beside the words saying what turns.
+const read = find('read');
+assert(read, 'the read control went');
+assert(!everyPiece(read).some(one => one.names.has('spin')), 'a spinner sits alone where Read the file was');
+assert.match(read.textContent, /Read/, 'Read the file lost its words');
+assert(read.disabled, 'Read the file can be pressed again while it reads');
+assert(activity.children[0] && activity.children[0].names && activity.children[0].names.has('spin'), 'the line under the header does not start with the spinner');
+assert.equal(everyPiece(head).filter(one => one.names.has('spin')).length, 1, 'more than one spinner');
+now = 2000; tick();
+assert.match(activity.textContent, /0:44/);
+const before = calls.length;
+now = 5000; tick();
+assert.equal(calls.length, before, 'drawing time made a request');
+const stop = find('stop-read'); stop.press(); stop.press();
+assert.equal(calls.filter(one => one[0] === 'the_file_read_is_stopped').length, 1);
+assert.deepEqual(calls.find(one => one[0] === 'the_file_read_is_stopped')[1], {server:answer.server,file:answer.file_bytes});
+assert(everyPiece(body).some(one => one.dataset.box === 'render'), 'the page disappeared');
+hidden = true; tick();
+assert.equal(cleared, 1);
+connected = false; tick();
+assert.equal(cleared, 1); assert.equal(intervals, 1);
+"#).unwrap();
+        let ran = std::process::Command::new("node").arg(folder.join("harness.mjs")).current_dir(&folder).output().unwrap();
+        let _ = fs::remove_dir_all(folder);
+        assert!(ran.status.success(), "{}", String::from_utf8_lossy(&ran.stderr));
+    }
+
+    const THE_UPLOADING_LINES_STAND_INS: [(&str, &str); 15] = [
         ("servers.js", "export function theMomentReads(seconds) { return `at ${seconds}`; }"),
+        ("panes.js", "export function thePagesAreMarked() { globalThis.marked = (globalThis.marked || 0) + 1; }"),
         (
             "files.js",
             "export function theBrowserIsOpenedAt(...args) { (globalThis.calls ||= []).push(['opened-at', ...args]); } \
@@ -9283,7 +10659,7 @@ console.log(JSON.stringify(out));
         ("event-route.js", "export function whenTold(kind, handler) { ((globalThis.told ||= {})[kind] ||= []).push(handler); }"),
         ("the-failure-shape.js", "export const EXPANDED = 'e'; export function theFailureShape() { return document.createElement('div'); }"),
         ("the-machines-own-words.js", "export function theMachinesOwnWordsFor() {}"),
-        ("the-underway-shape.js", "export function theMarkOnAControl() {} export function theMarkOnARow() { return document.createElement('span'); }"),
+        ("the-underway-shape.js", "export function theElapsed() { return document.createElement('span'); } export function theMarkOnAControl() {} export function theMarkOnARow() { return document.createElement('span'); }"),
         ("the-typed-text.js", "export function theTypingIsTakenFrom() { return null; } export function theTypingIsPutBackInto() {}"),
         (
             "the-value-drawn.js",
@@ -9300,7 +10676,7 @@ console.log(JSON.stringify(out));
 }
 class Piece {
   constructor(tag) {
-    this.tagName = tag.toUpperCase(); this.children = []; this.own = ""; this.title = ""; this.style = {};
+    this.tagName = tag.toUpperCase(); this.children = []; this.own = ""; this.title = ""; this.style = { setProperty() {} };
     this.dataset = {}; this.hidden = false; this.type = ""; this.disabled = false; this.value = "";
     this.attributes = {}; this.parentNode = null; this.open = false; this.listeners = {};
     const names = new Set();
@@ -9645,16 +11021,16 @@ console.log(JSON.stringify(out));
         );
     }
 
-    /// **Must-do 5: the *could not reach* ending names the server by what the
-    /// user calls it, and never by its identifier.**
+    /// **Must-do 5, as changed 2026-11-13: the *could not reach* ending draws
+    /// no value at all**, so never the server's identifier, and not its name
+    /// either: the panel is the server's, and the name under the sentence made
+    /// the box taller than its words (the Creator's note 4 on the test copy of
+    /// 2026-11-12). Until that date it named the server by what the user calls
+    /// it.
     #[test]
-    fn a_read_that_could_not_reach_the_server_names_it_by_its_name() {
-        let drawn = the_read_failure(&Ending::TheMachineCouldNotBeReached.into(), Some("the big box"), None)
-            .expect("drawn");
-        assert_eq!(drawn.values.len(), 1);
-        assert_eq!(drawn.values[0].value.as_str(), "the big box");
-        let unnamed = the_read_failure(&Ending::TheMachineCouldNotBeReached.into(), None, None).expect("drawn");
-        assert!(unnamed.values.is_empty());
+    fn a_read_that_could_not_reach_the_server_draws_no_value() {
+        let drawn = the_read_failure(&Ending::TheMachineCouldNotBeReached.into(), None).expect("drawn");
+        assert!(drawn.values.is_empty());
     }
 
     /// **Must-do 6: an EEVEE file draws EEVEE's count and no device pair**, the
@@ -9686,6 +11062,7 @@ console.log(JSON.stringify(out));
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_files_own_scripts_run: None,
                 the_folders_at_the_machines_top: None,
             },
             Some(&picked),
@@ -9734,8 +11111,11 @@ console.log(JSON.stringify(out));
         let said = the_words_of_a_line(&lines[0]);
         assert!(said.contains("<0.01>,"), "the threshold part does not end in a comma: {said}");
         let plain = |word: &str| Prose::new(word).as_str().replace('\u{a0}', " ");
-        assert!(said.contains(&plain(words::AND_THE_OWN_COUNTS_OF)), "{said}");
-        assert!(said.contains("<FX>."), "the list does not end in a full stop: {said}");
+        // **One layer, counted** (the twenty-eighth notes, note 17): it read
+        // *and the sample counts of FX.* until then.
+        assert!(said.contains(&plain(words::AND_THE_ONE_OWN_COUNT_OF)), "{said}");
+        assert!(said.contains("<1> View Layer."), "the list does not end in a full stop: {said}");
+        assert!(said.contains("<30s> per frame,"), "{said}");
         assert!(!said.contains(",  Every") && !said.contains(", Every"), "the cost runs on after a comma: {said}");
         assert!(said.ends_with(&plain(words::EVERY_FRAME_NOW_RENDERS_ALL)), "{said}");
 
@@ -9744,7 +11124,7 @@ console.log(JSON.stringify(out));
         scene.view_layers = vec![a_layer("Interior", true, false)];
         let said = the_words_of_a_line(&the_samples_lines(&answers, Some(&scene), Some(OfferedEngine::Cycles), Some(a_version(5, 1, 0)), false)[0]);
         assert!(said.starts_with(&plain(words::OVERRIDES_A_TIME_LIMIT_OF)), "{said}");
-        assert!(said.contains("<30s>."), "{said}");
+        assert!(said.contains("<30s> per frame."), "{said}");
 
         scene.time_limit = 0.0;
         assert!(
@@ -9810,6 +11190,23 @@ console.log(JSON.stringify(out));
             .expect("the command");
         assert!(command.contains("with_the_first_frame_check == Some(true)"));
         assert!(command.contains("WhichSetting::TheFirstFrameCheck, \"on\""));
+    }
+
+    /// **`§ The dependency warning` as changed 2026-11-11: the band's
+    /// first-frame way says it submits** — *Submit one frame first*, beside
+    /// *Submit anyway* — while the foot's switch keeps *Render one frame
+    /// first*. The four questions, scout 1.4.
+    #[test]
+    fn four_questions_1_4_the_bands_first_frame_way_says_it_submits() {
+        let record = WhatTheRecordHolds {
+            the_dependency_warning: TheSwitchReads::NotSwitchedOff,
+            ..WhatTheRecordHolds::default()
+        };
+        let (held, file) = a_run_that_read_and_can_submit(vec![a_scene("Scene")]);
+        let panel = the_panel_starting_from(&held, &a_server(), file, &record);
+        let band = panel.the_dependency_band.as_ref().expect("the band is drawn");
+        assert_eq!(band.render_one_frame_first, Some(Prose::new("Submit one frame first")));
+        assert_eq!(band.submit_anyway, Prose::new("Submit anyway"));
     }
 
     /// **`§ Submitting` and `§ The dependency warning`: where every job the
@@ -9897,7 +11294,7 @@ console.log(JSON.stringify(out));
         assert!(the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::TheFirstFrameCheck, "on").is_none());
         let panel = page(&held);
         assert_eq!(panel.the_reporting_control_reads.as_str(), "Off");
-        assert_eq!(panel.the_first_frame_is_answered_in_queue.unwrap().as_str().replace('\u{a0}', " "), "Answer the first frame in Queue.");
+        assert_eq!(panel.the_first_frame_is_answered_in_queue.unwrap().as_str().replace('\u{a0}', " "), "Answer the first-frame check in Queue.");
         let given = the_act_as_the_page_composed_it(&held, &a_server(), file, &record, &row, a_run()).unwrap();
         assert_eq!(given.reporting.0, serde_json::json!("Nothing"));
         assert!(the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::FrameRange, "7").is_none());
@@ -9930,6 +11327,63 @@ console.log(JSON.stringify(out));
             .and_then(|rest| rest.split("\n}").next())
             .expect("the second way in");
         assert!(!shown.contains("the_check_is_started"), "the second way in starts a check");
+    }
+
+    /// **The runner's ruling 3 of 2026-11-11 (`Design/Render Settings § When
+    /// there is no version to pick`; `Render Settings` B5): where no build
+    /// answered and the server's disk reads full, the line says *The server’s
+    /// disk is full.*, never *This server has no Blender.*, and no way to Set
+    /// up is drawn beside it.** Render and the read stay unavailable. *On the
+    /// live pass, with 0 bytes free, the page said the server had no Blender.*
+    #[test]
+    fn a_full_disk_is_said_and_never_that_the_server_has_no_blender() {
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let mut held = a_run_with_a_reading();
+        held.version_lists.get_mut(&a_server()).expect("a list").entries.clear();
+        let no_blender = the_panel(&held, &a_server(), file);
+        assert_eq!(the_words_of_a_line(&no_blender.no_blender), words::NO_BLENDER_ON_THIS_SERVER);
+        assert_eq!(no_blender.set_it_up, Prose::new(words::SET_IT_UP));
+
+        held.the_disk_reads_full_on.insert(a_server());
+        let full = the_panel(&held, &a_server(), file);
+        assert_eq!(the_words_of_a_line(&full.no_blender), "The server’s disk is full.");
+        assert_eq!(full.set_it_up, Prose::new(String::new()), "nothing at Set up frees a disk");
+        assert!(!full.the_read_is_offered);
+
+        // **A list with a Blender in it says neither**, whatever the disk read.
+        let mut with_a_blender = a_run_with_a_reading();
+        with_a_blender.the_disk_reads_full_on.insert(a_server());
+        assert!(the_panel(&with_a_blender, &a_server(), file).no_blender.is_empty());
+
+        // **The page draws the way to Set up only where it is given one.**
+        let header = the_pages_function("function theHeaderIsDrawn(server, said, head) {");
+        assert!(header.contains("if (said.set_it_up) {"), "the page draws an empty link");
+    }
+
+    /// **`Render Settings` B5 as added 2026-11-11: what a landing list says
+    /// of the disk is what the search that brought it read**, and the next
+    /// landing replaces it.
+    #[test]
+    fn a_landing_list_takes_what_its_search_read_of_the_disk() {
+        use smoozy_render_settings::acting::versions::TheVersionListAsk;
+        let server = "a server whose disk fills and empties";
+        let mut held = WhatTheRunHolds::default();
+        let an_empty_list = || TheVersionListAsk::Answered(a_list_of(&[]));
+        the_version_list_came_back_with_the_disk(&mut held, server, an_empty_list(), true);
+        assert!(held.the_disk_reads_full_on.contains(server));
+        // **A list landed with no word of the disk says nothing of it**:
+        // each search's reading travels with its own list, and none is
+        // kept where another search could take it (Sol's second point).
+        the_version_list_came_back(&mut held, server, an_empty_list());
+        assert!(!held.the_disk_reads_full_on.contains(server), "another search's reading landed with this list");
+        the_version_list_came_back_with_the_disk(&mut held, server, an_empty_list(), true);
+        the_version_list_came_back_with_the_disk(
+            &mut held,
+            server,
+            TheVersionListAsk::TheMachineCouldNotBeAsked,
+            true,
+        );
+        assert!(!held.the_disk_reads_full_on.contains(server), "no list, nothing said of the disk");
     }
 
     /// **Must-do 12: with no Blender, the read and *Reset all* are still
@@ -10122,7 +11576,7 @@ console.log(JSON.stringify(out));
     fn every_control_the_page_draws_carries_its_own_box() {
         let code = the_page_code();
         for opening in [
-            "function aBox(name, ticked, extra, pressed, which) {",
+            "function aBox(name, ticked, extra, pressed, which, theNameAsDrawn) {",
             "function aSwitch(label, on, pressed, which, greyed) {",
             "function aLink(label, pressed, which) {",
             "function theCross(handBackTo, pressed, which) {",
@@ -10442,6 +11896,7 @@ console.log(JSON.stringify(out));
             fs::write(folder.join(name), text).expect("a stand-in");
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         fs::write(folder.join("the-click.mjs"), THE_CLICK_STAND_IN).expect("the click");
         fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers");
         fs::write(folder.join("harness.mjs"), THE_MINUTES_HARNESS.replace("SERVER", &a_server())).expect("the harness");
@@ -10492,6 +11947,7 @@ console.log(JSON.stringify(out));
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -10638,6 +12094,7 @@ console.log(JSON.stringify(out));
             fs::write(folder.join(name), text).expect("a stand-in");
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         fs::write(folder.join("the-click.mjs"), THE_CLICK_STAND_IN).expect("the click");
         fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers");
         fs::write(folder.join("harness.mjs"), THE_NOT_INSTALLED_HARNESS.replace("SERVER", &a_server())).expect("the harness");
@@ -11124,8 +12581,11 @@ console.log(JSON.stringify(out));
     /// **The act, as the page composed it** — `Render Settings` Y1's payload
     /// from the store and the resolved pick, the job's name as typed, the
     /// row's own label and badge, and the package area from piece 4's
-    /// `where_the_package_area_is`. **One scene ticked or none is one job; two
-    /// ticked are two, each carrying its own read name** (`Rendering` S2, S6).
+    /// `where_the_package_area_is`. **One scene ticked is one job; two ticked
+    /// are two, each carrying its own read name** (`Rendering` S2, S6). *Until
+    /// 2026-11-10 the run held no tick here and the one job named no scene;
+    /// with none ticked after a read nothing is sent now, and the run holds
+    /// the read's own tick, as a landing gives it.*
     #[test]
     fn the_act_is_composed_from_the_page_the_row_and_the_resolved_pick() {
         let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
@@ -11152,7 +12612,11 @@ console.log(JSON.stringify(out));
         )
         .unwrap_or_else(|said| panic!("{said:?}"));
         assert_eq!(given.scene_jobs.len(), 1);
-        assert!(given.scene_jobs[0].scene.is_none(), "no scene ticked names none (`Rendering` L15)");
+        assert_eq!(
+            given.scene_jobs[0].scene.as_ref().map(|scene| scene.name.as_text().to_string()).as_deref(),
+            Some("Interior"),
+            "the read's own tick is named (`Rendering` L15)"
+        );
         assert_eq!(given.scene_jobs[0].version_pick.version, "5.1.0");
         assert_eq!(given.label.as_deref(), Some("Kitchen, first pass"));
         assert_eq!(given.server.label.as_deref(), Some("the big box"));
@@ -11450,6 +12914,55 @@ console.log(JSON.stringify(out));
     /// piece 8.)*
     /// The page harness measured the colours (tenth-pass fix pieces 2 and 6's
     /// account); this holds the two halves to one another.
+    /// **The four questions, scout 3.49: a first-frame submission whose
+    /// first frame went and whose rest did not is said as one job** —
+    /// `Design/Render Settings § Submitting`, added 2026-11-12. Before, it
+    /// read *1 of 2 jobs submitted.* while a success read as one job.
+    /// **The four questions, scout 3.48 (Sol's narrowed form): the version
+    /// case says why the difference matters** — `Design/Render Settings §
+    /// The dependency warning`, added 2026-11-12.
+    #[test]
+    fn fifth_part_3_48_the_version_case_says_why() {
+        assert_eq!(words::A_CHECK_COVERS_ITS_BLENDER, "A check is valid only for the Blender version it ran with.");
+        let this = include_str!("render_settings.rs");
+        let case = this
+            .split("            \"version\",\n            vec![")
+            .nth(1)
+            .and_then(|rest| rest.split("words::CHECK_DEPENDENCIES,").next())
+            .expect("the version case");
+        assert!(case.contains("plainly(words::A_CHECK_COVERS_ITS_BLENDER)"), "{case}");
+    }
+
+    /// **The four questions, scout 2.16: a colliding output that is a folder
+    /// Smoozy adds names that folder** — `Design/Render Settings § Warnings`,
+    /// added 2026-11-12. Before, it read *— an added write place*.
+    #[test]
+    fn fifth_part_2_16_a_colliding_added_place_is_named() {
+        use smoozy_job_files::reading::AnAddedWritePlace;
+        let said = where_it_comes_from(&WhereItComesFrom::AnAddedWritePlaceNamed(AnAddedWritePlace::TheBakeOutputPath));
+        assert_eq!(the_words_of(&said), vec!["— the bake output folder"]);
+    }
+
+    #[test]
+    fn fifth_part_3_49_a_first_frame_pair_is_said_as_one_job() {
+        use crate::submitting::{WhatBecameOfOneJob as Became, WhatTheActCameTo as CameTo};
+        let half = CameTo::TheseJobs(vec![Became::ItIsInTheLine, Became::NotKnown]);
+        let (said, plain) = the_acts_answer(&half);
+        let (said, plain) = a_first_frame_pair_is_one_job(&half, 1, said, plain);
+        assert_eq!(plain, 1);
+        assert_eq!(
+            the_words_of(&said),
+            vec![words::ONLY_THE_FIRST_FRAME_WAS_SUBMITTED, words::NOT_KNOWN_WHETHER_IT_WAS_TAKEN]
+        );
+        assert_eq!(words::ONLY_THE_FIRST_FRAME_WAS_SUBMITTED, "Only the first frame was submitted.");
+        // Two scene-jobs keep their count, and so does anything else.
+        let (said, plain) = the_acts_answer(&half);
+        assert_eq!(a_first_frame_pair_is_one_job(&half, 2, said.clone(), plain), (said, plain));
+        assert!(the_working_half().contains(
+            "let (said, plain) = a_first_frame_pair_is_one_job(&came_to, how_many, said, plain);"
+        ));
+    }
+
     #[test]
     fn what_went_out_is_a_plain_note_and_only_a_refusal_keeps_the_refusal_colour() {
         use crate::submitting::{WhatBecameOfOneJob as Became, WhatTheActCameTo as CameTo};
@@ -11685,8 +13198,89 @@ console.log(JSON.stringify(out));
         assert!(panel.what_it_will_write.is_none());
     }
 
+    /// **`§ What it will write` with several scenes ticked: each ticked
+    /// scene's list under its name** (the four questions, scout 2.15,
+    /// 2026-11-12). Where every ticked scene has its own half, each is listed
+    /// in the reading's order and the one line goes; where one has none (an
+    /// older server program), the one line stands, as before.
+    #[test]
+    fn sixth_part_2_15_several_scenes_ticked_list_each_ones_outputs() {
+        let mut held = a_run_with_a_reading();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let key = FileKey { server: an_identity(&a_server()), path: file.to_string() };
+        for scene in ["Exterior", "Interior"] {
+            let provenance = the_provenance(&held, &key).expect("a reading stands");
+            held.store.tick_a_scene(
+                key.clone(),
+                NamedAnswer { name: ExactName::as_the_reading_produced_it(scene), provenance },
+            );
+        }
+        let interior = the_creators_shape();
+        held.outputs.insert(keyed(&a_server(), file), vec![(b"Interior".to_vec(), interior.clone())]);
+        let panel = the_panel(&held, &a_server(), file);
+        assert!(panel.the_scenes_outputs.is_empty() && !panel.one_scene_only.is_empty(), "a scene with no half of its own");
+
+        held.outputs
+            .get_mut(&keyed(&a_server(), file))
+            .expect("the outputs")
+            .push((b"Exterior".to_vec(), interior));
+        let panel = the_panel(&held, &a_server(), file);
+        let named: Vec<&str> = panel.the_scenes_outputs.iter().map(|one| one.scene.as_str()).collect();
+        assert_eq!(named, ["Interior", "Exterior"], "each ticked scene, in the reading's order");
+        assert!(
+            panel.the_scenes_outputs.iter().all(|one| one.what_it_will_write.as_ref().is_some_and(|writes| !writes.rows.is_empty())),
+            "each scene lists what it writes"
+        );
+        assert!(panel.one_scene_only.is_empty(), "the one line stayed beside the lists");
+        assert!(panel.what_it_will_write.is_none() && panel.the_folder_line.is_none(), "one scene's list and folder line");
+        assert!(panel.the_output_group_is_drawn);
+    }
+
+    /// **The Creator's note 4 on the test copy of 2026-11-12: a failed read
+    /// with nothing read is one box, and it says what to do next.** *Connection
+    /// lost. Your changes are kept. …* sat over *Could not reach the server.*
+    /// with the server's name under it: two boxes saying one thing, and nothing
+    /// to do. `Design/Render Settings § When the read gives nothing`, as
+    /// changed 2026-11-13: the failed read's box stands in for the band, and
+    /// the *could not reach* ending says *Read the file again.*
+    #[test]
+    fn a_failed_read_with_nothing_read_is_one_box_that_says_what_to_do_next() {
+        let mut area = std::env::temp_dir();
+        area.push(format!("smoozy-one-box-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&area);
+        let diary = crate::diary_service::DiaryService::open_at(area.clone()).expect("a diary");
+        let run = Identity::issue(IdentityKind::Run).expect("randomness");
+        let the_diary = TheDiaryInHand { diary: Some(&diary), run: Some(&run), the_servers_name: "the big box" };
+        let mut held = WhatTheRunHolds::default();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        for ending in [
+            Ending::TheMachineCouldNotBeReached,
+            Ending::TheFileCouldNotBeOpenedByThisVersion,
+            Ending::TheReadRanAndSomethingInItFailed,
+            Ending::SmoozyStoppedIt,
+        ] {
+            let _ = the_read_gave_nothing(&mut held, &a_server(), file, ending.clone(), &the_diary);
+            let panel = the_panel(&held, &a_server(), file);
+            assert!(panel.the_read_failure.is_some(), "{ending:?}");
+            assert!(panel.the_band.is_empty(), "{ending:?}: the band is drawn beside the box: {:?}", panel.the_band);
+        }
+        let _ = the_read_gave_nothing(&mut held, &a_server(), file, Ending::TheMachineCouldNotBeReached, &the_diary);
+        let drawn = the_panel(&held, &a_server(), file).the_read_failure.expect("drawn");
+        assert_eq!(drawn.what_did_not_happen, Prose::new(words::COULD_NOT_REACH_THE_SERVER));
+        assert_eq!(drawn.what_to_do_about_it, Some(Prose::new(words::READ_THE_FILE_AGAIN)));
+        assert!(drawn.values.is_empty(), "the panel is the server's: {:?}", drawn.values);
+        // **Cleared, the band comes back as it is before any read.**
+        held.the_read_that_gave_nothing.clear();
+        let panel = the_panel(&held, &a_server(), file);
+        assert_eq!(
+            panel.the_band,
+            vec![plainly(words::NOT_READ_LEAD), plainly(words::NOT_READ_REST)]
+        );
+        let _ = std::fs::remove_dir_all(&area);
+    }
+
     /// **`§ When the read gives nothing`: four endings, not one**, and only the
-    /// second carries a second sentence.
+    /// first (from 2026-11-13) and the second carry a second sentence.
     #[test]
     fn the_four_read_endings_each_say_something_different() {
         let picked = BlenderIdentity {
@@ -11700,13 +13294,16 @@ console.log(JSON.stringify(out));
             Ending::TheReadRanAndSomethingInItFailed,
             Ending::SmoozyStoppedIt,
         ] {
-            let drawn = the_read_failure(&ending.clone().into(), Some("the big box"), Some(&picked))
+            let drawn = the_read_failure(&ending.clone().into(), Some(&picked))
                 .expect("an ending is drawn");
             said.push(drawn.what_did_not_happen.as_str().to_string());
             let second = drawn.what_to_do_about_it.is_some();
             assert_eq!(
                 second,
-                matches!(ending, Ending::TheFileCouldNotBeOpenedByThisVersion),
+                matches!(
+                    ending,
+                    Ending::TheMachineCouldNotBeReached | Ending::TheFileCouldNotBeOpenedByThisVersion
+                ),
                 "the second sentence is on the wrong ending. **The shape grants \
                  one only where Smoozy knows what the user should do next**"
             );
@@ -11715,7 +13312,6 @@ console.log(JSON.stringify(out));
         // one sentence of its own, no second one and no Blender output.
         let no_blender = the_read_failure(
             &AReadThatGaveNothing::TheServerRanNoBlender,
-            Some("the big box"),
             Some(&picked),
         )
         .expect("it is drawn");
@@ -11726,7 +13322,7 @@ console.log(JSON.stringify(out));
         assert_eq!(said.len(), 5, "two of the endings say the same thing");
         // **A read Smoozy ended itself is not diagnosed as any of the three**,
         // and it does not send the user to change the version.
-        let stopped = the_read_failure(&Ending::SmoozyStoppedIt.into(), Some("the big box"), Some(&picked))
+        let stopped = the_read_failure(&Ending::SmoozyStoppedIt.into(), Some(&picked))
             .expect("it is drawn");
         assert!(stopped.what_to_do_about_it.is_none());
         assert!(stopped.values.is_empty());
@@ -11915,7 +13511,9 @@ console.log(JSON.stringify(out));
             .split_once("function theListIsKeptInsideTheWindow(")
             .expect("the dropdown's one measurement");
         let (the_exception, after) = rest.split_once("\n}\n").expect("the function ends");
-        assert_eq!(the_exception.matches("getBoundingClientRect").count(), 3, "{the_exception}");
+        // Four since the UI at every size (C1): the list, the control, each
+        // box that cuts it off, and the list again once its width is held.
+        assert_eq!(the_exception.matches("getBoundingClientRect").count(), 4, "{the_exception}");
         assert!(the_exception.contains("window.innerHeight"), "{the_exception}");
         assert_eq!(whole.matches("theListIsKeptInsideTheWindow(face, list);").count(), 1, "the list is measured from more than its opening");
         let page = format!("{before}{after}");
@@ -11994,6 +13592,12 @@ console.log(JSON.stringify(out));
             })
             .collect::<Vec<_>>()
             .join("\n");
+        // **The dropdown's two limits are the one use of the element's style**
+        // (the UI at every size, C1): values the stylesheet reads, not
+        // declarations, the way `web/files.js` and `web/servers.js` place
+        // their menus (H33).
+        let page = page
+            .replace(".style.setProperty(\"--ddl-", "");
         for forbidden in ["innerHTML", "outerHTML", "insertAdjacentHTML", ".style."] {
             assert!(
                 !page.contains(forbidden),
@@ -12167,7 +13771,7 @@ check(on && !elements.pickfmt.hidden && elements.folder.hidden);
     fn after_a_read_the_control_summarises_the_formats_the_count_and_the_folder() {
         let a_format = |name: &str, files: usize, chosen: bool| AFormatKnown {
             name: name.to_string(),
-            where_in_the_job: String::new(),
+            where_in_the_job: Vec::new(),
             at_the_top: false,
             files,
             chosen,
@@ -12520,6 +14124,7 @@ check(on && !elements.pickfmt.hidden && elements.folder.hidden);
         fs::create_dir_all(&folder).expect("a scratch folder");
         fs::copy(web.join("the-typed-text.js"), folder.join("the-typed-text.mjs"))
             .expect("the page module is copied");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         fs::write(folder.join("harness.mjs"), THE_TYPED_TEXT_HARNESS).expect("the harness is written");
         let ran = std::process::Command::new("node")
             .arg(folder.join("harness.mjs"))
@@ -12575,7 +14180,9 @@ check(on && !elements.pickfmt.hidden && elements.folder.hidden);
             fs::write(folder.join(name), text).expect("a stand-in");
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         fs::copy(web.join("the-typed-text.js"), folder.join("the-typed-text.js")).expect("the typed text");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         fs::write(folder.join("the-click.mjs"), THE_CLICK_STAND_IN).expect("the click");
         fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers");
         fs::write(folder.join("harness.mjs"), THE_CLICK_HARNESS.replace("SERVER", &a_server())).expect("the harness");
@@ -12612,6 +14219,7 @@ check(on && !elements.pickfmt.hidden && elements.folder.hidden);
         fs::create_dir_all(&folder).unwrap();
         for (name, text) in THE_UPLOADING_LINES_STAND_INS { fs::write(folder.join(name), text).unwrap(); }
         fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("web/render-settings.js"), folder.join("render-settings.js")).unwrap();
+        fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("web/the-focus-moves.js"), folder.join("the-focus-moves.js")).unwrap();
         fs::write(folder.join("the-click.mjs"), THE_CLICK_STAND_IN).unwrap();
         fs::write(folder.join("answers.json"), panel.to_string()).unwrap();
         fs::write(folder.join("harness.mjs"), r#"
@@ -12889,6 +14497,7 @@ console.log(JSON.stringify(out));
             fs::write(folder.join(name), text).expect("a stand-in");
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         fs::write(folder.join("the-click.mjs"), THE_CLICK_STAND_IN).expect("the click");
         fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers");
         fs::write(folder.join("harness.mjs"), THE_DROPDOWN_HARNESS.replace("SERVER", &a_server())).expect("the harness");
@@ -12906,7 +14515,8 @@ console.log(JSON.stringify(out));
             serde_json::json!({
                 "noSelect": true,
                 "version": looks(&versions, Some(the_pick), "pick w-ver"),
-                "texture": looks(&textures, the_texture, "pick"),
+                // One width whatever is picked (UI consistency, finding 62).
+                "texture": looks(&textures, the_texture, "pick w-tex"),
                 // Only as wide as its longest choice, by the drawing's own class
                 // (the Creator's tenth notes, note 8).
                 "reports": looks(&reports, Some(the_report), "pick w-tg"),
@@ -13080,6 +14690,7 @@ console.log(JSON.stringify(out));
             fs::write(folder.join(name), text).expect("a stand-in");
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         fs::write(folder.join("answers.json"), answers.to_string()).expect("the answers");
         fs::write(folder.join("harness.mjs"), THE_UPWARD_HARNESS.replace("SERVER", &a_server())).expect("the harness");
         let ran = std::process::Command::new("node").arg(folder.join("harness.mjs")).current_dir(&folder).output();
@@ -13167,6 +14778,7 @@ console.log(JSON.stringify({
             }
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -13262,6 +14874,7 @@ console.log(JSON.stringify({
             }
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -13496,6 +15109,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
             }
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -13712,6 +15326,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
                     eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                 },
                 announced_add_on_case: None,
+                the_files_own_scripts_run: None,
                 the_folders_at_the_machines_top: None,
             },
             version,
@@ -13743,6 +15358,11 @@ document.getElementById("out").textContent = JSON.stringify(out);
             &four_values(),
             std::time::SystemTime::now(),
         );
+        // **As a real landing does, the read ticks its scene** (`Render
+        // Settings` J7's third act, [`the_read_ticks_its_scene`]); with none
+        // ticked after a read nothing renders (`Render Settings` F5 of
+        // 2026-11-10).
+        the_read_ticks_its_scene(&mut held, &a_server(), file, None);
         (held, file)
     }
 
@@ -13843,13 +15463,14 @@ document.getElementById("out").textContent = JSON.stringify(out);
         let panel = the_panel(&held, &a_server(), file);
         let lines: Vec<String> = panel.the_samples_lines.iter().map(the_words_of_a_line).collect();
         assert_eq!(lines.len(), 1, "{lines:?}");
-        assert!(lines[0].contains("<FX>"), "{lines:?}");
+        // Counted, never named (the twenty-eighth notes, note 17).
+        assert!(lines[0].contains("<1>") && !lines[0].contains("FX"), "{lines:?}");
         let _ = the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::SampleCount, "256");
         let panel = the_panel(&held, &a_server(), file);
         let lines: Vec<String> = panel.the_samples_lines.iter().map(the_words_of_a_line).collect();
         assert_eq!(lines.len(), 1, "{lines:?}");
         let plain = |word: &str| Prose::new(word).as_str().replace('\u{a0}', " ");
-        assert!(lines[0].starts_with(&plain(words::OVERRIDES_THE_OWN_COUNTS_OF)), "{lines:?}");
+        assert!(lines[0].starts_with(&plain(words::OVERRIDES_THE_ONE_OWN_COUNT_OF)), "{lines:?}");
         assert!(!lines[0].contains("0.01") && !lines[0].contains("30s"), "{lines:?}");
 
         // **The engine the page shows is what decides, not the file's own**:
@@ -14046,7 +15667,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
         }
     }
 
-    /// **`Design/Render Settings`: *"Choosing Somewhere else… puts the system's
+    /// **`Design/Render Settings`: *"Choosing Other… puts the system's
     /// folder panel up at once, and the folder chosen there is shown in the
     /// box as the choice, which Done then keeps like any other. Closing the
     /// panel leaves the box as it was."*** The application's half: the folder
@@ -14108,7 +15729,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
     ///
     /// - *Read it now* reads unavailable where the application says the read
     ///   is not offered (fault 8);
-    /// - choosing *Somewhere else…* asks for the panel at once, before *Done*
+    /// - choosing *Other…* asks for the panel at once, before *Done*
     ///   (fault 11 — before this, the page asked nothing until *Done*);
     /// - the folder the panel gave is drawn as the choice, and *Done* hands it
     ///   back by its row, which the application then keeps;
@@ -14169,6 +15790,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
         let _ = fs::remove_dir_all(&folder);
         fs::create_dir_all(&folder).expect("a scratch folder");
         fs::copy(web.join("transfers.js"), folder.join("transfers.js")).expect("the page module is copied");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_BOX_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in is written");
         }
@@ -14195,7 +15817,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
                 "/Volumes/Renders/kitchen",
                 "/Users/artist/Renders/kitchen",
                 "/Users/artist/Downloads — your download folder",
-                "Somewhere else…"
+                "Other…"
             ]),
             "{got}"
         );
@@ -14453,15 +16075,17 @@ if (line.hidden) throw new Error("the refusal was not shown");
     /// `TheFilesOwn` and Blender rendered the file's 1..250.
     /// (`Audits/Build/Step 10c/The pass before Vast — Sesterce.md`, fault 1.)
     ///
-    /// The page writes a typed range under the scene in hand (`Render
-    /// Settings` J3: once a reading lands, a scene is in hand); **the job must
-    /// compose from that same entry** (`Render Settings` F5, the sentence
-    /// settled 2026-10-01). On a one-scene reading the job names that scene;
-    /// on a reading of several it names none (`Render Settings` Y10) and still
-    /// carries the range.
+    /// The page writes a typed range under the scene in hand; **the job must
+    /// compose from that same entry** (`Render Settings` F5). Since 2026-10-03
+    /// the read ticks its own scene (`Render Settings` J7's third act), so the
+    /// scene in hand is that tick and the job names it, on a reading of one
+    /// scene or of several. *Changed 2026-11-10 (the Creator's twenty-ninth
+    /// notes, note 6): with no scene ticked after a read nothing is sent, so
+    /// the case this test met first — several scenes, none ticked, a job
+    /// naming none — no longer composes at all (`twenty_ninth_notes_6`).*
     #[test]
     fn a_range_typed_after_a_read_reaches_the_job_as_the_page_draws_it() {
-        // One scene, nothing ticked.
+        // One scene, the read's own tick.
         let (mut held, file) = a_run_that_read_and_can_submit(vec![a_scene("Scene")]);
         assert!(the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::FrameRange, "1-20").is_none());
         assert_eq!(the_range_the_page_draws(&held, file).as_deref(), Some("1-20"));
@@ -14479,7 +16103,7 @@ if (line.hidden) throw new Error("the refusal was not shown");
             "`Render Settings` F5: a one-scene reading names its one scene"
         );
 
-        // Two scenes, nothing ticked.
+        // Two scenes, the read's own tick on the first.
         let (mut held, file) =
             a_run_that_read_and_can_submit(vec![a_scene("Interior"), a_scene("Exterior")]);
         assert!(the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::FrameRange, "1-20").is_none());
@@ -14487,8 +16111,11 @@ if (line.hidden) throw new Error("the refusal was not shown");
         let jobs = the_jobs_the_page_composes(&held, file);
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].frame_range, Some(typed("1-20")));
-        assert!(jobs[0].scene.is_none(), "`Render Settings` F5 and `Render Settings` Y10: several scenes, none named");
-        assert!(jobs[0].view_layer_pins.is_empty(), "no pins on a job naming no scene");
+        assert_eq!(
+            jobs[0].scene.as_ref().map(|scene| scene.name.as_text().to_string()).as_deref(),
+            Some("Interior"),
+            "the scene the page stands in is the one the job names"
+        );
     }
 
     /// **A range typed and then the scene ticked is carried**, and wherever
@@ -14519,14 +16146,18 @@ if (line.hidden) throw new Error("the refusal was not shown");
         assert_eq!(jobs[0].frame_range, Some(typed("5-9")));
         assert_eq!(jobs[0].scene.as_ref().map(|scene| scene.name.as_text()), Some("Scene"));
 
-        // **Two scenes: typed while the first stood in hand, then the second
-        // ticked.** The page then stands in the second scene and draws its
-        // own range, which is the file's — so the job carries no range, and
-        // the two agree (`Render Settings` J3's per-scene keying).
+        // **Two scenes: typed while the first stood in hand, then the tick
+        // moved to the second.** The page then stands in the second scene and
+        // draws its own range, which is the file's — so the job carries no
+        // range, and the two agree (`Render Settings` J3's per-scene keying).
         let (mut held, file) =
             a_run_that_read_and_can_submit(vec![a_scene("Interior"), a_scene("Exterior")]);
         assert!(the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::FrameRange, "5-9").is_none());
         tick(&mut held, file, "Exterior");
+        held.store.untick_a_scene(
+            FileKey { server: an_identity(&a_server()), path: file.to_string() },
+            &ExactName::as_the_reading_produced_it("Interior"),
+        );
         assert_eq!(the_range_the_page_draws(&held, file).as_deref(), Some("1-240"));
         let jobs = the_jobs_the_page_composes(&held, file);
         assert_eq!(jobs[0].frame_range, None, "the file's own, as the page draws it");
@@ -14540,11 +16171,15 @@ if (line.hidden) throw new Error("the refusal was not shown");
     fn a_run_that_read_a_file_saved_showing_interior() -> (WhatTheRunHolds, &'static str, FileKey) {
         let (mut held, file) =
             a_run_that_read_and_can_submit(vec![a_scene("Exterior"), a_scene("Interior"), a_scene("Garden")]);
-        the_read_ticks_its_scene(&mut held, &a_server(), file, Some(b"Interior".as_slice()));
         let key = FileKey {
             server: an_identity(&a_server()),
             path: file.to_string(),
         };
+        // **The helper's landing ticked the first scene, as one naming no
+        // saved scene does**; this file's landing names Interior, so it is
+        // landed again from nothing ticked.
+        only_these_are_ticked(&mut held, &key, &[]);
+        the_read_ticks_its_scene(&mut held, &a_server(), file, Some(b"Interior".as_slice()));
         (held, file, key)
     }
 
@@ -15052,6 +16687,7 @@ if (line.hidden) throw new Error("the refusal was not shown");
         fs::create_dir_all(&folder).expect("a scratch folder");
         let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -15254,6 +16890,7 @@ console.log(JSON.stringify(out));
             }
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -15338,8 +16975,38 @@ console.log(JSON.stringify(out));
         assert!(dropdown < column / 2.0, "Telegram's dropdown is {dropdown} wide in a column of {column}: {said}");
         assert_eq!(said["wide"]["telegramWidthWritten"], false, "Telegram's dropdown carries a width written on it: {said}");
         assert_eq!(said["wide"]["telegramClass"], "pick w-tg", "Telegram's dropdown lost the drawing's class: {said}");
-        // **No third line where nothing is wrong or under way.**
-        assert_eq!(said["wide"]["thirdLine"], false, "a third line is drawn with nothing to say: {said}");
+        // **The third line keeps its room where nothing is wrong or under
+        // way** (UI consistency, finding 14: it came and went, and Render
+        // jumped 25 pixels under the pointer as *Uploading dependencies*
+        // went). Its words coming move neither Render nor the foot.
+        assert_eq!(said["wide"]["thirdLine"], true, "the third line's room is not held: {said}");
+        for edge in ["top", "bottom"] {
+            assert!(near(at("third", "render", edge), at("wide", "render", edge)), "Render moved when the third line's words came ({edge}): {said}");
+        }
+        assert!(near(at("third", "foot", "top"), at("wide", "foot", "top")), "the foot moved when the third line's words came (top): {said}");
+        // **Where the two sentences fit side by side, the foot does not grow
+        // at all.** Where they do not — Linux's face is wide enough that, at
+        // this width, the no-folder sentence and *Uploading dependencies*
+        // need more than the line (hosted run 43727887590, 2026-11-15) — the
+        // drawing's own wrap puts the second wholly under the first, and the
+        // foot grows by that one line and no more. The wrap is only allowed
+        // where the two widths and the gap truly exceed the line.
+        let both_on_one_line = at("third", "uploading", "top") < at("third", "noFolder", "bottom") - 0.5;
+        if both_on_one_line {
+            assert!(near(at("third", "foot", "bottom"), at("wide", "foot", "bottom")), "the foot moved when the third line's words came (bottom): {said}");
+        } else {
+            let width = |part: &str| at("third", part, "right") - at("third", part, "left");
+            let gap = said["third"]["thirdLineGap"].as_f64().unwrap_or_else(|| panic!("no gap on the third line: {said}"));
+            let needed = width("noFolder") + gap + width("uploading");
+            let room = width("thirdLineBox");
+            assert!(needed > room - 0.5, "the third line wrapped with room for both ({needed} in {room}): {said}");
+            assert!(at("third", "uploading", "top") >= at("third", "noFolder", "bottom") - 0.5, "the uploading line is not wholly under the no-folder line: {said}");
+            let the_second_line = at("third", "uploading", "bottom") - at("third", "noFolder", "bottom");
+            assert!(
+                near(at("third", "foot", "bottom") - at("wide", "foot", "bottom"), the_second_line),
+                "the foot grew by more than the wrapped line ({the_second_line}): {said}"
+            );
+        }
 
         // **A submission that went: under Render, right-aligned in Render's
         // column, and nothing moved.**
@@ -15357,7 +17024,8 @@ console.log(JSON.stringify(out));
         assert!(near(at("third", "noFolder", "left"), at("third", "firstFrameSwitch", "left")), "the no-folder line is not under the switches: {said}");
         assert!(at("third", "uploading", "top") >= at("third", "firstFrameSwitch", "bottom"), "the uploading line is not under line 2: {said}");
         assert!(near(at("third", "uploading", "right"), at("third", "render", "right")), "the uploading line is not under Render: {said}");
-        assert!(at("third", "foot", "height") > at("wide", "foot", "height"), "the third line takes no room: {said}");
+        // (It used to take a line of room here; it holds that room always now,
+        // UI consistency, finding 14, asserted above.)
 
         // **At the 1,180 step the switches drop under the name**, and Render
         // stays on the name's line.
@@ -15435,6 +17103,8 @@ const measure = () => {
     secondLine: edges(foot.querySelector(".sfl2")),
     sent: edges(box("submitted")),
     thirdLine: Boolean(foot.querySelector(".sfl3")),
+    thirdLineBox: edges(foot.querySelector(".sfl3")),
+    thirdLineGap: foot.querySelector(".sfl3") ? parseFloat(getComputedStyle(foot.querySelector(".sfl3")).columnGap) : null,
     noFolder: edges(box("no-folder")),
     uploading: edges(box("dependencies-uploading") ? box("dependencies-uploading").parentNode : null),
   };
@@ -15562,7 +17232,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
                 let panel = the_panel_starting_from(&held, &a_server(), file, read);
                 assert_eq!(panel.the_telegram_line_is_drawn, read.telegram_is_on, "{kind} {state}");
                 let writes = panel.what_it_will_write.as_ref().expect("the file is read, so the list is drawn");
-                let formats: Vec<&str> = writes.rows.iter().filter_map(|row| row.format.as_ref().map(|one| one.as_str())).collect();
+                let formats: Vec<&str> = writes.rows.iter().flat_map(|row| row.counts.iter().map(|one| one.format.as_str())).filter(|one| !one.is_empty()).collect();
                 assert_eq!(formats.iter().all(|one| *one == "Video"), video, "{kind}: the job writes {formats:?}");
                 answers.insert(format!("{kind}-{state}"), serde_json::to_value(&panel).expect("the panel serialises"));
             }
@@ -15580,6 +17250,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
             }
         }
         fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_UPLOADING_LINES_STAND_INS {
             fs::write(folder.join(name), text).expect("a stand-in");
         }
@@ -15849,7 +17520,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
                 (
                     row.place.as_str().to_string(),
                     row.the_top.is_some(),
-                    row.format.as_ref().map(|format| format.as_str().to_string()).unwrap_or_default(),
+                    row.counts.iter().map(|one| one.format.as_str()).collect::<Vec<_>>().join(" + "),
                 )
             })
             .collect();
@@ -15860,10 +17531,11 @@ document.getElementById("out").textContent = JSON.stringify(out);
                 // **The two AO layers are pinned off on this ground**, so the two
                 // PNG outputs they alone feed count nothing and are not listed
                 // (`Design/Render Settings § What it will write`, 2026-11-02).
+                // **One row per folder** (the twenty-eighth notes, note 17):
+                // the two PNG outputs left and the two EXR ones share their
+                // folders, so each pair is one row. They were two each.
                 row("", true, "Video"),
                 row("PNG/", false, "PNG"),
-                row("PNG/", false, "PNG"),
-                row("EXR/", false, "Multilayer EXR"),
                 row("EXR/", false, "Multilayer EXR"),
             ]
         );
@@ -15997,7 +17669,11 @@ document.getElementById("out").textContent = JSON.stringify(out);
         use crate::surface::transfers::TheFormatReading;
         let panel = the_panel_starting_from(held, &a_server(), file, record);
         let the_list = panel.what_it_will_write.as_ref().map(|writes| {
-            let mut said: Vec<String> = writes.rows.iter().map(|row| row.how_many.as_str().to_string()).collect();
+            let mut said: Vec<String> = writes
+                .rows
+                .iter()
+                .flat_map(|row| row.counts.iter().map(|one| one.how_many.as_str().to_string()))
+                .collect();
             said.extend(the_words_of(&vec![writes.total.clone()]));
             for one in &writes.by_format {
                 said.push(one.how_many.as_str().to_string());
@@ -16277,7 +17953,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
     /// the runner's ruling of 2026-10-17; Rule 8). **Where a narrowing stands
     /// it is named**: the formats in Smoozy's words, as the strip's summary
     /// and the Transfers row name them, then the box's own *files are
-    /// downloaded.* **Where none stands, *Everything downloads.* stays.** What
+    /// downloaded.* **Where none stands, *All files are downloaded.* stays.** What
     /// Submit hands over is the narrowing, as before. **It fails against the
     /// box as it stood**, which said *Everything downloads.* in all three.
     #[test]
@@ -16419,7 +18095,9 @@ document.getElementById("out").textContent = JSON.stringify(out);
             let (writes, _, _) = the_output_group(Some(&outputs), None, &[], false, &ground);
             writes.expect("the list").rows.iter().map(|row| row.place.as_str().to_string()).collect()
         };
-        assert_eq!(places(b"/home/ubuntu/rendering"), vec!["", "PNG/", "PNG/", "PNG/", "PNG/", "EXR/", "EXR/"]);
+        // One row per folder (the twenty-eighth notes, note 17): the four
+        // PNG outputs and the two EXR ones were four and two rows.
+        assert_eq!(places(b"/home/ubuntu/rendering"), vec!["", "PNG/", "EXR/"]);
         assert_eq!(places(b"/ephemeral/smoozy/assets")[0], "ephemeral/smoozy/Render/");
     }
 
@@ -16475,13 +18153,13 @@ document.getElementById("out").textContent = JSON.stringify(out);
             &the_creators_ground(true),
         );
         let formats = knows.formats.expect("formats");
-        let seen: Vec<(&str, &str, bool)> = formats
+        let seen: Vec<(&str, String, bool)> = formats
             .iter()
-            .map(|one| (one.name.as_str(), one.where_in_the_job.as_str(), one.at_the_top))
+            .map(|one| (one.name.as_str(), one.where_in_the_job.join(" · "), one.at_the_top))
             .collect();
         assert_eq!(
             seen,
-            vec![("FFMPEG", "", true), ("PNG", "PNG/", false), ("OPEN_EXR_MULTILAYER", "EXR/", false)]
+            vec![("FFMPEG", String::new(), true), ("PNG", "PNG/".to_string(), false), ("OPEN_EXR_MULTILAYER", "EXR/".to_string(), false)]
         );
     }
 
@@ -16556,10 +18234,14 @@ document.getElementById("out").textContent = JSON.stringify(out);
         assert!(unread.the_folder_line.is_none(), "a line with no list under it");
 
         // **The page draws it above the list, and the top as words.**
-        let group = the_pages_function("function theOutputGroup(said) {");
+        let group = the_pages_function("function theOutputGroup(server, said) {");
         let line_at = group.find("said.the_folder_line").expect("the page draws the line");
-        assert!(line_at < group.find("said.what_it_will_write.rows").expect("the list"));
-        assert!(group.contains("if (row.the_top) {"));
+        // The list is drawn by its own function since 2026-11-12, so each
+        // ticked scene's can be drawn the same way (the four questions, 2.15).
+        assert!(line_at < group.find("theListAndItsLinesAreDrawnInto(output, server, said, \"\")").expect("the list"));
+        // A row draws the top as words (one row per folder, the twenty-eighth
+        // notes, note 17, moved the row into its own function).
+        assert!(the_pages_function("function aRowIsDrawnInto(writes, row, under) {").contains("if (!row.the_top) thePathIsDrawnInto(place, row.place);"));
     }
 
     /// **`Design/Render Settings § What it will write`, two rulings of
@@ -16610,9 +18292,21 @@ document.getElementById("out").textContent = JSON.stringify(out);
         // **The rows.** A strip scene's path, as a reading from an older server
         // program holds it, owes nothing under a layer no frame renders.
         let mut outputs = the_creators_shape();
+        // **Every row, a group's own included** (the twenty-eighth notes,
+        // note 17). The strip scene's `/tmp/` writes nothing, so from piece
+        // 13 it no longer takes the shared run away (`Job files and outputs`
+        // P6a); either way the list keeps its rows.
         let rows = |outputs: &TheOutputsHalf| {
             let (writes, _, _) = the_output_group(Some(outputs), None, &[], false, &the_creators_ground(true));
-            writes.expect("the list").rows
+            writes
+                .expect("the list")
+                .rows
+                .into_iter()
+                .flat_map(|row| match row.group {
+                    Some(group) => group.rows,
+                    None => vec![row],
+                })
+                .collect::<Vec<_>>()
         };
         let before = rows(&outputs).len();
         let mut stray = outputs.destinations[0].clone();
@@ -16626,7 +18320,214 @@ document.getElementById("out").textContent = JSON.stringify(out);
         outputs.destinations.push(stray);
         let listed = rows(&outputs);
         assert_eq!(listed.len(), before, "{listed:#?}");
-        assert!(listed.iter().all(|row| row.how_many.as_str() != "0"), "{listed:#?}");
+        assert!(listed.iter().all(|row| row.counts.iter().all(|one| one.how_many.as_str() != "0")), "{listed:#?}");
+    }
+
+    /// **`Job files and outputs` P6a: an output that writes nothing for the
+    /// job's frames does not shape the job's folder.** The shape of the
+    /// Creator's screenshot (the twenty-eighth notes, piece 9's account): the
+    /// `.blend` straight in `/home/ubuntu`, its frames under `//Render/V_Hero/…`,
+    /// and two File Output nodes at `//../../_OUT/…`, which climb to `/_OUT/…`
+    /// and are fed only by the two AO layers this job pins off. Until piece 13
+    /// those two made the run `/` alone, the page said *another computer's*,
+    /// and every row read `home/ubuntu/Render/V_Hero/…`.
+    #[test]
+    fn an_output_that_writes_nothing_does_not_shape_the_jobs_folder_on_the_page() {
+        use smoozy_job_files::reading::{ArtistsText, DestinationKind, RecordedLocation};
+        let layout = TheLayout::of(
+            smoozy_job_files::layout::MachineRoot::chosen("/root/smoozy").expect("a root"),
+            smoozy_job_files::layout::WhereThePackageAreaSits::UnderTheRoot,
+        );
+        let mut outputs = the_creators_shape();
+        for destination in &mut outputs.destinations {
+            let at: Option<&[u8]> = match &destination.kind {
+                DestinationKind::TheRegularOutputPath => Some(b"//Render/V_Hero/Video/Animation"),
+                DestinationKind::AnOutputOfAFileOutputNode { .. } => Some(b"//Render/V_Hero/PNG"),
+                DestinationKind::AWholeFileOutputNodeGatheringIntoOneFile { node, .. } => {
+                    // Fed by an AO layer, pinned off on this ground.
+                    let layer = if node.as_bytes().ends_with(b"Box") { "Box AO" } else { "Mattress AO" };
+                    destination.the_view_layers_that_feed_it = vec![ArtistsText::of(layer.as_bytes().to_vec())];
+                    Some(if layer == "Box AO" { b"//../../_OUT/EXR A" } else { b"//../../_OUT/EXR B" })
+                }
+                DestinationKind::AnAddedWritePlace(_) => None,
+            };
+            if let Some(at) = at {
+                destination.recorded_location = Some(RecordedLocation::of(at.to_vec()));
+            }
+        }
+        let ground = TheGroundOfTheCount {
+            the_folder_the_blend_sits_in: b"/home/ubuntu".to_vec(),
+            ..the_creators_ground(true)
+        };
+        let sits = where_the_jobs_folder_sits(&layout, &outputs, &ground, None, None);
+        assert_eq!(sits, WhereTheJobsFolderSits::In("/home/ubuntu/Render/V_Hero".to_string()));
+
+        let (writes, _, _) = the_output_group(Some(&outputs), None, &[], false, &ground);
+        let places: Vec<String> = writes
+            .expect("the list")
+            .rows
+            .into_iter()
+            .flat_map(|row| match row.group {
+                Some(group) => group.rows,
+                None => vec![row],
+            })
+            .map(|row| row.place.as_str().to_string())
+            .collect();
+        assert!(places.iter().all(|place| !place.contains("home") && !place.contains("_OUT")), "{places:?}");
+        assert!(places.iter().any(|place| place.starts_with("PNG")), "{places:?}");
+
+        // **Each still has a folder under the job's folder**, its whole path,
+        // since the run does not start it: if it writes after all, nothing is lost.
+        let composed = the_inventory_of(&outputs, &ground);
+        let job = ground.the_folder_composed_under();
+        let folders = composed.map.the_folders_of(job, |destination| destination.is_one_the_render_asked_for());
+        let folders: Vec<String> = folders.iter().map(|folder| String::from_utf8_lossy(folder).into_owned()).collect();
+        assert!(folders.contains(&"_OUT/EXR A".to_string()) && folders.contains(&"_OUT/EXR B".to_string()), "{folders:?}");
+        assert!(folders.contains(&"PNG".to_string()) && folders.contains(&"Video".to_string()), "{folders:?}");
+
+        // **With the AO layers on, the two write**, and the run is `/` as before.
+        let on = TheGroundOfTheCount { the_jobs_pins: Vec::new(), ..ground };
+        assert!(matches!(
+            where_the_jobs_folder_sits(&layout, &outputs, &on, None, None),
+            WhereTheJobsFolderSits::FallsBack { .. }
+        ));
+    }
+
+    /// **Piece 13's pictures: Render settings' output list for a made-up file
+    /// of the screenshot's shape** — `lamps_q012.blend` straight in
+    /// `/home/ubuntu`, three PNG outputs under `//Render/V_…/PNG`, and two File
+    /// Output nodes at `//../../_OUT/…` fed by a layer that does not render.
+    /// *After* is the panel this code composes; *before* is the same panel
+    /// with the list and the line the old rule gives: every output in the run
+    /// (the map composed with none marked as writing nothing) and the fallback
+    /// the old run of `/` took. **Where `SMOOZY_THE_PIECE_13_PICTURES` names a
+    /// folder, the page is written there for a browser to draw.**
+    #[test]
+    fn twenty_eighth_13_the_pictures_compose() {
+        use smoozy_job_files::reading::{ArtistsText, Destination, DestinationKind, Format, RecordedLocation, WhichScene};
+        let file = "/home/ubuntu/lamps_q012.blend";
+        let mut held = a_run_with_a_reading();
+        let picked = BlenderIdentity { path: "/opt/blender-5.1.0/blender".to_string(), version: a_version(5, 1, 0) };
+        held.readings.a_reading_landed(
+            FileKey { server: an_identity(&a_server()), path: file.to_string() },
+            &smoozy_render_settings::file_half::StartedUnder { version_pick: picked.clone(), file_identity: four_values() },
+            SettingsHalf {
+                scenes: vec![a_scene("Lamp Tryouts Q_012")],
+                offered_engine_identifiers: OfferedEngineIdentifiers {
+                    cycles: Some(ExactName::as_the_reading_produced_it("CYCLES")),
+                    eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
+                },
+                announced_add_on_case: None,
+                the_files_own_scripts_run: None,
+                the_folders_at_the_machines_top: Some(["home", "root"].map(str::to_string).to_vec()),
+            },
+            Some(&picked),
+            &four_values(),
+            std::time::SystemTime::now(),
+        );
+        // As a real landing does, the read ticks its scene (`Render Settings`
+        // J7's third act; with none ticked nothing renders since 2026-11-10).
+        the_read_ticks_its_scene(&mut held, &a_server(), file, None);
+        let text = |said: &str| ArtistsText::of(said.as_bytes().to_vec());
+        let png = Format { as_the_file_records_it: text("PNG"), the_ending_it_writes: Some(text(".png")), is_video_shaped: false };
+        let exr = Format { as_the_file_records_it: text("OPEN_EXR_MULTILAYER"), the_ending_it_writes: Some(text(".exr")), is_video_shaped: false };
+        let a_node = |node: &str, at: &str, layer: &str, format: &Format| Destination {
+            kind: DestinationKind::AnOutputOfAFileOutputNode {
+                the_effect: None,
+                node: text(node),
+                output: text(&format!("Lamps - {layer}")),
+                the_nodes_base_file_name: None,
+                replaced: None,
+            },
+            recorded_location: Some(RecordedLocation::of(at.as_bytes().to_vec())),
+            format: Some(format.clone()),
+            origin: WhereItComesFrom::AFileOutputNodeNamed(text(node)),
+            scene: WhichScene::TheJobsOwnScene,
+            the_view_layers_that_feed_it: vec![text(layer)],
+            the_location_with_its_folder_replaced: None,
+        };
+        let mut outputs = the_creators_shape();
+        let mut regular = outputs.destinations[0].clone();
+        regular.recorded_location = Some(RecordedLocation::of(b"//Render/V_Product/JPEG/Lamps_".to_vec()));
+        regular.format = Some(Format { as_the_file_records_it: text("JPEG"), the_ending_it_writes: Some(text(".jpg")), is_video_shaped: false });
+        regular.the_view_layers_that_feed_it = vec![text("Product")];
+        let places: Vec<Destination> = outputs.destinations.iter().filter(|one| !one.is_one_the_render_asked_for()).cloned().collect();
+        outputs.destinations = vec![
+            regular,
+            a_node("PNG Product", "//Render/V_Product/PNG", "Product", &png),
+            a_node("PNG Background", "//Render/V_Background/PNG", "Background", &png),
+            a_node("PNG Shadow", "//Render/V_Shadow/PNG", "Shadow", &png),
+            a_node("OUT EXR", "//../../_OUT/Lamps/EXR", "Old Layer", &exr),
+            a_node("OUT Mist", "//../../_OUT/Lamps/Mist", "Old Layer", &exr),
+        ];
+        outputs.destinations.extend(places);
+        outputs.per_frame[0].view_layers_that_render = vec![text("Product"), text("Background"), text("Shadow")];
+        outputs.per_frame[0].the_regular_output_paths_answered_path =
+            Some(RecordedLocation::of(b"/home/ubuntu/Render/V_Product/JPEG/Lamps_0001.jpg".to_vec()));
+        held.outputs.insert(keyed(&a_server(), file), vec![(b"Lamp Tryouts Q_012".to_vec(), outputs.clone())]);
+        let layout = TheLayout::of(
+            smoozy_job_files::layout::MachineRoot::chosen("/root/smoozy").expect("a root"),
+            smoozy_job_files::layout::WhereThePackageAreaSits::UnderTheRoot,
+        );
+        let with = WhatTheRecordHolds { the_layout: Some(layout.clone()), ..WhatTheRecordHolds::default() };
+        let after = serde_json::to_value(the_panel_starting_from(&held, &a_server(), file, &with)).expect("the panel");
+        let said = after.to_string();
+        assert!(said.contains("/home/ubuntu/Render") && !said.contains("home/ubuntu/Render/V_"), "{said}");
+
+        // **The old rule's list and line**, composed by the same functions.
+        let ground = TheGroundOfTheCount {
+            the_folder_the_blend_sits_in: b"/home/ubuntu".to_vec(),
+            the_jobs_pins: Vec::new(),
+            the_jobs_folder: Some(format!("{}/{A_FOLDER_FOR_THIS_JOB}", layout.area(Area::Job))),
+            the_jobs_frames: None,
+        };
+        let (as_it, _) = as_the_job_renders_it(&outputs, &ground);
+        let to_map: Vec<ADestinationToMap<'_>> = as_it
+            .destinations
+            .iter()
+            .map(|destination| ADestinationToMap {
+                destination,
+                the_longest_name_it_will_write: None,
+                it_writes_nothing_for_the_jobs_frames: false,
+            })
+            .collect();
+        let map = compose_the_map(&to_map, &ground.the_folder_the_blend_sits_in, ground.the_folder_composed_under(), as_it.taken_by);
+        let inventory = compose_the_inventory(&as_it, &map);
+        let old_rows = the_writes(&inventory, false, &as_it, &map, ground.the_folder_composed_under()).expect("the list");
+        let mut before = after.clone();
+        before["what_it_will_write"] = serde_json::to_value(&old_rows).expect("the list");
+        before["the_folder_line"] = serde_json::to_value(the_folder_line(&WhereTheJobsFolderSits::FallsBack {
+            why: smoozy_job_files::where_the_folder_sits::WhyTheFilesOwnPlaceWasNotUsed::ItIsAnotherComputers,
+            to: WhereTheFallbackGoes::SmoozysFolder,
+            place: layout.area(Area::Job).to_string(),
+        }))
+        .expect("the line");
+        assert!(before.to_string().contains("home/ubuntu/Render/"), "{before}");
+
+        let Some(folder) = std::env::var_os("SMOOZY_THE_PIECE_13_PICTURES") else {
+            return;
+        };
+        let folder = std::path::PathBuf::from(folder);
+        fs::create_dir_all(&folder).expect("the folder");
+        let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+        for entry in fs::read_dir(&web).expect("the page folder") {
+            let path = entry.expect("an entry").path();
+            if path.extension().and_then(|one| one.to_str()) == Some("css") {
+                fs::copy(&path, folder.join(path.file_name().expect("a name"))).expect("a stylesheet is copied");
+            }
+        }
+        fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+        for (name, text) in THE_UPLOADING_LINES_STAND_INS {
+            fs::write(folder.join(name), text).expect("a stand-in");
+        }
+        fs::copy(web.join("the-value-drawn.js"), folder.join("the-value-drawn.js")).expect("the value drawn");
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+        fs::write(folder.join("servers.js"), "export function theMomentReads() { return '10:51'; }").expect("the moment");
+        fs::write(folder.join("panes.js"), THE_MARK_THAT_SAYS_IT_RAN).expect("the mark");
+        let answers = serde_json::json!({ "before": { "width": 1240, "answer": before }, "after": { "width": 1240, "answer": after } });
+        fs::write(folder.join("answers.js"), format!("export default {answers};")).expect("the answers");
+        fs::write(folder.join("index.html"), THE_MANY_LAYERS_PAGE.replace("SERVER", &a_server())).expect("the page");
     }
 
     /// **The chosen fallback folder on the page** (`Job files and
@@ -16693,10 +18594,10 @@ document.getElementById("out").textContent = JSON.stringify(out);
         assert!(panel.the_second_folder_line.is_some());
 
         // **The page draws the second line under the first.**
-        let group = the_pages_function("function theOutputGroup(said) {");
+        let group = the_pages_function("function theOutputGroup(server, said) {");
         let first = group.find("said.the_folder_line").expect("the first line");
         let second = group.find("said.the_second_folder_line").expect("the page draws the second line");
-        assert!(first < second && second < group.find("said.what_it_will_write.rows").expect("the list"));
+        assert!(first < second && second < group.find("theListAndItsLinesAreDrawnInto(output, server, said, \"\")").expect("the list"));
     }
 
     /// **Piece 2's account, section 6, ruled for this piece: the collision
@@ -16769,6 +18670,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
                         eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE")),
                     },
                     announced_add_on_case: None,
+                    the_files_own_scripts_run: None,
                     the_folders_at_the_machines_top: None,
                 },
                 Some(&picked),
@@ -16835,7 +18737,7 @@ document.getElementById("out").textContent = JSON.stringify(out);
         let design = include_str!("../../../../Preparation/Design/Render Settings.md").replace('’', "'");
         let drawing = include_str!("../../../../Preparation/Design/Mockup/Smoozy.html").replace("&#8217;", "’");
         let the_sentence = crate::surface::transfers::words::READ_ANOTHER_SCENE;
-        assert!(design.contains(&format!("*{} Everything downloads.*", the_sentence.replace('’', "'"))), "the plan's words");
+        assert!(design.contains(&format!("*{} All files are downloaded.*", the_sentence.replace('’', "'"))), "the plan's words");
         assert!(design.contains("*the selected scenes' formats are unknown*"));
         assert_eq!(
             crate::surface::transfers::words::READ_ANOTHER_SCENE_SEVERAL_TICKED,
@@ -16843,13 +18745,1278 @@ document.getElementById("out").textContent = JSON.stringify(out);
         );
         assert!(drawing.contains(the_sentence), "the drawing's words");
     }
+    // ════════════════════════════════════════════════════════════════════════
+    // The Creator's twenty-eighth notes, note 17: Render settings with many
+    // long View Layers (`Audits/Build/Twenty-eighth notes/Render settings
+    // with many view layers — the design.md`)
+    // ════════════════════════════════════════════════════════════════════════
+
+    mod twenty_eighth_notes_17 {
+        use super::*;
+
+        fn a_build(major: u32, minor: u32, patch: u32) -> version::PickedBuild {
+            version::PickedBuild {
+                path: format!("/opt/blender-{major}.{minor}.{patch}/blender"),
+                answered: a_version(major, minor, patch),
+            }
+        }
+
+        /// **`§ The header carries the Blender version`: the pick is not
+        /// described; *Latest on this server.* only where Smoozy picked an
+        /// older Blender because nothing newer is there; never for the user's
+        /// own pick.** Before: *matched to the file*, *nearest above the
+        /// file's*, *nearest below — nothing above it on this server*.
+        #[test]
+        fn the_pick_is_not_described_save_the_latest_on_this_server() {
+            let automatic = |how| Resolution::Automatic { build: a_build(5, 2, 3), how };
+            assert_eq!(the_pick_line(&automatic(HowItMatched::TheExactLine)), None);
+            assert_eq!(the_pick_line(&automatic(HowItMatched::TheNearestLineAbove)), None);
+            assert_eq!(
+                the_pick_line(&automatic(HowItMatched::TheNearestLineBelow)),
+                Some(Prose::new(words::LATEST_ON_THIS_SERVER))
+            );
+            assert_eq!(the_pick_line(&Resolution::TheUsersOverride(a_build(4, 5, 3).as_identity())), None);
+            // The three sentences that already sat there stay.
+            assert_eq!(
+                the_pick_line(&Resolution::NoVersionResolves(WhyNone::NoSavedWithVersionToMatchOn)),
+                Some(Prose::new(words::NOTHING_TO_MATCH_ON))
+            );
+        }
+
+        /// **The version line is held at the height of the warning with
+        /// *Latest on this server.* after it, matched file or not** — so the
+        /// held copy names the file's line and the picked one, or the file's
+        /// twice, and there is none where the file records no version.
+        #[test]
+        fn the_held_line_is_this_files_warning() {
+            let files = Some(version::ReleaseLine { major: 5, minor: 0 });
+            let said = |line: &ASentence| the_words_of_a_line(line);
+            let picked = a_build(5, 2, 3).as_identity();
+            let held = the_version_line_held(files, Some(&picked));
+            assert_eq!(held, the_mismatch(files, Some(&picked)).expect("5.0 and 5.2 differ").line);
+            let matched = a_build(5, 0, 1).as_identity();
+            let held = said(&the_version_line_held(files, Some(&matched)));
+            assert!(held.contains("<5.0>") && !held.contains("<5.2>") && held.matches("<5.0>").count() == 2, "{held}");
+            assert!(the_version_line_held(None, Some(&picked)).is_empty());
+        }
+
+        /// **`§ When the override warning goes`: the second line counts and
+        /// never names, even for one layer**, and only the layers still
+        /// rendering are counted. Before: *FX and Mist keep their own sample
+        /// counts.*
+        #[test]
+        fn the_samples_line_counts_and_never_names() {
+            let mut scene = a_scene("Lamps");
+            scene.early_stop.adaptive_sampling_is_on = false;
+            scene.time_limit = 0.0;
+            scene.view_layers = (0..22)
+                .map(|at| a_layer(&format!("Tb + Fx + NOVA K30 + ARC M60 - Layer {at}"), at != 21, at % 4 == 1 || at == 20))
+                .collect();
+            let untyped = SceneEntries::default();
+            let (lines, the_count_stands) =
+                the_samples_lines_and_the_count(&untyped, Some(&scene), Some(OfferedEngine::Cycles), Some(a_version(5, 2, 3)), false);
+            assert!(the_count_stands);
+            assert_eq!(lines.len(), 1, "{lines:?}");
+            let said = the_words_of_a_line(&lines[0]);
+            // Six of the seven overriding layers still render.
+            let plain = |word: &str| Prose::new(word).as_str().replace('\u{a0}', " ");
+            assert_eq!(said.trim(), format!("<6> {}", plain(words::VIEW_LAYERS_USE_THEIR_OWN_COUNTS)));
+            assert!(!said.contains("NOVA"), "a layer is named: {said}");
+
+            scene.view_layers = vec![a_layer("FX", true, true), a_layer("Interior", true, false)];
+            let (lines, _) =
+                the_samples_lines_and_the_count(&untyped, Some(&scene), Some(OfferedEngine::Cycles), Some(a_version(5, 2, 3)), false);
+            assert_eq!(the_words_of_a_line(&lines[0]).trim(), format!("<1> {}", plain(words::VIEW_LAYER_USES_ITS_OWN_COUNT)));
+
+            // **Typed, the two lines become one**: *Overrides noise threshold
+            // 0.01, time limit 30s per frame, and sample counts for 6 View
+            // Layers. Rendering all samples may take longer and cost more.*
+            let mut scene = a_scene("Lamps");
+            scene.view_layers = (0..6).map(|at| a_layer(&format!("Layer {at}"), true, true)).collect();
+            let typed = SceneEntries { sample_count: Some(512), ..SceneEntries::default() };
+            let (lines, the_count_stands) =
+                the_samples_lines_and_the_count(&typed, Some(&scene), Some(OfferedEngine::Cycles), Some(a_version(5, 2, 3)), false);
+            assert!(!the_count_stands);
+            assert_eq!(lines.len(), 1);
+            assert_eq!(
+                the_words_of_a_line(&lines[0]),
+                "Overrides noise threshold <0.01>, time limit <30s> per frame, and sample counts for <6> View Layers. \
+                 Rendering all samples may take longer and cost more."
+                    .replace("  ", " ")
+            );
+        }
+
+        /// **The panel says which lines are the file's own setup** — grey
+        /// edged — and which is the typed count's, amber.
+        #[test]
+        fn the_files_own_lines_are_marked_as_the_files() {
+            let (held, file) = a_run_that_read(vec![a_scene("Interior")], a_version(5, 1, 0));
+            let panel = the_panel(&held, &a_server(), file);
+            assert!(!panel.the_samples_lines.is_empty());
+            assert!(panel.the_samples_lines_are_the_files);
+            assert!(panel.the_own_counts_line_stands);
+        }
+
+        fn a_folder(folder: &str, counts: &[(&str, usize)]) -> AFolderOfTheList {
+            AFolderOfTheList {
+                place: if folder.is_empty() {
+                    WhereUnderTheJobsFolder::TheTop
+                } else {
+                    WhereUnderTheJobsFolder::AFolder(folder.to_string())
+                },
+                not_under_it: false,
+                counts: counts.iter().map(|(format, how_many)| (format.to_string(), *how_many)).collect(),
+            }
+        }
+
+        fn the_counts(row: &AWriteRow) -> Vec<(String, String)> {
+            row.counts.iter().map(|one| (one.how_many.as_str().to_string(), one.format.as_str().to_string())).collect()
+        }
+
+        /// **Forty sibling folders sit under their parent, written once, and
+        /// the group starts closed; a folder straight under the job's folder
+        /// is never grouped.**
+        #[test]
+        fn forty_siblings_are_one_closed_group_under_their_parent() {
+            let mut merged = vec![a_folder("Q_012/", &[("JPEG", 1)])];
+            for at in 0..40 {
+                merged.push(a_folder(&format!("Q_012/PNG/04. Lamps + Shades/Layer {at:02}/"), &[("PNG", 1)]));
+            }
+            let rows = the_rows_by_folder(merged);
+            assert_eq!(rows.len(), 2, "{rows:#?}");
+            assert_eq!(rows[0].place.as_str(), "Q_012/");
+            assert!(rows[0].group.is_none());
+            let group = rows[1].group.as_ref().expect("a group");
+            assert_eq!(rows[1].place.as_str(), "Q_012/PNG/04. Lamps + Shades/");
+            assert_eq!(the_counts(&rows[1]), vec![("40".to_string(), "PNG".to_string())]);
+            assert_eq!(group.folders.values, vec![Verbatim::new("40")]);
+            assert!(group.it_starts_closed);
+            assert_eq!(group.rows.len(), 40);
+            assert_eq!(group.rows[0].place.as_str(), "Layer 00/");
+
+            // Eight folders: open. Nine: closed.
+            let eight: Vec<AFolderOfTheList> = (0..8).map(|at| a_folder(&format!("renders/{at}/"), &[("EXR", 2)])).collect();
+            assert!(!the_rows_by_folder(eight)[0].group.as_ref().expect("a group").it_starts_closed);
+            let nine: Vec<AFolderOfTheList> = (0..9).map(|at| a_folder(&format!("renders/{at}/"), &[("EXR", 2)])).collect();
+            assert!(the_rows_by_folder(nine)[0].group.as_ref().expect("a group").it_starts_closed);
+
+            // **The job's folder is never a parent**: the two-layer file's list
+            // is as it was.
+            let plain = the_rows_by_folder(vec![
+                a_folder("beauty/", &[("EXR", 240)]),
+                a_folder("mist/", &[("EXR", 240)]),
+                a_folder("", &[("PNG", 120)]),
+                a_folder("previews/", &[("JPEG", 120)]),
+            ]);
+            assert_eq!(plain.len(), 4);
+            assert!(plain.iter().all(|row| row.group.is_none()));
+            assert_eq!(plain[2].the_top, Some(Prose::new(words::TOP_OF_THE_JOBS_FOLDER)));
+        }
+
+        /// **A parent's own files are its group's first row, *this folder*;
+        /// a folder of two formats is one row with a count and format per
+        /// line; one level only.**
+        #[test]
+        fn a_parents_own_files_come_first_and_one_level_only() {
+            let rows = the_rows_by_folder(vec![
+                a_folder("shots/a/x/", &[("PNG", 3)]),
+                a_folder("shots/a/", &[("EXR", 1), ("PNG", 1)]),
+                a_folder("shots/a/y/", &[("PNG", 3)]),
+                a_folder("shots/b/", &[("PNG", 5)]),
+            ]);
+            // `shots/a/` heads its own group, so `shots/` keeps one folder
+            // (`shots/b/`) and makes none: nothing nests.
+            assert_eq!(rows.len(), 2, "{rows:#?}");
+            let group = rows[0].group.as_ref().expect("a group");
+            assert_eq!(rows[0].place.as_str(), "shots/a/");
+            assert_eq!(group.rows[0].the_top, Some(Prose::new(words::THIS_FOLDER)));
+            assert_eq!(the_counts(&group.rows[0]), vec![("1".into(), "EXR".into()), ("1".into(), "PNG".into())]);
+            assert_eq!(group.rows[1].place.as_str(), "x/");
+            assert_eq!(group.rows[2].place.as_str(), "y/");
+            assert_eq!(group.folders.values, vec![Verbatim::new("2")]);
+            assert_eq!(the_counts(&rows[0]), vec![("7".into(), "PNG".into()), ("1".into(), "EXR".into())]);
+            assert_eq!(rows[1].place.as_str(), "shots/b/");
+            assert!(rows[1].group.is_none());
+        }
+
+        /// **The page draws note 17 as the design says, under Node**: each
+        /// View Layer row is the tick and the name with its unseen bold copy,
+        /// the own count on a line of its own outside the box, and a pinned
+        /// row's cross drawn over the name's place outside the box; the
+        /// version line holds the warning's unseen copy under the warning;
+        /// the samples line takes the grey edge; and a group of forty starts
+        /// closed, opens on a press, and stays open across a redraw. **Run
+        /// against the page as it stood, every one of these failed**: the
+        /// rows had no `vln`, the tag and the cross sat beside the name, the
+        /// line was the pick line, the hint was amber, and there was no group.
+        /// Skipped, and says so, where no Node is installed.
+        #[test]
+        fn the_page_draws_the_rows_the_held_line_and_the_groups() {
+            let mut scene = a_scene("Lamps");
+            scene.view_layers = vec![
+                a_layer("Tb + Fx + NOVA K30 - Product", true, false),
+                a_layer("Tb + Fx + NOVA K30 + ARC M60 - Background", true, true),
+            ];
+            let (held, file) = a_run_that_read(vec![scene], a_version(5, 2, 3));
+            let panel = the_panel(&held, &a_server(), file);
+            let mut answer = serde_json::to_value(&panel).expect("the panel serialises");
+            answer["the_view_layers"][0]["whose"] = "the-users".into();
+            answer["the_view_layers"][0]["hand_back_to"] =
+                serde_json::to_value(with_values(words::BACK_TO_THE_FILES_VALUE_AT_FRAME, vec!["1".to_string()], None)).unwrap();
+            let picked = a_build(5, 2, 3).as_identity();
+            let files = Some(version::ReleaseLine { major: 5, minor: 0 });
+            answer["the_mismatch"] = serde_json::to_value(the_mismatch(files, Some(&picked))).unwrap();
+            answer["the_version_line_held"] = serde_json::to_value(the_version_line_held(files, Some(&picked))).unwrap();
+            let mut merged = vec![a_folder("Q_012/", &[("JPEG", 1), ("PNG", 1)])];
+            for at in 0..40 {
+                merged.push(a_folder(&format!("Q_012/PNG/04. Lamps + Shades/Layer {at:02}/"), &[("PNG", 1)]));
+            }
+            answer["the_output_group_is_drawn"] = true.into();
+            answer["what_it_will_write"] = serde_json::json!({
+                "rows": serde_json::to_value(the_rows_by_folder(merged)).unwrap(),
+                "total": serde_json::to_value(with_values("", vec!["42".to_string()], Some(words::FILES_WORD))).unwrap(),
+                "by_format": [],
+            });
+
+            let folder = std::env::temp_dir().join(format!("smoozy-note-17-page-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&folder);
+            fs::create_dir_all(&folder).expect("a scratch folder");
+            let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+            fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+            for (name, text) in THE_UPLOADING_LINES_STAND_INS {
+                fs::write(folder.join(name), text).expect("a stand-in");
+            }
+            fs::write(folder.join("answers.json"), answer.to_string()).expect("the answer");
+            fs::write(folder.join("harness.mjs"), THE_NOTE_17_HARNESS.replace("SERVER", &a_server())).expect("the harness");
+            let ran = std::process::Command::new("node").arg(folder.join("harness.mjs")).current_dir(&folder).output();
+            let _ = fs::remove_dir_all(&folder);
+            let Ok(ran) = ran else {
+                eprintln!("SKIPPED: no Node on this computer, so the render settings page was not run");
+                return;
+            };
+            assert!(ran.status.success(), "the page code did not run: {}", String::from_utf8_lossy(&ran.stderr));
+            let got: serde_json::Value = serde_json::from_slice(&ran.stdout).expect("the harness prints one answer");
+            let rows = got["rows"].as_array().expect("rows");
+            assert_eq!(rows.len(), 2, "{got}");
+            for row in rows {
+                assert_eq!(row["boldCopy"], true, "{got}");
+                assert_eq!(row["crossInTheBox"], false, "{got}");
+            }
+            assert_eq!(rows[0]["crossOutsideTheBox"], true, "the pinned row's cross: {got}");
+            assert_eq!(rows[1]["tagOnItsOwnLine"], true, "the own count: {got}");
+            assert_eq!(rows[1]["tagInTheBox"], false, "{got}");
+            // The held line also holds the read's own line, unseen, and the
+            // read's answer line (UI consistency, findings 15 and 48).
+            assert_eq!(got["line"], serde_json::json!(["vmm pkheld", "sub rdline pkheld", "alertnote", "vmm"]), "{got}");
+            assert!(got["hints"].as_array().unwrap().iter().all(|one| one.as_str().unwrap().contains("flat")), "{got}");
+            assert_eq!(got["closed"], "false", "{got}");
+            assert_eq!(got["rowsUnderClosed"], 0, "{got}");
+            assert_eq!(got["opened"], "true", "{got}");
+            assert_eq!(got["rowsUnderOpen"], 40, "{got}");
+            assert_eq!(got["afterARedraw"], "true", "{got}");
+            assert_eq!(got["twoFormatRows"], 1, "{got}");
+            assert_eq!(got["marked"], true, "the panel was not measured: {got}");
+        }
+
+        /// **The screenshot's case, with made-up names, as the panel the
+        /// application composes for it** — three scenes, twenty-two long View
+        /// Layers with six at 100 samples of their own, 300 on the file, saved
+        /// with 5.0 and rendering with 5.2, the files falling back to Smoozy's
+        /// folder, and twenty PNGs sharing one folder. The list, the warning
+        /// and the folder line are composed by this file's own functions and
+        /// laid onto the panel, since no reading stand-in here carries a node
+        /// tree of twenty outputs.
+        pub(crate) fn the_screenshots_case(forty_folders: bool) -> serde_json::Value {
+            let names: Vec<String> = [
+                "Tb + Fx + NOVA K30 - Product", "Tb + Fx + NOVA K30 - Background",
+                "Tb + Fx + ARC M60 - Product", "Tb + Fx + ARC M60 - Background",
+                "Tb + Fx + NOVA K30 + ARC M60 - Product", "Tb + Fx + NOVA K30 + ARC M60 - Background",
+                "Tb + Fx + Gl + NOVA K30 - Product", "Tb + Fx + Gl + NOVA K30 - Background",
+                "Tb + Fx + Gl + ARC M60 - Product", "Tb + Fx + Gl + ARC M60 - Background",
+                "Tb + Fx + Gl + NOVA K30 + ARC M60 - Product", "Tb + Fx + Gl + NOVA K30 + ARC M60 - Background",
+                "Tb + NOVA K30 - Product", "Tb + NOVA K30 - Background", "Tb + ARC M60 - Product",
+                "Tb + ARC M60 - Background", "Tb + NOVA K30 + ARC M60 - Product", "Tb + NOVA K30 + ARC M60 - Background",
+                "Fx + NOVA K30 - Shadow", "Fx + ARC M60 - Shadow", "Fx + Gl - Reflections", "Tb + Fx + Gl - Floor",
+            ]
+            .map(str::to_string)
+            .to_vec();
+            let mut scene = a_scene("Lamp Tryouts Q_012");
+            scene.early_stop.adaptive_sampling_is_on = false;
+            scene.time_limit = 0.0;
+            scene.sample_counts.cycles = 300;
+            scene.frame_end = 1;
+            scene.frame_count = 1;
+            scene.saved_with = "5.0.1".to_string();
+            scene.view_layers = names
+                .iter()
+                .enumerate()
+                .map(|(at, name)| {
+                    let mut layer = a_layer(name, at < 20, at < 12 && at % 2 == 1);
+                    layer.own_sample_count = 100;
+                    layer
+                })
+                .collect();
+            // The scene in hand is the reading's first, so it leads the list.
+            let (held, file) = a_run_that_read(vec![scene, a_scene("Lamp Tryouts Q_011"), a_scene("Scene")], a_version(5, 2, 3));
+            let mut answer = serde_json::to_value(the_panel(&held, &a_server(), file)).expect("the panel");
+            answer["the_scenes"][0]["ticked"] = true.into();
+            answer["the_version_control_is_drawn"] = true.into();
+            let picked = a_build(5, 2, 3).as_identity();
+            let files = Some(version::ReleaseLine { major: 5, minor: 0 });
+            answer["the_versions"] = serde_json::json!([{ "build": picked.path, "answered": "5.2.3", "below_the_floor": null, "picked": true }]);
+            answer["the_pick_line"] = serde_json::Value::Null;
+            answer["the_mismatch"] = serde_json::to_value(the_mismatch(files, Some(&picked))).unwrap();
+            answer["the_version_line_held"] = serde_json::to_value(the_version_line_held(files, Some(&picked))).unwrap();
+            let mut merged = vec![a_folder("Q_012/", &[("JPEG", 1)])];
+            if forty_folders {
+                for name in names.iter().take(20) {
+                    for crop in ["1x1", "16x9"] {
+                        merged.push(a_folder(&format!("Q_012/PNG/04. Lamps + Shades/{name} - {crop}/"), &[("PNG", 1)]));
+                    }
+                }
+            } else {
+                merged.push(a_folder("Q_012/PNG/04. Lamps + Shades/", &[("PNG", 20)]));
+            }
+            let pngs = if forty_folders { 40 } else { 20 };
+            answer["the_output_group_is_drawn"] = true.into();
+            answer["what_it_will_write"] = serde_json::json!({
+                "rows": serde_json::to_value(the_rows_by_folder(merged)).unwrap(),
+                "total": serde_json::to_value(with_values("", vec![(pngs + 1).to_string()], Some(words::FILES_WORD))).unwrap(),
+                "by_format": [{ "how_many": pngs.to_string(), "format": "PNG" }, { "how_many": "1", "format": "JPEG" }],
+            });
+            answer["the_folder_line"] = serde_json::to_value(the_folder_line(&WhereTheJobsFolderSits::FallsBack {
+                why: smoozy_job_files::where_the_folder_sits::WhyTheFilesOwnPlaceWasNotUsed::ItIsAnotherComputers,
+                to: WhereTheFallbackGoes::SmoozysFolder,
+                place: "/root/smoozy/jobs".to_string(),
+            }))
+            .unwrap();
+            answer
+        }
+
+        /// **The two-layer file of the drawing's own example**: Interior,
+        /// FX keyed with its own 1024, Reflections hollow, Mist with its own
+        /// 4096, Cryptomatte and Denoise data pinned; the outputs straight
+        /// under the job's folder, so no group.
+        pub(crate) fn the_two_layer_file() -> serde_json::Value {
+            let mut scene = a_scene("Interior");
+            let fx = a_layer("FX", true, true);
+            let mut mist = a_layer("Mist", true, true);
+            mist.own_sample_count = 4096;
+            scene.view_layers = vec![
+                a_layer("Interior", true, false),
+                fx,
+                a_layer("Reflections", false, false),
+                mist,
+                a_layer("Cryptomatte", true, false),
+                a_layer("Denoise data", false, false),
+            ];
+            let (held, file) = a_run_that_read(vec![scene, a_scene("Exterior"), a_scene("Turntable")], a_version(5, 1, 0));
+            let mut answer = serde_json::to_value(the_panel(&held, &a_server(), file)).expect("the panel");
+            answer["the_scenes"][0]["ticked"] = true.into();
+            answer["the_version_control_is_drawn"] = true.into();
+            answer["the_versions"] = serde_json::json!([{ "build": "/opt/blender-5.1.0/blender", "answered": "5.1.0", "below_the_floor": null, "picked": true }]);
+            answer["the_pick_line"] = serde_json::Value::Null;
+            answer["the_version_line_held"] =
+                serde_json::to_value(the_version_line_held(Some(version::ReleaseLine { major: 5, minor: 1 }), None)).unwrap();
+            answer["the_view_layers"][1]["diamond"] = "solid".into();
+            answer["the_view_layers"][2]["diamond"] = "hollow".into();
+            for at in [4, 5] {
+                answer["the_view_layers"][at]["whose"] = "the-users".into();
+                answer["the_view_layers"][at]["hand_back_to"] =
+                    serde_json::to_value(with_values(words::BACK_TO_THE_FILES_VALUE_AT_FRAME, vec!["1".to_string()], None)).unwrap();
+            }
+            answer["the_output_group_is_drawn"] = true.into();
+            answer["what_it_will_write"] = serde_json::json!({
+                "rows": serde_json::to_value(the_rows_by_folder(vec![
+                    a_folder("beauty/", &[("EXR", 240)]),
+                    a_folder("mist/", &[("EXR", 240)]),
+                    a_folder("", &[("PNG", 120)]),
+                    a_folder("previews/", &[("JPEG", 120)]),
+                ])).unwrap(),
+                "total": serde_json::to_value(with_values("", vec!["720".to_string()], Some(words::FILES_WORD))).unwrap(),
+                "by_format": [{ "how_many": "480", "format": "EXR" }, { "how_many": "120", "format": "PNG" }, { "how_many": "120", "format": "JPEG" }],
+            });
+            answer
+        }
+
+        /// **Drawn in Chrome with the application's own stylesheets and page,
+        /// and measured**: every View Layer's tick sits on its name's first
+        /// line and every name starts at one left edge; the own count is under
+        /// the name; at the window's floor the panel folds to two columns and
+        /// the outputs follow Render in the second; and a group's line stays
+        /// where it was when it is opened. **Where
+        /// `SMOOZY_THE_MANY_LAYERS_PICTURES` names a folder, a picture of each
+        /// is written there.** A computer with no Chrome skips it.
+        #[test]
+        fn the_many_layers_are_drawn_as_the_design_says_in_a_real_browser() {
+            let Some(chrome) = a_chrome() else {
+                eprintln!("SKIPPED: no Chrome on this computer, so the rows were not measured");
+                return;
+            };
+            let many = the_screenshots_case(false);
+            let forty = the_screenshots_case(true);
+            let answers = serde_json::json!({
+                "many": { "width": 1240, "answer": many },
+                // The window's floor, 680, less the rail of icons, 52.
+                "floor": { "width": 628, "answer": many, "narrow": "s1 s2 s3 s4" },
+                "grp": { "width": 1240, "answer": forty },
+                "grpopen": { "width": 1240, "answer": forty, "open": true },
+                "two": { "width": 1240, "answer": the_two_layer_file() },
+            });
+            let web = std::env::var_os("SMOOZY_THE_MANY_LAYERS_WEB")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("web"));
+            let folder = std::env::temp_dir().join(format!("smoozy-many-layers-browser-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&folder);
+            fs::create_dir_all(&folder).expect("a scratch folder");
+            for entry in fs::read_dir(&web).expect("the page folder") {
+                let path = entry.expect("an entry").path();
+                if path.extension().and_then(|one| one.to_str()) == Some("css") {
+                    fs::copy(&path, folder.join(path.file_name().expect("a name"))).expect("a stylesheet is copied");
+                }
+            }
+            fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+            for (name, text) in THE_UPLOADING_LINES_STAND_INS {
+                fs::write(folder.join(name), text).expect("a stand-in");
+            }
+            // **The panel's mark, as `web/panes.js` writes it** — the one rule
+            // `the_settings_body_folds_by_its_own_width_and_the_drawing_and_the_page_agree`
+            // holds to the mockup.
+            // **The paths and names drawn as the application draws them**, so
+            // a path breaks where the page lets it, and moments as times.
+            fs::copy(web.join("the-value-drawn.js"), folder.join("the-value-drawn.js")).expect("the value drawn");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+            fs::write(folder.join("servers.js"), "export function theMomentReads() { return '10:51'; }").expect("the moment");
+            // **It says when it has run**, and the page measures only after
+            // that (`THE_MANY_LAYERS_PAGE`, which says why).
+            fs::write(
+                folder.join("panes.js"),
+                "export function thePagesAreMarked() { for (const sheet of document.querySelectorAll('.sheet')) { \
+                   if (sheet.clientWidth && sheet.clientWidth < 916) sheet.dataset.narrow = 'two'; else delete sheet.dataset.narrow; } \
+                   if (window.theMarkRan) window.theMarkRan(); }",
+            )
+            .expect("the mark");
+            fs::write(folder.join("answers.js"), format!("export default {answers};")).expect("the answers");
+            fs::write(folder.join("index.html"), THE_MANY_LAYERS_PAGE.replace("SERVER", &a_server())).expect("the page");
+
+            let run = |state: &str, out: Option<&Path>| {
+                let mut command = std::process::Command::new(&chrome);
+                command.args(["--headless", "--disable-gpu", "--no-first-run", "--hide-scrollbars", "--allow-file-access-from-files", "--virtual-time-budget=5000"]);
+                let width = answers[state]["width"].as_u64().unwrap_or(1240);
+                command.arg(format!("--window-size={width},1100"));
+                command.arg(format!("--user-data-dir={}", folder.join(format!("profile-{state}")).display()));
+                match out {
+                    Some(picture) => {
+                        command.arg("--force-device-scale-factor=2");
+                        command.arg(format!("--screenshot={}", picture.display()))
+                    }
+                    None => command.arg("--dump-dom"),
+                };
+                let dumped = folder.join(format!("{state}.html"));
+                let mut chrome = command
+                    .arg(format!("file://{}#{state}", folder.join("index.html").display()))
+                    .stdout(fs::File::create(&dumped).expect("the dump is written"))
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .expect("Chrome starts");
+                // A fixed deadline, never an open wait.
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+                while chrome.try_wait().expect("Chrome is watched").is_none() {
+                    if std::time::Instant::now() > deadline {
+                        let _ = chrome.kill();
+                        let _ = chrome.wait();
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                let page = fs::read_to_string(&dumped).unwrap_or_default();
+                let said = page
+                    .split("<pre id=\"out\">")
+                    .nth(1)
+                    .and_then(|rest| rest.split("</pre>").next())
+                    .unwrap_or_default()
+                    .replace("&nbsp;", " ");
+                serde_json::from_str::<serde_json::Value>(&said).unwrap_or(serde_json::Value::Null)
+            };
+            let mut said = serde_json::Map::new();
+            for state in ["many", "floor", "grp", "grpopen", "two"] {
+                said.insert(state.to_string(), run(state, None));
+            }
+            if let Some(pictures) = std::env::var_os("SMOOZY_THE_MANY_LAYERS_PICTURES") {
+                let pictures = Path::new(&pictures);
+                for state in ["many", "floor", "grp", "grpopen", "two"] {
+                    run(state, Some(&pictures.join(format!("{state}.png"))));
+                }
+            }
+            // **Where `SMOOZY_THE_MANY_LAYERS_KEEP` names a folder, the page
+            // as drawn is kept there**, for the pictures' *before*.
+            if let Some(keep) = std::env::var_os("SMOOZY_THE_MANY_LAYERS_KEEP") {
+                let keep = Path::new(&keep);
+                fs::create_dir_all(keep).expect("the kept folder");
+                for entry in fs::read_dir(&folder).expect("the scratch folder") {
+                    let path = entry.expect("an entry").path();
+                    if path.is_file() {
+                        fs::copy(&path, keep.join(path.file_name().expect("a name"))).expect("a file is kept");
+                    }
+                }
+            }
+            let _ = fs::remove_dir_all(&folder);
+            let said = serde_json::Value::Object(said);
+            for state in ["many", "floor", "two"] {
+                let one = &said[state];
+                assert!(one.is_object(), "{state}: the page measured nothing, so the panel's mark never ran: {said}");
+                assert!(one["error"].is_null(), "{state}: {one}");
+                assert!(one["rows"].as_u64().unwrap_or(0) > 0, "{state} drew no rows: {one}");
+                assert!(one["tickOffLine"].as_f64().expect("measured") <= 1.5, "{state}: a tick is not on its name's first line: {one}");
+                assert!(one["namesLeft"].as_f64().expect("measured") <= 0.5, "{state}: the names start at different places: {one}");
+                assert_eq!(one["tagsUnderTheirNames"], true, "{state}: {one}");
+            }
+            assert!(said["floor"]["wrapped"].as_u64().unwrap_or(0) > 0, "nothing wrapped at the floor, so nothing was shown: {said}");
+            assert_eq!(said["floor"]["narrow"], "two", "{said}");
+            assert_eq!(said["floor"]["outputsUnderRender"], true, "{said}");
+            assert_eq!(said["many"]["narrow"], serde_json::Value::Null, "{said}");
+            assert_eq!(said["many"]["outputsUnderRender"], false, "three columns at the normal width: {said}");
+            assert_eq!(said["grp"]["expanded"], "false", "{said}");
+            assert_eq!(said["grpopen"]["expanded"], "true", "{said}");
+            assert!(said["grpopen"]["lineMoved"].as_f64().expect("measured").abs() <= 0.5, "the group's line moved when opened: {said}");
+            assert_eq!(said["grpopen"]["under"], 40, "{said}");
+        }
+
+        /// **The pictures of piece 12 for the Creator: the band while Render
+        /// waits for the check**, before (*0 assets this file needs are not on
+        /// the server.* under *Waiting for check*) and after (no band). The
+        /// standing is the one the live pass met: complete, with a linked
+        /// file's rows on the server but their remap owed, so nothing is counted
+        /// and nothing is confirmed. The *before* is this page with the band the
+        /// old code drew put back. **Where `SMOOZY_THE_PIECE_12_BAND` names a
+        /// folder, the page is written there for a browser to draw.**
+        #[test]
+        fn twenty_eighth_12_the_band_pictures_compose() {
+            use crate::surface::the_dependency_check::WhyRenderIsHeld;
+            use smoozy_dependencies::bytes::MachineLocation;
+            use smoozy_dependencies::record::MachineKey;
+            use smoozy_dependencies::rows::RowState;
+            use smoozy_dependencies::standing::{CheckStanding, Completion, FixingStatus, RowAtCompletion};
+            let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+            let mut held = a_run_with_a_reading();
+            held.the_saved_with.insert(keyed(&a_server(), file), "4.5.3".to_string());
+            let machine = MachineKey::of(an_identity(&a_server()), Identity::issue(IdentityKind::Installation).expect("randomness"));
+            let picked = BlenderIdentity { path: "/opt/blender-5.1.0/blender".to_string(), version: a_version(5, 1, 0) };
+            let standing = CheckStanding::at_the_sittings_end(
+                MachineLocation::composed(file.as_bytes().to_vec()),
+                machine,
+                picked,
+                std::time::SystemTime::now(),
+                Completion::Completed,
+                &[RowAtCompletion {
+                    state: RowState::AlreadyOnTheMachine,
+                    inside_a_linked_blend: Some(FixingStatus { the_fixing_matches_the_current_located_answers: false, a_re_production_is_owed: true }),
+                }],
+                four_values(),
+            );
+            let a_record = |hold: Option<WhyRenderIsHeld>| WhatTheRecordHolds {
+                the_dependency_warning: TheSwitchReads::NotSwitchedOff,
+                the_check: TheCheckTheBandReads { the_record_says: WhatTheRecordSays::AStanding(Box::new(standing.clone())), a_stop_can_be_kept: true },
+                the_hold_on_render: hold,
+                ..WhatTheRecordHolds::default()
+            };
+            let mut before = serde_json::to_value(the_panel_starting_from(&held, &a_server(), file, &a_record(Some(WhyRenderIsHeld::ItsCheckIsRunning)))).expect("the panel");
+            let the_old_page = serde_json::to_value(the_panel_starting_from(&held, &a_server(), file, &a_record(None))).expect("the panel");
+            assert!(the_old_page["the_dependency_band"].is_object(), "the standing draws the band");
+            for field in ["the_dependency_band", "the_dependencies_group_is_drawn", "dependencies_heading"] {
+                before[field] = the_old_page[field].clone();
+            }
+            let after = serde_json::to_value(the_panel_starting_from(&held, &a_server(), file, &a_record(Some(WhyRenderIsHeld::ItsCheckIsRunning)))).expect("the panel");
+            assert!(after["the_dependency_band"].is_null());
+            let Some(folder) = std::env::var_os("SMOOZY_THE_PIECE_12_BAND") else {
+                return;
+            };
+            let folder = std::path::PathBuf::from(folder);
+            fs::create_dir_all(&folder).expect("the folder");
+            let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+            for entry in fs::read_dir(&web).expect("the page folder") {
+                let path = entry.expect("an entry").path();
+                if path.extension().and_then(|one| one.to_str()) == Some("css") {
+                    fs::copy(&path, folder.join(path.file_name().expect("a name"))).expect("a stylesheet is copied");
+                }
+            }
+            fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+            for (name, text) in THE_UPLOADING_LINES_STAND_INS {
+                fs::write(folder.join(name), text).expect("a stand-in");
+            }
+            fs::copy(web.join("the-value-drawn.js"), folder.join("the-value-drawn.js")).expect("the value drawn");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+            fs::write(folder.join("servers.js"), "export function theMomentReads() { return '10:51'; }").expect("the moment");
+            fs::write(folder.join("panes.js"), THE_MARK_THAT_SAYS_IT_RAN).expect("the mark");
+            let answers = serde_json::json!({ "before": { "width": 1240, "answer": before }, "after": { "width": 1240, "answer": after } });
+            fs::write(folder.join("answers.js"), format!("export default {answers};")).expect("the answers");
+            fs::write(folder.join("index.html"), THE_MANY_LAYERS_PAGE.replace("SERVER", &a_server())).expect("the page");
+        }
+
+        /// **Twenty outputs sharing one folder are one row that adds their
+        /// counts** — the screenshot's case, through the page's own
+        /// composition. Before: twenty rows of the same path.
+        #[test]
+        fn outputs_sharing_a_folder_are_one_row() {
+            let mut outputs = the_creators_shape();
+            let png = outputs
+                .destinations
+                .iter()
+                .find(|one| one.format.as_ref().is_some_and(|format| format.as_the_file_records_it.as_bytes() == b"PNG"))
+                .expect("a PNG output")
+                .clone();
+            for _ in 0..20 {
+                outputs.destinations.push(png.clone());
+            }
+            let (writes, _, _) = the_output_group(Some(&outputs), None, &[], false, &the_creators_ground(true));
+            let writes = writes.expect("the list");
+            let png_rows = writes
+                .rows
+                .iter()
+                .filter(|row| row.counts.iter().any(|one| one.format.as_str() == "PNG"))
+                .count();
+            assert_eq!(png_rows, 1, "{:#?}", writes.rows);
+        }
+    }
+
+    /// **The Creator's twenty-ninth notes, notes 8 and 10: a job writing into
+    /// many folders** — `Design/Queue & History § What the job writes` and
+    /// `Design/Render Settings § What it will write`, the download box's
+    /// paragraph (both changed 2026-11-10). The account is in `Audits/Build/Twenty-ninth notes/`, Part B's piece 1.
+    pub(crate) mod twenty_ninth_notes_8_and_10 {
+        use super::*;
+
+        /// **A made-up job of the Creator's shape**, the drawing's
+        /// `q-manyfolders`: 26 folders under two tops, JPEG and PNG, 98
+        /// files. Each folder, its format and its files, in the reading's
+        /// order.
+        pub(crate) fn the_creators_folders() -> Vec<(String, &'static str, usize)> {
+            let mut folders = vec![
+                ("home/ubuntu/Render/".to_string(), "JPEG", 1),
+                ("home/ubuntu/Render/V_012/PNG/04. Lamps + Shades/".to_string(), "PNG", 1),
+            ];
+            for (look, format, files) in [("Cutout", "PNG", 5), ("Studio", "JPEG", 3)] {
+                for aspect in ["1x1", "4x5", "9x16", "16x9"] {
+                    for product in ["04. Lamps + Shades", "05. Floor Lamps", "06. Pendants"] {
+                        folders.push((format!("_OUT/V_012/{look}/{aspect}/{product}/"), format, files));
+                    }
+                }
+            }
+            folders
+        }
+
+        /// The folders of one format, or of all with none named.
+        pub(crate) fn the_creators_folders_of(format: Option<&str>) -> Vec<String> {
+            the_creators_folders()
+                .into_iter()
+                .filter(|(_, its, _)| format.is_none_or(|one| one == *its))
+                .map(|(folder, _, _)| folder)
+                .collect()
+        }
+
+        /// **The list a press opens**, as `§ What it will write` composes
+        /// it for these folders: Render settings' own rows and total.
+        pub(crate) fn the_creators_list() -> TheWrites {
+            let folders = the_creators_folders();
+            let merged = folders
+                .iter()
+                .map(|(folder, format, files)| AFolderOfTheList {
+                    place: WhereUnderTheJobsFolder::AFolder(folder.clone()),
+                    not_under_it: false,
+                    counts: vec![(format.to_string(), *files)],
+                })
+                .collect();
+            let of = |format: &str| folders.iter().filter(|one| one.1 == format).map(|one| one.2).sum::<usize>();
+            TheWrites {
+                rows: the_rows_by_folder(merged),
+                total: part("", vec![(of("PNG") + of("JPEG")).to_string()], Some(words::FILES_WORD), false),
+                by_format: ["PNG", "JPEG"]
+                    .into_iter()
+                    .map(|format| AWriteTotal { how_many: Verbatim::new(of(format).to_string()), format: Verbatim::new(format) })
+                    .collect(),
+            }
+        }
+
+        fn sits(folders: &[&str]) -> Option<Vec<(String, usize)>> {
+            let folders: Vec<String> = folders.iter().map(|one| one.to_string()).collect();
+            where_the_folders_sit(&folders).map(|sits| {
+                let mut said: Vec<(String, usize)> = sits.tops.into_iter().map(|top| (top.folder, top.folders)).collect();
+                said.push(("+".to_string(), sits.more));
+                said
+            })
+        }
+
+        fn top(folder: &str, folders: usize) -> (String, usize) {
+            (folder.to_string(), folders)
+        }
+
+        /// **The tops of the Creator's job**: the job's page names
+        /// `home/ubuntu/Render/` (the folder itself and one inside it) and
+        /// `_OUT/V_012/` (24); the box names each format's own. **It failed
+        /// before the change**: there was no rule, and every place listed all
+        /// of them whole.
+        #[test]
+        fn the_creators_job_sits_under_two_tops() {
+            let all: Vec<String> = the_creators_folders_of(None);
+            assert_eq!(all.len(), 26);
+            let all = where_the_folders_sit(&all).expect("more than three");
+            assert_eq!(all.tops, vec![ATop { folder: "home/ubuntu/Render/".into(), folders: 2 }, ATop { folder: "_OUT/V_012/".into(), folders: 24 }]);
+            assert_eq!(all.more, 0);
+            let jpeg = where_the_folders_sit(&the_creators_folders_of(Some("JPEG"))).expect("13 JPEG folders");
+            assert_eq!(jpeg.tops, vec![ATop { folder: "home/ubuntu/Render/".into(), folders: 1 }, ATop { folder: "_OUT/V_012/Studio/".into(), folders: 12 }]);
+            let png = where_the_folders_sit(&the_creators_folders_of(Some("PNG"))).expect("13 PNG folders");
+            assert_eq!(
+                png.tops,
+                vec![
+                    ATop { folder: "home/ubuntu/Render/V_012/PNG/04. Lamps + Shades/".into(), folders: 1 },
+                    ATop { folder: "_OUT/V_012/Cutout/".into(), folders: 12 },
+                ]
+            );
+        }
+
+        /// **The rule's edges**: three folders or fewer are listed whole; a
+        /// folder written into stops the walk and holds what is under it;
+        /// more than three tops name the first three and count the rest; the
+        /// job's own folder is a top of its own, named last.
+        #[test]
+        fn the_rule_starts_at_four_and_names_three_tops_at_most() {
+            assert_eq!(sits(&["beauty/", "mist/", "previews/"]), None);
+            assert_eq!(sits(&["", "beauty/", "mist/"]), None);
+            assert_eq!(
+                sits(&["r/", "r/s/t/", "r/u/", "z/"]),
+                Some(vec![top("r/", 3), top("z/", 1), top("+", 0)])
+            );
+            assert_eq!(
+                sits(&["x/y/", "x/y/z/1/", "x/y/z/2/", "q/"]),
+                Some(vec![top("x/y/", 3), top("q/", 1), top("+", 0)])
+            );
+            assert_eq!(
+                sits(&["a/", "b/", "c/x/", "c/y/", "d/", "e/1/", "e/2/"]),
+                Some(vec![top("a/", 1), top("b/", 1), top("c/", 2), top("+", 3)])
+            );
+            assert_eq!(
+                sits(&["", "a/x/", "a/y/", "b/"]),
+                Some(vec![top("a/", 2), top("b/", 1), top("", 1), top("+", 0)])
+            );
+            assert_eq!(
+                sits(&["", "a/", "b/", "c/x/", "c/y/"]),
+                Some(vec![top("a/", 1), top("b/", 1), top("c/", 2), top("+", 1)])
+            );
+        }
+    }
+
+    /// **The Creator's twenty-ninth notes, note 6: with every scene unticked,
+    /// nothing renders** — the spec's *None ticked renders nothing*,
+    /// `Design/Render Settings § Scenes`, *None ticked*, `Render Settings` F5
+    /// of 2026-11-10, and the drawing's `res-noscene`. The account is
+    /// `Audits/Build/Twenty-ninth notes/`, Part B's piece 5.
+    mod twenty_ninth_notes_6 {
+        use super::*;
+
+        fn the_key(file: &str) -> FileKey {
+            FileKey { server: an_identity(&a_server()), path: file.to_string() }
+        }
+
+        /// **A file of three scenes, read, and every tick taken off** — the
+        /// read's own included, as the user does by clicking the one ticked.
+        fn three_scenes_and_none_ticked() -> (WhatTheRunHolds, &'static str) {
+            let (mut held, file) = a_run_that_read_and_can_submit(vec![a_scene("Interior"), a_scene("Exterior"), a_scene("Turntable")]);
+            let key = the_key(file);
+            let ticked: Vec<ExactName> = held
+                .store
+                .per_file(&key)
+                .map(|per_file| per_file.scenes_ticked.iter().map(|one| one.name.clone()).collect())
+                .unwrap_or_default();
+            for name in &ticked {
+                held.store.untick_a_scene(key.clone(), name);
+            }
+            (held, file)
+        }
+
+        fn interior_ticked(held: &mut WhatTheRunHolds, file: &str) {
+            let key = the_key(file);
+            let provenance = the_provenance(held, &key).expect("a reading stands");
+            held.store.tick_a_scene(key, NamedAnswer { name: ExactName::as_the_reading_produced_it("Interior"), provenance });
+        }
+
+        /// The band is drawn: the dependency warning is not switched off.
+        fn a_record() -> WhatTheRecordHolds {
+            WhatTheRecordHolds { the_dependency_warning: TheSwitchReads::NotSwitchedOff, ..WhatTheRecordHolds::default() }
+        }
+
+        /// **The page greys everything a scene owns, draws no scene's View
+        /// Layers or outputs, and offers no job**; the version, *Read again*
+        /// and *Reset all* stay. **It failed before the change**: the page
+        /// stood in the first scene, drew its 240 frames, 2048 samples and two
+        /// View Layers, and offered *Render 240 frames*.
+        #[test]
+        fn with_every_scene_unticked_the_page_greys_and_offers_no_job() {
+            let (mut held, file) = three_scenes_and_none_ticked();
+            let panel = the_panel_starting_from(&held, &a_server(), file, &a_record());
+            assert!(panel.no_scene_is_ticked);
+            assert_eq!(
+                the_words_of_a_line(&panel.the_band).trim(),
+                format!("{} {}", words::NO_SCENE_IS_TICKED_LEAD, words::NO_SCENE_IS_TICKED_REST)
+            );
+            // The scenes are drawn, none ticked.
+            assert!(panel.the_scene_group_is_drawn);
+            assert_eq!(panel.the_scenes.len(), 3);
+            assert!(panel.the_scenes.iter().all(|one| !one.ticked));
+            assert!(!panel.all_scenes.as_ref().expect("All scenes").ticked);
+            // Every value greys and empties, the range too.
+            for field in [&panel.the_range, &panel.samples, &panel.resolution] {
+                assert!(field.greyed, "{field:?}");
+                assert!(field.value.is_none(), "{field:?}");
+                assert!(field.hand_back_to.is_none(), "{field:?}");
+            }
+            assert!(panel.the_render_group_is_greyed);
+            assert!(panel.the_frame_count.is_empty(), "{:?}", panel.the_frame_count);
+            assert!(panel.frames_qualifier.is_none());
+            assert!(panel.the_size_reading.is_none());
+            assert!(panel.the_samples_lines.is_empty(), "{:?}", panel.the_samples_lines);
+            // The View Layers and What it will write go, with no line in their place.
+            assert!(panel.the_view_layers.is_empty() && !panel.the_view_layer_group_is_drawn);
+            assert!(panel.view_layers_qualifier.is_none());
+            assert!(panel.what_it_will_write.is_none() && !panel.the_output_group_is_drawn);
+            assert!(panel.one_scene_only.is_empty() && panel.the_output_lines.is_empty());
+            // Render keeps its word and is not offered.
+            assert_eq!(the_words_of_a_line(&panel.the_render_control).trim(), words::RENDER);
+            assert!(!panel.submitting_is_offered);
+            assert!(panel.the_strip_reading.is_none());
+            // The dependency warning is still there: its way to the check is about the file.
+            assert!(panel.the_dependency_band.is_some());
+
+            // **What stays live**: the version, as it was with a scene ticked.
+            let (mut one, _) = three_scenes_and_none_ticked();
+            interior_ticked(&mut one, file);
+            let ticked = the_panel_starting_from(&one, &a_server(), file, &a_record());
+            assert!(!ticked.no_scene_is_ticked && ticked.submitting_is_offered);
+            assert_eq!(the_version_resolved(&held, &a_server(), file), the_version_resolved(&one, &a_server(), file));
+            assert!(panel.the_version_control_is_drawn);
+            assert_eq!(serde_json::to_value(&panel.the_versions).unwrap(), serde_json::to_value(&ticked.the_versions).unwrap());
+            assert!(panel.the_read_is_offered && panel.a_reading_stands);
+
+            // **Reset all is the way back**: it ticks the scene the file was saved showing.
+            assert!(the_value_is_handed_back(&mut held, &a_server(), file, WhichSetting::Everything).is_none());
+            let back = the_panel_starting_from(&held, &a_server(), file, &a_record());
+            assert!(!back.no_scene_is_ticked && back.submitting_is_offered);
+            assert_eq!(back.the_scenes.iter().filter(|one| one.ticked).count(), 1);
+        }
+
+        /// **A submission that arrives anyway is refused and composes nothing**
+        /// — the guard behind the greyed Render. **It failed before the
+        /// change**: one job was composed, carrying no scene name, which would
+        /// have rendered the scene the file was saved showing.
+        #[test]
+        fn a_submission_with_every_scene_unticked_is_refused() {
+            let (held, file) = three_scenes_and_none_ticked();
+            let refused = the_act_as_the_page_composed_it(
+                &held,
+                &a_server(),
+                file,
+                &WhatTheRecordHolds::default(),
+                &a_row_on(&a_server(), true),
+                a_run(),
+            )
+            .err()
+            .expect("no job is composed");
+            assert_eq!(
+                the_words_of_a_line(&refused).trim(),
+                format!("{} {}", words::NOT_SUBMITTED, words::NO_SCENE_IS_TICKED_LEAD)
+            );
+            // **A one-scene file the same**: unticking its one scene renders nothing.
+            let (mut held, file) = a_run_that_read_and_can_submit(vec![a_scene("Scene")]);
+            let key = the_key(file);
+            held.store.untick_a_scene(key, &ExactName::as_the_reading_produced_it("Scene"));
+            assert!(the_panel(&held, &a_server(), file).no_scene_is_ticked);
+            assert!(the_act_as_the_page_composed_it(&held, &a_server(), file, &WhatTheRecordHolds::default(), &a_row_on(&a_server(), true), a_run()).is_err());
+            // **Before any read, nothing changes**: the pre-read page still submits.
+            let mut unread = WhatTheRunHolds { version_lists: a_run_with_a_reading().version_lists, ..WhatTheRunHolds::default() };
+            unread.the_saved_with.insert(keyed(&a_server(), file), "5.1.0".to_string());
+            assert!(!the_panel(&unread, &a_server(), file).no_scene_is_ticked);
+            assert!(the_act_as_the_page_composed_it(&unread, &a_server(), file, &WhatTheRecordHolds::default(), &a_row_on(&a_server(), true), a_run()).is_ok());
+        }
+
+        /// **An answer to a scene's setting that arrives anyway is not taken**:
+        /// there is no scene to key it by (`Render Settings` F5 of
+        /// 2026-11-10). **It failed
+        /// before the change**: the count went into the first scene's own
+        /// entries, and showed when that scene was ticked again.
+        #[test]
+        fn a_scenes_answer_with_every_scene_unticked_is_not_taken() {
+            let (mut held, file) = three_scenes_and_none_ticked();
+            for (which, text) in [
+                (WhichSetting::SampleCount, "64"),
+                (WhichSetting::FrameRange, "1-10"),
+                (WhichSetting::ResolutionPercentage, "50"),
+                (WhichSetting::Device, "the-processor"),
+            ] {
+                let _ = the_answer_is_taken(&mut held, &a_server(), file, which, text);
+            }
+            interior_ticked(&mut held, file);
+            let panel = the_panel(&held, &a_server(), file);
+            assert_eq!(panel.samples.value.as_ref().map(|value| value.as_str().to_string()).as_deref(), Some("2048"));
+            assert_eq!(panel.the_range.value.as_ref().map(|value| value.as_str().to_string()).as_deref(), Some("1-240"));
+            assert_eq!(panel.resolution.value.as_ref().map(|value| value.as_str().to_string()).as_deref(), Some("100"));
+            assert_eq!(held.store.the_answers_composition_reads(&the_key(file), None), SceneEntries::default());
+            // The job name is the page's, not a scene's, and is taken.
+            let (mut held, file) = three_scenes_and_none_ticked();
+            let _ = the_answer_is_taken(&mut held, &a_server(), file, WhichSetting::JobName, "Kitchen — final");
+            assert_eq!(the_panel(&held, &a_server(), file).the_job_name.as_str(), "Kitchen — final");
+        }
+
+        /// **A page from a history entry whose job named no scene still
+        /// submits**, though a reading stands and nothing is ticked: its kept
+        /// setup is in the pre-read set and the job composes from it with no
+        /// name (`Render Settings` F5 and `Render Settings` Y15, as narrowed
+        /// 2026-11-10). Unticking a scene on any other page greys it.
+        #[test]
+        fn a_page_from_a_history_entry_with_no_scene_still_submits() {
+            let (mut held, file) = three_scenes_and_none_ticked();
+            let entries = SceneEntries { sample_count: Some(64), ..SceneEntries::default() };
+            smoozy_rendering::again::a_kept_setup_with_no_scene_is_loaded(&mut held.store, the_key(file), &entries, None, false);
+            the_page_came_from(
+                &mut held,
+                &a_server(),
+                file,
+                ThePageCameFrom {
+                    band: WhereItCameFrom::SubmittingAgain { the_jobs_name: "Kitchen, take one".to_string(), when: String::new() },
+                    the_simplify_offer_is_drawn: false,
+                    the_entry: Identity::issue(IdentityKind::Job).unwrap(),
+                    the_entrys_label: "Kitchen, take one".to_string(),
+                    the_moment: None,
+                },
+            );
+            let panel = the_panel(&held, &a_server(), file);
+            assert!(!panel.no_scene_is_ticked && panel.submitting_is_offered);
+            let given = the_act_as_the_page_composed_it(&held, &a_server(), file, &WhatTheRecordHolds::default(), &a_row_on(&a_server(), true), a_run())
+                .unwrap_or_else(|said| panic!("{said:?}"));
+            assert_eq!(given.scene_jobs.len(), 1);
+            assert!(given.scene_jobs[0].scene.is_none());
+            assert_eq!(given.scene_jobs[0].sample_count, Some(64));
+        }
+
+        /// **The page draws its own greys**: the Frames group, the download
+        /// switch, *Render one frame first*, and the dependency warning's two
+        /// ways to submit; *Check dependencies…* and the version stay live,
+        /// and Render is greyed with its one word. Drawn in Chrome with the
+        /// application's own page and stylesheets. **Where
+        /// `SMOOZY_THE_NO_SCENE_PICTURES` names a folder, a picture is written
+        /// there, its name ending in `SMOOZY_THE_NO_SCENE_PICTURES_WHEN`
+        /// (*before* or *after*).** **It failed before the change**: the page
+        /// drew the first scene's View Layers and *Render 240 frames*, live. A
+        /// computer with no Chrome skips it.
+        #[test]
+        fn with_every_scene_unticked_the_page_greys_in_a_real_browser() {
+            let Some(chrome) = a_chrome() else {
+                eprintln!("SKIPPED: no Chrome on this computer, so the page was not drawn");
+                return;
+            };
+            let (held, file) = three_scenes_and_none_ticked();
+            let answer = serde_json::to_value(the_panel_starting_from(&held, &a_server(), file, &a_record())).expect("the panel serialises");
+            let web = Path::new(env!("CARGO_MANIFEST_DIR")).join("web");
+            let folder = std::env::temp_dir().join(format!("smoozy-no-scene-browser-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&folder);
+            fs::create_dir_all(&folder).expect("a scratch folder");
+            for entry in fs::read_dir(&web).expect("the page folder") {
+                let path = entry.expect("an entry").path();
+                if path.extension().and_then(|one| one.to_str()) == Some("css") {
+                    fs::copy(&path, folder.join(path.file_name().expect("a name"))).expect("a stylesheet is copied");
+                }
+            }
+            fs::copy(web.join("render-settings.js"), folder.join("render-settings.js")).expect("the page");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+            for (name, text) in THE_UPLOADING_LINES_STAND_INS {
+                fs::write(folder.join(name), text).expect("a stand-in");
+            }
+            fs::copy(web.join("the-value-drawn.js"), folder.join("the-value-drawn.js")).expect("the value drawn");
+            fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+            fs::write(folder.join("answers.js"), format!("export default {answer};")).expect("the answer");
+            fs::write(folder.join("index.html"), THE_NO_SCENE_PAGE.replace("SERVER", &a_server())).expect("the page");
+            let run = |out: Option<&Path>| {
+                let mut command = std::process::Command::new(&chrome);
+                command.args(["--headless", "--disable-gpu", "--no-first-run", "--hide-scrollbars", "--allow-file-access-from-files", "--virtual-time-budget=5000", "--window-size=1240,820"]);
+                command.arg(format!("--user-data-dir={}", folder.join(if out.is_some() { "profile-picture" } else { "profile" }).display()));
+                match out {
+                    Some(picture) => {
+                        command.arg("--force-device-scale-factor=2");
+                        command.arg(format!("--screenshot={}", picture.display()))
+                    }
+                    None => command.arg("--dump-dom"),
+                };
+                let dumped = folder.join("dump.html");
+                let mut chrome = command
+                    .arg(format!("file://{}", folder.join("index.html").display()))
+                    .stdout(fs::File::create(&dumped).expect("the dump is written"))
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .expect("Chrome starts");
+                // A fixed deadline, never an open wait.
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+                while chrome.try_wait().expect("Chrome is watched").is_none() {
+                    if std::time::Instant::now() > deadline {
+                        let _ = chrome.kill();
+                        let _ = chrome.wait();
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                let page = fs::read_to_string(&dumped).unwrap_or_default();
+                let said = page
+                    .split("<pre id=\"out\">")
+                    .nth(1)
+                    .and_then(|rest| rest.split("</pre>").next())
+                    .unwrap_or_default()
+                    .replace("&nbsp;", " ")
+                    .replace("&amp;", "&");
+                serde_json::from_str::<serde_json::Value>(&said).unwrap_or(serde_json::Value::Null)
+            };
+            if let Some(pictures) = std::env::var_os("SMOOZY_THE_NO_SCENE_PICTURES") {
+                let when = std::env::var("SMOOZY_THE_NO_SCENE_PICTURES_WHEN").unwrap_or_else(|_| "after".to_string());
+                let pictures = Path::new(&pictures);
+                fs::create_dir_all(pictures).expect("the pictures' folder");
+                run(Some(&pictures.join(format!("2. Render settings, no scene ticked, {when}.png"))));
+            }
+            let said = run(None);
+            let _ = fs::remove_dir_all(&folder);
+            assert!(said["error"].is_null(), "{said}");
+            assert_eq!(said["band"], format!("{} {}", words::NO_SCENE_IS_TICKED_LEAD, words::NO_SCENE_IS_TICKED_REST), "{said}");
+            assert_eq!(said["framesGreyed"], true, "{said}");
+            assert_eq!(said["renderGreyed"], true, "{said}");
+            assert_eq!(said["layers"], 0, "{said}");
+            assert_eq!(said["outputs"], false, "{said}");
+            assert_eq!(said["render"], serde_json::json!({ "said": words::RENDER, "disabled": true }), "{said}");
+            assert_eq!(said["downloadSwitch"], true, "the download switch is not greyed: {said}");
+            assert_eq!(said["firstFrameSwitch"], true, "Render one frame first is not greyed: {said}");
+            assert_eq!(said["bandWays"], serde_json::json!({ "band-check": false, "band-first-frame": true, "band-anyway": true }), "{said}");
+            assert_eq!(said["rangeField"], false, "the range is still a field: {said}");
+        }
+    }
+
 }
+
+/// **The drawing's `res-noscene`, drawn by the application's own page**: the
+/// panel over a fixed frame, the light theme, and what is greyed read back.
+const THE_NO_SCENE_PAGE: &str = r#"<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="smoozy.css">
+<style>
+  html, body { height: 100%; overflow: hidden; margin: 0; background: var(--bg); }
+  .app { display: block; height: 100%; }
+  .frame { position: fixed; left: 0; top: 0; bottom: 0; width: 1240px; display: flex; flex-direction: column; }
+  .frame > .sheet { height: 100%; }
+  #out { display: none; }
+</style>
+</head><body>
+<div class="app" id="app"><div class="frame" data-panel="set"><div class="sheet"><div class="shead"><div class="htitle" id="head"></div></div><div class="suscroll" id="body"></div></div></div></div>
+<pre id="out"></pre>
+<script>
+  window.__TAURI__ = { core: { invoke(command) {
+    if (command === "the_render_settings_panel") return Promise.resolve(structuredClone(window.theAnswer));
+    return Promise.resolve(null);
+  } } };
+</script>
+<script type="module">
+import answer from "./answers.js";
+import { panels } from "./a-server.js";
+import { theSettingsAreOpenedOn } from "./render-settings.js";
+document.documentElement.dataset.theme = "light";
+window.theAnswer = answer;
+const out = document.getElementById("out");
+try {
+  const settle = async () => { for (let at = 0; at < 8; at += 1) await new Promise((go) => setTimeout(go, 0)); };
+  const head = document.getElementById("head");
+  const body = document.getElementById("body");
+  await theSettingsAreOpenedOn("SERVER", Array.from(new TextEncoder().encode(answer.file)), "");
+  panels[0].itIsDrawn({ head, body }, "SERVER");
+  await settle();
+  const groups = [...body.querySelectorAll(".grp")];
+  const titled = (word) => groups.find((one) => (one.querySelector("h3") || {}).textContent?.startsWith(word));
+  const box = (which) => body.querySelector(`[data-box="${which}"]`);
+  const render = box("render");
+  const ways = {};
+  for (const which of ["band-check", "band-first-frame", "band-anyway"]) { const one = box(which); ways[which] = one ? one.disabled : null; }
+  const band = body.querySelector("p.noread");
+  out.textContent = JSON.stringify({
+    band: band ? band.textContent.replace(/ /g, " ") : null,
+    framesGreyed: Boolean(titled(answer.frames_heading)?.classList.contains("greyed")),
+    renderGreyed: Boolean(titled(answer.render_heading)?.classList.contains("greyed")),
+    layers: body.querySelectorAll(".vlrow").length,
+    outputs: Boolean(titled(answer.output_heading)),
+    render: render ? { said: render.textContent, disabled: render.disabled } : null,
+    downloadSwitch: Boolean(box("download-switch")?.disabled),
+    firstFrameSwitch: Boolean(box("first-frame-switch")?.disabled),
+    bandWays: ways,
+    rangeField: Boolean(box("range-field")?.tagName === "INPUT"),
+  });
+} catch (error) { out.textContent = JSON.stringify({ error: String(error.stack || error) }); }
+</script>
+</body></html>"#;
+
+/// **A stand-in for `web/panes.js` that marks nothing and says it ran**, for
+/// the pages drawn on [`THE_MANY_LAYERS_PAGE`] only to be looked at: that page
+/// waits for the mark before it measures.
+#[cfg(test)]
+const THE_MARK_THAT_SAYS_IT_RAN: &str =
+    "export function thePagesAreMarked() { if (window.theMarkRan) window.theMarkRan(); }";
+
+/// **Note 17's page in a real browser**: the panel at the width the address
+/// names, drawn from the application's own page and stylesheets, and
+/// measured. **It loads `web/panes.js` at its start, as the application's own
+/// page does, and measures only once the panel's own mark has run**, so the
+/// floor's mark is read, never its absence. Changed 2026-11-11: the panel asks
+/// for its mark by `import("./panes.js")`, and this page had never loaded that
+/// file, so the ask read it from disk after the page was drawn. On a busy
+/// machine that read landed after the page's eight turns, and the floor was
+/// measured with no mark; waiting for the mark alone was not enough either,
+/// since the browser's own clock for `--virtual-time-budget` does not wait
+/// for that read, and the page was taken before it measured.
+#[cfg(test)]
+const THE_MANY_LAYERS_PAGE: &str = r#"<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="smoozy.css">
+<style>
+  html, body { height: 100%; overflow: hidden; margin: 0; }
+  .app { display: block; height: 100%; }
+  .frame { position: fixed; left: 0; top: 0; bottom: 0; display: flex; flex-direction: column; }
+  .frame > .sheet { height: 100%; }
+  #out { display: none; }
+</style>
+</head><body>
+<div class="app" id="app"><div class="frame" data-panel="set"><div class="sheet"><div class="shead"><div class="htitle" id="head"></div></div><div class="suscroll" id="body"></div></div></div></div>
+<pre id="out"></pre>
+<script>
+  window.__TAURI__ = { core: { invoke(command) {
+    if (command === "the_render_settings_panel") return Promise.resolve(structuredClone(window.theAnswer));
+    return Promise.resolve(null);
+  } } };
+  // The panel asks for its mark by loading `panes.js`, and the stand-in says when it has run.
+  window.theMarkHasRun = new Promise((ran) => { window.theMarkRan = ran; });
+</script>
+<script type="module">
+import answers from "./answers.js";
+// Loaded at the start, as the application's own `web/smoozy.js` loads it, so the panel's later ask finds it already there.
+import "./panes.js";
+import { panels } from "./a-server.js";
+import { theSettingsAreOpenedOn } from "./render-settings.js";
+const state = location.hash.slice(1);
+const which = answers[state];
+document.querySelector(".frame").style.width = which.width + "px";
+if (which.narrow) document.getElementById("app").dataset.narrow = which.narrow;
+document.documentElement.dataset.theme = "light";
+window.theAnswer = which.answer;
+window.addEventListener("unhandledrejection", (event) => { document.getElementById("out").textContent = JSON.stringify({ error: String(event.reason && event.reason.stack || event.reason) }); });
+const settle = async () => { for (let at = 0; at < 8; at += 1) await new Promise((go) => setTimeout(go, 0)); };
+const head = document.getElementById("head");
+const body = document.getElementById("body");
+await theSettingsAreOpenedOn("SERVER", Array.from(new TextEncoder().encode(which.answer.file)), "");
+panels[0].itIsDrawn({ head, body }, "SERVER");
+await settle();
+// Measured once the panel's own mark has run: wait for it, not for time.
+await window.theMarkHasRun;
+await settle();
+const out = {};
+const group = () => body.querySelector(".wgrp");
+if (which.open) {
+  const before = group().getBoundingClientRect().top;
+  group().click();
+  await settle();
+  out.lineMoved = group().getBoundingClientRect().top - before;
+}
+const rows = [...body.querySelectorAll(".vlrow")];
+out.rows = rows.length;
+let off = 0, lefts = [], wrapped = 0, under = true;
+for (const row of rows) {
+  const tick = row.querySelector(".box > i").getBoundingClientRect();
+  const name = row.querySelector(".vln > .vlt");
+  // The name is a block in its cell, so its first line is read off its words.
+  const words = document.createRange();
+  words.selectNodeContents(name.firstChild);
+  const first = words.getClientRects()[0];
+  off = Math.max(off, Math.abs((tick.top + tick.bottom) / 2 - (first.top + first.bottom) / 2));
+  lefts.push(first.left);
+  const box = name.getBoundingClientRect();
+  if (box.height > first.height * 1.5) wrapped += 1;
+  const tag = [...row.children].find((one) => one.classList.contains("tag"));
+  if (tag && tag.getBoundingClientRect().top < box.bottom - 0.5) under = false;
+}
+out.tickOffLine = off;
+out.namesLeft = Math.max(...lefts) - Math.min(...lefts);
+out.wrapped = wrapped;
+out.tagsUnderTheirNames = under;
+out.narrow = document.querySelector(".sheet").dataset.narrow || null;
+const cols = [...body.querySelectorAll(".cols > .col")].map((one) => one.getBoundingClientRect());
+out.outputsUnderRender = cols.length === 3 && Math.abs(cols[2].left - cols[1].left) < 1 && cols[2].top >= cols[1].bottom;
+if (group()) out.expanded = group().getAttribute("aria-expanded");
+out.under = body.querySelectorAll(".writes .p.in").length;
+document.getElementById("out").textContent = JSON.stringify(out);
+</script>
+</body></html>
+"#;
+
+/// **Note 17's page harness**: the page opened on one answer and drawn, the
+/// group pressed, and the page shown again.
+#[cfg(test)]
+const THE_NOTE_17_HARNESS: &str = r#"import { everyPiece } from "./document.mjs";
+import { readFileSync } from "node:fs";
+const answer = JSON.parse(readFileSync("./answers.json", "utf8"));
+globalThis.window = { addEventListener() {}, __TAURI__: { core: { invoke(command) {
+  if (command === "the_render_settings_panel") return Promise.resolve(answer);
+  return Promise.resolve(null);
+} } } };
+const { panels } = await import("./a-server.js");
+const { theSettingsAreOpenedOn } = await import("./render-settings.js");
+const settle = async () => { for (let at = 0; at < 8; at += 1) await new Promise((go) => setImmediate(go)); };
+await theSettingsAreOpenedOn("SERVER", Array.from(Buffer.from(answer.file)), "");
+const head = document.createElement("div");
+const body = document.createElement("div");
+panels[0].itIsDrawn({ head, body }, "SERVER");
+await settle();
+const all = () => [...everyPiece(head), ...everyPiece(body)];
+const out = {};
+out.rows = all().filter((one) => one.names.has("vlrow")).map((row) => {
+  const box = row.children.find((one) => one.names.has("box"));
+  return {
+    boldCopy: everyPiece(box).some((one) => one.names.has("vlb")),
+    crossInTheBox: everyPiece(box).some((one) => one.names.has("clear")),
+    crossOutsideTheBox: row.children.some((one) => one.names.has("vlx") && everyPiece(one).some((it) => it.names.has("clear"))),
+    tagOnItsOwnLine: row.children.some((one) => one.names.has("tag")),
+    tagInTheBox: everyPiece(box).some((one) => one.names.has("tag")),
+  };
+});
+const line = all().find((one) => one.names.has("pkline"));
+out.line = line ? line.children.map((one) => one.className) : null;
+out.hints = all().filter((one) => one.names.has("hint")).map((one) => one.className);
+const group = () => all().find((one) => one.names.has("wgrp"));
+const under = () => all().filter((one) => one.names.has("in")).length;
+out.closed = group().getAttribute("aria-expanded");
+out.rowsUnderClosed = under();
+group().press();
+await settle();
+out.opened = group().getAttribute("aria-expanded");
+out.rowsUnderOpen = under();
+panels[0].itIsShowingAgain("SERVER");
+await settle();
+out.afterARedraw = group().getAttribute("aria-expanded");
+out.twoFormatRows = all().filter((one) => one.names.has("wcounts") && one.children.length === 4).length;
+out.marked = (globalThis.marked || 0) > 0;
+console.log(JSON.stringify(out));
+"#;
 
 /// The modules `web/transfers.js` imports, standing in for the box's test —
 /// none of them is looked at.
 #[cfg(test)]
-const THE_BOX_STAND_INS: [(&str, &str); 8] = [
+const THE_BOX_STAND_INS: [(&str, &str); 10] = [
     ("event-route.js", "export function whenTold() {}"),
+    // **The `.blend`'s link into Files** that `web/transfers.js` draws on a
+    // dependency upload (the twenty-ninth notes, note 5).
+    (
+        "a-server.js",
+        "export const FILES = 'files'; export function thePanelOverItIsCollapsed() {} \
+         export function theServerWillOpenOn() {}",
+    ),
+    ("files.js", "export function theBrowserIsOpenedAt() {}"),
     (
         "the-rail.js",
         "export const A_SERVER = 'machineview'; export const TRANSFERS = 'transfersview'; \
@@ -17013,6 +20180,7 @@ class Field {
   focus() { document.activeElement = this; }
   setSelectionRange(start, end, direction) { this.selectionStart = start; this.selectionEnd = end; this.selectionDirection = direction; }
   dispatchEvent(event) { fire(this, event.type); return true; }
+
 }
 const holder = (...fields) => ({ contains: (one) => fields.includes(one) && one.isConnected });
 const typing = (field, text) => { field.value += text; field.selectionStart = field.selectionEnd = field.value.length; fire(field, "input"); };
@@ -17085,3 +20253,265 @@ out.nothingIsTakenWhereTheFocusIsNot = theTypingIsTakenFrom(holder(elsewhere)) =
 
 console.log(JSON.stringify(out));
 "#;
+
+/// **The *Prepare simulations* row's range words** — what is played before the
+/// job's frames and before the first-frame check's, on every attempt.
+fn the_simulation_range_words(
+    job: Option<(i64, i64)>,
+    check: Option<Option<(i64, i64)>>,
+    simulations_begin: i64,
+) -> String {
+    match (job, check) {
+        // **Scout 3.18, 2026-11-11**: *the check* read as the dependency check
+        // on this page, and *Plays nothing* as a fault.
+        (None, _) => format!("Nothing to play: simulations start at frame {simulations_begin}, after the last frame."),
+        (Some((from, to)), Some(Some((check_from, check_to)))) => format!("Plays frames {check_from}–{check_to} for the first frame and {from}–{to} for the job, on every attempt."),
+        (Some((from, to)), Some(None)) => format!("Plays frames {from}–{to} for the job and nothing for the first frame, on every attempt."),
+        (Some((from, to)), None) => format!("Plays frames {from}–{to} before rendering, on every attempt."),
+    }
+}
+
+/// **The four questions, batch 3: words a user can't act on** (2026-11-11).
+/// Each line is in the user's words, by `Preparation/Groundwork/Rules.md`
+/// Rule 1 and Rule 9. Written before the words changed, and failed first.
+#[cfg(test)]
+mod the_four_questions_batch_3 {
+    use super::*;
+
+    /// Scouts 3.17, 3.18 and 3.19.
+    #[test]
+    fn the_page_says_where_and_what_next() {
+        assert_eq!(
+            words::THIS_SERVERS_FALLBACK_FOLDER_CANT_BE_USED,
+            "This server’s fallback folder can’t be used; change it on its Edit page."
+        );
+        assert_eq!(
+            words::NOT_KNOWN_WHETHER_IT_WAS_TAKEN,
+            "Submission not confirmed. Check the Queue before submitting again."
+        );
+        assert_eq!(
+            the_simulation_range_words(Some((101, 125)), Some(Some((101, 121))), 900),
+            "Plays frames 101–121 for the first frame and 101–125 for the job, on every attempt."
+        );
+        assert_eq!(
+            the_simulation_range_words(None, None, 900),
+            "Nothing to play: simulations start at frame 900, after the last frame."
+        );
+    }
+}
+
+#[cfg(test)]
+mod fourth_part_read_tests {
+    use super::*;
+    use super::tests::*;
+    #[test]
+    fn fourth_part_4_3_a_stop_request_does_not_claim_the_server_confirmed_it() {
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let mut held = a_run_with_a_reading();
+        let control = std::sync::Arc::new(crate::reading_the_file::AReadControl::new());
+        control.stop();
+        held.read_controls.insert(keyed(&server, file), control);
+        let said = the_read_lands_in(&mut held, None, &server, file,
+            crate::reading_the_file::WhatTheReadCameTo::TheFourValuesCouldNotBeRead);
+        assert_eq!(serde_json::to_string(&said).unwrap(), serde_json::to_string(&vec![plainly("Stop requested.")]).unwrap());
+        assert!(!held.read_controls.contains_key(&keyed(&server, file)));
+        assert!(the_panel(&held, &server, file).the_read_failure.is_none());
+    }
+    /// **The night's live pass, fault 3: a stop the server confirmed says
+    /// *Read stopped.*** on the read line (`Design/Render Settings § A read
+    /// can take longer`, changed 2026-11-13), and no failure box. **Failed
+    /// before the fix**: it said *Stop requested.* whatever the server said.
+    #[test]
+    fn night_pass_3_a_stop_the_server_confirmed_says_read_stopped() {
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let mut held = a_run_with_a_reading();
+        let control = std::sync::Arc::new(crate::reading_the_file::AReadControl::new());
+        control.stop();
+        control.it_ended_there();
+        assert!(control.the_stop_was_confirmed());
+        held.read_controls.insert(keyed(&server, file), control);
+        let said = the_read_lands_in(&mut held, None, &server, file,
+            crate::reading_the_file::WhatTheReadCameTo::ThePreLoad {
+                went: smoozy_render_settings::acting::pre_load::HowThePreLoadWent::NoReading(Ending::SmoozyStoppedIt),
+                operation: None,
+            });
+        assert_eq!(serde_json::to_string(&said).unwrap(), serde_json::to_string(&vec![plainly("Read stopped.")]).unwrap());
+        assert!(the_panel(&held, &server, file).the_read_failure.is_none());
+    }
+    /// **The Rough what-if answers, share 1 (7, 8, 10).** A reading thrown
+    /// away because the Blender version moved under it says so; one that was
+    /// stored stays a stored read even where a Stop landed after the store.
+    /// Until then the first said nothing and the second said *Read stopped.*
+    /// over the file's values.
+    /// **The leftovers of the Rough what-if answers (185): a newer copy of
+    /// the file still uploading is said on the page**, from the transfer
+    /// records — an upload onto this file on this server that has not ended.
+    /// A download, an upload elsewhere or to another server, and one that
+    /// ended, say nothing. Before, the page read the old file and nothing said
+    /// a newer one was on its way.
+    #[test]
+    fn rough_leftovers_185_a_newer_copy_still_uploading_is_said() {
+        use smoozy_server_protocol::transfers::{Direction, Ending, TransferRecord};
+        let issue = |kind| Identity::issue(kind).expect("random bytes");
+        let server = issue(IdentityKind::LocalServer);
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let a_transfer = |direction, on: &Identity, to: &str| {
+            TransferRecord::arranged(
+                issue(IdentityKind::Transfer),
+                direction,
+                on.clone(),
+                None,
+                "/Users/a/kitchen_v14.blend".to_string(),
+                to.to_string(),
+                "/ephemeral/smoozy/assets/.smoozy-staging",
+                10,
+                issue(IdentityKind::Run),
+            )
+        };
+        let mut landed = a_transfer(Direction::Up, &server, file);
+        landed.ending = Some(Ending::Published);
+        let others = vec![
+            landed,
+            a_transfer(Direction::Down, &server, file),
+            a_transfer(Direction::Up, &server, "/ephemeral/smoozy/assets/other.blend"),
+            a_transfer(Direction::Up, &issue(IdentityKind::LocalServer), file),
+        ];
+        assert!(!a_newer_copy_has_not_finished_uploading(&others, &server.as_text(), file));
+        let mut going = others.clone();
+        going.push(a_transfer(Direction::Up, &server, file));
+        assert!(a_newer_copy_has_not_finished_uploading(&going, &server.as_text(), file));
+        let record = WhatTheRecordHolds { a_newer_copy_has_not_finished_uploading: true, ..WhatTheRecordHolds::default() };
+        let panel = the_panel_starting_from(&WhatTheRunHolds::default(), &server.as_text(), file, &record);
+        assert_eq!(
+            panel.a_newer_copy_is_uploading.map(|said| said.as_str().replace('\u{a0}', " ")),
+            Some("A newer copy of this file has not finished uploading.".to_string())
+        );
+        assert!(the_panel(&WhatTheRunHolds::default(), &server.as_text(), file).a_newer_copy_is_uploading.is_none());
+    }
+
+    /// **`Render Settings` Q14 item 2, wired — the leftovers of the Rough
+    /// what-if answers (215): the comparison at the page's open drops a
+    /// reading whose file changed on the server, and the band says so**; a
+    /// file that matches, and a channel that could not answer, leave the
+    /// reading standing and say nothing. Before, nothing called the
+    /// comparison, and a file replaced outside Smoozy kept the old values.
+    #[test]
+    fn rough_leftovers_215_a_file_changed_since_the_read_is_noticed_at_the_open() {
+        use smoozy_render_settings::readings::FourValuesNow;
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let key = FileKey { server: an_identity(&server), path: file.to_string() };
+        let mut held = a_run_with_a_reading();
+        assert!(!the_comparison_at_the_open_lands(&mut held, &server, file, FourValuesNow::Answered(four_values())));
+        assert!(!the_comparison_at_the_open_lands(&mut held, &server, file, FourValuesNow::TheChannelCannotAnswer));
+        assert!(held.readings.standing(&key).is_some(), "an unchanged file keeps its reading");
+        let mut changed = four_values();
+        changed.size += 1;
+        assert!(the_comparison_at_the_open_lands(&mut held, &server, file, FourValuesNow::Answered(changed)));
+        assert!(held.readings.standing(&key).is_none(), "the changed file's reading is dropped");
+        let panel = the_panel(&held, &server, file);
+        assert_eq!(
+            serde_json::to_string(&panel.the_band).unwrap(),
+            serde_json::to_string(&vec![plainly(words::THE_FILE_CHANGED_LEAD), plainly(words::NOT_READ_REST)]).unwrap()
+        );
+        assert_eq!(words::THE_FILE_CHANGED_LEAD, "File changed on the server since the read.");
+        the_period_ended_for(&mut held, &server);
+        assert!(held.the_file_changed_since_the_read.is_empty(), "the mark goes with the connected period");
+    }
+
+    /// **`Render Settings` V3a, the leftovers of the Rough what-if answers
+    /// (222, 227): the page says once that the file's scripts will run on the
+    /// server, only where the reading found them.** A file without them, a
+    /// file not read, and a reading from an older server program say nothing.
+    #[test]
+    fn rough_leftovers_222_the_page_says_the_files_scripts_run_only_where_they_do() {
+        let key = FileKey {
+            server: an_identity(&a_server()),
+            path: "/ephemeral/smoozy/assets/kitchen_v14.blend".to_string(),
+        };
+        let mut held = a_run_with_a_reading();
+        assert_eq!(the_files_scripts_line(held.readings.standing(&key)), None, "an older program said nothing");
+        assert_eq!(the_files_scripts_line(None), None, "nothing is read");
+        let mut reading = held.readings.standing(&key).cloned().expect("the reading");
+        reading.settings.the_files_own_scripts_run = Some(false);
+        assert_eq!(the_files_scripts_line(Some(&reading)), None, "a file without scripts");
+        reading.settings.the_files_own_scripts_run = Some(true);
+        assert_eq!(
+            the_files_scripts_line(Some(&reading)).map(|said| said.as_str().replace('\u{a0}', " ")),
+            Some("This file\u{2019}s scripts will run on the server.".to_string())
+        );
+        let _ = &mut held;
+        let page = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/web/render-settings.js")).expect("the page");
+        assert!(page.contains("band.textContent = said.the_files_scripts_run;"), "the page does not draw the line");
+    }
+
+    #[test]
+    fn rough_share_1_a_read_lost_to_a_version_change_is_said_and_a_stored_one_is_not_a_stop() {
+        use smoozy_render_settings::acting::pre_load::HowThePreLoadWent;
+        use smoozy_render_settings::file_half::Landed;
+        use crate::reading_the_file::WhatTheReadCameTo;
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let a_reading = |landed| WhatTheReadCameTo::ThePreLoad {
+            went: HowThePreLoadWent::AReading { landed, the_diary_act: None },
+            operation: None,
+        };
+        let mut held = a_run_with_a_reading();
+        let said = the_read_lands_in(&mut held, None, &server, file, a_reading(Landed::DiscardedTheVersionMoved));
+        assert_eq!(
+            serde_json::to_string(&said).unwrap(),
+            serde_json::to_string(&vec![plainly("Blender version changed during the read. Read the file again.")]).unwrap()
+        );
+        let control = std::sync::Arc::new(crate::reading_the_file::AReadControl::new());
+        control.stop();
+        held.read_controls.insert(keyed(&server, file), control);
+        let said = the_read_lands_in(&mut held, None, &server, file, a_reading(Landed::Stored));
+        assert!(said.is_empty(), "a stored reading is not said as stopped");
+        assert!(!held.read_controls.contains_key(&keyed(&server, file)));
+    }
+
+    #[test]
+    fn fourth_part_4_3_stop_discards_a_completed_read_before_it_can_replace_values() {
+        use smoozy_render_settings::acting::pre_load::HoldsTheFilesHalf;
+        use smoozy_render_settings::file_half::{StartedUnder, Landed};
+        use crate::reading_the_file::{TheFilesHalfOfThisRun, WhatTheReadLearnt, AReadControl};
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let mut held = a_run_with_a_reading();
+        let key = FileKey { server: an_identity(&server), path: file.into() };
+        let before = held.readings.standing(&key).unwrap().clone();
+        let control = std::sync::Arc::new(AReadControl::new());
+        held.read_controls.insert(keyed(&server, file), control.clone());
+        let held = Mutex::new(held);
+        let landing = TheFilesHalfOfThisRun { held: &held, server: &server, file, learnt: std::sync::Arc::new(Mutex::new(WhatTheReadLearnt::default())) };
+        let mut changed = before.settings.clone();
+        changed.scenes[0].resolution_percentage = 25;
+        control.stop();
+        let landed = landing.a_reading_landed(key.clone(), &StartedUnder {
+            version_pick: before.taken_by.clone(), file_identity: before.file_identity.clone(),
+        }, changed, Some(&before.taken_by), &before.file_identity, std::time::SystemTime::now());
+        assert_eq!(landed, Landed::DiscardedTheFileMoved);
+        assert_eq!(held.lock().unwrap().readings.standing(&key).unwrap().settings, before.settings);
+    }
+    #[test]
+    fn fourth_part_4_3_the_panel_carries_elapsed_stop_and_preserves_the_first_start() {
+        let mut held = a_run_with_a_reading();
+        let server = a_server();
+        let file = "/ephemeral/smoozy/assets/kitchen_v14.blend";
+        let mark = keyed(&server, file);
+        let control = std::sync::Arc::new(crate::reading_the_file::AReadControl::new());
+        held.read_controls.insert(mark.clone(), control.clone());
+        held.reading_now.insert(mark, true);
+        let panel = the_panel(&held, &server, file);
+        assert!(panel.the_read_elapsed_seconds.is_some());
+        assert_eq!(panel.stop_read.as_str(), "Stop");
+        assert!(!panel.the_read_is_stopping);
+        control.stop();
+        let panel = the_panel(&held, &server, file);
+        assert!(panel.the_read_is_stopping);
+        assert_eq!(panel.stopping_read.as_str(), "Stopping…");
+        assert!(held.read_controls.values().any(|first| std::sync::Arc::ptr_eq(first, &control)));
+    }
+}

@@ -54,11 +54,12 @@ use crate::board::instructions::{
 use crate::board::text::how_long_it_counts;
 use crate::job_messages::{
     a_frame_cannot_be_sent_yet, a_stop_to_offer, the_act_was_not_done, the_answer_already_applied,
-    the_answer_was_applied, the_job_already_ended, the_stop_question,
+    the_answer_was_applied, the_job_already_ended, the_stop_question_for, the_stop_questions_words,
     the_stop_was_sent, the_stops_outcome, the_submissions_outcome, the_waiting_message,
     the_words_could_not_be_read, the_words_in_the_chat, AComposedMessage, AStopsOutcome, AStream,
-    ASubmissionsOutcome, AWaitingJob, TheAnswer, WhatTheHoldWaitsFor, ANSWER_A_WAITING_JOB,
-    ASK_TO_STOP_THIS_JOB, KEEP_RENDERING, SEND_THE_WORDS, STOP_THIS_JOB, STOP_AN_ENDED_JOB, TRY_IT_AGAIN,
+    AStopQuestion, ASubmissionsOutcome, AWaitingJob, TheAnswer, WhatTheHoldWaitsFor, ANSWER_A_WAITING_JOB,
+    ASK_TO_CANCEL_THE_JOB, ASK_TO_STOP_THIS_JOB, KEEP_RENDERING, KEEP_THE_JOB, SEND_THE_WORDS, STOP_THIS_JOB,
+    STOP_AN_ENDED_JOB, TRY_IT_AGAIN, RESUME_IT,
 };
 use crate::listener::{ActsOnAnInstruction, Notes, TheListener};
 use crate::pacing::{AClassOfSend, HowASendEnded, TheSendQueue};
@@ -139,14 +140,23 @@ pub trait TheSupervisorsCommandPath: Send {
     /// **A2 — one release command on the hold** (`Rented-server runtime` U9),
     /// first recorded wins (`Rented-server runtime` U13).
     fn release_a_hold(&mut self, operation: &str, hold: &str, answer: TheAnswer) -> Result<ARecordedOutcome, String>;
+    /// **`Telegram` C1d — this machine's keeper of each job's own message**,
+    /// for D0's question asked in place on it. A path with none asks with a
+    /// new message, as before. Added 2026-11-09, the twenty-eighth notes, note
+    /// 18.
+    fn the_jobs_own_messages(&self) -> Option<crate::status::TheJobsOwnMessages> {
+        None
+    }
     /// **Y1 — the same job submitted again**, composed from its immutable
     /// manifest and kept records (`Job files and outputs` M2), **its new job
     /// identity issued by the supervisor before the submission is composed**
     /// (`State, identity and recovery` Y7a). `submission` is the
     /// submission's own operation identity, one per button, so a second press
     /// finds the recorded submission (`Server protocol and transfers` C4;
-    /// `Telegram` R4); `operation` is the press's.
-    fn submit_again(&mut self, operation: &str, submission: &str, failed_job: &str) -> Result<ARecordedOutcome, String>;
+    /// `Telegram` R4); `operation` is the press's. **`from` is *Resume*'s
+    /// frame** (`Telegram` Y4a as changed 2026-11-11): the copied range is
+    /// every frame the job asked for from it on; none for *Submit again*.
+    fn submit_again(&mut self, operation: &str, submission: &str, failed_job: &str, from: Option<i64>) -> Result<ARecordedOutcome, String>;
     /// **R14, I4 and I5 — a routed frame request, answered on the owning
     /// machine**: the picture sent from the derivative set, a cleared one made
     /// again through the preview route, or the negative case said from the
@@ -156,7 +166,7 @@ pub trait TheSupervisorsCommandPath: Send {
     /// request** — a desk process, a test — and the user is told the frame
     /// cannot be sent from this server yet, as before. Added 2026-10-16, the
     /// Telegram worker's piece 6.
-    fn answer_a_frame_request(&mut self, operation: &str, job: &str, frame: u64) -> Option<Result<ARecordedOutcome, String>> {
+    fn answer_a_frame_request(&mut self, operation: &str, job: &str, frame: i64) -> Option<Result<ARecordedOutcome, String>> {
         let _ = (operation, job, frame);
         None
     }
@@ -165,7 +175,7 @@ pub trait TheSupervisorsCommandPath: Send {
     /// (I2): `Some(None)` where it holds none, and **`None` where this path
     /// has no actor for a frame request**, as [`Self::answer_a_frame_request`].
     /// Added 2026-10-31, the Telegram discussion, the server half.
-    fn the_newest_frame_held(&mut self, job: &str) -> Option<Option<u64>> {
+    fn the_newest_frame_held(&mut self, job: &str) -> Option<Option<i64>> {
         let _ = job;
         None
     }
@@ -324,6 +334,11 @@ impl WhyTheButtonsStayed {
 /// **On a companion's Stop record: the message holds nothing but this button**
 /// (`Telegram` C1b's line of 2026-11-02).
 const THE_MESSAGE_SAYS_ONLY_THIS: &str = "the_message_says_only_its_stop";
+/// **`Telegram` D2 as changed 2026-11-13 — a question message that becomes
+/// *Stop sent.* and goes once the job's ending is told**, on its records.
+const IT_GOES_ONCE_SETTLED: &str = "goes_once_settled";
+/// The same, once it has gone (or Telegram refused, so it stays for good).
+const IT_HAS_GONE: &str = "in_between_gone";
 
 /// **Whether an edit taking buttons off is done.** A crash after the edit but
 /// before its durable mark replays the same markup, which Telegram answers
@@ -440,6 +455,102 @@ impl TheJobMessages {
     /// tap is still answered. A message whose every record is already marked
     /// is not edited again; a failed edit marks nothing, so it is owed still.
     /// Gives back how many records were marked.
+    /// **Every button off a message, whatever its records say** — for a
+    /// message this run has just put buttons back on, where the records may
+    /// already read removed. Its records are marked removed too.
+    pub fn every_button_is_taken_off(&mut self, message: i64, class: AClassOfSend) -> Result<usize, WhyTheButtonsStayed> {
+        let conversation = self.conversation;
+        let ended = send_and_wait(
+            &self.queue,
+            class,
+            Box::new(move |c: &TheClient| c.edit_message_reply_markup(conversation, message, json!({ "inline_keyboard": [] }))),
+        );
+        if !the_edit_is_done(&ended) {
+            return Err(WhyTheButtonsStayed::TheEdit { message, ended });
+        }
+        let records = self.store.the_action_contexts().map_err(|why| WhyTheButtonsStayed::TheStore(why.0))?;
+        let mut marked = 0;
+        for record in records.iter().filter(|r| {
+            r.conversation == self.conversation && r.source_message == Some(message) && r.payload["stop_removed"] != json!(true)
+        }) {
+            let mut record = record.clone();
+            record.payload["stop_removed"] = json!(true);
+            self.store.record_an_action_context(record).map_err(|why| WhyTheButtonsStayed::TheStore(why.0))?;
+            marked += 1;
+        }
+        Ok(marked)
+    }
+
+    /// **`Telegram` D2 as changed 2026-11-13 — a stop's question of its own,
+    /// confirmed, is marked to go once the job's ending is told.**
+    pub fn the_question_goes_once_settled(&mut self, message: i64) -> Result<usize, String> {
+        let records = self.store.the_action_contexts().map_err(|why| why.0)?;
+        let mut marked = 0;
+        for record in records.into_iter().filter(|r| r.conversation == self.conversation && r.source_message == Some(message)) {
+            let mut record = record;
+            if record.payload[IT_GOES_ONCE_SETTLED] == json!(true) {
+                continue;
+            }
+            record.payload[IT_GOES_ONCE_SETTLED] = json!(true);
+            self.store.record_an_action_context(record).map_err(|why| why.0)?;
+            marked += 1;
+        }
+        Ok(marked)
+    }
+
+    /// **`Telegram` D2 and I4 as changed 2026-11-13 — one message said in
+    /// between, deleted by its identity.** Accepted, or refused (sent 48 hours
+    /// or more before, or already gone), it is done; only one that reached
+    /// nothing is not.
+    pub fn delete_an_in_between_message(&mut self, message: i64) -> HowASendEnded {
+        let conversation = self.conversation;
+        send_and_wait(
+            &self.queue,
+            AClassOfSend::EndingsHoldsAndDrops,
+            Box::new(move |c: &TheClient| c.delete_an_in_between_message(conversation, message)),
+        )
+    }
+
+    /// **`Telegram` D2 as changed 2026-11-13, the Creator's addition — the
+    /// job's questions that became *Stop sent.* go**, once its ending is told.
+    /// Gives back how many went; a deletion that reached nothing is tried
+    /// again at the next call.
+    pub fn the_in_between_messages_go(&mut self, job: &str) -> Result<usize, String> {
+        let records = self.store.the_action_contexts().map_err(|why| why.0)?;
+        let owed: std::collections::BTreeSet<i64> = records
+            .iter()
+            .filter(|r| {
+                r.conversation == self.conversation
+                    && r.job.as_deref() == Some(job)
+                    && r.payload[IT_GOES_ONCE_SETTLED] == json!(true)
+                    && r.payload[IT_HAS_GONE] != json!(true)
+            })
+            .filter_map(|r| r.source_message)
+            .collect();
+        let mut gone = 0;
+        let mut not_reached = Vec::new();
+        for message in owed {
+            match self.delete_an_in_between_message(message) {
+                HowASendEnded::HandedBack(WhyTheCallFailed::NotReached(why)) => {
+                    self.note(&format!("the in-between message {message} was not reached: {why}"));
+                    not_reached.push(message);
+                    continue;
+                }
+                HowASendEnded::Accepted(_) => gone += 1,
+                _ => self.note(&format!("the in-between message {message} was refused deletion and stays")),
+            }
+            for record in records.iter().filter(|r| r.source_message == Some(message)) {
+                let mut record = record.clone();
+                record.payload[IT_HAS_GONE] = json!(true);
+                self.store.record_an_action_context(record).map_err(|why| why.0)?;
+            }
+        }
+        if !not_reached.is_empty() {
+            return Err(format!("the in-between messages {not_reached:?} were not reached; tried again next time"));
+        }
+        Ok(gone)
+    }
+
     pub fn remove_every_button_on(&mut self, message: i64, class: AClassOfSend) -> Result<usize, WhyTheButtonsStayed> {
         let records = self.store.the_action_contexts().map_err(|why| WhyTheButtonsStayed::TheStore(why.0))?;
         let on_it: Vec<_> = records
@@ -501,7 +612,7 @@ impl TheJobMessages {
     /// and the buttons to attach, only once all are written. Each record's
     /// labels carry the button's own label, for what the user is told about it
     /// (R7, Rule 9; fix-here item 13).
-    fn the_buttons_recorded_for(
+    pub(crate) fn the_buttons_recorded_for(
         &mut self,
         message: i64,
         composed: &AComposedMessage,
@@ -517,16 +628,40 @@ impl TheJobMessages {
             if button.action == KEEP_RENDERING || payload["confirmed"] == json!(true) {
                 payload["confirmation_message"] = json!(message);
             }
+            // **`Telegram` D0 as changed 2026-11-09: a Stop on the job's own
+            // message knows it**, so a press asks in place (C1d).
+            if payload[crate::status::THE_JOBS_MESSAGE] == json!(true) {
+                payload[crate::status::THE_JOBS_MESSAGE] = json!(message);
+            }
+            // **`Telegram` A2 as changed 2026-11-09: the question's buttons
+            // know their message**, so *Cancel job* and *Keep the job* change
+            // the question in place (the twenty-eighth notes, note 16).
+            let a_questions_button = [ANSWER_A_WAITING_JOB, ASK_TO_CANCEL_THE_JOB, KEEP_THE_JOB].contains(&button.action);
+            if a_questions_button {
+                payload["question_message"] = json!(message);
+            }
             if let Some(fields) = payload.as_object_mut() {
-                // Y1 and R4: the submission's own operation identity, one per
-                // button, so a second press lands on the supervisor's idempotency.
-                if button.action == TRY_IT_AGAIN {
-                    let Ok(submission) = Identity::issue(IdentityKind::Operation) else {
-                        return Err(WhyAMessageWasNotSent::SentWithoutItsButtons { message });
+                // Y1 and R4: the submission's own operation identity, so a
+                // second press lands on the supervisor's idempotency.
+                // **`Telegram` R4a, the leftovers of the Rough what-if answers
+                // (405): one identity per failed job, not per button** — the
+                // one already on a *Submit again* or *Resume* record for this
+                // job is used again, so a press on another message, or the
+                // other of the two buttons, is told *Already submitted again
+                // at …* rather than making a second copy.
+                if button.action == TRY_IT_AGAIN || button.action == RESUME_IT {
+                    let submission = match self.the_submission_already_issued_for(subject.job.as_deref()) {
+                        Some(held) => held,
+                        None => {
+                            let Ok(submission) = Identity::issue(IdentityKind::Operation) else {
+                                return Err(WhyAMessageWasNotSent::SentWithoutItsButtons { message });
+                            };
+                            submission.as_text()
+                        }
                     };
-                    fields.insert("submission".into(), json!(submission.as_text()));
+                    fields.insert("submission".into(), json!(submission));
                 }
-                if button.action == ANSWER_A_WAITING_JOB {
+                if a_questions_button {
                     fields.insert("job".into(), json!(subject.job));
                 }
                 if let Some(labels) = fields.get_mut("labels").and_then(Value::as_object_mut) {
@@ -537,12 +672,12 @@ impl TheJobMessages {
                 &key,
                 self.conversation,
                 &subject.owning_machine,
-                if button.action == ANSWER_A_WAITING_JOB {
+                if a_questions_button {
                     None
                 } else {
                     subject.job.as_deref()
                 },
-                if button.action == ANSWER_A_WAITING_JOB || button.action == STOP_AN_ENDED_JOB {
+                if a_questions_button || button.action == STOP_AN_ENDED_JOB {
                     subject.hold.as_deref()
                 } else {
                     None
@@ -560,10 +695,25 @@ impl TheJobMessages {
                 return Err(WhyAMessageWasNotSent::SentWithoutItsButtons { message });
             }
             let mut item = json!({"text": button.label, "callback_data": token});
-            if button.label == "Stop this job" { item["style"] = json!("danger"); }
+            if button.label == "Stop this job" || button.label == "Cancel this job" { item["style"] = json!("danger"); }
             rows.push(json!([item]));
         }
         Ok(json!({ "inline_keyboard": rows }))
+    }
+
+    /// **`Telegram` R4a: the submission identity already on a *Submit again*
+    /// or *Resume* record for this job**, where one stands in the worker's
+    /// state. A store that cannot be read gives none, and the button then
+    /// takes a fresh one, as before R4a.
+    fn the_submission_already_issued_for(&self, job: Option<&str>) -> Option<String> {
+        let job = job?;
+        self.store
+            .the_action_contexts()
+            .ok()?
+            .into_iter()
+            .filter(|record| record.job.as_deref() == Some(job))
+            .filter(|record| record.action == TRY_IT_AGAIN || record.action == RESUME_IT)
+            .find_map(|record| record.payload["submission"].as_str().map(str::to_string))
     }
 
     /// **R1, E3, A2 and Y4a — a text message with buttons.** The message is
@@ -620,6 +770,66 @@ impl TheJobMessages {
         }
     }
 
+    /// **`Telegram` C1d and C7a — a job's own message sent**, as `how` says
+    /// (V1e: its sound), registered as about its job (R1b), **its C7a record
+    /// written once Telegram accepts it**, and only then its buttons' records
+    /// and its buttons, on one row (C1c). Gives back the message identity.
+    pub fn send_the_jobs_message(
+        &mut self,
+        composed: &AComposedMessage,
+        subject: &TheSubject,
+        how: crate::transport::HowItIsSent,
+    ) -> Result<i64, WhyAMessageWasNotSent> {
+        let class = AClassOfSend::EndingsHoldsAndDrops;
+        let (conversation, text) = (self.conversation, composed.text.clone());
+        let sent = send_and_wait(&self.queue, class, Box::new(move |c: &TheClient| c.send_marked_message_as(conversation, &text, None, how)));
+        let Some(message) = accepted_id(&sent) else {
+            self.note("a job's message was not accepted");
+            return Err(WhyAMessageWasNotSent::NotSent(sent));
+        };
+        let Some(job) = subject.job.clone() else { return Ok(message) };
+        self.register(
+            message,
+            crate::worker_state::WhatAMessageIsAbout::AJob { job: job.clone(), generation: Some(subject.generation.clone()), frame: None, layer: None },
+        );
+        let record = crate::worker_state::AJobsMessage { job, generation: subject.generation.clone(), message };
+        if let Err(why) = self.store.record_a_jobs_message(record) {
+            self.note(&format!("the job's message {message} was not recorded: {}", why.0));
+        }
+        if composed.buttons.is_empty() {
+            return Ok(message);
+        }
+        let markup = crate::status::on_one_row(self.the_buttons_recorded_for(message, composed, subject)?);
+        let (conversation, text) = (self.conversation, composed.text.clone());
+        let added = send_and_wait(
+            &self.queue,
+            class,
+            Box::new(move |c: &TheClient| c.edit_marked_message(conversation, message, &text, Some(markup.clone()))),
+        );
+        if matches!(added, HowASendEnded::Accepted(_)) {
+            Ok(message)
+        } else {
+            Err(WhyAMessageWasNotSent::TheButtonsWereNotAdded { message })
+        }
+    }
+
+    /// **Every record on one message marked removed**, none deleted, so no
+    /// later rebuild puts a button back and a late press is still answered
+    /// (C1b). Gives back how many were marked.
+    pub fn every_record_on_it_is_marked_removed(&mut self, message: i64) -> Result<usize, WhyTheButtonsStayed> {
+        let records = self.store.the_action_contexts().map_err(|why| WhyTheButtonsStayed::TheStore(why.0))?;
+        let mut marked = 0;
+        for record in records.iter().filter(|r| {
+            r.conversation == self.conversation && r.source_message == Some(message) && r.payload["stop_removed"] != json!(true)
+        }) {
+            let mut record = record.clone();
+            record.payload["stop_removed"] = json!(true);
+            self.store.record_an_action_context(record).map_err(|why| WhyTheButtonsStayed::TheStore(why.0))?;
+            marked += 1;
+        }
+        Ok(marked)
+    }
+
     /// **R1 — attach buttons to a message already sent, changing nothing else**
     /// (`TheClient::edit_message_reply_markup`, U4's call).
     fn attach(&mut self, message: i64, markup: Value, class: AClassOfSend) -> Result<(), WhyAMessageWasNotSent> {
@@ -657,28 +867,6 @@ impl TheJobMessages {
             composed.buttons.push(a_stop_to_offer(server, label, false));
         }
         self.send_with_buttons_in(&composed, subject, class)
-    }
-
-    /// **C1b's short companion, after an album, which cannot carry a button
-    /// itself**: the machine, the job and the frame, with *Stop this job*. **Its
-    /// Stop's durable record says it holds nothing else**, which is how the
-    /// removal knows to delete it (C1b's line of 2026-11-02). **A subject with
-    /// no job is never live, so nothing is sent**: there would be nothing to say.
-    pub fn send_a_companion(
-        &mut self,
-        text: AMarkedText,
-        subject: &TheSubject,
-        server: &(impl TheServersName + ?Sized),
-        label: &str,
-        class: AClassOfSend,
-    ) -> Result<(), WhyAMessageWasNotSent> {
-        if subject.job.is_none() {
-            return Ok(());
-        }
-        let mut stop = a_stop_to_offer(server, label, false);
-        stop.payload[THE_MESSAGE_SAYS_ONLY_THIS] = json!(true);
-        self.send_with_buttons_in(&AComposedMessage { text, buttons: vec![stop] }, subject, class)
-            .map(|_| ())
     }
 
     /// **C1b at composition**: Stop where `live`, none where the job has
@@ -733,20 +921,21 @@ impl TheJobMessages {
         )
     }
 
-    /// Attach to a lone accepted message; for an album use a separate message.
+    /// **Attach *Stop this job* to a lone accepted message.** An album gets
+    /// none and **nothing follows it**: the companion that once carried its
+    /// Stop is not sent from 2026-11-09 (`Telegram` C1b, the twenty-eighth
+    /// notes, note 19). An older release's companion is still deleted when its
+    /// job ends ([`Self::remove_the_stops_where`]).
     pub fn control_the_accepted_message(
         &mut self,
         ended: &HowASendEnded,
         subject: &TheSubject,
         server: &(impl TheServersName + ?Sized),
         label: &str,
-        companion: &str,
         class: AClassOfSend,
     ) -> Result<(), WhyAMessageWasNotSent> {
         match ended {
-            HowASendEnded::Accepted(result) if result.is_array() => {
-                self.send_a_companion(companion.into(), subject, server, label, class)
-            }
+            HowASendEnded::Accepted(result) if result.is_array() => Ok(()),
             _ => match accepted_id(ended) {
                 Some(message) => self.attach_a_stop(message, subject, server, label, class),
                 None => Ok(()),
@@ -803,17 +992,45 @@ impl TheJobMessages {
         self.send_the_waiting_question_composed(waiting, composed, subject)
     }
 
+    /// **`Telegram` C1b and A2 as changed 2026-11-09: the question carries
+    /// its two answers and no Stop** — *Cancel job* is how the job is ended
+    /// there, and asks in place first. Each answer carries the question's own
+    /// words, so asking in place and *Keep the job* change nothing else. The
+    /// Creator's twenty-eighth notes, note 16.
     fn send_the_waiting_question_composed(
         &mut self,
         waiting: &AWaitingJob,
-        composed: AComposedMessage,
+        mut composed: AComposedMessage,
         subject: &TheSubject,
     ) -> Result<Option<i64>, WhyAMessageWasNotSent> {
-        if subject.job.is_some() {
-            self.send_about_with_buttons(&composed, subject, &waiting.server, &waiting.label)
-                .map(Some)
+        let _ = waiting;
+        let words = json!({ "text": composed.text.text, "entities": composed.text.entities });
+        for button in &mut composed.buttons {
+            button.payload["question"] = words.clone();
+        }
+        self.send_with_buttons(&composed, subject).map(Some)
+    }
+
+    /// **`Telegram` A2: the question changed in place** — its words and its
+    /// buttons, each button's record written against the question before the
+    /// edit attaches it (R1). `Err` where the edit was not taken.
+    pub fn the_question_is_changed(
+        &mut self,
+        message: i64,
+        composed: &AComposedMessage,
+        subject: &TheSubject,
+    ) -> Result<(), WhyAMessageWasNotSent> {
+        let markup = self.the_buttons_recorded_for(message, composed, subject)?;
+        let (conversation, text) = (self.conversation, composed.text.clone());
+        let changed = send_and_wait(
+            &self.queue,
+            AClassOfSend::RoutedAnswersAndAcknowledgements,
+            Box::new(move |c: &TheClient| c.edit_marked_message(conversation, message, &text, Some(markup.clone()))),
+        );
+        if matches!(changed, HowASendEnded::Accepted(_)) {
+            Ok(())
         } else {
-            self.send_with_buttons(&composed, subject).map(Some)
+            Err(WhyAMessageWasNotSent::NotSent(changed))
         }
     }
 
@@ -940,6 +1157,20 @@ impl TheOwnersActs {
         let ended = send_text(&self.queue, self.conversation, class, text);
         let ok = matches!(ended, HowASendEnded::Accepted(_));
         self.note(&format!("answered the user, accepted = {ok}"));
+        ended
+    }
+
+    /// **`Telegram` R16 as changed 2026-11-13 — *Already answered.* goes
+    /// without a sound**: it only tells a late repeat that nothing changed
+    /// (Telegram when things aren't ideal, problem 2).
+    fn answer_without_a_sound(&mut self, text: AMarkedText) -> HowASendEnded {
+        let conversation = self.conversation;
+        let ended = send_and_wait(
+            &self.queue,
+            AClassOfSend::RoutedAnswersAndAcknowledgements,
+            Box::new(move |c: &TheClient| c.send_marked_message_as(conversation, &text, None, crate::transport::HowItIsSent::silent(true))),
+        );
+        self.note(&format!("answered the user without a sound, accepted = {}", matches!(ended, HowASendEnded::Accepted(_))));
         ended
     }
 
@@ -1118,7 +1349,6 @@ impl TheOwnersActs {
                 subject,
                 server,
                 label,
-                &format!("{}\n{label}", server.label()),
                 AClassOfSend::RoutedAnswersAndAcknowledgements,
             );
         }
@@ -1130,8 +1360,82 @@ impl TheOwnersActs {
     /// job's ending does not rebuild *Keep rendering* onto it
     /// ([`TheJobMessages::remove_every_button_on`]). Without the worker's
     /// store the buttons are cleared alone, as before.
+    /// **`Telegram` A2 as changed 2026-11-09: *Cancel job* asks in place, and
+    /// *Keep the job* puts the two answers back** — the question itself is
+    /// changed, never a new message sent. **Only while the hold is
+    /// unanswered**: once an answer is recorded, from the desk or the phone,
+    /// the press says so and changes nothing, so *Keep the job* never brings
+    /// the answers back. The Creator's twenty-eighth notes, note 16.
+    fn the_cancel_is_asked_in_place(&mut self, entry: &AnEntry, hold: &str, labels: &TheLabels) -> Result<(), String> {
+        if !self.holds.the_hold_is_unanswered(hold) {
+            self.answer_without_a_sound(a_user_message(&labels.server, &labels.label, "", "Already answered."));
+            return self.supervisor.record_the_outcome(&entry.operation, &ARecordedOutcome::Failed("the hold is answered".into()));
+        }
+        let (Some(message), Some(mut messages)) = (entry.payload["question_message"].as_i64(), self.messages()) else {
+            return self.supervisor.record_the_outcome(
+                &entry.operation,
+                &ARecordedOutcome::Failed("the question's message is not known".into()),
+            );
+        };
+        let question = AMarkedText {
+            text: entry.payload["question"]["text"].as_str().unwrap_or_default().to_string(),
+            entities: entry.payload["question"]["entities"].as_array().cloned().unwrap_or_default(),
+        };
+        let frames_held = entry.payload["frames_held"].as_u64().unwrap_or_default();
+        let the_frames = entry.payload["the_frames"].as_str().unwrap_or_default().to_string();
+        let owning_machine = match &entry.addressee {
+            crate::board::instructions::TheAddressee::Machine(m) => m.clone(),
+            _ => return Err("a question has no owner".into()),
+        };
+        let subject = TheSubject {
+            owning_machine,
+            job: entry.payload["job"].as_str().map(str::to_string),
+            hold: Some(hold.to_string()),
+            generation: entry.payload["generation"].as_str().unwrap_or_default().to_string(),
+        };
+        let mut composed = if entry.action == ASK_TO_CANCEL_THE_JOB {
+            crate::job_messages::the_question_asks_to_cancel(&question, &labels.server, &labels.label, frames_held, &the_frames)
+        } else {
+            AComposedMessage {
+                text: question.clone(),
+                buttons: crate::job_messages::the_questions_two_answers(&labels.server, &labels.label, frames_held, &the_frames),
+            }
+        };
+        let words = json!({ "text": question.text, "entities": question.entities });
+        for button in &mut composed.buttons {
+            button.payload["question"] = words.clone();
+        }
+        match messages.the_question_is_changed(message, &composed, &subject) {
+            Ok(()) => {
+                // **An answer recorded while the question was being changed**
+                // — the desk's, its buttons already taken away — must not leave
+                // the answers back on an answered question (Sol's fresh look,
+                // 2026-11-09): read again, and take them off.
+                if !self.holds.the_hold_is_unanswered(hold) {
+                    // **Whatever the records say**: the answer's own removal
+                    // may already have marked them removed before this edit
+                    // put buttons back (Sol's second look, 2026-11-09).
+                    let _ = messages.every_button_is_taken_off(message, AClassOfSend::RoutedAnswersAndAcknowledgements);
+                }
+                self.supervisor.record_the_outcome(&entry.operation, &ARecordedOutcome::Done)
+            }
+            Err(WhyAMessageWasNotSent::NotSent(HowASendEnded::HandedBack(WhyTheCallFailed::NotReached(why)))) => Err(why),
+            Err(why) => self.supervisor.record_the_outcome(
+                &entry.operation,
+                &ARecordedOutcome::Failed(format!("the question was not changed: {why:?}")),
+            ),
+        }
+    }
+
     fn close_the_question(&self, entry: &AnEntry) {
         if let Some(message) = entry.payload["confirmation_message"].as_i64() {
+            // **`Telegram` D0 asked in place on the job's own message**: its
+            // question goes and C1d's words and buttons come back at once.
+            if let (Some(keeper), Some(mut messages)) = (self.supervisor.the_jobs_own_messages(), self.messages()) {
+                if keeper.the_question_is_answered(&mut messages, message) {
+                    return;
+                }
+            }
             if let Some(mut messages) = self.messages() {
                 let _ = messages.remove_every_button_on(message, AClassOfSend::RoutedAnswersAndAcknowledgements);
                 return;
@@ -1177,11 +1481,17 @@ impl TheOwnersActs {
         };
         // **E3d/R7a: ordinary log text under marked names, never markup**, in C6's first class: it is the answer to a tap.
         let told = the_words_in_the_chat(&labels.server, &labels.label, stream, &bytes, incomplete);
+        // **E3e (2026-11-12): one button under the log copies its last
+        // line** — unless the job is live, where the message carries C1b's
+        // Stop instead: a message holds one keyboard, and the Stop is put on
+        // and taken off by an edit of it.
+        let live = self.it_is_live(Self::subject_of(entry).as_ref());
+        let the_copy_button = crate::job_messages::the_copy_button_under(&told).filter(|_| !live);
         let (conversation, text) = (self.conversation, told.text.clone());
         let ended = send_and_wait(
             &self.queue,
             AClassOfSend::RoutedAnswersAndAcknowledgements,
-            Box::new(move |c: &TheClient| c.send_marked_message(conversation, &text, None)),
+            Box::new(move |c: &TheClient| c.send_marked_message(conversation, &text, the_copy_button.clone())),
         );
         let ok = matches!(ended, HowASendEnded::Accepted(_));
         self.note(&format!(
@@ -1196,14 +1506,12 @@ impl TheOwnersActs {
         // **C1b: requested output carries Stop only while its job is live**;
         // the words of a job that has ended — the usual case, asked for after
         // a failure — carry none, and neither does the file after them.
-        let live = self.it_is_live(Self::subject_of(entry).as_ref());
         if let (true, Some(mut messages), Some(subject)) = (live, self.messages(), Self::subject_of(entry)) {
             let _ = messages.control_the_accepted_message(
                 &ended,
                 &subject,
                 &labels.server,
                 &labels.label,
-                "",
                 AClassOfSend::RoutedAnswersAndAcknowledgements,
             );
         }
@@ -1291,7 +1599,8 @@ impl TheOwnersActs {
 fn the_words_of(action: &str) -> &'static str {
     match action {
         STOP_THIS_JOB | ASK_TO_STOP_THIS_JOB => "Stop this job",
-        TRY_IT_AGAIN => "Retry",
+        TRY_IT_AGAIN => "Submit again",
+        RESUME_IT => "Resume",
         ANSWER_A_WAITING_JOB => "the answer",
         _ => "the action",
     }
@@ -1329,9 +1638,16 @@ impl ActsOnAnInstruction for TheOwnersActs {
             self.say_it_has_already_ended(&labels)?;
             return self.supervisor.record_the_outcome(&entry.operation, &ARecordedOutcome::Done);
         }
-        // **V1d — the tap on the ask started its round where it was resolved**
-        // (`routing`); the press itself is recorded and nothing else.
+        // **V1d — the tap on the ask: the listener starts its round when it
+        // finds this instruction on its board** (`routing`, R10 as changed
+        // 2026-11-13); the press itself is recorded and nothing else.
         if entry.action == crate::routing::context::CHOOSING_THE_PHONES_CHOICE {
+            return self.supervisor.record_the_outcome(&entry.operation, &ARecordedOutcome::Done);
+        }
+        // **R1a as added 2026-11-13 — a reply about no job: the listener
+        // handles it as no reply when it finds this instruction on its board**
+        // (`routing`, as changed the same day); this only acknowledges.
+        if entry.action == crate::routing::context::AS_IF_NOT_A_REPLY {
             return self.supervisor.record_the_outcome(&entry.operation, &ARecordedOutcome::Done);
         }
         if entry.action == crate::routing::context::EVERY_LIVE_JOBS_REPORTING {
@@ -1339,6 +1655,9 @@ impl ActsOnAnInstruction for TheOwnersActs {
         }
         if entry.action == crate::routing::context::ONE_JOBS_REPORTING {
             return self.one_jobs_reporting(entry, &subject, &labels);
+        }
+        if entry.action == ASK_TO_CANCEL_THE_JOB || entry.action == KEEP_THE_JOB {
+            return self.the_cancel_is_asked_in_place(entry, &subject, &labels);
         }
         let confirmation = entry.payload["confirmation_identity"]
             .as_str()
@@ -1352,6 +1671,14 @@ impl ActsOnAnInstruction for TheOwnersActs {
                 || self.holds.the_stop_state(&subject) == crate::routing::gather::AStopState::Ended
             {
                 self.say_it_has_already_ended(&labels)?;
+                // **D2 as changed 2026-11-13: *This job has already ended.*
+                // settles a confirmed stop**, so its question, which the
+                // listener turns into *Stop sent.*, goes now.
+                if entry.action == STOP_THIS_JOB && entry.payload["confirmed"] == json!(true) {
+                    if let (HowStopSentIsSaid::IntoTheQuestion(question), Some(mut messages)) = (how_stop_sent_is_said(entry), self.messages()) {
+                        let _ = messages.delete_an_in_between_message(question);
+                    }
+                }
                 return self.supervisor.record_the_outcome(
                     &entry.operation,
                     &ARecordedOutcome::Failed("the job or attempt has ended".into()),
@@ -1367,11 +1694,7 @@ impl ActsOnAnInstruction for TheOwnersActs {
                 .the_recorded_outcome(confirmation.as_deref().unwrap())?
                 .is_some()
             {
-                self.answer_about(
-                    entry,
-                    &labels,
-                    a_user_message(&labels.server, &labels.label, "", "Already answered."),
-                );
+                self.answer_without_a_sound(a_user_message(&labels.server, &labels.label, "", "Already answered."));
                 return self
                     .supervisor
                     .record_the_outcome(&entry.operation, &ARecordedOutcome::Done);
@@ -1392,7 +1715,7 @@ impl ActsOnAnInstruction for TheOwnersActs {
                 let Some(mut messages) = self.messages() else {
                     self.answer(
                         AClassOfSend::RoutedAnswersAndAcknowledgements,
-                        "Could not confirm the stop. Try again.".into(),
+                        "Stop not sent. Try again.".into(),
                     );
                     return self.supervisor.record_the_outcome(
                         &entry.operation,
@@ -1419,14 +1742,41 @@ impl ActsOnAnInstruction for TheOwnersActs {
                     hold: None,
                     generation: generation.ok_or("a stop has no live generation")?,
                 };
-                let mut question = the_stop_question(
-                    &labels.server,
-                    &labels.label,
-                    self.holds.the_stop_state(&subject)
-                        == crate::routing::gather::AStopState::Waiting,
-                );
+                // **A first-frame check with its range held on it asks to stop
+                // the whole job** (`Queue & History` L19a; the twenty-eighth
+                // notes, note 16). **A range waiting its turn after *Render
+                // all* asks with the pair's sentence** (C1d's *Cancel this
+                // job*, its button carrying the range).
+                let which = match self.holds.the_pair_of_a_check(&subject) {
+                    Some((first_frame, the_frames)) => AStopQuestion::ACheck { first_frame, the_frames },
+                    None if self.holds.the_stop_state(&subject) == crate::routing::gather::AStopState::Waiting => {
+                        match entry.payload["the_frames"].as_str().filter(|frames| !frames.is_empty()) {
+                            Some(the_frames) => AStopQuestion::AWaitingRange { the_frames: the_frames.into() },
+                            None => AStopQuestion::AWaitingJob,
+                        }
+                    }
+                    None => AStopQuestion::ARender,
+                };
+                let mut question = the_stop_question_for(&labels.server, &labels.label, &which);
                 let identity = Identity::issue(IdentityKind::Operation).map_err(|_| "a stop question could not be identified")?.as_text();
                 for button in &mut question.buttons { button.payload["confirmation_identity"] = json!(identity); }
+                // **`Telegram` D0 as changed 2026-11-09: a Stop pressed on the
+                // job's own message asks in place** and sends no new message;
+                // anywhere else, or where that message is no longer the job's,
+                // the question goes as a new message, as before.
+                if let (Some(on), Some(keeper)) =
+                    (entry.payload[crate::status::THE_JOBS_MESSAGE].as_i64(), self.supervisor.the_jobs_own_messages())
+                {
+                    match keeper.the_question_in_place(&mut messages, on, &question, &the_stop_questions_words(&which), &about) {
+                        crate::status::WhatTheEditCameTo::Done => {
+                            return self.supervisor.record_the_outcome(&entry.operation, &ARecordedOutcome::Done);
+                        }
+                        crate::status::WhatTheEditCameTo::TheLineReachedNothing => {
+                            return Err("the question asked in place reached nothing".into());
+                        }
+                        _ => {}
+                    }
+                }
                 match messages.send_with_buttons_in(
                     &question,
                     &about,
@@ -1443,6 +1793,16 @@ impl ActsOnAnInstruction for TheOwnersActs {
                     .record_the_outcome(&entry.operation, &ARecordedOutcome::Done);
             }
             self.close_the_question(entry);
+            // **D2 as changed 2026-11-13 (the Creator's addition): a question
+            // of its own becomes *Stop sent.* and goes once the job's ending is
+            // told**; one asked on the job's own message needs nothing.
+            if let HowStopSentIsSaid::IntoTheQuestion(question) = how_stop_sent_is_said(entry) {
+                if let Some(mut messages) = self.messages() {
+                    if let Err(why) = messages.the_question_goes_once_settled(question) {
+                        self.note(&format!("the question {question} was not marked to go: {why}"));
+                    }
+                }
+            }
         }
         // R1, on the owner: a generation that has ended is acted on by nothing,
         // and the user is told nothing was done.
@@ -1470,7 +1830,14 @@ impl ActsOnAnInstruction for TheOwnersActs {
             }
             TRY_IT_AGAIN => {
                 let submission = entry.payload["submission"].as_str().ok_or("the record carries no submission identity")?.to_string();
-                self.supervisor.submit_again(&entry.operation, &submission, &subject)?
+                self.supervisor.submit_again(&entry.operation, &submission, &subject, None)?
+            }
+            // **`Telegram` Y4a as changed 2026-11-11: *Resume*** — the same
+            // submission, from the frame its button carries.
+            RESUME_IT => {
+                let submission = entry.payload["submission"].as_str().ok_or("the record carries no submission identity")?.to_string();
+                let from = entry.payload["from"].as_i64().ok_or("the record carries no frame to resume from")?;
+                self.supervisor.submit_again(&entry.operation, &submission, &subject, Some(from))?
             }
             SEND_THE_WORDS => {
                 let outcome = self.the_words(entry, &subject, &labels)?;
@@ -1481,7 +1848,7 @@ impl ActsOnAnInstruction for TheOwnersActs {
             // truthfully that the frame cannot be sent yet, and the outcome is
             // recorded, rather than an error that silently acknowledged it.
             SENDING_A_FRAME => {
-                let frame = entry.payload["frame"].as_u64().unwrap_or_default();
+                let frame = entry.payload["frame"].as_i64().unwrap_or_default();
                 // **Since step 10c's Telegram worker, piece 6, the machine's
                 // own path answers it** (I4, I5); a path with no actor keeps
                 // the truthful answer below.
@@ -1580,6 +1947,7 @@ pub struct TheListenersAcknowledgement {
 /// **The stops among entries a holder has newly accepted that it has not yet
 /// said were sent**, with the words for each.
 pub fn the_stops_to_say(accepted: &[AnEntry], said: &HashSet<String>) -> Vec<(String, AMarkedText)> {
+    let mut this_time = HashSet::new();
     accepted
         .iter()
         .filter(|e| {
@@ -1587,6 +1955,9 @@ pub fn the_stops_to_say(accepted: &[AnEntry], said: &HashSet<String>) -> Vec<(St
                 && e.action == STOP_THIS_JOB
                 && e.payload["confirmed"] == json!(true)
                 && !said.contains(&e.operation)
+                // **D2 as changed 2026-11-13: once for each stop**, however
+                // many confirmed taps reach the board.
+                && the_stop_question_of(e).is_none_or(|q| !said.contains(&q) && this_time.insert(q))
         })
         .map(|e| {
             let labels: TheLabels =
@@ -1599,22 +1970,68 @@ pub fn the_stops_to_say(accepted: &[AnEntry], said: &HashSet<String>) -> Vec<(St
         .collect()
 }
 
+/// **`Telegram` D2 as changed 2026-11-13 — where *Stop sent.* is said.**
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HowStopSentIsSaid {
+    /// Confirmed on the job's own message, which says *Stopping.* itself.
+    NotInTheChat,
+    /// Confirmed on a question of its own, which becomes it.
+    IntoTheQuestion(i64),
+    /// An entry naming no question, from an older program.
+    AsAMessage,
+}
+
+pub fn how_stop_sent_is_said(entry: &AnEntry) -> HowStopSentIsSaid {
+    if entry.payload.get(crate::status::THE_QUESTIONS_WORDS).is_some_and(|words| !words.is_null()) {
+        return HowStopSentIsSaid::NotInTheChat;
+    }
+    match entry.payload["confirmation_message"].as_i64() {
+        Some(question) => HowStopSentIsSaid::IntoTheQuestion(question),
+        None => HowStopSentIsSaid::AsAMessage,
+    }
+}
+
+/// **The confirmation question a confirmed stop answers**, by C4's
+/// `stop-question-` identity, where its payload names one.
+fn the_stop_question_of(entry: &AnEntry) -> Option<String> {
+    entry.payload["confirmation_identity"]
+        .as_str()
+        .map(|id| format!("stop-question-{id}"))
+        .or_else(|| entry.payload["confirmation_message"].as_i64().map(|id| format!("stop-question-{id}")))
+}
+
 impl TheListenersAcknowledgement {
     /// **C1b: the acknowledgement that a stop was sent carries no Stop.**
     pub fn before_each_turn(&mut self, listener: &TheListener) {
         let accepted = listener.the_instructions_accepted_lately();
         for (operation, text) in the_stops_to_say(&accepted, &self.said) {
-            let ended = send_text(
-                &self.queue,
-                self.conversation,
-                AClassOfSend::RoutedAnswersAndAcknowledgements,
-                text,
-            );
+            let entry = accepted.iter().find(|e| e.operation == operation && e.action == STOP_THIS_JOB);
+            let question = entry.and_then(the_stop_question_of);
+            // **D2 as changed 2026-11-13 (the Creator's addition): never a
+            // message that stays.**
+            let conversation = self.conversation;
+            let ended = match entry.map(how_stop_sent_is_said).unwrap_or(HowStopSentIsSaid::AsAMessage) {
+                HowStopSentIsSaid::NotInTheChat => HowASendEnded::DroppedAsSuperseded,
+                HowStopSentIsSaid::IntoTheQuestion(message) => send_and_wait(
+                    &self.queue,
+                    AClassOfSend::RoutedAnswersAndAcknowledgements,
+                    Box::new(move |c: &TheClient| {
+                        c.edit_marked_message(conversation, message, &text, Some(json!({ "inline_keyboard": [] })))
+                    }),
+                ),
+                HowStopSentIsSaid::AsAMessage => send_text(
+                    &self.queue,
+                    self.conversation,
+                    AClassOfSend::RoutedAnswersAndAcknowledgements,
+                    text,
+                ),
+            };
             if !matches!(
                 ended,
                 HowASendEnded::HandedBack(WhyTheCallFailed::NotReached(_))
             ) {
                 self.said.insert(operation);
+                self.said.extend(question);
             }
         }
     }
@@ -1712,8 +2129,9 @@ pub mod a_stand_in {
             id: &str,
             submission: &str,
             job: &str,
+            from: Option<i64>,
         ) -> Result<ARecordedOutcome, String> {
-            self.supervisor.submit_again(id, submission, job)
+            self.supervisor.submit_again(id, submission, job, from)
         }
     }
 
@@ -1777,8 +2195,12 @@ pub mod a_stand_in {
             heard.recorded.insert(operation.to_string(), ARecordedOutcome::Done);
             Ok(ARecordedOutcome::Done)
         }
-        fn submit_again(&mut self, operation: &str, submission: &str, failed_job: &str) -> Result<ARecordedOutcome, String> {
+        fn submit_again(&mut self, operation: &str, submission: &str, failed_job: &str, from: Option<i64>) -> Result<ARecordedOutcome, String> {
             let mut heard = self.heard();
+            let failed_job = &match from {
+                Some(from) => format!("{failed_job} from frame {from}"),
+                None => failed_job.to_string(),
+            };
             if let Some(ended) = before_a_command(&mut heard, operation) {
                 return ended;
             }
@@ -1793,7 +2215,10 @@ pub mod a_stand_in {
                     let new_job = Identity::issue(IdentityKind::Job).map_err(|e| format!("{e:?}"))?.as_text();
                     heard.commands.push(format!("submit {failed_job} again as {new_job} under {submission}"));
                     heard.submitted.insert(submission.to_string(), (new_job, SystemTime::now()));
-                    ASubmissionsOutcome::Submitted
+                    match from {
+                        Some(from) => ASubmissionsOutcome::Resumed { from },
+                        None => ASubmissionsOutcome::Submitted,
+                    }
                 }
             };
             heard.submissions.push((failed_job.to_string(), outcome));
@@ -1850,6 +2275,22 @@ mod tests {
         }
     }
 
+    /// **A job this machine still holds that has ended** — the usual state
+    /// of a job whose log is asked for (2026-11-12).
+    struct HeldAndEnded(&'static str);
+    impl ReadsWhatThisMachineHolds for HeldAndEnded {
+        fn the_jobs(&self) -> Vec<AJobAsHeld> {
+            vec![AJobAsHeld {
+                job: self.0.to_string(),
+                label: "Kitchen".into(),
+                generation: "1".into(),
+                record_directory: true,
+                rendering: None,
+                waiting: None,
+            }]
+        }
+    }
+
     fn quiet() -> Notes {
         Box::new(|_| {})
     }
@@ -1882,6 +2323,8 @@ mod tests {
             disk_free_at_the_ending: None,
             no_render_began: false,
             the_reason_the_machine_recorded: None,
+            frames_asked: 40,
+            resume: None,
         }
     }
 
@@ -1922,7 +2365,7 @@ mod tests {
             .map(|c| fields_of(&c.carries)).collect();
         let remaining = &edits.iter().rev().find(|f| f["message_id"] == json!(first)).unwrap()["reply_markup"]["inline_keyboard"];
         let labels: Vec<_> = remaining.as_array().unwrap().iter().map(|row| row[0]["text"].as_str().unwrap()).collect();
-        assert_eq!(labels, ["Send Output log", "Retry"]);
+        assert_eq!(labels, ["Send Output log", "Submit again \u{2014} 40 frames"]);
         assert!(edits.iter().rev().find(|f| f["message_id"] == json!(second)).unwrap()["reply_markup"]["inline_keyboard"].as_array().unwrap().is_empty());
         let after = store.the_action_contexts_bound_to(first).unwrap();
         assert_eq!(after.len(), original.len(), "delayed taps retain every context");
@@ -1991,7 +2434,7 @@ mod tests {
         let try_again = records.iter().find(|r| r.action == TRY_IT_AGAIN).unwrap();
         assert!(try_again.payload["submission"].is_string());
         // R7 and fix-here item 13: the button's own label rides its record.
-        assert_eq!(try_again.payload["labels"]["button"], json!("Retry"));
+        assert_eq!(try_again.payload["labels"]["button"], json!("Submit again \u{2014} 40 frames"));
     }
 
     /// **R1: a record that cannot be written means no button at all.**
@@ -2056,6 +2499,7 @@ mod tests {
             conversation: CHAT,
             source_message: message,
             label: None,
+            pressed_at: None,
         };
         let names = WhatATokenNames::read(&record.token).unwrap();
         let entry = a_taps_resolution(&evidence, 1, &names);
@@ -2091,7 +2535,7 @@ mod tests {
         let service = Arc::new(AStandInService::new());
         service.then_answers(r#"{"ok":true,"result":{"message_id":77}}"#);
         let (mut messages, _) = issuer(&service);
-        messages.send_with_buttons(&the_stop_question("Desk", "Kitchen", false), &job_one()).unwrap();
+        messages.send_with_buttons(&crate::job_messages::the_stop_question("Desk", "Kitchen", false), &job_one()).unwrap();
         let calls = service.heard();
         let rows = &fields_of(&calls[1].carries)["reply_markup"]["inline_keyboard"];
         assert_eq!(rows[0][0]["text"], "Keep rendering");
@@ -2133,8 +2577,74 @@ mod tests {
         }
         let texts = texts_sent(&answers);
         assert_eq!(texts.len(), 2);
-        assert_eq!(texts[0], "Desk\nKitchen\nResubmitted.");
-        assert!(texts[1].starts_with("Desk\nKitchen\nAlready resubmitted at "));
+        assert_eq!(texts[0], "Desk\nKitchen\nSubmitted again.");
+        assert!(texts[1].starts_with("Desk\nKitchen\nAlready submitted again at "));
+    }
+
+    /// **`Telegram` R4a, the leftovers of the Rough what-if answers (405): a
+    /// second *Submit again* or *Resume* for the same job, on another message,
+    /// is told *Already submitted again at …* and makes no second copy.** Both
+    /// buttons of both messages carry one submission identity, so the
+    /// supervisor's own idempotency answers the second press.
+    #[test]
+    fn rough_leftovers_405_a_second_submit_again_for_the_same_job_is_refused() {
+        let service = Arc::new(AStandInService::new());
+        let (mut messages, store) = issuer(&service);
+        let failed = AFailedJob { resume: Some(crate::job_messages::AResume { from: 12, frames: 29 }), ..a_failure(TheCause::TheMachinesOwn) };
+        service.then_answers(r#"{"ok":true,"result":{"message_id":77}}"#);
+        messages.send_with_buttons(&the_failure_message(&failed), &job_one()).unwrap();
+        service.then_answers(r#"{"ok":true,"result":{"message_id":78}}"#);
+        messages.send_with_buttons(&the_failure_message(&failed), &job_one()).unwrap();
+        let submissions: std::collections::HashSet<String> = store
+            .the_action_contexts()
+            .unwrap()
+            .into_iter()
+            .filter(|record| record.action == TRY_IT_AGAIN || record.action == RESUME_IT)
+            .map(|record| record.payload["submission"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(submissions.len(), 1, "one submission identity for the job, on every button of every message");
+
+        let supervisor = AStandInSupervisor::default();
+        let answers = Arc::new(AStandInService::new());
+        let mut acts = owner(&answers, &supervisor, vec!["job-1"]);
+        act_once(&mut acts, &press(&store, 77, TRY_IT_AGAIN, "cb-1"));
+        act_once(&mut acts, &press(&store, 78, TRY_IT_AGAIN, "cb-2"));
+        act_once(&mut acts, &press(&store, 78, RESUME_IT, "cb-3"));
+        let journal = supervisor.heard().submissions.clone();
+        {
+            let heard = supervisor.heard();
+            assert_eq!(heard.submitted.len(), 1, "one copy, whatever was pressed after");
+            assert_eq!(heard.commands.len(), 3);
+            assert!(heard.commands[1].ends_with("already recorded") && heard.commands[2].ends_with("already recorded"), "{:?}", heard.commands);
+        }
+        for (_, outcome) in journal {
+            acts.report(AJournalledOutcome::ASubmission { server: "Desk".into(), label: "Kitchen".into(), outcome });
+        }
+        let texts = texts_sent(&answers);
+        assert_eq!(texts[0], "Desk\nKitchen\nSubmitted again.");
+        assert!(texts[1..].iter().all(|text| text.starts_with("Desk\nKitchen\nAlready submitted again at ")), "{texts:?}");
+    }
+
+    /// **The four questions, batch 4 (scout 1.5): *Resume* submits once, from
+    /// the frame its button carries**, with its own submission identity, and
+    /// its answer says where it started (`Telegram` Y4a as changed 2026-11-11).
+    #[test]
+    fn four_questions_1_5_resume_submits_once_from_its_frame() {
+        let service = Arc::new(AStandInService::new());
+        service.then_answers(r#"{"ok":true,"result":{"message_id":77}}"#);
+        let (mut messages, store) = issuer(&service);
+        let failed = AFailedJob { resume: Some(crate::job_messages::AResume { from: 12, frames: 29 }), ..a_failure(TheCause::TheMachinesOwn) };
+        messages.send_with_buttons(&the_failure_message(&failed), &job_one()).unwrap();
+        let supervisor = AStandInSupervisor::default();
+        let answers = Arc::new(AStandInService::new());
+        let mut acts = owner(&answers, &supervisor, vec!["job-1"]);
+        act_once(&mut acts, &press(&store, 77, RESUME_IT, "cb-1"));
+        let journal = supervisor.heard().submissions.clone();
+        assert!(supervisor.heard().commands[0].starts_with("submit job-1 from frame 12 again as "), "{:?}", supervisor.heard().commands);
+        for (_, outcome) in journal {
+            acts.report(AJournalledOutcome::ASubmission { server: "Desk".into(), label: "Kitchen".into(), outcome });
+        }
+        assert_eq!(texts_sent(&answers), ["Desk\nKitchen\nResumed from frame 12. The frames will be in two folders."]);
     }
 
     /// **A3, held-job piece B: the release of a hold for the driver update is
@@ -2174,6 +2684,160 @@ mod tests {
         assert_eq!(texts_sent(&answers), ["Desk\nKitchen\nAnswered “Render all — 240 frames”."]);
     }
 
+    /// **The twenty-eighth notes, note 16 — the question's *Cancel job* asks
+    /// in place, *Keep the job* puts the answers back, and once the hold is
+    /// answered neither changes anything.** The question is edited, never a
+    /// new message; no release is sent until *Cancel the job*. **It failed
+    /// before the change**: the question carried *Cancel* acting at once and
+    /// a Stop besides, and no press asked in place.
+    #[test]
+    fn twenty_eighth_16_cancel_job_asks_in_place_and_keep_the_job_puts_the_answers_back() {
+        struct Answered(bool);
+        impl ReadsWhatThisMachineHolds for Answered {
+            fn the_jobs(&self) -> Vec<AJobAsHeld> {
+                Vec::new()
+            }
+            fn the_live_generation(&self, subject: &str) -> Option<String> {
+                (subject == "hold-1").then(|| "1".to_string())
+            }
+            fn the_hold_is_unanswered(&self, _hold: &str) -> bool {
+                !self.0
+            }
+        }
+        let service = Arc::new(AStandInService::new());
+        for _ in 0..2 {
+            service.then_answers(r#"{"ok":true,"result":{"message_id":80}}"#);
+        }
+        let (mut messages, store) = issuer(&service);
+        let waiting = AWaitingJob {
+            server: "Desk".into(),
+            label: "Kitchen".into(),
+            hold: "hold-1".into(),
+            generation: "1".into(),
+            waits_for: WhatTheHoldWaitsFor::TheUsersAnswer,
+            the_frame_shown: 1,
+            frames_held: 240,
+            the_frames: "1\u{2013}240".into(),
+        };
+        let subject = TheSubject { owning_machine: ME.into(), job: Some("range-1".into()), hold: Some("hold-1".into()), generation: "1".into() };
+        assert_eq!(messages.send_the_waiting_question(&waiting, false, &subject), Ok(Some(80)));
+        let mut first: Vec<_> = store.the_action_contexts_bound_to(80).unwrap();
+        first.sort_by_key(|r| r.payload["button_row"].as_u64());
+        assert_eq!(
+            first.iter().map(|r| r.payload["labels"]["button"].as_str().unwrap_or_default().to_string()).collect::<Vec<_>>(),
+            ["Render all \u{2014} 240 frames", "Cancel job"],
+            "two answers, and no Stop"
+        );
+
+        let supervisor = AStandInSupervisor::default();
+        let mut acts = owner(&service, &supervisor, vec![]);
+        acts.holds = Box::new(Answered(false));
+        acts.supervisor = Box::new(supervisor.with_context_store(store.clone()));
+        let the_edit = |service: &AStandInService| {
+            service
+                .heard()
+                .iter()
+                .rev()
+                .find(|c| c.method == "editMessageText")
+                .map(|c| fields_of(&c.carries))
+                .unwrap()
+        };
+        let labels_of = |fields: &Value| {
+            fields["reply_markup"]["inline_keyboard"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|row| row[0]["text"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        };
+        service.then_answers(r#"{"ok":true,"result":{"message_id":80}}"#);
+        acts.act_once(&press(&store, 80, ASK_TO_CANCEL_THE_JOB, "ask")).unwrap();
+        let asked = the_edit(&service);
+        assert_eq!(asked["message_id"], 80, "the question itself is changed");
+        assert!(asked["text"].as_str().unwrap().ends_with(
+            "Needs your answer. Render frames 1\u{2013}240?\n\nCancel this job? Frames 1\u{2013}240 will not render. Their settings are deleted too. The first-frame check stays in History."
+        ));
+        assert_eq!(labels_of(&asked), ["Keep the job", "Cancel the job"]);
+        assert!(supervisor.heard().commands.is_empty(), "asking sends no answer");
+
+        service.then_answers(r#"{"ok":true,"result":{"message_id":80}}"#);
+        acts.act_once(&press(&store, 80, KEEP_THE_JOB, "keep")).unwrap();
+        let back = the_edit(&service);
+        assert!(back["text"].as_str().unwrap().ends_with("Needs your answer. Render frames 1\u{2013}240?"));
+        assert_eq!(labels_of(&back), ["Render all \u{2014} 240 frames", "Cancel job"]);
+
+        // **Once the hold is answered** — the desk's *Render all* won — a
+        // late *Cancel job* or *Keep the job* changes nothing.
+        acts.holds = Box::new(Answered(true));
+        let edits = service.heard().iter().filter(|c| c.method == "editMessageText").count();
+        service.then_answers(r#"{"ok":true,"result":{"message_id":90}}"#);
+        acts.act_once(&press(&store, 80, ASK_TO_CANCEL_THE_JOB, "late")).unwrap();
+        assert_eq!(service.heard().iter().filter(|c| c.method == "editMessageText").count(), edits);
+        assert_eq!(texts_sent(&service).last().map(String::as_str), Some("Desk\nKitchen\nAlready answered."));
+        assert!(supervisor.heard().commands.is_empty());
+    }
+
+    /// **Sol's fresh look, 2026-11-09: *Cancel job* or *Keep the job* racing
+    /// the desk's answer** — the hold is unanswered when the press is read and answered
+    /// by the time the question is changed back. The answers must not stay on
+    /// an answered question. **It failed before the fix**: the two answers
+    /// were put back and stayed.
+    #[test]
+    fn twenty_eighth_16_a_change_in_place_racing_the_desks_answer_leaves_no_answers() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        /// **The desk's answer lands between the two reads**, and its own
+        /// removal has already marked the question's records removed (Sol's
+        /// second look: the take-off then skipped them).
+        struct AnsweredOnTheSecondRead(AtomicUsize, Shared);
+        impl ReadsWhatThisMachineHolds for AnsweredOnTheSecondRead {
+            fn the_jobs(&self) -> Vec<AJobAsHeld> {
+                Vec::new()
+            }
+            fn the_live_generation(&self, subject: &str) -> Option<String> {
+                (subject == "hold-1").then(|| "1".to_string())
+            }
+            fn the_hold_is_unanswered(&self, _hold: &str) -> bool {
+                let first = self.0.fetch_add(1, Ordering::SeqCst) == 0;
+                if !first {
+                    for mut record in self.1.the_action_contexts_bound_to(80).unwrap() {
+                        record.payload["stop_removed"] = json!(true);
+                        self.1.lock().unwrap().record_an_action_context(record).unwrap();
+                    }
+                }
+                first
+            }
+        }
+        let service = Arc::new(AStandInService::new());
+        for _ in 0..2 {
+            service.then_answers(r#"{"ok":true,"result":{"message_id":80}}"#);
+        }
+        let (mut messages, store) = issuer(&service);
+        let waiting = AWaitingJob {
+            server: "Desk".into(),
+            label: "Kitchen".into(),
+            hold: "hold-1".into(),
+            generation: "1".into(),
+            waits_for: WhatTheHoldWaitsFor::TheUsersAnswer,
+            the_frame_shown: 1,
+            frames_held: 240,
+            the_frames: "1\u{2013}240".into(),
+        };
+        let subject = TheSubject { owning_machine: ME.into(), job: Some("range-1".into()), hold: Some("hold-1".into()), generation: "1".into() };
+        messages.send_the_waiting_question(&waiting, false, &subject).unwrap();
+        let supervisor = AStandInSupervisor::default();
+        let mut acts = owner(&service, &supervisor, vec![]);
+        acts.holds = Box::new(AnsweredOnTheSecondRead(AtomicUsize::new(0), store.clone()));
+        acts.supervisor = Box::new(supervisor.with_context_store(store.clone()));
+        service.then_answers(r#"{"ok":true,"result":{"message_id":80}}"#);
+        service.then_answers(r#"{"ok":true,"result":true}"#);
+        // The race is the same for *Cancel job* and *Keep the job*: each puts
+        // buttons back on the question.
+        acts.act_once(&press(&store, 80, ASK_TO_CANCEL_THE_JOB, "ask")).unwrap();
+        let last = service.heard().last().cloned().unwrap();
+        assert_eq!(last.method, "editMessageReplyMarkup", "the answers are taken off again");
+        assert_eq!(fields_of(&last.carries)["reply_markup"]["inline_keyboard"], json!([]));
+    }
+
     /// **A2, A3 and fix-here item 10 — each button becomes one release command;
     /// the first recorded wins, the winner is told which answer was applied,
     /// and the loser is told which answer was applied and when.**
@@ -2198,11 +2862,18 @@ mod tests {
         let supervisor = AStandInSupervisor::default();
         let answers = Arc::new(AStandInService::new());
         let mut acts = owner(&answers, &supervisor, vec!["hold-1"]);
-        // Both buttons carry the same action, so each is pressed by its answer.
-        let records = store.the_action_contexts_bound_to(80).unwrap();
+        // *Render all* answers at once; *Cancel job* asks first, and the *no*
+        // rides the question asked in place (the twenty-eighth notes, note
+        // 16), sent here as its own message so its button can be pressed.
+        service.then_answers(r#"{"ok":true,"result":{"message_id":81}}"#);
+        let asked = crate::job_messages::the_question_asks_to_cancel(&AMarkedText::plain("q"), "Desk", "Kitchen", 39, "");
+        messages.send_with_buttons(&asked, &subject).unwrap();
+        let mut records = store.the_action_contexts_bound_to(80).unwrap();
+        records.extend(store.the_action_contexts_bound_to(81).unwrap());
+        let records: Vec<_> = records.into_iter().filter(|r| r.action == ANSWER_A_WAITING_JOB).collect();
         for (answer, callback) in [("GoOn", "cb-go"), ("Dont", "cb-dont")] {
             let record = records.iter().find(|r| r.payload["answer"] == json!(answer)).unwrap();
-            let evidence = ATapsEvidence { token: record.token.clone(), callback: callback.into(), conversation: CHAT, source_message: 80, label: None };
+            let evidence = ATapsEvidence { token: record.token.clone(), callback: callback.into(), conversation: CHAT, source_message: record.source_message.unwrap(), label: None, pressed_at: None };
             let entry = a_taps_resolution(&evidence, 2, &WhatATokenNames::read(&record.token).unwrap());
             act_once(&mut acts, &resolve_a_tap(&entry, ME, KEY, &store, &|_| Some("1".into())).unwrap());
         }
@@ -2257,7 +2928,7 @@ mod tests {
         let second = confirmed_press(&store, 90, "cb-2");
         acts.act_once(&second).unwrap();
         acts.act_once(&second).unwrap();
-        assert_eq!(texts_sent(&answers), ["Desk\nKitchen\n“Stop this job” was rejected by this server."]);
+        assert_eq!(texts_sent(&answers), ["Desk\nKitchen\n“Stop this job” was refused by this server."]);
     }
 
     /// **R14 until step 10c — a routed frame request is answered truthfully and
@@ -2358,6 +3029,7 @@ mod tests {
             file_name: "frame1.png".into(),
             bytes: crate::pictures::tests::a_png_header(1280, 720),
             which_picture: None,
+            not_read: Vec::new(),
         };
         let subject = TheSubject { owning_machine: ME.into(), job: None, hold: Some("hold-1".into()), generation: "1".into() };
         assert_eq!(messages.send_the_waiting_message(&waiting, Some(&picture), &subject), Ok(Some(81)));
@@ -2454,11 +3126,13 @@ mod tests {
         a_tap_reaches_the_owners_stop(&store, 31);
     }
 
-    /// **D1, R1 and fix-here item 6, finished — a frame picture carries a
-    /// working *Stop this job***: sent with no button, the record written
-    /// against it, then the button attached by the call that changes only it.
+    /// **`Telegram` C1b as changed 2026-11-09: a frame picture carries no
+    /// Stop**, an answer's included (the twenty-eighth notes, note 19); **a
+    /// Stop attached to a message already sent — requested output — still
+    /// works**: its record written first, then the button by the call that
+    /// changes only it (D1, R1, fix-here item 6). ~~`a_frame_picture_carries_a_stop_that_reaches_the_owner`~~.
     #[test]
-    fn a_frame_picture_carries_a_stop_that_reaches_the_owner() {
+    fn a_frame_picture_carries_no_stop_and_an_attached_stop_still_reaches_the_owner() {
         let service = Arc::new(AStandInService::new());
         service.then_answers(r#"{"ok":true,"result":{"message_id":95}}"#);
         let (mut messages, store) = issuer(&service);
@@ -2470,20 +3144,22 @@ mod tests {
             file_name: "frame140.png".into(),
             bytes: crate::pictures::tests::a_png_header(1280, 720),
             which_picture: None,
+            not_read: Vec::new(),
         };
         let sent = pictures.send_with_its_stop(&mut messages, picture, AClassOfSend::FramePicturesAndMedia, Some(&job_one()));
-        assert_eq!(sent, crate::pictures::APictureSent::Sent { message: 95, stop: Some(Ok(())) });
+        assert_eq!(sent, crate::pictures::APictureSent::Sent { message: 95, stop: None });
+        assert_eq!(service.heard().iter().map(|c| c.method.as_str()).collect::<Vec<_>>(), ["sendPhoto"]);
+        assert!(store.the_action_contexts_bound_to(95).unwrap().is_empty());
 
+        messages.attach_a_stop(96, &job_one(), "Desk", "Kitchen", AClassOfSend::RoutedAnswersAndAcknowledgements).unwrap();
         let heard = service.heard();
-        assert_eq!(heard.iter().map(|c| c.method.as_str()).collect::<Vec<_>>(), ["sendPhoto", "editMessageReplyMarkup"]);
-        assert!(fields_of(&heard[0].carries).get("reply_markup").is_none(), "no button before its record");
-        let records = store.the_action_contexts_bound_to(95).unwrap();
+        let records = store.the_action_contexts_bound_to(96).unwrap();
         assert_eq!(records.len(), 1);
         let attached = fields_of(&heard[1].carries);
-        assert_eq!(attached["message_id"], json!(95));
+        assert_eq!(attached["message_id"], json!(96));
         assert_eq!(attached["reply_markup"]["inline_keyboard"][0][0]["text"], json!("Stop this job"));
         assert_eq!(attached["reply_markup"]["inline_keyboard"][0][0]["callback_data"], json!(records[0].token));
-        a_tap_reaches_the_owners_stop(&store, 95);
+        a_tap_reaches_the_owners_stop(&store, 96);
     }
 
     #[test]
@@ -2574,7 +3250,15 @@ mod tests {
             acts.holds = Box::new(Live(vec![]));
             acts.act_once(&entry).unwrap();
             let after: Vec<String> = service.heard()[before..].iter().map(|call| call.method.clone()).collect();
-            assert_eq!(after, ["sendMessage"], "{action}: one new message, nothing attached or edited");
+            // **D2 as changed 2026-11-13 (the Creator's addition)**: a
+            // confirmed stop's question of its own goes once *This job has
+            // already ended.* settles it.
+            let expected: &[&str] = if action == "confirmed" { &["sendMessage", "deleteMessage"] } else { &["sendMessage"] };
+            assert_eq!(after, expected, "{action}: one new message, nothing attached or edited");
+            if action == "confirmed" {
+                let deleted = &service.heard()[before + 1];
+                assert_eq!(fields_of(&deleted.carries)["message_id"], json!(101), "the question goes");
+            }
             assert_eq!(texts_sent(&service).last().unwrap(), "Desk\nKitchen\nThis job has already ended.");
             assert!(supervisor.heard().commands.is_empty());
         }
@@ -2811,29 +3495,32 @@ mod tests {
                     which_picture: Some(crate::pictures::WhichPictureItIs::AViewLayer(format!(
                         "Layer {n}"
                     ))),
+                    not_read: Vec::new(),
                 })
                 .collect();
             assert_eq!(
                 messages.send_the_waiting_set(&waiting, copies, &subject),
                 Ok(Some(300))
             );
+            // **Two answers and no Stop** since the twenty-eighth notes,
+            // note 16: *Cancel job* is how the job is ended there, and asks
+            // in place first. Both are bound to the hold and name the range.
             let records = store.the_action_contexts_bound_to(300).unwrap();
-            assert_eq!(records.len(), 3);
-            assert_eq!(
-                records
-                    .iter()
-                    .filter(|r| r.action == ANSWER_A_WAITING_JOB
-                        && r.hold.as_deref() == Some("hold-1")
-                        && r.payload["job"] == json!("range-1"))
-                    .count(),
-                2
-            );
-            let stop = records
-                .iter()
-                .find(|r| r.action == ASK_TO_STOP_THIS_JOB)
-                .unwrap();
-            assert_eq!(stop.job.as_deref(), Some("range-1"));
-            assert!(stop.hold.is_none());
+            assert_eq!(records.len(), 2);
+            for action in [ANSWER_A_WAITING_JOB, ASK_TO_CANCEL_THE_JOB] {
+                assert_eq!(
+                    records
+                        .iter()
+                        .filter(|r| r.action == action
+                            && r.hold.as_deref() == Some("hold-1")
+                            && r.payload["job"] == json!("range-1")
+                            && r.payload["question_message"] == json!(300))
+                        .count(),
+                    1,
+                    "{action}"
+                );
+            }
+            assert!(!records.iter().any(|r| r.action == ASK_TO_STOP_THIS_JOB), "no Stop on the question");
             assert!(
                 service
                     .heard()
@@ -2881,6 +3568,7 @@ mod tests {
             file_name: "1.png".into(),
             bytes: crate::pictures::tests::a_png_header(1280, 720),
             which_picture: None,
+            not_read: Vec::new(),
         };
         assert_eq!(
             messages.send_the_waiting_set(&waiting, vec![picture], &subject),
@@ -2891,7 +3579,7 @@ mod tests {
                 .the_action_contexts_bound_to(300)
                 .unwrap()
                 .iter()
-                .filter(|r| r.action == ANSWER_A_WAITING_JOB)
+                .filter(|r| r.action == ANSWER_A_WAITING_JOB || r.action == ASK_TO_CANCEL_THE_JOB)
                 .count(),
             2
         );
@@ -2920,6 +3608,12 @@ mod tests {
     /// **A failure with words on both streams, one stream's words tapped**;
     /// gives back every call the owner made on the tap.
     fn tap_for_the_words(stream: AStream, words: Vec<u8>, complaints: ACollectionOutcome) -> Vec<crate::transport::a_stand_in::ACallItHeard> {
+        tap_for_the_words_of_a_job(stream, words, complaints, true)
+    }
+
+    /// **The same, with the job rendering at the tap or ended by then** —
+    /// the usual case being ended: a log is asked for after a failure.
+    fn tap_for_the_words_of_a_job(stream: AStream, words: Vec<u8>, complaints: ACollectionOutcome, live: bool) -> Vec<crate::transport::a_stand_in::ACallItHeard> {
         let service = Arc::new(AStandInService::new());
         service.then_answers(r#"{"ok":true,"result":{"message_id":77}}"#);
         let (mut messages, store) = issuer(&service);
@@ -2932,13 +3626,16 @@ mod tests {
         let answers = Arc::new(AStandInService::new());
         answers.then_answers(r#"{"ok":true,"result":{"message_id":78}}"#);
         let mut acts = owner(&answers, &supervisor, vec!["job-1"]);
+        if !live {
+            acts.holds = Box::new(HeldAndEnded("job-1"));
+        }
         let record = store
             .the_action_contexts_bound_to(77)
             .unwrap()
             .into_iter()
             .find(|r| r.action == SEND_THE_WORDS && r.payload["stream"] == json!(stream))
             .expect("a button for this stream");
-        let evidence = ATapsEvidence { token: record.token.clone(), callback: "cb-words".into(), conversation: CHAT, source_message: 77, label: None };
+        let evidence = ATapsEvidence { token: record.token.clone(), callback: "cb-words".into(), conversation: CHAT, source_message: 77, label: None, pressed_at: None };
         let entry = a_taps_resolution(&evidence, 1, &WhatATokenNames::read(&record.token).unwrap());
         act_once(&mut acts, &resolve_a_tap(&entry, ME, KEY, &store, &|_| Some("1".into())).unwrap());
         // **C6b: the act ended with any file still waiting in the upload lane**,
@@ -2960,7 +3657,9 @@ mod tests {
         let text = fields["text"].as_str().unwrap().to_string();
         assert!(units(&text) <= THE_BOUND, "over Telegram's bound: {} units", units(&text));
         let entities = fields["entities"].as_array().expect("an entity list");
-        assert_eq!(entities.len(), 2);
+        // The two names, and from 2026-11-12 E3e's fold over the log.
+        assert_eq!(entities.len(), 3);
+        assert_eq!(entities[2]["type"], "expandable_blockquote");
         assert_eq!(entities[0]["type"], "bold");
         assert_eq!(marked_by(&text, &entities[0]), "Desk");
         assert_eq!(entities[1]["type"], "italic");
@@ -2973,6 +3672,57 @@ mod tests {
     /// of backslashes, and every character markup would have wanted escaped.
     fn a_line(n: usize) -> String {
         format!("Кадр {n} 🎬 Fra:{n} Mem:1.2G | C:\\Users\\Анна\\シーン_[final]*(v2).blend <b>&copy;</b> `ok` ~#+-=|{{}}.!\n")
+    }
+
+    /// **`Telegram` E3e (2026-11-12, Creator-stated): the log arrives folded,
+    /// and one button under it copies its last line.** The stream's text is
+    /// one `expandable_blockquote`, the label outside it; the button is an
+    /// inline one with `copy_text`, holding the last line that has anything
+    /// but white space; nothing comes back to a machine for it, so it has no
+    /// token. **Before it** the log was plain text with no button, as long
+    /// in the chat as it was.
+    #[test]
+    fn e3e_the_log_arrives_folded_with_a_button_that_copies_its_last_line() {
+        let words = "Fra:147 saved\nError: cannot open 'C:\\tex\\wood.png' 🎬\n   \n".to_string();
+        let heard = tap_for_the_words_of_a_job(AStream::TheComplaints, words.clone().into_bytes(), ACollectionOutcome::Collected, false);
+        assert_eq!(heard.len(), 1, "one message and no file");
+        let fields = fields_of(&heard[0].carries);
+        let text = fields["text"].as_str().unwrap();
+        assert_eq!(text, format!("Desk\nKitchen\nErrors log, in full.\n{words}"));
+        let entities = fields["entities"].as_array().expect("an entity list");
+        let folds: Vec<&Value> = entities.iter().filter(|e| e["type"] == "expandable_blockquote").collect();
+        assert_eq!(folds.len(), 1, "the log is not one folded quotation: {entities:?}");
+        assert_eq!(marked_by(text, folds[0]), words, "the fold is not exactly the log");
+        assert!(entities.iter().all(|e| e["type"] != "spoiler" && e["type"] != "blockquote"));
+        assert_eq!(
+            fields["reply_markup"],
+            json!({ "inline_keyboard": [[{ "text": "Copy last line", "copy_text": { "text": "Error: cannot open 'C:\\tex\\wood.png' 🎬" } }]] }),
+            "the copy button is not the log's last line"
+        );
+        // **A job rendering at the tap: no copy button**, since the message
+        // is C1b's to put *Stop this job* on, by an edit of its keyboard.
+        let heard = tap_for_the_words_of_a_job(AStream::TheComplaints, words.into_bytes(), ACollectionOutcome::Collected, true);
+        assert!(fields_of(&heard[0].carries).get("reply_markup").is_none(), "a live job's log carries a copy button");
+    }
+
+    /// **E3e: a last line over Telegram's 256 is cut to its first 256 UTF-16
+    /// units, between whole characters; a log of white space has no button.**
+    #[test]
+    fn e3e_the_copied_line_stays_inside_256_and_white_space_copies_nothing() {
+        let long: String = "🎬".repeat(200);
+        let told = the_words_in_the_chat("Desk", "Kitchen", AStream::TheOrdinaryOutput, format!("first\n{long}\n").as_bytes(), false);
+        let copied = told.copies.expect("a line to copy");
+        assert_eq!(copied.encode_utf16().count(), 256);
+        assert_eq!(copied, "🎬".repeat(128));
+        let odd = format!("a{}", "🎬".repeat(200));
+        let copied = the_words_in_the_chat("Desk", "Kitchen", AStream::TheOrdinaryOutput, odd.as_bytes(), false).copies.unwrap();
+        assert_eq!(copied.encode_utf16().count(), 255, "cut between whole characters");
+        assert_eq!(the_words_in_the_chat("Desk", "Kitchen", AStream::TheOrdinaryOutput, b" \n\t\n", false).copies, None);
+        // **Where the block is the log's end, the line is the end's.**
+        let many: String = (1..=400).map(a_line).collect();
+        let told = the_words_in_the_chat("Desk", "Kitchen", AStream::TheOrdinaryOutput, many.as_bytes(), false);
+        assert!(told.file.is_some());
+        assert_eq!(told.copies.as_deref(), Some(a_line(400).trim()));
     }
 
     /// **E3d, whole: words that fit arrive whole in the chat, and no file.**
@@ -3057,7 +3807,7 @@ mod tests {
         let mut failure = a_failure(TheCause::TheMachinesOwn);
         failure.complaints = ACollectionOutcome::Collected;
         let labels: Vec<String> = the_failure_message(&failure).buttons.iter().map(|b| b.label.clone()).collect();
-        assert_eq!(labels, ["Send Output log", "Send Errors log", "Retry"]);
+        assert_eq!(labels, ["Send Output log", "Send Errors log", "Submit again \u{2014} 40 frames"]);
 
         let heard = tap_for_the_words(AStream::TheComplaints, b"Error: out of memory\n".to_vec(), ACollectionOutcome::Collected);
         assert_eq!(the_block(&heard[0]).0, "Desk\nKitchen\nErrors log, in full.\nError: out of memory\n");
@@ -3096,6 +3846,23 @@ mod tests {
         let texts = texts_sent(&answers);
         assert!(texts[0].contains("Stopped. 12 frames on the server"));
         assert!(texts[1].starts_with("Desk\nKitchen\nAlready stopped at "));
+    }
+
+    /// **The Creator's addition of 2026-11-13 (`Telegram` D2): where *Stop
+    /// sent.* goes.** A stop confirmed on the job's own message — its records
+    /// carry the question's words — sends nothing in the chat; one confirmed
+    /// on a question of its own turns that question into it; an entry naming
+    /// no question, from an older program, is a message as before.
+    #[test]
+    fn not_ideal_2_stop_sent_is_never_a_message_that_stays() {
+        let on_its_own = crate::listener::an_action_for("m", STOP_THIS_JOB, json!({ "confirmed": true, "confirmation_message": 90 })).unwrap();
+        assert_eq!(how_stop_sent_is_said(&on_its_own), HowStopSentIsSaid::IntoTheQuestion(90));
+        let mut in_place = on_its_own.clone();
+        in_place.payload[crate::status::THE_QUESTIONS_WORDS] = json!("Stop this job?");
+        assert_eq!(how_stop_sent_is_said(&in_place), HowStopSentIsSaid::NotInTheChat);
+        let mut older = on_its_own.clone();
+        older.payload.as_object_mut().unwrap().remove("confirmation_message");
+        assert_eq!(how_stop_sent_is_said(&older), HowStopSentIsSaid::AsAMessage);
     }
 
     /// **R1 on the owner — an ended generation submits nothing**, and the user

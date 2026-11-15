@@ -29,9 +29,12 @@
 //! - `Design/Servers § A row` — the name, the address and the hardware words,
 //!   which the head shows for one server and the list shows for all of them.
 //!
-//! **The eleven server-pane states belong to this piece:** `pane-connected`,
+//! **The twelve server-pane states belong to this piece:** `pane-connected`,
 //! `pane-off`, `pane-connecting`, `pane-repair`, `pane-setup`, `pane-key`,
-//! `pane-restart`, `pane-failed`, `pane-notool`, `pane-keyed`, `pane-railmenu`.
+//! `pane-restart`, `pane-failed`, `pane-notool`, `pane-keyed`, `pane-railmenu`,
+//! and `pane-disconnect` (2026-11-13: the heading's control under the pointer,
+//! one width and red, the Creator's notes on the test copy of 2026-11-12,
+//! note 7; drawn by `web/servers.js`' shared control).
 //! The connection control and menu are the All servers screen's actual shared
 //! builders, with its complete key-checked reading; selecting remains navigation.
 //!
@@ -175,6 +178,9 @@ pub struct TheHead {
     /// **What it is doing**, which is the fourth thing on the mockup's hardware
     /// line. The dash where Smoozy cannot say.
     pub the_work: Vec<Words>,
+    /// **The work is the dash**, which the head does not draw (the UI at every
+    /// size, B-18): on its one line the dash read as punctuation.
+    pub the_work_is_the_dash: bool,
     /// **`Servers` §11.8's rental line, on the head's hardware line** — the
     /// running-time figure where one stands, and `Servers` W40's statement in
     /// its place otherwise; **never neither** (`Servers` W40a). Nothing after
@@ -399,6 +405,13 @@ fn the_head_of(row: AServerRow) -> TheHead {
         address: row.address,
         badge: row.badge,
         the_hardware: row.the_hardware,
+        // **The dash stays in the list's column and is not drawn on the head**
+        // (the UI at every size, B-18): on the head's one line it sits between
+        // two readings and reads as punctuation — *Hardware not read yet —
+        // Your provider bills you…*. The work is still the row's, so the list
+        // and the head read one way (the runner's ruling of 2026-11-11); the
+        // head is told only that it is the dash. `Design/Servers § A row`.
+        the_work_is_the_dash: row.the_work == vec![crate::surface::servers::the_dash()],
         the_work: row.the_work,
         // **No running-time figure is supplied by anything today** — the
         // figure is taken on a connection (`Servers` W41), and no connection
@@ -588,6 +601,27 @@ mod tests {
             assert_eq!(head.the_hardware, row.the_hardware);
             assert_eq!(head.the_work, row.the_work);
         }
+    }
+
+    /// **The head leaves the dash out** (the UI at every size, B-18): a server
+    /// whose work Smoozy cannot say reads *—* in the list's column, and on the
+    /// head's one line that dash sat between the hardware and the rental line
+    /// as if it were punctuation.
+    #[test]
+    fn b18_the_head_leaves_the_lists_dash_out() {
+        let rows = vec![a_row(Some("RunPod 4090"))];
+        let list = crate::surface::servers::the_screen_from(&rows, &[], None, None, &Default::default());
+        let row = &list.rows[0];
+        assert!(
+            row.the_work.contains(&crate::surface::servers::the_dash()),
+            "the list's column should read the dash for a server it cannot read: {:?}",
+            row.the_work
+        );
+        let head = the_head_from(&rows, row.server.as_str(), None, &Default::default()).expect("the server is in the record");
+        assert_eq!(head.the_work, row.the_work, "the head and the list read one way");
+        assert!(head.the_work_is_the_dash, "the head is not told its work is the dash, so it draws it");
+        let page = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("web/a-server.js")).expect("the page");
+        assert!(page.contains("if (!drawn.the_work_is_the_dash)"), "the head's page still draws the dash");
     }
 
     /// **A server that is not in the record is said rather than drawn empty**
@@ -920,6 +954,7 @@ mod tests {
         let _ = fs::remove_dir_all(&scratch);
         fs::create_dir_all(&scratch).expect("a scratch folder");
         fs::copy(web.join("a-server.js"), scratch.join("a-server.js")).expect("the page is copied");
+        fs::copy(web.join("the-focus-moves.js"), scratch.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_STRIPS_STAND_INS {
             fs::write(scratch.join(name), text).expect("a stand-in is written");
         }
@@ -1036,6 +1071,7 @@ mod tests {
             let _ = fs::remove_dir_all(&scratch);
             fs::create_dir_all(&scratch).expect("a scratch folder");
             fs::copy(web.join("a-server.js"), scratch.join("a-server.js")).expect("the page is copied");
+            fs::copy(web.join("the-focus-moves.js"), scratch.join("the-focus-moves.js")).expect("the one way the focus moves");
             for (name, text) in THE_STRIPS_STAND_INS {
                 fs::write(scratch.join(name), text).expect("a stand-in is written");
             }
@@ -1103,6 +1139,7 @@ mod tests {
         let _ = fs::remove_dir_all(&scratch);
         fs::create_dir_all(&scratch).expect("a scratch folder");
         fs::copy(web.join("a-server.js"), scratch.join("a-server.js")).expect("the page is copied");
+        fs::copy(web.join("the-focus-moves.js"), scratch.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_STRIPS_STAND_INS {
             fs::write(scratch.join(name), text).expect("a stand-in is written");
         }
@@ -1158,6 +1195,7 @@ mod tests {
         let _ = fs::remove_dir_all(&scratch);
         fs::create_dir_all(&scratch).expect("a scratch folder");
         fs::copy(web.join("a-server.js"), scratch.join("a-server.js")).expect("the page is copied");
+        fs::copy(web.join("the-focus-moves.js"), scratch.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_STRIPS_STAND_INS {
             fs::write(scratch.join(name), text).expect("a stand-in is written");
         }
@@ -1251,6 +1289,7 @@ mod tests {
         let _ = fs::remove_dir_all(&scratch);
         fs::create_dir_all(&scratch).expect("a scratch folder");
         fs::copy(web.join("a-server.js"), scratch.join("a-server.js")).expect("the page is copied");
+        fs::copy(web.join("the-focus-moves.js"), scratch.join("the-focus-moves.js")).expect("the one way the focus moves");
         for (name, text) in THE_STRIPS_STAND_INS {
             fs::write(scratch.join(name), text).expect("a stand-in is written");
         }
@@ -1424,6 +1463,7 @@ console.log(JSON.stringify(got));
         fs::create_dir_all(&scratch).unwrap();
         for (name,text) in THE_STRIPS_STAND_INS { fs::write(scratch.join(name),text).unwrap(); }
         fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("web/a-server.js"),scratch.join("a-server.js")).unwrap();
+        fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join("web/the-focus-moves.js"),scratch.join("the-focus-moves.js")).unwrap();
         fs::write(scratch.join("package.json"), r#"{"type":"module"}"#).unwrap();
         fs::write(scratch.join("answers.json"),serde_json::json!({"server":server,"screen":answer}).to_string()).unwrap();
         fs::write(scratch.join("harness.mjs"),format!("{THE_STRIPS_DOCUMENT}{}",r#"
@@ -1679,6 +1719,7 @@ mod pane_drawing_states {
             "pane-notool",
             "pane-keyed",
             "pane-railmenu",
+            "pane-disconnect",
         ];
         claimed.sort();
         assert_eq!(states, claimed);
@@ -1747,6 +1788,44 @@ mod pane_and_rail_browser {
         the_walk_passes("smoozy-boxes-over-panels", &walk);
     }
 
+    /// **The Creator's twenty-eighth notes, note 2: Tab stays inside what is
+    /// open** — `Preparation/Design/Whole app.md`, *Keyboard shortcuts*, *Tab
+    /// stays inside the box on top*. Over the real rail, list and pane:
+    /// - every Servers box — *Add a server*, *Edit*, *Remove*, *Server
+    ///   identity changed* and the *stop and clear* ending — opens with the
+    ///   focus inside it, and Tab and Shift+Tab visit each of its controls and
+    ///   never leave it for the rail or the screen behind;
+    /// - *Add a server*, opened from a focused button and closed with Escape,
+    ///   gives the focus back to that button;
+    /// - with Render Settings open over a server, Tab and Shift+Tab around the
+    ///   whole window never land on the server's screen under the panel, and
+    ///   do reach the rail; collapsed, the screen is reachable again.
+    ///
+    /// Each press is the window's own: where nothing in the page took the key,
+    /// the walk makes the browser's move, to the next Tab stop in the page's
+    /// order (`focus::THE_TAB_PRESS`).
+    #[test]
+    fn twenty_eighth_2_tab_stays_inside_the_servers_boxes_and_off_the_screen_under_a_panel() {
+        let row = smoozy_servers::store::ServerRow::saved(
+            "server-one",
+            smoozy_servers::identity::Host::what_the_user_typed("127.0.0.1").unwrap(),
+            smoozy_servers::identity::Port::what_the_user_typed(22).unwrap(),
+            smoozy_servers::identity::Username::what_the_user_typed("root").unwrap(),
+            smoozy_servers::identity::KeyReference {
+                local_key_identifier: "key-one".into(),
+                fingerprint: "SHA256:a".into(),
+            },
+        );
+        let rows = [row.clone()];
+        let edit = crate::surface::servers::the_edit_dialog_from(&row, &rows, &[], None);
+        let add = crate::surface::servers::the_add_dialog_from(&rows);
+        let walk = TAB_WALK
+            .replace("EDIT_VALUE", &serde_json::to_string(&edit).unwrap())
+            .replace("ADD_VALUE", &serde_json::to_string(&add).unwrap())
+            .replace("THE_TAB_PRESS", crate::surface::focus::THE_TAB_PRESS);
+        the_walk_passes("smoozy-tab-inside", &walk);
+    }
+
     /// Runs `walk` against the real rail, list and pane modules in Chrome,
     /// over the application's own five menus and row, and fails unless it
     /// prints `PASS`. Skips, and says so, where no Chrome is installed.
@@ -1770,6 +1849,7 @@ mod pane_and_rail_browser {
             "servers.js",
             "a-server.js",
             "the-rail.js",
+            "the-tab-key.js",
             "the-drawing.css",
             "servers.css",
             "a-server.css",
@@ -1781,6 +1861,9 @@ mod pane_and_rail_browser {
                 .unwrap_or_else(|| web.clone());
             fs::copy(source.join(name), folder.join(name)).unwrap();
         }
+        fs::copy(web.join("the-focus-moves.js"), folder.join("the-focus-moves.js")).expect("the one way the focus moves");
+        // The real Help links, which `servers.js` imports (2026-11-13).
+        fs::copy(web.join("help-links.js"), folder.join("help-links.js")).expect("the Help links");
         for (name, source) in STAND_INS {
             fs::write(folder.join(name), source).unwrap();
         }
@@ -1803,7 +1886,10 @@ mod pane_and_rail_browser {
             .split_once("const out=document.getElementById('out');")
             .unwrap();
         fs::write(folder.join("setup.js"), setup).unwrap();
-        fs::write(folder.join("walk.js"), format!("import * as rail from './the-rail.js';\nimport * as servers from './servers.js';\nimport * as pane from './a-server.js';\nimport {{tell}} from './event-route.js';\nconst out=document.getElementById('out');{walk}")).unwrap();
+        // **A walk that presses Tab loads the shared Tab rule as the page does**,
+        // before it starts, rather than fetching it part-way through.
+        let the_tab_rule = if walk.contains("theTabIsPressed") { "import './the-tab-key.js';\n" } else { "" };
+        fs::write(folder.join("walk.js"), format!("import * as rail from './the-rail.js';\nimport * as servers from './servers.js';\nimport * as pane from './a-server.js';\nimport {{tell}} from './event-route.js';\n{the_tab_rule}const out=document.getElementById('out');{walk}")).unwrap();
         fs::write(folder.join("index.html"), r#"<!doctype html><link rel="stylesheet" href="the-drawing.css"><link rel="stylesheet" href="servers.css"><link rel="stylesheet" href="a-server.css"><link rel="stylesheet" href="the-rail.css"><div class="app"><div id="pane" class="pane"></div></div><pre id="out"></pre><script src="setup.js"></script><script type="module" src="walk.js"></script>"#).unwrap();
         let dump = folder.join("dump.html");
         // The test's process has one fixed deadline. No polling or wait loop.
@@ -1813,7 +1899,9 @@ mod pane_and_rail_browser {
                 "--disable-gpu",
                 "--no-first-run",
                 "--allow-file-access-from-files",
-                "--virtual-time-budget=5000",
+                // Virtual time: an idle page ends at once, so the budget costs
+                // nothing; the Tab walk needs more of it than the others.
+                "--virtual-time-budget=15000",
                 "--window-size=1000,800",
                 "--dump-dom",
             ])
@@ -2104,6 +2192,119 @@ try {
  check(!panelOf('server-two') || panelOf('server-two').getBoundingClientRect().width===0,'a panel is on screen beside All servers');
  at=null;
  await theBoxIsOnTop('All servers','Add a server');
+ out.textContent=failures.length?failures.join(' | '):'PASS';
+} catch(e) { out.textContent=e.stack; }
+"#;
+
+    /// The walk for the twenty-eighth notes, note 2: Tab inside every Servers
+    /// box, the focus given back to *Add a server*, and the screen under an
+    /// open panel kept out of Tab's reach.
+    const TAB_WALK: &str = r#"
+const screen = SCREEN_VALUE;
+const base = structuredClone(screen.rows[0]);
+base.the_menu='disconnected'; base.the_connection={label:'Connect',act:'connect',unavailable:false};
+screen.rows=[base, {...structuredClone(base),server:'server-two',name:'Second'}];
+window.__TAURI__={core:{invoke:async (act,args={})=>{
+  if(act==='the_rail') return {opens_at:'queueview',the_rails_own_name:'Navigation',the_servers_heading:'Servers',places:[],servers:screen.rows.map(r=>({server:r.server,name:r.name,away:false}))};
+  if(act==='the_pane_layout') return {seams:[]};
+  if(act==='the_all_servers_screen') return structuredClone(screen);
+  if(act==='the_servers_own_screen') { const r=screen.rows.find(r=>r.server===args.server); return {the_head:r?{...r,the_rental_line:{}}:null,the_server_is_gone:!r,the_tabs:[{tab:'files',name:'Files'},{tab:'setupview',name:'Set up'}],the_panels:[],instead:{lead:'Removed',values:[]}}; }
+  if(act==='the_removal_of') return {heading:{lead:'Remove',values:[args.server]},said:'Confirmation',cancel:'Cancel',remove:'Remove'};
+  if(act==='the_edit_dialog') return EDIT_VALUE;
+  if(act==='the_add_dialog') return ADD_VALUE;
+  return {};
+}}};
+const out=document.getElementById('out');
+out.textContent='START';
+const failures=[];
+const check=(ok,why)=>{if(!ok) failures.push(why);};
+const flush=async()=>{for(let i=0;i<12;i++) await Promise.resolve();};
+THE_TAB_PRESS
+const panelOf=(server)=>document.querySelector('.sheetwrap[data-server="'+server+'"]');
+const theOpenBox=()=>[...document.querySelectorAll('.modal')].filter(one=>one.getBoundingClientRect().width>0).pop();
+const theMenuOf=async(server)=>{
+  document.querySelector('.rail [data-server="'+server+'"]').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:5,clientY:40})); await flush();
+};
+const escape=async()=>{(document.activeElement||document.body).dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})); await flush(); await new Promise(go=>setTimeout(go,0));};
+const theBoxIsWalked=async(which)=>{
+  await flush();
+  const modal=theOpenBox();
+  if(!modal){check(false,which+' did not open');return;}
+  theBoxIsWalkedWithTab(which, modal, check);
+  await escape();
+  if(theOpenBox()) theOpenBox().remove();
+  if(document.querySelector('.svctx')) document.body.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));
+  await flush();
+};
+// **Every Tab stop under the open panel**: the server's head, its tab and
+// whatever it says instead, everything of `#machineview` but the panels.
+const under=()=>[...document.querySelectorAll('#machineview > *')].filter(one=>!one.classList.contains('sheetwrap'));
+const theWindowIsWalked=(which,{mayReachUnder})=>{
+  const many=theTabStopsIn(document).length*2+2;
+  for(const back of [false,true]){
+    let rail=false, below=false, panel=false;
+    for(let at=0;at<many;at++){
+      theTabIsPressed(back);
+      const on=document.activeElement;
+      if(on&&on.closest&&on.closest('.rail')) rail=true;
+      if(on&&on.closest&&on.closest('.sheetwrap')) panel=true;
+      if(under().some(one=>one.contains(on))){
+        below=true;
+        if(!mayReachUnder){check(false,which+': '+(back?'Shift+Tab':'Tab')+' reached '+theNameOf(on)+' on the screen under the panel');break;}
+      }
+    }
+    check(rail,which+': '+(back?'Shift+Tab':'Tab')+' never reached the rail');
+    if(!mayReachUnder) check(panel,which+': '+(back?'Shift+Tab':'Tab')+' never reached the panel');
+    if(mayReachUnder) check(below,which+': '+(back?'Shift+Tab':'Tab')+' never reached the server\'s own screen');
+  }
+};
+try {
+ const drawn=(parts)=>{const one=document.createElement('button');one.type='button';one.className='btn';one.textContent='In the panel';parts.body.appendChild(one);};
+ pane.aPanelIsRegistered({panel:pane.RENDER_SETTINGS,itIsDrawn:drawn,itIsShowingAgain(){},theFileItIsOn(){return [1,2];},itIsShownOn(){}});
+ pane.aPanelIsRegistered({panel:pane.THE_DEPENDENCY_CHECK,itIsDrawn:drawn,itIsShowingAgain(){},theFileItIsOn(){return [1,2];},itIsShownOn(){}});
+ await flush();
+ // ── The panel over a server ──
+ rail.theCurrentPlaceIs('machineview','server-one'); await flush();
+ await tell('servers:what-is-observed',{subject:'server-one'}); await flush();
+ pane.thePanelIsOpenedOver('server-one', pane.RENDER_SETTINGS); await flush();
+ check(under().flatMap(theTabStopsIn).length>0,'the server\'s screen has no Tab stop to keep out of reach');
+ theWindowIsWalked('Render Settings open',{mayReachUnder:false});
+ // A strip of the other panel sits in the open one's frame and stays reachable.
+ pane.thePanelIsOpenedOver('server-one', pane.THE_DEPENDENCY_CHECK); await flush();
+ theWindowIsWalked('the dependency check open',{mayReachUnder:false});
+ panelOf('server-one').querySelector('.collapse').focus();
+ await escape();
+ check(!panelOf('server-one')||panelOf('server-one').hidden,'Escape did not collapse the panel');
+ theWindowIsWalked('the panels collapsed',{mayReachUnder:true});
+ // ── The boxes, over the server's screen ──
+ await theMenuOf('server-one');
+ document.querySelector('.svctx [data-act="remove"]')?.click();
+ await theBoxIsWalked('Remove');
+ await theMenuOf('server-one');
+ document.querySelector('.svctx [data-act="edit"]')?.click();
+ await theBoxIsWalked('Edit');
+ await tell('servers:the-changed-identity-warning',{subject:'server-one'});
+ await theBoxIsWalked('Server identity changed');
+ screen.the_stop_and_clear_ending={server:'server-one',which:screen.the_boxes_a_connection_raises.stop_and_clear[0].which};
+ await theMenuOf('server-one');
+ screen.the_stop_and_clear_ending=null;
+ await theBoxIsWalked('Stop and clear ending');
+ // ── Add a server, the Creator's own case ──
+ rail.theCurrentPlaceIs('serversview'); await flush();
+ const add=[...document.querySelectorAll('#serversview button')].find(one=>one.textContent===ADD_VALUE.heading||one.textContent===screen.add_a_server);
+ check(add,'All servers has no Add a server');
+ if(add){
+   add.focus(); add.click(); await flush();
+   const modal=theOpenBox();
+   if(!modal) check(false,'Add a server did not open');
+   else {
+     theBoxIsWalkedWithTab('Add a server', modal, check);
+     check(modal.querySelector('input')===document.activeElement||modal.contains(document.activeElement),'Add a server: the focus left it');
+     await escape();
+     check(!theOpenBox(),'Add a server did not close on Escape');
+     check(document.activeElement===add,'Add a server: the focus did not come back to the button that opened it ('+theNameOf(document.activeElement)+')');
+   }
+ }
  out.textContent=failures.length?failures.join(' | '):'PASS';
 } catch(e) { out.textContent=e.stack; }
 "#;

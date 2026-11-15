@@ -52,3 +52,13 @@
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — the Prepare simulations line's off words. The last words read before the release. No auditor has seen it.
 
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent) — Playing from the earliest simulation's own start, the Creator's ruling of that day, and its Sources entry. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 4, Telegram.md`, outside any round — the phone offers the app's two ways, *Submit again* and *Resume*, never *Retry* (scout 1.5, Creator-stated). No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the live pass's leftovers.md`, outside any round — the phone offers Submit again and Resume where the cause is unknown and where a job was interrupted twice, as History does (Creator-stated: the phone matches the app). No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep, Codex's points: the replaced case's sentence covers both marks. No auditor has seen it.
+2026-11-14 — Claude Opus 5.5 — added *Force stop* after a stop Smoozy stopped waiting for (the Creator's ruling on 287, Rough share 3).
+2026-11-14 — Claude Opus 5.5 — Render Settings says when a file's scripts will run (the leftovers of the Rough what-if answers, 222, 227).

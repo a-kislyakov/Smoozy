@@ -92,3 +92,61 @@
 2026-11-06 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Step 13/Brief — the words, the last fix before the release.md`, outside any round — Prepare simulations' three lines and the Telegram line's *Install*. The last words read before the release. No auditor has seen it.
 
 2026-11-08 — Claude Opus 5.5 (Claude Code subagent) — Prepare simulations: the later start and its two new lines. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 11, linked files go first.md`, outside any round — *Submitting*: *so far* on the uploading line, which goes when the upload ends, and *Waiting for check* while a linked file is read after every file landed. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 9, Render settings with many view layers.md`, outside any round — note 17: *§ The header carries the Blender version* (the held line and *Latest on this server.*), *§ The version mismatch warning*, *§ View Layers* (the row), *§ The sample count* (the typed line), *§ When the override warning goes* (counted, grey-edged), *§ The body is three columns* (two columns), *§ What it will write* (one row per folder, groups). No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 12, what the live pass found.md`, outside any round — § The dependency warning: no band while the control reads *Waiting for check*. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — the drawing pass.md`, outside any round — notes 6, 8 and 10: *What it will write* (the download box's folders) and *None ticked*. No auditor has seen it.
+
+2026-11-11 — Claude Fable 5.2 (Claude Code subagent), holding the build runner's ruling 3 at the foot of `Audits/Build/Fable review/The live pass of the night's fixes — what happened.md` (the full disk), outside any round — *When there is no version to pick*: where the server's disk is full the line reads *The server's disk is full.*, with no way to Server Setup beside it (Rule 10, the runner's ruling 3). No auditor has seen it.
+
+2026-11-11 — GPT-6.1 (Codex), outside any round — Recorded that Render takes the name in the field at the press, including an empty name. From the thirtieth notes brief. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — `§ Submitting`: the submitted line's sentence is cut short where its line has no room, and never drops under. No auditor has seen it.
+
+2026-11-11 — GPT-6.1 (Codex), second UI builder — Kept download choices and folder readings visible.
+
+2026-11-11 — GPT-6.1 (Codex) — Correction: the preceding entry proposed D-11; that plan edit was taken out after its first test passed on the old page. No Render Settings plan change was kept.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — C5: the Range help is brought into view when it opens, with a bridge over its gap; D-11: a folder holding more than one format keeps its counts at its top. No auditor has seen it.
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), third builder on `Audits/Build/The UI at every size/Brief — the fixes.md`, outside any round — D-11 withdrawn, its sentence taken out. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 3, words a user can't act on.md`, outside any round — *for the first frame* for *for the check*, and *Nothing to play* for *Plays nothing* (scout 3.18); an uncertain submission says to check the Queue before sending again (3.19); the fallback folder's second line says where it is set (3.17). The drawing's fallback line changed with them. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 6, the rest that hold.md`, outside any round — The dependency band's first-frame button reads *Submit one frame first* (scout 1.4). No auditor has seen it.
+
+2026-11-11 — GPT-6 (Codex) — Corrected the Resume band to include its starting frame.
+
+2026-11-11 — GPT-6 (Codex) — Planned the read’s elapsed line and Stop.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, fifth part: *Submitting*: a first-frame pair whose rest did not go reads *Only the first frame was submitted.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code sub-agent) — Batch 6, sixth part: *What it will write*: each ticked scene's list under its name (scout 2.15); a folder's counts at its top, each on its format's line (D-11). No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — reading the file, past a minute.md`, outside any round — *Before the file has been read*: the band reads *File not read.* after a connection ends; the *Connection lost* band went. *Reading the file*: the control keeps its words and reads unavailable while a read runs, and the turning mark starts the line *Reading the file · 0:42 · Stop* (note 3). *When the read gives nothing*: *Could not reach the server.* gains *Read the file again.* and draws no server name; where no reading stands, a failed read's box stands in for the band (note 4). From the Creator's notes on the test copy of 2026-11-12. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the window notes, Sol's points.md`, outside any round — *Read stopped.* also for a read cut short by a restart of the server's Smoozy (Sol's look at reading the file past a minute, point 4). No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — what the night's live pass found.md`, outside any round — *A read can take longer*: *Read stopped.* once the server says the read has ended. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the test copy's notes, second round.md`, outside any round — § A read can take longer: *Reading frame N of M*. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep of the app and the website: screen words only, as listed in `Audits/Build/The word sweep, the app and the website — what landed.md`. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — the word sweep, Codex's points: the band's replaced case, and the read line's *Stop* as the small button. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent) — reading at a frame, built from the research: a scene read off its curves adds nothing to the read line's frame count. No auditor has seen it.
+
+2026-11-13 — Claude Opus 5.5 (Claude Code sub-agent), builder on `Audits/Build/Brief — UI consistency, the fixes.md`, outside any round — *Keeping things still, 2026-11-13*: what the UI consistency check asked of this screen, so nothing jumps, slides or stops lining up. No auditor has seen it.
+
+2026-11-14 — Claude Opus 5.5 (Claude Code sub-agent) — drivers and cheap moves, built from the research: a scene whose drivers are followed without stepping adds nothing to the read line's frame count. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Required the live setup check at Render.
+2026-11-14 — Claude Opus 5.5 — added A read lost to a version change says so (Rough share 1).
+2026-11-14 — Claude Opus 5.5 — the file's scripts line (the leftovers of the Rough what-if answers, 222, 227).
+2026-11-14 — Claude Opus 5.5 — the line when the file changed on the server since the read (the leftovers of the Rough what-if answers, 215).
+2026-11-14 — Claude Opus 5.5 — the newer-copy line (the leftovers of the Rough what-if answers, 185).

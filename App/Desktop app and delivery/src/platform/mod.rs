@@ -65,3 +65,7 @@ pub fn sweep_the_throwaway_areas() -> Vec<files::Failure> {
     }
     trouble
 }
+
+// Windows and Linux keep their existing reads; this route is macOS only.
+#[cfg(target_os = "macos")]
+pub mod macos_file_access;

@@ -171,6 +171,13 @@ pub const THE_RELEASE_ROOT_THIS_BUILD_CARRIES: Option<PublicKeyBytes> = Some([
 /// `smoozy-release check`. It verifies as a desktop that has accepted
 /// generation 1 and refuses as one that has accepted generation 2, so there was
 /// nothing to raise here.
+///
+/// **Checked again 2026-11-15, before 0.4.0, and still 1: the generation
+/// Smoozy 0.3.1 was published under, at release sequence 2967** (`v0.3.1`) —
+/// read off that published release, by its own address, with
+/// `smoozy-release check`. It verifies as a desktop that has accepted
+/// generation 1 and refuses as one that has accepted generation 2, so there was
+/// nothing to raise here.
 pub const THE_GREATEST_KEY_SET_GENERATION_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE: u64 = 1;
 
 /// **The greatest release sequence published when this build was made** — the
@@ -261,13 +268,21 @@ pub const THE_GREATEST_KEY_SET_GENERATION_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE: u6
 /// next release's green run.~~ *(Struck 2026-11-08: 2847 was the greatest
 /// published release until Smoozy 0.3.0 was published at 2927.)*
 ///
-/// **It is 2927, raised 2026-11-08, before 0.3.1: the release sequence Smoozy
+/// ~~**It is 2927, raised 2026-11-08, before 0.3.1: the release sequence Smoozy
 /// 0.3.0 was published at** (`v0.3.0`, from `3413d32d2`), read off that
 /// published release, by its own address, with `smoozy-release check` — it
 /// verifies as a desktop that has accepted sequence 2927 and refuses as one
 /// that has accepted 2928. Raised again, with the constant above, before the
+/// next release's green run.~~ *(Struck 2026-11-15: 2927 was the greatest
+/// published release until Smoozy 0.3.1 was published at 2967.)*
+///
+/// **It is 2967, raised 2026-11-15, before 0.4.0: the release sequence Smoozy
+/// 0.3.1 was published at** (`v0.3.1`, from `61a55174c`), read off that
+/// published release, by its own address, with `smoozy-release check` — it
+/// verifies as a desktop that has accepted sequence 2967 and refuses as one
+/// that has accepted 2968. Raised again, with the constant above, before the
 /// next release's green run.
-pub const THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE: u64 = 2927;
+pub const THE_GREATEST_RELEASE_SEQUENCE_PUBLISHED_WHEN_THIS_BUILD_WAS_MADE: u64 = 2967;
 
 /// **B9's built-in floor pair, as one value.**
 ///
@@ -618,8 +633,9 @@ pub fn admit_a_key_set_statement(
 /// 1766, Smoozy 0.1.7's own~~ — struck again 2026-11-01, before 0.2.0:
 /// ~~the pair is now 1 and 1812, Smoozy 0.1.8's own~~ — struck again
 /// 2026-11-07, before 0.3.0: ~~the pair is now 1 and 2847, Smoozy 0.2.0's
-/// own~~ — struck again 2026-11-08, before 0.3.1: the pair is now 1 and 2927,
-/// Smoozy 0.3.0's own.)*
+/// own~~ — struck again 2026-11-08, before 0.3.1: ~~the pair is now 1 and
+/// 2927, Smoozy 0.3.0's own~~ — struck again 2026-11-15, before 0.4.0: the
+/// pair is now 1 and 2967, Smoozy 0.3.1's own.)*
 pub fn admit_a_key_set_statement_against(
     root: &PublicKeyBytes,
     remembered: Option<&TheTrustRecord>,

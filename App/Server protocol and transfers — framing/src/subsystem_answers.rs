@@ -133,14 +133,14 @@ impl SubsystemFailure {
     /// file-server answer uses.
     pub fn in_words(&self) -> String {
         match self {
-            SubsystemFailure::TheChannelIsGone => "the connection to the server ended".to_string(),
+            SubsystemFailure::TheChannelIsGone => "connection lost".to_string(),
             SubsystemFailure::TheServerRefused(StatusCode::NoSuchFile) => {
-                "the server said the file or folder is not there".to_string()
+                "not found".to_string()
             }
             SubsystemFailure::TheServerRefused(StatusCode::PermissionDenied) => {
-                "the server said permission was denied".to_string()
+                "permission denied".to_string()
             }
-            SubsystemFailure::TheServerRefused(_) => "the server refused it".to_string(),
+            SubsystemFailure::TheServerRefused(_) => "refused by the server".to_string(),
             SubsystemFailure::TheAnswerCouldNotBeRead => {
                 "the server's answer could not be read".to_string()
             }

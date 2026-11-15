@@ -185,7 +185,7 @@ pub const THE_ACTING_HALF: [AnActLeftToTheActingHalf; 7] = [
     },
     AnActLeftToTheActingHalf {
         section: "§9b",
-        clauses: &["F1"],
+        clauses: &["F1", "F1b"],
         what: "the package inspection, the bootstrap-and-repair request and the plain start of the registered service",
         why: "**all three are requests on the pre-package surface** (`Server protocol and transfers` §5), whose adapter is that document's and whose records are `Rented-server runtime`'s. The ordering, the four conditions that reach the request, and what the user is shown of the inspection are here. **Two of the three landed on 2026-09-06 at `App/Server protocol and transfers/src/bootstrap.rs`** — the bootstrap-and-repair request itself and package inspection, that document's B1 to B7 — so what this clause is missing is no longer the request but the sending of it from here, and the plain start of the registered service beside it",
     },
@@ -713,7 +713,13 @@ mod tests {
         // desktop, over Y6b's reading, so this page files nothing for it.
         // **111 from 2026-11-04**: Y7e keeps a failed setup’s own reason
         // in the desktop’s output panel and diary, even before placement.
-        assert_eq!(the_clauses_this_plan_defines().len(), 111);
+        // **112 from 2026-11-13**: R6a, the attached volume found from the
+        // machine's mounts and offered beside the home mount (the scout's
+        // list, item 1). Built in `crate::placement` and the desktop's
+        // setup, so this page files nothing for it.
+        // 113 from 2026-11-14: F1b checks incompatible programs before placement,
+        // performed in the desktop's setting_up::what_v14_refuses.
+        assert_eq!(the_clauses_this_plan_defines().len(), 113);
     }
 
     /// **The one clause of this plan written in a different shape, held visible.**

@@ -404,6 +404,7 @@ pub mod testing {
                 eevee: Some(ExactName::as_the_reading_produced_it("BLENDER_EEVEE_NEXT")),
             },
             announced_add_on_case: None,
+            the_files_own_scripts_run: None,
             the_folders_at_the_machines_top: None,
         }
     }

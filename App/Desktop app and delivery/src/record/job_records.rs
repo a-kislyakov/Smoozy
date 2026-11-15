@@ -512,6 +512,10 @@ impl JobRecords<'_> {
         if record.what_the_note_carried.ending.as_ref().is_some_and(|ending| ending.no_render_began) {
             self.no_render_began_is_kept(&record.job, true)?;
         }
+        // **Record version 63, the same way**: most endings name no file.
+        if let Some(ending) = record.what_the_note_carried.ending.as_ref().filter(|ending| !ending.the_files_missing.is_empty()) {
+            self.the_files_missing_are_kept(&record.job, &ending.the_files_missing)?;
+        }
 
         for (position, disturbance) in record.disturbances.iter().enumerate() {
             self.connection.execute(
@@ -704,6 +708,22 @@ impl JobRecords<'_> {
         let written = self.connection.execute(
             "UPDATE job_record SET no_render_began = ?2 WHERE job = ?1",
             rusqlite::params![job.as_text(), no_render_began as i64],
+        )?;
+        Ok(written > 0)
+    }
+
+    /// **Record version 63: the files the render went on without** (`Rendering`
+    /// K14c), kept beside the record as a JSON list — nothing where the ending
+    /// named none.
+    pub fn the_files_missing_are_kept(&self, job: &Identity, missing: &[String]) -> Result<bool, RecordFailure> {
+        let kept = if missing.is_empty() {
+            None
+        } else {
+            Some(serde_json::to_string(missing).map_err(|failure| RecordFailure::Engine { reported: failure.to_string() })?)
+        };
+        let written = self.connection.execute(
+            "UPDATE job_record SET note_files_missing = ?2 WHERE job = ?1",
+            rusqlite::params![job.as_text(), kept],
         )?;
         Ok(written > 0)
     }
@@ -1004,7 +1024,7 @@ impl JobRecords<'_> {
     /// **Two acts call for it and they are the only two** (`State, identity and
     /// recovery` V1 steps 1 and 2, at that document's §7): the server row's
     /// removal, which performs [`THE_START_WAS_NEVER_HEARD`] inside its own
-    /// walk (`src/record/server_rows.rs`), and step 1's absent or different
+    /// walk (`src/record/server_rows.rs`), and step 1's absent
     /// branch, which calls this. **No absence, of any length, calls it** —
     /// a server that simply does not answer leaves its records exactly as step
     /// 2's third branch leaves them.
@@ -1046,7 +1066,8 @@ impl JobRecords<'_> {
                     file_values_texture_limit_render, start_never_heard,
                     the_reason_the_machine_recorded, the_device_line_as_observed,
                     frames_asked, frames_cannot_be_counted, job_output_folder,
-                    driver_mark_blender, driver_mark_driver_version, no_render_began
+                    driver_mark_blender, driver_mark_driver_version, no_render_began,
+                    note_files_missing
              FROM job_record WHERE {clause}"
         ))?;
         let rows = statement.query_map(parameters, |row| {
@@ -1106,6 +1127,7 @@ impl JobRecords<'_> {
                 driver_mark_blender: row.get(52)?,
                 driver_mark_driver_version: row.get(53)?,
                 no_render_began: row.get::<_, i64>(54)? != 0,
+                files_missing: row.get(55)?,
             })
         })?;
 
@@ -1206,6 +1228,13 @@ impl JobRecords<'_> {
                         .clone()
                         .filter(|reason| !reason.is_empty()),
                     no_render_began: row.no_render_began,
+                    // **Record version 63's column**, read back as the list
+                    // it was kept as; one that will not read is none.
+                    the_files_missing: row
+                        .files_missing
+                        .as_deref()
+                        .and_then(|kept| serde_json::from_str(kept).ok())
+                        .unwrap_or_default(),
                     the_device_line_as_observed: row
                         .the_device_line_as_observed
                         .clone()
@@ -1674,6 +1703,8 @@ impl JobRecords<'_> {
                     self.the_device_line_as_observed_is_kept(job, line)?;
                 }
                 self.no_render_began_is_kept(job, ending.no_render_began)?;
+                // **Record version 63** (`Rendering` K14c).
+                self.the_files_missing_are_kept(job, &ending.the_files_missing)?;
             }
             Ok(())
         })();
@@ -2341,6 +2372,8 @@ struct ARowAsRead {
     the_device_line_as_observed: Option<String>,
     /// Record version 60's column.
     no_render_began: bool,
+    /// Record version 63's column.
+    files_missing: Option<String>,
     /// Record version 35's two columns.
     frames_asked: Option<String>,
     frames_cannot_be_counted: bool,
@@ -2655,6 +2688,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 2,
             the_reason_the_machine_recorded: None,
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: None,
         });
         note.attempts = 2;
@@ -3248,6 +3282,60 @@ mod tests {
         );
     }
 
+    /// **Record version 63: the files a render went on without** (`Rendering`
+    /// K14c, the paragraph after `Queue & History` N3) — kept by the
+    /// connection's fill-in and by a record written whole, read back onto the
+    /// ending, in the user's own names, and nothing where the ending named
+    /// none. The last three owed, 2026-11-12.
+    #[test]
+    fn the_files_a_render_went_on_without_are_kept_and_read_back() {
+        use smoozy_queue_history::acting::note::{TheEndingOnTheNote, TheOutcomeAsWritten};
+        let connection = a_record_store();
+        let records = JobRecords::over(&connection);
+        let ending = |missing: Vec<String>| TheEndingOnTheNote {
+            outcome: TheOutcomeAsWritten::Finished,
+            exit_status: Some(0),
+            the_attempt_whose_capture_record_holds_the_words: 1,
+            the_reason_the_machine_recorded: None,
+            no_render_began: false,
+            the_files_missing: missing,
+            the_device_line_as_observed: None,
+        };
+        let names = vec!["sky_4k.exr".to_string(), "Занавеска.png".to_string()];
+
+        // The connection's fill-in.
+        let job = a_job();
+        records.write_the_provisional_record(&a_full_record(&job, &a_server())).unwrap();
+        let mut note = TheNote::created_with_the_job_record("A label");
+        note.attempts = 1;
+        note.ending = Some(ending(names.clone()));
+        records.the_fill_in(&job, &note).unwrap();
+        let read = JobRecords::over(&connection).read(&job).unwrap().unwrap();
+        assert_eq!(read.what_the_note_carried.ending.unwrap().the_files_missing, names);
+
+        // A record written whole with its ending, as an adoption writes one.
+        let whole = a_job();
+        let mut record = a_full_record(&whole, &a_server());
+        record.what_the_note_carried.ending = Some(ending(names.clone()));
+        records.write_the_provisional_record(&record).unwrap();
+        let read = JobRecords::over(&connection).read(&whole).unwrap().unwrap();
+        assert_eq!(read.what_the_note_carried.ending.unwrap().the_files_missing, names);
+
+        // None named: nothing kept, and none read back.
+        let plain = a_job();
+        records.write_the_provisional_record(&a_full_record(&plain, &a_server())).unwrap();
+        let mut note = TheNote::created_with_the_job_record("A label");
+        note.attempts = 1;
+        note.ending = Some(ending(Vec::new()));
+        records.the_fill_in(&plain, &note).unwrap();
+        let kept: Option<String> = connection
+            .query_row("SELECT note_files_missing FROM job_record WHERE job = ?1", [plain.as_text()], |row| row.get(0))
+            .unwrap();
+        assert_eq!(kept, None);
+        let read = JobRecords::over(&connection).read(&plain).unwrap().unwrap();
+        assert!(read.what_the_note_carried.ending.unwrap().the_files_missing.is_empty());
+    }
+
     /// **Record version 60: an ending that came before any render began is kept and
     /// read back**, and nought stands on a record that never said so.
     #[test]
@@ -3321,6 +3409,7 @@ mod tests {
             the_attempt_whose_capture_record_holds_the_words: 2,
             the_reason_the_machine_recorded: Some(reason.to_string()),
             no_render_began: false,
+            the_files_missing: Vec::new(),
             the_device_line_as_observed: Some(line.to_string()),
         });
         assert!(matches!(

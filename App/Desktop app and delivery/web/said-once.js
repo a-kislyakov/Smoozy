@@ -39,6 +39,8 @@
 // *3 switched off* never parts across two lines. `Design/Whole app §
 // Typography`; the character's one home is `src/typography.rs`
 // (`BETWEEN_A_FIGURE_AND_ITS_UNIT`).
+import { theFailureShape, EXPANDED } from "./the-failure-shape.js";
+
 const BETWEEN_A_FIGURE_AND_ITS_UNIT = "\u00A0";
 
 /// **Build the restore control.**
@@ -139,10 +141,12 @@ export function theWarningsSwitchedOff(parts) {
   // used to post nothing at all: the count did not move, no failure was drawn,
   // and what the user saw was a control that did nothing — twice. The sentence
   // arrives as prose and is drawn in the one failure shape (F-10).
+  // **Drawn in the shape, red dot and all**, as every other failure on this
+  // screen is; until the UI at every size (E-17) it was a grey hint that read
+  // like a note.
   if (parts.theRestoreDidNotLand) {
-    const refused = document.createElement("p");
-    refused.className = "hintl said-once-refused";
-    refused.textContent = parts.theRestoreDidNotLand;
+    const refused = theFailureShape({ sentence: parts.theRestoreDidNotLand, kind: "ending", controls: [], room: EXPANDED });
+    refused.classList.add("said-once-refused");
     section.appendChild(refused);
   }
 

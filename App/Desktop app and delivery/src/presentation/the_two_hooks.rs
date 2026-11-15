@@ -304,6 +304,19 @@ pub fn the_diary_is_handed_a_sentence_with_no_record(
     presented: &APresentationWithNoRecord<'_>,
     sentence: WhoseSentenceItIs<'_>,
 ) -> TheDiaryWasHanded {
+    the_diary_is_handed_a_sentence_and_its_reason(diary, run, presented, sentence, None)
+}
+
+/// **M32b — the same, with a fourth field the sentence does not carry: the
+/// reason the act gave** (Blender's download list that could not be read).
+/// Added 2026-11-13. The screen still says the sentence alone.
+pub fn the_diary_is_handed_a_sentence_and_its_reason(
+    diary: Option<&DiaryService>,
+    run: Option<&Identity>,
+    presented: &APresentationWithNoRecord<'_>,
+    sentence: WhoseSentenceItIs<'_>,
+    reason: Option<&str>,
+) -> TheDiaryWasHanded {
     let WhoseSentenceItIs::TheComposersOwn(the_composed_sentence) = sentence else {
         return TheDiaryWasHanded::NothingBecauseItIsAStandIn;
     };
@@ -325,6 +338,9 @@ pub fn the_diary_is_handed_a_sentence_with_no_record(
             presented.the_files_recorded_path,
             presented.the_users_label,
         ]
+        .into_iter()
+        .chain(reason)
+        .collect::<Vec<_>>()
         .join("\t"),
         concerning: vec![presented.server_row.clone()],
     };

@@ -970,6 +970,22 @@ pub(crate) mod tests {
         }
     }
 
+    /// **Batch 2 of the Bad what-if answers, 160 to 182: the record's own
+    /// warnings name nothing on Smoozy's folder or the login's `.ssh`** — no
+    /// job's set and no dependency reaches them, which is the gap the answers
+    /// found. The desktop's Files boxes name both from the row's layout and
+    /// the login's home (`Desktop app and delivery`'s
+    /// `bad_batch_2_smoozys_own_files_and_the_ssh_keys_are_named_before_they_go`);
+    /// these two stay as they are.
+    #[test]
+    fn bad_batch_2_system_paths_have_no_extra_warning_without_a_recorded_dependency() {
+        let reader = ARecord::default();
+        for path in [b"/home/user/smoozy".as_slice(), b"/home/user/smoozy/package", b"/home/user/smoozy/job-records", b"/home/user/smoozy/.smoozy-root", b"/home/user/.ssh"] {
+            assert!(the_delete_warning(&[path.to_vec()], &reader).is_empty());
+            assert!(the_live_job_warning(&[path.to_vec()], &reader).is_empty());
+        }
+    }
+
     /// **W1: the delete warning names anything the points-at reading shows
     /// depended on, whether or not a job is live.**
     #[test]

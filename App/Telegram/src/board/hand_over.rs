@@ -21,9 +21,13 @@ use crate::board::text::{TheBoard, TheRouteMode, TheUtterance, WhatIsPinned};
 pub enum WhatTheClaimantDoes {
     /// **B3**: process a transient machinery message and unpin it by identity.
     TakeInAndUnpin { id: i64, utterance: TheUtterance },
-    /// A pin that is neither a board nor a machinery message: unpinned by
+    /// A pin of Smoozy's that this build cannot read (B9a): unpinned by
     /// identity, as B11's janitor would, until a board can be read.
     Unpin { id: i64 },
+    /// **B3 as changed 2026-11-11 (the four questions, batch 4, Sol's S1): a
+    /// pin of the user's**, unpinned by identity to read beneath it and
+    /// pinned again once the claim ends.
+    LiftTheUsersPin { id: i64 },
     /// The current board, to copy.
     CopyIt { id: i64, board: TheBoard },
     /// No pin at all: there is no board to preserve.
@@ -50,6 +54,7 @@ pub fn what_the_claimant_does(top: &WhatIsPinned, the_unreadable_board_is_stale:
             WhatTheClaimantDoes::TakeInAndUnpin { id: *id, utterance: utterance.clone() }
         }
         WhatIsPinned::SomethingElse { id } => WhatTheClaimantDoes::Unpin { id: *id },
+        WhatIsPinned::AUsersPin { id } => WhatTheClaimantDoes::LiftTheUsersPin { id: *id },
         WhatIsPinned::AnUnreadableBoard { id, .. } if the_unreadable_board_is_stale => {
             WhatTheClaimantDoes::StartAFreshBoardOverAStaleOne { id: *id }
         }
@@ -87,7 +92,7 @@ impl TheUnreadableBoardWatch {
                 self.seen = None;
                 self.unchanged_since = None;
             }
-            WhatIsPinned::AMachineryMessage { .. } | WhatIsPinned::SomethingElse { .. } => {}
+            WhatIsPinned::AMachineryMessage { .. } | WhatIsPinned::SomethingElse { .. } | WhatIsPinned::AUsersPin { .. } => {}
         }
     }
 
@@ -137,6 +142,8 @@ pub fn the_successor(
         route: TheRouteMode::Asking,
         roster: previous.map(|b| b.roster.clone()).unwrap_or_default(),
         instructions: previous.map(|b| b.instructions.clone()).unwrap_or_default(),
+        // R10 as added 2026-11-13: the commands under way are copied too.
+        commands: previous.map(|b| b.commands.clone()).unwrap_or_default(),
     };
     if !board.fits() {
         return Err(TheListCannotBePreserved);
@@ -211,6 +218,7 @@ mod tests {
         assert_eq!(what_the_claimant_does(&unreadable, false), WhatTheClaimantDoes::StandDownAndSayTheBoardIsUnreadable);
         assert_eq!(what_the_claimant_does(&unreadable, true), WhatTheClaimantDoes::StartAFreshBoardOverAStaleOne { id: 4 });
         assert_eq!(what_the_claimant_does(&WhatIsPinned::SomethingElse { id: 5 }, false), WhatTheClaimantDoes::Unpin { id: 5 });
+        assert_eq!(what_the_claimant_does(&WhatIsPinned::AUsersPin { id: 6 }, false), WhatTheClaimantDoes::LiftTheUsersPin { id: 6 });
     }
 
     /// **B3's stale-board rule on B5's test**: unchanged text for a whole

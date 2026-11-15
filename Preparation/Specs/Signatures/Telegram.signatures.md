@@ -57,3 +57,27 @@
 - 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — a preview too heavy for Telegram.md`, outside any round, on the build runner's word — *Send a frame*'s sentence on the two limits corrected. No auditor has seen it.
 2026-11-02 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — what the first live pass found.md`, outside any round — The companion is taken away when its job ends. No auditor has seen it.
 2026-11-03 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Blender 5.3/Brief — Telegram after setup, and a Resume's range.md`, outside any round — the page and Queue say the piece is not installed. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — Telegram's one message per job, the plan text.md`, outside any round — one message per job, what makes a sound, pictures as replies with no Stop; an edit's sound written as unresolved. No auditor has seen it.
+
+2026-11-09 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-eighth notes/Brief — piece 8, the Queue's dot and the first-frame buttons.md`, outside any round — the first-frame question offers no Stop; a stop from the phone ends both jobs. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — the drawing pass.md`, outside any round — note 9: *One message per job*, the rendering job's message ends with how long ago it changed. No auditor has seen it.
+
+2026-11-10 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/Twenty-ninth notes/Brief — piece T, Telegram's job message tells the ending and its time.md`, outside any round — note 9: the sources pointer names entry 91 of the Architecture sources. No auditor has seen it.
+
+2026-11-11 — Claude Opus 5.5 (Claude Code subagent), builder on `Audits/Build/The four questions/Brief — batch 4, Telegram.md`, outside any round — *Submit again, and Resume* (was *Retry*, scout 1.5, Creator-stated); a message the user pins stays pinned (Sol's S1); a View Layer whose picture could not be read is named (Sol's S6). No auditor has seen it.
+
+2026-11-12 — Claude Fable 5.2 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the admin fresh look, logs in Telegram, and the empty screen.md`, outside any round — *How a log arrives*: folded, with a button that copies its last line (Creator-stated, the runner's rulings of 2026-11-12). No auditor has seen it.
+
+2026-11-12 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the live pass's leftovers.md`, outside any round — the phone offers Submit again and Resume where the cause is unknown and where a job was interrupted twice, as History does (Creator-stated: the phone matches the app). No auditor has seen it.
+
+2026-11-12 — GPT-6 (Codex) — Shortened screen text and unified names in the last words sweep; no auditor has seen these changes.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — the Telegram notes.md`, outside any round — Status asks every server and names one never asked as not checked; removed and long-gone servers leave; /frame reaches finished jobs and says which servers it could not reach; the server's message shows its age. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — Telegram when things aren't ideal, the fixes.md`, outside any round — a deleted shared note sent again; a tap's *Sent.* and repeats; an older /reporting tap counts from the tap; a bot already used by servers; the *Updated* moment on Telegram's clock; /start, /frame below zero and edited commands answered; the picture backlog bounded. No auditor has seen it.
+2026-11-13 — Claude Opus 5.5 (Claude Code subagent), holding `Audits/Build/The four questions/Brief — Telegram when things aren't ideal, the fixes.md` and the Creator's addition of the same day passed on by the runner, outside any round — nothing said in between stays in the chat. No auditor has seen it.
+
+2026-11-14 — GPT-6.1-Sol (Codex) — Batch 1: address checks, single Add press and Telegram setup and retry corrections.
+2026-11-14 — Claude Opus 5.5 — added the Creator's batch 1 ruling: the chat setup connected to is named.
+2026-11-14 — Claude Opus 5.5 — a job is sent again once from the phone (the leftovers of the Rough what-if answers, 405).
+2026-11-14 — Claude Opus 5.5 — when Telegram refuses a server's messages the app says so; Set up again keeps the old buttons working (the runner's ruling on the Rough what-if answers 388–392, 400).
